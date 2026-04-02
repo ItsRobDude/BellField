@@ -1,0 +1,771 @@
+Bell Field - Service Done Right.
+
+Field Dispatch Service Software.
+
+Windows 10/11 x Android
+-----------------------------------------------------------------
+
+
+The shape of the product
+
+This should be three surfaces, not one giant app:
+
+1. Office app
+
+This is the “desktop software,” but it should really be a desktop-focused web app, not a Windows-native program.
+That gives you:
+
+fast development
+easier updates
+easier remote access
+easier role-based access
+no install headaches
+
+This is where dispatch, CSR, managers, accounting, and office staff live.
+
+2. Field app
+
+This should be a real mobile app, not just a stretched website.
+
+Reason: techs need:
+
+offline tolerance
+camera/photos
+signatures
+fast load times
+easy tap targets
+local caching
+reliable job access in bad signal areas
+3. Shared backend
+
+One backend should own all business rules and be the single source of truth.
+
+The field app and office app should never talk directly to each other.
+They both talk to the backend.
+
+How I would split the code
+
+Use a modular monolith.
+
+That means:
+
+one main backend
+one main database
+clearly separated modules inside it
+strict module boundaries
+internal events for cross-module updates
+
+Do not start with microservices.
+
+Repo layout
+/apps
+  /office-web
+  /field-mobile
+  /api
+  /worker
+
+/packages
+  /ui-office
+  /ui-mobile
+  /contracts
+  /validation
+  /workflow
+  /utils
+
+/infrastructure
+  /db
+  /migrations
+  /deploy
+What each app does
+/office-web
+
+Office users:
+
+dashboard
+customer/account pages
+location pages
+equipment management
+job intake
+dispatch board
+invoices
+estimates
+PO/inventory
+reports
+settings
+/field-mobile
+
+Technicians:
+
+today’s jobs
+route / appointment list
+job details
+location details
+equipment details
+notes / photos
+estimate creation
+invoice handoff
+payment collection
+status updates
+/api
+
+Single backend with modules.
+
+/worker
+
+Background tasks:
+
+notifications
+PDF generation
+async imports
+report jobs
+attachment processing
+recurring jobs later
+Backend module boundaries
+
+These are the modules I’d lock in from the start:
+
+Foundation modules
+Identity
+
+Users, roles, permissions, branches, auth.
+
+CRM
+
+Customer accounts, contacts, account roles, bill-to logic.
+
+Locations
+
+Service properties, location relationships, access notes, location contacts.
+
+Equipment
+
+Assets, system groupings, equipment status, equipment metadata, install info.
+
+Operations
+
+Jobs, appointments, dispatching, status changes, notes, attachments.
+
+Financial / operational modules
+Estimates
+
+Service estimates, replacement estimates, templates, options, approvals.
+
+Billing
+
+Invoices, invoice lines, payments, credits later.
+
+Inventory
+
+Items, stock locations, technician trucks, stock movement.
+
+Purchasing
+
+POs, PO lines, receiving, vendor links.
+
+Job Costing
+
+Labor/material cost rolled up to the job.
+
+Cross-cutting modules
+Files
+
+Photos, PDFs, signatures, attachments.
+
+Notifications
+
+Text/email reminders, tech notices, customer messages later.
+
+Audit
+
+Activity timeline, change history, who changed what.
+
+Reporting
+
+KPIs, boards, filters, exports.
+
+How the modules should interact
+
+Keep this rule:
+
+One module owns its own writes. Other modules can read it, but should not directly mutate its tables.
+
+Examples:
+
+Jobs can read location and equipment data.
+Billing does not edit jobs; it snapshots job/account/location data when posting invoices.
+Inventory does not rewrite jobs; it posts cost entries tied to jobs.
+Field app can update equipment through the Equipment module, not by editing location records directly.
+Important internal events
+
+These are the glue:
+
+JobCreated
+AppointmentScheduled
+AppointmentReassigned
+TechnicianStatusChanged
+JobStatusChanged
+EquipmentUpdated
+EstimateApproved
+InvoicePosted
+InventoryIssuedToJob
+POReceived
+PaymentRecorded
+
+That gives you clean interactions without hard-wiring everything together.
+
+How the office and field apps should communicate
+The rule
+
+They do not sync directly with each other.
+
+They both communicate with:
+
+the API
+real-time event stream
+shared database through backend rules only
+Real-time
+
+Use real-time updates for:
+
+dispatch board changes
+tech status changes
+appointment assignment
+job status updates
+estimate approval notifications
+invoice/payment completion
+Offline / sync
+
+The field app needs a local store and sync queue.
+
+Field sync model
+
+Each mobile device keeps:
+
+assigned jobs
+appointment info
+location details
+equipment list
+recent service history
+notes/photos waiting to upload
+pending status changes
+
+When signal returns:
+
+queued actions get pushed
+server accepts/rejects each action
+updated records get pulled back
+
+That is the right model. Not full two-way chaos.
+
+Good offline rule
+
+The field app can create or edit:
+
+notes
+photos
+equipment updates
+estimate drafts
+job status actions
+signatures
+material usage drafts
+
+But server-side posting should finalize:
+
+invoices
+payments
+official costing entries
+posted financial records
+
+That keeps money clean.
+
+The human-facing visual side
+Office app layout
+
+The office app should be dense and practical.
+
+Main navigation
+Dashboard
+Search
+Accounts
+Locations
+Jobs
+Dispatch
+Estimates
+Invoices
+Inventory
+Purchasing
+Reports
+Settings
+The most important screen: location page
+
+This should be a core hub.
+
+Location page tabs
+Overview
+Contacts
+Billing / ownership history
+Equipment
+Service history
+Jobs
+Invoices
+Estimates
+Files
+Notes
+Equipment tab on location page
+
+This must support:
+
+add equipment
+edit equipment
+deactivate equipment
+move/remove old equipment from “active” view
+view equipment history
+attach photos / install docs
+see filter sizes / model / serial / unit location
+tie service events to that equipment
+
+Do not hard-delete equipment.
+Old units should become inactive or removed-from-service, not disappear.
+
+Dispatch board / daily schedule
+
+This needs to be one of the first major UX designs.
+
+Best layout
+
+Use a three-part layout:
+
+Left panel
+
+Unscheduled / unassigned jobs queue:
+
+job number
+customer/location
+job type
+promised date
+priority
+tags like no-cool / PM / callback
+Center panel
+
+Main timeline board:
+
+rows = technicians
+horizontal axis = time of day
+appointment cards placed on the timeline
+drag/drop reassign and reschedule
+visual warning for overlaps / travel / skill mismatch / after-hours
+
+Rows should show:
+
+technician name
+truck
+current status
+skill tags
+branch
+Right panel
+
+Selected job / appointment detail drawer:
+
+customer
+location
+contacts
+equipment summary
+problem description
+notes
+last service
+estimate / invoice status
+quick actions
+Top toolbar
+date selector
+day / week toggle
+branch filter
+technician filters
+search
+new job
+dispatch warnings
+print/export later
+
+This layout works because dispatch lives on one screen instead of bouncing around.
+
+Field app visual structure
+
+The field app should feel like a technician’s work console, not a mini office app.
+
+Main tabs
+Today
+Jobs
+Estimates
+Inventory
+More
+Technician workflow on a job
+
+From the job screen, the tech should be able to:
+
+see address and call contact
+tap for map/directions
+mark on-my-way
+mark arrived
+view problem description
+view service history
+open equipment tab
+add/edit equipment
+add notes and photos
+create estimate from template
+capture approval/signature
+hand off to invoice/payment
+mark complete
+Equipment editing in the field
+
+Field techs should be able to update:
+
+make/model/serial
+filter size
+equipment location text
+install date
+condition/status
+notes
+photos
+
+More sensitive changes like ownership/billing relationships stay office-side.
+
+The build order
+
+Do not start with “everything.”
+
+Build this in layers.
+
+Layer 1: product blueprint
+
+Roles, workflows, screen map, dispatch board layout, mobile flow, module boundaries.
+
+Layer 2: foundation
+
+Auth, users, branches, audit, attachments, shared UI shells, logging, seed data.
+
+Layer 3: CRM and location core
+
+Accounts, locations, contacts, equipment, history model.
+
+Layer 4: operations
+
+Jobs, appointments, dispatch, notes, photos, service history.
+
+Layer 5: field mobile
+
+Job list, job details, status flow, offline sync, equipment editing.
+
+Layer 6: estimates and invoices
+
+Estimate builder, templates, invoice generation, signatures, payments.
+
+Layer 7: inventory and POs
+
+Truck stock, PO receiving, issue to job, job costing.
+
+Layer 8: reporting and admin
+
+Permissions, dashboards, exports, audit views.
+
+Layer 9: customer-facing extras
+
+Online booking, customer portal, reminders, maybe later membership/service agreement flows.
+
+Month-by-month roadmap
+
+This assumes a serious internal build, not a weekend side project.
+
+Month 1 — Blueprint and product definition
+
+Goal: decide exactly what is being built before schema or coding explodes.
+
+Deliverables:
+
+role map
+workflow map from inbound call to completed invoice
+office screen map
+field screen map
+dispatch board wireframe
+location page wireframe
+module boundaries
+sync strategy
+prioritized backlog
+repo skeleton
+design system starter
+
+End-of-month demo:
+
+clickable office app shell
+clickable field app shell
+approved product map
+no major architecture ambiguity left
+Month 2 — Platform foundation
+
+Goal: make the base stable.
+
+Build:
+
+auth
+user roles
+branch context
+audit logging
+file upload plumbing
+shared navigation
+seed/demo data
+database conventions
+API patterns
+worker process
+real-time event infrastructure
+
+End-of-month demo:
+
+users log in
+roles work
+attachments upload
+audit trail records changes
+shell screens are live
+Month 3 — Accounts, locations, contacts, equipment
+
+Goal: build the living customer/property system.
+
+Build:
+
+customer accounts
+locations
+location history relationships
+contacts
+equipment
+equipment status/history
+location page with editable equipment tab
+
+End-of-month demo:
+
+create an account
+attach multiple locations
+assign contacts
+add/edit/deactivate equipment from the location page
+preserve historical relationship changes
+Month 4 — Jobs and appointments
+
+Goal: operational work records exist.
+
+Build:
+
+job intake
+appointment creation
+job statuses
+technician assignment
+job notes
+photo attachments
+service history views pulling from jobs/equipment
+
+End-of-month demo:
+
+CSR creates a job
+dispatcher schedules it
+job appears on tech assignment list
+location and equipment history are visible from the job
+Month 5 — Dispatch board v1
+
+Goal: office can actually run the day.
+
+Build:
+
+daily dispatch board
+unassigned queue
+drag/drop scheduling
+reschedule / reassign
+tech status display
+appointment conflict checks
+day/week views
+
+End-of-month demo:
+
+office can run a day from the board
+tech assignment updates in near real time
+dispatch sees status changes quickly
+Month 6 — Field app v1
+
+Goal: techs can work jobs in the field.
+
+Build:
+
+login
+today’s jobs
+job detail
+notes/photos
+status updates
+equipment view/edit
+cached job data
+offline queue
+sync retry logic
+
+End-of-month demo:
+
+tech receives jobs
+updates status from the field
+adds equipment changes and notes
+office sees those updates after sync
+Month 7 — Estimates
+
+Goal: techs can sell and document work.
+
+Build:
+
+service estimate builder
+replacement estimate builder
+estimate templates
+multi-option proposals
+approval/signature capture
+convert accepted estimate into follow-up work or invoice flow
+
+End-of-month demo:
+
+tech creates estimate from template
+customer approves on device
+office can see estimate instantly
+Month 8 — Invoices and payments
+
+Goal: close jobs financially.
+
+Build:
+
+invoice generation from job/estimate
+invoice lines
+tax/total logic
+snapshots of bill-to/location/job data
+payment recording
+printable/exportable invoice docs
+
+End-of-month demo:
+
+completed job becomes invoice
+customer can sign
+payment is recorded
+invoice remains historically correct even after later customer/location changes
+Month 9 — Inventory, PO, and job costing
+
+Goal: material and cost tracking becomes real.
+
+Build:
+
+item catalog
+inventory locations
+technician trucks as stock locations
+PO creation
+PO receiving
+stock transfers
+issue to job
+job cost rollup
+
+End-of-month demo:
+
+buy material into truck or warehouse
+consume material on job
+see cost tied to the job
+Month 10 — Reporting, permissions, and management tools
+
+Goal: management can trust the system.
+
+Build:
+
+permissions hardening
+dashboards
+service history reporting
+job profitability
+inventory valuation basics
+branch filtering
+activity timelines
+
+End-of-month demo:
+
+managers can answer operational questions without digging through raw records
+Month 11 — Pilot and migration
+
+Goal: start using it in real life.
+
+Build:
+
+import tools for accounts/locations/equipment/jobs as needed
+data cleanup scripts
+pilot branch/team controls
+support tools
+issue triage workflow
+
+End-of-month demo:
+
+one pilot group can run on it for selected workflows
+Month 12 — Stabilization and rollout
+
+Goal: make it dependable enough to trust.
+
+Build:
+
+performance tuning
+bug fixes
+backup/restore checks
+monitoring
+error recovery
+training material
+rollout plan
+
+End-of-month demo:
+
+stable internal v1 with real users
+What gets postponed on purpose
+
+Do not try to do these early:
+
+customer self-booking
+customer portal
+financing workflows
+recurring service agreements
+advanced payroll
+commission engine
+marketing attribution
+multi-tenant SaaS architecture
+deep accounting integrations
+
+Those come later.
+
+The reason is simple: your schedule logic, field workflow, invoicing, and inventory must work first or the rest sits on sand.
+
+The exact structural rule to follow
+
+For the whole project, use this order:
+
+First define
+who uses it
+what screens exist
+how jobs move through the system
+how office and field communicate
+what must be real-time
+what must work offline
+what modules own what
+Then define
+API contracts
+state machines
+events
+data ownership
+Then define
+database tables
+indexes
+snapshots
+history rules
+
+That order is what keeps this from turning into a giant unfinished database with no usable product.
+
+My recommendation for the code and product stack
+
+For this project, I would lock in:
+
+Office app: Next.js web app
+Field app: React Native with Expo
+Backend: NestJS
+Database: PostgreSQL
+Cache/realtime/pubsub: Redis
+File storage: S3-compatible object storage
+Mobile local storage: SQLite on device
+Real-time: WebSocket layer from backend
+Shared contracts: TypeScript shared types/validation
+
+That gives you one language across the whole stack, faster iteration, shared validation, and easier AI-assisted development.
