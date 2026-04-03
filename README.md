@@ -1,25 +1,42 @@
 # BellField — HVAC Field-Service Platform
 
-BellField is an internal HVAC field-service management platform designed for a single company first, with a clean path to multi-branch support later.
+BellField is a field-service platform being designed to start as a serious side project, be test-driven in a real HVAC business if possible, and eventually be strong enough to sell to other service companies.
 
-The product is intended to cover the operational core of a field-service business, including:
+The goal is not to one-shot a full ServiceTitan competitor. The goal is to build BellField in the right order, with maintainable architecture, practical workflows, and a clear path from internal-style usage to a real commercial product.
+
+BellField should support the operational core of a field-service company, including:
 
 - customer accounts / bill-to entities
 - service locations / properties
-- changing contacts and occupants over time
-- equipment and unit tracking at each location
-- service history by location and equipment
-- jobs and appointments
-- dispatch board / daily scheduling
-- service and replacement estimates
+- location-specific contacts
+- equipment and grouped systems at each location
+- service history by location and by equipment
+- jobs and multi-appointment scheduling
+- dispatch board / daily schedule
+- service estimates and replacement estimates
 - invoices and payments
 - purchase orders and inventory
-- technician vehicle inventory
+- technician truck inventory
 - job costing
-- notes, photos, attachments, and audit history
+- notes, photos, videos, files, and audit history
 - role-based office and field workflows
+- PM reminders and recurring service planning later in the roadmap
 
-The system is being planned as a maintainable, expandable product rather than a quick one-off app.
+The system is intended to be modern and clean, while still keeping dense operational information easy to reach.
+
+---
+
+## Product Direction
+
+BellField is being built for real field-service companies.
+
+Initial development assumptions:
+- it may be test-driven by a real HVAC company such as Blaine Heating and Air Conditioning
+- it must support both office workflows and field workflows from the beginning
+- the mobile app is not optional later; it is part of version 1 planning
+- the product should feel open and easy by default, with tighter controls available through permissions
+
+This product should be treated as a commercial SaaS-oriented platform in its structure, even if the early build is done gradually over weeks and months.
 
 ---
 
@@ -28,34 +45,66 @@ The system is being planned as a maintainable, expandable product rather than a 
 The platform should be built as three connected surfaces:
 
 ### 1. Office App
-A desktop-focused web application used by:
+A desktop-focused web application used by office staff and management.
 
+Primary office roles:
 - CSR
-- dispatch
-- service manager
-- accounting
-- admin / office staff
+- Dispatcher
+- Admin
+- Owner
+- Book Keeping
 
-This app handles dense operational workflows, scheduling, location/account management, financial processing, and reporting.
+These default roles should exist, but permissions should not be hardcoded around them.
 
 ### 2. Field App
 A mobile application used by technicians in the field.
 
 This app must support:
-
 - assigned job access
-- status updates
-- notes and photos
+- appointment status changes
+- notes and job register entries
 - equipment inspection and editing
+- file/photo/video upload
 - estimate creation
-- signature capture
-- invoice/payment handoff
 - weak signal and offline tolerance
+- simple workflows usable by older technicians
 
 ### 3. Shared Backend
-A single backend should own all business logic and act as the single source of truth for both the office app and field app.
+A single backend should own all business logic and act as the single source of truth for both the office app and the field app.
 
 The office app and field app do not communicate directly with each other. Both communicate only with the backend.
+
+---
+
+## Permissions Philosophy
+
+BellField should ship with default roles, but permissions must be editable.
+
+### Default roles
+- CSR
+- Dispatcher
+- Admin
+- Owner
+- Book Keeping
+- Technician
+
+### Permission behavior
+- permissions should be toggle-able with simple on/off controls such as checkboxes or switches
+- owners or setup admins should be able to grant or revoke permissions quickly
+- the product should feel fairly open by default
+- companies can tighten access later if they want to
+- most permissions should be feature-level permissions, not buried in code-only logic
+
+### Examples of permission-controlled actions
+- add equipment
+- remove equipment
+- edit equipment details from the field
+- build estimates
+- collect payment
+- reassign jobs
+- edit invoices before posting
+- approve larger estimates
+- manage inventory and purchasing
 
 ---
 
@@ -64,7 +113,6 @@ The office app and field app do not communicate directly with each other. Both c
 The platform should start as a **modular monolith**.
 
 This means:
-
 - one backend
 - one PostgreSQL database
 - clearly separated internal modules
@@ -73,7 +121,6 @@ This means:
 
 ### Why this approach
 This provides:
-
 - simpler development and deployment
 - easier reporting and transaction integrity
 - fewer synchronization headaches
@@ -103,7 +150,6 @@ Microservices should not be used at the beginning.
 
 ### Reasoning
 This keeps the stack mostly TypeScript across the product, which improves:
-
 - consistency
 - speed of development
 - shared validation
@@ -114,39 +160,44 @@ This keeps the stack mostly TypeScript across the product, which improves:
 
 ## Core Design Principles
 
-1. **Separate bill-to accounts from service locations**
-   - the payer is not always the service address
-   - one account may be linked to many properties
+1. **Customer / company first, then service locations**
+   - BellField should be organized around the customer account first
+   - one customer can have many service addresses
+   - this supports property managers, landlords, and businesses with multiple sites
 
-2. **Treat contacts as changeable**
-   - people move
-   - tenants change
-   - occupants change
-   - old people and old roles must remain in history
+2. **Separate bill-to identity from location contacts**
+   - the owner / customer account is not always the main on-site contact
+   - each location needs its own contact list
+   - location contacts may differ from the bill-to customer
 
-3. **Treat locations as long-lived**
-   - the property remains even when ownership or occupancy changes
+3. **Treat locations as long-lived records**
+   - locations continue to exist even when ownership or occupants change
+   - names and contact details at a location may be updated over time
+   - old records must still reflect who was there previously
 
-4. **Treat equipment as editable but historically traceable**
-   - units can be updated from the location page and field app
-   - old units should not simply disappear
-   - inactive / replaced / removed equipment should remain in history
+4. **Preserve historical correctness**
+   - old jobs, invoices, and service records must not change just because the current owner, tenant, or contact info changed later
+   - history must remain visible and trustworthy
 
-5. **Preserve historical accuracy**
-   - completed jobs and posted invoices must remain historically correct even if ownership, contacts, or account relationships change later
+5. **Treat equipment as editable but historically traceable**
+   - equipment must be editable from both office and field workflows
+   - equipment changes should not erase service history
+   - replaced or removed equipment should remain historically traceable
 
-6. **Support field connectivity problems**
-   - the field app must tolerate weak or intermittent signal
-   - mobile changes must sync safely when connection returns
+6. **Design for real field usage**
+   - the field app must work in weak or intermittent signal areas
+   - saved field work must sync later without losing data
+   - the field workflow should stay simple enough for older technicians
 
-7. **Optimize for office speed**
-   - the office app should be dense, practical, and fast
-   - it should not feel like a stretched mobile app
+7. **Keep the UI modern and clean, but not shallow**
+   - dense operational info should still be available
+   - tabs, tables, drawers, and grouped views should reduce clutter
+   - important info should be easy to reach without turning the app into a goose hunt
 
 8. **Build for extension**
    - avoid spaghetti coupling
    - use clear module ownership
-   - keep future branch support in mind
+   - support future branch, PM contract, and broader SaaS use cases without rewriting the foundation
 
 ---
 
@@ -154,25 +205,336 @@ This keeps the stack mostly TypeScript across the product, which improves:
 
 ### Office Users
 Primary office users include:
-
 - CSR
-- dispatcher
-- service manager
-- accounting
-- admin / leadership
+- Dispatcher
+- Admin
+- Owner
+- Book Keeping
 
 ### Field Users
 Primary field users include:
+- Service Technicians
+- Install Technicians later if needed
 
-- service technicians
-- install technicians later if needed
+---
+
+## Account, Location, and Contact Rules
+
+### Customer accounts
+BellField should begin from the customer or company record.
+
+Customer accounts should support:
+- account/company/customer name
+- bill-to identity
+- billing details
+- phone number
+- email
+- fax
+- linked service locations
+- linked contacts
+- account notes
+- account activity
+
+### Service locations
+A customer can have multiple serviceable locations.
+
+Each location should support:
+- service address
+- display name / location name
+- current linked customer / owner view
+- separate contact list for that address
+- service history
+- equipment list
+- location-specific notes
+- change history
+
+### Contacts
+Contacts should be easy to add and remove from both customer and location records.
+
+Contact fields should include at minimum:
+- phone number
+- email
+- fax
+
+UI expectations:
+- there should be a clear "+" action to add contacts
+- there should be a clear remove action for contacts
+- locations and customer accounts can each have multiple contacts
+
+### Historical contact behavior
+When people move or details change:
+- the location can be updated
+- the normal current view should show current information
+- old jobs and old service records must still show the historical names/details tied to that work
+- location history should remain reviewable in a dedicated history/activity area
+
+---
+
+## Equipment Management Rules
+
+Equipment must be manageable from both:
+- the location page in the office app
+- the field mobile app
+
+### Equipment view
+Equipment should appear on a dedicated location tab/page, but be grouped logically within the location.
+
+That means:
+- equipment belongs under the location record
+- the equipment list should be grouped rather than being scattered around unrelated screens
+- grouping should support real HVAC system relationships where useful
+
+### Equipment requirements
+Each equipment record should support, at minimum:
+- equipment type
+- make / brand
+- model
+- serial number
+- filter size
+- equipment location description
+- install date
+- status
+- notes
+- photos / documents
+- HVAC-specific details that may expand over time
+
+### Equipment editing rules
+Technicians should be able to:
+- add equipment
+- edit equipment
+- remove equipment
+
+These actions should be permission-toggle controlled so each company can decide how open or restricted they want this behavior to be.
+
+### Replacement workflow rule
+When equipment is replaced:
+- the PO for the new equipment should be tied to the replacement job
+- if the purchased item is tagged as Equipment, the system should automatically add the new equipment to the job location
+- old equipment removal should remain a manual action
+- old equipment must remain historically traceable
+
+Equipment should not be hard-deleted in normal workflow.
+
+---
+
+## Job, Appointment, and Dispatch Rules
+
+### Job creation and origin tracking
+Jobs should support both:
+- job type / category labeling
+- job origin tracking
+
+Examples of job origin:
+- inbound phone call
+- PM contract reminder
+- quote follow-up
+- callback / warranty
+- office-created / manager-created work
+
+Job categories should support a business-unit style structure similar to how service companies separate work types.
+
+### PM contracts and reminders
+PM contracts and similar recurring service programs should later support job reminders for recurring tasks such as:
+- filter changes
+- seasonal maintenance
+- repeating inspections
+
+### Multi-appointment support
+A single job must be able to have multiple appointments, including future appointments on later dates.
+
+This supports:
+- return visits
+- parts follow-up
+- unfinished work
+- replacement scheduling
+
+### Dispatch board
+The dispatch board should be one of the main office screens and should visually resemble a technician timeline board similar to ServiceTitan or FieldOps.
+
+#### Visual structure
+- horizontal time / hour markers
+- technicians listed vertically
+- appointment cards on the timeline
+- unassigned queue
+- details panel / drawer
+
+#### Dispatch information to show at a glance
+- technician
+- time
+- job type
+- location
+- status
+- priority
+- parts needed later where available
+
+### Appointment / dispatch statuses
+Default visual statuses should include:
+- Assigned
+- On the Way
+- Arrived
+- Working
+- Finished
+- No Answer
+- Confirmed
+
+These should be treated as default states, but the system should be designed so companies can evolve statuses later if needed.
+
+---
+
+## Field Technician Workflow Rules
+
+The field app should be simple and practical.
+
+A technician on a job should be able to:
+- view address and primary contact
+- open maps / directions
+- update appointment status
+- review problem description
+- review service history
+- review and edit equipment
+- add notes
+- add register entries / charges / invoice items
+- upload images, videos, and files to the job
+- create estimates
+- complete the job
+
+### Notes and register behavior
+Technicians should always be prompted for notes.
+
+They should also have a register-style area to add:
+- charges
+- invoice items
+- service line items
+- related job entries as part of the field workflow
+
+### Photo / video / file behavior
+Technicians should be able to upload and attach:
+- images
+- videos
+- files
+
+### Payment collection behavior
+Whether technicians can collect payment in the field should be controlled by a toggle-able permission and should typically be off by default.
+
+---
+
+## Estimates and Invoices
+
+### Estimates
+BellField should treat these as separate estimate types:
+- service estimates
+- replacement estimates
+
+The system should support:
+- premade estimate templates
+- custom estimate creation
+- multi-option replacement estimates such as good / better / best or A / B / C style choices
+
+Technicians should be able to create estimates in the field.
+
+### Invoices
+Not every job needs a bill.
+
+Examples:
+- estimate-only calls may not create an invoice
+- service jobs often will
+
+Every job should still be able to be completed normally whether or not it produces an invoice.
+
+### Invoice editability rule
+An invoice should remain editable until it is posted on the accounting side.
+
+After posting:
+- the posted invoice becomes the authoritative accounting record
+- history should remain reliable
+
+---
+
+## Purchasing, Inventory, and Job Costing
+
+### Inventory locations
+Technician trucks should be treated as their own inventory locations.
+
+Office staff should be able to see what stock is on each truck.
+
+### Direct-to-job purchasing
+Parts should be allowed to be assigned directly to a job.
+
+This means BellField must support both:
+- inventory flowing through stock locations
+- purchasing or assignment directly against a specific job when needed
+
+### Job costing
+Job costing should be part of version 1 planning, even if it lands later in the early build sequence.
+
+The architecture should support job costing from the beginning.
+
+---
+
+## Real-Time vs Offline Requirements
+
+### Real-Time Requirements
+The following should update in near real time when signal exists:
+- dispatch board changes
+- technician status changes
+- appointment assignment and reassignment
+- job status changes
+- estimate-related changes where relevant
+- invoice / payment completion states later where enabled
+
+### Save behavior
+If a technician edits something in the field, office users should only see it after the technician saves those changes.
+
+### Offline / Sync Requirements
+The field app must support offline-tolerant behavior for:
+- notes
+- photos
+- videos
+- file attachments
+- equipment edits
+- estimate drafts
+- job status updates
+- register entries
+
+If signal is poor:
+- it is acceptable to save work locally
+- the app should sync later when connection improves
+
+### Financial posting rule
+Final posting for official financial actions should remain server-side.
+
+Examples:
+- posting invoices
+- final payment records
+- official job costing entries
+
+This keeps financial records controlled and historically reliable.
+
+---
+
+## Activity Logs and History
+
+BellField should maintain visible history throughout the product.
+
+### Job activity logs
+Every job should have an activity log showing who changed what and when.
+
+### Location history
+Location pages should have a separate tab or area that records changes over time.
+
+This should include things like:
+- contact changes
+- owner/customer relationship changes
+- equipment changes
+- notes or important updates
+
+History should be easy to review, not hidden away.
 
 ---
 
 ## Office App — Main Product Areas
 
 The office application should include the following major navigation areas:
-
 - Dashboard
 - Search
 - Accounts
@@ -188,7 +550,6 @@ The office application should include the following major navigation areas:
 
 ### Key Office Priorities
 The office app must support:
-
 - fast search and account lookup
 - quick location history review
 - dense scheduling workflows
@@ -212,257 +573,17 @@ The field app should focus on technician execution and speed.
 
 ### Technician priorities
 The field app must support:
-
 - assigned appointments
 - status changes
-- notes and photos
+- notes and register entries
 - location and contact access
 - equipment review and editing
 - service history review
 - estimate creation
-- customer approval and signature
-- invoice/payment handoff
+- file/photo/video upload
 - offline-safe local work
 
----
-
-## Core Screen Map — Office App
-
-### Dashboard
-A role-based operational overview for office users.
-
-### Search
-Global search across:
-- accounts
-- locations
-- contacts
-- jobs
-- equipment
-- invoices
-
-### Accounts
-Used to manage bill-to entities.
-
-Expected content:
-- account overview
-- billing details
-- linked locations
-- linked contacts
-- account notes
-- account activity
-
-### Locations
-A central operational hub for each service property.
-
-### Jobs
-Operational work records.
-
-### Dispatch
-The daily / weekly dispatch board.
-
-### Estimates
-Estimate list, status, approvals, and templates.
-
-### Invoices
-Invoice list, invoice detail, payments, and balances.
-
-### Inventory
-Item catalog, stock by location, technician vehicle inventory.
-
-### Purchasing
-Purchase orders and receiving.
-
-### Reports
-Operational, service, costing, and financial reports.
-
-### Settings
-User, permission, branch, and application settings.
-
----
-
-## Core Screen Map — Location Page
-
-The location page should be one of the most important hubs in the system.
-
-### Recommended tabs
-- Overview
-- Contacts
-- Billing / ownership history
-- Equipment
-- Service history
-- Jobs
-- Invoices
-- Estimates
-- Files
-- Notes
-
-### Why this matters
-The location is where service actually happens, so office staff and technicians both need reliable, centralized visibility there.
-
----
-
-## Equipment Management
-
-Equipment must be manageable from both:
-
-- the location page in the office app
-- the field mobile app
-
-### Equipment requirements
-Each equipment record should support, at minimum:
-
-- equipment type
-- make
-- model
-- serial number
-- filter sizes
-- equipment location description
-- install date
-- status
-- notes
-- photos / documents
-- HVAC-specific details that may expand over time
-
-### Editing rules
-Equipment should support:
-
-- add new equipment
-- update existing equipment
-- mark inactive / removed / replaced
-- keep service history tied to the proper unit
-- preserve old equipment for historical reference
-
-Equipment should not be hard-deleted in normal workflow.
-
----
-
-## Dispatch Board / Daily Schedule
-
-The dispatch board should be a major centerpiece of the office app.
-
-### Recommended layout
-
-#### Left panel
-**Unscheduled / unassigned jobs queue**
-
-Show:
-- job number
-- customer / location
-- job type
-- promised date
-- priority
-- job tags such as no-cool, PM, callback, etc.
-
-#### Center panel
-**Main time grid**
-
-- rows = technicians
-- horizontal axis = time of day
-- appointment cards displayed on each technician timeline
-- drag and drop rescheduling and reassignment
-
-Should show:
-- technician name
-- truck
-- current status
-- skill tags
-- branch later
-
-Should warn about:
-- overlaps
-- travel conflicts
-- skill mismatch
-- after-hours issues
-
-#### Right panel
-**Selected job / appointment detail drawer**
-
-Show:
-- customer
-- location
-- contacts
-- equipment summary
-- problem description
-- job notes
-- previous service info
-- estimate / invoice state
-- quick actions
-
-### Top toolbar
-Should include:
-- date selector
-- day/week toggle
-- branch filter
-- technician filters
-- search
-- new job action
-- scheduling warnings / notices
-
-### Dispatch goals
-The dispatch board should let the office actually run the day from one screen instead of bouncing between disconnected pages.
-
----
-
-## Field Technician Workflow
-
-A technician on a job should be able to:
-
-- view address and primary contact
-- open maps / directions
-- mark on-my-way
-- mark arrived
-- review problem description
-- review service history
-- review and edit equipment
-- add notes and photos
-- create estimates from templates
-- capture approval / signature
-- move toward invoice/payment flow
-- mark the job complete
-
-The field app should be organized around this practical sequence.
-
----
-
-## Real-Time vs Offline Requirements
-
-### Real-Time Requirements
-The following should update in near real time:
-
-- dispatch board changes
-- technician status changes
-- appointment assignment and reassignment
-- job status changes
-- estimate approval notifications
-- invoice / payment completion states
-
-### Offline / Sync Requirements
-The field app must support offline-tolerant behavior for:
-
-- notes
-- photos
-- equipment edits
-- estimate drafts
-- job status updates
-- signatures
-- material usage drafts
-
-When connection returns:
-
-- queued actions should sync to the server
-- the server should validate them
-- accepted changes should be committed
-- latest authoritative data should flow back to the device
-
-### Financial posting rule
-Final posting for official financial actions should remain server-side.
-
-Examples:
-- posting invoices
-- final payment records
-- official job costing entries
-
-This keeps financial records controlled and historically reliable.
+The field experience should stay simple enough for older technicians and should avoid clutter-heavy workflows.
 
 ---
 
@@ -499,76 +620,6 @@ The backend should be split into clear modules.
 
 ---
 
-## Module Responsibilities
-
-### Identity
-- users
-- authentication
-- authorization
-- role handling
-
-### CRM
-- customer accounts
-- bill-to entities
-- account contact relationships
-
-### Locations
-- service properties
-- location metadata
-- ownership / billing relationship history
-
-### Contacts
-- people
-- changing roles by account or location
-
-### Equipment
-- unit and system records
-- equipment metadata
-- equipment history and status
-
-### Jobs
-- work records
-- notes
-- attachments
-- service execution
-
-### Appointments / Dispatch
-- calendar scheduling
-- technician assignment
-- rescheduling
-- dispatch visibility
-
-### Estimates
-- service estimates
-- replacement estimates
-- templates
-- customer approval flow
-
-### Billing
-- invoices
-- payments
-- financial snapshots
-
-### Inventory
-- stock locations
-- technician truck stock
-- inventory movement
-
-### Purchasing
-- vendors
-- POs
-- PO receiving
-
-### Job Costing
-- labor/material cost tied to jobs
-
-### Audit
-- change history
-- activity timeline
-- accountability
-
----
-
 ## Module Interaction Rules
 
 ### Primary rule
@@ -581,15 +632,18 @@ Other modules may read that data through approved interfaces, but should not dir
 - Billing should snapshot job/account/location data when invoices are posted.
 - Inventory can issue material to a job without directly mutating job records.
 - Equipment changes from the field app should go through the Equipment module, not by bypassing module rules.
+- Purchasing should be able to feed equipment-typed items into equipment creation rules when tied to replacement work.
 
 ### Example internal events
 - JobCreated
 - AppointmentScheduled
 - AppointmentReassigned
 - TechnicianStatusChanged
-- JobStatusChanged
+- JobStatusSaved
 - EquipmentUpdated
+- EstimateCreated
 - EstimateApproved
+- InvoiceDrafted
 - InvoicePosted
 - InventoryIssuedToJob
 - POReceived
@@ -638,30 +692,31 @@ These events help modules stay coordinated without becoming tightly coupled.
 This project should be built in layers, not all at once.
 
 ### Build order
-1. product blueprint
-2. platform foundation
-3. accounts / locations / contacts / equipment
+1. product blueprint and workflow rules
+2. platform foundation and permissions
+3. customer / location / contact / equipment organization
 4. jobs / appointments / dispatch
-5. field app basics
-6. estimates / invoices / payments
+5. field app basics and offline save/sync
+6. estimates / invoice draft flow
 7. purchasing / inventory / job costing
-8. reporting / permissions hardening
+8. reporting / permissions hardening / PM reminders
 9. pilot / migration / rollout
 
 ---
 
 ## 12-Month Delivery Plan
 
-## Month 1 — Blueprint and Product Definition
-Goal: remove ambiguity and lock the shape of the product.
+## Month 1 — Product Definition and Structure
+Goal: remove ambiguity and lock the product shape, rules, and initial code structure.
 
 ### Deliverables
 - user role map
-- workflow map from call intake to completed invoice
+- permission model direction
+- workflow map from call intake to completed job
 - office screen map
 - field screen map
 - dispatch board wireframe
-- location page wireframe
+- location page and equipment tab wireframe
 - module boundaries
 - sync strategy
 - prioritized backlog
@@ -682,8 +737,8 @@ Goal: establish the technical base.
 ### Deliverables
 - authentication
 - user roles
-- branch context foundation
-- audit logging
+- toggle-able permissions
+- audit logging foundation
 - file upload plumbing
 - shared app shells
 - seed data
@@ -694,6 +749,7 @@ Goal: establish the technical base.
 ### End-of-month demo
 - users can log in
 - roles work
+- permissions can be toggled
 - attachments upload
 - audit trail records activity
 - application shell is live
@@ -701,36 +757,40 @@ Goal: establish the technical base.
 ---
 
 ## Month 3 — Accounts, Locations, Contacts, Equipment
-Goal: build the customer/property core.
+Goal: build the organizational core of the app.
 
 ### Deliverables
 - customer accounts
 - locations
 - account/location relationships with history
-- contacts
+- customer contacts
+- location contacts
 - equipment records
 - equipment status/history
-- editable equipment tab on location page
+- editable grouped equipment tab on location page
 
 ### End-of-month demo
 - create an account
 - link multiple locations
-- assign contacts
-- add/edit/deactivate equipment
-- preserve relationship history
+- assign separate contacts
+- add/edit/remove equipment
+- preserve relationship and history behavior
 
 ---
 
 ## Month 4 — Jobs and Appointments
-Goal: establish real operational records.
+Goal: establish operational work records.
 
 ### Deliverables
 - job intake
+- job types / categories
+- job origin tracking
 - appointment creation
+- future appointments
 - job status tracking
 - technician assignment
 - notes
-- photo attachments
+- file/photo/video attachments
 - service history views based on jobs and equipment
 
 ### End-of-month demo
@@ -742,14 +802,16 @@ Goal: establish real operational records.
 ---
 
 ## Month 5 — Dispatch Board v1
-Goal: let the office run the daily schedule.
+Goal: let the office run the day on a real timeline board.
 
 ### Deliverables
 - daily dispatch board
 - unassigned queue
+- horizontal time grid
+- technicians vertically listed
 - drag/drop scheduling
 - reassignment and rescheduling
-- technician status indicators
+- visible appointment statuses
 - conflict checks
 - day/week view
 
@@ -767,8 +829,10 @@ Goal: let technicians execute jobs in the field.
 - field login
 - today’s jobs
 - job detail
-- notes/photos
 - status updates
+- prompted notes
+- register entries
+- file/photo/video upload
 - equipment view/edit
 - cached job data
 - offline queue
@@ -776,47 +840,45 @@ Goal: let technicians execute jobs in the field.
 
 ### End-of-month demo
 - technician receives jobs
-- updates job status
+- updates status
 - edits equipment
-- adds notes/photos
-- office receives synced updates
+- adds notes and attachments
+- office receives synced saved updates
 
 ---
 
-## Month 7 — Estimates
-Goal: support technician selling and quoting.
+## Month 7 — Estimates and Invoice Draft Flow
+Goal: support technician quoting and early financial flow.
 
 ### Deliverables
 - service estimate builder
 - replacement estimate builder
 - estimate templates
 - multi-option proposals
-- approval/signature capture
-- conversion path from estimate to next workflow
+- invoice draft flow
+- editable invoice behavior before posting
 
 ### End-of-month demo
 - technician creates estimate from template
-- customer approves on device
-- office sees estimate status immediately
+- customer-facing options are visible
+- office can draft and edit invoice before posting
 
 ---
 
-## Month 8 — Invoices and Payments
-Goal: close jobs financially.
+## Month 8 — Posting, Payments, and Accounting Handoff
+Goal: close jobs financially in a controlled way.
 
 ### Deliverables
-- invoice generation
-- invoice lines
-- tax/total logic
+- invoice posting workflow
+- posted vs editable invoice behavior
+- payment recording rules
 - bill-to/location/job snapshots
-- payment recording
 - printable/exportable invoice output
 
 ### End-of-month demo
-- completed job becomes invoice
-- customer signs
-- payment is recorded
-- invoice remains historically correct after later master-data changes
+- completed job can become invoice draft
+- accounting can post invoice
+- history remains reliable after posting
 
 ---
 
@@ -830,37 +892,40 @@ Goal: make materials and costs operationally real.
 - PO creation
 - PO receiving
 - stock transfers
-- issue to job
-- cost rollup to jobs
+- direct-to-job assignment
+- equipment-tagged PO behavior for replacement work
+- job cost rollup to jobs
 
 ### End-of-month demo
 - materials can be purchased into truck or warehouse
-- materials can be consumed on jobs
+- materials can be assigned to a job
+- equipment-tagged PO items can feed replacement workflow
 - job cost reflects material usage
 
 ---
 
-## Month 10 — Reporting and Management Tools
-Goal: make the system useful for leadership and control.
+## Month 10 — History, Reporting, and Management Tools
+Goal: make the system useful for management and trustworthy over time.
 
 ### Deliverables
-- permissions hardening
-- dashboards
+- stronger activity logs
+- location change history views
 - service history reports
 - job profitability reporting
 - inventory visibility
-- branch filtering foundation
-- activity timelines
+- owner/admin permission review tools
 
 ### End-of-month demo
 - management can answer operational questions without digging through raw data
+- historical changes are visible and understandable
 
 ---
 
-## Month 11 — Pilot and Migration
-Goal: begin controlled real-world use.
+## Month 11 — PM Reminder Planning and Pilot Readiness
+Goal: prepare for more repeat-service workflows and controlled real usage.
 
 ### Deliverables
+- PM reminder design / initial support
 - import tools
 - data cleanup scripts
 - pilot controls
@@ -869,6 +934,7 @@ Goal: begin controlled real-world use.
 
 ### End-of-month demo
 - one pilot group can operate selected workflows in the system
+- PM reminder direction is visible
 
 ---
 
@@ -892,16 +958,15 @@ Goal: make v1 dependable enough to trust.
 ## What to Postpone Until Later
 
 The following should be delayed until the core system is stable:
-
 - customer self-booking
 - customer portal
-- financing workflows
-- recurring service agreements
+- advanced financing workflows
+- deeper PM contract automation beyond reminders
 - advanced payroll
 - commission engine
 - marketing attribution
 - deep accounting integrations
-- broader multi-tenant SaaS concerns
+- broader multi-tenant SaaS concerns beyond foundational design
 
 These are valuable, but they should not be built before the operational core is reliable.
 
@@ -909,32 +974,39 @@ These are valuable, but they should not be built before the operational core is 
 
 ## Immediate Planning Priority
 
-Before writing the full schema, the team should finish these planning artifacts:
+Before deep schema work begins, BellField should continue to define:
 
-1. user roles and workflow map
-2. office screen map
-3. field screen map
-4. dispatch board layout
-5. 12-month roadmap with milestone demos
-6. module boundaries and interaction rules
-7. offline / real-time communication strategy
+1. product rules and workflow states
+2. screen-by-screen behavior
+3. permissions and role toggles
+4. field save/sync behavior
+5. inventory and replacement rules
+6. invoice draft vs posted behavior
+7. milestone-by-milestone implementation order
 
-These artifacts should be approved before deep schema work begins.
+These artifacts should remain aligned with the README so the codebase grows in the intended direction.
 
 ---
 
 ## Summary
 
-This platform should be built as a practical internal HVAC field-service system first, not a giant all-at-once ServiceTitan clone.
+BellField should be built as a clean, modern, field-service platform with:
+- customer-first organization
+- location-specific operational depth
+- editable but permission-controlled workflows
+- strong field support from the start
+- trustworthy history and activity logs
+- practical dispatching
+- real job costing and inventory behavior
+- phased, realistic milestones instead of an all-at-once build
 
 The correct strategy is:
-
-- define the product shape first
-- define user workflows and screen surfaces
+- define product rules first
+- define user workflows and screen behavior
 - split the codebase into maintainable modules
 - support both office and field usage through one backend
-- build in phased, realistic milestones
 - preserve historical correctness
-- prioritize operational reliability before advanced extras
+- build in practical phases
+- leave advanced extras for later
 
-If this sequence is followed, the project stays understandable, buildable, and expandable.
+If this sequence is followed, BellField stays understandable, buildable, and expandable while moving toward a real sellable product.
