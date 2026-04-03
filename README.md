@@ -9,7 +9,7 @@ BellField should support the operational core of a field-service company, includ
 - customer accounts / bill-to entities
 - service locations / properties
 - location-specific contacts
-- equipment and grouped systems at each location
+- equipment at each location
 - service history by location and by equipment
 - jobs and multi-appointment scheduling
 - dispatch board / daily schedule
@@ -35,6 +35,7 @@ Initial development assumptions:
 - it must support both office workflows and field workflows from the beginning
 - the mobile app is not optional later; it is part of version 1 planning
 - the product should feel open and easy by default, with tighter controls available through permissions
+- BellField should be built for a single company to use first, with future multi-tenant SaaS support kept in mind from the beginning
 
 This product should be treated as a commercial SaaS-oriented platform in its structure, even if the early build is done gradually over weeks and months.
 
@@ -94,6 +95,9 @@ BellField should ship with default roles, but permissions must be editable.
 - the product should feel fairly open by default
 - companies can tighten access later if they want to
 - most permissions should be feature-level permissions, not buried in code-only logic
+- permissions should exist at both the role level and the individual employee level
+- per-employee settings should be able to override or further refine role defaults
+- BellField should aim for a permission depth similar to ServiceTitan, while keeping the UI simpler where possible
 
 ### Examples of permission-controlled actions
 - add equipment
@@ -193,6 +197,7 @@ This keeps the stack mostly TypeScript across the product, which improves:
    - dense operational info should still be available
    - tabs, tables, drawers, and grouped views should reduce clutter
    - important info should be easy to reach without turning the app into a goose hunt
+   - screen organization should aim to feel similar to ServiceTitan or FieldOps where that is useful and familiar
 
 8. **Build for extension**
    - avoid spaghetti coupling
@@ -248,6 +253,8 @@ Each location should support:
 - location-specific notes
 - change history
 
+A location must always have at least one usable form of contact information, such as a phone number or email.
+
 ### Contacts
 Contacts should be easy to add and remove from both customer and location records.
 
@@ -260,6 +267,14 @@ UI expectations:
 - there should be a clear "+" action to add contacts
 - there should be a clear remove action for contacts
 - locations and customer accounts can each have multiple contacts
+- one contact can belong to both a customer and a location
+- contacts should be linkable/shared rather than duplicated wherever possible
+- contacts should support optional tags such as Primary, Billing, or similar labels
+
+### Contact removal behavior
+When removing a contact, BellField should allow a choice such as:
+- archive
+- delete / end-date
 
 ### Historical contact behavior
 When people move or details change:
@@ -277,12 +292,20 @@ Equipment must be manageable from both:
 - the field mobile app
 
 ### Equipment view
-Equipment should appear on a dedicated location tab/page, but be grouped logically within the location.
+Equipment should appear on a dedicated location tab/page.
 
-That means:
-- equipment belongs under the location record
-- the equipment list should be grouped rather than being scattered around unrelated screens
-- grouping should support real HVAC system relationships where useful
+Important clarification:
+- each condenser, coil, furnace, air handler, package unit, and similar asset should be its own separate equipment record
+- equipment should not be merged into one combined system record by default
+- the location page should simply organize equipment under its own dedicated section/tab
+
+### Optional equipment grouping
+BellField should later support optional user-created grouping so office staff can link multiple related pieces of equipment together.
+
+Example:
+- a home with multiple split systems may need the office to highlight several separate equipment records and group them together so it is obvious which condenser, coil, and furnace belong to the same system
+
+Grouping should be optional and should not replace individual equipment records.
 
 ### Equipment requirements
 Each equipment record should support, at minimum:
@@ -298,6 +321,8 @@ Each equipment record should support, at minimum:
 - photos / documents
 - HVAC-specific details that may expand over time
 
+Equipment that is actually equipment inventory should be serialized and tracked individually.
+
 ### Equipment editing rules
 Technicians should be able to:
 - add equipment
@@ -309,15 +334,77 @@ These actions should be permission-toggle controlled so each company can decide 
 ### Replacement workflow rule
 When equipment is replaced:
 - the PO for the new equipment should be tied to the replacement job
-- if the purchased item is tagged as Equipment, the system should automatically add the new equipment to the job location
+- if the purchased item is tagged as Equipment, the system should automatically add the new equipment to the job location once it is received
 - old equipment removal should remain a manual action
 - old equipment must remain historically traceable
+- once the replacement job is completed, the new equipment simply remains on that location
 
 Equipment should not be hard-deleted in normal workflow.
 
 ---
 
 ## Job, Appointment, and Dispatch Rules
+
+### Job vs appointment model
+A job lives at and is attached to a location.
+
+Core job rules:
+- every job gets a job number
+- a job belongs to a location
+- a job is the parent operational record
+- a job can have one appointment or multiple appointments
+- estimates attach to the job
+- invoices come from the job
+
+When creating a job, the office should be able to set:
+- job type from a dropdown
+- category / business unit
+- job origin
+- date
+- time frame
+- technician assignment
+- summary / caller complaint
+
+When a date and time frame are entered during job creation, BellField should create the appointment tied to that job.
+
+That appointment:
+- lives on the dispatch board
+- shows the appointment status
+- is immediately assigned to a technician if a technician was selected during job creation
+
+### Job status model
+For v1, job statuses should be simple:
+- Open
+- Closed / Completed
+- Posted
+- Cancelled
+
+Important rules:
+- the job itself is not considered done just because an appointment is finished
+- closing/completing a job should be a manual office action when the office is ready to close it out and bill it as needed
+- posted status is tied to accounting/financial completion later in the process
+
+### Appointment status model
+Appointment statuses should be flexible and not forced into a strict workflow order in v1.
+
+Default statuses should include:
+- Assigned
+- Confirmed
+- On the Way
+- Arrived
+- Working
+- Finished
+- No Answer
+
+Clarifications:
+- these statuses may be updated at any time
+- strict sequential enforcement is not required for v1
+- all statuses are optional for v1 behavior
+- Confirmed means the office has confirmed the appointment, such as calling the day prior
+- Finished means that appointment/visit is finished, not that the whole job is finished
+- No Answer should act as a visible indicator/tag/color state for staff and should not automatically close or change the job itself
+
+BellField should generally use ServiceTitan-like status behavior as a reference for how job status and appointment status should feel unless later design decisions intentionally differ.
 
 ### Job creation and origin tracking
 Jobs should support both:
@@ -367,18 +454,6 @@ The dispatch board should be one of the main office screens and should visually 
 - priority
 - parts needed later where available
 
-### Appointment / dispatch statuses
-Default visual statuses should include:
-- Assigned
-- On the Way
-- Arrived
-- Working
-- Finished
-- No Answer
-- Confirmed
-
-These should be treated as default states, but the system should be designed so companies can evolve statuses later if needed.
-
 ---
 
 ## Field Technician Workflow Rules
@@ -396,16 +471,26 @@ A technician on a job should be able to:
 - add register entries / charges / invoice items
 - upload images, videos, and files to the job
 - create estimates
-- complete the job
+- complete the appointment work in the field
 
 ### Notes and register behavior
 Technicians should always be prompted for notes.
 
 They should also have a register-style area to add:
+- labor
 - charges
 - invoice items
 - service line items
+- parts / consumables
+- maintenance memberships
 - related job entries as part of the field workflow
+
+Everything the technician adds to the register should be reflected immediately on the invoice draft.
+
+Those invoice/register items:
+- can still be edited later
+- remain editable until the job is closed/completed
+- remain editable until the invoice is posted to accounting
 
 ### Photo / video / file behavior
 Technicians should be able to upload and attach:
@@ -432,6 +517,14 @@ The system should support:
 
 Technicians should be able to create estimates in the field.
 
+For now, estimates should not automatically trigger later workflows.
+
+That means:
+- an estimate can be created
+- an estimate can be approved
+- once approved, it is still up to the office to decide how to book or schedule follow-up work
+- the estimate should also be visible from the location so users can see what work has been quoted there
+
 ### Invoices
 Not every job needs a bill.
 
@@ -440,6 +533,8 @@ Examples:
 - service jobs often will
 
 Every job should still be able to be completed normally whether or not it produces an invoice.
+
+An invoice should come from a job, not from an individual appointment.
 
 ### Invoice editability rule
 An invoice should remain editable until it is posted on the accounting side.
@@ -457,12 +552,31 @@ Technician trucks should be treated as their own inventory locations.
 
 Office staff should be able to see what stock is on each truck.
 
-### Direct-to-job purchasing
+Truck transfers do not need approval.
+
+### PO rules
+Each PO should tie to one location or one job.
+
+Important rule:
+- no split PO behavior in v1
+
+Basic purchasing flow for now:
+- create PO
+- receive PO
+- invoice PO
+
+### Direct-to-job purchasing and material usage
 Parts should be allowed to be assigned directly to a job.
 
 This means BellField must support both:
 - inventory flowing through stock locations
 - purchasing or assignment directly against a specific job when needed
+
+Clarifications:
+- equipment should always go directly to a job
+- once received, equipment-tagged items should populate in that location’s equipment tab
+- non-equipment parts and consumables can also be added to a job
+- non-equipment items do not need to appear in the equipment tab
 
 ### Job costing
 Job costing should be part of version 1 planning, even if it lands later in the early build sequence.
@@ -636,8 +750,10 @@ Other modules may read that data through approved interfaces, but should not dir
 
 ### Example internal events
 - JobCreated
+- AppointmentCreated
 - AppointmentScheduled
 - AppointmentReassigned
+- AppointmentStatusUpdated
 - TechnicianStatusChanged
 - JobStatusSaved
 - EquipmentUpdated
@@ -765,14 +881,17 @@ Goal: build the organizational core of the app.
 - account/location relationships with history
 - customer contacts
 - location contacts
+- shared contact linking
+- contact tags
 - equipment records
 - equipment status/history
-- editable grouped equipment tab on location page
+- editable equipment tab on location page
 
 ### End-of-month demo
 - create an account
 - link multiple locations
 - assign separate contacts
+- link shared contacts
 - add/edit/remove equipment
 - preserve relationship and history behavior
 
@@ -788,6 +907,7 @@ Goal: establish operational work records.
 - appointment creation
 - future appointments
 - job status tracking
+- appointment status tracking
 - technician assignment
 - notes
 - file/photo/video attachments
@@ -856,6 +976,7 @@ Goal: support technician quoting and early financial flow.
 - estimate templates
 - multi-option proposals
 - invoice draft flow
+- register-to-invoice reflection
 - editable invoice behavior before posting
 
 ### End-of-month demo
@@ -891,8 +1012,9 @@ Goal: make materials and costs operationally real.
 - technician trucks as stock locations
 - PO creation
 - PO receiving
-- stock transfers
+- PO invoicing
 - direct-to-job assignment
+- serialized equipment behavior
 - equipment-tagged PO behavior for replacement work
 - job cost rollup to jobs
 
