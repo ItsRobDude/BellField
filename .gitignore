@@ -1,0 +1,11 @@
+node_modules
+.npm
+coverage
+*.log
+
+apps/**/node_modules
+apps/**/.next
+apps/**/dist
+apps/**/.expo
+apps/**/.turbo
+apps/**/tsconfig.tsbuildinfo

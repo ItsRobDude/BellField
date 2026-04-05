@@ -1,12 +1,25 @@
 {
   "name": "@bellfield/office-web",
-  "version": "0.0.0",
   "private": true,
+  "version": "0.0.1",
   "scripts": {
-    "dev": "echo \"office-web app scaffolded\"",
-    "lint": "echo \"office-web lint not configured yet\"",
-    "typecheck": "echo \"typecheck not configured yet\"",
-    "test": "echo \"office-web tests not configured yet\"",
-    "format": "echo \"office-web format not configured yet\""
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next dev",
+    "lint": "next lint",
+    "test": "tsc --noEmit"
+  },
+  "dependencies": {
+    "next": "15.3.2",
+    "react": "19.1.0",
+    "react-dom": "19.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "22.15.17",
+    "@types/react": "19.1.2",
+    "@types/react-dom": "19.1.2",
+    "eslint": "9.25.0",
+    "eslint-config-next": "15.3.2",
+    "typescript": "5.8.3"
   }
 }

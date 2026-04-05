@@ -1,12 +1,20 @@
 {
   "name": "@bellfield/worker",
-  "version": "0.0.0",
   "private": true,
+  "version": "0.0.1",
   "scripts": {
-    "dev": "echo \"worker app scaffolded\"",
-    "lint": "echo \"worker lint not configured yet\"",
-    "typecheck": "echo \"typecheck not configured yet\"",
-    "test": "echo \"worker tests not configured yet\"",
-    "format": "echo \"worker format not configured yet\""
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "22.15.17",
+    "@typescript-eslint/eslint-plugin": "8.31.0",
+    "@typescript-eslint/parser": "8.31.0",
+    "eslint": "9.25.0",
+    "tsx": "4.19.3",
+    "typescript": "5.8.3"
   }
 }

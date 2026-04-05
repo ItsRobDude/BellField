@@ -1,12 +1,27 @@
 {
   "name": "@bellfield/field-mobile",
-  "version": "0.0.0",
   "private": true,
+  "version": "0.0.1",
+  "main": "expo-router/entry",
   "scripts": {
-    "dev": "echo \"field-mobile app scaffolded\"",
-    "lint": "echo \"field-mobile lint not configured yet\"",
-    "typecheck": "echo \"typecheck not configured yet\"",
-    "test": "echo \"field-mobile tests not configured yet\"",
-    "format": "echo \"field-mobile format not configured yet\""
+    "dev": "expo start --android",
+    "start": "expo start --android",
+    "lint": "eslint .",
+    "test": "tsc --noEmit"
+  },
+  "dependencies": {
+    "expo": "~53.0.9",
+    "expo-router": "~5.0.6",
+    "expo-status-bar": "~2.2.3",
+    "react": "19.0.0",
+    "react-native": "0.79.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.0.10",
+    "@typescript-eslint/eslint-plugin": "8.31.0",
+    "@typescript-eslint/parser": "8.31.0",
+    "eslint": "9.25.0",
+    "eslint-config-expo": "~9.2.0",
+    "typescript": "5.8.3"
   }
 }

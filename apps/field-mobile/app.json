@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "BellField Field",
+    "slug": "bellfield-field-mobile",
+    "scheme": "bellfield-field",
+    "version": "0.0.1",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "com.bellfield.field"
+    },
+    "plugins": ["expo-router"],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
