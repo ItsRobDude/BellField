@@ -1,7 +1,9 @@
 node_modules
+.pnpm-store
 .npm
 coverage
 *.log
+.DS_Store
 
 apps/**/node_modules
 apps/**/.next
@@ -9,3 +11,6 @@ apps/**/dist
 apps/**/.expo
 apps/**/.turbo
 apps/**/tsconfig.tsbuildinfo
+
+packages/**/dist
+packages/**/tsconfig.tsbuildinfo

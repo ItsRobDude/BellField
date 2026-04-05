@@ -1,0 +1,8 @@
+node_modules
+.pnpm-store
+.next
+.expo
+dist
+coverage
+*.log
+pnpm-lock.yaml
