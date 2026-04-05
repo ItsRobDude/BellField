@@ -7,7 +7,8 @@
     "dev": "expo start --android",
     "start": "expo start --android",
     "lint": "eslint .",
-    "test": "tsc --noEmit"
+    "test": "pnpm run typecheck",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "expo": "~53.0.9",
