@@ -1,0 +1,19 @@
+{
+  "name": "bellfield",
+  "private": true,
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:office-web": "npm --workspace apps/office-web run dev",
+    "dev:field-mobile": "npm --workspace apps/field-mobile run dev",
+    "dev:api": "npm --workspace apps/api run dev",
+    "dev:worker": "npm --workspace apps/worker run dev",
+    "start:office-web": "npm --workspace apps/office-web run start",
+    "start:field-mobile": "npm --workspace apps/field-mobile run start",
+    "start:api": "npm --workspace apps/api run start",
+    "start:worker": "npm --workspace apps/worker run start",
+    "lint": "npm run lint --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
