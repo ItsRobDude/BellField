@@ -1,0 +1,73 @@
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from '@nestjs/common';
+import { log } from './logger';
+
+type HttpRequest = {
+  method: string;
+  url: string;
+  headers: Record<string, string | string[] | undefined>;
+};
+
+type HttpResponse = {
+  status(code: number): { json(payload: ErrorResponseBody): void };
+};
+
+type ErrorResponseBody = {
+  statusCode: number;
+  message: string;
+  error: string;
+  timestamp: string;
+  path: string;
+};
+
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: unknown, host: ArgumentsHost): void {
+    const context = host.switchToHttp();
+    const response = context.getResponse<HttpResponse>();
+    const request = context.getRequest<HttpRequest>();
+
+    const statusCode = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const errorResponse = this.buildErrorResponse(exception, statusCode, request.url);
+
+    log('error', 'API request failed.', {
+      method: request.method,
+      path: request.url,
+      statusCode,
+      requestId: request.headers['x-request-id'],
+      errorName: exception instanceof Error ? exception.name : 'UnknownError',
+      errorMessage: exception instanceof Error ? exception.message : 'Unhandled non-error exception',
+      stack: exception instanceof Error ? exception.stack : undefined
+    });
+
+    response.status(statusCode).json(errorResponse);
+  }
+
+  private buildErrorResponse(exception: unknown, statusCode: number, path: string): ErrorResponseBody {
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      const defaultMessage = exception.message;
+      const message =
+        typeof response === 'string'
+          ? response
+          : typeof response === 'object' && response !== null && 'message' in response
+            ? String(response.message)
+            : defaultMessage;
+
+      return {
+        statusCode,
+        message,
+        error: HttpStatus[statusCode] ?? 'HttpException',
+        timestamp: new Date().toISOString(),
+        path
+      };
+    }
+
+    return {
+      statusCode,
+      message: 'Internal server error',
+      error: 'InternalServerError',
+      timestamp: new Date().toISOString(),
+      path
+    };
+  }
+}
