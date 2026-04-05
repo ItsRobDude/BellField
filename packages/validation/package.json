@@ -1,0 +1,11 @@
+{
+  "name": "@bellfield/validation",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "echo \"validation lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"validation tests not configured yet\"",
+    "format": "echo \"validation format not configured yet\""
+  }
+}

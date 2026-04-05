@@ -1,0 +1,11 @@
+{
+  "name": "@bellfield/contracts",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "echo \"contracts lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"contracts tests not configured yet\"",
+    "format": "echo \"contracts format not configured yet\""
+  }
+}
