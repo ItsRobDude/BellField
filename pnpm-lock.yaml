@@ -1,0 +1,23 @@
+lockfileVersion: '9.0'
+
+settings:
+  autoInstallPeers: true
+  excludeLinksFromLockfile: false
+
+importers:
+
+  .: {}
+
+  apps/api: {}
+
+  apps/field-mobile: {}
+
+  apps/office-web: {}
+
+  apps/worker: {}
+
+  packages/contracts: {}
+
+  packages/utils: {}
+
+  packages/validation: {}

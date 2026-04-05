@@ -1,0 +1,15 @@
+{
+  "name": "bellfield-workspace",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "pnpm -r --if-present lint",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "format": "pnpm -r --if-present format",
+    "office-web": "pnpm --filter @bellfield/office-web dev",
+    "field-mobile": "pnpm --filter @bellfield/field-mobile dev",
+    "api": "pnpm --filter @bellfield/api dev",
+    "worker": "pnpm --filter @bellfield/worker dev"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "@bellfield/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"api app scaffolded\"",
+    "lint": "echo \"api lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"api tests not configured yet\"",
+    "format": "echo \"api format not configured yet\""
+  }
+}

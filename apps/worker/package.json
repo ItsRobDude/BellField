@@ -1,0 +1,12 @@
+{
+  "name": "@bellfield/worker",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"worker app scaffolded\"",
+    "lint": "echo \"worker lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"worker tests not configured yet\"",
+    "format": "echo \"worker format not configured yet\""
+  }
+}

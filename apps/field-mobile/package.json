@@ -1,0 +1,12 @@
+{
+  "name": "@bellfield/field-mobile",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"field-mobile app scaffolded\"",
+    "lint": "echo \"field-mobile lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"field-mobile tests not configured yet\"",
+    "format": "echo \"field-mobile format not configured yet\""
+  }
+}

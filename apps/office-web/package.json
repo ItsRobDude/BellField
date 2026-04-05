@@ -1,0 +1,12 @@
+{
+  "name": "@bellfield/office-web",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"office-web app scaffolded\"",
+    "lint": "echo \"office-web lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"office-web tests not configured yet\"",
+    "format": "echo \"office-web format not configured yet\""
+  }
+}

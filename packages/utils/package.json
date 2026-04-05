@@ -1,0 +1,11 @@
+{
+  "name": "@bellfield/utils",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "lint": "echo \"utils lint not configured yet\"",
+    "typecheck": "echo \"typecheck not configured yet\"",
+    "test": "echo \"utils tests not configured yet\"",
+    "format": "echo \"utils format not configured yet\""
+  }
+}
