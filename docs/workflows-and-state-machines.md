@@ -1,0 +1,445 @@
+# BellField Workflows and State Machines
+
+This document defines how work should move through BellField in real life.
+
+Its purpose is to describe the expected lifecycle of:
+- jobs
+- appointments
+- estimates
+- invoices
+- purchasing/receiving behavior related to jobs
+- job closing and follow-up decisions
+
+This is a product behavior document, not a coding document.
+
+For BellField version 1, workflows should generally behave more like a **guide with prompts and warnings** than a strict lock-everything system.
+
+Core v1 philosophy:
+- keep workflows flexible
+- preserve history
+- warn before risky actions
+- let permissions decide who can override rules
+
+---
+
+## 1. Core Workflow Philosophy
+
+BellField version 1 should guide users with:
+- warnings
+- prompts
+- confirmations
+- visible statuses
+- history logs
+
+It should not force overly strict step-by-step sequencing in most cases.
+
+This means:
+- users may skip intermediate appointment statuses if they forget
+- users can manually reopen or change records if permissions allow
+- BellField should help staff make clean records without over-automating every decision
+
+BellField should feel similar in spirit to ServiceTitan-style workflow behavior where that is practical, but should remain simpler and easier to understand.
+
+---
+
+## 2. Job and Appointment Relationship
+
+### Core model
+A job is the parent work record.
+
+An appointment is a scheduled visit attached to that job.
+
+Rules:
+- every appointment belongs to exactly one job
+- a job may have zero appointments
+- a job may have one appointment
+- a job may have multiple appointments
+
+A job with zero appointments:
+- is valid
+- should not appear on the dispatch timeline
+- should live in an unscheduled/open state until an appointment is added
+
+### Multi-appointment support
+A job may have multiple appointments with different:
+- dates
+- start times
+- end times
+- technicians
+- appointment statuses
+
+---
+
+## 3. Job Creation Workflow
+
+### Standard job creation
+When office staff create a job, BellField should allow them to enter:
+- location
+- customer/bill-to selection
+- job type
+- category/business unit
+- origin
+- summary/caller complaint
+- date
+- time frame
+- technician assignment
+
+### Automatic appointment generation
+If the office enters a date and time when creating the job:
+- BellField should automatically create the first appointment for that job
+- that appointment should appear on the dispatch board for that date/time
+
+### Unscheduled job behavior
+If the office creates a job without a date/time:
+- BellField should still save the job
+- the job should appear in the unscheduled area
+- it should not appear on the technician timeline until an appointment is created
+
+---
+
+## 4. Job State Machine
+
+### Default job statuses for v1
+BellField should use these default job statuses:
+- Open
+- Closed/Completed
+- Posted
+- Cancelled
+
+### Job status meanings
+**Open**
+- the job is active
+- work may still be ongoing
+- follow-up appointments may still be added
+- the invoice may still be edited
+
+**Closed/Completed**
+- office has manually decided the job is done
+- this is not automatic when an appointment is finished
+- the job has reached operational completion
+
+**Posted**
+- the invoice/accounting side has been finalized
+- this is the accounting-complete state
+- posted only happens after invoice posting/accounting completion
+
+**Cancelled**
+- the job is cancelled
+- future work under that job should not continue unless the job is reopened
+
+### Job state rules
+- Finished appointments do not auto-close a job
+- office must manually close/complete a job
+- a cancelled job may later be reopened if needed
+- reopening closed jobs should be permission-controlled
+
+### Close warning rule
+If a user tries to close a job that still has a future appointment attached:
+- BellField should warn or prompt them before allowing that action
+
+### Cancel behavior
+If a job is cancelled:
+- all appointments under it should also be cancelled
+
+---
+
+## 5. Appointment State Machine
+
+### Default appointment statuses for v1
+BellField should use these default appointment statuses:
+- Assigned
+- Confirmed
+- On the Way
+- Arrived
+- Working
+- Finished
+- No Answer
+
+### Appointment status principles
+- all default statuses should be available to both office users and technicians
+- statuses do not need strict sequence enforcement in v1
+- users should be able to skip statuses if they forgot to tap something earlier
+
+Example:
+- a technician can move from Assigned straight to Arrived if needed
+
+### Appointment status meanings
+**Assigned**
+- the appointment has been assigned to a technician
+
+**Confirmed**
+- office has confirmed the appointment with the customer
+- this is an appointment-only status, not a job status
+
+**On the Way**
+- technician is heading to the appointment
+
+**Arrived**
+- technician has arrived on site
+
+**Working**
+- technician is actively working the appointment
+
+**Finished**
+- that visit is finished
+- this does not mean the whole job is done
+
+**No Answer**
+- nobody answered or the visit attempt failed in that way
+- this should remain just a status/indicator
+- it should not auto-close anything
+- it should not auto-prompt the user into follow-up choices in v1
+- the appointment remains open until office decides what to do next
+
+### Appointment history behavior
+Appointment status changes should appear in the main job history/log rather than in a completely separate appointment-only history area.
+
+---
+
+## 6. Appointment Finish Workflow
+
+When a technician marks an appointment as **Finished**, BellField should guide them through a finish review flow.
+
+### Finish prompts
+BellField should prompt for:
+- notes
+- register items
+
+### Notes behavior
+Notes should be prompted every time an appointment is marked Finished.
+
+If the technician tries to finish without notes:
+- BellField should warn them
+- BellField should still allow them to continue if they choose
+
+### Register behavior
+Register items should also be prompted when finishing an appointment.
+
+However:
+- register entry is optional by default
+- users may skip it
+
+### Media requirements
+Photos/videos/files should not be universally required for all job types.
+
+However:
+- estimate-type jobs should require them
+- other job types may leave media optional by default
+
+---
+
+## 7. Job Follow-Up Workflow
+
+After an appointment is marked Finished and the job remains Open, the system should support common follow-up choices such as:
+- close the job
+- add another appointment
+- leave it open
+
+In v1:
+- this follow-up prompt/action should be optional or toggle-able
+- companies may choose how much workflow prompting they want
+
+### Parts-needed behavior
+If a technician says parts are needed:
+- BellField may represent this as a status or tag on the job
+- exact expanded parts-waiting workflow can be refined later
+
+---
+
+## 8. Reopen and New Job Workflow
+
+### Open job follow-up
+If an estimate is approved while the original job is still Open:
+- the standard workflow should be to add another appointment to that same job
+- however, the company should still be allowed to decide how they want to handle it
+
+### Closed job follow-up
+If an estimate is approved after the original job is already Closed:
+- BellField should prompt the user to create a new job
+
+### Manual status change prompts
+If a user manually changes a job’s status:
+- and the job is still Open, BellField should prompt whether they want to add a new appointment
+- if the job is already Closed, BellField should prompt whether they want to make a new job instead
+
+---
+
+## 9. Estimate Workflow
+
+### Estimate attachment rules
+Estimates attach to the job.
+
+They should also be visible in:
+- the job tabs
+- the location tabs
+
+### Estimate lifecycle
+For v1, estimate statuses should support behavior like:
+- Pending
+- Approved
+- Declined
+
+### Important v1 rule
+Estimates should not automatically trigger later workflow yet.
+
+That means:
+- BellField records the estimate
+- BellField records its approval/decline state
+- office still decides how to schedule or convert that work afterward
+
+---
+
+## 10. Invoice Workflow
+
+### Invoice creation timing
+An invoice draft should appear as soon as the job is created.
+
+Practical meaning:
+- the invoice may start mostly blank
+- it exists early so the job can build into it over time
+
+### Zero-dollar invoice rule
+BellField should still allow/record a zero-dollar invoice.
+
+### Register to invoice behavior
+Everything a technician adds in the register should immediately reflect on the invoice draft.
+
+This includes:
+- labor
+- service items
+- parts
+- memberships
+- other sellable items
+
+### Invoice editability
+Office users should be able to edit invoice lines even after technicians add them.
+
+The invoice should remain editable until posting.
+
+### Invoice states
+For practical workflow purposes, the invoice should behave like:
+- Draft/Editable
+- Posted/Locked
+
+### Posted invoice behavior
+Once posted:
+- the invoice should be locked
+- BellField may allow follow-up actions such as adjustment or credit-style corrections
+- BellField should not allow casual direct editing of the posted invoice itself
+
+---
+
+## 11. Job Closing and Invoice Relationship
+
+### Job closing behavior
+A job should not close automatically just because work is finished in the field.
+
+Office must manually close it.
+
+### Costing finalization behavior
+Job cost should not become final while the job is still open.
+
+However:
+- BellField should show a preview of job cost before completion
+- final job cost should become real/final once the job is completed
+
+---
+
+## 12. Purchasing, Receiving, and Equipment Installation Workflow
+
+### PO behavior
+A PO should always have an end location such as:
+- van
+- inventory
+- customer location
+
+A PO does not always need a job attached.
+
+### No split PO rule
+A PO should not split across multiple destinations in v1.
+
+### Basic PO workflow
+BellField should support this simple v1 flow:
+- create PO
+- receive PO
+- invoice PO
+
+### Equipment receipt workflow
+If equipment for a replacement job is received before it is installed:
+- it should appear on the customer location as pending equipment
+
+BellField should support statuses such as:
+- Received / Not Installed
+- Installed / Active
+- similar practical install states later if needed
+
+### Non-equipment material behavior
+Non-equipment materials assigned to a job:
+- should be included for job costing preview
+- should only affect finalized job cost once the job is completed
+- should not appear in the equipment tab
+
+---
+
+## 13. Dispatch Board Workflow Rules
+
+### Timeline behavior
+Appointments with technicians assigned:
+- should appear on the timeline
+
+Appointments without technicians assigned:
+- should live in the unassigned queue
+- should not appear on the timeline by default
+- an unassigned column may exist as an optional dispatch board configuration
+
+### Reassignment behavior
+If an appointment is reassigned to a different technician:
+- BellField should preserve that reassignment in history
+
+### Live update behavior
+Dispatch board color/status changes should update live for office users as soon as the technician or office user saves/presses that status change.
+
+---
+
+## 14. Warning and Override Philosophy
+
+### Warning style
+When BellField warns a user about something risky, the normal behavior should be:
+- simple yes/no confirmation
+
+### Override behavior
+Owners and admins should be able to override most workflow warnings.
+
+### Reopen permissions
+Reopening closed jobs should normally be controlled by a permission toggle set by the owner or higher-permission admin.
+
+---
+
+## 15. V1 State Machine Summary
+
+### Job summary
+- Jobs are flexible parent records
+- Appointments are visits under them
+- Finished appointments do not auto-close jobs
+- Office closes jobs manually
+- Posted only happens after accounting posting
+
+### Appointment summary
+- Appointment statuses are flexible
+- Users may skip intermediate steps
+- No Answer is a status only, not an automatic branch
+- Appointment history rolls into the main job history
+
+### Invoice summary
+- Invoice draft exists early
+- Register items feed the invoice draft immediately
+- Office can edit until posting
+- Posting locks the invoice except for later accounting-safe follow-up actions
+
+### V1 design rule
+BellField version 1 should behave as:
+- a practical guide
+- warning-driven
+- history-preserving
+- permission-controlled
+- flexible enough for real-world office and field behavior
