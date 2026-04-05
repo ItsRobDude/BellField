@@ -2,10 +2,20 @@
   "name": "@bellfield/validation",
   "version": "0.0.0",
   "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "files": ["dist"],
   "scripts": {
-    "lint": "echo \"validation lint not configured yet\"",
-    "typecheck": "echo \"typecheck not configured yet\"",
-    "test": "echo \"validation tests not configured yet\"",
-    "format": "echo \"validation format not configured yet\""
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint": "tsc --noEmit -p tsconfig.json",
+    "test": "tsc --noEmit -p tsconfig.json"
   }
 }
