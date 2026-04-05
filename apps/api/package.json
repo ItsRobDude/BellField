@@ -8,7 +8,10 @@
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "pnpm run typecheck",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "migration:create": "bash ./scripts/migrations/create.sh",
+    "migration:up": "bash ./scripts/migrations/up.sh",
+    "migration:down": "bash ./scripts/migrations/down.sh"
   },
   "dependencies": {
     "@nestjs/common": "11.1.3",
