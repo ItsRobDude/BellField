@@ -98,7 +98,7 @@ Notes:
 - iOS is not the expected local target on a normal Windows development setup.
 - Web can be useful for quick iteration, but it is not a substitute for validating behavior on an actual mobile target.
 
-### Production-style start commands
+### Start commands
 
 ```bash
 pnpm start:office-web
