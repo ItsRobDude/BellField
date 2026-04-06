@@ -108,20 +108,18 @@ Notes:
 
 ## 6) Repo-wide quality/check commands
 
+CI baseline versions:
+
+- Node.js 20 LTS
+- pnpm 10.13.1
+
 From repository root:
 
 ```bash
-pnpm format
-pnpm build
 pnpm lint
 pnpm typecheck
 pnpm test
-```
-
-Optional all-in-one sequence:
-
-```bash
-pnpm format && pnpm build && pnpm lint && pnpm typecheck && pnpm test
+pnpm build
 ```
 
 ## 7) Intentionally deferred items (explicit)
