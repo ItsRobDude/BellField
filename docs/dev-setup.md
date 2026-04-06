@@ -106,7 +106,21 @@ Notes:
 - `DATABASE_URL` is required for `migration:up` and `migration:down`.
 - Commands are cross-platform Node entrypoints and call `psql`.
 
-## 6) Repo-wide quality/check commands
+## 6) Environment variables
+
+Use `.env.example` files as documentation-first references:
+
+- repository root: shared naming and sample values
+- `apps/api/.env.example`: API runtime + API migration script variables
+- `apps/worker/.env.example`: worker runtime variables
+
+| Variable | Used by | Required? | Safe local sample value |
+| --- | --- | --- | --- |
+| `NODE_ENV` | `apps/api` runtime config, `apps/worker` runtime config | Optional (defaults to `development`) | `development` |
+| `PORT` | `apps/api` runtime config (HTTP listen port) | Optional (defaults to `3001`) | `3001` |
+| `DATABASE_URL` | `apps/api/scripts/migrations/*.mjs` (`migration:up`, `migration:down`) | Required for migration up/down scripts; not required for normal API startup | `postgresql://postgres:postgres@localhost:5432/bellfield` |
+
+## 7) Repo-wide quality/check commands
 
 CI baseline versions:
 
@@ -122,7 +136,7 @@ pnpm test
 pnpm build
 ```
 
-## 7) Intentionally deferred items (explicit)
+## 8) Intentionally deferred items (explicit)
 
 The current scaffold is intentionally foundation-only. These are deferred on purpose:
 
@@ -132,7 +146,7 @@ The current scaffold is intentionally foundation-only. These are deferred on pur
 4. Real production schema/domain model (beyond starter migration path and placeholders).
 5. Offline sync behavior implementation details (queue semantics, conflict resolution, retry policy, reconciliation UX).
 
-## 8) Troubleshooting notes (local self-hosted oriented)
+## 9) Troubleshooting notes (local self-hosted oriented)
 
 - **Port collisions:** If a surface fails to boot, check for port conflicts and stop old local processes.
 - **Dependency drift:** Re-run `pnpm install` after lockfile updates or branch switches.

@@ -1,11 +1,14 @@
+import { getWorkerRuntimeConfig } from './common/config/runtime-config';
 import { workerLog } from './common/logger';
 
 const heartbeatMs = 60_000;
 
 function startWorker(): void {
+  const runtimeConfig = getWorkerRuntimeConfig();
+
   workerLog('info', 'Worker started.', {
     pid: process.pid,
-    nodeEnv: process.env.NODE_ENV ?? 'development'
+    nodeEnv: runtimeConfig.nodeEnv
   });
 
   setInterval(() => {
