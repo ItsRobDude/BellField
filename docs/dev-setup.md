@@ -97,14 +97,45 @@ From repository root:
 
 ```bash
 pnpm --filter @bellfield/api migration:create -- add_example
-pnpm --filter @bellfield/api migration:up
-pnpm --filter @bellfield/api migration:down
 ```
 
 Notes:
 
+- `psql` must be installed and available on `PATH` because the migration runner shells out to PostgreSQL client tools.
 - `DATABASE_URL` is required for `migration:up` and `migration:down`.
+- `schema_migrations` is created by the runner on `migration:up` if it does not exist yet.
 - Commands are cross-platform Node entrypoints and call `psql`.
+
+### Fresh local bootstrap example (throwaway DB)
+
+```bash
+# verify PostgreSQL CLI is available
+psql --version
+
+# create a throwaway database
+createdb bellfield_migration_smoke
+
+# set DATABASE_URL for this shell
+export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bellfield_migration_smoke
+
+# create migration pair
+pnpm --filter @bellfield/api migration:create -- add_smoke_table
+
+# edit generated SQL files, then apply
+pnpm --filter @bellfield/api migration:up
+
+# rollback latest migration
+pnpm --filter @bellfield/api migration:down
+
+# clean up throwaway DB when done
+dropdb bellfield_migration_smoke
+```
+
+PowerShell equivalent environment variable set:
+
+```powershell
+$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/bellfield_migration_smoke"
+```
 
 ## 6) Environment variables
 
