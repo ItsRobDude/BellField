@@ -5,8 +5,8 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "start": "next dev",
-    "lint": "next lint",
+    "start": "next start",
+    "lint": "eslint .",
     "test": "pnpm run typecheck",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

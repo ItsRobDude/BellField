@@ -1,20 +1,17 @@
 {
   "name": "bellfield",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*"
-  ],
   "scripts": {
-    "dev:office-web": "npm --workspace apps/office-web run dev",
-    "dev:field-mobile": "npm --workspace apps/field-mobile run dev",
-    "dev:api": "npm --workspace apps/api run dev",
-    "dev:worker": "npm --workspace apps/worker run dev",
-    "start:office-web": "npm --workspace apps/office-web run start",
-    "start:field-mobile": "npm --workspace apps/field-mobile run start",
-    "start:api": "npm --workspace apps/api run start",
-    "start:worker": "npm --workspace apps/worker run start",
-    "build": "npm run build --workspaces --if-present",
+    "dev:office-web": "pnpm --filter @bellfield/office-web dev",
+    "dev:field-mobile": "pnpm --filter @bellfield/field-mobile dev",
+    "dev:api": "pnpm --filter @bellfield/api dev",
+    "dev:worker": "pnpm --filter @bellfield/worker dev",
+    "start:office-web": "pnpm --filter @bellfield/office-web start",
+    "start:field-mobile": "pnpm --filter @bellfield/field-mobile start",
+    "start:api": "pnpm --filter @bellfield/api start",
+    "start:worker": "pnpm --filter @bellfield/worker start",
+    "build": "pnpm -r --if-present build",
+    "format": "prettier --write .",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
     "test": "pnpm -r --if-present test"
