@@ -4,8 +4,11 @@
   "version": "0.0.1",
   "main": "expo-router/entry",
   "scripts": {
-    "dev": "expo start --android",
-    "start": "expo start --android",
+    "dev": "expo start",
+    "start": "expo start",
+    "dev:android": "expo start --android",
+    "dev:ios": "expo start --ios",
+    "dev:web": "expo start --web",
     "lint": "eslint .",
     "test": "pnpm run typecheck",
     "typecheck": "tsc --noEmit -p tsconfig.json"

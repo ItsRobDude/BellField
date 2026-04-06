@@ -80,6 +80,24 @@ pnpm dev:api
 pnpm dev:worker
 ```
 
+`pnpm dev:field-mobile` now runs the generic Expo startup flow (`expo start`), which lets you pick the target interactively.
+For direct Android device/emulator launch (common on Windows setups), use:
+
+```bash
+pnpm --filter @bellfield/field-mobile dev:android
+```
+
+Additional convenience targets:
+
+```bash
+pnpm --filter @bellfield/field-mobile dev:ios
+pnpm --filter @bellfield/field-mobile dev:web
+```
+
+Notes:
+- iOS is not the expected local target on a normal Windows development setup.
+- Web can be useful for quick iteration, but it is not a substitute for validating behavior on an actual mobile target.
+
 ### Production-style start commands
 
 ```bash
@@ -181,7 +199,7 @@ The current scaffold is intentionally foundation-only. These are deferred on pur
 
 - **Port collisions:** If a surface fails to boot, check for port conflicts and stop old local processes.
 - **Dependency drift:** Re-run `pnpm install` after lockfile updates or branch switches.
-- **Expo/device issues:** Ensure Android emulator/device tooling is running before `field-mobile` startup.
+- **Expo/device issues:** Use `pnpm --filter @bellfield/field-mobile dev:android` when you want direct Android launch and ensure emulator/device tooling is running beforehand.
 - **API migration commands:** Ensure `DATABASE_URL` and `psql` are both available when running migration scripts locally.
 - **Type errors across workspaces:** Run `pnpm typecheck` at root to catch shared-package breakages affecting multiple apps.
 - **Fresh start fallback:** If local state is inconsistent, clear local build artifacts and reinstall dependencies, then re-run the individual dev command.
