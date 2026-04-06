@@ -9,9 +9,9 @@
     "lint": "eslint \"src/**/*.ts\"",
     "test": "pnpm run typecheck",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "migration:create": "bash ./scripts/migrations/create.sh",
-    "migration:up": "bash ./scripts/migrations/up.sh",
-    "migration:down": "bash ./scripts/migrations/down.sh"
+    "migration:create": "node ./scripts/migrations/create.mjs",
+    "migration:up": "node ./scripts/migrations/up.mjs",
+    "migration:down": "node ./scripts/migrations/down.mjs"
   },
   "dependencies": {
     "@nestjs/common": "11.1.3",
