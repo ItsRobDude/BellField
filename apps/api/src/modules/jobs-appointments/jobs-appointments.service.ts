@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { CompanyDataService } from '../company-data/company-data.service';
+import { EquipmentDataService } from '../company-data/equipment-data.service';
+import { JobsDataService } from '../company-data/jobs-data.service';
+import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import type {
   AddJobNoteRequestDto,
@@ -19,7 +21,9 @@ import type {
 @Injectable()
 export class JobsAppointmentsService {
   constructor(
-    private readonly companyDataService: CompanyDataService,
+    private readonly referenceDataService: ReferenceDataService,
+    private readonly equipmentDataService: EquipmentDataService,
+    private readonly jobsDataService: JobsDataService,
     private readonly identityAccessService: IdentityAccessService
   ) {}
 
@@ -27,31 +31,34 @@ export class JobsAppointmentsService {
     this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
 
     return {
-      customers: this.companyDataService.listCustomers().map((customer) => this.toCustomerSummary(customer.id)),
-      locations: this.companyDataService.listLocations().map((location) => this.toLocationSummary(location.id)),
+      customers: this.referenceDataService.listCustomers().map((customer) => this.toCustomerSummary(customer.id)),
+      locations: this.referenceDataService.listLocations().map((location) => this.toLocationSummary(location.id)),
       technicians: this.identityAccessService
         .getActiveEmployees()
         .filter((employee) => employee.roleId === 'technician')
         .map((employee) => this.toTechnicianOption(employee.id)),
-      jobs: this.companyDataService.listJobs().map((job) => this.toJobSummary(job.id))
+      jobs: this.jobsDataService.listJobs().map((job) => this.toJobSummary(job.id))
     };
   }
 
   createJob(sessionToken: string, request: CreateJobRequestDto): JobSummaryDto {
     const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:create');
-    const job = this.companyDataService.createJob(request, actor.displayName);
+    const location = this.referenceDataService.getLocationById(request.locationId);
+    const billToCustomerId = request.billToCustomerId ?? location.customerId;
+    this.referenceDataService.getCustomerById(billToCustomerId);
+    const job = this.jobsDataService.createJob(request, actor.displayName, billToCustomerId, location.name);
     return this.toJobSummary(job.id);
   }
 
   updateJobStatus(sessionToken: string, jobId: string, request: UpdateJobStatusRequestDto): JobSummaryDto {
     const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
-    const job = this.companyDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
+    const job = this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
     return this.toJobSummary(job.id);
   }
 
   addAppointment(sessionToken: string, jobId: string, request: CreateAppointmentRequestDto): JobSummaryDto {
     const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:create');
-    this.companyDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
+    this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
     return this.toJobSummary(jobId);
   }
 
@@ -61,7 +68,7 @@ export class JobsAppointmentsService {
     request: UpdateAppointmentStatusRequestDto
   ): JobSummaryDto {
     const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:edit');
-    const appointment = this.companyDataService.updateAppointmentStatus(
+    const appointment = this.jobsDataService.updateAppointmentStatus(
       appointmentId,
       request.status,
       actor.displayName,
@@ -69,7 +76,7 @@ export class JobsAppointmentsService {
     );
 
     if (request.occurredAt) {
-      this.companyDataService.addSyncFlag(
+      this.jobsDataService.addSyncFlag(
         appointment.jobId,
         'Field update synced after local save queue replay.',
         actor.displayName,
@@ -82,10 +89,10 @@ export class JobsAppointmentsService {
 
   addJobNote(sessionToken: string, jobId: string, request: AddJobNoteRequestDto): JobSummaryDto {
     const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
-    this.companyDataService.addJobNote(jobId, request.note, actor.displayName, request.occurredAt);
+    this.jobsDataService.addJobNote(jobId, request.note, actor.displayName, request.occurredAt);
 
     if (request.occurredAt) {
-      this.companyDataService.addSyncFlag(
+      this.jobsDataService.addSyncFlag(
         jobId,
         'Field note synced after local save queue replay.',
         actor.displayName,
@@ -98,17 +105,21 @@ export class JobsAppointmentsService {
 
   getAssignedWork(sessionToken: string): FieldAssignedWorkResponseDto {
     const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
-    const jobs = this.companyDataService.listAssignedJobsForEmployee(actor.id);
+    const today = new Date();
+    const tomorrow = new Date(today);
+    tomorrow.setDate(today.getDate() + 1);
+    const allowedDates = new Set([today.toISOString().slice(0, 10), tomorrow.toISOString().slice(0, 10)]);
+    const jobs = this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
     const locationIds = [...new Set(jobs.map((job) => job.locationId))];
 
     return {
       jobs: jobs.map((job) => this.toJobSummary(job.id)),
       locations: locationIds.map((locationId) => this.toLocationSummary(locationId)),
       customers: locationIds
-        .map((locationId) => this.companyDataService.getLocationById(locationId).customerId)
+        .map((locationId) => this.referenceDataService.getLocationById(locationId).customerId)
         .filter((customerId, index, values) => values.indexOf(customerId) === index)
         .map((customerId) => this.toCustomerSummary(customerId)),
-      equipment: this.companyDataService
+      equipment: this.equipmentDataService
         .listEquipment(true)
         .filter((equipmentRecord) => equipmentRecord.locationId && locationIds.includes(equipmentRecord.locationId))
         .map((equipmentRecord) => ({
@@ -130,7 +141,7 @@ export class JobsAppointmentsService {
   }
 
   private toCustomerSummary(customerId: string): CustomerAccountSummaryDto {
-    const customer = this.companyDataService.getCustomerById(customerId);
+    const customer = this.referenceDataService.getCustomerById(customerId);
 
     return {
       id: customer.id,
@@ -143,8 +154,8 @@ export class JobsAppointmentsService {
   }
 
   private toLocationSummary(locationId: string): LocationSummaryDto {
-    const location = this.companyDataService.getLocationById(locationId);
-    const customer = this.companyDataService.getCustomerById(location.customerId);
+    const location = this.referenceDataService.getLocationById(locationId);
+    const customer = this.referenceDataService.getCustomerById(location.customerId);
 
     return {
       id: location.id,
@@ -156,7 +167,7 @@ export class JobsAppointmentsService {
       state: location.state,
       postalCode: location.postalCode,
       contacts: location.contactIds.map((contactId) => {
-        const contact = this.companyDataService.getContactById(contactId);
+        const contact = this.referenceDataService.getContactById(contactId);
 
         return {
           id: contact.id,
@@ -181,7 +192,7 @@ export class JobsAppointmentsService {
   }
 
   private toAppointmentSummary(appointmentId: string): AppointmentSummaryDto {
-    const appointment = this.companyDataService.getAppointmentById(appointmentId);
+    const appointment = this.jobsDataService.getAppointmentById(appointmentId);
     const technician = appointment.technicianId
       ? this.identityAccessService.getEmployeeSummaryById(appointment.technicianId)
       : null;
@@ -200,9 +211,9 @@ export class JobsAppointmentsService {
   }
 
   private toJobSummary(jobId: string): JobSummaryDto {
-    const job = this.companyDataService.getJobById(jobId);
-    const location = this.companyDataService.getLocationById(job.locationId);
-    const billToCustomer = this.companyDataService.getCustomerById(job.billToCustomerId);
+    const job = this.jobsDataService.getJobById(jobId);
+    const location = this.referenceDataService.getLocationById(job.locationId);
+    const billToCustomer = this.referenceDataService.getCustomerById(job.billToCustomerId);
 
     return {
       id: job.id,
@@ -217,7 +228,7 @@ export class JobsAppointmentsService {
       summary: job.summary,
       status: job.status,
       workOrderNumber: job.workOrderNumber,
-      appointments: this.companyDataService
+      appointments: this.jobsDataService
         .listAppointmentsForJob(job.id)
         .map((appointment) => this.toAppointmentSummary(appointment.id)),
       timeline: job.timeline.map((entry) => ({ ...entry })),

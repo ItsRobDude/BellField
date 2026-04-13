@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
-import { CompanyDataService } from '../company-data/company-data.service';
+import { EquipmentDataService } from '../company-data/equipment-data.service';
+import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import type {
   CreateEquipmentRequestDto,
@@ -11,7 +12,8 @@ import type {
 @Injectable()
 export class EquipmentService {
   constructor(
-    private readonly companyDataService: CompanyDataService,
+    private readonly referenceDataService: ReferenceDataService,
+    private readonly equipmentDataService: EquipmentDataService,
     private readonly identityAccessService: IdentityAccessService
   ) {}
 
@@ -19,8 +21,8 @@ export class EquipmentService {
     this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:view');
 
     return {
-      locations: this.companyDataService.listLocations().map((location) => this.toLocationSummary(location.id)),
-      equipment: this.companyDataService
+      locations: this.referenceDataService.listLocations().map((location) => this.toLocationSummary(location.id)),
+      equipment: this.equipmentDataService
         .listEquipment(includeInactive)
         .map((equipmentRecord) => this.toEquipmentSummary(equipmentRecord.id))
     };
@@ -28,20 +30,28 @@ export class EquipmentService {
 
   createEquipment(sessionToken: string, request: CreateEquipmentRequestDto): EquipmentSummaryDto {
     this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:create');
-    const createdEquipment = this.companyDataService.createEquipment(request);
+    if (request.locationId) {
+      this.referenceDataService.getLocationById(request.locationId);
+    }
+
+    const createdEquipment = this.equipmentDataService.createEquipment(request);
     return this.toEquipmentSummary(createdEquipment.id);
   }
 
   updateEquipment(sessionToken: string, equipmentId: string, request: UpdateEquipmentRequestDto): EquipmentSummaryDto {
     this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:edit');
-    const updatedEquipment = this.companyDataService.updateEquipment(equipmentId, request);
+    if (request.locationId) {
+      this.referenceDataService.getLocationById(request.locationId);
+    }
+
+    const updatedEquipment = this.equipmentDataService.updateEquipment(equipmentId, request);
     return this.toEquipmentSummary(updatedEquipment.id);
   }
 
   private toLocationSummary(locationId: string): EquipmentLocationSummaryDto {
-    const location = this.companyDataService.getLocationById(locationId);
-    const customer = this.companyDataService.getCustomerById(location.customerId);
-    const contactNames = location.contactIds.map((contactId) => this.companyDataService.getContactById(contactId).displayName);
+    const location = this.referenceDataService.getLocationById(locationId);
+    const customer = this.referenceDataService.getCustomerById(location.customerId);
+    const contactNames = location.contactIds.map((contactId) => this.referenceDataService.getContactById(contactId).displayName);
 
     return {
       id: location.id,
@@ -57,9 +67,9 @@ export class EquipmentService {
   }
 
   private toEquipmentSummary(equipmentId: string): EquipmentSummaryDto {
-    const equipmentRecord = this.companyDataService.getEquipmentById(equipmentId);
-    const location = equipmentRecord.locationId ? this.companyDataService.getLocationById(equipmentRecord.locationId) : null;
-    const customer = location ? this.companyDataService.getCustomerById(location.customerId) : null;
+    const equipmentRecord = this.equipmentDataService.getEquipmentById(equipmentId);
+    const location = equipmentRecord.locationId ? this.referenceDataService.getLocationById(equipmentRecord.locationId) : null;
+    const customer = location ? this.referenceDataService.getCustomerById(location.customerId) : null;
 
     return {
       id: equipmentRecord.id,

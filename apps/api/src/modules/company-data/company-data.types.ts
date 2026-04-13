@@ -49,6 +49,22 @@ export type EquipmentRecord = {
   updatedAt: string;
 };
 
+export type CreateEquipmentInput = {
+  locationId?: string;
+  inventoryLocationLabel?: string;
+  equipmentType: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  filterSizes: string[];
+  equipmentLocationDescription?: string;
+  installDate?: string;
+  status: EquipmentStatus;
+  notes?: string;
+};
+
+export type UpdateEquipmentInput = Partial<CreateEquipmentInput>;
+
 export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
 
 export type AppointmentStatus =
@@ -92,6 +108,19 @@ export type JobRecord = {
   updatedAt: string;
 };
 
+export type CreateJobInput = {
+  locationId: string;
+  billToCustomerId?: string;
+  jobType: string;
+  category: string;
+  origin: string;
+  summary: string;
+  workOrderNumber?: string;
+  scheduledDate?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+};
+
 export type AppointmentRecord = {
   id: string;
   jobId: string;
@@ -101,4 +130,10 @@ export type AppointmentRecord = {
   status: AppointmentStatus;
   createdAt: string;
   updatedAt: string;
+};
+
+export type CreateAppointmentInput = {
+  scheduledDate?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
 };
