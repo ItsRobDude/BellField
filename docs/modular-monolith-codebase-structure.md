@@ -1,49 +1,49 @@
-# HVAC Platform — Modular Monolith Codebase Structure
+# Field-Service Platform - Modular Monolith Codebase Structure
 
-This document defines the implementation-facing repository and module structure for the BellField HVAC platform.
+This document defines the implementation-facing repository and module structure for the BellField field-service platform.
 
 ## 1) Repo Layout
 
 ```text
 BellField/
-├─ apps/
-│  ├─ office-web/                 # Desktop-first web app for CSR/dispatch/manager/accounting/admin
-│  ├─ field-mobile/               # Mobile app for technicians (offline-first)
-│  ├─ api/                        # Modular monolith backend (HTTP + background consumers)
-│  ├─ worker/                     # Async/background jobs
-│  └─ realtime-gateway/           # WebSocket/SSE fanout (thin adapter, no business writes)
-│
-├─ packages/
-│  ├─ contracts/                  # API DTOs, event contracts, typed clients
-│  ├─ validation/                 # Shared validators/schemas
-│  ├─ workflow/                   # Shared workflow/state-machine primitives
-│  ├─ ui-office/                  # Office design system/components
-│  ├─ ui-mobile/                  # Mobile design system/components
-│  ├─ auth-kit/                   # Auth helpers, permission checks
-│  ├─ sync-kit/                   # Offline sync primitives (op-log envelopes, conflict metadata)
-│  ├─ realtime-contracts/         # Channel names + payload contracts
-│  └─ utils/                      # Cross-cutting utilities (pure, no domain behavior)
-│
-├─ services/
-│  └─ notifications-adapter/      # SMS/Email push adapter wrappers (provider-agnostic)
-│
-├─ infrastructure/
-│  ├─ db/
-│  │  ├─ migrations/
-│  │  ├─ seed/
-│  │  └─ views/
-│  ├─ storage/                    # File storage config (S3/Azure/GCS abstraction)
-│  ├─ queues/                     # Queue topics, retry/backoff policy
-│  ├─ observability/              # Logging, metrics, tracing setup
-│  └─ deploy/                     # IaC/runtime deployment manifests
-│
-├─ docs/
-│  ├─ hvac-product-shape-plan.md
-│  └─ modular-monolith-codebase-structure.md
-│
-└─ tools/
-   ├─ scripts/
-   └─ codegen/
+|-- apps/
+|   |-- office-web/                 # Desktop-first web app for CSR/dispatch/manager/accounting/admin
+|   |-- field-mobile/               # Mobile app for technicians (offline-first)
+|   |-- api/                        # Modular monolith backend (HTTP + background consumers)
+|   |-- worker/                     # Async/background jobs
+|   `-- realtime-gateway/           # WebSocket/SSE fanout (thin adapter, no business writes)
+|
+|-- packages/
+|   |-- contracts/                  # API DTOs, event contracts, typed clients
+|   |-- validation/                 # Shared validators/schemas
+|   |-- workflow/                   # Shared workflow/state-machine primitives
+|   |-- ui-office/                  # Office design system/components
+|   |-- ui-mobile/                  # Mobile design system/components
+|   |-- auth-kit/                   # Auth helpers, permission checks
+|   |-- sync-kit/                   # Offline sync primitives (op-log envelopes, conflict metadata)
+|   |-- realtime-contracts/         # Channel names + payload contracts
+|   `-- utils/                      # Cross-cutting utilities (pure, no domain behavior)
+|
+|-- services/
+|   `-- notifications-adapter/      # SMS/Email push adapter wrappers (provider-agnostic)
+|
+|-- infrastructure/
+|   |-- db/
+|   |   |-- migrations/
+|   |   |-- seed/
+|   |   `-- views/
+|   |-- storage/                    # File storage config (S3/Azure/GCS abstraction)
+|   |-- queues/                     # Queue topics, retry/backoff policy
+|   |-- observability/              # Logging, metrics, tracing setup
+|   `-- deploy/                     # IaC/runtime deployment manifests
+|
+|-- docs/
+|   |-- product-shape-plan.md
+|   `-- modular-monolith-codebase-structure.md
+|
+`-- tools/
+    |-- scripts/
+    `-- codegen/
 ```
 
 ---
@@ -84,33 +84,33 @@ BellField/
 
 ```text
 apps/api/src/modules/
-├─ identity-access/
-├─ crm/
-├─ locations/
-├─ contacts/
-├─ equipment/
-├─ operations/         # jobs + appointments + dispatch state transitions
-├─ estimates/          # service + replacement templates
-├─ billing/            # invoices + payments
-├─ inventory/          # stock and truck/vehicle inventory
-├─ purchasing/         # POs + receiving
-├─ job-costing/
-├─ files/
-├─ notifications/
-├─ audit/
-├─ reporting/
-└─ sync/               # mobile sync API, version vectors/tokens, conflict resolution
+|-- identity-access/
+|-- crm/
+|-- locations/
+|-- contacts/
+|-- equipment/
+|-- operations/         # jobs + appointments + dispatch state transitions
+|-- estimates/          # service + replacement templates
+|-- billing/            # invoices + payments
+|-- inventory/          # stock and truck/vehicle inventory
+|-- purchasing/         # POs + receiving
+|-- job-costing/
+|-- files/
+|-- notifications/
+|-- audit/
+|-- reporting/
+`-- sync/               # mobile sync API, version vectors/tokens, conflict resolution
 ```
 
 Each module contains:
 ```text
 <module>/
-├─ domain/             # entities, value objects, domain services, invariants
-├─ application/        # use cases/commands/queries
-├─ infrastructure/     # repositories/adapters for this module only
-├─ api/                # route handlers/controllers/mappers
-├─ events/             # domain event definitions + handlers
-└─ tests/
+|-- domain/             # entities, value objects, domain services, invariants
+|-- application/        # use cases/commands/queries
+|-- infrastructure/     # repositories/adapters for this module only
+|-- api/                # route handlers/controllers/mappers
+|-- events/             # domain event definitions + handlers
+`-- tests/
 ```
 
 ---
@@ -143,32 +143,32 @@ A module may write only its own aggregate roots/tables. Cross-module changes hap
 
 ## 5) Interaction Architecture
 
-## 5.1 Office web ↔ Backend
+## 5.1 Office web -> Backend
 - Office web calls REST/GraphQL endpoints in `apps/api`.
 - Reads frequently via query endpoints optimized for dense grids.
 - Real-time board/timeline updates via `realtime-gateway` channels.
 
-## 5.2 Field mobile ↔ Backend
+## 5.2 Field mobile -> Backend
 - Pull sync packs by cursor/version token.
 - Push offline op-log batches to `sync` module.
 - Server returns accepted/rejected ops + conflict details.
 
-## 5.3 Backend ↔ Database
+## 5.3 Backend -> Database
 - Single PostgreSQL instance.
 - Separate schema namespace per module (or strict table prefixes) to make ownership explicit.
 - Cross-module reporting uses read models/materialized views, not cross-module writes.
 
-## 5.4 Backend ↔ File storage
+## 5.4 Backend -> File storage
 - Files module issues pre-signed upload URLs.
 - Clients upload directly to storage.
 - Backend stores metadata + attachment links and emits `AttachmentStored`.
 
-## 5.5 Backend ↔ Notifications
+## 5.5 Backend -> Notifications
 - Domain events create notification intents.
 - Worker processes intents via provider adapters (SMS/email/push).
 - Delivery results recorded asynchronously.
 
-## 5.6 Backend ↔ Real-time updates
+## 5.6 Backend -> Real-time updates
 - Modules publish domain events to outbox.
 - Realtime gateway consumes curated event stream and fans out UI payloads.
 - UI payload contracts live in `packages/realtime-contracts`.
