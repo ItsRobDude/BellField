@@ -36,6 +36,14 @@ BellField should aim to become:
 
 That order matters.
 
+### Product benchmark posture
+BellField should take cues from strong existing products without inheriting their full sprawl.
+
+- take ServiceTitan-like depth seriously in dispatch, permissions, billing controls, and operational history
+- keep daily workflows easier to learn and lighter to operate for a small shop, more in the spirit of Housecall Pro or Jobber
+- keep HVAC-specific practicality in focus, similar to the useful parts of FieldEdge
+- do not allow broad suite expansion to outrun the operational core BellField is trying to make trustworthy
+
 ---
 
 ## 2. What Is Already Defined Before Coding
@@ -86,8 +94,10 @@ The following should be postponed until later unless there is a very strong reas
 - customer portal
 - customer self-booking
 - advanced text/email automation
+- call-center style layers and contact-center sprawl
 - cloud-hosted BellField data services
 - advanced route optimization/AI dispatch
+- broad marketing-suite features
 - advanced payroll/commission systems
 - deep accounting integrations
 - highly customizable dashboards before core screens are solid

@@ -37,7 +37,16 @@ Initial development assumptions:
 - the product should feel open and easy by default, with tighter controls available through permissions
 - BellField should be built for a single company to use first, with future multi-tenant SaaS support kept in mind from the beginning
 
-This product should be treated as a commercial SaaS-oriented platform in its structure, even if the early build is done gradually over weeks and months.
+This product should be treated as commercial-software-grade in its structure, even while staying self-hosted-first, even if the early build is done gradually over weeks and months.
+
+### Product positioning guidance
+BellField should learn from strong existing products without copying any one of them outright.
+
+- aim for ServiceTitan-like seriousness in dispatch, permissions, job history, invoice behavior, and operational depth
+- aim for Housecall Pro and Jobber-like ease of use for small shops and daily workflows
+- aim for FieldEdge-like HVAC practicality around equipment, office-to-field handoff, and service-company reality
+- keep BellField's own identity around self-hosted-first ownership, boring maintainable structure, and stronger offline-tolerant field work
+- do not chase broad growth-suite sprawl too early, such as marketing automation, call-center layers, customer portal polish, AI dispatch, advanced payroll, or commission systems
 
 ---
 
@@ -191,13 +200,14 @@ This keeps the stack mostly TypeScript across the product, which improves:
 6. **Design for real field usage**
    - the field app must work in weak or intermittent signal areas
    - saved field work must sync later without losing data
+   - offline support should mean meaningful work can be captured safely, not just viewed
    - the field workflow should stay simple enough for older technicians
 
 7. **Keep the UI modern and clean, but not shallow**
    - dense operational info should still be available
    - tabs, tables, drawers, and grouped views should reduce clutter
    - important info should be easy to reach without turning the app into a goose hunt
-   - screen organization should aim to feel similar to ServiceTitan or FieldOps where that is useful and familiar
+   - screen organization should borrow from tools like ServiceTitan or FieldOps where that is useful, but stay easier to learn for a smaller shop
 
 8. **Build for extension**
    - avoid spaghetti coupling

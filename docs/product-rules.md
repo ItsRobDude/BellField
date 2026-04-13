@@ -23,6 +23,15 @@ It should favor:
 
 BellField should preserve history whenever practical, but it must also allow true deletion when the user has the correct permissions.
 
+### Product reference posture
+BellField should use other field-service products as reference points, not as copy targets.
+
+- BellField should prefer ServiceTitan-like depth in core operations such as dispatch, permissions, invoice safety, and job history.
+- BellField should prefer Housecall Pro and Jobber-like simplicity for common daily tasks so small shops do not feel buried in process.
+- BellField should prefer FieldEdge-like HVAC practicality for equipment-heavy workflows and office-to-field handoff.
+- BellField should keep its own differentiation in self-hosted-first deployment, history correctness, and meaningful offline-safe field work.
+- BellField should avoid taking on broad growth-suite or marketing-suite behavior early unless that work clearly serves the operational core.
+
 ---
 
 ## 2. Customer Account Rules
@@ -264,6 +273,8 @@ Appointment statuses should remain flexible.
 
 They do not need strict workflow enforcement in v1.
 
+Common office actions such as confirm, reschedule, reassign, and mark technician progress should feel fast and obvious instead of buried behind enterprise-style process steps.
+
 ---
 
 ## 8. Estimate Rules
@@ -297,6 +308,8 @@ That means:
 - an estimate can be made
 - an estimate can be marked approved or declined
 - the office still decides how to schedule or book follow-up work
+
+Estimate behavior should stay practical and field-friendly before it becomes highly automated or sales-suite-heavy.
 
 ---
 
@@ -351,6 +364,11 @@ This includes things such as:
 - other sellable line items
 
 Those items can still be edited later until the job is completed and the invoice is posted.
+
+The default workflow should stay understandable for a small service company:
+- common actions should be quick
+- advanced controls can exist without dominating the normal path
+- deeper accounting or reporting needs should not make the basic field workflow harder to use
 
 ---
 

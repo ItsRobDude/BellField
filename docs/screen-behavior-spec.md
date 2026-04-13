@@ -27,7 +27,12 @@ Core design principles:
 - locked actions should often remain visible but disabled/greyed out
 - future UI customization should be possible, including drag/drop organization and tab ordering where practical
 
-BellField should generally aim for a visual organization style in the same family as ServiceTitan or FieldOps, while keeping its own cleaner, simpler identity.
+BellField should generally aim for a visual organization style in the same family as ServiceTitan or FieldOps for operational depth, while keeping a cleaner, easier-to-learn small-shop identity closer to the best parts of Housecall Pro or Jobber.
+
+Important UI posture:
+- BellField should not copy large-suite clutter just because enterprise products have it
+- common actions should feel obvious and low-friction
+- advanced depth should be layered behind drawers, tabs, filters, and workbenches instead of crowding the default view
 
 ---
 
@@ -79,6 +84,7 @@ The dashboard should feel clean and high-level, with:
 - a modern, welcoming visual style
 
 The dashboard may include encouraging or high-level informational content, but it should remain practical first.
+It should not turn into a giant control panel that tries to surface every possible metric at once.
 
 ---
 
@@ -240,6 +246,7 @@ Example style:
 The dispatch board should be one of the main operating screens for office users.
 
 It should feel like a true scheduling workspace, not just a static calendar.
+It should feel operationally serious, but its quick actions should still be learnable by a smaller office without heavy training.
 
 ### Default interaction behavior
 When a user clicks an appointment card on the dispatch board:
@@ -330,6 +337,7 @@ Example ideas:
 - similar morale/engagement metrics
 
 The goal is to make the field app feel useful and encouraging rather than lifeless.
+It should feel lighter and more approachable than a full office console squeezed onto a phone.
 
 ---
 
@@ -344,6 +352,7 @@ Instead, BellField should favor:
 - simple section navigation
 
 This keeps the experience easier for older technicians and reduces the feeling of endless scrolling.
+Common field actions should stay available within a few taps without forcing technicians through too many nested screens.
 
 ### Core field job sections
 The field job screen should include sections such as:
@@ -450,3 +459,4 @@ BellField screen behavior should follow these defaults:
 - full-screen versions available where compact views become inconvenient
 
 The goal is a system that stays clean, fast, and understandable while still exposing dense operational detail when needed.
+BellField should feel deep where the business needs it, but never busy just to imitate a larger cloud suite.
