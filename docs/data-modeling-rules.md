@@ -180,16 +180,16 @@ Archived/end-dated contacts:
 ## 6. Equipment Modeling Rules
 
 ### Equipment meaning
-Each physical HVAC component should be its own separate equipment record.
+Each physical serviceable asset should be its own separate equipment record when the trade needs equipment tracking at that level.
 
-Examples:
+HVAC examples:
 - condenser
 - coil
 - furnace
 - air handler
 - package unit
 
-BellField should not treat a whole system as one single equipment record by default.
+BellField should not treat a whole system as one single equipment record by default in trades where separate tracked components matter.
 
 ### Equipment placement rule
 Equipment may exist in:

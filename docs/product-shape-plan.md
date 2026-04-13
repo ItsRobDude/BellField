@@ -1,6 +1,9 @@
-# HVAC Field-Service Platform — Product Shape (Pre-Schema)
+# Field-Service Platform — Product Shape (Pre-Schema)
 
 This document defines the product shape before database schema design.
+
+BellField is intended to serve service industries broadly, not HVAC alone.
+HVAC remains a strong early reference case in this document because it is a practical starting point for equipment, dispatch, and field workflow design.
 
 ## A) Major Product Surfaces
 
@@ -244,7 +247,7 @@ Principles:
   - scan/enter serial
   - pick type
   - add condition + photo
-  - optional nameplate OCR assist (future enhancement)
+  - optional equipment label or nameplate OCR assist (future enhancement)
 - Can update runtime-critical fields offline (condition, notes, photo, observed serial/model).
 - Sensitive fields (pricing-linked warranty overrides) may require manager approval after sync.
 
@@ -374,7 +377,7 @@ Principles:
 - Deep accounting ERP integrations (keep export/import first).
 - IoT/telematics automatic equipment diagnostics.
 - Dynamic pricing engine and complex contract billing.
-- OCR/nameplate automation and computer-vision enhancements.
+- OCR/equipment-label automation and computer-vision enhancements.
 - Native tablet-specific UX refinements beyond core responsive support.
 
 ---

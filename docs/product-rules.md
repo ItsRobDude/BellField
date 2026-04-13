@@ -28,9 +28,12 @@ BellField should use other field-service products as reference points, not as co
 
 - BellField should prefer ServiceTitan-like depth in core operations such as dispatch, permissions, invoice safety, and job history.
 - BellField should prefer Housecall Pro and Jobber-like simplicity for common daily tasks so small shops do not feel buried in process.
-- BellField should prefer FieldEdge-like HVAC practicality for equipment-heavy workflows and office-to-field handoff.
+- BellField should prefer FieldEdge-like trade practicality for equipment-heavy workflows and office-to-field handoff.
 - BellField should keep its own differentiation in self-hosted-first deployment, history correctness, and meaningful offline-safe field work.
 - BellField should avoid taking on broad growth-suite or marketing-suite behavior early unless that work clearly serves the operational core.
+
+BellField is not intended to be an HVAC-only product.
+However, HVAC remains an important early reference case, especially for equipment-heavy workflows, replacement behavior, and service-history behavior.
 
 ---
 
@@ -148,16 +151,16 @@ Equipment may exist in:
 BellField should allow equipment inventory to exist outside of customer locations when that reflects how the company operates.
 
 ### Equipment records
-Each piece of HVAC equipment should be its own equipment record.
+Each physical serviceable asset should be its own equipment record when the trade needs equipment tracking at that level.
 
-Examples:
+HVAC examples:
 - condenser
 - coil
 - furnace
 - air handler
 - package unit
 
-BellField should not automatically merge multiple pieces into one combined system record.
+BellField should not automatically merge multiple pieces into one combined system record in trades where separate tracked components matter.
 
 ### Equipment history
 If equipment is removed from active use:
@@ -189,7 +192,7 @@ The filter field should allow users to:
 BellField may later support optional grouping of separate equipment records.
 
 Example:
-- a user may highlight several pieces of equipment and group them to show which condenser, coil, and furnace belong together
+- in HVAC-style workflows, a user may highlight several pieces of equipment and group them to show which condenser, coil, and furnace belong together
 
 This grouping should be optional and should not replace separate equipment records.
 

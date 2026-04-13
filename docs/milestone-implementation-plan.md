@@ -41,7 +41,7 @@ BellField should take cues from strong existing products without inheriting thei
 
 - take ServiceTitan-like depth seriously in dispatch, permissions, billing controls, and operational history
 - keep daily workflows easier to learn and lighter to operate for a small shop, more in the spirit of Housecall Pro or Jobber
-- keep HVAC-specific practicality in focus, similar to the useful parts of FieldEdge
+- keep trade-specific practicality in focus, similar to the useful parts of FieldEdge, while avoiding HVAC-only assumptions where the broader service-platform model should stay flexible
 - do not allow broad suite expansion to outrun the operational core BellField is trying to make trustworthy
 
 ---
@@ -202,7 +202,7 @@ Milestone 2 is done when:
 ## 8. Milestone 3 — Equipment and Location Service Context
 
 ### Goal
-Make locations operationally useful for HVAC work.
+Make locations operationally useful for equipment-heavy service work, with HVAC as an important reference case.
 
 ### Scope
 - equipment tab on location screen

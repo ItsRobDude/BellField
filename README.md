@@ -1,6 +1,6 @@
-# BellField — HVAC Field-Service Platform
+# BellField — Field-Service Platform
 
-BellField is a field-service platform being designed to start as a serious side project, be test-driven in a real HVAC business if possible, and eventually be strong enough to sell to other service companies.
+BellField is a field-service platform being designed to start as a serious side project, be test-driven in a real service business if possible, and eventually be strong enough to sell to other service companies.
 
 The goal is not to one-shot a full ServiceTitan competitor. The goal is to build BellField in the right order, with maintainable architecture, practical workflows, and a clear path from internal-style usage to a real commercial product.
 
@@ -29,9 +29,11 @@ The system is intended to be modern and clean, while still keeping dense operati
 ## Product Direction
 
 BellField is being built for real field-service companies.
+It should support service industries broadly, with equipment-heavy trades like HVAC as strong early reference cases rather than hard product boundaries.
 
 Initial development assumptions:
 - it may be test-driven by a real HVAC company such as Blaine Heating and Air Conditioning
+- BellField should stay broad enough to support service industries beyond HVAC where the workflow model still fits
 - it must support both office workflows and field workflows from the beginning
 - the mobile app is not optional later; it is part of version 1 planning
 - the product should feel open and easy by default, with tighter controls available through permissions
@@ -44,7 +46,7 @@ BellField should learn from strong existing products without copying any one of 
 
 - aim for ServiceTitan-like seriousness in dispatch, permissions, job history, invoice behavior, and operational depth
 - aim for Housecall Pro and Jobber-like ease of use for small shops and daily workflows
-- aim for FieldEdge-like HVAC practicality around equipment, office-to-field handoff, and service-company reality
+- aim for FieldEdge-like trade practicality around equipment-heavy workflows, office-to-field handoff, and service-company reality
 - keep BellField's own identity around self-hosted-first ownership, boring maintainable structure, and stronger offline-tolerant field work
 - do not chase broad growth-suite sprawl too early, such as marketing automation, call-center layers, customer portal polish, AI dispatch, advanced payroll, or commission systems
 
@@ -305,15 +307,16 @@ Equipment must be manageable from both:
 Equipment should appear on a dedicated location tab/page.
 
 Important clarification:
-- each condenser, coil, furnace, air handler, package unit, and similar asset should be its own separate equipment record
-- equipment should not be merged into one combined system record by default
+- each physical serviceable asset should be its own separate equipment record when the trade needs asset-level tracking
+- in HVAC-style workflows, that means separate records for items such as condensers, coils, furnaces, air handlers, or package units
+- equipment should not be merged into one combined system record by default in trades where separate tracked components matter
 - the location page should simply organize equipment under its own dedicated section/tab
 
 ### Optional equipment grouping
 BellField should later support optional user-created grouping so office staff can link multiple related pieces of equipment together.
 
 Example:
-- a home with multiple split systems may need the office to highlight several separate equipment records and group them together so it is obvious which condenser, coil, and furnace belong to the same system
+- in HVAC-style workflows, a home with multiple split systems may need the office to highlight several separate equipment records and group them together so it is obvious which condenser, coil, and furnace belong to the same system
 
 Grouping should be optional and should not replace individual equipment records.
 
@@ -329,7 +332,7 @@ Each equipment record should support, at minimum:
 - status
 - notes
 - photos / documents
-- HVAC-specific details that may expand over time
+- trade-specific details that may expand over time, including HVAC-specific fields where needed
 
 Equipment that is actually equipment inventory should be serialized and tracked individually.
 

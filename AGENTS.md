@@ -2,7 +2,8 @@
 
 This file is the operating guide for AI contributors working in the BellField repository.
 
-BellField is a self-hosted-first HVAC field-service platform for real service companies.
+BellField is a self-hosted-first field-service platform for real service companies.
+It should serve service industries broadly, with equipment-heavy trades like HVAC as strong early reference cases rather than hard boundaries.
 It is being built for one company to use first, with future multi-tenant SaaS kept in mind.
 BellField does **not** host customer business data by default.
 The product must remain practical for small shops, Windows-friendly, low-cost, and maintainable.
@@ -113,8 +114,8 @@ These rules should not drift unless the docs are intentionally updated.
 - True deletion is allowed only with the correct permission and should be treated as dangerous.
 
 ### Equipment rules
-- Each physical HVAC component is its own equipment record.
-- Do not merge condenser/coil/furnace/etc. into one default record.
+- Each physical serviceable asset is its own equipment record when the trade needs asset-level tracking.
+- In HVAC-style workflows, do not merge condenser/coil/furnace/etc. into one default record.
 - Optional grouping is a relationship, not a merge.
 - Equipment can exist at customer locations or inventory locations.
 - Equipment-tagged received items can become pending/installed location equipment.
