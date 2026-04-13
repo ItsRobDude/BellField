@@ -8,6 +8,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
   const runtimeConfig = getApiRuntimeConfig();
 
+  // Keep local app-to-api wiring simple while the persistent auth/session layer is still forming.
+  app.enableCors({ origin: true });
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   await app.listen(runtimeConfig.port);

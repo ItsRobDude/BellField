@@ -1,13 +1,3 @@
-export interface HealthStatus {
-  status: 'ok';
-  timestamp: string;
-}
-
-export interface VersionInfo {
-  name: string;
-  version: string;
-}
-
 export type EmployeeRoleId =
   | 'owner'
   | 'admin'
@@ -37,19 +27,31 @@ export type PermissionArea =
 
 export type PermissionKey = `${PermissionArea}:${PermissionAction}`;
 
-export interface RoleTemplate {
+export type LoginSurface = 'office-web' | 'field-mobile';
+
+export type RoleTemplate = {
   id: EmployeeRoleId;
   name: string;
   description: string;
   permissions: PermissionKey[];
-}
+};
 
-export interface EmployeePermissionOverrides {
+export type EmployeePermissionOverrides = {
   grantedPermissions: PermissionKey[];
   revokedPermissions: PermissionKey[];
-}
+};
 
-export interface EmployeeSummary {
+export type EmployeeRecord = {
+  id: string;
+  email: string;
+  displayName: string;
+  roleId: EmployeeRoleId;
+  isActive: boolean;
+  password: string;
+  permissionOverrides: EmployeePermissionOverrides;
+};
+
+export type EmployeeSummary = {
   id: string;
   email: string;
   displayName: string;
@@ -58,35 +60,31 @@ export interface EmployeeSummary {
   isActive: boolean;
   effectivePermissions: PermissionKey[];
   permissionOverrides: EmployeePermissionOverrides;
-}
+};
 
-export interface LoginRequest {
+export type LoginRequestDto = {
   email: string;
   password: string;
-  surface: 'office-web' | 'field-mobile';
+  surface: LoginSurface;
   deviceLabel?: string;
-}
+};
 
-export interface LoginResponse {
+export type LoginResponseDto = {
   sessionToken: string;
   employee: EmployeeSummary;
-}
+};
 
-export interface CurrentSessionResponse {
-  employee: EmployeeSummary;
-}
-
-export interface EmployeeListResponse {
-  employees: EmployeeSummary[];
-}
-
-export interface RoleTemplateListResponse {
-  roles: RoleTemplate[];
-}
-
-export interface UpdateEmployeeRequest {
+export type UpdateEmployeeRequestDto = {
   roleId?: EmployeeRoleId;
   isActive?: boolean;
   grantedPermissions?: PermissionKey[];
   revokedPermissions?: PermissionKey[];
-}
+};
+
+export type SessionRecord = {
+  token: string;
+  employeeId: string;
+  surface: LoginSurface;
+  deviceLabel?: string;
+  issuedAt: string;
+};
