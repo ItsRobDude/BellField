@@ -57,6 +57,28 @@ export class IdentityAccessService {
     return this.toEmployeeSummary(employee);
   }
 
+  getAuthorizedEmployee(sessionToken: string, permissionKey?: PermissionKey): EmployeeSummary {
+    const employee = this.getEmployeeFromSession(sessionToken);
+
+    if (permissionKey) {
+      this.ensurePermission(employee, permissionKey);
+    }
+
+    return this.toEmployeeSummary(employee);
+  }
+
+  getActiveEmployees(): EmployeeSummary[] {
+    return [...this.employees.values()]
+      .filter((employee) => employee.isActive)
+      .map((employee) => this.toEmployeeSummary(employee))
+      .sort((left, right) => left.displayName.localeCompare(right.displayName));
+  }
+
+  getEmployeeSummaryById(employeeId: string): EmployeeSummary | null {
+    const employee = this.employees.get(employeeId);
+    return employee ? this.toEmployeeSummary(employee) : null;
+  }
+
   getEmployees(sessionToken: string): EmployeeSummary[] {
     const actor = this.getEmployeeFromSession(sessionToken);
     this.ensurePermission(actor, 'employeesPermissions:view');

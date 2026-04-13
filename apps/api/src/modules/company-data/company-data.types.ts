@@ -1,0 +1,104 @@
+export type CustomerAccountRecord = {
+  id: string;
+  name: string;
+  accountType: 'residential' | 'company' | 'propertyManager' | 'landlord';
+  isActive: boolean;
+  phone?: string;
+  email?: string;
+  flags: string[];
+};
+
+export type ContactRecord = {
+  id: string;
+  displayName: string;
+  phone?: string;
+  email?: string;
+  tags: string[];
+  isActive: boolean;
+};
+
+export type LocationRecord = {
+  id: string;
+  name: string;
+  customerId: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  contactIds: string[];
+  alternateBillToCustomerIds: string[];
+  historyNotes: string[];
+};
+
+export type EquipmentStatus = 'active' | 'inactive' | 'pendingInstall';
+
+export type EquipmentRecord = {
+  id: string;
+  locationId?: string;
+  inventoryLocationLabel?: string;
+  equipmentType: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  filterSizes: string[];
+  equipmentLocationDescription?: string;
+  installDate?: string;
+  status: EquipmentStatus;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
+
+export type AppointmentStatus =
+  | 'assigned'
+  | 'confirmed'
+  | 'onTheWay'
+  | 'arrived'
+  | 'working'
+  | 'finished'
+  | 'noAnswer'
+  | 'cancelled';
+
+export type JobTimelineEntry = {
+  id: string;
+  occurredAt: string;
+  actorName: string;
+  kind:
+    | 'jobCreated'
+    | 'jobStatusUpdated'
+    | 'appointmentCreated'
+    | 'appointmentStatusUpdated'
+    | 'jobNote'
+    | 'syncFlag';
+  message: string;
+};
+
+export type JobRecord = {
+  id: string;
+  jobNumber: string;
+  locationId: string;
+  billToCustomerId: string;
+  jobType: string;
+  category: string;
+  origin: string;
+  summary: string;
+  status: JobStatus;
+  workOrderNumber?: string;
+  appointmentIds: string[];
+  timeline: JobTimelineEntry[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type AppointmentRecord = {
+  id: string;
+  jobId: string;
+  scheduledDate?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+  status: AppointmentStatus;
+  createdAt: string;
+  updatedAt: string;
+};

@@ -4,6 +4,7 @@ import { IdentityAccessService } from './identity-access.service';
 
 @Module({
   controllers: [IdentityAccessController],
-  providers: [IdentityAccessService]
+  providers: [IdentityAccessService],
+  exports: [IdentityAccessService]
 })
 export class IdentityAccessModule {}
