@@ -51,12 +51,21 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
+  const [equipmentType, setEquipmentType] = useState('Condenser');
+  const [equipmentBrand, setEquipmentBrand] = useState('Carrier');
   const [equipmentModel, setEquipmentModel] = useState('');
   const [equipmentSerial, setEquipmentSerial] = useState('');
+  const [equipmentFilterSizes, setEquipmentFilterSizes] = useState('16x25x1');
+  const [equipmentLocationDescription, setEquipmentLocationDescription] = useState('');
+  const [equipmentInstallDate, setEquipmentInstallDate] = useState('');
+  const [equipmentNotes, setEquipmentNotes] = useState('');
   const [equipmentLocationId, setEquipmentLocationId] = useState('');
   const [equipmentStatus, setEquipmentStatus] = useState<EquipmentStatus>('active');
   const [jobLocationId, setJobLocationId] = useState('');
   const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
+  const [jobType, setJobType] = useState('Service');
+  const [jobCategory, setJobCategory] = useState('General');
+  const [jobOrigin, setJobOrigin] = useState('Inbound phone call');
   const [jobSummary, setJobSummary] = useState('');
   const [jobTechnicianId, setJobTechnicianId] = useState('');
   const [jobDate, setJobDate] = useState('');
@@ -128,15 +137,24 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         sessionToken,
         apiBaseUrl,
         locationId: equipmentLocationId || undefined,
-        equipmentType: 'Equipment',
-        brand: 'Generic',
+        equipmentType,
+        brand: equipmentBrand,
         model: equipmentModel,
         serialNumber: equipmentSerial,
-        filterSizes: ['16x25x1'],
+        filterSizes: equipmentFilterSizes.split(','),
+        equipmentLocationDescription: equipmentLocationDescription || undefined,
+        installDate: equipmentInstallDate || undefined,
+        notes: equipmentNotes || undefined,
         status: equipmentStatus
       });
+      setEquipmentType('Condenser');
+      setEquipmentBrand('Carrier');
       setEquipmentModel('');
       setEquipmentSerial('');
+      setEquipmentFilterSizes('16x25x1');
+      setEquipmentLocationDescription('');
+      setEquipmentInstallDate('');
+      setEquipmentNotes('');
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to add equipment.');
@@ -165,14 +183,17 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         apiBaseUrl,
         locationId: jobLocationId,
         billToCustomerId: jobBillToCustomerId || undefined,
-        jobType: 'Service',
-        category: 'General',
-        origin: 'Office created',
+        jobType,
+        category: jobCategory,
+        origin: jobOrigin,
         summary: jobSummary,
         scheduledDate: jobDate || undefined,
         timeWindowLabel: jobWindow || undefined,
         technicianId: jobTechnicianId || undefined
       });
+      setJobType('Service');
+      setJobCategory('General');
+      setJobOrigin('Inbound phone call');
       setJobSummary('');
       await refreshWorkspace();
     } catch (error) {
@@ -274,13 +295,25 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         locations={jobsWorkspace.locations}
         equipment={equipment}
         equipmentLocationId={equipmentLocationId}
+        equipmentType={equipmentType}
+        equipmentBrand={equipmentBrand}
         equipmentModel={equipmentModel}
         equipmentSerial={equipmentSerial}
+        equipmentFilterSizes={equipmentFilterSizes}
+        equipmentLocationDescription={equipmentLocationDescription}
+        equipmentInstallDate={equipmentInstallDate}
+        equipmentNotes={equipmentNotes}
         equipmentStatus={equipmentStatus}
         showInactiveEquipment={showInactiveEquipment}
         onEquipmentLocationChange={setEquipmentLocationId}
+        onEquipmentTypeChange={setEquipmentType}
+        onEquipmentBrandChange={setEquipmentBrand}
         onEquipmentModelChange={setEquipmentModel}
         onEquipmentSerialChange={setEquipmentSerial}
+        onEquipmentFilterSizesChange={setEquipmentFilterSizes}
+        onEquipmentLocationDescriptionChange={setEquipmentLocationDescription}
+        onEquipmentInstallDateChange={setEquipmentInstallDate}
+        onEquipmentNotesChange={setEquipmentNotes}
         onEquipmentStatusChange={setEquipmentStatus}
         onShowInactiveChange={setShowInactiveEquipment}
         onCreateEquipment={handleCreateEquipment}
@@ -291,6 +324,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         jobsWorkspace={jobsWorkspace}
         jobLocationId={jobLocationId}
         jobBillToCustomerId={jobBillToCustomerId}
+        jobType={jobType}
+        jobCategory={jobCategory}
+        jobOrigin={jobOrigin}
         jobSummary={jobSummary}
         jobTechnicianId={jobTechnicianId}
         jobDate={jobDate}
@@ -298,6 +334,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         appointmentDrafts={appointmentDrafts}
         onJobLocationChange={handleJobLocationChange}
         onJobBillToCustomerChange={setJobBillToCustomerId}
+        onJobTypeChange={setJobType}
+        onJobCategoryChange={setJobCategory}
+        onJobOriginChange={setJobOrigin}
         onJobSummaryChange={setJobSummary}
         onJobTechnicianChange={setJobTechnicianId}
         onJobDateChange={setJobDate}

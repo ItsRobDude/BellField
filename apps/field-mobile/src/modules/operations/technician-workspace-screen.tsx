@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   addFieldJobNote,
   getAssignedFieldWork,
@@ -33,6 +33,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSuccessfulSyncAt, setLastSuccessfulSyncAt] = useState<string | null>(null);
 
   const locationLookup = useMemo(
     () => new Map((assignedWork?.locations ?? []).map((location) => [location.id, location])),
@@ -78,16 +79,25 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   }
 
   function queueAppointmentStatus(appointmentId: string, status: AppointmentStatus) {
-    setPendingOperations((current) => [
-      ...current,
-      {
+    const occurredAt = new Date().toISOString();
+
+    setPendingOperations((current) => {
+      const nextOperation: PendingOperation = {
         id: `${appointmentId}-status-${Date.now()}`,
         kind: 'appointmentStatus',
         appointmentId,
         status,
-        occurredAt: new Date().toISOString()
-      }
-    ]);
+        occurredAt
+      };
+
+      return [
+        ...current.filter(
+          (operation) =>
+            !(operation.kind === 'appointmentStatus' && operation.appointmentId === appointmentId)
+        ),
+        nextOperation
+      ];
+    });
     applyLocalAppointmentStatus(appointmentId, status);
   }
 
@@ -95,16 +105,22 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     const nextStatus = equipmentStatusDrafts[equipmentId] ?? 'active';
     const nextNotes = equipmentNoteDrafts[equipmentId] ?? '';
 
-    setPendingOperations((current) => [
-      ...current,
-      {
+    setPendingOperations((current) => {
+      const nextOperation: PendingOperation = {
         id: `${equipmentId}-equipment-${Date.now()}`,
         kind: 'equipmentUpdate',
         equipmentId,
         status: nextStatus,
         notes: nextNotes
-      }
-    ]);
+      };
+
+      return [
+        ...current.filter(
+          (operation) => !(operation.kind === 'equipmentUpdate' && operation.equipmentId === equipmentId)
+        ),
+        nextOperation
+      ];
+    });
 
     applyLocalEquipmentUpdate(equipmentId, nextStatus, nextNotes);
   }
@@ -220,12 +236,29 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
         setPendingOperations(operationsToSync.slice(index + 1));
       }
 
+      setLastSuccessfulSyncAt(new Date().toISOString());
       await refreshAssignedWork();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to sync queued field work.');
     } finally {
       setIsSyncing(false);
     }
+  }
+
+  function handleSignOut() {
+    if (pendingOperations.length === 0) {
+      onSignOut();
+      return;
+    }
+
+    Alert.alert(
+      'Unsynced work',
+      'This device still has local BellField changes waiting to sync. Sign out anyway?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Sign out', style: 'destructive', onPress: onSignOut }
+      ]
+    );
   }
 
   return (
@@ -243,6 +276,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             <Text style={styles.sectionTitle}>Sync foundation</Text>
             <Text style={styles.summaryText}>Pending local saves: {pendingOperations.length}</Text>
             <Text style={styles.summaryText}>Server snapshot: {assignedWork?.serverTime ?? 'Not loaded yet'}</Text>
+            <Text style={styles.summaryText}>Last successful sync: {lastSuccessfulSyncAt ?? 'Not synced yet'}</Text>
             <Text style={styles.summaryText}>Scope: today and tomorrow assigned jobs</Text>
           </View>
 
@@ -253,7 +287,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             <Pressable onPress={() => void syncNow()} style={styles.primaryButton}>
               {isSyncing ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Sync Now</Text>}
             </Pressable>
-            <Pressable onPress={onSignOut} style={styles.secondaryButton}>
+            <Pressable onPress={handleSignOut} style={styles.secondaryButton}>
               <Text style={styles.secondaryButtonText}>Sign out</Text>
             </Pressable>
           </View>
@@ -282,6 +316,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       {appointment.scheduledDate || 'Unscheduled'} - {appointment.timeWindowLabel || 'No window'}
                     </Text>
                     <Text style={styles.summaryText}>{appointment.technicianName || employee.displayName}</Text>
+                    <Text style={styles.summaryText}>Latest saved local status: {appointment.status}</Text>
                     <View style={styles.actionRow}>
                       {(['assigned', 'arrived', 'working', 'finished'] as AppointmentStatus[]).map((status) => (
                         <Pressable
@@ -298,6 +333,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
                 <View style={styles.block}>
                   <Text style={styles.sectionTitleSmall}>Save note locally</Text>
+                  <Text style={styles.summaryText}>Office will not see this note until Sync Now succeeds.</Text>
                   <TextInput
                     value={noteDrafts[job.id] ?? ''}
                     onChangeText={(value) => setNoteDrafts((current) => ({ ...current, [job.id]: value }))}
@@ -316,6 +352,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       {record.equipmentType}: {record.brand} {record.model}
                     </Text>
                     <Text style={styles.summaryText}>Serial: {record.serialNumber}</Text>
+                    <Text style={styles.summaryText}>Current local status: {record.status}</Text>
                     <View style={styles.actionRow}>
                       {(['active', 'pendingInstall', 'inactive'] as EquipmentStatus[]).map((status) => (
                         <Pressable
@@ -349,7 +386,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             ) : (
               pendingOperations.map((operation) => (
                 <Text key={operation.id} style={styles.summaryText}>
-                  {operation.kind}
+                  {formatPendingOperation(operation)}
                 </Text>
               ))
             )}
@@ -399,3 +436,15 @@ const styles = StyleSheet.create({
   tagButtonText: { color: '#33523d', fontSize: 13, fontWeight: '600' },
   errorText: { color: '#b42318', fontSize: 14 }
 });
+
+function formatPendingOperation(operation: PendingOperation): string {
+  if (operation.kind === 'jobNote') {
+    return `Job note saved locally at ${new Date(operation.occurredAt).toLocaleTimeString()}`;
+  }
+
+  if (operation.kind === 'appointmentStatus') {
+    return `Appointment status queued: ${operation.status}`;
+  }
+
+  return `Equipment update queued: ${operation.status}`;
+}

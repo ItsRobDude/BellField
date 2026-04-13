@@ -10,6 +10,16 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   panel: { background: '#ffffff', border: '1px solid #eadfc9', borderRadius: 16, display: 'grid', gap: '0.75rem', padding: '1rem' },
   subpanel: { background: '#faf7ef', borderRadius: 12, display: 'grid', gap: '0.5rem', padding: '0.75rem' },
   input: { background: '#ffffff', border: '1px solid #d9c8ad', borderRadius: 12, fontSize: '0.95rem', padding: '0.75rem 0.9rem' },
+  textarea: {
+    background: '#ffffff',
+    border: '1px solid #d9c8ad',
+    borderRadius: 12,
+    fontSize: '0.95rem',
+    marginBottom: '1rem',
+    minHeight: '5rem',
+    padding: '0.75rem 0.9rem',
+    resize: 'vertical'
+  },
   button: { background: '#ffffff', border: '1px solid #cdbfa6', borderRadius: 999, color: '#1f2933', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem 1rem' },
   inlineLabel: { alignItems: 'center', display: 'flex', gap: '0.5rem', fontSize: '0.95rem', fontWeight: 600 },
   title: { fontSize: '2rem', margin: '0 0 0.25rem' },

@@ -14,6 +14,9 @@ type JobsAppointmentsPanelProps = {
   jobsWorkspace: JobsWorkspaceResponse;
   jobLocationId: string;
   jobBillToCustomerId: string;
+  jobType: string;
+  jobCategory: string;
+  jobOrigin: string;
   jobSummary: string;
   jobTechnicianId: string;
   jobDate: string;
@@ -21,6 +24,9 @@ type JobsAppointmentsPanelProps = {
   appointmentDrafts: Record<string, AppointmentDraft>;
   onJobLocationChange: (value: string) => void;
   onJobBillToCustomerChange: (value: string) => void;
+  onJobTypeChange: (value: string) => void;
+  onJobCategoryChange: (value: string) => void;
+  onJobOriginChange: (value: string) => void;
   onJobSummaryChange: (value: string) => void;
   onJobTechnicianChange: (value: string) => void;
   onJobDateChange: (value: string) => void;
@@ -36,6 +42,9 @@ export function JobsAppointmentsPanel({
   jobsWorkspace,
   jobLocationId,
   jobBillToCustomerId,
+  jobType,
+  jobCategory,
+  jobOrigin,
   jobSummary,
   jobTechnicianId,
   jobDate,
@@ -43,6 +52,9 @@ export function JobsAppointmentsPanel({
   appointmentDrafts,
   onJobLocationChange,
   onJobBillToCustomerChange,
+  onJobTypeChange,
+  onJobCategoryChange,
+  onJobOriginChange,
   onJobSummaryChange,
   onJobTechnicianChange,
   onJobDateChange,
@@ -79,6 +91,9 @@ export function JobsAppointmentsPanel({
               })
             : null}
         </select>
+        <input value={jobType} onChange={(event) => onJobTypeChange(event.target.value)} placeholder="Job type" style={styles.input} />
+        <input value={jobCategory} onChange={(event) => onJobCategoryChange(event.target.value)} placeholder="Category" style={styles.input} />
+        <input value={jobOrigin} onChange={(event) => onJobOriginChange(event.target.value)} placeholder="Origin" style={styles.input} />
         <input value={jobSummary} onChange={(event) => onJobSummaryChange(event.target.value)} placeholder="Job summary" style={styles.input} />
         <input value={jobDate} onChange={(event) => onJobDateChange(event.target.value)} type="date" style={styles.input} />
         <input value={jobWindow} onChange={(event) => onJobWindowChange(event.target.value)} placeholder="1:00 PM - 3:00 PM" style={styles.input} />
@@ -107,6 +122,9 @@ export function JobsAppointmentsPanel({
                   </strong>
                   <div style={styles.muted}>
                     {job.locationName} - {job.billToCustomerName}
+                  </div>
+                  <div style={styles.muted}>
+                    {job.jobType} / {job.category} / {job.origin}
                   </div>
                 </div>
                 <select
