@@ -45,6 +45,7 @@ From repository root:
 Notes:
 
 - `DATABASE_URL` is required for `migration:up` and `migration:down`.
+- `DATABASE_URL` is also used by the Nest API runtime now that the operational foundation persists to PostgreSQL.
 - The migration runner creates `schema_migrations` automatically with `CREATE TABLE IF NOT EXISTS ...` before applying migrations.
 - Applied migrations are tracked in PostgreSQL table `schema_migrations`.
 - `migration:up` applies pending `*.up.sql` files in filename order.

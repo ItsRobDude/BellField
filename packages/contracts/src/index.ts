@@ -172,6 +172,14 @@ export interface CreateEquipmentRequest {
 
 export type UpdateEquipmentRequest = Partial<CreateEquipmentRequest>;
 
+export interface UpdateEquipmentFieldRequest extends UpdateEquipmentRequest {
+  baseUpdatedAt?: string;
+}
+
+export interface EquipmentMutationResponse extends EquipmentSummary {
+  syncResult?: SyncResult;
+}
+
 export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
 
 export type AppointmentStatus =
@@ -183,6 +191,11 @@ export type AppointmentStatus =
   | 'finished'
   | 'noAnswer'
   | 'cancelled';
+
+export interface SyncResult {
+  status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
+  message?: string;
+}
 
 export interface AppointmentSummary {
   id: string;
@@ -252,6 +265,10 @@ export interface UpdateJobStatusRequest {
   occurredAt?: string;
 }
 
+export interface UpdateJobStatusResponse extends JobSummary {
+  warningMessages?: string[];
+}
+
 export interface CreateAppointmentRequest {
   scheduledDate?: string;
   timeWindowLabel?: string;
@@ -262,11 +279,16 @@ export interface CreateAppointmentRequest {
 export interface UpdateAppointmentStatusRequest {
   status: AppointmentStatus;
   occurredAt?: string;
+  baseUpdatedAt?: string;
 }
 
 export interface AddJobNoteRequest {
   note: string;
   occurredAt?: string;
+}
+
+export interface JobMutationResponse extends JobSummary {
+  syncResult?: SyncResult;
 }
 
 export interface FieldAssignedWorkResponse {
@@ -288,4 +310,7 @@ export interface FieldAssignedWorkResponse {
     updatedAt: string;
   }>;
   serverTime: string;
+  snapshotVersion: string;
+  windowStartDate: string;
+  windowEndDate: string;
 }

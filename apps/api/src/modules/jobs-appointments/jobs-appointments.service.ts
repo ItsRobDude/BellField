@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { JobRecord } from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
@@ -10,12 +11,14 @@ import type {
   CreateJobRequestDto,
   CustomerAccountSummaryDto,
   FieldAssignedWorkResponseDto,
+  JobMutationResponseDto,
   JobSummaryDto,
   JobsWorkspaceResponseDto,
   LocationSummaryDto,
   TechnicianOptionDto,
   UpdateAppointmentStatusRequestDto,
-  UpdateJobStatusRequestDto
+  UpdateJobStatusRequestDto,
+  UpdateJobStatusResponseDto
 } from './jobs-appointments.types';
 
 @Injectable()
@@ -27,48 +30,106 @@ export class JobsAppointmentsService {
     private readonly identityAccessService: IdentityAccessService
   ) {}
 
-  getWorkspace(sessionToken: string): JobsWorkspaceResponseDto {
-    this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
+  async getWorkspace(sessionToken: string): Promise<JobsWorkspaceResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
+
+    const [customers, locations, technicians, jobs] = await Promise.all([
+      this.referenceDataService.listCustomers(),
+      this.referenceDataService.listLocations(),
+      this.identityAccessService.getActiveEmployees(),
+      this.jobsDataService.listJobs()
+    ]);
 
     return {
-      customers: this.referenceDataService.listCustomers().map((customer) => this.toCustomerSummary(customer.id)),
-      locations: this.referenceDataService.listLocations().map((location) => this.toLocationSummary(location.id)),
-      technicians: this.identityAccessService
-        .getActiveEmployees()
-        .filter((employee) => employee.roleId === 'technician')
-        .map((employee) => this.toTechnicianOption(employee.id)),
-      jobs: this.jobsDataService.listJobs().map((job) => this.toJobSummary(job.id))
+      customers: customers.map((customer) => ({
+        id: customer.id,
+        name: customer.name,
+        accountType: customer.accountType,
+        phone: customer.phone,
+        email: customer.email,
+        flags: [...customer.flags]
+      })),
+      locations: await Promise.all(locations.map((location) => this.toLocationSummary(location.id))),
+      technicians: await Promise.all(
+        technicians
+          .filter((employee) => employee.roleId === 'technician')
+          .map((employee) => this.toTechnicianOption(employee.id))
+      ),
+      jobs: await Promise.all(jobs.map((job) => this.toJobSummary(job.id)))
     };
   }
 
-  createJob(sessionToken: string, request: CreateJobRequestDto): JobSummaryDto {
-    const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:create');
-    const location = this.referenceDataService.getLocationById(request.locationId);
+  async createJob(sessionToken: string, request: CreateJobRequestDto): Promise<JobSummaryDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:create');
+    const location = await this.referenceDataService.getLocationById(request.locationId);
     const billToCustomerId = request.billToCustomerId ?? location.customerId;
-    this.referenceDataService.getCustomerById(billToCustomerId);
-    const job = this.jobsDataService.createJob(request, actor.displayName, billToCustomerId, location.name);
+    await this.referenceDataService.getCustomerById(billToCustomerId);
+    const job = await this.jobsDataService.createJob(request, actor.displayName, billToCustomerId, location.name);
     return this.toJobSummary(job.id);
   }
 
-  updateJobStatus(sessionToken: string, jobId: string, request: UpdateJobStatusRequestDto): JobSummaryDto {
-    const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
-    const job = this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
-    return this.toJobSummary(job.id);
+  async updateJobStatus(
+    sessionToken: string,
+    jobId: string,
+    request: UpdateJobStatusRequestDto
+  ): Promise<UpdateJobStatusResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
+    const referenceDate = (request.occurredAt ?? new Date().toISOString()).slice(0, 10);
+    const warningMessages: string[] = [];
+
+    if (request.status === 'closed' && (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))) {
+      warningMessages.push('This job still has a future appointment scheduled. Confirm before closing it out.');
+    }
+
+    const job = await this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
+
+    return {
+      ...(await this.toJobSummary(job.id)),
+      ...(warningMessages.length > 0 ? { warningMessages } : {})
+    };
   }
 
-  addAppointment(sessionToken: string, jobId: string, request: CreateAppointmentRequestDto): JobSummaryDto {
-    const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:create');
-    this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
+  async addAppointment(
+    sessionToken: string,
+    jobId: string,
+    request: CreateAppointmentRequestDto
+  ): Promise<JobSummaryDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:create');
+    await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
     return this.toJobSummary(jobId);
   }
 
-  updateAppointmentStatus(
+  async updateAppointmentStatus(
     sessionToken: string,
     appointmentId: string,
     request: UpdateAppointmentStatusRequestDto
-  ): JobSummaryDto {
-    const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:edit');
-    const appointment = this.jobsDataService.updateAppointmentStatus(
+  ): Promise<JobMutationResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:edit');
+    const currentAppointment = await this.jobsDataService.getAppointmentById(appointmentId);
+    const currentJob = await this.jobsDataService.getJobById(currentAppointment.jobId);
+
+    if (
+      request.baseUpdatedAt &&
+      currentAppointment.updatedAt > request.baseUpdatedAt &&
+      currentAppointment.status !== request.status
+    ) {
+      await this.jobsDataService.addSyncFlag(
+        currentAppointment.jobId,
+        'Field appointment update conflicted with a newer BellField appointment change.',
+        actor.displayName,
+        new Date().toISOString()
+      );
+
+      return {
+        ...(await this.toJobSummary(currentAppointment.jobId)),
+        syncResult: {
+          status: 'conflict',
+          message: 'Appointment changed before this offline update could sync.'
+        }
+      };
+    }
+
+    const appointment = await this.jobsDataService.updateAppointmentStatus(
       appointmentId,
       request.status,
       actor.displayName,
@@ -76,51 +137,81 @@ export class JobsAppointmentsService {
     );
 
     if (request.occurredAt) {
-      this.jobsDataService.addSyncFlag(
+      await this.jobsDataService.addSyncFlag(
         appointment.jobId,
-        'Field update synced after local save queue replay.',
+        currentJob.status === 'cancelled'
+          ? 'Field appointment update synced after the job had already been cancelled.'
+          : 'Field update synced after local save queue replay.',
         actor.displayName,
         new Date().toISOString()
       );
     }
 
-    return this.toJobSummary(appointment.jobId);
+    return {
+      ...(await this.toJobSummary(appointment.jobId)),
+      ...(request.baseUpdatedAt
+        ? {
+            syncResult: {
+              status: 'applied'
+            }
+          }
+        : {})
+    };
   }
 
-  addJobNote(sessionToken: string, jobId: string, request: AddJobNoteRequestDto): JobSummaryDto {
-    const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
-    this.jobsDataService.addJobNote(jobId, request.note, actor.displayName, request.occurredAt);
+  async addJobNote(sessionToken: string, jobId: string, request: AddJobNoteRequestDto): Promise<JobMutationResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
+    const currentJob = await this.jobsDataService.getJobById(jobId);
+
+    await this.jobsDataService.addJobNote(jobId, request.note, actor.displayName, request.occurredAt);
 
     if (request.occurredAt) {
-      this.jobsDataService.addSyncFlag(
+      await this.jobsDataService.addSyncFlag(
         jobId,
-        'Field note synced after local save queue replay.',
+        currentJob.status === 'cancelled'
+          ? 'Field note synced after the job had already been cancelled.'
+          : 'Field note synced after local save queue replay.',
         actor.displayName,
         new Date().toISOString()
       );
     }
 
-    return this.toJobSummary(jobId);
+    return {
+      ...(await this.toJobSummary(jobId)),
+      ...(request.occurredAt
+        ? {
+            syncResult: {
+              status: 'applied'
+            }
+          }
+        : {})
+    };
   }
 
-  getAssignedWork(sessionToken: string): FieldAssignedWorkResponseDto {
-    const actor = this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
+  async getAssignedWork(sessionToken: string): Promise<FieldAssignedWorkResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
-    const allowedDates = new Set([today.toISOString().slice(0, 10), tomorrow.toISOString().slice(0, 10)]);
-    const jobs = this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
+    const windowStartDate = today.toISOString().slice(0, 10);
+    const windowEndDate = tomorrow.toISOString().slice(0, 10);
+    const allowedDates = new Set([windowStartDate, windowEndDate]);
+    const jobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
     const locationIds = [...new Set(jobs.map((job) => job.locationId))];
+    const equipment = await this.equipmentDataService.listEquipment(true);
+    const serverTime = new Date().toISOString();
 
     return {
-      jobs: jobs.map((job) => this.toJobSummary(job.id)),
-      locations: locationIds.map((locationId) => this.toLocationSummary(locationId)),
-      customers: locationIds
-        .map((locationId) => this.referenceDataService.getLocationById(locationId).customerId)
-        .filter((customerId, index, values) => values.indexOf(customerId) === index)
-        .map((customerId) => this.toCustomerSummary(customerId)),
-      equipment: this.equipmentDataService
-        .listEquipment(true)
+      jobs: await Promise.all(jobs.map((job) => this.toJobSummary(job.id))),
+      locations: await Promise.all(locationIds.map((locationId) => this.toLocationSummary(locationId))),
+      customers: await Promise.all(
+        [
+          ...new Set(
+            await Promise.all(locationIds.map(async (locationId) => (await this.referenceDataService.getLocationById(locationId)).customerId))
+          )
+        ].map((customerId) => this.toCustomerSummary(customerId))
+      ),
+      equipment: equipment
         .filter((equipmentRecord) => equipmentRecord.locationId && locationIds.includes(equipmentRecord.locationId))
         .map((equipmentRecord) => ({
           id: equipmentRecord.id,
@@ -136,12 +227,15 @@ export class JobsAppointmentsService {
           notes: equipmentRecord.notes,
           updatedAt: equipmentRecord.updatedAt
         })),
-      serverTime: new Date().toISOString()
+      serverTime,
+      snapshotVersion: serverTime,
+      windowStartDate,
+      windowEndDate
     };
   }
 
-  private toCustomerSummary(customerId: string): CustomerAccountSummaryDto {
-    const customer = this.referenceDataService.getCustomerById(customerId);
+  private async toCustomerSummary(customerId: string): Promise<CustomerAccountSummaryDto> {
+    const customer = await this.referenceDataService.getCustomerById(customerId);
 
     return {
       id: customer.id,
@@ -153,9 +247,10 @@ export class JobsAppointmentsService {
     };
   }
 
-  private toLocationSummary(locationId: string): LocationSummaryDto {
-    const location = this.referenceDataService.getLocationById(locationId);
-    const customer = this.referenceDataService.getCustomerById(location.customerId);
+  private async toLocationSummary(locationId: string): Promise<LocationSummaryDto> {
+    const location = await this.referenceDataService.getLocationById(locationId);
+    const customer = await this.referenceDataService.getCustomerById(location.customerId);
+    const contacts = await Promise.all(location.contactIds.map((contactId) => this.referenceDataService.getContactById(contactId)));
 
     return {
       id: location.id,
@@ -166,23 +261,19 @@ export class JobsAppointmentsService {
       city: location.city,
       state: location.state,
       postalCode: location.postalCode,
-      contacts: location.contactIds.map((contactId) => {
-        const contact = this.referenceDataService.getContactById(contactId);
-
-        return {
-          id: contact.id,
-          displayName: contact.displayName,
-          phone: contact.phone,
-          email: contact.email,
-          tags: [...contact.tags]
-        };
-      }),
+      contacts: contacts.map((contact) => ({
+        id: contact.id,
+        displayName: contact.displayName,
+        phone: contact.phone,
+        email: contact.email,
+        tags: [...contact.tags]
+      })),
       alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
     };
   }
 
-  private toTechnicianOption(employeeId: string): TechnicianOptionDto {
-    const employee = this.identityAccessService.getEmployeeSummaryById(employeeId);
+  private async toTechnicianOption(employeeId: string): Promise<TechnicianOptionDto> {
+    const employee = await this.identityAccessService.getEmployeeSummaryById(employeeId);
 
     return {
       id: employee?.id ?? employeeId,
@@ -191,10 +282,10 @@ export class JobsAppointmentsService {
     };
   }
 
-  private toAppointmentSummary(appointmentId: string): AppointmentSummaryDto {
-    const appointment = this.jobsDataService.getAppointmentById(appointmentId);
+  private async toAppointmentSummary(appointmentId: string): Promise<AppointmentSummaryDto> {
+    const appointment = await this.jobsDataService.getAppointmentById(appointmentId);
     const technician = appointment.technicianId
-      ? this.identityAccessService.getEmployeeSummaryById(appointment.technicianId)
+      ? await this.identityAccessService.getEmployeeSummaryById(appointment.technicianId)
       : null;
 
     return {
@@ -210,10 +301,14 @@ export class JobsAppointmentsService {
     };
   }
 
-  private toJobSummary(jobId: string): JobSummaryDto {
-    const job = this.jobsDataService.getJobById(jobId);
-    const location = this.referenceDataService.getLocationById(job.locationId);
-    const billToCustomer = this.referenceDataService.getCustomerById(job.billToCustomerId);
+  private async toJobSummary(jobId: string): Promise<JobSummaryDto> {
+    const job = await this.jobsDataService.getJobById(jobId);
+    return this.toJobSummaryFromRecord(job);
+  }
+
+  private async toJobSummaryFromRecord(job: JobRecord): Promise<JobSummaryDto> {
+    const location = await this.referenceDataService.getLocationById(job.locationId);
+    const billToCustomer = await this.referenceDataService.getCustomerById(job.billToCustomerId);
 
     return {
       id: job.id,
@@ -228,9 +323,7 @@ export class JobsAppointmentsService {
       summary: job.summary,
       status: job.status,
       workOrderNumber: job.workOrderNumber,
-      appointments: this.jobsDataService
-        .listAppointmentsForJob(job.id)
-        .map((appointment) => this.toAppointmentSummary(appointment.id)),
+      appointments: await Promise.all(job.appointmentIds.map((appointmentId) => this.toAppointmentSummary(appointmentId))),
       timeline: job.timeline.map((entry) => ({ ...entry })),
       createdAt: job.createdAt,
       updatedAt: job.updatedAt

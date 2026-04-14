@@ -1,0 +1,10 @@
+drop table if exists job_timeline_entries;
+drop table if exists appointments;
+drop table if exists jobs;
+drop table if exists equipment;
+drop table if exists locations;
+drop table if exists contacts;
+drop table if exists customers;
+drop table if exists sessions;
+drop table if exists employees;
+drop sequence if exists job_number_sequence;

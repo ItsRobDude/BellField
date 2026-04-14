@@ -64,6 +64,23 @@ export type FieldAssignedWorkResponse = {
     updatedAt: string;
   }>;
   serverTime: string;
+  snapshotVersion: string;
+  windowStartDate: string;
+  windowEndDate: string;
+};
+
+export type SyncResult = {
+  status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
+  message?: string;
+};
+
+export type JobMutationResponse = FieldAssignedWorkResponse['jobs'][number] & {
+  syncResult?: SyncResult;
+  warningMessages?: string[];
+};
+
+export type EquipmentMutationResponse = FieldAssignedWorkResponse['equipment'][number] & {
+  syncResult?: SyncResult;
 };
 
 const defaultApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
@@ -103,12 +120,17 @@ export async function updateFieldAppointmentStatus(input: {
   appointmentId: string;
   status: AppointmentStatus;
   occurredAt?: string;
+  baseUpdatedAt?: string;
 }) {
-  return requestJson(`/operations/jobs/appointments/${input.appointmentId}/status`, {
+  return requestJson<JobMutationResponse>(`/operations/jobs/appointments/${input.appointmentId}/status`, {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl,
     method: 'PATCH',
-    body: JSON.stringify({ status: input.status, occurredAt: input.occurredAt })
+    body: JSON.stringify({
+      status: input.status,
+      occurredAt: input.occurredAt,
+      baseUpdatedAt: input.baseUpdatedAt
+    })
   });
 }
 
@@ -119,7 +141,7 @@ export async function addFieldJobNote(input: {
   note: string;
   occurredAt?: string;
 }) {
-  return requestJson(`/operations/jobs/${input.jobId}/notes`, {
+  return requestJson<JobMutationResponse>(`/operations/jobs/${input.jobId}/notes`, {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl,
     method: 'POST',
@@ -133,11 +155,16 @@ export async function updateFieldEquipment(input: {
   equipmentId: string;
   status?: EquipmentStatus;
   notes?: string;
+  baseUpdatedAt?: string;
 }) {
-  return requestJson(`/operations/equipment/${input.equipmentId}`, {
+  return requestJson<EquipmentMutationResponse>(`/operations/equipment/${input.equipmentId}`, {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl,
     method: 'PATCH',
-    body: JSON.stringify({ status: input.status, notes: input.notes })
+    body: JSON.stringify({
+      status: input.status,
+      notes: input.notes,
+      baseUpdatedAt: input.baseUpdatedAt
+    })
   });
 }

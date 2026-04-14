@@ -4,9 +4,10 @@ import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import type {
   CreateEquipmentRequestDto,
+  EquipmentMutationResponseDto,
   EquipmentLocationSummaryDto,
   EquipmentSummaryDto,
-  UpdateEquipmentRequestDto
+  UpdateEquipmentFieldRequestDto
 } from './equipment.types';
 
 @Injectable()
@@ -17,41 +18,77 @@ export class EquipmentService {
     private readonly identityAccessService: IdentityAccessService
   ) {}
 
-  getWorkspace(sessionToken: string, includeInactive: boolean) {
-    this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:view');
+  async getWorkspace(sessionToken: string, includeInactive: boolean) {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:view');
+    const [locations, equipment] = await Promise.all([
+      this.referenceDataService.listLocations(),
+      this.equipmentDataService.listEquipment(includeInactive)
+    ]);
 
     return {
-      locations: this.referenceDataService.listLocations().map((location) => this.toLocationSummary(location.id)),
-      equipment: this.equipmentDataService
-        .listEquipment(includeInactive)
-        .map((equipmentRecord) => this.toEquipmentSummary(equipmentRecord.id))
+      locations: await Promise.all(locations.map((location) => this.toLocationSummary(location.id))),
+      equipment: await Promise.all(equipment.map((equipmentRecord) => this.toEquipmentSummary(equipmentRecord.id)))
     };
   }
 
-  createEquipment(sessionToken: string, request: CreateEquipmentRequestDto): EquipmentSummaryDto {
-    this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:create');
+  async createEquipment(sessionToken: string, request: CreateEquipmentRequestDto): Promise<EquipmentSummaryDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:create');
+
     if (request.locationId) {
-      this.referenceDataService.getLocationById(request.locationId);
+      await this.referenceDataService.getLocationById(request.locationId);
     }
 
-    const createdEquipment = this.equipmentDataService.createEquipment(request);
+    const createdEquipment = await this.equipmentDataService.createEquipment(request);
     return this.toEquipmentSummary(createdEquipment.id);
   }
 
-  updateEquipment(sessionToken: string, equipmentId: string, request: UpdateEquipmentRequestDto): EquipmentSummaryDto {
-    this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:edit');
+  async updateEquipment(
+    sessionToken: string,
+    equipmentId: string,
+    request: UpdateEquipmentFieldRequestDto
+  ): Promise<EquipmentMutationResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:edit');
+
     if (request.locationId) {
-      this.referenceDataService.getLocationById(request.locationId);
+      await this.referenceDataService.getLocationById(request.locationId);
     }
 
-    const updatedEquipment = this.equipmentDataService.updateEquipment(equipmentId, request);
-    return this.toEquipmentSummary(updatedEquipment.id);
+    const currentRecord = await this.equipmentDataService.getEquipmentById(equipmentId);
+
+    if (
+      request.baseUpdatedAt &&
+      currentRecord.updatedAt > request.baseUpdatedAt &&
+      ((request.status !== undefined && request.status !== currentRecord.status) ||
+        (request.notes !== undefined && request.notes.trim() !== currentRecord.notes))
+    ) {
+      return {
+        ...(await this.toEquipmentSummary(equipmentId)),
+        syncResult: {
+          status: 'conflict',
+          message: 'Equipment changed in BellField before this field update synced.'
+        }
+      };
+    }
+
+    const updatedEquipment = await this.equipmentDataService.updateEquipment(equipmentId, request);
+
+    return {
+      ...(await this.toEquipmentSummary(updatedEquipment.id)),
+      ...(request.baseUpdatedAt
+        ? {
+            syncResult: {
+              status: 'applied'
+            }
+          }
+        : {})
+    };
   }
 
-  private toLocationSummary(locationId: string): EquipmentLocationSummaryDto {
-    const location = this.referenceDataService.getLocationById(locationId);
-    const customer = this.referenceDataService.getCustomerById(location.customerId);
-    const contactNames = location.contactIds.map((contactId) => this.referenceDataService.getContactById(contactId).displayName);
+  private async toLocationSummary(locationId: string): Promise<EquipmentLocationSummaryDto> {
+    const location = await this.referenceDataService.getLocationById(locationId);
+    const customer = await this.referenceDataService.getCustomerById(location.customerId);
+    const contacts = await Promise.all(location.contactIds.map((contactId) => this.referenceDataService.getContactById(contactId)));
+    const contactNames = contacts.map((contact) => contact.displayName);
 
     return {
       id: location.id,
@@ -66,10 +103,12 @@ export class EquipmentService {
     };
   }
 
-  private toEquipmentSummary(equipmentId: string): EquipmentSummaryDto {
-    const equipmentRecord = this.equipmentDataService.getEquipmentById(equipmentId);
-    const location = equipmentRecord.locationId ? this.referenceDataService.getLocationById(equipmentRecord.locationId) : null;
-    const customer = location ? this.referenceDataService.getCustomerById(location.customerId) : null;
+  private async toEquipmentSummary(equipmentId: string): Promise<EquipmentSummaryDto> {
+    const equipmentRecord = await this.equipmentDataService.getEquipmentById(equipmentId);
+    const location = equipmentRecord.locationId
+      ? await this.referenceDataService.getLocationById(equipmentRecord.locationId)
+      : null;
+    const customer = location ? await this.referenceDataService.getCustomerById(location.customerId) : null;
 
     return {
       id: equipmentRecord.id,

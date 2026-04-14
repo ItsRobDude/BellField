@@ -7,20 +7,20 @@ export class IdentityAccessController {
   constructor(private readonly identityAccessService: IdentityAccessService) {}
 
   @Post('auth/login')
-  login(@Body() loginRequest: LoginRequestDto) {
+  async login(@Body() loginRequest: LoginRequestDto) {
     return this.identityAccessService.login(loginRequest);
   }
 
   @Get('auth/me')
-  getCurrentEmployee(@Headers('authorization') authorizationHeader?: string) {
+  async getCurrentEmployee(@Headers('authorization') authorizationHeader?: string) {
     return {
-      employee: this.identityAccessService.getCurrentEmployee(this.getBearerToken(authorizationHeader))
+      employee: await this.identityAccessService.getCurrentEmployee(this.getBearerToken(authorizationHeader))
     };
   }
 
   @Get('roles')
-  getRoles(@Headers('authorization') authorizationHeader?: string) {
-    this.identityAccessService.getCurrentEmployee(this.getBearerToken(authorizationHeader));
+  async getRoles(@Headers('authorization') authorizationHeader?: string) {
+    await this.identityAccessService.getCurrentEmployee(this.getBearerToken(authorizationHeader));
 
     return {
       roles: this.identityAccessService.getRoleTemplates()
@@ -28,14 +28,14 @@ export class IdentityAccessController {
   }
 
   @Get('employees')
-  getEmployees(@Headers('authorization') authorizationHeader?: string) {
+  async getEmployees(@Headers('authorization') authorizationHeader?: string) {
     return {
-      employees: this.identityAccessService.getEmployees(this.getBearerToken(authorizationHeader))
+      employees: await this.identityAccessService.getEmployees(this.getBearerToken(authorizationHeader))
     };
   }
 
   @Patch('employees/:employeeId')
-  updateEmployee(
+  async updateEmployee(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('employeeId') employeeId: string,
     @Body() updateEmployeeRequest: UpdateEmployeeRequestDto

@@ -77,6 +77,13 @@ export type AppointmentStatus =
   | 'noAnswer'
   | 'cancelled';
 
+export type SyncResultStatus = 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
+
+export type SyncResult = {
+  status: SyncResultStatus;
+  message?: string;
+};
+
 export type JobTimelineEntry = {
   id: string;
   occurredAt: string;

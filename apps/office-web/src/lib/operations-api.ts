@@ -112,6 +112,10 @@ export type JobSummary = {
   updatedAt: string;
 };
 
+export type JobUpdateResponse = JobSummary & {
+  warningMessages?: string[];
+};
+
 export type JobsWorkspaceResponse = {
   customers: CustomerAccountSummary[];
   locations: LocationSummary[];
@@ -242,8 +246,8 @@ export async function updateOfficeJobStatus(input: {
   apiBaseUrl?: string;
   jobId: string;
   status: JobStatus;
-}): Promise<JobSummary> {
-  return requestJson<JobSummary>(`/operations/jobs/${input.jobId}/status`, {
+}): Promise<JobUpdateResponse> {
+  return requestJson<JobUpdateResponse>(`/operations/jobs/${input.jobId}/status`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken,
     method: 'PATCH',

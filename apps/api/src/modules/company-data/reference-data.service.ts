@@ -1,35 +1,25 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { ContactRecord, CustomerAccountRecord, LocationRecord } from './company-data.types';
-import { seededContacts, seededCustomers, seededLocations } from './seed-company-data';
+import { ReferenceDataRepository } from './reference-data.repository';
 
 @Injectable()
 export class ReferenceDataService {
-  private readonly customers = new Map<string, CustomerAccountRecord>(
-    seededCustomers.map((customer) => [customer.id, structuredClone(customer)])
-  );
+  constructor(private readonly referenceDataRepository: ReferenceDataRepository) {}
 
-  private readonly contacts = new Map<string, ContactRecord>(
-    seededContacts.map((contact) => [contact.id, structuredClone(contact)])
-  );
-
-  private readonly locations = new Map<string, LocationRecord>(
-    seededLocations.map((location) => [location.id, structuredClone(location)])
-  );
-
-  listCustomers(): CustomerAccountRecord[] {
-    return [...this.customers.values()].sort((left, right) => left.name.localeCompare(right.name));
+  async listCustomers(): Promise<CustomerAccountRecord[]> {
+    return this.referenceDataRepository.listCustomers();
   }
 
-  listContacts(): ContactRecord[] {
-    return [...this.contacts.values()].sort((left, right) => left.displayName.localeCompare(right.displayName));
+  async listContacts(): Promise<ContactRecord[]> {
+    return this.referenceDataRepository.listContacts();
   }
 
-  listLocations(): LocationRecord[] {
-    return [...this.locations.values()].sort((left, right) => left.name.localeCompare(right.name));
+  async listLocations(): Promise<LocationRecord[]> {
+    return this.referenceDataRepository.listLocations();
   }
 
-  getLocationById(locationId: string): LocationRecord {
-    const location = this.locations.get(locationId);
+  async getLocationById(locationId: string): Promise<LocationRecord> {
+    const location = await this.referenceDataRepository.getLocationById(locationId);
 
     if (!location) {
       throw new NotFoundException('Location not found.');
@@ -38,8 +28,8 @@ export class ReferenceDataService {
     return location;
   }
 
-  getCustomerById(customerId: string): CustomerAccountRecord {
-    const customer = this.customers.get(customerId);
+  async getCustomerById(customerId: string): Promise<CustomerAccountRecord> {
+    const customer = await this.referenceDataRepository.getCustomerById(customerId);
 
     if (!customer) {
       throw new NotFoundException('Customer account not found.');
@@ -48,8 +38,8 @@ export class ReferenceDataService {
     return customer;
   }
 
-  getContactById(contactId: string): ContactRecord {
-    const contact = this.contacts.get(contactId);
+  async getContactById(contactId: string): Promise<ContactRecord> {
+    const contact = await this.referenceDataRepository.getContactById(contactId);
 
     if (!contact) {
       throw new NotFoundException('Contact not found.');

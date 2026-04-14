@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import { EquipmentService } from './equipment.service';
-import type { CreateEquipmentRequestDto, UpdateEquipmentRequestDto } from './equipment.types';
+import type { CreateEquipmentRequestDto, UpdateEquipmentFieldRequestDto } from './equipment.types';
 
 @Controller('operations/equipment')
 export class EquipmentController {
@@ -26,7 +26,7 @@ export class EquipmentController {
   updateEquipment(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('equipmentId') equipmentId: string,
-    @Body() request: UpdateEquipmentRequestDto
+    @Body() request: UpdateEquipmentFieldRequestDto
   ) {
     return this.equipmentService.updateEquipment(this.getBearerToken(authorizationHeader), equipmentId, request);
   }

@@ -80,6 +80,8 @@ pnpm dev:api
 pnpm dev:worker
 ```
 
+Before running `pnpm dev:api` against a fresh local database, apply the API migrations first so the persisted operational foundation tables exist.
+
 `pnpm dev:field-mobile` now runs the generic Expo startup flow (`expo start`), which lets you pick the target interactively.
 For direct Android device/emulator launch (common on Windows setups), use:
 
@@ -167,7 +169,8 @@ Use `.env.example` files as documentation-first references:
 | --- | --- | --- | --- |
 | `NODE_ENV` | `apps/api` runtime config, `apps/worker` runtime config | Optional (defaults to `development`) | `development` |
 | `PORT` | `apps/api` runtime config (HTTP listen port) | Optional (defaults to `3001`) | `3001` |
-| `DATABASE_URL` | `apps/api/scripts/migrations/*.mjs` (`migration:up`, `migration:down`) | Required for migration up/down scripts; not required for normal API startup | `postgresql://postgres:postgres@localhost:5432/bellfield` |
+| `DATABASE_URL` | `apps/api` runtime config and `apps/api/scripts/migrations/*.mjs` (`migration:up`, `migration:down`) | Required for normal API startup and migration scripts | `postgresql://postgres:postgres@localhost:5432/bellfield` |
+| `BOOTSTRAP_SEED_DATA` | `apps/api` runtime bootstrap seeding | Optional (defaults to `true` outside production) | `true` |
 
 ## 7) Repo-wide quality/check commands
 
@@ -187,19 +190,19 @@ pnpm build
 
 ## 8) Intentionally deferred items (explicit)
 
-The current scaffold is intentionally foundation-only. These are deferred on purpose:
+The current scaffold is still intentionally narrow. These are deferred on purpose:
 
-1. Auth implementation (login/session/identity flows).
-2. Role/permission enforcement implementation.
-3. Business modules beyond starter health/shells (CRM, Jobs, Dispatch, Estimates, Billing, Inventory, etc.).
-4. Real production schema/domain model (beyond starter migration path and placeholders).
-5. Offline sync behavior implementation details (queue semantics, conflict resolution, retry policy, reconciliation UX).
+1. Dispatch board UI and technician timeline operations.
+2. Broader CRM CRUD beyond the persisted customer/location/contact foundation used by jobs and equipment.
+3. Estimates, invoices, payments, purchasing, inventory, and job costing flows.
+4. Attachment/media upload sync and richer offline reconciliation UX.
+5. Automated migration, persistence, and sync test coverage beyond manual review.
 
 ## 9) Troubleshooting notes (local self-hosted oriented)
 
 - **Port collisions:** If a surface fails to boot, check for port conflicts and stop old local processes.
 - **Dependency drift:** Re-run `pnpm install` after lockfile updates or branch switches.
 - **Expo/device issues:** Use `pnpm --filter @bellfield/field-mobile dev:android` when you want direct Android launch and ensure emulator/device tooling is running beforehand.
-- **API migration commands:** Ensure `DATABASE_URL` and `psql` are both available when running migration scripts locally.
+- **API startup and migrations:** Ensure `DATABASE_URL` is set for the Nest API process, and ensure both `DATABASE_URL` and `psql` are available when running migration scripts locally.
 - **Type errors across workspaces:** Run `pnpm typecheck` at root to catch shared-package breakages affecting multiple apps.
 - **Fresh start fallback:** If local state is inconsistent, clear local build artifacts and reinstall dependencies, then re-run the individual dev command.

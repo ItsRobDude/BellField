@@ -203,7 +203,12 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
   async function handleJobStatusChange(jobId: string, status: 'open' | 'closed' | 'posted' | 'cancelled') {
     try {
-      await updateOfficeJobStatus({ jobId, status, sessionToken, apiBaseUrl });
+      const response = await updateOfficeJobStatus({ jobId, status, sessionToken, apiBaseUrl });
+
+      if (response.warningMessages?.length) {
+        window.alert(response.warningMessages.join('\n'));
+      }
+
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update job status.');

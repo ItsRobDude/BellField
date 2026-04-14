@@ -1,4 +1,4 @@
-import type { AppointmentStatus, JobStatus } from '../company-data/company-data.types';
+import type { AppointmentStatus, JobStatus, SyncResult } from '../company-data/company-data.types';
 
 export type CustomerAccountSummaryDto = {
   id: string;
@@ -100,6 +100,10 @@ export type UpdateJobStatusRequestDto = {
   occurredAt?: string;
 };
 
+export type UpdateJobStatusResponseDto = JobSummaryDto & {
+  warningMessages?: string[];
+};
+
 export type CreateAppointmentRequestDto = {
   scheduledDate?: string;
   timeWindowLabel?: string;
@@ -110,11 +114,16 @@ export type CreateAppointmentRequestDto = {
 export type UpdateAppointmentStatusRequestDto = {
   status: AppointmentStatus;
   occurredAt?: string;
+  baseUpdatedAt?: string;
 };
 
 export type AddJobNoteRequestDto = {
   note: string;
   occurredAt?: string;
+};
+
+export type JobMutationResponseDto = JobSummaryDto & {
+  syncResult?: SyncResult;
 };
 
 export type FieldAssignedWorkResponseDto = {
@@ -136,4 +145,7 @@ export type FieldAssignedWorkResponseDto = {
     updatedAt: string;
   }>;
   serverTime: string;
+  snapshotVersion: string;
+  windowStartDate: string;
+  windowEndDate: string;
 };

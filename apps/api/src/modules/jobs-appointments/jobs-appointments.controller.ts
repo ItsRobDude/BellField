@@ -13,17 +13,17 @@ export class JobsAppointmentsController {
   constructor(private readonly jobsAppointmentsService: JobsAppointmentsService) {}
 
   @Get()
-  getWorkspace(@Headers('authorization') authorizationHeader?: string) {
+  async getWorkspace(@Headers('authorization') authorizationHeader?: string) {
     return this.jobsAppointmentsService.getWorkspace(this.getBearerToken(authorizationHeader));
   }
 
   @Post()
-  createJob(@Headers('authorization') authorizationHeader: string | undefined, @Body() request: CreateJobRequestDto) {
+  async createJob(@Headers('authorization') authorizationHeader: string | undefined, @Body() request: CreateJobRequestDto) {
     return this.jobsAppointmentsService.createJob(this.getBearerToken(authorizationHeader), request);
   }
 
   @Patch(':jobId/status')
-  updateJobStatus(
+  async updateJobStatus(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string,
     @Body() request: UpdateJobStatusRequestDto
@@ -32,7 +32,7 @@ export class JobsAppointmentsController {
   }
 
   @Post(':jobId/appointments')
-  addAppointment(
+  async addAppointment(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string,
     @Body() request: CreateAppointmentRequestDto
@@ -41,7 +41,7 @@ export class JobsAppointmentsController {
   }
 
   @Post(':jobId/notes')
-  addJobNote(
+  async addJobNote(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string,
     @Body() request: AddJobNoteRequestDto
@@ -50,7 +50,7 @@ export class JobsAppointmentsController {
   }
 
   @Patch('appointments/:appointmentId/status')
-  updateAppointmentStatus(
+  async updateAppointmentStatus(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('appointmentId') appointmentId: string,
     @Body() request: UpdateAppointmentStatusRequestDto
@@ -63,7 +63,7 @@ export class JobsAppointmentsController {
   }
 
   @Get('field/assigned-work')
-  getAssignedWork(@Headers('authorization') authorizationHeader?: string) {
+  async getAssignedWork(@Headers('authorization') authorizationHeader?: string) {
     return this.jobsAppointmentsService.getAssignedWork(this.getBearerToken(authorizationHeader));
   }
 

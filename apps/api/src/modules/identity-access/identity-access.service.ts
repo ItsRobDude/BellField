@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { defaultRoleTemplates } from './default-role-templates';
+import { IdentityAccessRepository } from './identity-access.repository';
 import type {
   EmployeeRecord,
   EmployeeSummary,
@@ -8,26 +9,20 @@ import type {
   LoginResponseDto,
   PermissionKey,
   RoleTemplate,
-  SessionRecord,
   UpdateEmployeeRequestDto
 } from './identity-access.types';
-import { seededEmployees } from './seed-employees';
 
 @Injectable()
 export class IdentityAccessService {
-  private readonly employees = new Map<string, EmployeeRecord>(
-    seededEmployees.map((employee) => [employee.id, structuredClone(employee)])
-  );
-
-  private readonly sessions = new Map<string, SessionRecord>();
+  constructor(private readonly identityAccessRepository: IdentityAccessRepository) {}
 
   getRoleTemplates(): RoleTemplate[] {
     return Object.values(defaultRoleTemplates);
   }
 
-  login(loginRequest: LoginRequestDto): LoginResponseDto {
+  async login(loginRequest: LoginRequestDto): Promise<LoginResponseDto> {
     const normalizedEmail = loginRequest.email.trim().toLowerCase();
-    const employee = [...this.employees.values()].find((candidate) => candidate.email.toLowerCase() === normalizedEmail);
+    const employee = await this.identityAccessRepository.findEmployeeByEmail(normalizedEmail);
 
     if (!employee || employee.password !== loginRequest.password) {
       throw new UnauthorizedException('Invalid email or password.');
@@ -38,7 +33,7 @@ export class IdentityAccessService {
     }
 
     const sessionToken = randomUUID();
-    this.sessions.set(sessionToken, {
+    await this.identityAccessRepository.createSession({
       token: sessionToken,
       employeeId: employee.id,
       surface: loginRequest.surface,
@@ -52,13 +47,13 @@ export class IdentityAccessService {
     };
   }
 
-  getCurrentEmployee(sessionToken: string): EmployeeSummary {
-    const employee = this.getEmployeeFromSession(sessionToken);
+  async getCurrentEmployee(sessionToken: string): Promise<EmployeeSummary> {
+    const employee = await this.getEmployeeFromSession(sessionToken);
     return this.toEmployeeSummary(employee);
   }
 
-  getAuthorizedEmployee(sessionToken: string, permissionKey?: PermissionKey): EmployeeSummary {
-    const employee = this.getEmployeeFromSession(sessionToken);
+  async getAuthorizedEmployee(sessionToken: string, permissionKey?: PermissionKey): Promise<EmployeeSummary> {
+    const employee = await this.getEmployeeFromSession(sessionToken);
 
     if (permissionKey) {
       this.ensurePermission(employee, permissionKey);
@@ -67,32 +62,40 @@ export class IdentityAccessService {
     return this.toEmployeeSummary(employee);
   }
 
-  getActiveEmployees(): EmployeeSummary[] {
-    return [...this.employees.values()]
+  async getActiveEmployees(): Promise<EmployeeSummary[]> {
+    const employees = await this.identityAccessRepository.listEmployees();
+
+    return employees
       .filter((employee) => employee.isActive)
       .map((employee) => this.toEmployeeSummary(employee))
       .sort((left, right) => left.displayName.localeCompare(right.displayName));
   }
 
-  getEmployeeSummaryById(employeeId: string): EmployeeSummary | null {
-    const employee = this.employees.get(employeeId);
+  async getEmployeeSummaryById(employeeId: string): Promise<EmployeeSummary | null> {
+    const employee = await this.identityAccessRepository.findEmployeeById(employeeId);
     return employee ? this.toEmployeeSummary(employee) : null;
   }
 
-  getEmployees(sessionToken: string): EmployeeSummary[] {
-    const actor = this.getEmployeeFromSession(sessionToken);
+  async getEmployees(sessionToken: string): Promise<EmployeeSummary[]> {
+    const actor = await this.getEmployeeFromSession(sessionToken);
     this.ensurePermission(actor, 'employeesPermissions:view');
 
-    return [...this.employees.values()]
+    const employees = await this.identityAccessRepository.listEmployees();
+
+    return employees
       .map((employee) => this.toEmployeeSummary(employee))
       .sort((left, right) => left.displayName.localeCompare(right.displayName));
   }
 
-  updateEmployee(sessionToken: string, employeeId: string, update: UpdateEmployeeRequestDto): EmployeeSummary {
-    const actor = this.getEmployeeFromSession(sessionToken);
+  async updateEmployee(
+    sessionToken: string,
+    employeeId: string,
+    update: UpdateEmployeeRequestDto
+  ): Promise<EmployeeSummary> {
+    const actor = await this.getEmployeeFromSession(sessionToken);
     this.ensurePermission(actor, 'employeesPermissions:configure');
 
-    const existingEmployee = this.employees.get(employeeId);
+    const existingEmployee = await this.identityAccessRepository.findEmployeeById(employeeId);
 
     if (!existingEmployee) {
       throw new NotFoundException('Employee not found.');
@@ -115,27 +118,27 @@ export class IdentityAccessService {
       existingEmployee.permissionOverrides.revokedPermissions = this.uniquePermissionKeys(update.revokedPermissions);
     }
 
-    this.employees.set(existingEmployee.id, existingEmployee);
+    await this.identityAccessRepository.saveEmployee(existingEmployee);
 
     return this.toEmployeeSummary(existingEmployee);
   }
 
-  private getEmployeeFromSession(sessionToken: string): EmployeeRecord {
-    const session = this.sessions.get(sessionToken);
+  private async getEmployeeFromSession(sessionToken: string): Promise<EmployeeRecord> {
+    const session = await this.identityAccessRepository.findSessionByToken(sessionToken);
 
     if (!session) {
       throw new UnauthorizedException('Session not found. Please log in again.');
     }
 
-    const employee = this.employees.get(session.employeeId);
+    const employee = await this.identityAccessRepository.findEmployeeById(session.employeeId);
 
     if (!employee) {
-      this.sessions.delete(sessionToken);
+      await this.identityAccessRepository.deleteSession(sessionToken);
       throw new UnauthorizedException('Employee account no longer exists.');
     }
 
     if (!employee.isActive) {
-      this.sessions.delete(sessionToken);
+      await this.identityAccessRepository.deleteSession(sessionToken);
       throw new ForbiddenException('This employee account is inactive.');
     }
 
