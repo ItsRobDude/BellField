@@ -121,6 +121,14 @@ The overview should make it easy to see:
 - primary billing info
 - quick counts or summaries of locations, open jobs, estimates, and invoices
 
+### Account working expectations
+Milestone 2 account screens should make these actions straightforward:
+- create or edit the customer record
+- mark the account inactive
+- review active locations
+- link or review shared contacts
+- jump into the current location or contact context without needing a separate admin-only workflow first
+
 ---
 
 ## 5. Location Screen
@@ -160,6 +168,11 @@ Without clicking around too much, the location overview should show:
 
 The goal is that staff can understand the location quickly without digging through multiple screens.
 
+### Location reassignment visibility
+If a location changes ownership, the location screen should make the current owner obvious while still leaving the earlier ownership story readable through history/activity.
+
+The normal screen behavior should not make reassignment feel like the location was deleted and recreated.
+
 ---
 
 ## 6. Equipment Tab Behavior
@@ -187,6 +200,23 @@ BellField should provide a clear toggle such as:
 - “Show inactive equipment”
 
 This keeps the active list clean while still making older equipment accessible when needed.
+
+### Equipment drawer expectations
+The equipment detail drawer should be able to show and edit, at minimum:
+- equipment type
+- brand
+- model
+- serial number
+- filter sizes
+- equipment location description
+- install date
+- current status
+- notes
+
+The drawer should also make it easy to understand whether the equipment is:
+- pending install
+- active
+- inactive
 
 ---
 
@@ -237,6 +267,15 @@ Changes to invoice summary-type information should still appear in the main job 
 
 Example style:
 - “John Smith edited the invoice notes.”
+
+### Unscheduled and follow-up appointment behavior
+If a job has no appointments yet:
+- the office should still be able to find it from normal job views
+- the job should read clearly as unscheduled rather than looking incomplete or broken
+
+If an open job needs another visit:
+- adding the next appointment should feel like a normal action from the Appointments area or a nearby quick action
+- the user should not need to leave the job context and pretend they are creating unrelated new work
 
 ---
 

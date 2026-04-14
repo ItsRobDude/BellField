@@ -61,6 +61,26 @@ A customer account can have:
 - multiple billing contacts
 - multiple regular contacts
 
+### Customer edit and inactive behavior
+Office users should be able to:
+- create a customer
+- edit the current customer name, type, phone, email, and flags
+- mark a customer inactive without deleting it
+
+Inactive customers:
+- should stay visible in history and admin-facing review flows
+- should not appear as the default choice in normal active job/location creation flows
+- may still be selected deliberately where historical cleanup or reassignment work requires it
+
+### Customer search behavior
+Milestone 2 search should be good enough for real office use, not just demo lookup.
+
+At minimum, office users should be able to find active customers by:
+- account name
+- phone number
+- email when present
+- important flags such as Do Not Service in a readable visible way once the account is opened
+
 ---
 
 ## 3. Location Rules
@@ -97,6 +117,24 @@ When creating a new location under a customer account:
 - the user should have to confirm Yes or No before continuing
 
 BellField should strongly encourage contact information for a location, even if it is not always strictly present at creation.
+
+### Location edit behavior
+Office users should be able to edit a location's:
+- display name
+- service address
+- current owner/customer
+- current contact links
+- allowed alternate bill-to choices
+
+Important rule:
+- editing current location data must not erase the location's older ownership/contact story
+
+### Location search behavior
+Milestone 2 should support finding locations through normal office lookup by:
+- location name
+- service address text
+- main contact phone when present
+- current owner/customer context
 
 ---
 
@@ -138,6 +176,26 @@ If a contact is archived or end-dated:
 - it should remain viewable in history
 - it should not appear in normal active/current-use lists or dropdowns
 - it should not create confusion between old and current data
+
+### Shared contact linking behavior
+Milestone 2 should support these office actions clearly:
+- create a brand-new contact from either the customer or location context
+- link an existing contact into an additional customer or location context
+- unlink a contact from one context without deleting the shared contact entirely
+
+Important rule:
+- unlinking a contact from one place should only remove that relationship
+- it should not silently remove the person from every other place they are linked
+
+### Contact search behavior
+Active contacts should be searchable by:
+- display name
+- phone number
+- email when present
+
+Archived or end-dated contacts:
+- should stay out of default pickers
+- should remain reachable through history or explicit inactive/archive views
 
 ---
 
@@ -196,6 +254,36 @@ Example:
 
 This grouping should be optional and should not replace separate equipment records.
 
+### Equipment edit behavior
+Equipment should be editable from the location equipment context.
+
+In early BellField milestones, the most important editable fields are:
+- type
+- brand
+- model
+- serial number
+- filter sizes
+- equipment location description
+- install date
+- status
+- notes
+
+Important rule:
+- editing equipment should update the current record cleanly
+- meaningful changes should still remain understandable through equipment history and job/location history
+
+### Install-state behavior
+BellField should support install-state movement without pretending every equipment record starts active.
+
+Version 1 should support practical states such as:
+- pending install
+- active
+- inactive
+
+Important rule:
+- pending install equipment should be visible where the company needs it
+- moving equipment from pending install to active should preserve the record's continuity rather than creating a fake replacement record
+
 ---
 
 ## 6. Job Rules
@@ -243,6 +331,34 @@ A finished appointment does not mean the whole job is finished.
 ### Cancelled jobs
 Cancelled jobs should remain searchable in history unless truly deleted by a user with the correct permissions.
 
+### Bill-to behavior
+The location's current owner/customer should be the default bill-to when creating a job.
+
+However:
+- the office should be able to choose a different allowed bill-to for that job
+- that override belongs to the job, not to every future job at that location
+- the selected bill-to should remain visible in the job header and job history context
+
+### Work order number behavior
+The work order number is an operational reference field, not a replacement for the job number.
+
+Version 1 should treat it as:
+- optional
+- editable by office users with the appropriate job-edit permission
+- visible on the job header and in office review flows when present
+
+### Job timeline completeness
+The job timeline should be the main readable activity record for Milestone 4.
+
+At minimum, it should show:
+- job creation
+- job status changes
+- appointment creation
+- appointment status changes
+- office or field notes
+- important sync/conflict flags where they affect office understanding
+- later invoice/estimate references without requiring separate hidden histories
+
 ---
 
 ## 7. Appointment Rules
@@ -277,6 +393,17 @@ Appointment statuses should remain flexible.
 They do not need strict workflow enforcement in v1.
 
 Common office actions such as confirm, reschedule, reassign, and mark technician progress should feel fast and obvious instead of buried behind enterprise-style process steps.
+
+### Add-appointment behavior
+Open jobs should allow additional appointments to be added later.
+
+Important rule:
+- this is the normal follow-up path for an open job that still needs more visits
+- adding another appointment should not require creating a replacement job
+
+If the job is already closed or cancelled:
+- BellField should warn the user before allowing work to continue under that same job
+- the product may prompt them to reopen the job or create a new one depending on the situation
 
 ---
 

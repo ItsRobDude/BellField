@@ -90,6 +90,13 @@ If a customer account changes name, status, contacts, or ownership relationships
 - the current customer record should update
 - historical jobs/invoices tied to old work should still preserve what was true at that time
 
+### Customer summary vs detail rule
+BellField should support both lightweight list records and richer detail records for customers.
+
+At minimum:
+- customer summary data should support search/list/workspace flows
+- customer detail data should support current flags, contact relationships, active locations, and visible history references
+
 ---
 
 ## 4. Location Modeling Rules
@@ -124,6 +131,15 @@ If a location changes hands:
 - the new owner becomes the active owner
 - old jobs/invoices/history stay with the location’s historical story
 - the old customer should no longer show that location as a current active location
+
+### Ownership history record rule
+The data model should keep location ownership history as its own meaningful relationship history, not just as overwritten current fields.
+
+That means BellField should be able to represent:
+- the current owner/customer
+- prior owner/customer relationships
+- when the ownership relationship changed
+- optional notes about why the change happened
 
 ### Contact warning rule for new locations
 When creating a location, BellField should strongly encourage contact information.
@@ -174,6 +190,15 @@ Contacts should support:
 Archived/end-dated contacts:
 - should disappear from normal active-use lists
 - should remain visible in history
+
+### Contact link record rule
+Because contacts may belong to customers, locations, or both, BellField should model the contact relationship itself as meaningful.
+
+That relationship layer should be able to support:
+- linked customer contexts
+- linked location contexts
+- link-level tags or labels where needed
+- unlink/end-date behavior without deleting the shared person record
 
 ---
 
@@ -237,6 +262,13 @@ BellField should support install-state style concepts such as:
 
 This is especially important when equipment is received before installation is completed.
 
+### Equipment grouping record rule
+If optional grouping is added, the data model should store it as a relationship between equipment records rather than as a merged equipment identity.
+
+The grouping layer should support:
+- multiple separate equipment records belonging to one practical grouped system
+- removing or changing the grouping without destroying the underlying equipment records
+
 ---
 
 ## 7. Job Modeling Rules
@@ -288,6 +320,24 @@ The job should act as a central timeline for:
 - invoice-related activity references
 - estimate-related activity references
 
+### Job warning metadata rule
+Warnings such as "future appointment still exists" should be treated as workflow outputs around a job action, not as a replacement for the job's actual status.
+
+The model and interface layer should keep:
+- the actual persisted job status
+- separate warning metadata returned by risky transitions when needed
+
+### Timeline event completeness rule
+Milestone 4 should treat the job timeline as a first-class modeled record stream.
+
+At minimum, the timeline model should support:
+- job created
+- job status updated
+- appointment created
+- appointment status updated
+- note added
+- sync/conflict flag
+
 ---
 
 ## 8. Appointment Modeling Rules
@@ -327,6 +377,10 @@ A job may exist with zero appointments.
 This means the data model must allow:
 - jobs without appointments
 - appointments created later
+
+Important direction:
+- an unscheduled job should be represented explicitly by the absence of appointments
+- dispatch visibility should be derived from appointment existence, not from inventing a separate fake scheduled record
 
 ---
 

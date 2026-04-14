@@ -80,9 +80,16 @@ When office staff create a job, BellField should allow them to enter:
 - category/business unit
 - origin
 - summary/caller complaint
+- work order number when available
 - date
 - time frame
 - technician assignment
+
+### Bill-to and work order behavior
+During job creation:
+- the location's current owner/customer should be the default bill-to
+- the office may override the bill-to to another allowed customer for that job
+- the work order number should be optional operational reference data, not a replacement for the BellField job number
 
 ### Automatic appointment generation
 If the office enters a date and time when creating the job:
@@ -94,6 +101,14 @@ If the office creates a job without a date/time:
 - BellField should still save the job
 - the job should appear in the unscheduled area
 - it should not appear on the technician timeline until an appointment is created
+
+### Add-appointment-later behavior
+If an open job already exists, office users should be able to add another appointment later without creating a replacement job.
+
+This should be the normal follow-up path for:
+- return visits
+- unfinished work
+- approved work that still belongs under the same open job
 
 ---
 
@@ -140,6 +155,12 @@ If a user tries to close a job that still has a future appointment attached:
 ### Cancel behavior
 If a job is cancelled:
 - all appointments under it should also be cancelled
+
+### Reopen behavior
+If later work needs to continue on a closed or cancelled job:
+- BellField should warn the office user before reopening it
+- BellField should allow reopening when permissions allow
+- BellField may also prompt the user to create a new job instead when that would produce a cleaner record
 
 ---
 
@@ -443,3 +464,36 @@ BellField version 1 should behave as:
 - history-preserving
 - permission-controlled
 - flexible enough for real-world office and field behavior
+
+---
+
+## 16. Early Milestone Office and Field Expectations
+
+### CRM office workflow expectation
+For Milestone 2, the office should be able to:
+- create a customer
+- create one or more locations under that customer
+- create a shared contact once and link it to customer, location, or both
+- reassign a location to a new current owner/customer without breaking the location's history
+- archive or end-date stale contacts without making historical records confusing
+
+### Equipment office and field expectation
+For Milestone 3, the normal workflow should be:
+- office or field adds equipment to the location context
+- either side can fill in missing equipment details later
+- status can move between pending install, active, and inactive as real work happens
+- inactive equipment stays out of the default active list but remains visible in history when needed
+
+### Jobs and appointments office expectation
+For Milestone 4, the office should be able to:
+- create a job with or without the first appointment
+- add later appointments to an open job
+- use warnings instead of hard locks for close/cancel/reopen edge cases
+- rely on one mixed timeline to understand what happened on the job
+
+### Field expectation for Milestones 2-4
+Before dispatch and full field feature breadth are complete, the field app only needs enough early-milestone context to:
+- understand the assigned location and bill-to context
+- view and edit supported equipment details
+- update appointment progress and notes against the correct job record
+- sync those actions back into the same unified office-visible history

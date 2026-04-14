@@ -820,22 +820,29 @@ These events help modules stay coordinated without becoming tightly coupled.
 
 This project should be built in layers, not all at once.
 
+`docs/milestone-implementation-plan.md` is the sequencing source of truth.
+The roadmap below is a summary of that build order, not a separate competing plan.
+
 ### Build order
-1. product blueprint and workflow rules
-2. platform foundation and permissions
-3. customer / location / contact / equipment organization
-4. jobs / appointments / dispatch
-5. field app basics and offline save/sync
-6. estimates / invoice draft flow
-7. purchasing / inventory / job costing
-8. reporting / permissions hardening / PM reminders
-9. pilot / migration / rollout
+1. project foundation
+2. app shells, authentication, and employee basics
+3. customers, locations, and contacts
+4. equipment and location service context
+5. jobs and appointments core
+6. dispatch board v1
+7. field app v1 and offline work
+8. estimates and invoice draft workflow
+9. invoice posting and bookkeeping workflow
+10. inventory, PO, and job costing
+11. reporting, history hardening, and admin polish
+12. self-hosted pilot deployment
+13. stabilization and beta readiness
 
 ---
 
 ## 12-Month Delivery Plan
 
-## Month 1 — Product Definition and Structure
+## Month 1 - Product Definition and Structure
 Goal: remove ambiguity and lock the product shape, rules, and initial code structure.
 
 ### Deliverables
@@ -860,7 +867,7 @@ Goal: remove ambiguity and lock the product shape, rules, and initial code struc
 
 ---
 
-## Month 2 — Platform Foundation
+## Month 2 - Platform Foundation
 Goal: establish the technical base.
 
 ### Deliverables
@@ -885,7 +892,7 @@ Goal: establish the technical base.
 
 ---
 
-## Month 3 — Accounts, Locations, Contacts, Equipment
+## Month 3 - Accounts, Locations, Contacts, Equipment
 Goal: build the organizational core of the app.
 
 ### Deliverables
@@ -910,7 +917,7 @@ Goal: build the organizational core of the app.
 
 ---
 
-## Month 4 — Jobs and Appointments
+## Month 4 - Jobs and Appointments
 Goal: establish operational work records.
 
 ### Deliverables
@@ -934,7 +941,7 @@ Goal: establish operational work records.
 
 ---
 
-## Month 5 — Dispatch Board v1
+## Month 5 - Dispatch Board v1
 Goal: let the office run the day on a real timeline board.
 
 ### Deliverables
@@ -955,12 +962,12 @@ Goal: let the office run the day on a real timeline board.
 
 ---
 
-## Month 6 — Field App v1
+## Month 6 - Field App v1
 Goal: let technicians execute jobs in the field.
 
 ### Deliverables
 - field login
-- today’s jobs
+- today's jobs
 - job detail
 - status updates
 - prompted notes
@@ -980,7 +987,7 @@ Goal: let technicians execute jobs in the field.
 
 ---
 
-## Month 7 — Estimates and Invoice Draft Flow
+## Month 7 - Estimates and Invoice Draft Flow
 Goal: support technician quoting and early financial flow.
 
 ### Deliverables
@@ -999,7 +1006,7 @@ Goal: support technician quoting and early financial flow.
 
 ---
 
-## Month 8 — Posting, Payments, and Accounting Handoff
+## Month 8 - Posting, Payments, and Accounting Handoff
 Goal: close jobs financially in a controlled way.
 
 ### Deliverables
@@ -1016,7 +1023,7 @@ Goal: close jobs financially in a controlled way.
 
 ---
 
-## Month 9 — Inventory, PO, and Job Costing
+## Month 9 - Inventory, PO, and Job Costing
 Goal: make materials and costs operationally real.
 
 ### Deliverables
@@ -1039,7 +1046,7 @@ Goal: make materials and costs operationally real.
 
 ---
 
-## Month 10 — History, Reporting, and Management Tools
+## Month 10 - History, Reporting, and Management Tools
 Goal: make the system useful for management and trustworthy over time.
 
 ### Deliverables
@@ -1056,7 +1063,7 @@ Goal: make the system useful for management and trustworthy over time.
 
 ---
 
-## Month 11 — PM Reminder Planning and Pilot Readiness
+## Month 11 - PM Reminder Planning and Pilot Readiness
 Goal: prepare for more repeat-service workflows and controlled real usage.
 
 ### Deliverables
@@ -1073,7 +1080,7 @@ Goal: prepare for more repeat-service workflows and controlled real usage.
 
 ---
 
-## Month 12 — Stabilization and Rollout
+## Month 12 - Stabilization and Rollout
 Goal: make v1 dependable enough to trust.
 
 ### Deliverables
