@@ -142,6 +142,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       jobId,
       note,
       occurredAt: new Date().toISOString(),
+      baseUpdatedAt: findJobBaseUpdatedAt(serverSnapshot, jobId),
       state: 'pending'
     };
 
@@ -236,7 +237,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
               apiBaseUrl,
               jobId: operation.jobId,
               note: operation.note,
-              occurredAt: operation.occurredAt
+              occurredAt: operation.occurredAt,
+              baseUpdatedAt: operation.baseUpdatedAt
             });
 
             if (response.syncResult?.status === 'applied' || !response.syncResult) {
@@ -286,6 +288,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
               equipmentId: operation.equipmentId,
               status: operation.status,
               notes: operation.notes,
+              occurredAt: operation.occurredAt,
               baseUpdatedAt: operation.baseUpdatedAt
             });
 
@@ -611,6 +614,10 @@ function applyPendingOperations(
 
 function findAppointmentBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, appointmentId: string): string | undefined {
   return snapshot?.jobs.flatMap((job) => job.appointments).find((appointment) => appointment.id === appointmentId)?.updatedAt;
+}
+
+function findJobBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, jobId: string): string | undefined {
+  return snapshot?.jobs.find((job) => job.id === jobId)?.updatedAt;
 }
 
 function findEquipmentBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, equipmentId: string): string | undefined {

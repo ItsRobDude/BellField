@@ -32,6 +32,8 @@ export type LocationRecord = {
 
 export type EquipmentStatus = 'active' | 'inactive' | 'pendingInstall';
 
+export const equipmentStatuses = ['active', 'inactive', 'pendingInstall'] as const satisfies readonly EquipmentStatus[];
+
 export type EquipmentRecord = {
   id: string;
   locationId?: string;
@@ -67,6 +69,8 @@ export type UpdateEquipmentInput = Partial<CreateEquipmentInput>;
 
 export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
 
+export const jobStatuses = ['open', 'closed', 'posted', 'cancelled'] as const satisfies readonly JobStatus[];
+
 export type AppointmentStatus =
   | 'assigned'
   | 'confirmed'
@@ -76,6 +80,21 @@ export type AppointmentStatus =
   | 'finished'
   | 'noAnswer'
   | 'cancelled';
+
+export const appointmentStatuses = [
+  'assigned',
+  'confirmed',
+  'onTheWay',
+  'arrived',
+  'working',
+  'finished',
+  'noAnswer',
+  'cancelled'
+] as const satisfies readonly AppointmentStatus[];
+
+export type FieldSyncSource = 'field-save-queue';
+
+export const fieldSyncSources = ['field-save-queue'] as const satisfies readonly FieldSyncSource[];
 
 export type SyncResultStatus = 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
 

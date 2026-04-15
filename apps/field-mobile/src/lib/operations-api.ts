@@ -19,6 +19,7 @@ export type FieldAssignedWorkResponse = {
     billToCustomerName: string;
     summary: string;
     status: string;
+    updatedAt: string;
     appointments: {
       id: string;
       scheduledDate?: string;
@@ -138,7 +139,8 @@ export async function updateFieldAppointmentStatus(input: {
     body: JSON.stringify({
       status: input.status,
       occurredAt: input.occurredAt,
-      baseUpdatedAt: input.baseUpdatedAt
+      baseUpdatedAt: input.baseUpdatedAt,
+      syncSource: 'field-save-queue'
     })
   });
 }
@@ -149,12 +151,18 @@ export async function addFieldJobNote(input: {
   jobId: string;
   note: string;
   occurredAt?: string;
+  baseUpdatedAt?: string;
 }) {
   return requestJson<JobMutationResponse>(`/operations/jobs/${input.jobId}/notes`, {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl,
     method: 'POST',
-    body: JSON.stringify({ note: input.note, occurredAt: input.occurredAt })
+    body: JSON.stringify({
+      note: input.note,
+      occurredAt: input.occurredAt,
+      baseUpdatedAt: input.baseUpdatedAt,
+      syncSource: 'field-save-queue'
+    })
   });
 }
 
@@ -164,6 +172,7 @@ export async function updateFieldEquipment(input: {
   equipmentId: string;
   status?: EquipmentStatus;
   notes?: string;
+  occurredAt?: string;
   baseUpdatedAt?: string;
 }) {
   return requestJson<EquipmentMutationResponse>(`/operations/equipment/${input.equipmentId}`, {
@@ -173,7 +182,9 @@ export async function updateFieldEquipment(input: {
     body: JSON.stringify({
       status: input.status,
       notes: input.notes,
-      baseUpdatedAt: input.baseUpdatedAt
+      occurredAt: input.occurredAt,
+      baseUpdatedAt: input.baseUpdatedAt,
+      syncSource: 'field-save-queue'
     })
   });
 }

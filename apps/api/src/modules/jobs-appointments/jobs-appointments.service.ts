@@ -1,9 +1,11 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { JobRecord } from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
+import type { AuthorizedEmployee } from '../identity-access/identity-access.types';
+import { getAssignedWorkWindow } from './field-work-window';
 import type {
   AddJobNoteRequestDto,
   AppointmentSummaryDto,
@@ -31,7 +33,7 @@ export class JobsAppointmentsService {
   ) {}
 
   async getWorkspace(sessionToken: string): Promise<JobsWorkspaceResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
 
     const [customers, locations, technicians, jobs] = await Promise.all([
       this.referenceDataService.listCustomers(),
@@ -60,7 +62,7 @@ export class JobsAppointmentsService {
   }
 
   async createJob(sessionToken: string, request: CreateJobRequestDto): Promise<JobSummaryDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:create');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:create', ['office-web']);
     const location = await this.referenceDataService.getLocationById(request.locationId);
     const billToCustomerId = request.billToCustomerId ?? location.customerId;
     await this.referenceDataService.getCustomerById(billToCustomerId);
@@ -73,8 +75,9 @@ export class JobsAppointmentsService {
     jobId: string,
     request: UpdateJobStatusRequestDto
   ): Promise<UpdateJobStatusResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
-    await this.jobsDataService.getJobById(jobId);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, undefined, ['office-web']);
+    const jobBeforeUpdate = await this.jobsDataService.getJobById(jobId);
+    this.ensureOfficeJobLifecyclePermission(actor, jobBeforeUpdate.status, request.status);
     const referenceDate = (request.occurredAt ?? new Date().toISOString()).slice(0, 10);
     const warningMessages: string[] = [];
 
@@ -95,8 +98,17 @@ export class JobsAppointmentsService {
     jobId: string,
     request: CreateAppointmentRequestDto
   ): Promise<JobSummaryDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:create');
-    await this.jobsDataService.getJobById(jobId);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'appointmentsDispatch:create',
+      ['office-web']
+    );
+    const job = await this.jobsDataService.getJobById(jobId);
+
+    if (job.status !== 'open') {
+      throw new ConflictException('Appointments can only be added to open jobs. Reopen the job first if work should continue.');
+    }
+
     await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
     return this.toJobSummary(jobId);
   }
@@ -109,6 +121,21 @@ export class JobsAppointmentsService {
     const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:edit');
     const currentAppointment = await this.jobsDataService.getAppointmentById(appointmentId);
     const currentJob = await this.jobsDataService.getJobById(currentAppointment.jobId);
+    const accessCheck = await this.evaluateFieldJobMutationAccess(actor, currentJob.id, {
+      occurredAt: request.occurredAt,
+      baseUpdatedAt: request.baseUpdatedAt,
+      syncSource: request.syncSource
+    });
+
+    if (accessCheck.status === 'rejected') {
+      return {
+        ...(await this.toJobSummary(currentJob.id)),
+        syncResult: {
+          status: 'rejected',
+          message: accessCheck.message
+        }
+      };
+    }
 
     if (
       request.baseUpdatedAt &&
@@ -141,9 +168,11 @@ export class JobsAppointmentsService {
     if (request.occurredAt) {
       await this.jobsDataService.addSyncFlag(
         appointment.jobId,
-        currentJob.status === 'cancelled'
-          ? 'Field appointment update synced after the job had already been cancelled.'
-          : 'Field update synced after local save queue replay.',
+        accessCheck.status === 'preservedReplay'
+          ? 'Field appointment update synced after assignment changed while the device was offline.'
+          : currentJob.status === 'cancelled'
+            ? 'Field appointment update synced after the job had already been cancelled.'
+            : 'Field update synced after local save queue replay.',
         actor.displayName,
         new Date().toISOString()
       );
@@ -162,17 +191,35 @@ export class JobsAppointmentsService {
   }
 
   async addJobNote(sessionToken: string, jobId: string, request: AddJobNoteRequestDto): Promise<JobMutationResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken);
+    this.ensureJobNotePermission(actor);
     const currentJob = await this.jobsDataService.getJobById(jobId);
+    const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {
+      occurredAt: request.occurredAt,
+      baseUpdatedAt: request.baseUpdatedAt,
+      syncSource: request.syncSource
+    });
+
+    if (accessCheck.status === 'rejected') {
+      return {
+        ...(await this.toJobSummary(jobId)),
+        syncResult: {
+          status: 'rejected',
+          message: accessCheck.message
+        }
+      };
+    }
 
     await this.jobsDataService.addJobNote(jobId, request.note, actor.displayName, request.occurredAt);
 
     if (request.occurredAt) {
       await this.jobsDataService.addSyncFlag(
         jobId,
-        currentJob.status === 'cancelled'
-          ? 'Field note synced after the job had already been cancelled.'
-          : 'Field note synced after local save queue replay.',
+        accessCheck.status === 'preservedReplay'
+          ? 'Field note synced after assignment changed while the device was offline.'
+          : currentJob.status === 'cancelled'
+            ? 'Field note synced after the job had already been cancelled.'
+            : 'Field note synced after local save queue replay.',
         actor.displayName,
         new Date().toISOString()
       );
@@ -191,15 +238,12 @@ export class JobsAppointmentsService {
   }
 
   async getAssignedWork(sessionToken: string): Promise<FieldAssignedWorkResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view');
-    const today = new Date();
-    const tomorrow = new Date(today);
-    tomorrow.setDate(today.getDate() + 1);
-    // Use the server's local calendar day so the default today/tomorrow window
-    // does not shift forward during late-evening hours due to UTC conversion.
-    const windowStartDate = formatLocalDate(today);
-    const windowEndDate = formatLocalDate(tomorrow);
-    const allowedDates = new Set([windowStartDate, windowEndDate]);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'appointmentsDispatch:view',
+      ['field-mobile']
+    );
+    const { windowStartDate, windowEndDate, allowedDates } = getAssignedWorkWindow();
     const jobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
     const locationIds = [...new Set(jobs.map((job) => job.locationId))];
     const equipment = await this.equipmentDataService.listEquipment(true);
@@ -333,12 +377,83 @@ export class JobsAppointmentsService {
       updatedAt: job.updatedAt
     };
   }
-}
 
-function formatLocalDate(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, '0');
-  const day = String(value.getDate()).padStart(2, '0');
+  private ensureOfficeJobLifecyclePermission(
+    actor: AuthorizedEmployee,
+    currentStatus: UpdateJobStatusResponseDto['status'],
+    nextStatus: UpdateJobStatusRequestDto['status']
+  ): void {
+    const permissions = new Set(actor.effectivePermissions);
 
-  return `${year}-${month}-${day}`;
+    if (nextStatus === 'posted') {
+      if (!permissions.has('invoices:post')) {
+        throw new ForbiddenException('Posting a job requires invoice posting permission.');
+      }
+
+      return;
+    }
+
+    if (currentStatus !== 'open' && nextStatus === 'open') {
+      if (!permissions.has('jobs:configure')) {
+        throw new ForbiddenException('Reopening a job requires job configuration permission.');
+      }
+
+      return;
+    }
+
+    if (!permissions.has('jobs:edit')) {
+      throw new ForbiddenException('Changing job status requires job edit permission.');
+    }
+  }
+
+  private ensureJobNotePermission(actor: AuthorizedEmployee): void {
+    const permissions = new Set(actor.effectivePermissions);
+    const requiredPermission = actor.sessionSurface === 'field-mobile' ? 'appointmentsDispatch:edit' : 'jobs:edit';
+
+    if (!permissions.has(requiredPermission)) {
+      throw new ForbiddenException('You do not have permission to add job notes.');
+    }
+  }
+
+  private async evaluateFieldJobMutationAccess(
+    actor: AuthorizedEmployee,
+    jobId: string,
+    replay: { occurredAt?: string; baseUpdatedAt?: string; syncSource?: string }
+  ): Promise<{ status: 'allowed' | 'preservedReplay' | 'rejected'; message?: string }> {
+    if (actor.sessionSurface !== 'field-mobile') {
+      return { status: 'allowed' };
+    }
+
+    const { allowedDates } = getAssignedWorkWindow();
+    const assignedJobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
+    const assignedJobIds = new Set(assignedJobs.map((job) => job.id));
+
+    if (assignedJobIds.has(jobId)) {
+      return { status: 'allowed' };
+    }
+
+    if (this.isReplayProvenanceValid(replay)) {
+      return { status: 'preservedReplay' };
+    }
+
+    return {
+      status: 'rejected',
+      message: 'This field change is outside the current assigned-work scope and could not be validated as an offline replay.'
+    };
+  }
+
+  private isReplayProvenanceValid(replay: {
+    occurredAt?: string;
+    baseUpdatedAt?: string;
+    syncSource?: string;
+  }): boolean {
+    if (replay.syncSource !== 'field-save-queue' || !replay.occurredAt || !replay.baseUpdatedAt) {
+      return false;
+    }
+
+    // Until BellField adds signed snapshot provenance, require the queued replay
+    // marker and a stable client-side timestamp chain before accepting out-of-scope
+    // field writes after reassignment.
+    return replay.baseUpdatedAt <= replay.occurredAt;
+  }
 }

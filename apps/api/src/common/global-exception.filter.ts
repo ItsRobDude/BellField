@@ -49,9 +49,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       const message =
         typeof response === 'string'
           ? response
-          : typeof response === 'object' && response !== null && 'message' in response
-            ? String(response.message)
-            : defaultMessage;
+          : this.getExceptionMessage(response, defaultMessage);
 
       return {
         statusCode,
@@ -69,5 +67,21 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       timestamp: new Date().toISOString(),
       path
     };
+  }
+
+  private getExceptionMessage(response: unknown, defaultMessage: string): string {
+    if (!response || typeof response !== 'object') {
+      return defaultMessage;
+    }
+
+    if ('message' in response && Array.isArray(response.message)) {
+      return response.message.join('; ');
+    }
+
+    if ('message' in response) {
+      return String(response.message);
+    }
+
+    return defaultMessage;
   }
 }

@@ -1,12 +1,12 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/common';
+import {
+  AddJobNoteRequestBodyDto,
+  CreateAppointmentRequestBodyDto,
+  CreateJobRequestBodyDto,
+  UpdateAppointmentStatusRequestBodyDto,
+  UpdateJobStatusRequestBodyDto
+} from './jobs-appointments.dto';
 import { JobsAppointmentsService } from './jobs-appointments.service';
-import type {
-  AddJobNoteRequestDto,
-  CreateAppointmentRequestDto,
-  CreateJobRequestDto,
-  UpdateAppointmentStatusRequestDto,
-  UpdateJobStatusRequestDto
-} from './jobs-appointments.types';
 
 @Controller('operations/jobs')
 export class JobsAppointmentsController {
@@ -18,7 +18,10 @@ export class JobsAppointmentsController {
   }
 
   @Post()
-  async createJob(@Headers('authorization') authorizationHeader: string | undefined, @Body() request: CreateJobRequestDto) {
+  async createJob(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Body() request: CreateJobRequestBodyDto
+  ) {
     return this.jobsAppointmentsService.createJob(this.getBearerToken(authorizationHeader), request);
   }
 
@@ -26,7 +29,7 @@ export class JobsAppointmentsController {
   async updateJobStatus(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string,
-    @Body() request: UpdateJobStatusRequestDto
+    @Body() request: UpdateJobStatusRequestBodyDto
   ) {
     return this.jobsAppointmentsService.updateJobStatus(this.getBearerToken(authorizationHeader), jobId, request);
   }
@@ -35,7 +38,7 @@ export class JobsAppointmentsController {
   async addAppointment(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string,
-    @Body() request: CreateAppointmentRequestDto
+    @Body() request: CreateAppointmentRequestBodyDto
   ) {
     return this.jobsAppointmentsService.addAppointment(this.getBearerToken(authorizationHeader), jobId, request);
   }
@@ -44,7 +47,7 @@ export class JobsAppointmentsController {
   async addJobNote(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string,
-    @Body() request: AddJobNoteRequestDto
+    @Body() request: AddJobNoteRequestBodyDto
   ) {
     return this.jobsAppointmentsService.addJobNote(this.getBearerToken(authorizationHeader), jobId, request);
   }
@@ -53,7 +56,7 @@ export class JobsAppointmentsController {
   async updateAppointmentStatus(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('appointmentId') appointmentId: string,
-    @Body() request: UpdateAppointmentStatusRequestDto
+    @Body() request: UpdateAppointmentStatusRequestBodyDto
   ) {
     return this.jobsAppointmentsService.updateAppointmentStatus(
       this.getBearerToken(authorizationHeader),

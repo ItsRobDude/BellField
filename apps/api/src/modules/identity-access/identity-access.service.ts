@@ -3,12 +3,15 @@ import { randomUUID } from 'node:crypto';
 import { defaultRoleTemplates } from './default-role-templates';
 import { IdentityAccessRepository } from './identity-access.repository';
 import type {
+  AuthorizedEmployee,
   EmployeeRecord,
   EmployeeSummary,
+  LoginSurface,
   LoginRequestDto,
   LoginResponseDto,
   PermissionKey,
   RoleTemplate,
+  SessionRecord,
   UpdateEmployeeRequestDto
 } from './identity-access.types';
 
@@ -48,18 +51,29 @@ export class IdentityAccessService {
   }
 
   async getCurrentEmployee(sessionToken: string): Promise<EmployeeSummary> {
-    const employee = await this.getEmployeeFromSession(sessionToken);
+    const { employee } = await this.getEmployeeFromSession(sessionToken);
     return this.toEmployeeSummary(employee);
   }
 
-  async getAuthorizedEmployee(sessionToken: string, permissionKey?: PermissionKey): Promise<EmployeeSummary> {
-    const employee = await this.getEmployeeFromSession(sessionToken);
+  async getAuthorizedEmployee(
+    sessionToken: string,
+    permissionKey?: PermissionKey,
+    allowedSurfaces?: LoginSurface[]
+  ): Promise<AuthorizedEmployee> {
+    const { employee, session } = await this.getEmployeeFromSession(sessionToken);
+
+    if (allowedSurfaces && !allowedSurfaces.includes(session.surface)) {
+      throw new ForbiddenException(this.buildSurfaceErrorMessage(allowedSurfaces));
+    }
 
     if (permissionKey) {
       this.ensurePermission(employee, permissionKey);
     }
 
-    return this.toEmployeeSummary(employee);
+    return {
+      ...this.toEmployeeSummary(employee),
+      sessionSurface: session.surface
+    };
   }
 
   async getActiveEmployees(): Promise<EmployeeSummary[]> {
@@ -77,8 +91,7 @@ export class IdentityAccessService {
   }
 
   async getEmployees(sessionToken: string): Promise<EmployeeSummary[]> {
-    const actor = await this.getEmployeeFromSession(sessionToken);
-    this.ensurePermission(actor, 'employeesPermissions:view');
+    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:view', ['office-web']);
 
     const employees = await this.identityAccessRepository.listEmployees();
 
@@ -92,8 +105,7 @@ export class IdentityAccessService {
     employeeId: string,
     update: UpdateEmployeeRequestDto
   ): Promise<EmployeeSummary> {
-    const actor = await this.getEmployeeFromSession(sessionToken);
-    this.ensurePermission(actor, 'employeesPermissions:configure');
+    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', ['office-web']);
 
     const existingEmployee = await this.identityAccessRepository.findEmployeeById(employeeId);
 
@@ -123,7 +135,14 @@ export class IdentityAccessService {
     return this.toEmployeeSummary(existingEmployee);
   }
 
-  private async getEmployeeFromSession(sessionToken: string): Promise<EmployeeRecord> {
+  async getRoleTemplatesForOffice(sessionToken: string): Promise<RoleTemplate[]> {
+    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:view', ['office-web']);
+    return this.getRoleTemplates();
+  }
+
+  private async getEmployeeFromSession(
+    sessionToken: string
+  ): Promise<{ employee: EmployeeRecord; session: SessionRecord }> {
     const session = await this.identityAccessRepository.findSessionByToken(sessionToken);
 
     if (!session) {
@@ -142,7 +161,7 @@ export class IdentityAccessService {
       throw new ForbiddenException('This employee account is inactive.');
     }
 
-    return employee;
+    return { employee, session };
   }
 
   private toEmployeeSummary(employee: EmployeeRecord): EmployeeSummary {
@@ -193,5 +212,13 @@ export class IdentityAccessService {
 
   private uniquePermissionKeys(permissionKeys: PermissionKey[]): PermissionKey[] {
     return [...new Set(permissionKeys)].sort();
+  }
+
+  private buildSurfaceErrorMessage(allowedSurfaces: LoginSurface[]): string {
+    return allowedSurfaces.includes('field-mobile') && allowedSurfaces.includes('office-web')
+      ? 'This action is not available for the current session surface.'
+      : allowedSurfaces[0] === 'field-mobile'
+        ? 'This action is only available from the BellField field app.'
+        : 'This action is only available from the BellField office app.';
   }
 }

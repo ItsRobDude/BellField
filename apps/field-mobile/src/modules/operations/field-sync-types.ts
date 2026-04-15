@@ -14,6 +14,7 @@ export type PendingOperation =
       kind: 'jobNote';
       jobId: string;
       note: string;
+      baseUpdatedAt?: string;
     })
   | (PendingOperationBase & {
       kind: 'appointmentStatus';

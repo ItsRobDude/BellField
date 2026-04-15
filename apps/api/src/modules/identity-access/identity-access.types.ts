@@ -6,7 +6,18 @@ export type EmployeeRoleId =
   | 'bookKeeping'
   | 'technician';
 
+export const employeeRoleIds = [
+  'owner',
+  'admin',
+  'csr',
+  'dispatcher',
+  'bookKeeping',
+  'technician'
+] as const satisfies readonly EmployeeRoleId[];
+
 export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'post' | 'export' | 'configure';
+
+export const permissionActions = ['view', 'create', 'edit', 'delete', 'approve', 'post', 'export', 'configure'] as const satisfies readonly PermissionAction[];
 
 export type PermissionArea =
   | 'customers'
@@ -25,9 +36,33 @@ export type PermissionArea =
   | 'companySettings'
   | 'supportLogsBackups';
 
+export const permissionAreas = [
+  'customers',
+  'locations',
+  'contacts',
+  'equipment',
+  'jobs',
+  'appointmentsDispatch',
+  'estimates',
+  'invoices',
+  'payments',
+  'purchasing',
+  'inventory',
+  'reports',
+  'employeesPermissions',
+  'companySettings',
+  'supportLogsBackups'
+] as const satisfies readonly PermissionArea[];
+
 export type PermissionKey = `${PermissionArea}:${PermissionAction}`;
 
+export const permissionKeys = permissionAreas.flatMap((area) =>
+  permissionActions.map((action) => `${area}:${action}` as PermissionKey)
+);
+
 export type LoginSurface = 'office-web' | 'field-mobile';
+
+export const loginSurfaces = ['office-web', 'field-mobile'] as const satisfies readonly LoginSurface[];
 
 export type RoleTemplate = {
   id: EmployeeRoleId;
@@ -60,6 +95,10 @@ export type EmployeeSummary = {
   isActive: boolean;
   effectivePermissions: PermissionKey[];
   permissionOverrides: EmployeePermissionOverrides;
+};
+
+export type AuthorizedEmployee = EmployeeSummary & {
+  sessionSurface: LoginSurface;
 };
 
 export type LoginRequestDto = {

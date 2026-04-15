@@ -60,7 +60,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
     id: 'admin',
     name: 'Admin',
     description: 'Broad operational and employee-management control.',
-    permissions: uniquePermissions(adminCore)
+    permissions: uniquePermissions([...adminCore, ...permissionKeys('jobs', ['configure'])])
   },
   csr: {
     id: 'csr',
@@ -101,8 +101,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...permissionKeys('customers', ['view']),
       ...permissionKeys('locations', ['view']),
       ...permissionKeys('contacts', ['view']),
-      ...permissionKeys('equipment', ['view', 'create', 'edit', 'delete']),
-      ...permissionKeys('jobs', ['view', 'edit']),
+      ...permissionKeys('equipment', ['create', 'edit', 'delete']),
       ...permissionKeys('appointmentsDispatch', ['view', 'edit']),
       ...permissionKeys('estimates', ['view', 'create', 'edit']),
       ...permissionKeys('invoices', ['view', 'edit'])

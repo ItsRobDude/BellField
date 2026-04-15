@@ -1,13 +1,13 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/common';
+import { LoginRequestBodyDto, UpdateEmployeeRequestBodyDto } from './identity-access.dto';
 import { IdentityAccessService } from './identity-access.service';
-import type { LoginRequestDto, UpdateEmployeeRequestDto } from './identity-access.types';
 
 @Controller('identity')
 export class IdentityAccessController {
   constructor(private readonly identityAccessService: IdentityAccessService) {}
 
   @Post('auth/login')
-  async login(@Body() loginRequest: LoginRequestDto) {
+  async login(@Body() loginRequest: LoginRequestBodyDto) {
     return this.identityAccessService.login(loginRequest);
   }
 
@@ -20,10 +20,8 @@ export class IdentityAccessController {
 
   @Get('roles')
   async getRoles(@Headers('authorization') authorizationHeader?: string) {
-    await this.identityAccessService.getCurrentEmployee(this.getBearerToken(authorizationHeader));
-
     return {
-      roles: this.identityAccessService.getRoleTemplates()
+      roles: await this.identityAccessService.getRoleTemplatesForOffice(this.getBearerToken(authorizationHeader))
     };
   }
 
@@ -38,7 +36,7 @@ export class IdentityAccessController {
   async updateEmployee(
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('employeeId') employeeId: string,
-    @Body() updateEmployeeRequest: UpdateEmployeeRequestDto
+    @Body() updateEmployeeRequest: UpdateEmployeeRequestBodyDto
   ) {
     return this.identityAccessService.updateEmployee(
       this.getBearerToken(authorizationHeader),

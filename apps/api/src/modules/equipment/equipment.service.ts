@@ -2,6 +2,9 @@ import { Injectable } from '@nestjs/common';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
+import { getAssignedWorkWindow } from '../jobs-appointments/field-work-window';
+import { JobsDataService } from '../company-data/jobs-data.service';
+import type { AuthorizedEmployee } from '../identity-access/identity-access.types';
 import type {
   CreateEquipmentRequestDto,
   EquipmentMutationResponseDto,
@@ -15,11 +18,12 @@ export class EquipmentService {
   constructor(
     private readonly referenceDataService: ReferenceDataService,
     private readonly equipmentDataService: EquipmentDataService,
+    private readonly jobsDataService: JobsDataService,
     private readonly identityAccessService: IdentityAccessService
   ) {}
 
   async getWorkspace(sessionToken: string, includeInactive: boolean) {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:view');
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:view', ['office-web']);
     const [locations, equipment] = await Promise.all([
       this.referenceDataService.listLocations(),
       this.equipmentDataService.listEquipment(includeInactive)
@@ -32,7 +36,7 @@ export class EquipmentService {
   }
 
   async createEquipment(sessionToken: string, request: CreateEquipmentRequestDto): Promise<EquipmentSummaryDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:create');
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:create', ['office-web']);
 
     if (request.locationId) {
       await this.referenceDataService.getLocationById(request.locationId);
@@ -47,13 +51,24 @@ export class EquipmentService {
     equipmentId: string,
     request: UpdateEquipmentFieldRequestDto
   ): Promise<EquipmentMutationResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:edit');
 
     if (request.locationId) {
       await this.referenceDataService.getLocationById(request.locationId);
     }
 
     const currentRecord = await this.equipmentDataService.getEquipmentById(equipmentId);
+    const accessCheck = await this.evaluateFieldEquipmentAccess(actor, currentRecord.locationId, request);
+
+    if (accessCheck.status === 'rejected') {
+      return {
+        ...(await this.toEquipmentSummary(equipmentId)),
+        syncResult: {
+          status: 'rejected',
+          message: accessCheck.message
+        }
+      };
+    }
 
     if (
       request.baseUpdatedAt &&
@@ -77,7 +92,10 @@ export class EquipmentService {
       ...(request.baseUpdatedAt
         ? {
             syncResult: {
-              status: 'applied'
+              status: 'applied',
+              ...(accessCheck.status === 'preservedReplay'
+                ? { message: 'Equipment update synced after assignment changed while the device was offline.' }
+                : {})
             }
           }
         : {})
@@ -127,5 +145,49 @@ export class EquipmentService {
       notes: equipmentRecord.notes,
       updatedAt: equipmentRecord.updatedAt
     };
+  }
+
+  private async evaluateFieldEquipmentAccess(
+    actor: AuthorizedEmployee,
+    locationId: string | undefined,
+    replay: UpdateEquipmentFieldRequestDto
+  ): Promise<{ status: 'allowed' | 'preservedReplay' | 'rejected'; message?: string }> {
+    if (actor.sessionSurface !== 'field-mobile') {
+      return { status: 'allowed' };
+    }
+
+    if (!locationId) {
+      return this.isReplayProvenanceValid(replay)
+        ? { status: 'preservedReplay' }
+        : {
+            status: 'rejected',
+            message: 'This equipment change is outside the current assigned-work scope and could not be validated as an offline replay.'
+          };
+    }
+
+    const { allowedDates } = getAssignedWorkWindow();
+    const assignedJobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
+    const assignedLocationIds = new Set(assignedJobs.map((job) => job.locationId));
+
+    if (assignedLocationIds.has(locationId)) {
+      return { status: 'allowed' };
+    }
+
+    if (this.isReplayProvenanceValid(replay)) {
+      return { status: 'preservedReplay' };
+    }
+
+    return {
+      status: 'rejected',
+      message: 'This equipment change is outside the current assigned-work scope and could not be validated as an offline replay.'
+    };
+  }
+
+  private isReplayProvenanceValid(replay: UpdateEquipmentFieldRequestDto): boolean {
+    if (replay.syncSource !== 'field-save-queue' || !replay.occurredAt || !replay.baseUpdatedAt) {
+      return false;
+    }
+
+    return replay.baseUpdatedAt <= replay.occurredAt;
   }
 }

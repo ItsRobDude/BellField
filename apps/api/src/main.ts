@@ -1,3 +1,4 @@
+import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './modules/app.module';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
@@ -11,6 +12,16 @@ async function bootstrap() {
   // Keep local app-to-api wiring simple while the persistent auth/session layer is still forming.
   app.enableCors({ origin: true });
   app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+      transformOptions: {
+        enableImplicitConversion: false
+      }
+    })
+  );
 
   await app.listen(runtimeConfig.port);
 

@@ -1,4 +1,4 @@
-import type { EquipmentStatus, SyncResult } from '../company-data/company-data.types';
+import type { EquipmentStatus, FieldSyncSource, SyncResult } from '../company-data/company-data.types';
 
 export type EquipmentLocationSummaryDto = {
   id: string;
@@ -52,7 +52,9 @@ export type CreateEquipmentRequestDto = {
 export type UpdateEquipmentRequestDto = Partial<CreateEquipmentRequestDto>;
 
 export type UpdateEquipmentFieldRequestDto = UpdateEquipmentRequestDto & {
+  occurredAt?: string;
   baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
 };
 
 export type EquipmentMutationResponseDto = EquipmentSummaryDto & {
