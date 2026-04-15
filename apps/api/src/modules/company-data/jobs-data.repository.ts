@@ -155,7 +155,7 @@ export class JobsDataRepository {
       [jobId]
     );
 
-    return result.rows.map((row) => this.toAppointmentRecord(row));
+    return result.rows.map((row: AppointmentRow) => this.toAppointmentRecord(row));
   }
 
   async getAppointmentById(appointmentId: string): Promise<AppointmentRecord | null> {
@@ -467,7 +467,7 @@ export class JobsDataRepository {
       [employeeId, allowedDateValues]
     );
 
-    return this.listJobsByIds(result.rows.map((row) => row.jobId));
+    return this.listJobsByIds(result.rows.map((row: { jobId: string }) => row.jobId));
   }
 
   async hasFutureAppointments(jobId: string, referenceDate: string): Promise<boolean> {

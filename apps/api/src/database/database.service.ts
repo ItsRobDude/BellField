@@ -1,8 +1,10 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
-import { Pool, type PoolClient, type QueryResult, type QueryResultRow } from 'pg';
+import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { getApiRuntimeConfig } from '../common/config/runtime-config';
 
-export type QueryExecutor = Pick<Pool, 'query'> | Pick<PoolClient, 'query'>;
+export type QueryExecutor = {
+  query<T extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<T>>;
+};
 
 @Injectable()
 export class DatabaseService implements OnModuleDestroy {
@@ -14,9 +16,9 @@ export class DatabaseService implements OnModuleDestroy {
 
   async query<T extends QueryResultRow = QueryResultRow>(
     text: string,
-    values?: readonly unknown[]
+    values?: unknown[]
   ): Promise<QueryResult<T>> {
-    return this.pool.query<T>(text, values);
+    return this.pool.query<T>(text, values as never[] | undefined);
   }
 
   async transaction<T>(callback: (queryable: QueryExecutor) => Promise<T>): Promise<T> {

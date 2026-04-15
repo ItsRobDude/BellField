@@ -74,6 +74,7 @@ export class JobsAppointmentsService {
     request: UpdateJobStatusRequestDto
   ): Promise<UpdateJobStatusResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit');
+    await this.jobsDataService.getJobById(jobId);
     const referenceDate = (request.occurredAt ?? new Date().toISOString()).slice(0, 10);
     const warningMessages: string[] = [];
 
@@ -95,6 +96,7 @@ export class JobsAppointmentsService {
     request: CreateAppointmentRequestDto
   ): Promise<JobSummaryDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:create');
+    await this.jobsDataService.getJobById(jobId);
     await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
     return this.toJobSummary(jobId);
   }
@@ -193,8 +195,10 @@ export class JobsAppointmentsService {
     const today = new Date();
     const tomorrow = new Date(today);
     tomorrow.setDate(today.getDate() + 1);
-    const windowStartDate = today.toISOString().slice(0, 10);
-    const windowEndDate = tomorrow.toISOString().slice(0, 10);
+    // Use the server's local calendar day so the default today/tomorrow window
+    // does not shift forward during late-evening hours due to UTC conversion.
+    const windowStartDate = formatLocalDate(today);
+    const windowEndDate = formatLocalDate(tomorrow);
     const allowedDates = new Set([windowStartDate, windowEndDate]);
     const jobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
     const locationIds = [...new Set(jobs.map((job) => job.locationId))];
@@ -329,4 +333,12 @@ export class JobsAppointmentsService {
       updatedAt: job.updatedAt
     };
   }
+}
+
+function formatLocalDate(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+
+  return `${year}-${month}-${day}`;
 }

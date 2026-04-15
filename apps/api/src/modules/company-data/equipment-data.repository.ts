@@ -50,7 +50,7 @@ export class EquipmentDataRepository {
       [includeInactive]
     );
 
-    return result.rows.map((row) => this.toEquipmentRecord(row));
+    return result.rows.map((row: EquipmentRow) => this.toEquipmentRecord(row));
   }
 
   async getEquipmentById(equipmentId: string): Promise<EquipmentRecord | null> {

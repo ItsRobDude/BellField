@@ -816,6 +816,27 @@ These events help modules stay coordinated without becoming tightly coupled.
 
 ---
 
+## Local Setup and Checks
+
+Use **pnpm only** in this repository.
+
+### Bootstrap on Windows
+- Install Node.js in user space if needed. Admin rights are not required as long as `node` and `pnpm` are available in your user PATH.
+- From the repo root, run `pnpm install --frozen-lockfile`.
+- If that fails because the lockfile is stale, run `pnpm install` once to reconcile `pnpm-lock.yaml`, then continue with the normal commands below.
+
+### Standard maintenance commands
+- `pnpm typecheck`
+- `pnpm lint`
+- `pnpm build`
+- `pnpm test`
+
+### Notes
+- `pnpm test` is currently smoke coverage built on top of the existing workspace typechecks; it is not a full application test suite yet.
+- Run commands from the repo root so workspace package resolution stays consistent across Windows setups.
+
+---
+
 ## Product Roadmap
 
 This project should be built in layers, not all at once.

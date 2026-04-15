@@ -87,7 +87,7 @@ export class IdentityAccessRepository {
       `
     );
 
-    return result.rows.map((row) => this.toEmployeeRecord(row));
+    return result.rows.map((row: EmployeeRow) => this.toEmployeeRecord(row));
   }
 
   async saveEmployee(employee: EmployeeRecord): Promise<void> {

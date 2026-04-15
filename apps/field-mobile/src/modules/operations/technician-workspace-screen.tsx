@@ -65,31 +65,41 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const rejectedCount = pendingOperations.filter((operation) => operation.state === 'rejected').length;
 
   useEffect(() => {
-    void initializeWorkspace();
-  }, []);
+    async function initializeWorkspace() {
+      setIsInitializing(true);
+      setErrorMessage(null);
 
-  async function initializeWorkspace() {
-    setIsInitializing(true);
-    setErrorMessage(null);
+      try {
+        await initializeFieldSyncStore();
+        const [persistedSnapshot, persistedOperations, persistedMetadata] = await Promise.all([
+          loadAssignedWorkSnapshot(),
+          loadPendingOperations(),
+          loadSyncMetadata()
+        ]);
 
-    try {
-      await initializeFieldSyncStore();
-      const [persistedSnapshot, persistedOperations, persistedMetadata] = await Promise.all([
-        loadAssignedWorkSnapshot(),
-        loadPendingOperations(),
-        loadSyncMetadata()
-      ]);
+        setServerSnapshot(persistedSnapshot);
+        setPendingOperations(persistedOperations);
+        setSyncMetadata(persistedMetadata);
+        const nextAssignedWork = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
+        const nextSyncMetadata: SyncMetadata = {
+          ...persistedMetadata,
+          lastSnapshotVersion: nextAssignedWork.snapshotVersion,
+          lastSyncError: null
+        };
 
-      setServerSnapshot(persistedSnapshot);
-      setPendingOperations(persistedOperations);
-      setSyncMetadata(persistedMetadata);
-      await refreshAssignedWork(false, persistedMetadata);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load BellField field storage.');
-    } finally {
-      setIsInitializing(false);
+        await saveAssignedWorkSnapshot(nextAssignedWork);
+        await saveSyncMetadata(nextSyncMetadata);
+        setServerSnapshot(nextAssignedWork);
+        setSyncMetadata(nextSyncMetadata);
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to load BellField field storage.');
+      } finally {
+        setIsInitializing(false);
+      }
     }
-  }
+
+    void initializeWorkspace();
+  }, [apiBaseUrl, sessionToken]);
 
   async function refreshAssignedWork(showSpinner = true, metadataOverride?: SyncMetadata) {
     if (showSpinner) {

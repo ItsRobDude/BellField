@@ -104,11 +104,15 @@ export async function loadPendingOperations(): Promise<PendingOperation[]> {
     last_result_message: string | null;
   }>('select payload_json, state, last_result_message from pending_operations order by created_at asc');
 
-  return rows.map((row) => ({
-    ...(JSON.parse(row.payload_json) as Omit<PendingOperation, 'state' | 'lastResultMessage'>),
-    state: row.state,
-    lastResultMessage: row.last_result_message ?? undefined
-  }));
+  return rows.map((row): PendingOperation => {
+    const storedOperation = JSON.parse(row.payload_json) as PendingOperation;
+
+    return {
+      ...storedOperation,
+      state: row.state,
+      lastResultMessage: row.last_result_message ?? undefined
+    };
+  });
 }
 
 export async function queuePendingOperation(operation: PendingOperation): Promise<void> {

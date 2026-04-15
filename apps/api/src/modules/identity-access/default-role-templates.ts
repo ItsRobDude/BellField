@@ -1,7 +1,7 @@
 import type { EmployeeRoleId, PermissionAction, PermissionArea, PermissionKey, RoleTemplate } from './identity-access.types';
 
 function permissionKeys(area: PermissionArea, actions: PermissionAction[]): PermissionKey[] {
-  return actions.map((action) => `${area}:${action}`);
+  return actions.map((action): PermissionKey => `${area}:${action}`);
 }
 
 function uniquePermissions(permissions: PermissionKey[]): PermissionKey[] {

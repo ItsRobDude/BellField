@@ -55,7 +55,7 @@ export class ReferenceDataRepository {
       `
     );
 
-    return result.rows.map((row) => this.toCustomerRecord(row));
+    return result.rows.map((row: CustomerRow) => this.toCustomerRecord(row));
   }
 
   async getCustomerById(customerId: string): Promise<CustomerAccountRecord | null> {
@@ -94,7 +94,7 @@ export class ReferenceDataRepository {
       `
     );
 
-    return result.rows.map((row) => this.toContactRecord(row));
+    return result.rows.map((row: ContactRow) => this.toContactRecord(row));
   }
 
   async getContactById(contactId: string): Promise<ContactRecord | null> {
@@ -136,7 +136,7 @@ export class ReferenceDataRepository {
       `
     );
 
-    return result.rows.map((row) => this.toLocationRecord(row));
+    return result.rows.map((row: LocationRow) => this.toLocationRecord(row));
   }
 
   async getLocationById(locationId: string): Promise<LocationRecord | null> {

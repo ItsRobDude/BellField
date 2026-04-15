@@ -11,7 +11,7 @@ export type AppointmentStatus =
   | 'cancelled';
 
 export type FieldAssignedWorkResponse = {
-  jobs: Array<{
+  jobs: {
     id: string;
     jobNumber: string;
     locationId: string;
@@ -19,22 +19,23 @@ export type FieldAssignedWorkResponse = {
     billToCustomerName: string;
     summary: string;
     status: string;
-    appointments: Array<{
+    appointments: {
       id: string;
       scheduledDate?: string;
       timeWindowLabel?: string;
       technicianName?: string;
       status: AppointmentStatus;
-    }>;
-    timeline: Array<{
+      updatedAt: string;
+    }[];
+    timeline: {
       id: string;
       occurredAt: string;
       actorName: string;
       message: string;
       kind: string;
-    }>;
-  }>;
-  locations: Array<{
+    }[];
+  }[];
+  locations: {
     id: string;
     name: string;
     customerName: string;
@@ -42,15 +43,23 @@ export type FieldAssignedWorkResponse = {
     city: string;
     state: string;
     postalCode: string;
-    contacts: Array<{
+    contacts: {
       id: string;
       displayName: string;
       phone?: string;
       email?: string;
       tags: string[];
-    }>;
-  }>;
-  equipment: Array<{
+    }[];
+  }[];
+  customers: {
+    id: string;
+    name: string;
+    accountType: string;
+    phone?: string;
+    email?: string;
+    flags: string[];
+  }[];
+  equipment: {
     id: string;
     locationId?: string;
     equipmentType: string;
@@ -62,7 +71,7 @@ export type FieldAssignedWorkResponse = {
     status: EquipmentStatus;
     notes: string;
     updatedAt: string;
-  }>;
+  }[];
   serverTime: string;
   snapshotVersion: string;
   windowStartDate: string;
