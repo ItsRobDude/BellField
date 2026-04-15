@@ -25,6 +25,11 @@ export type PendingOperation =
   | (PendingOperationBase & {
       kind: 'equipmentUpdate';
       equipmentId: string;
+      model?: string;
+      serialNumber?: string;
+      filterSizes?: string[];
+      equipmentLocationDescription?: string;
+      installDate?: string;
       status: EquipmentStatus;
       notes: string;
       baseUpdatedAt?: string;

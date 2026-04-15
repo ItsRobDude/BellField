@@ -1,3 +1,5 @@
+import { resolveFieldApiBaseUrl } from './api-base-url';
+
 export type EquipmentStatus = 'active' | 'inactive' | 'pendingInstall';
 
 export type AppointmentStatus =
@@ -69,6 +71,7 @@ export type FieldAssignedWorkResponse = {
     serialNumber: string;
     filterSizes: string[];
     equipmentLocationDescription?: string;
+    installDate?: string;
     status: EquipmentStatus;
     notes: string;
     updatedAt: string;
@@ -93,14 +96,13 @@ export type EquipmentMutationResponse = FieldAssignedWorkResponse['equipment'][n
   syncResult?: SyncResult;
 };
 
-const defaultApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
-
 async function requestJson<TResponse>(
   path: string,
   options: RequestInit & { apiBaseUrl?: string; sessionToken: string } = { sessionToken: '' }
 ): Promise<TResponse> {
-  const { apiBaseUrl = defaultApiBaseUrl, headers, sessionToken, ...requestOptions } = options;
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const { apiBaseUrl, headers, sessionToken, ...requestOptions } = options;
+  const resolvedApiBaseUrl = resolveFieldApiBaseUrl(apiBaseUrl);
+  const response = await fetch(`${resolvedApiBaseUrl}${path}`, {
     ...requestOptions,
     headers: {
       'Content-Type': 'application/json',
@@ -170,6 +172,11 @@ export async function updateFieldEquipment(input: {
   sessionToken: string;
   apiBaseUrl?: string;
   equipmentId: string;
+  model?: string;
+  serialNumber?: string;
+  filterSizes?: string[];
+  equipmentLocationDescription?: string;
+  installDate?: string;
   status?: EquipmentStatus;
   notes?: string;
   occurredAt?: string;
@@ -180,6 +187,11 @@ export async function updateFieldEquipment(input: {
     apiBaseUrl: input.apiBaseUrl,
     method: 'PATCH',
     body: JSON.stringify({
+      model: input.model,
+      serialNumber: input.serialNumber,
+      filterSizes: input.filterSizes,
+      equipmentLocationDescription: input.equipmentLocationDescription,
+      installDate: input.installDate,
       status: input.status,
       notes: input.notes,
       occurredAt: input.occurredAt,

@@ -1,6 +1,7 @@
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type {
   AppointmentStatus,
+  JobStatus,
   JobsWorkspaceResponse
 } from '@/lib/operations-api';
 
@@ -33,7 +34,20 @@ type JobsAppointmentsPanelProps = {
   onJobWindowChange: (value: string) => void;
   onAppointmentDraftChange: (jobId: string, draft: AppointmentDraft) => void;
   onCreateJob: () => Promise<void>;
-  onJobStatusChange: (jobId: string, status: 'open' | 'closed' | 'posted' | 'cancelled') => Promise<void>;
+  pendingJobStatusChange: {
+    jobId: string;
+    nextStatus: JobStatus;
+    reviewMessage: string;
+    isSubmitting: boolean;
+  } | null;
+  onJobStatusReviewRequested: (
+    jobId: string,
+    currentStatus: JobStatus,
+    status: JobStatus,
+    summary: string
+  ) => void;
+  onConfirmJobStatusChange: () => Promise<void>;
+  onCancelJobStatusChange: () => void;
   onAppointmentStatusChange: (appointmentId: string, status: AppointmentStatus) => Promise<void>;
   onAddAppointment: (jobId: string) => Promise<void>;
 };
@@ -61,7 +75,10 @@ export function JobsAppointmentsPanel({
   onJobWindowChange,
   onAppointmentDraftChange,
   onCreateJob,
-  onJobStatusChange,
+  pendingJobStatusChange,
+  onJobStatusReviewRequested,
+  onConfirmJobStatusChange,
+  onCancelJobStatusChange,
   onAppointmentStatusChange,
   onAddAppointment
 }: JobsAppointmentsPanelProps) {
@@ -130,9 +147,11 @@ export function JobsAppointmentsPanel({
                 <select
                   value={job.status}
                   onChange={(event) =>
-                    void onJobStatusChange(
+                    onJobStatusReviewRequested(
                       job.id,
-                      event.target.value as 'open' | 'closed' | 'posted' | 'cancelled'
+                      job.status,
+                      event.target.value as JobStatus,
+                      job.summary
                     )
                   }
                   style={styles.input}
@@ -143,6 +162,23 @@ export function JobsAppointmentsPanel({
                   <option value="cancelled">Cancelled</option>
                 </select>
               </div>
+              {pendingJobStatusChange?.jobId === job.id ? (
+                <div style={styles.subpanel}>
+                  <strong>Confirm status change to {pendingJobStatusChange.nextStatus}</strong>
+                  <div style={styles.muted}>{pendingJobStatusChange.reviewMessage}</div>
+                  <div style={styles.muted}>
+                    BellField may still show an additional server warning after the change is applied.
+                  </div>
+                  <div style={styles.row}>
+                    <button type="button" onClick={() => void onConfirmJobStatusChange()} style={styles.button}>
+                      {pendingJobStatusChange.isSubmitting ? 'Saving...' : 'Confirm status change'}
+                    </button>
+                    <button type="button" onClick={onCancelJobStatusChange} style={styles.button}>
+                      Keep current status
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <div style={styles.grid}>
                 {job.appointments.map((appointment) => (
                   <div key={appointment.id} style={styles.subpanel}>

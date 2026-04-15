@@ -1,14 +1,21 @@
 import path from 'node:path';
 import { existsSync } from 'node:fs';
 
-import { migrationsDir, queryPsql, requireDatabaseUrl, runPsql } from './shared.mjs';
+import {
+  ensureSchemaMigrationsTable,
+  getLastAppliedMigrationFilename,
+  getMigrationDriver,
+  migrationsDir,
+  requireDatabaseUrl,
+  rollbackMigrationFile
+} from './shared.mjs';
 
 const databaseUrl = requireDatabaseUrl();
+const driver = getMigrationDriver();
 
-const lastFilename = queryPsql('SELECT filename FROM schema_migrations ORDER BY id DESC LIMIT 1;', {
-  databaseUrl,
-  allowFailure: true
-});
+await ensureSchemaMigrationsTable(databaseUrl, driver);
+
+const lastFilename = await getLastAppliedMigrationFilename(databaseUrl, driver);
 
 if (!lastFilename) {
   console.log('No applied migrations found.');
@@ -24,11 +31,7 @@ if (!existsSync(downFile)) {
   process.exit(1);
 }
 
-const escapedFilename = lastFilename.replace(/'/g, "''");
-console.log(`Reverting ${lastFilename} using ${downFilename}`);
-runPsql(['-f', downFile], { databaseUrl });
-runPsql(['-c', `DELETE FROM schema_migrations WHERE filename = '${escapedFilename}';`], {
-  databaseUrl
-});
+console.log(`Reverting ${lastFilename} using ${downFilename} with ${driver} driver`);
+await rollbackMigrationFile(databaseUrl, lastFilename, downFile, driver);
 
 console.log(`Rolled back ${lastFilename}`);

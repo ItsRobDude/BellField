@@ -1,5 +1,16 @@
+import { useEffect, useState } from 'react';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type { EquipmentStatus, EquipmentSummary, LocationSummary } from '@/lib/operations-api';
+
+type EquipmentRecordDraft = {
+  model: string;
+  serialNumber: string;
+  filterSizes: string;
+  equipmentLocationDescription: string;
+  installDate: string;
+  status: EquipmentStatus;
+  notes: string;
+};
 
 type EquipmentPanelProps = {
   locations: LocationSummary[];
@@ -27,7 +38,18 @@ type EquipmentPanelProps = {
   onEquipmentStatusChange: (value: EquipmentStatus) => void;
   onShowInactiveChange: (value: boolean) => void;
   onCreateEquipment: () => Promise<void>;
-  onRecordStatusChange: (record: EquipmentSummary, nextStatus: EquipmentStatus) => Promise<void>;
+  onRecordUpdate: (
+    recordId: string,
+    draft: {
+      model: string;
+      serialNumber: string;
+      filterSizes: string[];
+      equipmentLocationDescription?: string;
+      installDate?: string;
+      status: EquipmentStatus;
+      notes: string;
+    }
+  ) => Promise<void>;
 };
 
 export function EquipmentPanel({
@@ -56,8 +78,34 @@ export function EquipmentPanel({
   onEquipmentStatusChange,
   onShowInactiveChange,
   onCreateEquipment,
-  onRecordStatusChange
+  onRecordUpdate
 }: EquipmentPanelProps) {
+  const [drafts, setDrafts] = useState<Record<string, EquipmentRecordDraft>>({});
+
+  useEffect(() => {
+    setDrafts((current) => {
+      const nextDrafts = { ...current };
+
+      for (const record of equipment) {
+        if (!nextDrafts[record.id]) {
+          nextDrafts[record.id] = createEquipmentRecordDraft(record);
+        }
+      }
+
+      return nextDrafts;
+    });
+  }, [equipment]);
+
+  function updateDraft(record: EquipmentSummary, patch: Partial<EquipmentRecordDraft>) {
+    setDrafts((current) => ({
+      ...current,
+      [record.id]: {
+        ...(current[record.id] ?? createEquipmentRecordDraft(record)),
+        ...patch
+      }
+    }));
+  }
+
   return (
     <section style={styles.card}>
       <div style={styles.row}>
@@ -102,27 +150,96 @@ export function EquipmentPanel({
         style={styles.textarea}
       />
       <div style={styles.grid}>
-        {equipment.map((record) => (
-          <article key={record.id} style={styles.panel}>
-            <strong>
-              {record.equipmentType}: {record.brand} {record.model}
-            </strong>
-            <div style={styles.muted}>{record.locationName || record.inventoryLocationLabel}</div>
-            <div style={styles.muted}>Serial: {record.serialNumber}</div>
-            <div style={styles.muted}>Filters: {record.filterSizes.join(', ') || 'None entered'}</div>
-            <div style={styles.muted}>Notes: {record.notes || 'No notes yet.'}</div>
-            <select
-              value={record.status}
-              onChange={(event) => void onRecordStatusChange(record, event.target.value as EquipmentStatus)}
-              style={styles.input}
-            >
-              <option value="active">Active</option>
-              <option value="pendingInstall">Pending install</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </article>
-        ))}
+        {equipment.map((record) => {
+          const draft = drafts[record.id] ?? createEquipmentRecordDraft(record);
+
+          return (
+            <article key={record.id} style={styles.panel}>
+              <strong>
+                {record.equipmentType}: {record.brand} {record.model}
+              </strong>
+              <div style={styles.muted}>{record.locationName || record.inventoryLocationLabel}</div>
+              <input
+                value={draft.model}
+                onChange={(event) => updateDraft(record, { model: event.target.value })}
+                placeholder="Model"
+                style={styles.input}
+              />
+              <input
+                value={draft.serialNumber}
+                onChange={(event) => updateDraft(record, { serialNumber: event.target.value })}
+                placeholder="Serial"
+                style={styles.input}
+              />
+              <input
+                value={draft.filterSizes}
+                onChange={(event) => updateDraft(record, { filterSizes: event.target.value })}
+                placeholder="Filters (comma separated)"
+                style={styles.input}
+              />
+              <input
+                value={draft.equipmentLocationDescription}
+                onChange={(event) => updateDraft(record, { equipmentLocationDescription: event.target.value })}
+                placeholder="Equipment location"
+                style={styles.input}
+              />
+              <input
+                value={draft.installDate}
+                onChange={(event) => updateDraft(record, { installDate: event.target.value })}
+                type="date"
+                style={styles.input}
+              />
+              <textarea
+                value={draft.notes}
+                onChange={(event) => updateDraft(record, { notes: event.target.value })}
+                placeholder="Notes"
+                style={styles.textarea}
+              />
+              <select
+                value={draft.status}
+                onChange={(event) => updateDraft(record, { status: event.target.value as EquipmentStatus })}
+                style={styles.input}
+              >
+                <option value="active">Active</option>
+                <option value="pendingInstall">Pending install</option>
+                <option value="inactive">Inactive</option>
+              </select>
+              <button
+                type="button"
+                onClick={() =>
+                  void onRecordUpdate(record.id, {
+                    model: draft.model.trim(),
+                    serialNumber: draft.serialNumber.trim(),
+                    filterSizes: draft.filterSizes
+                      .split(',')
+                      .map((value) => value.trim())
+                      .filter((value) => value.length > 0),
+                    equipmentLocationDescription: draft.equipmentLocationDescription.trim() || undefined,
+                    installDate: draft.installDate || undefined,
+                    status: draft.status,
+                    notes: draft.notes.trim()
+                  })
+                }
+                style={styles.button}
+              >
+                Save equipment changes
+              </button>
+            </article>
+          );
+        })}
       </div>
     </section>
   );
+}
+
+function createEquipmentRecordDraft(record: EquipmentSummary): EquipmentRecordDraft {
+  return {
+    model: record.model,
+    serialNumber: record.serialNumber,
+    filterSizes: record.filterSizes.join(', '),
+    equipmentLocationDescription: record.equipmentLocationDescription ?? '',
+    installDate: record.installDate ?? '',
+    status: record.status,
+    notes: record.notes
+  };
 }

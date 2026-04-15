@@ -13,6 +13,7 @@ import {
   type AppointmentStatus,
   type EquipmentStatus,
   type EquipmentSummary,
+  type JobStatus,
   type JobsWorkspaceResponse
 } from '@/lib/operations-api';
 import {
@@ -38,8 +39,41 @@ type Props = {
   onSignOut: () => void;
 };
 
+type PendingJobStatusChange = {
+  jobId: string;
+  currentStatus: JobStatus;
+  nextStatus: JobStatus;
+  jobSummary: string;
+  reviewMessage: string;
+  isSubmitting: boolean;
+};
+
 function canViewEmployees(employee: EmployeeSummary | null): boolean {
   return employee?.effectivePermissions.includes('employeesPermissions:view') ?? false;
+}
+
+function getJobStatusReviewMessage(
+  currentStatus: JobStatus,
+  nextStatus: JobStatus,
+  jobSummary: string
+): string {
+  if (currentStatus === nextStatus) {
+    return `Job "${jobSummary}" is already ${nextStatus}.`;
+  }
+
+  if (nextStatus === 'closed') {
+    return `Closing "${jobSummary}" marks the job operationally complete. BellField will still warn if future appointments remain.`;
+  }
+
+  if (nextStatus === 'posted') {
+    return `Posting "${jobSummary}" is the accounting-complete state. Only continue when invoice posting work is ready to be finalized.`;
+  }
+
+  if (nextStatus === 'cancelled') {
+    return `Cancelling "${jobSummary}" should stop future work under this job until the office deliberately reopens it.`;
+  }
+
+  return `Reopening "${jobSummary}" makes the job active again so office staff can continue work or schedule follow-up appointments.`;
 }
 
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
@@ -50,6 +84,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [equipment, setEquipment] = useState<EquipmentSummary[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [pendingJobStatusChange, setPendingJobStatusChange] = useState<PendingJobStatusChange | null>(null);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
   const [equipmentType, setEquipmentType] = useState('Condenser');
   const [equipmentBrand, setEquipmentBrand] = useState('Carrier');
@@ -161,14 +196,27 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
-  async function handleEquipmentStatusChange(record: EquipmentSummary, nextStatus: EquipmentStatus) {
+  async function handleEquipmentUpdate(recordId: string, draft: {
+    model: string;
+    serialNumber: string;
+    filterSizes: string[];
+    equipmentLocationDescription?: string;
+    installDate?: string;
+    status: EquipmentStatus;
+    notes: string;
+  }) {
     try {
       await updateOfficeEquipment({
-        equipmentId: record.id,
+        equipmentId: recordId,
         sessionToken,
         apiBaseUrl,
-        status: nextStatus,
-        notes: record.notes
+        model: draft.model,
+        serialNumber: draft.serialNumber,
+        filterSizes: draft.filterSizes,
+        equipmentLocationDescription: draft.equipmentLocationDescription,
+        installDate: draft.installDate,
+        status: draft.status,
+        notes: draft.notes
       });
       await refreshWorkspace();
     } catch (error) {
@@ -201,17 +249,51 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
-  async function handleJobStatusChange(jobId: string, status: 'open' | 'closed' | 'posted' | 'cancelled') {
+  function handleJobStatusReviewRequested(
+    jobId: string,
+    currentStatus: JobStatus,
+    nextStatus: JobStatus,
+    jobSummary: string
+  ) {
+    if (currentStatus === nextStatus) {
+      setPendingJobStatusChange(null);
+      return;
+    }
+
+    setPendingJobStatusChange({
+      jobId,
+      currentStatus,
+      nextStatus,
+      jobSummary,
+      reviewMessage: getJobStatusReviewMessage(currentStatus, nextStatus, jobSummary),
+      isSubmitting: false
+    });
+  }
+
+  async function confirmJobStatusChange() {
+    if (!pendingJobStatusChange) {
+      return;
+    }
+
+    setPendingJobStatusChange((current) => (current ? { ...current, isSubmitting: true } : current));
+
     try {
-      const response = await updateOfficeJobStatus({ jobId, status, sessionToken, apiBaseUrl });
+      const response = await updateOfficeJobStatus({
+        jobId: pendingJobStatusChange.jobId,
+        status: pendingJobStatusChange.nextStatus,
+        sessionToken,
+        apiBaseUrl
+      });
 
       if (response.warningMessages?.length) {
         window.alert(response.warningMessages.join('\n'));
       }
 
+      setPendingJobStatusChange(null);
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update job status.');
+      setPendingJobStatusChange((current) => (current ? { ...current, isSubmitting: false } : current));
     }
   }
 
@@ -322,7 +404,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onEquipmentStatusChange={setEquipmentStatus}
         onShowInactiveChange={setShowInactiveEquipment}
         onCreateEquipment={handleCreateEquipment}
-        onRecordStatusChange={handleEquipmentStatusChange}
+        onRecordUpdate={handleEquipmentUpdate}
       />
 
       <JobsAppointmentsPanel
@@ -350,7 +432,10 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
           setAppointmentDrafts((current) => ({ ...current, [jobId]: draft }))
         }
         onCreateJob={handleCreateJob}
-        onJobStatusChange={handleJobStatusChange}
+        pendingJobStatusChange={pendingJobStatusChange}
+        onJobStatusReviewRequested={handleJobStatusReviewRequested}
+        onConfirmJobStatusChange={confirmJobStatusChange}
+        onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
         onAppointmentStatusChange={handleAppointmentStatusChange}
         onAddAppointment={handleAddAppointment}
       />

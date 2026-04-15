@@ -2,6 +2,7 @@
 
 import type { CSSProperties, FormEvent } from 'react';
 import { useState } from 'react';
+import { getInitialOfficeApiBaseUrl } from '@/lib/api-base-url';
 import { loginToOfficeApi, type EmployeeSummary } from '@/lib/identity-api';
 import { OfficeWorkspaceShell } from '@/modules/operations/office-workspace-shell';
 
@@ -12,7 +13,7 @@ const demoAccounts = [
 ];
 
 export function OfficeAuthShell() {
-  const [apiBaseUrl, setApiBaseUrl] = useState(process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001');
+  const [apiBaseUrl, setApiBaseUrl] = useState(getInitialOfficeApiBaseUrl());
   const [email, setEmail] = useState(demoAccounts[0].email);
   const [password, setPassword] = useState(demoAccounts[0].password);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -67,7 +68,18 @@ export function OfficeAuthShell() {
           session.
         </p>
         <form onSubmit={handleLogin} style={styles.form}>
-          <input value={apiBaseUrl} onChange={(event) => setApiBaseUrl(event.target.value)} style={styles.input} />
+          <label style={styles.fieldLabel}>
+            <span>Server URL</span>
+            <input
+              value={apiBaseUrl}
+              onChange={(event) => setApiBaseUrl(event.target.value)}
+              placeholder="https://office-pc:3001"
+              style={styles.input}
+            />
+          </label>
+          <p style={styles.helperText}>
+            Local development may use `http://localhost:3001`. Production browsers should point at the office server.
+          </p>
           <input value={email} onChange={(event) => setEmail(event.target.value)} style={styles.input} />
           <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" style={styles.input} />
           <button type="submit" disabled={isSubmitting} style={styles.button}>
@@ -98,7 +110,9 @@ export function OfficeAuthShell() {
 const styles: Record<string, CSSProperties> = {
   page: { minHeight: '100vh', background: '#f4f1e8', color: '#1f2933', display: 'grid', fontFamily: 'Arial, sans-serif', placeItems: 'center', padding: '2rem' },
   card: { background: '#fffdf7', border: '1px solid #e5dcc8', borderRadius: 24, maxWidth: '34rem', padding: '2rem', width: '100%' },
+  fieldLabel: { color: '#1f2933', display: 'grid', fontSize: '0.95rem', fontWeight: 600, gap: '0.5rem' },
   form: { display: 'grid', gap: '0.75rem', marginTop: '1rem' },
+  helperText: { color: '#52606d', fontSize: '0.9rem', margin: '-0.25rem 0 0' },
   input: { background: '#ffffff', border: '1px solid #d9c8ad', borderRadius: 14, fontSize: '1rem', padding: '0.85rem 1rem' },
   button: { background: '#1c6b57', border: 'none', borderRadius: 999, color: '#ffffff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, padding: '0.9rem 1.25rem' },
   demoList: { display: 'grid', gap: '0.5rem', marginTop: '1rem' },

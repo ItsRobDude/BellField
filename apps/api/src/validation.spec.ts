@@ -20,9 +20,14 @@ describe('Runtime validation', () => {
   };
   const jobsAppointmentsService = {
     createJob: jest.fn(),
-    updateJobStatus: jest.fn()
+    updateJobStatus: jest.fn(),
+    addAppointment: jest.fn(),
+    updateAppointmentStatus: jest.fn(),
+    addJobNote: jest.fn()
   };
-  const equipmentService = {};
+  const equipmentService = {
+    updateEquipment: jest.fn()
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
@@ -69,5 +74,53 @@ describe('Runtime validation', () => {
 
     expect(response.status).toBe(400);
     expect(jobsAppointmentsService.updateJobStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed appointment payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/jobs/job-1/appointments')
+      .send({
+        scheduledDate: '04/14/2026',
+        timeWindowLabel: 'Morning'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.addAppointment).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed appointment status payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/jobs/appointments/appointment-1/status')
+      .send({
+        status: 'done',
+        occurredAt: 'not-a-date'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.updateAppointmentStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed job note payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/jobs/job-1/notes')
+      .send({
+        note: '',
+        occurredAt: 'not-a-date'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.addJobNote).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed equipment update payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/equipment/equipment-1')
+      .send({
+        status: 'broken',
+        installDate: '14-04-2026'
+      });
+
+    expect(response.status).toBe(400);
+    expect(equipmentService.updateEquipment).not.toHaveBeenCalled();
   });
 });

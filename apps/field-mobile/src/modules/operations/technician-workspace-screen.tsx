@@ -31,6 +31,33 @@ type Props = {
   onSignOut: () => void;
 };
 
+type EquipmentDraft = {
+  model: string;
+  serialNumber: string;
+  filterSizes: string;
+  equipmentLocationDescription: string;
+  installDate: string;
+  status: EquipmentStatus;
+  notes: string;
+};
+
+type FinishReviewState = {
+  jobId: string;
+  appointmentId: string;
+  visitNotes: string;
+  registerReminder: string;
+};
+
+const fieldAppointmentStatuses: AppointmentStatus[] = [
+  'assigned',
+  'confirmed',
+  'onTheWay',
+  'arrived',
+  'working',
+  'finished',
+  'noAnswer'
+];
+
 const defaultSyncMetadata: SyncMetadata = {
   lastSuccessfulSyncAt: null,
   lastAttemptedSyncAt: null,
@@ -43,8 +70,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata>(defaultSyncMetadata);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
-  const [equipmentNoteDrafts, setEquipmentNoteDrafts] = useState<Record<string, string>>({});
-  const [equipmentStatusDrafts, setEquipmentStatusDrafts] = useState<Record<string, EquipmentStatus>>({});
+  const [equipmentDrafts, setEquipmentDrafts] = useState<Record<string, EquipmentDraft>>({});
+  const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -129,8 +156,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     }
   }
 
-  async function queueJobNote(jobId: string) {
-    const note = noteDrafts[jobId]?.trim();
+  async function queueJobNote(jobId: string, noteOverride?: string) {
+    const note = (noteOverride ?? noteDrafts[jobId] ?? '').trim();
 
     if (!note) {
       return;
@@ -149,7 +176,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     try {
       await queuePendingOperation(operation);
       setPendingOperations((current) => [...current, operation]);
-      setNoteDrafts((current) => ({ ...current, [jobId]: '' }));
+
+      if (noteOverride === undefined) {
+        setNoteDrafts((current) => ({ ...current, [jobId]: '' }));
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the note locally.');
     }
@@ -178,29 +208,117 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     }
   }
 
-  async function queueEquipmentUpdate(equipmentId: string) {
-    const nextStatus = equipmentStatusDrafts[equipmentId] ?? findEquipmentCurrentStatus(assignedWork, equipmentId);
-    const nextNotes = equipmentNoteDrafts[equipmentId] ?? findEquipmentCurrentNotes(assignedWork, equipmentId);
+  async function queueEquipmentUpdate(record: FieldAssignedWorkResponse['equipment'][number]) {
+    const draft = equipmentDrafts[record.id] ?? createEquipmentDraft(record);
     const nextOperation: PendingOperation = {
-      id: `${equipmentId}-equipment-${Date.now()}`,
+      id: `${record.id}-equipment-${Date.now()}`,
       kind: 'equipmentUpdate',
-      equipmentId,
-      status: nextStatus,
-      notes: nextNotes,
+      equipmentId: record.id,
+      model: draft.model.trim(),
+      serialNumber: draft.serialNumber.trim(),
+      filterSizes: draft.filterSizes
+        .split(',')
+        .map((value) => value.trim())
+        .filter((value) => value.length > 0),
+      equipmentLocationDescription: draft.equipmentLocationDescription.trim() || undefined,
+      installDate: draft.installDate.trim() || undefined,
+      status: draft.status,
+      notes: draft.notes.trim(),
       occurredAt: new Date().toISOString(),
-      baseUpdatedAt: findEquipmentBaseUpdatedAt(serverSnapshot, equipmentId),
+      baseUpdatedAt: findEquipmentBaseUpdatedAt(serverSnapshot, record.id),
       state: 'pending'
     };
 
     try {
       await queuePendingOperation(nextOperation);
       setPendingOperations((current) => [
-        ...current.filter((operation) => !(operation.kind === 'equipmentUpdate' && operation.equipmentId === equipmentId)),
+        ...current.filter((operation) => !(operation.kind === 'equipmentUpdate' && operation.equipmentId === record.id)),
         nextOperation
       ]);
+      setEquipmentDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[record.id];
+        return nextDrafts;
+      });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the equipment change locally.');
     }
+  }
+
+  function updateEquipmentDraft(
+    record: FieldAssignedWorkResponse['equipment'][number],
+    patch: Partial<EquipmentDraft>
+  ) {
+    setEquipmentDrafts((current) => ({
+      ...current,
+      [record.id]: {
+        ...(current[record.id] ?? createEquipmentDraft(record)),
+        ...patch
+      }
+    }));
+  }
+
+  function beginFinishReview(jobId: string, appointmentId: string) {
+    setFinishReview((current) =>
+      current?.appointmentId === appointmentId
+        ? current
+        : {
+            jobId,
+            appointmentId,
+            visitNotes: '',
+            registerReminder: ''
+          }
+    );
+  }
+
+  function handleAppointmentStatusPress(jobId: string, appointmentId: string, status: AppointmentStatus) {
+    if (status === 'finished') {
+      beginFinishReview(jobId, appointmentId);
+      return;
+    }
+
+    setFinishReview((current) => (current?.appointmentId === appointmentId ? null : current));
+    void queueAppointmentStatus(appointmentId, status);
+  }
+
+  function commitFinishReview(allowEmptyNotes: boolean) {
+    const currentFinishReview = finishReview;
+
+    if (!currentFinishReview) {
+      return;
+    }
+
+    const visitNotes = currentFinishReview.visitNotes.trim();
+
+    if (!visitNotes && !allowEmptyNotes) {
+      Alert.alert(
+        'Finish without notes?',
+        'BellField should prompt for visit notes before the appointment is marked finished. Continue anyway?',
+        [
+          { text: 'Add notes', style: 'cancel' },
+          {
+            text: 'Continue',
+            onPress: () => commitFinishReview(true)
+          }
+        ]
+      );
+      return;
+    }
+
+    void (async () => {
+      if (visitNotes) {
+        await queueJobNote(currentFinishReview.jobId, visitNotes);
+      }
+
+      const registerReminder = currentFinishReview.registerReminder.trim();
+
+      if (registerReminder) {
+        await queueJobNote(currentFinishReview.jobId, `Register / follow-up: ${registerReminder}`);
+      }
+
+      await queueAppointmentStatus(currentFinishReview.appointmentId, 'finished');
+      setFinishReview(null);
+    })();
   }
 
   async function syncNow() {
@@ -241,7 +359,25 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
               baseUpdatedAt: operation.baseUpdatedAt
             });
 
-            if (response.syncResult?.status === 'applied' || !response.syncResult) {
+            if (response.syncResult?.status === 'conflict') {
+              await updatePendingOperationState(operation.id, 'conflict', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'conflict', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else if (response.syncResult?.status === 'rejected') {
+              await updatePendingOperationState(operation.id, 'rejected', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'rejected', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else {
               await removePendingOperation(operation.id);
               setPendingOperations((current) => current.filter((entry) => entry.id !== operation.id));
             }
@@ -286,6 +422,11 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
               sessionToken,
               apiBaseUrl,
               equipmentId: operation.equipmentId,
+              model: operation.model,
+              serialNumber: operation.serialNumber,
+              filterSizes: operation.filterSizes,
+              equipmentLocationDescription: operation.equipmentLocationDescription,
+              installDate: operation.installDate,
               status: operation.status,
               notes: operation.notes,
               occurredAt: operation.occurredAt,
@@ -453,16 +594,59 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                     <Text style={styles.summaryText}>{appointment.technicianName || employee.displayName}</Text>
                     <Text style={styles.summaryText}>Latest local appointment status: {appointment.status}</Text>
                     <View style={styles.actionRow}>
-                      {(['assigned', 'arrived', 'working', 'finished'] as AppointmentStatus[]).map((status) => (
+                      {fieldAppointmentStatuses.map((status) => (
                         <Pressable
                           key={status}
-                          onPress={() => void queueAppointmentStatus(appointment.id, status)}
+                          onPress={() => handleAppointmentStatusPress(job.id, appointment.id, status)}
                           style={styles.tagButton}
                         >
                           <Text style={styles.tagButtonText}>{status}</Text>
                         </Pressable>
                       ))}
                     </View>
+
+                    {finishReview?.appointmentId === appointment.id ? (
+                      <View style={styles.reviewCard}>
+                        <Text style={styles.sectionTitleSmall}>Finish review</Text>
+                        <Text style={styles.summaryText}>
+                          BellField should prompt for notes and register items before finishing this visit.
+                        </Text>
+                        <TextInput
+                          value={finishReview.visitNotes}
+                          onChangeText={(value) =>
+                            setFinishReview((current) =>
+                              current && current.appointmentId === appointment.id
+                                ? { ...current, visitNotes: value }
+                                : current
+                            )
+                          }
+                          multiline
+                          placeholder="Visit notes"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={finishReview.registerReminder}
+                          onChangeText={(value) =>
+                            setFinishReview((current) =>
+                              current && current.appointmentId === appointment.id
+                                ? { ...current, registerReminder: value }
+                                : current
+                            )
+                          }
+                          multiline
+                          placeholder="Register item or follow-up reminder"
+                          style={styles.input}
+                        />
+                        <View style={styles.actionRow}>
+                          <Pressable onPress={() => commitFinishReview(false)} style={styles.primaryButton}>
+                            <Text style={styles.primaryButtonText}>Save finish locally</Text>
+                          </Pressable>
+                          <Pressable onPress={() => setFinishReview(null)} style={styles.secondaryButton}>
+                            <Text style={styles.secondaryButtonText}>Cancel</Text>
+                          </Pressable>
+                        </View>
+                      </View>
+                    ) : null}
                   </View>
                 ))}
 
@@ -483,6 +667,11 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
                 {equipment.map((record) => (
                   <View key={record.id} style={styles.block}>
+                    {(() => {
+                      const equipmentDraft = equipmentDrafts[record.id] ?? createEquipmentDraft(record);
+
+                      return (
+                        <>
                     <Text style={styles.sectionTitleSmall}>
                       {record.equipmentType}: {record.brand} {record.model}
                     </Text>
@@ -492,7 +681,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       {(['active', 'pendingInstall', 'inactive'] as EquipmentStatus[]).map((status) => (
                         <Pressable
                           key={status}
-                          onPress={() => setEquipmentStatusDrafts((current) => ({ ...current, [record.id]: status }))}
+                          onPress={() => updateEquipmentDraft(record, { status })}
                           style={styles.tagButton}
                         >
                           <Text style={styles.tagButtonText}>{status}</Text>
@@ -500,14 +689,48 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       ))}
                     </View>
                     <TextInput
-                      value={equipmentNoteDrafts[record.id] ?? record.notes}
-                      onChangeText={(value) => setEquipmentNoteDrafts((current) => ({ ...current, [record.id]: value }))}
-                      multiline
+                      value={equipmentDraft.model}
+                      onChangeText={(value) => updateEquipmentDraft(record, { model: value })}
+                      placeholder="Model"
                       style={styles.input}
                     />
-                    <Pressable onPress={() => void queueEquipmentUpdate(record.id)} style={styles.secondaryButton}>
+                    <TextInput
+                      value={equipmentDraft.serialNumber}
+                      onChangeText={(value) => updateEquipmentDraft(record, { serialNumber: value })}
+                      placeholder="Serial number"
+                      style={styles.input}
+                    />
+                    <TextInput
+                      value={equipmentDraft.filterSizes}
+                      onChangeText={(value) => updateEquipmentDraft(record, { filterSizes: value })}
+                      placeholder="Filters (comma separated)"
+                      style={styles.input}
+                    />
+                    <TextInput
+                      value={equipmentDraft.equipmentLocationDescription}
+                      onChangeText={(value) => updateEquipmentDraft(record, { equipmentLocationDescription: value })}
+                      placeholder="Equipment location"
+                      style={styles.input}
+                    />
+                    <TextInput
+                      value={equipmentDraft.installDate}
+                      onChangeText={(value) => updateEquipmentDraft(record, { installDate: value })}
+                      placeholder="Install date (YYYY-MM-DD)"
+                      style={styles.input}
+                    />
+                    <TextInput
+                      value={equipmentDraft.notes}
+                      onChangeText={(value) => updateEquipmentDraft(record, { notes: value })}
+                      multiline
+                      placeholder="Equipment notes"
+                      style={styles.input}
+                    />
+                    <Pressable onPress={() => void queueEquipmentUpdate(record)} style={styles.secondaryButton}>
                       <Text style={styles.secondaryButtonText}>Save equipment locally</Text>
                     </Pressable>
+                        </>
+                      );
+                    })()}
                   </View>
                 ))}
               </View>
@@ -600,6 +823,11 @@ function applyPendingOperations(
           record.id === operation.equipmentId
             ? {
                 ...record,
+                model: operation.model ?? record.model,
+                serialNumber: operation.serialNumber ?? record.serialNumber,
+                filterSizes: operation.filterSizes ?? record.filterSizes,
+                equipmentLocationDescription: operation.equipmentLocationDescription ?? record.equipmentLocationDescription,
+                installDate: operation.installDate ?? record.installDate,
                 status: operation.status,
                 notes: operation.notes
               }
@@ -624,15 +852,16 @@ function findEquipmentBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, equip
   return snapshot?.equipment.find((record) => record.id === equipmentId)?.updatedAt;
 }
 
-function findEquipmentCurrentNotes(snapshot: FieldAssignedWorkResponse | null, equipmentId: string): string {
-  return snapshot?.equipment.find((record) => record.id === equipmentId)?.notes ?? '';
-}
-
-function findEquipmentCurrentStatus(
-  snapshot: FieldAssignedWorkResponse | null,
-  equipmentId: string
-): EquipmentStatus {
-  return snapshot?.equipment.find((record) => record.id === equipmentId)?.status ?? 'active';
+function createEquipmentDraft(record: FieldAssignedWorkResponse['equipment'][number]): EquipmentDraft {
+  return {
+    model: record.model,
+    serialNumber: record.serialNumber,
+    filterSizes: record.filterSizes.join(', '),
+    equipmentLocationDescription: record.equipmentLocationDescription ?? '',
+    installDate: record.installDate ?? '',
+    status: record.status,
+    notes: record.notes
+  };
 }
 
 function formatPendingOperation(operation: PendingOperation): string {
@@ -671,6 +900,7 @@ const styles = StyleSheet.create({
   subtitle: { color: '#52606d', fontSize: 15, lineHeight: 22 },
   summaryCard: { backgroundColor: '#ffffff', borderColor: '#ebdec6', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
   block: { backgroundColor: '#faf7ef', borderRadius: 14, gap: 8, padding: 12 },
+  reviewCard: { backgroundColor: '#f3f7ef', borderColor: '#d5e2cd', borderRadius: 14, borderWidth: 1, gap: 8, padding: 12 },
   sectionTitle: { color: '#1f2933', fontSize: 17, fontWeight: '600' },
   sectionTitleSmall: { color: '#1f2933', fontSize: 15, fontWeight: '600' },
   summaryText: { color: '#52606d', fontSize: 14, lineHeight: 20 },

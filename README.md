@@ -173,6 +173,54 @@ This keeps the stack mostly TypeScript across the product, which improves:
 
 ---
 
+## Local Setup
+
+BellField now expects a consistent local baseline:
+
+- **Node:** `20.x`
+- **pnpm:** `10.13.1`
+
+Recommended Windows-friendly bootstrap:
+
+```powershell
+corepack enable
+corepack prepare pnpm@10.13.1 --activate
+pnpm install --frozen-lockfile
+```
+
+If the lockfile is intentionally being reconciled, use:
+
+```powershell
+pnpm install
+```
+
+Client/API environment setup:
+
+- Copy root settings from [.env.example](./.env.example) when running the API or worker locally.
+- Copy [apps/office-web/.env.example](./apps/office-web/.env.example) for the office app.
+- Copy [apps/field-mobile/.env.example](./apps/field-mobile/.env.example) for the field app.
+- `NEXT_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_API_BASE_URL` should point at the BellField API on the office server outside local development. `localhost` is only the development fallback.
+
+Common maintenance checks:
+
+```powershell
+pnpm typecheck
+pnpm lint
+pnpm test
+pnpm build
+```
+
+API migration commands:
+
+```powershell
+pnpm --filter @bellfield/api migration:up
+pnpm --filter @bellfield/api migration:down
+```
+
+These now use the Node/Postgres driver by default. Optional `psql` escape-hatch commands remain available as `migration:up:psql` and `migration:down:psql`.
+
+---
+
 ## Core Design Principles
 
 1. **Customer / company first, then service locations**

@@ -1,3 +1,5 @@
+import { resolveOfficeApiBaseUrl } from './api-base-url';
+
 export type CustomerAccountSummary = {
   id: string;
   name: string;
@@ -127,14 +129,13 @@ export type JobsWorkspaceResponse = {
   jobs: JobSummary[];
 };
 
-const defaultApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
-
 async function requestJson<TResponse>(
   path: string,
   options: RequestInit & { apiBaseUrl?: string; sessionToken?: string } = {}
 ): Promise<TResponse> {
-  const { apiBaseUrl = defaultApiBaseUrl, headers, sessionToken, ...requestOptions } = options;
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const { apiBaseUrl, headers, sessionToken, ...requestOptions } = options;
+  const resolvedApiBaseUrl = resolveOfficeApiBaseUrl(apiBaseUrl);
+  const response = await fetch(`${resolvedApiBaseUrl}${path}`, {
     ...requestOptions,
     headers: {
       'Content-Type': 'application/json',
@@ -193,6 +194,11 @@ export async function updateOfficeEquipment(input: {
   equipmentId: string;
   sessionToken: string;
   apiBaseUrl?: string;
+  model?: string;
+  serialNumber?: string;
+  filterSizes?: string[];
+  equipmentLocationDescription?: string;
+  installDate?: string;
   status?: EquipmentStatus;
   notes?: string;
 }): Promise<EquipmentSummary> {
@@ -201,6 +207,11 @@ export async function updateOfficeEquipment(input: {
     sessionToken: input.sessionToken,
     method: 'PATCH',
     body: JSON.stringify({
+      model: input.model,
+      serialNumber: input.serialNumber,
+      filterSizes: input.filterSizes,
+      equipmentLocationDescription: input.equipmentLocationDescription,
+      installDate: input.installDate,
       status: input.status,
       notes: input.notes
     })

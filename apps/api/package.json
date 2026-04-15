@@ -11,7 +11,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "migration:create": "node ./scripts/migrations/create.mjs",
     "migration:up": "node ./scripts/migrations/up.mjs",
-    "migration:down": "node ./scripts/migrations/down.mjs"
+    "migration:down": "node ./scripts/migrations/down.mjs",
+    "migration:up:psql": "node ./scripts/migrations/up.mjs --driver=psql",
+    "migration:down:psql": "node ./scripts/migrations/down.mjs --driver=psql"
   },
   "dependencies": {
     "@nestjs/common": "11.1.3",
@@ -35,9 +37,8 @@
     "@typescript-eslint/parser": "8.31.0",
     "eslint": "9.25.0",
     "jest": "30.0.5",
-    "typescript": "5.8.3"
-    ,
     "supertest": "7.1.1",
-    "ts-jest": "29.4.0"
+    "ts-jest": "29.4.0",
+    "typescript": "5.8.3"
   }
 }

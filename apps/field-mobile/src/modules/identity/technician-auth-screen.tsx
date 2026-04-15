@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { getInitialFieldApiBaseUrl } from '@/lib/api-base-url';
 import { loginToFieldApi, type EmployeeSummary } from '@/lib/identity-api';
 import { TechnicianWorkspaceScreen } from '@/modules/operations/technician-workspace-screen';
 
@@ -11,7 +12,7 @@ const demoAccounts = [
 ];
 
 export function TechnicianAuthScreen() {
-  const [apiBaseUrl, setApiBaseUrl] = useState(process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001');
+  const [apiBaseUrl, setApiBaseUrl] = useState(getInitialFieldApiBaseUrl());
   const [email, setEmail] = useState(demoAccounts[0].email);
   const [password, setPassword] = useState(demoAccounts[0].password);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
@@ -69,7 +70,16 @@ export function TechnicianAuthScreen() {
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Server URL</Text>
-            <TextInput value={apiBaseUrl} onChangeText={setApiBaseUrl} autoCapitalize="none" style={styles.input} />
+            <TextInput
+              value={apiBaseUrl}
+              onChangeText={setApiBaseUrl}
+              autoCapitalize="none"
+              placeholder="https://office-pc:3001"
+              style={styles.input}
+            />
+            <Text style={styles.helperText}>
+              Local development may use `http://localhost:3001`. Production devices should point at the office server.
+            </Text>
           </View>
 
           <View style={styles.formGroup}>
@@ -131,6 +141,7 @@ const styles = StyleSheet.create({
   subtitle: { color: '#52606d', fontSize: 15, lineHeight: 22 },
   formGroup: { gap: 8 },
   label: { color: '#1f2933', fontSize: 14, fontWeight: '600' },
+  helperText: { color: '#52606d', fontSize: 13, lineHeight: 18 },
   input: { backgroundColor: '#ffffff', borderColor: '#d9c8ad', borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12 },
   switchRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   switchLabel: { color: '#52606d', fontSize: 14 },

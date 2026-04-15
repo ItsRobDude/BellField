@@ -1,3 +1,5 @@
+import { resolveFieldApiBaseUrl } from './api-base-url';
+
 export type EmployeeSummary = {
   id: string;
   email: string;
@@ -13,14 +15,13 @@ export type LoginResponse = {
   employee: EmployeeSummary;
 };
 
-const defaultApiBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3001';
-
 async function requestJson<TResponse>(
   path: string,
   options: RequestInit & { apiBaseUrl?: string } = {}
 ): Promise<TResponse> {
-  const { apiBaseUrl = defaultApiBaseUrl, headers, ...requestOptions } = options;
-  const response = await fetch(`${apiBaseUrl}${path}`, {
+  const { apiBaseUrl, headers, ...requestOptions } = options;
+  const resolvedApiBaseUrl = resolveFieldApiBaseUrl(apiBaseUrl);
+  const response = await fetch(`${resolvedApiBaseUrl}${path}`, {
     ...requestOptions,
     headers: {
       'Content-Type': 'application/json',
