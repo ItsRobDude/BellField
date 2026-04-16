@@ -41,6 +41,7 @@ Use this routing guide to save context and stay focused.
 ### For all code tasks
 Read:
 - `README.md`
+- `docs/README.md`
 - `docs/engineering-standards.md`
 - this file
 
@@ -68,6 +69,10 @@ Also read:
 Also read:
 - `docs/data-modeling-rules.md`
 
+### If the task involves migration commands, migration files, or database bootstrap workflow
+Also read:
+- `docs/database-migrations.md`
+
 ### If the task involves hosting, storage, backups, updates, Windows support, or self-hosting constraints
 Also read:
 - `docs/deployment-model.md`
@@ -77,6 +82,8 @@ Also read:
 - `docs/milestone-implementation-plan.md`
 
 If a task does not touch one of these areas, do not pull in extra docs.
+
+Historical planning docs such as `docs/product-shape-plan.md` are context only unless the task explicitly asks for older planning material.
 
 ---
 

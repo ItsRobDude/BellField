@@ -1,5 +1,9 @@
 # Field-Service Platform — Product Shape (Pre-Schema)
 
+> Status: historical planning context.
+> This document is not BellField's primary source of truth.
+> Prefer `product-rules.md`, `screen-behavior-spec.md`, `workflows-and-state-machines.md`, `offline-sync.md`, `milestone-implementation-plan.md`, and `../README.md` for current guidance.
+
 This document defines the product shape before database schema design.
 
 BellField is intended to serve service industries broadly, not HVAC alone.

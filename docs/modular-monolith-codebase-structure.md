@@ -1,242 +1,129 @@
 # Field-Service Platform - Modular Monolith Codebase Structure
 
-This document defines the implementation-facing repository and module structure for the BellField field-service platform.
+> Status: architecture direction and repo-structure guardrail.
+> This document is not the source of truth for the exact current filesystem inventory.
+> For what exists today, prefer `README.md`, `docs/dev-setup.md`, and the repo itself.
 
-## 1) Repo Layout
+This document defines how BellField should keep its codebase organized as a modular monolith without pretending that future apps or packages already exist.
 
-```text
-BellField/
-|-- apps/
-|   |-- office-web/                 # Desktop-first web app for CSR/dispatch/manager/accounting/admin
-|   |-- field-mobile/               # Mobile app for technicians (offline-first)
-|   |-- api/                        # Modular monolith backend (HTTP + background consumers)
-|   |-- worker/                     # Async/background jobs
-|   `-- realtime-gateway/           # WebSocket/SSE fanout (thin adapter, no business writes)
-|
-|-- packages/
-|   |-- contracts/                  # API DTOs, event contracts, typed clients
-|   |-- validation/                 # Shared validators/schemas
-|   |-- workflow/                   # Shared workflow/state-machine primitives
-|   |-- ui-office/                  # Office design system/components
-|   |-- ui-mobile/                  # Mobile design system/components
-|   |-- auth-kit/                   # Auth helpers, permission checks
-|   |-- sync-kit/                   # Offline sync primitives (op-log envelopes, conflict metadata)
-|   |-- realtime-contracts/         # Channel names + payload contracts
-|   `-- utils/                      # Cross-cutting utilities (pure, no domain behavior)
-|
-|-- services/
-|   `-- notifications-adapter/      # SMS/Email push adapter wrappers (provider-agnostic)
-|
-|-- infrastructure/
-|   |-- db/
-|   |   |-- migrations/
-|   |   |-- seed/
-|   |   `-- views/
-|   |-- storage/                    # File storage config (S3/Azure/GCS abstraction)
-|   |-- queues/                     # Queue topics, retry/backoff policy
-|   |-- observability/              # Logging, metrics, tracing setup
-|   `-- deploy/                     # IaC/runtime deployment manifests
-|
-|-- docs/
-|   |-- product-shape-plan.md
-|   `-- modular-monolith-codebase-structure.md
-|
-`-- tools/
-    |-- scripts/
-    `-- codegen/
-```
+## 1. Current Repo Shape
 
----
+Current top-level apps:
 
-## 2) Apps and Shared Packages
+- `apps/office-web`
+- `apps/field-mobile`
+- `apps/api`
+- `apps/worker`
 
-### apps/office-web
-- Dense desktop UX.
-- Reads/writes only through `apps/api`.
-- Uses `packages/contracts`, `packages/ui-office`, `packages/auth-kit`, `packages/realtime-contracts`.
+Current shared packages:
 
-### apps/field-mobile
-- Offline-first technician workflow.
-- Local operation log + background sync.
-- Uses `packages/contracts`, `packages/ui-mobile`, `packages/sync-kit`, `packages/auth-kit`.
+- `packages/contracts`
+- `packages/validation`
+- `packages/utils`
 
-### apps/api
-- Single modular backend process.
-- Hosts HTTP APIs and orchestrates module use cases.
-- Publishes domain events to internal bus/outbox.
+Current repo rule:
 
-### apps/worker
-- Executes async tasks (PDF generation, notifications, image processing, retries).
-- Consumes domain events/outbox and queue messages.
+- new top-level apps or packages should not be added casually
+- if a new top-level area is introduced, the docs should be updated intentionally
 
-### apps/realtime-gateway
-- Subscribes to approved backend event streams and pushes UI-safe updates via WS/SSE.
-- Never writes business entities directly.
+## 2. Architecture Direction
 
-### Shared package usage rules
-- `contracts` can be imported by all apps.
-- `validation` can be imported by apps and packages but contains no side effects.
-- Domain logic must **not** be implemented in shared UI/util packages.
+BellField should continue to use a modular monolith posture:
 
----
+- one shared backend as the source of truth for business rules
+- one primary PostgreSQL database
+- clients that talk to the backend, not directly to the database
+- module boundaries that stay explicit even inside one backend process
 
-## 3) Backend Modules (inside `apps/api/src/modules`)
+This direction exists to keep deployment simple while still preventing spaghetti coupling.
 
-```text
-apps/api/src/modules/
-|-- identity-access/
-|-- crm/
-|-- locations/
-|-- contacts/
-|-- equipment/
-|-- operations/         # jobs + appointments + dispatch state transitions
-|-- estimates/          # service + replacement templates
-|-- billing/            # invoices + payments
-|-- inventory/          # stock and truck/vehicle inventory
-|-- purchasing/         # POs + receiving
-|-- job-costing/
-|-- files/
-|-- notifications/
-|-- audit/
-|-- reporting/
-`-- sync/               # mobile sync API, version vectors/tokens, conflict resolution
-```
+## 3. App Responsibilities
 
-Each module contains:
-```text
-<module>/
-|-- domain/             # entities, value objects, domain services, invariants
-|-- application/        # use cases/commands/queries
-|-- infrastructure/     # repositories/adapters for this module only
-|-- api/                # route handlers/controllers/mappers
-|-- events/             # domain event definitions + handlers
-`-- tests/
-```
+### `apps/office-web`
 
----
+Purpose: office-facing web application for CSR, dispatch, management, and accounting workflows.
 
-## 4) Ownership Boundaries Between Modules
+Rules:
 
-### Ownership map
-- `identity-access`: users, roles, permissions.
-- `crm`: bill-to account master.
-- `locations`: service location master and lifecycle.
-- `contacts`: contact persons + effective-date history.
-- `equipment`: equipment master and equipment lifecycle.
-- `operations`: jobs, appointments, dispatch assignment/status.
-- `estimates`: service/replacement estimates and template instantiation.
-- `billing`: invoices, payments, immutable financial posting.
-- `inventory`: stock levels and movements by warehouse/truck.
-- `purchasing`: PO lifecycle and receiving.
-- `job-costing`: cost ledgers/rollups tied to jobs.
-- `files`: attachment metadata + linking.
-- `notifications`: outbound comm intent and delivery state.
-- `audit`: append-only change history.
-- `sync`: mobile sync cursors/op application/conflict handling.
+- talks only to the backend
+- does not own business rules by itself
+- should stay dense, practical, and desktop-friendly
 
-### Boundary rule (hard)
-A module may write only its own aggregate roots/tables. Cross-module changes happen via:
-1) explicit public application service call, or
-2) domain event + handler.
+### `apps/field-mobile`
 
----
+Purpose: technician-facing mobile application with offline-tolerant behavior.
 
-## 5) Interaction Architecture
+Rules:
 
-## 5.1 Office web -> Backend
-- Office web calls REST/GraphQL endpoints in `apps/api`.
-- Reads frequently via query endpoints optimized for dense grids.
-- Real-time board/timeline updates via `realtime-gateway` channels.
+- stores only the data needed for assigned field work
+- syncs through backend APIs
+- should not fork product logic away from office or backend rules
 
-## 5.2 Field mobile -> Backend
-- Pull sync packs by cursor/version token.
-- Push offline op-log batches to `sync` module.
-- Server returns accepted/rejected ops + conflict details.
+### `apps/api`
 
-## 5.3 Backend -> Database
-- Single PostgreSQL instance.
-- Separate schema namespace per module (or strict table prefixes) to make ownership explicit.
-- Cross-module reporting uses read models/materialized views, not cross-module writes.
+Purpose: shared backend and primary business-logic host.
 
-## 5.4 Backend -> File storage
-- Files module issues pre-signed upload URLs.
-- Clients upload directly to storage.
-- Backend stores metadata + attachment links and emits `AttachmentStored`.
+Rules:
 
-## 5.5 Backend -> Notifications
-- Domain events create notification intents.
-- Worker processes intents via provider adapters (SMS/email/push).
-- Delivery results recorded asynchronously.
+- owns trusted business rules
+- owns database writes
+- should keep internal module boundaries explicit
 
-## 5.6 Backend -> Real-time updates
-- Modules publish domain events to outbox.
-- Realtime gateway consumes curated event stream and fans out UI payloads.
-- UI payload contracts live in `packages/realtime-contracts`.
+### `apps/worker`
 
----
+Purpose: background task execution and asynchronous processing.
 
-## 6) Key Domain Events
+Rules:
 
-- `AccountCreated`
-- `BillToLinkedToLocation`
-- `LocationOwnershipChanged`
-- `LocationContactChanged`
-- `EquipmentAdded`
-- `EquipmentUpdated`
-- `EquipmentReplaced`
-- `JobCreated`
-- `AppointmentScheduled`
-- `AppointmentReassigned`
-- `TechnicianStatusChanged`
-- `JobStatusChanged`
-- `EstimateCreated`
-- `EstimateApproved`
-- `InvoicePosted`
-- `PaymentRecorded`
-- `InventoryIssuedToJob`
-- `InventoryAdjusted`
-- `POCreated`
-- `POReceived`
-- `AttachmentStored`
-- `AuditEntryCreated`
-- `SyncBatchApplied`
-- `SyncConflictDetected`
+- should support backend-owned workflows rather than become a second business-logic center
+- should stay narrow and explicit about what it processes
 
-Event publishing rules:
-- Published only after local transaction commit (outbox pattern).
-- Event payloads include immutable IDs + version/timestamp metadata.
-- Consumers must be idempotent.
+## 4. Shared Package Rules
 
----
+Current shared packages should stay narrow:
 
-## 7) Rules for Preventing Tight Coupling
+- `contracts` for shared request, response, and contract shapes
+- `validation` for shared validation helpers
+- `utils` for small cross-cutting utilities
 
-1. **No direct repository access across modules.**
-   - Use application services or events only.
+Package guardrails:
 
-2. **No shared mutable domain objects in `packages/`.**
-   - Shared packages contain contracts/validation/utilities only.
+- do not move domain behavior into random shared packages
+- do not add packages just to feel architecturally sophisticated
+- prefer fewer, clearer packages until the repo has a real reason to split more code out
 
-3. **Stable contracts first.**
-   - API DTOs and event schemas versioned in `packages/contracts`.
+## 5. Backend Module Direction
 
-4. **Outbox + idempotent consumers mandatory.**
-   - Prevent hidden runtime coupling and duplicate side effects.
+Inside the API, BellField should continue moving toward explicit domain modules such as:
 
-5. **Read models for composition.**
-   - Complex office screens compose data via query/read-model layer, not cross-module writes.
+- identity and access
+- CRM and customer data
+- locations and contacts
+- equipment
+- jobs, appointments, and dispatch operations
+- estimates
+- billing
+- purchasing and inventory
+- files and audit
+- sync
 
-6. **Sync module owns conflict policy.**
-   - Field/mobile clients do not implement business conflict decisions.
+These names describe direction, not a requirement that every boundary already exists as a final package or folder shape.
 
-7. **Financial immutability.**
-   - Posted invoices/payments are append-only; adjustments use explicit corrective entries.
+## 6. Boundary Rules
 
-8. **Audit everywhere.**
-   - Mutations produce audit records with actor, source, and correlation IDs.
+Non-negotiable boundary rules:
 
-9. **Enforced dependency direction.**
-   - Domain -> application -> infrastructure/api only (never reverse).
+- office and field clients never talk directly to each other
+- clients never talk directly to the database
+- backend and shared domain logic own business rules
+- modules should not silently mutate each other's private data
+- cross-module coordination should be explicit, not accidental
 
-10. **Module fitness tests in CI.**
-    - Automated import/dependency checks fail build on illegal cross-module references.
+## 7. Future Expansion Rule
+
+If BellField later adds more apps, packages, or infrastructure areas:
+
+- document whether they are current-state or target-state
+- keep names boring and obvious
+- avoid cloud-only assumptions
+- do not split code just because a theoretical future architecture might want it

@@ -1,208 +1,145 @@
 # Developer Setup
 
-This document captures what has been scaffolded so far, why the initial tooling choices were made, and how to run BellField locally in a self-hosted development style.
+This document captures the current local development baseline for BellField.
 
-## 1) What was scaffolded
+It should match the repo as it exists today, not an older scaffold or a future target-state layout.
 
-### Apps
+## 1. Local Baseline
 
-- `apps/office-web` — Next.js office-facing web app scaffold.
-- `apps/field-mobile` — Expo + React Native mobile scaffold for technicians.
-- `apps/api` — NestJS API scaffold (modular monolith host).
-- `apps/worker` — lightweight Node/TypeScript worker scaffold for background tasks.
+BellField uses:
 
-### Shared packages
+- Node `20.x`
+- pnpm `10.13.1`
 
-- `packages/contracts` — shared TS contracts/shapes between surfaces.
-- `packages/validation` — shared TS validation helpers.
-- `packages/utils` — shared TS utility functions.
+BellField is a `pnpm` workspace repo.
+Do not mix `npm`, `yarn`, `bun`, or extra monorepo tooling unless the repo is intentionally changed to support them.
 
-### Migration path
+## 2. What Exists Today
 
-- API migrations are SQL-first files in `apps/api/src/database/migrations`.
-- Migration commands are Node-based (`migration:create`, `migration:up`, `migration:down`) and run `psql` directly.
+Current apps:
 
-### Tooling baseline
+- `apps/office-web` - Next.js office web app
+- `apps/field-mobile` - Expo / React Native field app
+- `apps/api` - NestJS API
+- `apps/worker` - TypeScript worker
 
-- `pnpm` workspace monorepo layout with root scripts for dev/start/build/format/lint/typecheck/test.
-- TypeScript configured across apps and packages.
-- ESLint configured in root and per-app where needed.
-- Prettier configured at repository root (`.prettierrc.json`).
+Current shared packages:
 
-## 2) Why these key tooling choices were made
+- `packages/contracts`
+- `packages/validation`
+- `packages/utils`
 
-### Minimal first
+## 3. Install
 
-- The scaffold intentionally avoids heavy framework add-ons until product/workflow rules are stable.
-- It is easier to add complexity than to remove accidental complexity.
+From the repo root:
 
-### Conservative choices
-
-- SQL-first migration files are explicit and easy to reason about in code review.
-- Separate app surfaces and a worker are created early, but kept thin so architecture can evolve without rework.
-
-### TypeScript-first across the stack
-
-- Shared language and types reduce integration friction between office web, mobile, API, worker, and shared packages.
-- Improves interface clarity and catches contract drift earlier during local development.
-
-## 3) Install instructions
-
-### Prerequisites
-
-- Node.js 20+ (LTS recommended).
-- `pnpm` 9+.
-- PostgreSQL client (`psql`) available on your `PATH` for migration commands.
-
-### Install
-
-```bash
-# from repository root
-pnpm install
-```
-
-If `pnpm` is not installed yet:
-
-```bash
+```powershell
 corepack enable
-corepack prepare pnpm@latest --activate
+corepack prepare pnpm@10.13.1 --activate
+pnpm install --frozen-lockfile
+```
+
+If the lockfile is intentionally being updated:
+
+```powershell
 pnpm install
 ```
 
-## 4) Run commands (repository root)
+## 4. Environment Setup
 
-### Development
+Root runtime settings:
 
-```bash
+- Copy `.env.example` values into your local shell or app-specific `.env` files when running the API or worker.
+- `DATABASE_URL` is required for API runtime and migration scripts.
+- `PORT` controls the local API listen port.
+
+Client runtime settings:
+
+- `apps/office-web/.env.example` defines `NEXT_PUBLIC_API_BASE_URL`
+- `apps/field-mobile/.env.example` defines `EXPO_PUBLIC_API_BASE_URL`
+
+Outside local development, point both client base URLs at the BellField API running on the office server.
+
+## 5. Run Commands
+
+Run these from the repository root:
+
+```powershell
 pnpm dev:office-web
 pnpm dev:field-mobile
 pnpm dev:api
 pnpm dev:worker
 ```
 
-Before running `pnpm dev:api` against a fresh local database, apply the API migrations first so the persisted operational foundation tables exist.
+Start commands:
 
-`pnpm dev:field-mobile` now runs the generic Expo startup flow (`expo start`), which lets you pick the target interactively.
-For direct Android device/emulator launch (common on Windows setups), use:
-
-```bash
-pnpm --filter @bellfield/field-mobile dev:android
-```
-
-Additional convenience targets:
-
-```bash
-pnpm --filter @bellfield/field-mobile dev:ios
-pnpm --filter @bellfield/field-mobile dev:web
-```
-
-Notes:
-- iOS is not the expected local target on a normal Windows development setup.
-- Web can be useful for quick iteration, but it is not a substitute for validating behavior on an actual mobile target.
-
-### Start commands
-
-```bash
+```powershell
 pnpm start:office-web
 pnpm start:field-mobile
 pnpm start:api
 pnpm start:worker
 ```
 
-> `office-web` uses standard Next.js behavior: `pnpm --filter @bellfield/office-web build` then `pnpm start:office-web`.
+Field mobile convenience targets:
 
-## 5) Migrations (API)
-
-From repository root:
-
-```bash
-pnpm --filter @bellfield/api migration:create -- add_example
+```powershell
+pnpm --filter @bellfield/field-mobile dev:android
+pnpm --filter @bellfield/field-mobile dev:ios
+pnpm --filter @bellfield/field-mobile dev:web
 ```
 
 Notes:
 
-- `psql` must be installed and available on `PATH` because the migration runner shells out to PostgreSQL client tools.
-- `DATABASE_URL` is required for `migration:up` and `migration:down`.
-- `schema_migrations` is created by the runner on `migration:up` if it does not exist yet.
-- Commands are cross-platform Node entrypoints and call `psql`.
+- `pnpm dev:field-mobile` runs the generic Expo startup flow.
+- Android is the expected day-to-day local mobile target on a normal Windows setup.
+- iOS is available as a script target but is not the normal Windows path.
 
-### Fresh local bootstrap example (throwaway DB)
+## 6. Common Checks
 
-```bash
-# verify PostgreSQL CLI is available
-psql --version
-
-# create a throwaway database
-createdb bellfield_migration_smoke
-
-# set DATABASE_URL for this shell
-export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bellfield_migration_smoke
-
-# create migration pair
-pnpm --filter @bellfield/api migration:create -- add_smoke_table
-
-# edit generated SQL files, then apply
-pnpm --filter @bellfield/api migration:up
-
-# rollback latest migration
-pnpm --filter @bellfield/api migration:down
-
-# clean up throwaway DB when done
-dropdb bellfield_migration_smoke
-```
-
-PowerShell equivalent environment variable set:
+Repository-wide checks:
 
 ```powershell
-$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/bellfield_migration_smoke"
-```
-
-## 6) Environment variables
-
-Use `.env.example` files as documentation-first references:
-
-- repository root: shared naming and sample values
-- `apps/api/.env.example`: API runtime + API migration script variables
-- `apps/worker/.env.example`: worker runtime variables
-
-| Variable | Used by | Required? | Safe local sample value |
-| --- | --- | --- | --- |
-| `NODE_ENV` | `apps/api` runtime config, `apps/worker` runtime config | Optional (defaults to `development`) | `development` |
-| `PORT` | `apps/api` runtime config (HTTP listen port) | Optional (defaults to `3001`) | `3001` |
-| `DATABASE_URL` | `apps/api` runtime config and `apps/api/scripts/migrations/*.mjs` (`migration:up`, `migration:down`) | Required for normal API startup and migration scripts | `postgresql://postgres:postgres@localhost:5432/bellfield` |
-| `BOOTSTRAP_SEED_DATA` | `apps/api` runtime bootstrap seeding | Optional (defaults to `true` outside production) | `true` |
-
-## 7) Repo-wide quality/check commands
-
-CI baseline versions:
-
-- Node.js 20 LTS
-- pnpm 10.13.1
-
-From repository root:
-
-```bash
-pnpm lint
 pnpm typecheck
+pnpm lint
 pnpm test
 pnpm build
 ```
 
-## 8) Intentionally deferred items (explicit)
+Current testing posture:
 
-The current scaffold is still intentionally narrow. These are deferred on purpose:
+- workspace `test` scripts are still lightweight in some apps
+- `apps/api` has a real Jest test command
+- some app `test` scripts currently delegate to typecheck
 
-1. Dispatch board UI and technician timeline operations.
-2. Broader CRM CRUD beyond the persisted customer/location/contact foundation used by jobs and equipment.
-3. Estimates, invoices, payments, purchasing, inventory, and job costing flows.
-4. Attachment/media upload sync and richer offline reconciliation UX.
-5. Automated migration, persistence, and sync test coverage beyond manual review.
+## 7. API Migrations
 
-## 9) Troubleshooting notes (local self-hosted oriented)
+Before running `pnpm dev:api` against a fresh local database, apply the API migrations first.
 
-- **Port collisions:** If a surface fails to boot, check for port conflicts and stop old local processes.
-- **Dependency drift:** Re-run `pnpm install` after lockfile updates or branch switches.
-- **Expo/device issues:** Use `pnpm --filter @bellfield/field-mobile dev:android` when you want direct Android launch and ensure emulator/device tooling is running beforehand.
-- **API startup and migrations:** Ensure `DATABASE_URL` is set for the Nest API process, and ensure both `DATABASE_URL` and `psql` are available when running migration scripts locally.
-- **Type errors across workspaces:** Run `pnpm typecheck` at root to catch shared-package breakages affecting multiple apps.
-- **Fresh start fallback:** If local state is inconsistent, clear local build artifacts and reinstall dependencies, then re-run the individual dev command.
+Current commands:
+
+```powershell
+pnpm --filter @bellfield/api migration:create -- add_descriptive_name
+pnpm --filter @bellfield/api migration:up
+pnpm --filter @bellfield/api migration:down
+```
+
+Optional `psql` fallback commands:
+
+```powershell
+pnpm --filter @bellfield/api migration:up:psql
+pnpm --filter @bellfield/api migration:down:psql
+```
+
+Important notes:
+
+- the default migration driver is the repository-owned Node runner plus the PostgreSQL driver
+- `psql` is optional unless you intentionally use the `:psql` commands
+- migration SQL files live under `apps/api/src/database/migrations`
+
+See [database-migrations.md](./database-migrations.md) for the full migration workflow and safety rules.
+
+## 8. Practical Working Notes
+
+- Run commands from the repo root so workspace resolution stays consistent.
+- Prefer PowerShell-friendly and Windows-friendly instructions in docs and scripts.
+- If a setup instruction and the actual package scripts disagree, update the docs deliberately rather than relying on tribal knowledge.

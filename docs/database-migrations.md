@@ -1,53 +1,111 @@
-# Database migrations (API)
+# Database Migrations (API)
 
-## Foundation decision
+This document defines the tracked schema-change workflow for `apps/api`.
 
-BellField API uses **plain SQL file migrations executed by `psql`** with a tiny repository-owned runner script. This is intentionally conservative for PostgreSQL: SQL is explicit, easy to review, and avoids locking migration flow to an ORM in this early phase.
+BellField should use migrations for every intentional schema change.
+Do not "just change the database."
 
-## Directory structure
+## 1. Current Migration Approach
 
-Migrations live in:
+BellField API uses plain SQL migration files with repository-owned runner scripts.
 
-- `apps/api/src/database/migrations`
+Current behavior:
 
-Each migration is a pair of files:
+- migration files live in `apps/api/src/database/migrations`
+- each migration is a forward and rollback pair
+- the default runner uses Node plus the PostgreSQL driver
+- optional `psql` fallback commands exist when that driver is intentionally needed
 
-- `<timestamp>_<name>.up.sql` (forward change)
-- `<timestamp>_<name>.down.sql` (rollback change)
+This keeps migrations explicit, reviewable, and independent from ORM-owned migration systems.
 
-## Naming convention
+## 2. Migration Files
 
-- Timestamp format: `YYYYMMDDHHMMSS` in UTC.
-- Name format: lowercase `snake_case`.
-- Full example: `20260405103045_add_jobs_table.up.sql` and `20260405103045_add_jobs_table.down.sql`.
+Each migration is a pair of SQL files:
 
-## Zero-to-local-database bootstrap (fresh machine)
+- `<timestamp>_<name>.up.sql`
+- `<timestamp>_<name>.down.sql`
 
-From repository root:
+Current naming rules:
 
-1. Confirm PostgreSQL client tooling is installed and available on `PATH`:
-   - `psql --version`
-2. Create a throwaway local database (example name):
-   - `createdb bellfield_migration_smoke`
-3. Set `DATABASE_URL` for migration commands:
-   - macOS/Linux: `export DATABASE_URL=postgresql://postgres:postgres@localhost:5432/bellfield_migration_smoke`
-   - Windows PowerShell: `$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/bellfield_migration_smoke"`
-4. Create a migration pair:
-   - `pnpm --filter @bellfield/api migration:create -- add_descriptive_name`
-5. Add SQL to both generated files (`.up.sql` and `.down.sql`).
-6. Apply pending migrations:
-   - `pnpm --filter @bellfield/api migration:up`
-7. Roll back the latest migration (if needed):
-   - `pnpm --filter @bellfield/api migration:down`
-8. (Optional) Drop the throwaway database after verification:
-   - `dropdb bellfield_migration_smoke`
+- timestamp format: `YYYYMMDDHHMMSS`
+- name format: lowercase `snake_case`
+- example: `20260416093000_add_customer_flags.up.sql`
 
-Notes:
+The create script generates both files:
 
-- `DATABASE_URL` is required for `migration:up` and `migration:down`.
-- `DATABASE_URL` is also used by the Nest API runtime now that the operational foundation persists to PostgreSQL.
-- The migration runner creates `schema_migrations` automatically with `CREATE TABLE IF NOT EXISTS ...` before applying migrations.
-- Applied migrations are tracked in PostgreSQL table `schema_migrations`.
-- `migration:up` applies pending `*.up.sql` files in filename order.
-- `migration:down` rolls back one migration at a time using its paired `*.down.sql` file.
-- Keep Milestone 0 SQL-first workflow as-is: no fake baseline migration should be committed before a real BellField-owned schema change exists.
+```powershell
+pnpm --filter @bellfield/api migration:create -- add_customer_flags
+```
+
+## 3. Commands
+
+Create a migration pair:
+
+```powershell
+pnpm --filter @bellfield/api migration:create -- add_descriptive_name
+```
+
+Apply pending migrations:
+
+```powershell
+pnpm --filter @bellfield/api migration:up
+```
+
+Roll back the latest applied migration:
+
+```powershell
+pnpm --filter @bellfield/api migration:down
+```
+
+Optional `psql` fallback:
+
+```powershell
+pnpm --filter @bellfield/api migration:up:psql
+pnpm --filter @bellfield/api migration:down:psql
+```
+
+## 4. Environment Requirements
+
+`DATABASE_URL` is required for `migration:up` and `migration:down`.
+
+Example PowerShell setup:
+
+```powershell
+$env:DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/bellfield"
+```
+
+Important notes:
+
+- the default migration flow does not require `psql` on `PATH`
+- `psql` is only required when using the `:psql` commands
+- the API runtime uses the same `DATABASE_URL`
+
+## 5. Fresh Local Workflow
+
+Typical flow from the repository root:
+
+1. Point `DATABASE_URL` at a local BellField database.
+2. Create a migration pair with `migration:create`.
+3. Write forward SQL in the `.up.sql` file.
+4. Write rollback SQL in the matching `.down.sql` file.
+5. Apply pending migrations with `migration:up`.
+6. Start the API after the database is up to date.
+7. Use `migration:down` only when intentionally testing rollback or undoing the latest local migration.
+
+## 6. Tracking Behavior
+
+The migration runner automatically manages the `schema_migrations` table.
+
+Current rules:
+
+- pending `.up.sql` files run in filename order
+- applied migrations are recorded in `schema_migrations`
+- `migration:down` rolls back one migration at a time using the paired `.down.sql` file
+
+## 7. Safety Rules
+
+- every committed schema change must have both an `.up.sql` and `.down.sql` file
+- do not bypass migrations for BellField-owned schema changes
+- keep SQL conservative and reviewable
+- be extra careful with jobs, invoices, payments, history, and snapshots
+- if a migration changes product meaning, update the owning docs as part of the same work
