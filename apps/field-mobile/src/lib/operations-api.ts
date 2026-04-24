@@ -1,99 +1,20 @@
+import type {
+  AppointmentStatus,
+  EquipmentMutationResponse,
+  EquipmentStatus,
+  FieldAssignedWorkResponse,
+  JobMutationResponse,
+  SyncResult
+} from '@bellfield/contracts';
 import { resolveFieldApiBaseUrl } from './api-base-url';
 
-export type EquipmentStatus = 'active' | 'inactive' | 'pendingInstall';
-
-export type AppointmentStatus =
-  | 'assigned'
-  | 'confirmed'
-  | 'onTheWay'
-  | 'arrived'
-  | 'working'
-  | 'finished'
-  | 'noAnswer'
-  | 'cancelled';
-
-export type FieldAssignedWorkResponse = {
-  jobs: {
-    id: string;
-    jobNumber: string;
-    locationId: string;
-    locationName: string;
-    billToCustomerName: string;
-    summary: string;
-    status: string;
-    updatedAt: string;
-    appointments: {
-      id: string;
-      scheduledDate?: string;
-      timeWindowLabel?: string;
-      technicianName?: string;
-      status: AppointmentStatus;
-      updatedAt: string;
-    }[];
-    timeline: {
-      id: string;
-      occurredAt: string;
-      actorName: string;
-      message: string;
-      kind: string;
-    }[];
-  }[];
-  locations: {
-    id: string;
-    name: string;
-    customerName: string;
-    addressLine1: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    contacts: {
-      id: string;
-      displayName: string;
-      phone?: string;
-      email?: string;
-      tags: string[];
-    }[];
-  }[];
-  customers: {
-    id: string;
-    name: string;
-    accountType: string;
-    phone?: string;
-    email?: string;
-    flags: string[];
-  }[];
-  equipment: {
-    id: string;
-    locationId?: string;
-    equipmentType: string;
-    brand: string;
-    model: string;
-    serialNumber: string;
-    filterSizes: string[];
-    equipmentLocationDescription?: string;
-    installDate?: string;
-    status: EquipmentStatus;
-    notes: string;
-    updatedAt: string;
-  }[];
-  serverTime: string;
-  snapshotVersion: string;
-  windowStartDate: string;
-  windowEndDate: string;
-};
-
-export type SyncResult = {
-  status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
-  message?: string;
-};
-
-export type JobMutationResponse = FieldAssignedWorkResponse['jobs'][number] & {
-  syncResult?: SyncResult;
-  warningMessages?: string[];
-};
-
-export type EquipmentMutationResponse = FieldAssignedWorkResponse['equipment'][number] & {
-  syncResult?: SyncResult;
+export type {
+  AppointmentStatus,
+  EquipmentMutationResponse,
+  EquipmentStatus,
+  FieldAssignedWorkResponse,
+  JobMutationResponse,
+  SyncResult
 };
 
 async function requestJson<TResponse>(

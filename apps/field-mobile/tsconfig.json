@@ -4,6 +4,7 @@
     "strict": true,
     "baseUrl": ".",
     "paths": {
+      "@bellfield/contracts": ["../../packages/contracts/src/index.ts"],
       "@/*": ["src/*"]
     }
   },

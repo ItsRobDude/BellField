@@ -1,53 +1,17 @@
+import type {
+  CurrentSessionResponse,
+  EmployeeListResponse,
+  EmployeeRoleId,
+  EmployeeSummary,
+  LoginResponse,
+  RoleTemplate,
+  RoleTemplateListResponse
+} from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
-export type EmployeeRoleId =
-  | 'owner'
-  | 'admin'
-  | 'csr'
-  | 'dispatcher'
-  | 'bookKeeping'
-  | 'technician';
+export type { EmployeeRoleId, EmployeeSummary, LoginResponse, RoleTemplate };
 
-export type PermissionKey =
-  | `${'customers' | 'locations' | 'contacts' | 'equipment' | 'jobs' | 'appointmentsDispatch' | 'estimates' | 'invoices' | 'payments' | 'purchasing' | 'inventory' | 'reports' | 'employeesPermissions' | 'companySettings' | 'supportLogsBackups'}:${'view' | 'create' | 'edit' | 'delete' | 'approve' | 'post' | 'export' | 'configure'}`;
-
-export type EmployeeSummary = {
-  id: string;
-  email: string;
-  displayName: string;
-  roleId: EmployeeRoleId;
-  roleName: string;
-  isActive: boolean;
-  effectivePermissions: PermissionKey[];
-  permissionOverrides: {
-    grantedPermissions: PermissionKey[];
-    revokedPermissions: PermissionKey[];
-  };
-};
-
-export type RoleTemplate = {
-  id: EmployeeRoleId;
-  name: string;
-  description: string;
-  permissions: PermissionKey[];
-};
-
-export type LoginResponse = {
-  sessionToken: string;
-  employee: EmployeeSummary;
-};
-
-type EmployeeListResponse = {
-  employees: EmployeeSummary[];
-};
-
-type RoleListResponse = {
-  roles: RoleTemplate[];
-};
-
-type CurrentSessionResponse = {
-  employee: EmployeeSummary;
-};
+type RoleListResponse = RoleTemplateListResponse;
 
 async function requestJson<TResponse>(
   path: string,

@@ -16,6 +16,7 @@
     "migration:down:psql": "node ./scripts/migrations/down.mjs --driver=psql"
   },
   "dependencies": {
+    "@bellfield/contracts": "workspace:*",
     "@nestjs/common": "11.1.3",
     "@nestjs/core": "11.1.3",
     "@nestjs/platform-express": "11.1.3",

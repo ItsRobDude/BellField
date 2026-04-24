@@ -1,3 +1,11 @@
+import type {
+  AppointmentStatus as ContractAppointmentStatus,
+  EquipmentStatus as ContractEquipmentStatus,
+  FieldSyncSource as ContractFieldSyncSource,
+  JobStatus as ContractJobStatus,
+  SyncResult as ContractSyncResult
+} from '@bellfield/contracts';
+
 export type CustomerAccountRecord = {
   id: string;
   name: string;
@@ -30,7 +38,7 @@ export type LocationRecord = {
   historyNotes: string[];
 };
 
-export type EquipmentStatus = 'active' | 'inactive' | 'pendingInstall';
+export type EquipmentStatus = ContractEquipmentStatus;
 
 export const equipmentStatuses = ['active', 'inactive', 'pendingInstall'] as const satisfies readonly EquipmentStatus[];
 
@@ -67,19 +75,11 @@ export type CreateEquipmentInput = {
 
 export type UpdateEquipmentInput = Partial<CreateEquipmentInput>;
 
-export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
+export type JobStatus = ContractJobStatus;
 
 export const jobStatuses = ['open', 'closed', 'posted', 'cancelled'] as const satisfies readonly JobStatus[];
 
-export type AppointmentStatus =
-  | 'assigned'
-  | 'confirmed'
-  | 'onTheWay'
-  | 'arrived'
-  | 'working'
-  | 'finished'
-  | 'noAnswer'
-  | 'cancelled';
+export type AppointmentStatus = ContractAppointmentStatus;
 
 export const appointmentStatuses = [
   'assigned',
@@ -92,16 +92,11 @@ export const appointmentStatuses = [
   'cancelled'
 ] as const satisfies readonly AppointmentStatus[];
 
-export type FieldSyncSource = 'field-save-queue';
+export type FieldSyncSource = ContractFieldSyncSource;
 
 export const fieldSyncSources = ['field-save-queue'] as const satisfies readonly FieldSyncSource[];
 
-export type SyncResultStatus = 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
-
-export type SyncResult = {
-  status: SyncResultStatus;
-  message?: string;
-};
+export type SyncResult = ContractSyncResult;
 
 export type JobTimelineEntry = {
   id: string;

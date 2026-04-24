@@ -43,6 +43,17 @@ This direction exists to keep deployment simple while still preventing spaghetti
 
 Purpose: office-facing web application for CSR, dispatch, management, and accounting workflows.
 
+### Current foundation data boundary
+
+The early codebase may use `apps/api/src/modules/company-data` as foundation persistence glue while the first operational modules are still being stabilized.
+
+Rules:
+- Other API modules may depend on `company-data` public services and exported record/input types.
+- Other API modules must not import `company-data` repository files directly.
+- When CRM, locations, equipment, jobs, and appointments become durable milestone layers, move ownership out of the foundation glue deliberately instead of letting `company-data` become a permanent everything module.
+
+---
+
 Rules:
 
 - talks only to the backend

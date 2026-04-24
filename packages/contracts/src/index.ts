@@ -173,7 +173,9 @@ export interface CreateEquipmentRequest {
 export type UpdateEquipmentRequest = Partial<CreateEquipmentRequest>;
 
 export interface UpdateEquipmentFieldRequest extends UpdateEquipmentRequest {
+  occurredAt?: string;
   baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
 }
 
 export interface EquipmentMutationResponse extends EquipmentSummary {
@@ -196,6 +198,8 @@ export interface SyncResult {
   status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
   message?: string;
 }
+
+export type FieldSyncSource = 'field-save-queue';
 
 export interface AppointmentSummary {
   id: string;
@@ -280,11 +284,14 @@ export interface UpdateAppointmentStatusRequest {
   status: AppointmentStatus;
   occurredAt?: string;
   baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
 }
 
 export interface AddJobNoteRequest {
   note: string;
   occurredAt?: string;
+  baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
 }
 
 export interface JobMutationResponse extends JobSummary {
@@ -305,7 +312,7 @@ export interface FieldAssignedWorkResponse {
     filterSizes: string[];
     equipmentLocationDescription?: string;
     installDate?: string;
-    status: string;
+    status: EquipmentStatus;
     notes: string;
     updatedAt: string;
   }>;

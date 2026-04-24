@@ -1,19 +1,7 @@
+import type { EmployeeSummary, LoginResponse } from '@bellfield/contracts';
 import { resolveFieldApiBaseUrl } from './api-base-url';
 
-export type EmployeeSummary = {
-  id: string;
-  email: string;
-  displayName: string;
-  roleId: 'owner' | 'admin' | 'csr' | 'dispatcher' | 'bookKeeping' | 'technician';
-  roleName: string;
-  isActive: boolean;
-  effectivePermissions: string[];
-};
-
-export type LoginResponse = {
-  sessionToken: string;
-  employee: EmployeeSummary;
-};
+export type { EmployeeSummary, LoginResponse };
 
 async function requestJson<TResponse>(
   path: string,

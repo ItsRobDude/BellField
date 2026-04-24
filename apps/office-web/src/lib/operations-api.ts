@@ -1,133 +1,32 @@
+import type {
+  AppointmentStatus,
+  AppointmentSummary,
+  CustomerAccountSummary,
+  EquipmentStatus,
+  EquipmentSummary,
+  EquipmentWorkspaceResponse,
+  JobStatus,
+  JobsWorkspaceResponse,
+  JobSummary,
+  LocationSummary,
+  UpdateJobStatusResponse
+} from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
-export type CustomerAccountSummary = {
-  id: string;
-  name: string;
-  accountType: string;
-  phone?: string;
-  email?: string;
-  flags: string[];
+export type {
+  AppointmentStatus,
+  AppointmentSummary,
+  CustomerAccountSummary,
+  EquipmentStatus,
+  EquipmentSummary,
+  EquipmentWorkspaceResponse,
+  JobStatus,
+  JobsWorkspaceResponse,
+  JobSummary,
+  LocationSummary
 };
 
-export type ContactSummary = {
-  id: string;
-  displayName: string;
-  phone?: string;
-  email?: string;
-  tags: string[];
-};
-
-export type LocationSummary = {
-  id: string;
-  name: string;
-  customerId: string;
-  customerName: string;
-  addressLine1: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  contacts: ContactSummary[];
-  alternateBillToCustomerIds: string[];
-};
-
-export type EquipmentStatus = 'active' | 'inactive' | 'pendingInstall';
-
-export type EquipmentSummary = {
-  id: string;
-  locationId?: string;
-  locationName?: string;
-  customerName?: string;
-  inventoryLocationLabel?: string;
-  equipmentType: string;
-  brand: string;
-  model: string;
-  serialNumber: string;
-  filterSizes: string[];
-  equipmentLocationDescription?: string;
-  installDate?: string;
-  status: EquipmentStatus;
-  notes: string;
-  updatedAt: string;
-};
-
-export type EquipmentWorkspaceResponse = {
-  locations: Array<{
-    id: string;
-    name: string;
-    customerId: string;
-    customerName: string;
-    addressLine1: string;
-    city: string;
-    state: string;
-    postalCode: string;
-    contactNames: string[];
-  }>;
-  equipment: EquipmentSummary[];
-};
-
-export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
-
-export type AppointmentStatus =
-  | 'assigned'
-  | 'confirmed'
-  | 'onTheWay'
-  | 'arrived'
-  | 'working'
-  | 'finished'
-  | 'noAnswer'
-  | 'cancelled';
-
-export type AppointmentSummary = {
-  id: string;
-  jobId: string;
-  scheduledDate?: string;
-  timeWindowLabel?: string;
-  technicianId?: string;
-  technicianName?: string;
-  status: AppointmentStatus;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type JobSummary = {
-  id: string;
-  jobNumber: string;
-  locationId: string;
-  locationName: string;
-  billToCustomerId: string;
-  billToCustomerName: string;
-  jobType: string;
-  category: string;
-  origin: string;
-  summary: string;
-  status: JobStatus;
-  workOrderNumber?: string;
-  appointments: AppointmentSummary[];
-  timeline: Array<{
-    id: string;
-    occurredAt: string;
-    actorName: string;
-    kind: string;
-    message: string;
-  }>;
-  createdAt: string;
-  updatedAt: string;
-};
-
-export type JobUpdateResponse = JobSummary & {
-  warningMessages?: string[];
-};
-
-export type JobsWorkspaceResponse = {
-  customers: CustomerAccountSummary[];
-  locations: LocationSummary[];
-  technicians: Array<{
-    id: string;
-    displayName: string;
-    roleId: string;
-  }>;
-  jobs: JobSummary[];
-};
+export type JobUpdateResponse = UpdateJobStatusResponse;
 
 async function requestJson<TResponse>(
   path: string,
