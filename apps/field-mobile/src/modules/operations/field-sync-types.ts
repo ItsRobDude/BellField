@@ -1,4 +1,10 @@
-import type { AppointmentStatus, EquipmentStatus, FieldAssignedWorkResponse, SyncResult } from '@/lib/operations-api';
+import type {
+  AppointmentFinishOutcome,
+  AppointmentStatus,
+  EquipmentStatus,
+  FieldAssignedWorkResponse,
+  SyncResult
+} from '@/lib/operations-api';
 
 export type PendingOperationState = 'pending' | 'conflict' | 'rejected';
 
@@ -20,6 +26,16 @@ export type PendingOperation =
       kind: 'appointmentStatus';
       appointmentId: string;
       status: AppointmentStatus;
+      baseUpdatedAt?: string;
+    })
+  | (PendingOperationBase & {
+      kind: 'appointmentFinishReview';
+      appointmentId: string;
+      status: 'finished';
+      finishOutcome: AppointmentFinishOutcome;
+      visitNotes?: string;
+      hasChargeActivity: boolean;
+      registerFollowUpNote?: string;
       baseUpdatedAt?: string;
     })
   | (PendingOperationBase & {

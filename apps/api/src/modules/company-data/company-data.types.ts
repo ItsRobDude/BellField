@@ -1,4 +1,5 @@
 import type {
+  AppointmentFinishOutcome as ContractAppointmentFinishOutcome,
   AppointmentStatus as ContractAppointmentStatus,
   EquipmentStatus as ContractEquipmentStatus,
   FieldSyncSource as ContractFieldSyncSource,
@@ -147,13 +148,22 @@ export type UpdateEquipmentInput = Partial<CreateEquipmentInput> & {
 
 export type JobStatus = ContractJobStatus;
 
-export const jobStatuses = ['open', 'closed', 'posted', 'cancelled'] as const satisfies readonly JobStatus[];
+export const jobStatuses = [
+  'new',
+  'scheduled',
+  'inProgress',
+  'waitingOnParts',
+  'completed',
+  'closed',
+  'cancelled'
+] as const satisfies readonly JobStatus[];
 
 export type AppointmentStatus = ContractAppointmentStatus;
 
 export const appointmentStatuses = [
-  'assigned',
+  'scheduled',
   'confirmed',
+  'dispatched',
   'onTheWay',
   'arrived',
   'working',
@@ -161,6 +171,14 @@ export const appointmentStatuses = [
   'noAnswer',
   'cancelled'
 ] as const satisfies readonly AppointmentStatus[];
+
+export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
+
+export const appointmentFinishOutcomes = [
+  'completed',
+  'followUpNeeded',
+  'noAccess'
+] as const satisfies readonly AppointmentFinishOutcome[];
 
 export type FieldSyncSource = ContractFieldSyncSource;
 
@@ -176,7 +194,9 @@ export type JobTimelineEntry = {
     | 'jobCreated'
     | 'jobStatusUpdated'
     | 'appointmentCreated'
+    | 'appointmentScheduleUpdated'
     | 'appointmentStatusUpdated'
+    | 'appointmentFinishedReview'
     | 'jobNote'
     | 'syncFlag';
   message: string;
@@ -219,11 +239,21 @@ export type AppointmentRecord = {
   timeWindowLabel?: string;
   technicianId?: string;
   status: AppointmentStatus;
+  finishOutcome?: AppointmentFinishOutcome;
+  visitNotes?: string;
+  hasChargeActivity?: boolean;
+  registerFollowUpNote?: string;
   createdAt: string;
   updatedAt: string;
 };
 
 export type CreateAppointmentInput = {
+  scheduledDate?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+};
+
+export type UpdateAppointmentScheduleInput = {
   scheduledDate?: string;
   timeWindowLabel?: string;
   technicianId?: string;

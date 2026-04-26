@@ -12,14 +12,36 @@ function createService() {
       city: 'Blaine',
       state: 'WA',
       postalCode: '98230',
-      contactIds: [],
-      alternateBillToCustomerIds: [],
-      historyNotes: []
+      alternateBillToCustomerIds: []
+    }),
+    getLocationDetail: jest.fn().mockResolvedValue({
+      id: 'location-1',
+      name: 'Main Shop',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      addressLine1: '123 Main',
+      city: 'Blaine',
+      state: 'WA',
+      postalCode: '98230',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      contacts: [],
+      alternateBillToCustomerIds: []
     }),
     getCustomerById: jest.fn().mockResolvedValue({
       id: 'customer-1',
       name: 'Acme',
       accountType: 'company',
+      billingAddressLine1: '123 Main',
+      billingCity: 'Blaine',
+      billingState: 'WA',
+      billingPostalCode: '98230',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
       flags: []
     })
   };
@@ -29,8 +51,10 @@ function createService() {
   const jobsDataService = {
     getJobById: jest.fn(),
     hasFutureAppointments: jest.fn().mockResolvedValue(false),
+    hasIncompleteAppointments: jest.fn().mockResolvedValue(false),
     updateJobStatus: jest.fn(),
     createAppointment: jest.fn(),
+    updateAppointmentSchedule: jest.fn(),
     getAppointmentById: jest.fn(),
     updateAppointmentStatus: jest.fn(),
     addSyncFlag: jest.fn(),
@@ -50,14 +74,31 @@ function createService() {
       jobsDataService as never,
       identityAccessService as never
     ),
-    referenceDataService,
     jobsDataService,
     identityAccessService
   };
 }
 
+function createJob(status: JobRecord['status']): JobRecord {
+  return {
+    id: 'job-1',
+    jobNumber: '1001',
+    locationId: 'location-1',
+    billToCustomerId: 'customer-1',
+    jobType: 'service',
+    category: 'service',
+    origin: 'phone',
+    summary: 'No cooling',
+    status,
+    appointmentIds: [],
+    timeline: [],
+    createdAt: '2026-04-14T10:00:00.000Z',
+    updatedAt: '2026-04-14T10:00:00.000Z'
+  };
+}
+
 describe('JobsAppointmentsService', () => {
-  it('rejects adding appointments to non-open jobs', async () => {
+  it('rejects adding appointments to closed jobs', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
       id: 'office-1',
@@ -65,15 +106,12 @@ describe('JobsAppointmentsService', () => {
       effectivePermissions: ['appointmentsDispatch:create'],
       sessionSurface: 'office-web'
     });
-    jobsDataService.getJobById.mockResolvedValue({
-      id: 'job-1',
-      status: 'closed'
-    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('closed'));
 
     await expect(service.addAppointment('session-token', 'job-1', {})).rejects.toBeInstanceOf(ConflictException);
   });
 
-  it('requires invoice posting permission before posting jobs', async () => {
+  it('requires configure permission before reopening completed jobs', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
       id: 'office-1',
@@ -81,33 +119,16 @@ describe('JobsAppointmentsService', () => {
       effectivePermissions: ['jobs:edit'],
       sessionSurface: 'office-web'
     });
-    jobsDataService.getJobById.mockResolvedValue({
-      id: 'job-1',
-      status: 'open'
-    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('completed'));
 
     await expect(
-      service.updateJobStatus('session-token', 'job-1', { status: 'posted' })
+      service.updateJobStatus('session-token', 'job-1', { status: 'scheduled' })
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it('rejects out-of-scope field appointment updates without replay provenance', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
-    const job: JobRecord = {
-      id: 'job-1',
-      jobNumber: '1001',
-      locationId: 'location-1',
-      billToCustomerId: 'customer-1',
-      jobType: 'service',
-      category: 'service',
-      origin: 'phone',
-      summary: 'No cooling',
-      status: 'open',
-      appointmentIds: [],
-      timeline: [],
-      createdAt: '2026-04-14T10:00:00.000Z',
-      updatedAt: '2026-04-14T10:00:00.000Z'
-    };
+    const job = createJob('scheduled');
 
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
       id: 'tech-1',
@@ -118,7 +139,7 @@ describe('JobsAppointmentsService', () => {
     jobsDataService.getAppointmentById.mockResolvedValue({
       id: 'appointment-1',
       jobId: 'job-1',
-      status: 'assigned',
+      status: 'scheduled',
       updatedAt: '2026-04-14T10:00:00.000Z',
       createdAt: '2026-04-14T09:00:00.000Z'
     });
@@ -139,21 +160,7 @@ describe('JobsAppointmentsService', () => {
 
   it('preserves offline field appointment updates after assignment changes when replay provenance is present', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
-    const job: JobRecord = {
-      id: 'job-1',
-      jobNumber: '1001',
-      locationId: 'location-1',
-      billToCustomerId: 'customer-1',
-      jobType: 'service',
-      category: 'service',
-      origin: 'phone',
-      summary: 'No cooling',
-      status: 'open',
-      appointmentIds: [],
-      timeline: [],
-      createdAt: '2026-04-14T10:00:00.000Z',
-      updatedAt: '2026-04-14T10:00:00.000Z'
-    };
+    const job = createJob('scheduled');
 
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
       id: 'tech-1',
@@ -164,7 +171,7 @@ describe('JobsAppointmentsService', () => {
     jobsDataService.getAppointmentById.mockResolvedValue({
       id: 'appointment-1',
       jobId: 'job-1',
-      status: 'assigned',
+      status: 'scheduled',
       updatedAt: '2026-04-14T10:00:00.000Z',
       createdAt: '2026-04-14T09:00:00.000Z'
     });
@@ -191,5 +198,49 @@ describe('JobsAppointmentsService', () => {
       'Field Tech',
       expect.any(String)
     );
+  });
+
+  it('rejects field appointment cancellation by default', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['appointmentsDispatch:edit'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'scheduled',
+      updatedAt: '2026-04-14T10:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
+
+    await expect(
+      service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'cancelled' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('requires structured finish review fields for field finish actions', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['appointmentsDispatch:edit'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'working',
+      updatedAt: '2026-04-14T10:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('inProgress'));
+
+    await expect(
+      service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'finished' })
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

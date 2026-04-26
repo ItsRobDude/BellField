@@ -383,10 +383,14 @@ export class DatabaseBootstrapService implements OnModuleInit {
             time_window_label,
             technician_id,
             status,
+            finish_outcome,
+            visit_notes,
+            has_charge_activity,
+            register_follow_up_note,
             created_at,
             updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
           on conflict (id) do nothing
         `,
         [
@@ -396,6 +400,10 @@ export class DatabaseBootstrapService implements OnModuleInit {
           appointment.timeWindowLabel ?? null,
           appointment.technicianId ?? null,
           appointment.status,
+          appointment.finishOutcome ?? null,
+          appointment.visitNotes ?? null,
+          appointment.hasChargeActivity ?? null,
+          appointment.registerFollowUpNote ?? null,
           appointment.createdAt,
           appointment.updatedAt
         ]

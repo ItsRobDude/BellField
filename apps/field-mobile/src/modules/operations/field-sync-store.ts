@@ -13,7 +13,7 @@ const defaultSyncMetadata: SyncMetadata = {
 let databasePromise: Promise<SQLiteDatabase> | null = null;
 
 function getEntityKey(operation: PendingOperation): string {
-  if (operation.kind === 'appointmentStatus') {
+  if (operation.kind === 'appointmentStatus' || operation.kind === 'appointmentFinishReview') {
     return `appointment:${operation.appointmentId}`;
   }
 
@@ -121,9 +121,8 @@ export async function queuePendingOperation(operation: PendingOperation): Promis
   const entityKey = getEntityKey(operation);
 
   if (operation.kind !== 'jobNote') {
-    await database.runAsync('delete from pending_operations where entity_key = $entityKey and kind = $kind', {
+    await database.runAsync('delete from pending_operations where entity_key = $entityKey', {
       $entityKey: entityKey,
-      $kind: operation.kind
     });
   }
 

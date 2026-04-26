@@ -1,4 +1,9 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import type {
+  AppointmentFinishOutcome,
+  AppointmentStatus,
+  JobStatus
+} from '@bellfield/contracts';
 import type { JobRecord } from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
@@ -18,10 +23,14 @@ import type {
   JobsWorkspaceResponseDto,
   LocationSummaryDto,
   TechnicianOptionDto,
+  UpdateAppointmentScheduleRequestDto,
   UpdateAppointmentStatusRequestDto,
   UpdateJobStatusRequestDto,
   UpdateJobStatusResponseDto
 } from './jobs-appointments.types';
+
+const activeJobStatuses: JobStatus[] = ['new', 'scheduled', 'inProgress', 'waitingOnParts'];
+const finalJobStatuses: JobStatus[] = ['completed', 'closed', 'cancelled'];
 
 @Injectable()
 export class JobsAppointmentsService {
@@ -63,7 +72,7 @@ export class JobsAppointmentsService {
           .filter((employee) => employee.roleId === 'technician')
           .map((employee) => this.toTechnicianOption(employee.id))
       ),
-      jobs: await Promise.all(jobs.map((job) => this.toJobSummary(job.id)))
+      jobs: await Promise.all(jobs.map((job) => this.toJobSummaryFromRecord(job)))
     };
   }
 
@@ -87,8 +96,20 @@ export class JobsAppointmentsService {
     const referenceDate = (request.occurredAt ?? new Date().toISOString()).slice(0, 10);
     const warningMessages: string[] = [];
 
+    if (request.status === 'completed' && (await this.jobsDataService.hasIncompleteAppointments(jobId))) {
+      warningMessages.push('This job still has appointments that are not finished, no-answer, or cancelled.');
+    }
+
     if (request.status === 'closed' && (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))) {
       warningMessages.push('This job still has a future appointment scheduled. Confirm before closing it out.');
+    }
+
+    if (request.status === 'cancelled' && (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))) {
+      warningMessages.push('Cancelling this job will also cancel its future appointments.');
+    }
+
+    if (this.isReopenTransition(jobBeforeUpdate.status, request.status)) {
+      warningMessages.push('Reopening this job keeps prior appointments and history intact while making the work active again.');
     }
 
     const job = await this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
@@ -111,12 +132,32 @@ export class JobsAppointmentsService {
     );
     const job = await this.jobsDataService.getJobById(jobId);
 
-    if (job.status !== 'open') {
-      throw new ConflictException('Appointments can only be added to open jobs. Reopen the job first if work should continue.');
+    if (job.status === 'closed' || job.status === 'cancelled') {
+      throw new ConflictException('Appointments cannot be added to closed or cancelled jobs. Reopen the job first if work should continue.');
     }
 
     await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
     return this.toJobSummary(jobId);
+  }
+
+  async updateAppointmentSchedule(
+    sessionToken: string,
+    appointmentId: string,
+    request: UpdateAppointmentScheduleRequestDto
+  ): Promise<JobSummaryDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'appointmentsDispatch:edit',
+      ['office-web']
+    );
+    const appointment = await this.jobsDataService.getAppointmentById(appointmentId);
+    await this.jobsDataService.updateAppointmentSchedule(
+      appointmentId,
+      request,
+      actor.displayName,
+      request.occurredAt
+    );
+    return this.toJobSummary(appointment.jobId);
   }
 
   async updateAppointmentStatus(
@@ -127,6 +168,7 @@ export class JobsAppointmentsService {
     const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:edit');
     const currentAppointment = await this.jobsDataService.getAppointmentById(appointmentId);
     const currentJob = await this.jobsDataService.getJobById(currentAppointment.jobId);
+    this.validateAppointmentStatusChange(actor, request);
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, currentJob.id, {
       occurredAt: request.occurredAt,
       baseUpdatedAt: request.baseUpdatedAt,
@@ -146,7 +188,7 @@ export class JobsAppointmentsService {
     if (
       request.baseUpdatedAt &&
       currentAppointment.updatedAt > request.baseUpdatedAt &&
-      currentAppointment.status !== request.status
+      this.hasConflictProneAppointmentChange(request, currentAppointment)
     ) {
       await this.jobsDataService.addSyncFlag(
         currentAppointment.jobId,
@@ -164,11 +206,20 @@ export class JobsAppointmentsService {
       };
     }
 
+    const warningMessages = this.buildFinishWarnings(request);
     const appointment = await this.jobsDataService.updateAppointmentStatus(
       appointmentId,
       request.status,
       actor.displayName,
-      request.occurredAt
+      request.occurredAt,
+      request.status === 'finished'
+        ? {
+            finishOutcome: request.finishOutcome,
+            visitNotes: request.visitNotes,
+            hasChargeActivity: request.hasChargeActivity,
+            registerFollowUpNote: request.registerFollowUpNote
+          }
+        : undefined
     );
 
     if (request.occurredAt) {
@@ -186,6 +237,7 @@ export class JobsAppointmentsService {
 
     return {
       ...(await this.toJobSummary(appointment.jobId)),
+      ...(warningMessages.length > 0 ? { warningMessages } : {}),
       ...(request.baseUpdatedAt
         ? {
             syncResult: {
@@ -363,7 +415,10 @@ export class JobsAppointmentsService {
     };
   }
 
-  private async toAppointmentSummary(appointmentId: string): Promise<AppointmentSummaryDto> {
+  private async toAppointmentSummary(
+    appointmentId: string,
+    jobStatus?: JobStatus
+  ): Promise<AppointmentSummaryDto> {
     const appointment = await this.jobsDataService.getAppointmentById(appointmentId);
     const technician = appointment.technicianId
       ? await this.identityAccessService.getEmployeeSummaryById(appointment.technicianId)
@@ -377,6 +432,11 @@ export class JobsAppointmentsService {
       technicianId: appointment.technicianId,
       technicianName: technician?.displayName,
       status: appointment.status,
+      finishOutcome: appointment.finishOutcome,
+      visitNotes: appointment.visitNotes,
+      hasChargeActivity: appointment.hasChargeActivity,
+      registerFollowUpNote: appointment.registerFollowUpNote,
+      needsOfficeReview: this.needsOfficeReviewForAppointment(appointment.status, jobStatus),
       createdAt: appointment.createdAt,
       updatedAt: appointment.updatedAt
     };
@@ -390,6 +450,9 @@ export class JobsAppointmentsService {
   private async toJobSummaryFromRecord(job: JobRecord): Promise<JobSummaryDto> {
     const location = await this.referenceDataService.getLocationById(job.locationId);
     const billToCustomer = await this.referenceDataService.getCustomerById(job.billToCustomerId);
+    const appointments = await Promise.all(
+      job.appointmentIds.map((appointmentId) => this.toAppointmentSummary(appointmentId, job.status))
+    );
 
     return {
       id: job.id,
@@ -404,7 +467,11 @@ export class JobsAppointmentsService {
       summary: job.summary,
       status: job.status,
       workOrderNumber: job.workOrderNumber,
-      appointments: await Promise.all(job.appointmentIds.map((appointmentId) => this.toAppointmentSummary(appointmentId))),
+      needsScheduling: !appointments.some(
+        (appointment) => appointment.status !== 'cancelled' && Boolean(appointment.scheduledDate)
+      ),
+      needsOfficeReview: appointments.some((appointment) => appointment.needsOfficeReview),
+      appointments,
       timeline: job.timeline.map((entry) => ({ ...entry })),
       createdAt: job.createdAt,
       updatedAt: job.updatedAt
@@ -413,20 +480,12 @@ export class JobsAppointmentsService {
 
   private ensureOfficeJobLifecyclePermission(
     actor: AuthorizedEmployee,
-    currentStatus: UpdateJobStatusResponseDto['status'],
-    nextStatus: UpdateJobStatusRequestDto['status']
+    currentStatus: JobStatus,
+    nextStatus: JobStatus
   ): void {
     const permissions = new Set(actor.effectivePermissions);
 
-    if (nextStatus === 'posted') {
-      if (!permissions.has('invoices:post')) {
-        throw new ForbiddenException('Posting a job requires invoice posting permission.');
-      }
-
-      return;
-    }
-
-    if (currentStatus !== 'open' && nextStatus === 'open') {
+    if (this.isReopenTransition(currentStatus, nextStatus)) {
       if (!permissions.has('jobs:configure')) {
         throw new ForbiddenException('Reopening a job requires job configuration permission.');
       }
@@ -446,6 +505,84 @@ export class JobsAppointmentsService {
     if (!permissions.has(requiredPermission)) {
       throw new ForbiddenException('You do not have permission to add job notes.');
     }
+  }
+
+  private validateAppointmentStatusChange(
+    actor: AuthorizedEmployee,
+    request: UpdateAppointmentStatusRequestDto
+  ): void {
+    if (actor.sessionSurface === 'field-mobile' && request.status === 'cancelled') {
+      throw new ForbiddenException('Technicians cannot cancel appointments by default.');
+    }
+
+    const hasFinishReviewFields =
+      request.finishOutcome !== undefined ||
+      request.visitNotes !== undefined ||
+      request.hasChargeActivity !== undefined ||
+      request.registerFollowUpNote !== undefined;
+
+    if (request.status !== 'finished' && hasFinishReviewFields) {
+      throw new ConflictException('Finish review details may only be saved when the appointment is marked finished.');
+    }
+
+    if (actor.sessionSurface === 'field-mobile' && request.status === 'finished') {
+      if (!request.finishOutcome) {
+        throw new ConflictException('Field finish review requires a finish outcome.');
+      }
+
+      if (request.hasChargeActivity === undefined) {
+        throw new ConflictException('Field finish review requires a charge activity answer.');
+      }
+    }
+  }
+
+  private buildFinishWarnings(request: UpdateAppointmentStatusRequestDto): string[] {
+    if (request.status !== 'finished') {
+      return [];
+    }
+
+    const warnings: string[] = [];
+    const visitNotes = request.visitNotes?.trim() ?? '';
+
+    if (!visitNotes) {
+      warnings.push('Finishing without visit notes is allowed, but BellField should prompt before continuing.');
+    }
+
+    if (!visitNotes && request.hasChargeActivity === false) {
+      warnings.push('This finish review has no visit notes and no charge activity. Confirm before leaving the visit as finished.');
+    }
+
+    return warnings;
+  }
+
+  private hasConflictProneAppointmentChange(
+    request: UpdateAppointmentStatusRequestDto,
+    currentAppointment: {
+      status: AppointmentStatus;
+      finishOutcome?: AppointmentFinishOutcome;
+      visitNotes?: string;
+      hasChargeActivity?: boolean;
+      registerFollowUpNote?: string;
+    }
+  ): boolean {
+    return (
+      request.status !== currentAppointment.status ||
+      request.finishOutcome !== currentAppointment.finishOutcome ||
+      (request.visitNotes ?? '').trim() !== (currentAppointment.visitNotes ?? '') ||
+      request.hasChargeActivity !== currentAppointment.hasChargeActivity ||
+      (request.registerFollowUpNote ?? '').trim() !== (currentAppointment.registerFollowUpNote ?? '')
+    );
+  }
+
+  private needsOfficeReviewForAppointment(
+    appointmentStatus: AppointmentStatus,
+    jobStatus: JobStatus | undefined
+  ): boolean {
+    return appointmentStatus === 'finished' && jobStatus !== 'completed' && jobStatus !== 'closed' && jobStatus !== 'cancelled';
+  }
+
+  private isReopenTransition(currentStatus: JobStatus, nextStatus: JobStatus): boolean {
+    return finalJobStatuses.includes(currentStatus) && activeJobStatuses.includes(nextStatus);
   }
 
   private async evaluateFieldJobMutationAccess(
@@ -484,9 +621,6 @@ export class JobsAppointmentsService {
       return false;
     }
 
-    // Until BellField adds signed snapshot provenance, require the queued replay
-    // marker and a stable client-side timestamp chain before accepting out-of-scope
-    // field writes after reassignment.
     return replay.baseUpdatedAt <= replay.occurredAt;
   }
 }

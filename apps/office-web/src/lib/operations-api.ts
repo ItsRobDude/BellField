@@ -1,4 +1,5 @@
 import type {
+  AppointmentFinishOutcome,
   AppointmentStatus,
   AppointmentSummary,
   ContactDetail,
@@ -34,6 +35,7 @@ import type {
   LocationMutationResponse,
   LocationSummary,
   ReassignLocationOwnerRequest,
+  UpdateAppointmentScheduleRequest,
   UpdateContactLinkRequest,
   UpdateContactRequest,
   UpdateCustomerRequest,
@@ -43,6 +45,7 @@ import type {
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
 export type {
+  AppointmentFinishOutcome,
   AppointmentStatus,
   AppointmentSummary,
   ContactDetail,
@@ -302,17 +305,47 @@ export async function addOfficeAppointment(input: {
   });
 }
 
+export async function updateOfficeAppointmentSchedule(
+  input: UpdateAppointmentScheduleRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    appointmentId: string;
+  }
+): Promise<JobSummary> {
+  return requestJson<JobSummary>(`/operations/jobs/appointments/${input.appointmentId}`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'PATCH',
+    body: JSON.stringify({
+      scheduledDate: input.scheduledDate,
+      timeWindowLabel: input.timeWindowLabel,
+      technicianId: input.technicianId,
+      occurredAt: input.occurredAt
+    })
+  });
+}
+
 export async function updateOfficeAppointmentStatus(input: {
   sessionToken: string;
   apiBaseUrl?: string;
   appointmentId: string;
   status: AppointmentStatus;
+  finishOutcome?: AppointmentFinishOutcome;
+  visitNotes?: string;
+  hasChargeActivity?: boolean;
+  registerFollowUpNote?: string;
 }): Promise<JobSummary> {
   return requestJson<JobSummary>(`/operations/jobs/appointments/${input.appointmentId}/status`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken,
     method: 'PATCH',
-    body: JSON.stringify({ status: input.status })
+    body: JSON.stringify({
+      status: input.status,
+      finishOutcome: input.finishOutcome,
+      visitNotes: input.visitNotes,
+      hasChargeActivity: input.hasChargeActivity,
+      registerFollowUpNote: input.registerFollowUpNote
+    })
   });
 }
 

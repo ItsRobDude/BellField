@@ -1,5 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
+  AppointmentFinishOutcome,
   AppointmentRecord,
   AppointmentStatus,
   CreateAppointmentInput,
@@ -7,6 +8,7 @@ import type {
   JobRecord,
   JobStatus
 } from './company-data.types';
+import type { UpdateAppointmentScheduleInput } from './company-data.types';
 import { JobsDataRepository } from './jobs-data.repository';
 
 @Injectable()
@@ -59,17 +61,44 @@ export class JobsDataService {
     return this.jobsDataRepository.createAppointment(jobId, input, actorName, occurredAt);
   }
 
+  async updateAppointmentSchedule(
+    appointmentId: string,
+    input: UpdateAppointmentScheduleInput,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<AppointmentRecord> {
+    const appointment = await this.jobsDataRepository.updateAppointmentSchedule(
+      appointmentId,
+      input,
+      actorName,
+      occurredAt
+    );
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found.');
+    }
+
+    return appointment;
+  }
+
   async updateAppointmentStatus(
     appointmentId: string,
     status: AppointmentStatus,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    finishReview?: {
+      finishOutcome?: AppointmentFinishOutcome;
+      visitNotes?: string;
+      hasChargeActivity?: boolean;
+      registerFollowUpNote?: string;
+    }
   ): Promise<AppointmentRecord> {
     const appointment = await this.jobsDataRepository.updateAppointmentStatus(
       appointmentId,
       status,
       actorName,
-      occurredAt
+      occurredAt,
+      finishReview
     );
 
     if (!appointment) {
@@ -115,5 +144,9 @@ export class JobsDataService {
 
   async hasFutureAppointments(jobId: string, referenceDate: string): Promise<boolean> {
     return this.jobsDataRepository.hasFutureAppointments(jobId, referenceDate);
+  }
+
+  async hasIncompleteAppointments(jobId: string): Promise<boolean> {
+    return this.jobsDataRepository.hasIncompleteAppointments(jobId);
   }
 }

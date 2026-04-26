@@ -1,4 +1,5 @@
 import type {
+  AppointmentFinishOutcome,
   AppointmentStatus,
   CreateEquipmentRequest,
   EquipmentMutationResponse,
@@ -12,6 +13,7 @@ import type {
 import { resolveFieldApiBaseUrl } from './api-base-url';
 
 export type {
+  AppointmentFinishOutcome,
   AppointmentStatus,
   EquipmentSummary,
   EquipmentMutationResponse,
@@ -56,6 +58,10 @@ export async function updateFieldAppointmentStatus(input: {
   apiBaseUrl?: string;
   appointmentId: string;
   status: AppointmentStatus;
+  finishOutcome?: AppointmentFinishOutcome;
+  visitNotes?: string;
+  hasChargeActivity?: boolean;
+  registerFollowUpNote?: string;
   occurredAt?: string;
   baseUpdatedAt?: string;
 }) {
@@ -65,6 +71,10 @@ export async function updateFieldAppointmentStatus(input: {
     method: 'PATCH',
     body: JSON.stringify({
       status: input.status,
+      finishOutcome: input.finishOutcome,
+      visitNotes: input.visitNotes,
+      hasChargeActivity: input.hasChargeActivity,
+      registerFollowUpNote: input.registerFollowUpNote,
       occurredAt: input.occurredAt,
       baseUpdatedAt: input.baseUpdatedAt,
       syncSource: 'field-save-queue'

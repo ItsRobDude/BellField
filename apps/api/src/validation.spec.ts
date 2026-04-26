@@ -24,6 +24,7 @@ describe('Runtime validation', () => {
     createJob: jest.fn(),
     updateJobStatus: jest.fn(),
     addAppointment: jest.fn(),
+    updateAppointmentSchedule: jest.fn(),
     updateAppointmentStatus: jest.fn(),
     addJobNote: jest.fn()
   };
@@ -103,6 +104,31 @@ describe('Runtime validation', () => {
       .send({
         status: 'done',
         occurredAt: 'not-a-date'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.updateAppointmentStatus).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed appointment schedule payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/jobs/appointments/appointment-1')
+      .send({
+        scheduledDate: '04/14/2026',
+        technicianId: ''
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.updateAppointmentSchedule).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed finish review payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/jobs/appointments/appointment-1/status')
+      .send({
+        status: 'finished',
+        finishOutcome: 'unknown',
+        hasChargeActivity: 'yes'
       });
 
     expect(response.status).toBe(400);

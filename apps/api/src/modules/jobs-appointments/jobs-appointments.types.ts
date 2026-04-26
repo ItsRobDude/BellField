@@ -1,5 +1,6 @@
 import type {
   AddJobNoteRequest,
+  AppointmentFinishOutcome,
   AppointmentSummary,
   ContactSummary,
   CreateAppointmentRequest,
@@ -11,6 +12,7 @@ import type {
   JobSummary,
   JobTimelineEntry,
   LocationSummary,
+  UpdateAppointmentScheduleRequest,
   UpdateAppointmentStatusRequest,
   UpdateJobStatusRequest,
   UpdateJobStatusResponse
@@ -22,12 +24,14 @@ export type LocationSummaryDto = LocationSummary;
 export type TechnicianOptionDto = JobsWorkspaceResponse['technicians'][number];
 export type JobTimelineEntryDto = JobTimelineEntry;
 export type AppointmentSummaryDto = AppointmentSummary;
+export type AppointmentFinishOutcomeDto = AppointmentFinishOutcome;
 export type JobSummaryDto = JobSummary;
 export type JobsWorkspaceResponseDto = JobsWorkspaceResponse;
 export type CreateJobRequestDto = CreateJobRequest;
 export type UpdateJobStatusRequestDto = UpdateJobStatusRequest;
 export type UpdateJobStatusResponseDto = UpdateJobStatusResponse;
 export type CreateAppointmentRequestDto = CreateAppointmentRequest;
+export type UpdateAppointmentScheduleRequestDto = UpdateAppointmentScheduleRequest;
 export type UpdateAppointmentStatusRequestDto = UpdateAppointmentStatusRequest;
 export type AddJobNoteRequestDto = AddJobNoteRequest;
 export type JobMutationResponseDto = JobMutationResponse;

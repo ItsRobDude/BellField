@@ -10,6 +10,7 @@ import {
   getOfficeEquipmentWorkspace,
   getOfficeJobsWorkspace,
   linkOfficeEquipmentReplacement,
+  updateOfficeAppointmentSchedule,
   updateOfficeAppointmentStatus,
   updateOfficeEquipment,
   updateOfficeJobStatus,
@@ -31,7 +32,11 @@ import {
 import { EmployeeManagementPanel } from './employee-management-panel';
 import { CrmPanel } from './crm-panel';
 import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
-import { JobsAppointmentsPanel, type AppointmentDraft } from './jobs-appointments-panel';
+import {
+  JobsAppointmentsPanel,
+  type AppointmentDraft,
+  type AppointmentEditDraft
+} from './jobs-appointments-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const plannedOfficeAreas = ['Accounts', 'Locations', 'Jobs', 'Dispatch', 'Invoices', 'Reports'];
@@ -65,19 +70,27 @@ function getJobStatusReviewMessage(
     return `Job "${jobSummary}" is already ${nextStatus}.`;
   }
 
-  if (nextStatus === 'closed') {
-    return `Closing "${jobSummary}" marks the job operationally complete. BellField will still warn if future appointments remain.`;
+  if (nextStatus === 'completed') {
+    return `Marking "${jobSummary}" completed means the work looks done operationally, but office closeout can still happen later.`;
   }
 
-  if (nextStatus === 'posted') {
-    return `Posting "${jobSummary}" is the accounting-complete state. Only continue when invoice posting work is ready to be finalized.`;
+  if (nextStatus === 'closed') {
+    return `Closing "${jobSummary}" is the administrative closeout step. BellField will still warn if future appointments remain.`;
   }
 
   if (nextStatus === 'cancelled') {
     return `Cancelling "${jobSummary}" should stop future work under this job until the office deliberately reopens it.`;
   }
 
-  return `Reopening "${jobSummary}" makes the job active again so office staff can continue work or schedule follow-up appointments.`;
+  if (nextStatus === 'waitingOnParts') {
+    return `Setting "${jobSummary}" to waiting on parts keeps the job visible without pretending it is fully scheduled or complete.`;
+  }
+
+  if (nextStatus === 'inProgress') {
+    return `Moving "${jobSummary}" to in progress should reflect active work underway, not final closeout.`;
+  }
+
+  return `Moving "${jobSummary}" back into an active status keeps its history intact while the office continues work or schedules follow-up appointments.`;
 }
 
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
@@ -103,6 +116,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [jobDate, setJobDate] = useState('');
   const [jobWindow, setJobWindow] = useState('');
   const [appointmentDrafts, setAppointmentDrafts] = useState<Record<string, AppointmentDraft>>({});
+  const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
 
   const locationLookup = useMemo(
     () => new Map((jobsWorkspace?.locations ?? []).map((location) => [location.id, location])),
@@ -424,6 +438,33 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
+  async function handleSaveAppointmentSchedule(appointmentId: string) {
+    const draft = appointmentEditDrafts[appointmentId];
+
+    if (!draft) {
+      return;
+    }
+
+    try {
+      await updateOfficeAppointmentSchedule({
+        appointmentId,
+        sessionToken,
+        apiBaseUrl,
+        scheduledDate: draft.scheduledDate || undefined,
+        timeWindowLabel: draft.timeWindowLabel || undefined,
+        technicianId: draft.technicianId || undefined
+      });
+      setAppointmentEditDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[appointmentId];
+        return nextDrafts;
+      });
+      await refreshWorkspace();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update appointment scheduling.');
+    }
+  }
+
   async function handleAddAppointment(jobId: string) {
     const draft = appointmentDrafts[jobId] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
 
@@ -527,6 +568,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         jobDate={jobDate}
         jobWindow={jobWindow}
         appointmentDrafts={appointmentDrafts}
+        appointmentEditDrafts={appointmentEditDrafts}
         onJobLocationChange={handleJobLocationChange}
         onJobBillToCustomerChange={setJobBillToCustomerId}
         onJobTypeChange={setJobType}
@@ -539,12 +581,16 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onAppointmentDraftChange={(jobId, draft) =>
           setAppointmentDrafts((current) => ({ ...current, [jobId]: draft }))
         }
+        onAppointmentEditDraftChange={(appointmentId, draft) =>
+          setAppointmentEditDrafts((current) => ({ ...current, [appointmentId]: draft }))
+        }
         onCreateJob={handleCreateJob}
         pendingJobStatusChange={pendingJobStatusChange}
         onJobStatusReviewRequested={handleJobStatusReviewRequested}
         onConfirmJobStatusChange={confirmJobStatusChange}
         onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
         onAppointmentStatusChange={handleAppointmentStatusChange}
+        onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
         onAddAppointment={handleAddAppointment}
       />
     </main>

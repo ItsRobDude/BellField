@@ -8,6 +8,7 @@ import {
   linkFieldEquipmentReplacement,
   updateFieldAppointmentStatus,
   updateFieldEquipment,
+  type AppointmentFinishOutcome,
   type AppointmentStatus,
   type EquipmentStatus,
   type FieldAssignedWorkResponse
@@ -63,12 +64,15 @@ type FinishReviewState = {
   jobId: string;
   appointmentId: string;
   visitNotes: string;
+  finishOutcome: AppointmentFinishOutcome;
+  hasChargeActivity: boolean;
   registerReminder: string;
 };
 
 const fieldAppointmentStatuses: AppointmentStatus[] = [
-  'assigned',
+  'scheduled',
   'confirmed',
+  'dispatched',
   'onTheWay',
   'arrived',
   'working',
@@ -221,11 +225,50 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     try {
       await queuePendingOperation(nextOperation);
       setPendingOperations((current) => [
-        ...current.filter((operation) => !(operation.kind === 'appointmentStatus' && operation.appointmentId === appointmentId)),
+        ...current.filter(
+          (operation) =>
+            !(
+              (operation.kind === 'appointmentStatus' || operation.kind === 'appointmentFinishReview') &&
+              operation.appointmentId === appointmentId
+            )
+        ),
         nextOperation
       ]);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the appointment status locally.');
+    }
+  }
+
+  async function queueAppointmentFinishReview(currentFinishReview: FinishReviewState) {
+    const baseUpdatedAt = findAppointmentBaseUpdatedAt(serverSnapshot, currentFinishReview.appointmentId);
+    const nextOperation: PendingOperation = {
+      id: `${currentFinishReview.appointmentId}-finish-${Date.now()}`,
+      kind: 'appointmentFinishReview',
+      appointmentId: currentFinishReview.appointmentId,
+      status: 'finished',
+      finishOutcome: currentFinishReview.finishOutcome,
+      visitNotes: currentFinishReview.visitNotes.trim() || undefined,
+      hasChargeActivity: currentFinishReview.hasChargeActivity,
+      registerFollowUpNote: currentFinishReview.registerReminder.trim() || undefined,
+      occurredAt: new Date().toISOString(),
+      baseUpdatedAt,
+      state: 'pending'
+    };
+
+    try {
+      await queuePendingOperation(nextOperation);
+      setPendingOperations((current) => [
+        ...current.filter(
+          (operation) =>
+            !(
+              (operation.kind === 'appointmentStatus' || operation.kind === 'appointmentFinishReview') &&
+              operation.appointmentId === currentFinishReview.appointmentId
+            )
+        ),
+        nextOperation
+      ]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save the finish review locally.');
     }
   }
 
@@ -392,6 +435,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             jobId,
             appointmentId,
             visitNotes: '',
+            finishOutcome: 'completed',
+            hasChargeActivity: true,
             registerReminder: ''
           }
     );
@@ -407,7 +452,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     void queueAppointmentStatus(appointmentId, status);
   }
 
-  function commitFinishReview(allowEmptyNotes: boolean) {
+  function commitFinishReview(allowEmptyNotes: boolean, allowNoNotesAndNoCharges: boolean) {
     const currentFinishReview = finishReview;
 
     if (!currentFinishReview) {
@@ -424,7 +469,22 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
           { text: 'Add notes', style: 'cancel' },
           {
             text: 'Continue',
-            onPress: () => commitFinishReview(true)
+            onPress: () => commitFinishReview(true, allowNoNotesAndNoCharges)
+          }
+        ]
+      );
+      return;
+    }
+
+    if (!visitNotes && !currentFinishReview.hasChargeActivity && !allowNoNotesAndNoCharges) {
+      Alert.alert(
+        'Finish with no notes and no charges?',
+        'This finish review has no visit notes and no charge activity. BellField should warn before continuing.',
+        [
+          { text: 'Go back', style: 'cancel' },
+          {
+            text: 'Continue',
+            onPress: () => commitFinishReview(true, true)
           }
         ]
       );
@@ -432,17 +492,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     }
 
     void (async () => {
-      if (visitNotes) {
-        await queueJobNote(currentFinishReview.jobId, visitNotes);
-      }
-
-      const registerReminder = currentFinishReview.registerReminder.trim();
-
-      if (registerReminder) {
-        await queueJobNote(currentFinishReview.jobId, `Register / follow-up: ${registerReminder}`);
-      }
-
-      await queueAppointmentStatus(currentFinishReview.appointmentId, 'finished');
+      await queueAppointmentFinishReview(currentFinishReview);
       setFinishReview(null);
     })();
   }
@@ -515,6 +565,44 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
               apiBaseUrl,
               appointmentId: operation.appointmentId,
               status: operation.status,
+              occurredAt: operation.occurredAt,
+              baseUpdatedAt: operation.baseUpdatedAt
+            });
+
+            if (response.syncResult?.status === 'conflict') {
+              await updatePendingOperationState(operation.id, 'conflict', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'conflict', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else if (response.syncResult?.status === 'rejected') {
+              await updatePendingOperationState(operation.id, 'rejected', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'rejected', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else {
+              await removePendingOperation(operation.id);
+              setPendingOperations((current) => current.filter((entry) => entry.id !== operation.id));
+            }
+          }
+
+          if (operation.kind === 'appointmentFinishReview') {
+            const response = await updateFieldAppointmentStatus({
+              sessionToken,
+              apiBaseUrl,
+              appointmentId: operation.appointmentId,
+              status: operation.status,
+              finishOutcome: operation.finishOutcome,
+              visitNotes: operation.visitNotes,
+              hasChargeActivity: operation.hasChargeActivity,
+              registerFollowUpNote: operation.registerFollowUpNote,
               occurredAt: operation.occurredAt,
               baseUpdatedAt: operation.baseUpdatedAt
             });
@@ -735,8 +823,55 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       <View style={styles.reviewCard}>
                         <Text style={styles.sectionTitleSmall}>Finish review</Text>
                         <Text style={styles.summaryText}>
-                          BellField should prompt for notes and register items before finishing this visit.
+                          BellField should prompt for notes, outcome, and charge activity before finishing this visit.
                         </Text>
+                        <Text style={styles.summaryText}>Outcome: {formatFinishOutcome(finishReview.finishOutcome)}</Text>
+                        <View style={styles.actionRow}>
+                          {(['completed', 'followUpNeeded', 'noAccess'] as AppointmentFinishOutcome[]).map((outcome) => (
+                            <Pressable
+                              key={outcome}
+                              onPress={() =>
+                                setFinishReview((current) =>
+                                  current && current.appointmentId === appointment.id
+                                    ? { ...current, finishOutcome: outcome }
+                                    : current
+                                )
+                              }
+                              style={styles.tagButton}
+                            >
+                              <Text style={styles.tagButtonText}>{formatFinishOutcome(outcome)}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        <Text style={styles.summaryText}>
+                          Charge activity: {finishReview.hasChargeActivity ? 'Yes' : 'No'}
+                        </Text>
+                        <View style={styles.actionRow}>
+                          <Pressable
+                            onPress={() =>
+                              setFinishReview((current) =>
+                                current && current.appointmentId === appointment.id
+                                  ? { ...current, hasChargeActivity: true }
+                                  : current
+                              )
+                            }
+                            style={styles.tagButton}
+                          >
+                            <Text style={styles.tagButtonText}>Charges added</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() =>
+                              setFinishReview((current) =>
+                                current && current.appointmentId === appointment.id
+                                  ? { ...current, hasChargeActivity: false }
+                                  : current
+                              )
+                            }
+                            style={styles.tagButton}
+                          >
+                            <Text style={styles.tagButtonText}>No charges</Text>
+                          </Pressable>
+                        </View>
                         <TextInput
                           value={finishReview.visitNotes}
                           onChangeText={(value) =>
@@ -764,7 +899,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                           style={styles.input}
                         />
                         <View style={styles.actionRow}>
-                          <Pressable onPress={() => commitFinishReview(false)} style={styles.primaryButton}>
+                          <Pressable onPress={() => commitFinishReview(false, false)} style={styles.primaryButton}>
                             <Text style={styles.primaryButtonText}>Save finish locally</Text>
                           </Pressable>
                           <Pressable onPress={() => setFinishReview(null)} style={styles.secondaryButton}>
@@ -1066,6 +1201,42 @@ function applyPendingOperations(
       };
     }
 
+    if (operation.kind === 'appointmentFinishReview') {
+      nextSnapshot = {
+        ...nextSnapshot,
+        jobs: nextSnapshot.jobs.map((job) => ({
+          ...job,
+          needsOfficeReview: job.id === findJobIdForAppointment(nextSnapshot, operation.appointmentId) ? true : job.needsOfficeReview,
+          appointments: job.appointments.map((appointment) =>
+            appointment.id === operation.appointmentId
+              ? {
+                  ...appointment,
+                  status: operation.status,
+                  finishOutcome: operation.finishOutcome,
+                  visitNotes: operation.visitNotes,
+                  hasChargeActivity: operation.hasChargeActivity,
+                  registerFollowUpNote: operation.registerFollowUpNote,
+                  needsOfficeReview: true
+                }
+              : appointment
+          ),
+          timeline:
+            job.id === findJobIdForAppointment(nextSnapshot, operation.appointmentId)
+              ? [
+                  ...job.timeline,
+                  {
+                    id: `${operation.id}-local-finish`,
+                    occurredAt: operation.occurredAt,
+                    actorName,
+                    message: `Finish review saved locally with outcome ${formatFinishOutcome(operation.finishOutcome)}.`,
+                    kind: 'appointmentFinishedReview'
+                  }
+                ]
+              : job.timeline
+        }))
+      };
+    }
+
     if (operation.kind === 'equipmentUpdate') {
       nextSnapshot = {
         ...nextSnapshot,
@@ -1148,7 +1319,30 @@ function formatPendingOperation(operation: PendingOperation): string {
     return `Appointment status queued: ${operation.status} (${stateSuffix})`;
   }
 
+  if (operation.kind === 'appointmentFinishReview') {
+    return `Finish review queued: ${formatFinishOutcome(operation.finishOutcome)} (${stateSuffix})`;
+  }
+
   return `Equipment update queued: ${operation.status} (${stateSuffix})`;
+}
+
+function findJobIdForAppointment(
+  snapshot: FieldAssignedWorkResponse,
+  appointmentId: string
+): string | undefined {
+  return snapshot.jobs.find((job) => job.appointments.some((appointment) => appointment.id === appointmentId))?.id;
+}
+
+function formatFinishOutcome(value: AppointmentFinishOutcome): string {
+  if (value === 'followUpNeeded') {
+    return 'Follow-up needed';
+  }
+
+  if (value === 'noAccess') {
+    return 'No access';
+  }
+
+  return 'Completed';
 }
 
 const styles = StyleSheet.create({

@@ -435,17 +435,27 @@ export interface EquipmentMutationResponse {
   syncResult?: SyncResult;
 }
 
-export type JobStatus = 'open' | 'closed' | 'posted' | 'cancelled';
+export type JobStatus =
+  | 'new'
+  | 'scheduled'
+  | 'inProgress'
+  | 'waitingOnParts'
+  | 'completed'
+  | 'closed'
+  | 'cancelled';
 
 export type AppointmentStatus =
-  | 'assigned'
+  | 'scheduled'
   | 'confirmed'
+  | 'dispatched'
   | 'onTheWay'
   | 'arrived'
   | 'working'
   | 'finished'
   | 'noAnswer'
   | 'cancelled';
+
+export type AppointmentFinishOutcome = 'completed' | 'followUpNeeded' | 'noAccess';
 
 export interface SyncResult {
   status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
@@ -462,6 +472,11 @@ export interface AppointmentSummary {
   technicianId?: string;
   technicianName?: string;
   status: AppointmentStatus;
+  finishOutcome?: AppointmentFinishOutcome;
+  visitNotes?: string;
+  hasChargeActivity?: boolean;
+  registerFollowUpNote?: string;
+  needsOfficeReview: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -487,6 +502,8 @@ export interface JobSummary {
   summary: string;
   status: JobStatus;
   workOrderNumber?: string;
+  needsScheduling: boolean;
+  needsOfficeReview: boolean;
   appointments: AppointmentSummary[];
   timeline: JobTimelineEntry[];
   createdAt: string;
@@ -533,8 +550,19 @@ export interface CreateAppointmentRequest {
   occurredAt?: string;
 }
 
+export interface UpdateAppointmentScheduleRequest {
+  scheduledDate?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+  occurredAt?: string;
+}
+
 export interface UpdateAppointmentStatusRequest {
   status: AppointmentStatus;
+  finishOutcome?: AppointmentFinishOutcome;
+  visitNotes?: string;
+  hasChargeActivity?: boolean;
+  registerFollowUpNote?: string;
   occurredAt?: string;
   baseUpdatedAt?: string;
   syncSource?: FieldSyncSource;
@@ -548,6 +576,7 @@ export interface AddJobNoteRequest {
 }
 
 export interface JobMutationResponse extends JobSummary {
+  warningMessages?: string[];
   syncResult?: SyncResult;
 }
 

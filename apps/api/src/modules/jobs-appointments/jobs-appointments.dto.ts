@@ -1,9 +1,19 @@
-import { IsIn, IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { appointmentStatuses, fieldSyncSources, jobStatuses, type AppointmentStatus, type FieldSyncSource, type JobStatus } from '../company-data/company-data.types';
+import { IsBoolean, IsIn, IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  appointmentFinishOutcomes,
+  appointmentStatuses,
+  fieldSyncSources,
+  jobStatuses,
+  type AppointmentFinishOutcome,
+  type AppointmentStatus,
+  type FieldSyncSource,
+  type JobStatus
+} from '../company-data/company-data.types';
 import type {
   AddJobNoteRequestDto,
   CreateAppointmentRequestDto,
   CreateJobRequestDto,
+  UpdateAppointmentScheduleRequestDto,
   UpdateAppointmentStatusRequestDto,
   UpdateJobStatusRequestDto
 } from './jobs-appointments.types';
@@ -89,9 +99,47 @@ export class CreateAppointmentRequestBodyDto implements CreateAppointmentRequest
   occurredAt?: string;
 }
 
+export class UpdateAppointmentScheduleRequestBodyDto implements UpdateAppointmentScheduleRequestDto {
+  @IsOptional()
+  @Matches(isoDatePattern, { message: 'scheduledDate must be in YYYY-MM-DD format.' })
+  scheduledDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  timeWindowLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  technicianId?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  occurredAt?: string;
+}
+
 export class UpdateAppointmentStatusRequestBodyDto implements UpdateAppointmentStatusRequestDto {
   @IsIn(appointmentStatuses)
   status!: AppointmentStatus;
+
+  @IsOptional()
+  @IsIn(appointmentFinishOutcomes)
+  finishOutcome?: AppointmentFinishOutcome;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  visitNotes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  hasChargeActivity?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  registerFollowUpNote?: string;
 
   @IsOptional()
   @IsISO8601()

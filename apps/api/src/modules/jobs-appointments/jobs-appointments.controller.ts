@@ -3,6 +3,7 @@ import {
   AddJobNoteRequestBodyDto,
   CreateAppointmentRequestBodyDto,
   CreateJobRequestBodyDto,
+  UpdateAppointmentScheduleRequestBodyDto,
   UpdateAppointmentStatusRequestBodyDto,
   UpdateJobStatusRequestBodyDto
 } from './jobs-appointments.dto';
@@ -41,6 +42,19 @@ export class JobsAppointmentsController {
     @Body() request: CreateAppointmentRequestBodyDto
   ) {
     return this.jobsAppointmentsService.addAppointment(this.getBearerToken(authorizationHeader), jobId, request);
+  }
+
+  @Patch('appointments/:appointmentId')
+  async updateAppointmentSchedule(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('appointmentId') appointmentId: string,
+    @Body() request: UpdateAppointmentScheduleRequestBodyDto
+  ) {
+    return this.jobsAppointmentsService.updateAppointmentSchedule(
+      this.getBearerToken(authorizationHeader),
+      appointmentId,
+      request
+    );
   }
 
   @Post(':jobId/notes')

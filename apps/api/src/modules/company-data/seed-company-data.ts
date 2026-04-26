@@ -338,7 +338,7 @@ export const seededJobs: JobRecord[] = [
     category: 'Service',
     origin: 'Inbound phone call',
     summary: 'Cooling not keeping up during afternoon heat.',
-    status: 'open',
+    status: 'scheduled',
     workOrderNumber: 'WO-1001',
     appointmentIds: ['appointment-1001-a'],
     timeline: [
@@ -362,7 +362,7 @@ export const seededJobs: JobRecord[] = [
     category: 'Commercial',
     origin: 'PM contract reminder',
     summary: 'Quarterly rooftop maintenance and airflow inspection.',
-    status: 'open',
+    status: 'inProgress',
     workOrderNumber: 'WO-1002',
     appointmentIds: ['appointment-1002-a', 'appointment-1002-b'],
     timeline: [
@@ -386,7 +386,7 @@ export const seededAppointments: AppointmentRecord[] = [
     scheduledDate: '2026-04-13',
     timeWindowLabel: '1:00 PM - 3:00 PM',
     technicianId: 'employee-technician-1',
-    status: 'assigned',
+    status: 'scheduled',
     createdAt: '2026-04-13T15:15:00.000Z',
     updatedAt: '2026-04-13T15:15:00.000Z'
   },
@@ -397,6 +397,10 @@ export const seededAppointments: AppointmentRecord[] = [
     timeWindowLabel: '8:00 AM - 10:00 AM',
     technicianId: 'employee-technician-1',
     status: 'working',
+    finishOutcome: undefined,
+    visitNotes: undefined,
+    hasChargeActivity: undefined,
+    registerFollowUpNote: undefined,
     createdAt: '2026-04-12T18:00:00.000Z',
     updatedAt: '2026-04-13T15:40:00.000Z'
   },
@@ -406,7 +410,7 @@ export const seededAppointments: AppointmentRecord[] = [
     scheduledDate: '2026-04-14',
     timeWindowLabel: '9:00 AM - 11:00 AM',
     technicianId: 'employee-technician-1',
-    status: 'assigned',
+    status: 'scheduled',
     createdAt: '2026-04-12T18:02:00.000Z',
     updatedAt: '2026-04-12T18:02:00.000Z'
   }

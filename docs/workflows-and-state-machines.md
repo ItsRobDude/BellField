@@ -116,27 +116,37 @@ This should be the normal follow-up path for:
 
 ### Default job statuses for v1
 BellField should use these default job statuses:
-- Open
-- Closed/Completed
-- Posted
+- New
+- Scheduled
+- In Progress
+- Waiting On Parts
+- Completed
+- Closed
 - Cancelled
 
 ### Job status meanings
-**Open**
-- the job is active
-- work may still be ongoing
-- follow-up appointments may still be added
-- the invoice may still be edited
+**New**
+- the job exists but no real appointment has been scheduled yet
+- it should stand out in office workflow as needing action
 
-**Closed/Completed**
-- office has manually decided the job is done
+**Scheduled**
+- the job has one or more scheduled visits
+- the job is still open operationally
+
+**In Progress**
+- work is actively underway or a visit attempt already happened
+- this still does not mean the whole job is done
+
+**Waiting On Parts**
+- work is paused waiting on material or equipment follow-up
+- the job should remain visible without pretending it is finished
+
+**Completed**
+- office has manually decided the work is operationally done
 - this is not automatic when an appointment is finished
-- the job has reached operational completion
 
-**Posted**
-- the invoice/accounting side has been finalized
-- this is the accounting-complete state
-- posted only happens after invoice posting/accounting completion
+**Closed**
+- office has manually closed the job administratively after review
 
 **Cancelled**
 - the job is cancelled
@@ -144,9 +154,10 @@ BellField should use these default job statuses:
 
 ### Job state rules
 - Finished appointments do not auto-close a job
-- office must manually close/complete a job
+- office must manually complete and close a job
 - a cancelled job may later be reopened if needed
 - reopening closed jobs should be permission-controlled
+- posted remains an invoice/accounting concept later, not a Milestone 4 job status
 
 ### Close warning rule
 If a user tries to close a job that still has a future appointment attached:
@@ -168,8 +179,9 @@ If later work needs to continue on a closed or cancelled job:
 
 ### Default appointment statuses for v1
 BellField should use these default appointment statuses:
-- Assigned
+- Scheduled
 - Confirmed
+- Dispatched
 - On the Way
 - Arrived
 - Working
@@ -185,12 +197,17 @@ Example:
 - a technician can move from Assigned straight to Arrived if needed
 
 ### Appointment status meanings
-**Assigned**
-- the appointment has been assigned to a technician
+**Scheduled**
+- the appointment exists in the schedule layer
+- it may or may not already be technician-assigned
 
 **Confirmed**
 - office has confirmed the appointment with the customer
 - this is an appointment-only status, not a job status
+
+**Dispatched**
+- office has actively sent the appointment into the field workflow
+- this is useful before technician travel begins
 
 **On the Way**
 - technician is heading to the appointment
@@ -488,6 +505,7 @@ For Milestone 3, the normal workflow should be:
 For Milestone 4, the office should be able to:
 - create a job with or without the first appointment
 - add later appointments to an open job
+- reschedule appointments without changing the underlying job meaning
 - use warnings instead of hard locks for close/cancel/reopen edge cases
 - rely on one mixed timeline to understand what happened on the job
 
