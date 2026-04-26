@@ -8,7 +8,7 @@ It should match the repo as it exists today, not an older scaffold or a future t
 
 BellField uses:
 
-- Node `20.x`
+- Node `24.x` (LTS)
 - pnpm `10.13.1`
 
 BellField is a `pnpm` workspace repo.
