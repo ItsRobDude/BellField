@@ -8,20 +8,21 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "pnpm run typecheck",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@bellfield/contracts": "workspace:*",
-    "next": "15.3.2",
+    "next": "15.5.7",
     "react": "19.1.0",
     "react-dom": "19.1.0"
   },
   "devDependencies": {
+    "@next/eslint-plugin-next": "15.5.7",
     "@types/node": "22.15.17",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
     "eslint": "9.25.0",
-    "eslint-config-next": "15.3.2",
+    "eslint-config-next": "15.5.7",
     "typescript": "5.8.3"
   }
 }

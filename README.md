@@ -47,7 +47,7 @@ BellField uses `pnpm` only.
 
 Expected local baseline:
 
-- Node `20.x`
+- Node `24.x` (LTS)
 - pnpm `10.13.1`
 
 Bootstrap from the repo root:
@@ -88,6 +88,12 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
+```
+
+Architecture guardrails are documented in [docs/architecture-guardrails.md](./docs/architecture-guardrails.md) and checked with:
+
+```powershell
+pnpm check:architecture
 ```
 
 API migration commands:
