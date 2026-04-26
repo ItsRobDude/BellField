@@ -127,6 +127,7 @@ Milestone 2 account screens should make these actions straightforward:
 - mark the account inactive
 - review active locations
 - link or review shared contacts
+- refresh an already-linked shared contact without interrupting the workflow
 - jump into the current location or contact context without needing a separate admin-only workflow first
 
 ---
@@ -236,7 +237,7 @@ At the top of the job page, without much scrolling, BellField should show:
 - job type/category/business unit
 - assigned technician(s)
 - appointment date/time where relevant
-- work order number field
+- work order number field when one was provided
 - quick actions
 
 ### Core job tabs

@@ -145,6 +145,7 @@ That means BellField should be able to represent:
 When creating a location, BellField should strongly encourage contact information.
 
 It should show phone/email fields and warn the user if both are left blank.
+Fax is optional supporting data, but fax should not count as satisfying the phone/email warning.
 
 This warning is a workflow rule, but the data model should support locations that are created before perfect contact information exists.
 
@@ -321,7 +322,7 @@ The job should act as a central timeline for:
 - estimate-related activity references
 
 ### Job warning metadata rule
-Warnings such as "future appointment still exists" should be treated as workflow outputs around a job action, not as a replacement for the job's actual status.
+Warnings such as "future appointment still exists" or "this cancellation will cancel N appointments" should be treated as workflow outputs around a job action, not as a replacement for the job's actual status.
 
 The model and interface layer should keep:
 - the actual persisted job status

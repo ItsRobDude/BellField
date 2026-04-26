@@ -618,26 +618,26 @@ Audit baseline:
 
 | Milestone | Area | Current repo baseline | Status | Next implementation target |
 | --- | --- | --- | --- | --- |
-| 2 | Customer reference data | Customer, location, and contact records exist in persistence-backed reference data and workspace responses. | Partially present | Add real customer/location/contact create, edit, archive, end-date, and search flows. |
-| 2 | Location ownership and reassignment | Current location owner and alternate bill-to concepts exist, but dedicated reassignment workflow and ownership-history behavior are not exposed as a finished CRM flow. | Needs hardening | Add location reassignment operations, visible ownership history, and office review behavior. |
-| 2 | Shared contact behavior | Contacts exist and can be attached to locations through current data shape, but link/unlink, shared-contact editing choices, and archive/end-date flows are not fully defined in the product surface. | Missing | Add explicit shared-contact link records, unlink behavior, archive/end-date behavior, and office search/list usage. |
-| 2 | Office CRM screens | The office workspace can operate jobs and equipment with existing location/customer context, but BellField does not yet have a real customer/location/contact management surface. | Missing | Build Milestone 2 office CRM list/detail/create flows before widening elsewhere. |
+| 2 | Customer reference data | Customer, location, and contact records exist in persistence-backed reference data and workspace responses, with create/edit paths exposed through the office CRM panel. | Present, needs hardening | Keep archive/end-date and duplicate-warning behavior covered by focused tests as the CRM surface matures. |
+| 2 | Location ownership and reassignment | Current location owner, alternate bill-to concepts, reassignment operations, and ownership history visibility exist in the office CRM flow. | Present, needs hardening | Keep reassignment history readable and avoid letting later job/billing work rewrite location history. |
+| 2 | Shared contact behavior | Shared contact records, customer/location contact links, link-level tags/overrides, archive/reactivate, end-date behavior, and duplicate relink refresh are present. | Present, needs hardening | Improve unlink/archive language and regression coverage as the CRM surface grows. |
+| 2 | Office CRM screens | The office workspace now has real customer/location/contact management, search, create/edit, reassignment, shared-contact linking, and light warning/notice behavior. | Present, needs hardening | Keep the UI boring and explicit; do not widen into dispatch or billing from the CRM panel. |
 | 3 | Equipment create/update basics | Equipment can already be created, listed, status-updated, and shown with active/inactive filtering. | Already present | Preserve the current API shape where practical while adding history-facing depth. |
 | 3 | Equipment history, install-state, and grouping | Pending install status exists, but equipment history visibility, install-state transitions, and grouping-as-relationship are not yet finished enough for Milestone 3. | Needs hardening | Add equipment history views, install-state expectations, and optional grouping metadata without pulling in inventory workflow. |
 | 3 | Office and field equipment UX | Office and field can edit basic equipment data, but the intended drawer/detail/history behavior is still underspecified compared with the docs. | Partially present | Build real location equipment context, edit flow, and history visibility from the same backend truth. |
-| 4 | Job and appointment foundation | Jobs, appointments, timeline entries, bill-to override, auto-created first appointment, and status updates already exist. | Already present | Keep the parent-job/child-appointment model stable and build on it conservatively. |
+| 4 | Job and appointment foundation | Jobs, appointments, timeline entries, bill-to override, optional work order values, auto-created first appointment, and status updates already exist. | Already present | Keep the parent-job/child-appointment model stable and build on it conservatively. |
 | 4 | Unscheduled jobs and add-appointment workflow | Jobs without appointments are supported in the model, but unscheduled-office behavior and follow-up appointment expectations are not yet complete enough in the office flow. | Needs hardening | Make unscheduled jobs clearly visible and make add-appointment the normal follow-up path for open jobs. |
-| 4 | Warning-driven job transitions | Close/cancel warning behavior has started, but reopen guidance, future-appointment warnings, and timeline completeness still need tighter implementation targets. | Needs hardening | Finish warning metadata, reopen prompts, and complete timeline expectations without starting dispatch or financial workflow early. |
+| 4 | Warning-driven job transitions | Close/reopen warnings exist, and cancel warnings now count all non-cancelled appointments under the job before cancelling them. | Needs hardening | Tighten close/reopen prompts and timeline completeness without starting dispatch or financial workflow early. |
 
 ### Minimum interface changes for the next coding pass
-- `reference-data` should grow from list/read support into the Milestone 2 CRM backbone:
-  customer, location, and contact create/update/archive/reassign/search operations.
-- Shared contracts should add clear list/detail shapes for:
-  customers, locations, contacts, location ownership history, shared contact links, and archive/end-date state.
+- `reference-data` and shared CRM contracts already carry the Milestone 2 backbone:
+  customer, location, contact, ownership history, shared contact link, archive/end-date, and search shapes.
+- CRM follow-up should harden behavior and tests rather than inventing a parallel interface:
+  duplicate relinks refresh the existing link, missing location phone/email uses explicit confirmation, and fax alone does not bypass that warning.
 - Equipment contracts should add:
   history-facing fields, install-state metadata, and optional grouping references while keeping separate equipment identity per physical asset.
-- Jobs and appointments contracts should add:
-  explicit unscheduled-job representation, warning metadata for risky transitions, work-order support in office flows, and fuller timeline entry coverage.
+- Jobs and appointments follow-up should focus on:
+  unscheduled-job visibility, add-appointment ergonomics, close/reopen warning clarity, and fuller timeline entry coverage.
 - Office and field clients should continue consuming the same backend truth:
   no client-only CRM, equipment, or job rule drift.
 
@@ -653,20 +653,20 @@ Audit baseline:
 
 ### Acceptance scenarios to run once Node tooling is available
 - CRM:
-  create customer, create location, reassign location owner, link an existing contact to both customer and location, archive or end-date a contact, and confirm search/list behavior stays usable.
+  create customer, create a location with and without phone/email confirmation, reassign location owner, link and relink an existing contact to both customer and location, archive or end-date a contact, and confirm search/list behavior stays usable.
 - Equipment:
   add equipment, edit key fields, move status between pending install and active, hide inactive equipment by default, and confirm history remains understandable.
 - Jobs and appointments:
-  create a job with a first appointment, create a job without an appointment, add a later appointment to the open job, close a job with a future appointment warning, cancel a job and verify appointments cancel with it, and confirm the timeline shows the expected history.
+  create a job with a first appointment, create a job without an appointment, add a later appointment to the open job, leave blank work order values absent, close a job with a future appointment warning, cancel a job and verify every non-cancelled appointment under it is cancelled, and confirm the timeline shows the expected history.
 - Milestone-boundary checks:
   Milestone 2 work should not require dispatch logic, Milestone 3 work should not require PO/inventory workflow, and Milestone 4 work should not require dispatch board or invoice-posting behavior.
 
 ### Immediate post-Node implementation order
-1. CRM pass:
-   customer/location/contact CRUD, shared-contact linking, archive/end-date behavior, reassignment flow, and search/list surfaces.
+1. CRM hardening pass:
+   regression-test customer/location/contact CRUD, shared-contact relinking, archive/end-date behavior, reassignment flow, and search/list surfaces.
 2. Equipment pass:
    history visibility, install-state hardening, optional grouping metadata, and location-context equipment UX cleanup.
 3. Jobs and appointments pass:
-   unscheduled-job visibility, add-appointment flow, work-order handling, warning-driven reopen/close/cancel behavior, and timeline completeness.
+   unscheduled-job visibility, add-appointment flow, warning-driven reopen/close behavior, and timeline completeness.
 4. Verification pass:
    typecheck, lint, migration boot, API/app smoke checks, and correction of any issues exposed by the first three passes.

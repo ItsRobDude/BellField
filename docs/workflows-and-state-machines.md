@@ -90,6 +90,7 @@ During job creation:
 - the location's current owner/customer should be the default bill-to
 - the office may override the bill-to to another allowed customer for that job
 - the work order number should be optional operational reference data, not a replacement for the BellField job number
+- if no work order number is provided, BellField should leave it blank and avoid showing a placeholder reference
 
 ### Automatic appointment generation
 If the office enters a date and time when creating the job:
@@ -166,6 +167,8 @@ If a user tries to close a job that still has a future appointment attached:
 ### Cancel behavior
 If a job is cancelled:
 - all appointments under it should also be cancelled
+- the office warning should count appointments under that job that are not already cancelled
+- past, same-day, future, and unscheduled appointments should all be included in the cancellation behavior when they belong to the cancelled job
 
 ### Reopen behavior
 If later work needs to continue on a closed or cancelled job:

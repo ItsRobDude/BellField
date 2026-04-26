@@ -113,10 +113,11 @@ When creating a new location under a customer account:
 - the phone number field should appear
 - the email field should appear
 - if the user tries to leave both blank, BellField should prompt:
-  - “Are you sure you don’t want to add a phone number or email for this location?”
+  - “This location has no phone or email. Is that okay?”
 - the user should have to confirm Yes or No before continuing
 
 BellField should strongly encourage contact information for a location, even if it is not always strictly present at creation.
+Fax is optional supporting data, but fax alone should not bypass the phone/email warning.
 
 ### Location edit behavior
 Office users should be able to edit a location's:
@@ -182,10 +183,12 @@ Milestone 2 should support these office actions clearly:
 - create a brand-new contact from either the customer or location context
 - link an existing contact into an additional customer or location context
 - unlink a contact from one context without deleting the shared contact entirely
+- relink an already-linked contact without creating a duplicate relationship
 
 Important rule:
 - unlinking a contact from one place should only remove that relationship
 - it should not silently remove the person from every other place they are linked
+- linking the same contact to the same customer or location again should refresh the existing relationship rather than return a missing or fake link
 
 ### Contact search behavior
 Active contacts should be searchable by:
@@ -346,6 +349,7 @@ Version 1 should treat it as:
 - optional
 - editable by office users with the appropriate job-edit permission
 - visible on the job header and in office review flows when present
+- omitted from job detail surfaces when no work order number was provided
 
 ### Job timeline completeness
 The job timeline should be the main readable activity record for Milestone 4.
