@@ -260,11 +260,13 @@ export interface CreateLocationRequest {
   fax?: string;
   alternateBillToCustomerIds?: string[];
   confirmDuplicate?: boolean;
+  confirmMissingContactInfo?: boolean;
 }
 
-export type UpdateLocationRequest = Partial<Omit<CreateLocationRequest, 'customerId' | 'confirmDuplicate'>> & {
+export type UpdateLocationRequest = Partial<Omit<CreateLocationRequest, 'customerId' | 'confirmDuplicate' | 'confirmMissingContactInfo'>> & {
   isActive?: boolean;
   confirmDuplicate?: boolean;
+  confirmMissingContactInfo?: boolean;
 };
 
 export interface ReassignLocationOwnerRequest {

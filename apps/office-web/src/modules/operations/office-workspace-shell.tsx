@@ -79,7 +79,7 @@ function getJobStatusReviewMessage(
   }
 
   if (nextStatus === 'cancelled') {
-    return `Cancelling "${jobSummary}" should stop future work under this job until the office deliberately reopens it.`;
+    return `Cancelling "${jobSummary}" stops work under this job and cancels its appointments.`;
   }
 
   if (nextStatus === 'waitingOnParts') {

@@ -243,7 +243,7 @@ export class JobsDataRepository {
           input.origin.trim(),
           input.summary.trim(),
           initialStatus,
-          input.workOrderNumber?.trim() || `WO-${jobNumber}`,
+          input.workOrderNumber?.trim() || null,
           now,
           now
         ]
@@ -306,11 +306,9 @@ export class JobsDataRepository {
             update appointments
             set status = 'cancelled', updated_at = $2
             where job_id = $1
-              and scheduled_date is not null
-              and scheduled_date >= $3::date
               and status <> 'cancelled'
           `,
-          [jobId, timelineTime, timelineTime.slice(0, 10)]
+          [jobId, timelineTime]
         );
 
         await this.insertTimelineEntry(
@@ -320,7 +318,7 @@ export class JobsDataRepository {
             occurredAt: timelineTime,
             actorName,
             kind: 'syncFlag',
-            message: 'Future appointments under the job were cancelled with the job.'
+            message: 'Appointments under the job were cancelled with the job.'
           },
           queryable
         );
@@ -598,6 +596,22 @@ export class JobsDataRepository {
     );
 
     return Boolean(result.rows[0]?.hasFutureAppointment);
+  }
+
+  async hasCancellableAppointments(jobId: string): Promise<boolean> {
+    const result = await this.databaseService.query<{ hasCancellableAppointment: boolean }>(
+      `
+        select exists(
+          select 1
+          from appointments
+          where job_id = $1
+            and status <> 'cancelled'
+        ) as "hasCancellableAppointment"
+      `,
+      [jobId]
+    );
+
+    return Boolean(result.rows[0]?.hasCancellableAppointment);
   }
 
   async hasIncompleteAppointments(jobId: string): Promise<boolean> {

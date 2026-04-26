@@ -104,8 +104,8 @@ export class JobsAppointmentsService {
       warningMessages.push('This job still has a future appointment scheduled. Confirm before closing it out.');
     }
 
-    if (request.status === 'cancelled' && (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))) {
-      warningMessages.push('Cancelling this job will also cancel its future appointments.');
+    if (request.status === 'cancelled' && (await this.jobsDataService.hasCancellableAppointments(jobId))) {
+      warningMessages.push('Cancelling this job will also cancel its appointments.');
     }
 
     if (this.isReopenTransition(jobBeforeUpdate.status, request.status)) {

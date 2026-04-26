@@ -201,6 +201,10 @@ export class CreateLocationRequestBodyDto implements CreateLocationRequestDto {
   @IsOptional()
   @IsBoolean()
   confirmDuplicate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmMissingContactInfo?: boolean;
 }
 
 export class UpdateLocationRequestBodyDto implements UpdateLocationRequestDto {
@@ -261,6 +265,10 @@ export class UpdateLocationRequestBodyDto implements UpdateLocationRequestDto {
   @IsOptional()
   @IsBoolean()
   confirmDuplicate?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmMissingContactInfo?: boolean;
 }
 
 export class ReassignLocationOwnerRequestBodyDto implements ReassignLocationOwnerRequestDto {

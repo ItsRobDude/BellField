@@ -95,6 +95,8 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
   const [reassignNote, setReassignNote] = useState('');
   const [customerDuplicateWarnings, setCustomerDuplicateWarnings] = useState<DuplicateCandidate[]>([]);
   const [locationDuplicateWarnings, setLocationDuplicateWarnings] = useState<DuplicateCandidate[]>([]);
+  const [createLocationMissingContactConfirmation, setCreateLocationMissingContactConfirmation] = useState(false);
+  const [saveLocationMissingContactConfirmation, setSaveLocationMissingContactConfirmation] = useState(false);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
 
   useEffect(() => {
@@ -252,10 +254,17 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
     }
   }
 
-  async function handleCreateLocation(forceConfirm = false) {
+  async function handleCreateLocation(options: { confirmDuplicate?: boolean; confirmMissingContactInfo?: boolean } = {}) {
     onErrorMessage(null);
+    const confirmMissingContactInfo =
+      options.confirmMissingContactInfo || createLocationMissingContactConfirmation;
 
-    if (!forceConfirm) {
+    if (!confirmMissingContactInfo && locationNeedsPhoneEmailConfirmation(locationForm.phone, locationForm.email)) {
+      setCreateLocationMissingContactConfirmation(true);
+      return;
+    }
+
+    if (!options.confirmDuplicate) {
       const duplicateResults = await collectDuplicateWarnings(
         `${locationForm.name} ${locationForm.phone} ${locationForm.addressLine1} ${locationForm.city}`,
         'location'
@@ -281,9 +290,11 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         email: locationForm.email || undefined,
         fax: locationForm.fax || undefined,
         alternateBillToCustomerIds: locationForm.alternateBillToCustomerIds,
-        confirmDuplicate: forceConfirm || locationDuplicateWarnings.length > 0
+        confirmDuplicate: options.confirmDuplicate || locationDuplicateWarnings.length > 0,
+        confirmMissingContactInfo
       });
       setLocationDuplicateWarnings([]);
+      setCreateLocationMissingContactConfirmation(false);
       setSelectedCustomer(null);
       setSelectedLocation(response.location);
       setSelectedContact(null);
@@ -302,6 +313,14 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
       return;
     }
 
+    if (
+      !saveLocationMissingContactConfirmation &&
+      locationNeedsPhoneEmailConfirmation(selectedLocation.phone, selectedLocation.email)
+    ) {
+      setSaveLocationMissingContactConfirmation(true);
+      return;
+    }
+
     try {
       const response = await updateOfficeLocation({
         locationId: selectedLocation.id,
@@ -317,8 +336,10 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         fax: selectedLocation.fax,
         isActive: selectedLocation.isActive,
         alternateBillToCustomerIds: [...selectedLocation.alternateBillToCustomerIds],
-        confirmDuplicate: true
+        confirmDuplicate: true,
+        confirmMissingContactInfo: saveLocationMissingContactConfirmation
       });
+      setSaveLocationMissingContactConfirmation(false);
       setSelectedLocation(response.location);
       hydrateLinkDrafts(response.location.contacts);
       await refreshWorkspace();
@@ -703,10 +724,36 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 </div>
               ))}
               <div style={styles.row}>
-                <button type="button" onClick={() => void handleCreateLocation(true)} style={styles.primaryButton}>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateLocation({ confirmDuplicate: true })}
+                  style={styles.primaryButton}
+                >
                   Create anyway
                 </button>
                 <button type="button" onClick={() => setLocationDuplicateWarnings([])} style={styles.button}>
+                  Keep editing
+                </button>
+              </div>
+            </div>
+          ) : null}
+          {createLocationMissingContactConfirmation ? (
+            <div style={styles.subpanel}>
+              <strong>Location has no phone or email</strong>
+              <div style={styles.tinyMuted}>Confirm this is intentional before saving this location.</div>
+              <div style={styles.row}>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateLocation({ confirmMissingContactInfo: true })}
+                  style={styles.primaryButton}
+                >
+                  Create without phone or email
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreateLocationMissingContactConfirmation(false)}
+                  style={styles.button}
+                >
                   Keep editing
                 </button>
               </div>
@@ -811,6 +858,24 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 <input value={selectedLocation.email ?? ''} onChange={(event) => setSelectedLocation((current) => current ? { ...current, email: event.target.value || undefined } : current)} style={styles.input} />
                 <input value={selectedLocation.fax ?? ''} onChange={(event) => setSelectedLocation((current) => current ? { ...current, fax: event.target.value || undefined } : current)} style={styles.input} />
               </div>
+              {saveLocationMissingContactConfirmation ? (
+                <div style={styles.subpanel}>
+                  <strong>Location has no phone or email</strong>
+                  <div style={styles.tinyMuted}>Confirm this is intentional before saving this location.</div>
+                  <div style={styles.row}>
+                    <button type="button" onClick={() => void handleSaveLocation()} style={styles.primaryButton}>
+                      Save without phone or email
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSaveLocationMissingContactConfirmation(false)}
+                      style={styles.button}
+                    >
+                      Keep editing
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               <label style={styles.inlineLabel}>
                 <input type="checkbox" checked={selectedLocation.isActive} onChange={(event) => setSelectedLocation((current) => current ? { ...current, isActive: event.target.checked } : current)} />
                 Location is active
@@ -1096,6 +1161,10 @@ function createEmptyContactForm(): ContactFormState {
     fax: '',
     tags: ''
   };
+}
+
+function locationNeedsPhoneEmailConfirmation(phone: string | undefined, email: string | undefined): boolean {
+  return !phone?.trim() && !email?.trim();
 }
 
 function splitCommaValues(value: string): string[] {

@@ -146,6 +146,10 @@ export class JobsDataService {
     return this.jobsDataRepository.hasFutureAppointments(jobId, referenceDate);
   }
 
+  async hasCancellableAppointments(jobId: string): Promise<boolean> {
+    return this.jobsDataRepository.hasCancellableAppointments(jobId);
+  }
+
   async hasIncompleteAppointments(jobId: string): Promise<boolean> {
     return this.jobsDataRepository.hasIncompleteAppointments(jobId);
   }

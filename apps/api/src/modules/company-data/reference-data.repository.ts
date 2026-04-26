@@ -619,7 +619,7 @@ export class ReferenceDataRepository {
     const tableName = input.linkedRecordKind === 'customer' ? 'customer_contact_links' : 'location_contact_links';
     const idColumn = input.linkedRecordKind === 'customer' ? 'customer_id' : 'location_id';
 
-    await this.databaseService.query(
+    const result = await this.databaseService.query<{ id: string }>(
       `
         insert into ${tableName} (
           id,
@@ -642,6 +642,7 @@ export class ReferenceDataRepository {
           is_active = excluded.is_active,
           end_date = excluded.end_date,
           updated_at = now()
+        returning id
       `,
       [
         id,
@@ -656,8 +657,17 @@ export class ReferenceDataRepository {
       ]
     );
 
-    const existingLink = await this.getContactLinkById(id);
-    return existingLink as ContactLinkRecord;
+    const linkId = result.rows[0]?.id;
+    if (!linkId) {
+      throw new Error('Contact link upsert did not return an id.');
+    }
+
+    const existingLink = await this.getContactLinkById(linkId);
+    if (!existingLink) {
+      throw new Error('Contact link could not be loaded after upsert.');
+    }
+
+    return existingLink;
   }
 
   async updateContactLink(linkId: string, input: UpdateContactLinkInput): Promise<ContactLinkRecord | null> {

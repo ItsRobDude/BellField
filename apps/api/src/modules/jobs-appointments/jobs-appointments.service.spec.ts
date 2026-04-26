@@ -51,6 +51,7 @@ function createService() {
   const jobsDataService = {
     getJobById: jest.fn(),
     hasFutureAppointments: jest.fn().mockResolvedValue(false),
+    hasCancellableAppointments: jest.fn().mockResolvedValue(false),
     hasIncompleteAppointments: jest.fn().mockResolvedValue(false),
     updateJobStatus: jest.fn(),
     createAppointment: jest.fn(),
@@ -124,6 +125,27 @@ describe('JobsAppointmentsService', () => {
     await expect(
       service.updateJobStatus('session-token', 'job-1', { status: 'scheduled' })
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('warns that cancelling a job cancels appointments under it', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
+    jobsDataService.hasCancellableAppointments.mockResolvedValue(true);
+    jobsDataService.updateJobStatus.mockResolvedValue(createJob('cancelled'));
+
+    const response = await service.updateJobStatus('session-token', 'job-1', {
+      status: 'cancelled',
+      occurredAt: '2026-04-14T11:00:00.000Z'
+    });
+
+    expect(response.warningMessages).toContain('Cancelling this job will also cancel its appointments.');
+    expect(jobsDataService.hasFutureAppointments).not.toHaveBeenCalled();
   });
 
   it('rejects out-of-scope field appointment updates without replay provenance', async () => {

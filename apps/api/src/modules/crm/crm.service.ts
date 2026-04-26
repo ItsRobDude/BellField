@@ -189,7 +189,6 @@ export class CrmService {
 
   async createCustomer(sessionToken: string, request: CreateCustomerRequestDto): Promise<CustomerMutationResponse> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:create', ['office-web']);
-    ensureAtLeastOneContactMethod(request.phone, request.email, request.fax, 'Customer accounts');
     const duplicateWarnings = await this.findCustomerDuplicates(request);
     this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'customer account');
 
@@ -220,12 +219,6 @@ export class CrmService {
   ): Promise<CustomerMutationResponse> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:edit', ['office-web']);
     const current = await this.referenceDataService.getCustomerById(customerId);
-    ensureAtLeastOneContactMethod(
-      request.phone ?? current.phone,
-      request.email ?? current.email,
-      request.fax ?? current.fax,
-      'Customer accounts'
-    );
     const duplicateWarnings = await this.findCustomerDuplicates({ ...current, ...request }, customerId);
     this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'customer account');
 
@@ -251,7 +244,7 @@ export class CrmService {
 
   async createLocation(sessionToken: string, request: CreateLocationRequestDto): Promise<LocationMutationResponse> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:create', ['office-web']);
-    ensureAtLeastOneContactMethod(request.phone, request.email, request.fax, 'Locations');
+    ensureLocationContactConfirmation(request.phone, request.email, request.confirmMissingContactInfo);
     await this.referenceDataService.getCustomerById(request.customerId);
     if (request.alternateBillToCustomerIds?.length) {
       await Promise.all(request.alternateBillToCustomerIds.map((customerId) => this.referenceDataService.getCustomerById(customerId)));
@@ -286,11 +279,10 @@ export class CrmService {
   ): Promise<LocationMutationResponse> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', ['office-web']);
     const current = await this.referenceDataService.getLocationById(locationId);
-    ensureAtLeastOneContactMethod(
+    ensureLocationContactConfirmation(
       request.phone ?? current.phone,
       request.email ?? current.email,
-      request.fax ?? current.fax,
-      'Locations'
+      request.confirmMissingContactInfo
     );
     if (request.alternateBillToCustomerIds?.length) {
       await Promise.all(request.alternateBillToCustomerIds.map((customerId) => this.referenceDataService.getCustomerById(customerId)));
@@ -330,7 +322,6 @@ export class CrmService {
 
   async createContact(sessionToken: string, request: CreateContactRequestDto): Promise<ContactMutationResponse> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:create', ['office-web']);
-    ensureAtLeastOneContactMethod(request.phone, request.email, request.fax, 'Contacts');
     const contact = await this.referenceDataService.createContact({
       displayName: request.displayName.trim(),
       phone: trimOptional(request.phone),
@@ -351,13 +342,7 @@ export class CrmService {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', ['office-web']);
 
     if (request.scope === 'global') {
-      const current = await this.referenceDataService.getContactById(contactId);
-      ensureAtLeastOneContactMethod(
-        request.phone ?? current.phone,
-        request.email ?? current.email,
-        request.fax ?? current.fax,
-        'Contacts'
-      );
+      await this.referenceDataService.getContactById(contactId);
       const contact = await this.referenceDataService.updateContact(contactId, {
         displayName: request.displayName?.trim(),
         phone: request.phone !== undefined ? trimOptional(request.phone) : undefined,
@@ -559,14 +544,13 @@ export class CrmService {
   }
 }
 
-function ensureAtLeastOneContactMethod(
+function ensureLocationContactConfirmation(
   phone: string | undefined,
   email: string | undefined,
-  fax: string | undefined,
-  label: string
+  confirmMissingContactInfo: boolean | undefined
 ): void {
-  if (!trimOptional(phone) && !trimOptional(email) && !trimOptional(fax)) {
-    throw new ConflictException(`${label} need at least one contact method such as phone, email, or fax.`);
+  if (!trimOptional(phone) && !trimOptional(email) && !confirmMissingContactInfo) {
+    throw new ConflictException('Locations without phone or email need office confirmation before saving.');
   }
 }
 
