@@ -95,6 +95,7 @@ describe('JobsDataRepository', () => {
 
     expect(count).toBe(2);
     expect(databaseService.query.mock.calls[0]?.[0]).toContain("status <> 'cancelled'");
+    expect(databaseService.query.mock.calls[0]?.[0]).not.toContain('scheduled_date');
     expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['job-1']);
   });
 });

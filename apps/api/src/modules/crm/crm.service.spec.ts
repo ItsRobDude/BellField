@@ -190,7 +190,7 @@ describe('CrmService', () => {
     );
   });
 
-  it('requires confirmation before creating a location without phone or email', async () => {
+  it('requires confirmation before creating a fax-only location', async () => {
     const { service, referenceDataService } = createService();
 
     await expect(
@@ -226,6 +226,29 @@ describe('CrmService', () => {
         phone: undefined,
         email: undefined,
         fax: undefined
+      })
+    );
+  });
+
+  it('allows confirmed fax-only location creation without treating fax as phone or email', async () => {
+    const { service, referenceDataService } = createService();
+
+    await service.createLocation('session-token', {
+      customerId: 'customer-1',
+      name: 'North End Rental',
+      addressLine1: '12 Cedar Lane',
+      city: 'Everett',
+      state: 'WA',
+      postalCode: '98201',
+      fax: '(555) 333-4444',
+      confirmMissingContactInfo: true
+    });
+
+    expect(referenceDataService.createLocation).toHaveBeenCalledWith(
+      expect.objectContaining({
+        phone: undefined,
+        email: undefined,
+        fax: '(555) 333-4444'
       })
     );
   });

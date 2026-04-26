@@ -150,6 +150,7 @@ describe('JobsAppointmentsService', () => {
     });
 
     expect(response.warningMessages).toContain(warning);
+    expect(response.warningMessages?.join(' ')).not.toMatch(/future/i);
     expect(jobsDataService.hasFutureAppointments).not.toHaveBeenCalled();
     expect(jobsDataService.countCancellableAppointments).toHaveBeenCalledWith('job-1');
   });
