@@ -36,8 +36,8 @@ export class JobsAppointmentsService {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
 
     const [customers, locations, technicians, jobs] = await Promise.all([
-      this.referenceDataService.listCustomers(),
-      this.referenceDataService.listLocations(),
+      this.referenceDataService.listCustomers(false),
+      this.referenceDataService.listLocations(false),
       this.identityAccessService.getActiveEmployees(),
       this.jobsDataService.listJobs()
     ]);
@@ -47,8 +47,14 @@ export class JobsAppointmentsService {
         id: customer.id,
         name: customer.name,
         accountType: customer.accountType,
+        billingAddressLine1: customer.billingAddressLine1,
+        billingCity: customer.billingCity,
+        billingState: customer.billingState,
+        billingPostalCode: customer.billingPostalCode,
         phone: customer.phone,
         email: customer.email,
+        fax: customer.fax,
+        isActive: customer.isActive,
         flags: [...customer.flags]
       })),
       locations: await Promise.all(locations.map((location) => this.toLocationSummary(location.id))),
@@ -289,32 +295,41 @@ export class JobsAppointmentsService {
       id: customer.id,
       name: customer.name,
       accountType: customer.accountType,
+      billingAddressLine1: customer.billingAddressLine1,
+      billingCity: customer.billingCity,
+      billingState: customer.billingState,
+      billingPostalCode: customer.billingPostalCode,
       phone: customer.phone,
       email: customer.email,
+      fax: customer.fax,
+      isActive: customer.isActive,
       flags: [...customer.flags]
     };
   }
 
   private async toLocationSummary(locationId: string): Promise<LocationSummaryDto> {
-    const location = await this.referenceDataService.getLocationById(locationId);
-    const customer = await this.referenceDataService.getCustomerById(location.customerId);
-    const contacts = await Promise.all(location.contactIds.map((contactId) => this.referenceDataService.getContactById(contactId)));
+    const location = await this.referenceDataService.getLocationDetail(locationId);
 
     return {
       id: location.id,
       name: location.name,
-      customerId: customer.id,
-      customerName: customer.name,
+      customerId: location.customerId,
+      customerName: location.customerName,
       addressLine1: location.addressLine1,
       city: location.city,
       state: location.state,
       postalCode: location.postalCode,
-      contacts: contacts.map((contact) => ({
-        id: contact.id,
-        displayName: contact.displayName,
-        phone: contact.phone,
-        email: contact.email,
-        tags: [...contact.tags]
+      phone: location.phone,
+      email: location.email,
+      fax: location.fax,
+      isActive: location.isActive,
+      contacts: location.contacts.map((contact) => ({
+        ...contact,
+        tags: [...contact.tags],
+        sharedContact: {
+          ...contact.sharedContact,
+          tags: [...contact.sharedContact.tags]
+        }
       })),
       alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
     };

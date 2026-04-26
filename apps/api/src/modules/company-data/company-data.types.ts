@@ -11,8 +11,13 @@ export type CustomerAccountRecord = {
   name: string;
   accountType: 'residential' | 'company' | 'propertyManager' | 'landlord';
   isActive: boolean;
+  billingAddressLine1: string;
+  billingCity: string;
+  billingState: string;
+  billingPostalCode: string;
   phone?: string;
   email?: string;
+  fax?: string;
   flags: string[];
 };
 
@@ -21,8 +26,31 @@ export type ContactRecord = {
   displayName: string;
   phone?: string;
   email?: string;
+  fax?: string;
   tags: string[];
   isActive: boolean;
+};
+
+export type ContactLinkRecord = {
+  id: string;
+  contactId: string;
+  linkedRecordId: string;
+  linkedRecordKind: 'customer' | 'location';
+  phone?: string;
+  email?: string;
+  fax?: string;
+  tags: string[];
+  isActive: boolean;
+  endDate?: string;
+};
+
+export type OwnershipHistoryRecord = {
+  id: string;
+  locationId: string;
+  customerId: string;
+  startedAt: string;
+  endedAt?: string;
+  note?: string;
 };
 
 export type LocationRecord = {
@@ -33,9 +61,11 @@ export type LocationRecord = {
   city: string;
   state: string;
   postalCode: string;
-  contactIds: string[];
+  phone?: string;
+  email?: string;
+  fax?: string;
+  isActive: boolean;
   alternateBillToCustomerIds: string[];
-  historyNotes: string[];
 };
 
 export type EquipmentStatus = ContractEquipmentStatus;

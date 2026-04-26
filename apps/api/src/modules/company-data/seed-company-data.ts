@@ -1,10 +1,12 @@
 import type {
   AppointmentRecord,
+  ContactLinkRecord,
   ContactRecord,
   CustomerAccountRecord,
   EquipmentRecord,
   JobRecord,
-  LocationRecord
+  LocationRecord,
+  OwnershipHistoryRecord
 } from './company-data.types';
 
 export const seededCustomers: CustomerAccountRecord[] = [
@@ -13,6 +15,10 @@ export const seededCustomers: CustomerAccountRecord[] = [
     name: 'Jordan and Casey Parker',
     accountType: 'residential',
     isActive: true,
+    billingAddressLine1: '214 Cedar Avenue',
+    billingCity: 'Everett',
+    billingState: 'WA',
+    billingPostalCode: '98201',
     phone: '(555) 201-1100',
     email: 'parker@example.local',
     flags: []
@@ -22,6 +28,10 @@ export const seededCustomers: CustomerAccountRecord[] = [
     name: 'Redwood Property Management',
     accountType: 'propertyManager',
     isActive: true,
+    billingAddressLine1: '901 First Avenue',
+    billingCity: 'Seattle',
+    billingState: 'WA',
+    billingPostalCode: '98104',
     phone: '(555) 201-2200',
     email: 'service@redwoodpm.local',
     flags: []
@@ -31,6 +41,10 @@ export const seededCustomers: CustomerAccountRecord[] = [
     name: 'Sunrise Dental Group',
     accountType: 'company',
     isActive: true,
+    billingAddressLine1: '455 Pine Street',
+    billingCity: 'Lynnwood',
+    billingState: 'WA',
+    billingPostalCode: '98036',
     phone: '(555) 201-3300',
     email: 'office@sunrisedental.local',
     flags: ['Do Not Service after hours without manager approval']
@@ -40,6 +54,10 @@ export const seededCustomers: CustomerAccountRecord[] = [
     name: 'Morgan Rentals',
     accountType: 'landlord',
     isActive: true,
+    billingAddressLine1: '18 Railroad Avenue',
+    billingCity: 'Bellingham',
+    billingState: 'WA',
+    billingPostalCode: '98225',
     phone: '(555) 201-4400',
     email: 'repairs@morganrentals.local',
     flags: []
@@ -52,6 +70,7 @@ export const seededContacts: ContactRecord[] = [
     displayName: 'Casey Parker',
     phone: '(555) 201-1101',
     email: 'casey.parker@example.local',
+    fax: undefined,
     tags: ['Primary'],
     isActive: true
   },
@@ -60,6 +79,7 @@ export const seededContacts: ContactRecord[] = [
     displayName: 'Avery Leasing Office',
     phone: '(555) 201-2201',
     email: 'leasing@redwoodpm.local',
+    fax: undefined,
     tags: ['Primary', 'Billing'],
     isActive: true
   },
@@ -68,6 +88,7 @@ export const seededContacts: ContactRecord[] = [
     displayName: 'Dr. Taylor Nguyen',
     phone: '(555) 201-3301',
     email: 'ops@sunrisedental.local',
+    fax: undefined,
     tags: ['Primary'],
     isActive: true
   }
@@ -82,9 +103,11 @@ export const seededLocations: LocationRecord[] = [
     city: 'Everett',
     state: 'WA',
     postalCode: '98201',
-    contactIds: ['contact-location-1'],
+    phone: '(555) 201-1101',
+    email: 'casey.parker@example.local',
+    fax: undefined,
+    isActive: true,
     alternateBillToCustomerIds: ['customer-landlord-1'],
-    historyNotes: ['Location remained active after prior ownership transfer to the Parker family.']
   },
   {
     id: 'location-redwood-unit-12',
@@ -94,9 +117,11 @@ export const seededLocations: LocationRecord[] = [
     city: 'Mukilteo',
     state: 'WA',
     postalCode: '98275',
-    contactIds: ['contact-location-2'],
+    phone: '(555) 201-2201',
+    email: 'leasing@redwoodpm.local',
+    fax: undefined,
+    isActive: true,
     alternateBillToCustomerIds: ['customer-landlord-1'],
-    historyNotes: ['Main billing customer moved from landlord to property manager in 2025.']
   },
   {
     id: 'location-sunrise-dental',
@@ -106,9 +131,62 @@ export const seededLocations: LocationRecord[] = [
     city: 'Lynnwood',
     state: 'WA',
     postalCode: '98036',
-    contactIds: ['contact-location-3'],
+    phone: '(555) 201-3301',
+    email: 'ops@sunrisedental.local',
+    fax: undefined,
+    isActive: true,
     alternateBillToCustomerIds: [],
-    historyNotes: ['Commercial rooftop units tracked separately from office split systems.']
+  }
+];
+
+export const seededLocationContactLinks: ContactLinkRecord[] = [
+  {
+    id: 'location-parkers-home--contact-location-1',
+    contactId: 'contact-location-1',
+    linkedRecordId: 'location-parkers-home',
+    linkedRecordKind: 'location',
+    tags: ['Primary'],
+    isActive: true
+  },
+  {
+    id: 'location-redwood-unit-12--contact-location-2',
+    contactId: 'contact-location-2',
+    linkedRecordId: 'location-redwood-unit-12',
+    linkedRecordKind: 'location',
+    tags: ['Primary', 'Billing'],
+    isActive: true
+  },
+  {
+    id: 'location-sunrise-dental--contact-location-3',
+    contactId: 'contact-location-3',
+    linkedRecordId: 'location-sunrise-dental',
+    linkedRecordKind: 'location',
+    tags: ['Primary'],
+    isActive: true
+  }
+];
+
+export const seededLocationOwnershipHistory: OwnershipHistoryRecord[] = [
+  {
+    id: 'location-parkers-home--owner-1',
+    locationId: 'location-parkers-home',
+    customerId: 'customer-residential-1',
+    startedAt: '2026-04-13T15:00:00.000Z',
+    note: 'Location remained active after prior ownership transfer to the Parker family.'
+  },
+  {
+    id: 'location-redwood-unit-12--owner-1',
+    locationId: 'location-redwood-unit-12',
+    customerId: 'customer-property-manager-1',
+    startedAt: '2026-04-13T15:00:00.000Z',
+    note: 'Main billing customer moved from landlord to property manager in 2025.'
+  },
+  {
+    id: 'location-sunrise-dental--owner-1',
+    locationId: 'location-sunrise-dental',
+    customerId: 'customer-company-1',
+    startedAt: '2026-04-13T15:00:00.000Z',
+    note: 'Commercial rooftop units tracked separately from office split systems.'
   }
 ];
 

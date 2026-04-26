@@ -5,6 +5,7 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   card: { background: '#fffdf7', border: '1px solid #e5dcc8', borderRadius: 20, margin: '0 auto 1rem', maxWidth: '76rem', padding: '1.5rem' },
   row: { alignItems: 'center', display: 'flex', gap: '0.75rem', justifyContent: 'space-between', flexWrap: 'wrap' },
   grid: { display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))' },
+  splitGrid: { display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(20rem, 1fr))' },
   list: { display: 'grid', gap: '1rem' },
   formRow: { display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', margin: '1rem 0' },
   panel: { background: '#ffffff', border: '1px solid #eadfc9', borderRadius: 16, display: 'grid', gap: '0.75rem', padding: '1rem' },
@@ -21,11 +22,18 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     resize: 'vertical'
   },
   button: { background: '#ffffff', border: '1px solid #cdbfa6', borderRadius: 999, color: '#1f2933', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 600, padding: '0.75rem 1rem' },
+  primaryButton: { background: '#1c6b57', border: '1px solid #1c6b57', borderRadius: 999, color: '#ffffff', cursor: 'pointer', fontSize: '0.95rem', fontWeight: 700, padding: '0.75rem 1rem' },
+  badgeRow: { display: 'flex', flexWrap: 'wrap', gap: '0.5rem' },
+  badge: { background: '#f8e6c7', borderRadius: 999, color: '#7a4a16', fontSize: '0.8rem', fontWeight: 700, padding: '0.3rem 0.65rem' },
+  dangerBadge: { background: '#fde7e5', borderRadius: 999, color: '#b42318', fontSize: '0.8rem', fontWeight: 700, padding: '0.3rem 0.65rem' },
+  cardButton: { background: '#ffffff', border: '1px solid #e5dcc8', borderRadius: 12, cursor: 'pointer', display: 'grid', gap: '0.35rem', padding: '0.85rem', textAlign: 'left' },
   inlineLabel: { alignItems: 'center', display: 'flex', gap: '0.5rem', fontSize: '0.95rem', fontWeight: 600 },
   title: { fontSize: '2rem', margin: '0 0 0.25rem' },
   heading: { fontSize: '1.15rem', margin: 0 },
+  subheading: { fontSize: '1rem', margin: 0 },
   kicker: { color: '#9a6b2f', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.12em', marginBottom: '0.5rem', textTransform: 'uppercase' },
   muted: { color: '#52606d', margin: 0 },
+  tinyMuted: { color: '#7b8794', fontSize: '0.85rem', margin: 0 },
   error: { color: '#b42318', margin: '0.75rem 0 0' },
   timeline: { margin: 0, paddingInlineStart: '1.1rem' }
 };

@@ -1,6 +1,15 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { getApiRuntimeConfig } from '../common/config/runtime-config';
-import { seededCustomers, seededContacts, seededEquipment, seededJobs, seededLocations, seededAppointments } from '../modules/company-data/seed-company-data';
+import {
+  seededAppointments,
+  seededContacts,
+  seededCustomers,
+  seededEquipment,
+  seededJobs,
+  seededLocationContactLinks,
+  seededLocations,
+  seededLocationOwnershipHistory
+} from '../modules/company-data/seed-company-data';
 import { seededEmployees } from '../modules/identity-access/seed-employees';
 import { DatabaseService } from './database.service';
 
@@ -21,6 +30,8 @@ export class DatabaseBootstrapService implements OnModuleInit {
     await this.seedCustomers();
     await this.seedContacts();
     await this.seedLocations();
+    await this.seedLocationContactLinks();
+    await this.seedLocationOwnershipHistory();
     await this.seedEquipment();
     await this.seedJobs();
     await this.seedAppointments();
@@ -63,11 +74,37 @@ export class DatabaseBootstrapService implements OnModuleInit {
     for (const customer of seededCustomers) {
       await this.databaseService.query(
         `
-          insert into customers (id, name, account_type, is_active, phone, email, flags)
-          values ($1, $2, $3, $4, $5, $6, $7::text[])
+          insert into customers (
+            id,
+            name,
+            account_type,
+            is_active,
+            billing_address_line1,
+            billing_city,
+            billing_state,
+            billing_postal_code,
+            phone,
+            email,
+            fax,
+            flags
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text[])
           on conflict (id) do nothing
         `,
-        [customer.id, customer.name, customer.accountType, customer.isActive, customer.phone ?? null, customer.email ?? null, customer.flags]
+        [
+          customer.id,
+          customer.name,
+          customer.accountType,
+          customer.isActive,
+          customer.billingAddressLine1,
+          customer.billingCity,
+          customer.billingState,
+          customer.billingPostalCode,
+          customer.phone ?? null,
+          customer.email ?? null,
+          customer.fax ?? null,
+          customer.flags
+        ]
       );
     }
   }
@@ -76,11 +113,19 @@ export class DatabaseBootstrapService implements OnModuleInit {
     for (const contact of seededContacts) {
       await this.databaseService.query(
         `
-          insert into contacts (id, display_name, phone, email, tags, is_active)
-          values ($1, $2, $3, $4, $5::text[], $6)
+          insert into contacts (id, display_name, phone, email, fax, tags, is_active)
+          values ($1, $2, $3, $4, $5, $6::text[], $7)
           on conflict (id) do nothing
         `,
-        [contact.id, contact.displayName, contact.phone ?? null, contact.email ?? null, contact.tags, contact.isActive]
+        [
+          contact.id,
+          contact.displayName,
+          contact.phone ?? null,
+          contact.email ?? null,
+          contact.fax ?? null,
+          contact.tags,
+          contact.isActive
+        ]
       );
     }
   }
@@ -97,11 +142,13 @@ export class DatabaseBootstrapService implements OnModuleInit {
             city,
             state,
             postal_code,
-            contact_ids,
+            phone,
+            email,
+            fax,
+            is_active,
             alternate_bill_to_customer_ids,
-            history_notes
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9::text[], $10::text[])
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text[])
           on conflict (id) do nothing
         `,
         [
@@ -112,9 +159,71 @@ export class DatabaseBootstrapService implements OnModuleInit {
           location.city,
           location.state,
           location.postalCode,
-          location.contactIds,
+          location.phone ?? null,
+          location.email ?? null,
+          location.fax ?? null,
+          location.isActive,
           location.alternateBillToCustomerIds,
-          location.historyNotes
+        ]
+      );
+    }
+  }
+
+  private async seedLocationContactLinks(): Promise<void> {
+    for (const link of seededLocationContactLinks) {
+      await this.databaseService.query(
+        `
+          insert into location_contact_links (
+            id,
+            location_id,
+            contact_id,
+            phone_override,
+            email_override,
+            fax_override,
+            tags,
+            is_active,
+            end_date
+          )
+          values ($1, $2, $3, $4, $5, $6, $7::text[], $8, $9)
+          on conflict (id) do nothing
+        `,
+        [
+          link.id,
+          link.linkedRecordId,
+          link.contactId,
+          link.phone ?? null,
+          link.email ?? null,
+          link.fax ?? null,
+          link.tags,
+          link.isActive,
+          link.endDate ?? null
+        ]
+      );
+    }
+  }
+
+  private async seedLocationOwnershipHistory(): Promise<void> {
+    for (const entry of seededLocationOwnershipHistory) {
+      await this.databaseService.query(
+        `
+          insert into location_ownership_history (
+            id,
+            location_id,
+            customer_id,
+            started_at,
+            ended_at,
+            note
+          )
+          values ($1, $2, $3, $4, $5, $6)
+          on conflict (id) do nothing
+        `,
+        [
+          entry.id,
+          entry.locationId,
+          entry.customerId,
+          entry.startedAt,
+          entry.endedAt ?? null,
+          entry.note ?? null
         ]
       );
     }

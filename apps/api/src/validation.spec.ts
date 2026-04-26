@@ -2,6 +2,8 @@ import { ValidationPipe } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { INestApplication } from '@nestjs/common';
 import * as request from 'supertest';
+import { CrmController } from './modules/crm/crm.controller';
+import { CrmService } from './modules/crm/crm.service';
 import { EquipmentController } from './modules/equipment/equipment.controller';
 import { EquipmentService } from './modules/equipment/equipment.service';
 import { IdentityAccessController } from './modules/identity-access/identity-access.controller';
@@ -28,14 +30,19 @@ describe('Runtime validation', () => {
   const equipmentService = {
     updateEquipment: jest.fn()
   };
+  const crmService = {
+    createCustomer: jest.fn(),
+    updateContactLink: jest.fn()
+  };
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [IdentityAccessController, JobsAppointmentsController, EquipmentController],
+      controllers: [IdentityAccessController, JobsAppointmentsController, EquipmentController, CrmController],
       providers: [
         { provide: IdentityAccessService, useValue: identityAccessService },
         { provide: JobsAppointmentsService, useValue: jobsAppointmentsService },
-        { provide: EquipmentService, useValue: equipmentService }
+        { provide: EquipmentService, useValue: equipmentService },
+        { provide: CrmService, useValue: crmService }
       ]
     }).compile();
 
@@ -122,5 +129,32 @@ describe('Runtime validation', () => {
 
     expect(response.status).toBe(400);
     expect(equipmentService.updateEquipment).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed CRM customer payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/crm/customers')
+      .send({
+        name: '',
+        accountType: 'company',
+        billingAddressLine1: '100 Main St',
+        billingCity: 'Seattle',
+        billingState: 'WA',
+        billingPostalCode: '98101'
+      });
+
+    expect(response.status).toBe(400);
+    expect(crmService.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed CRM contact-link payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/crm/contact-links/link-1')
+      .send({
+        endDate: '04/26/2026'
+      });
+
+    expect(response.status).toBe(400);
+    expect(crmService.updateContactLink).not.toHaveBeenCalled();
   });
 });

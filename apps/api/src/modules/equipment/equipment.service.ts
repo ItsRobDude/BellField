@@ -25,7 +25,7 @@ export class EquipmentService {
   async getWorkspace(sessionToken: string, includeInactive: boolean) {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'equipment:view', ['office-web']);
     const [locations, equipment] = await Promise.all([
-      this.referenceDataService.listLocations(),
+      this.referenceDataService.listLocations(false),
       this.equipmentDataService.listEquipment(includeInactive)
     ]);
 
@@ -103,16 +103,14 @@ export class EquipmentService {
   }
 
   private async toLocationSummary(locationId: string): Promise<EquipmentLocationSummaryDto> {
-    const location = await this.referenceDataService.getLocationById(locationId);
-    const customer = await this.referenceDataService.getCustomerById(location.customerId);
-    const contacts = await Promise.all(location.contactIds.map((contactId) => this.referenceDataService.getContactById(contactId)));
-    const contactNames = contacts.map((contact) => contact.displayName);
+    const location = await this.referenceDataService.getLocationDetail(locationId);
+    const contactNames = location.contacts.map((contact) => contact.displayName);
 
     return {
       id: location.id,
       name: location.name,
-      customerId: customer.id,
-      customerName: customer.name,
+      customerId: location.customerId,
+      customerName: location.customerName,
       addressLine1: location.addressLine1,
       city: location.city,
       state: location.state,

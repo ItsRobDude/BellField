@@ -26,6 +26,7 @@ import {
   type RoleTemplate
 } from '@/lib/identity-api';
 import { EmployeeManagementPanel } from './employee-management-panel';
+import { CrmPanel } from './crm-panel';
 import { EquipmentPanel } from './equipment-panel';
 import { JobsAppointmentsPanel, type AppointmentDraft } from './jobs-appointments-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -377,6 +378,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       {canViewEmployees(employee) ? (
         <EmployeeManagementPanel employees={employees} roles={roles} onEmployeeUpdate={handleEmployeeUpdate} />
       ) : null}
+
+      <CrmPanel apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} onErrorMessage={setErrorMessage} />
 
       <EquipmentPanel
         locations={jobsWorkspace.locations}
