@@ -4,14 +4,17 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   addOfficeAppointment,
   createOfficeEquipment,
+  deleteOfficeEquipment,
+  getOfficeEquipmentDetail,
   createOfficeJob,
   getOfficeEquipmentWorkspace,
   getOfficeJobsWorkspace,
+  linkOfficeEquipmentReplacement,
   updateOfficeAppointmentStatus,
   updateOfficeEquipment,
   updateOfficeJobStatus,
   type AppointmentStatus,
-  type EquipmentStatus,
+  type EquipmentDetail,
   type EquipmentSummary,
   type JobStatus,
   type JobsWorkspaceResponse
@@ -27,7 +30,7 @@ import {
 } from '@/lib/identity-api';
 import { EmployeeManagementPanel } from './employee-management-panel';
 import { CrmPanel } from './crm-panel';
-import { EquipmentPanel } from './equipment-panel';
+import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
 import { JobsAppointmentsPanel, type AppointmentDraft } from './jobs-appointments-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -83,20 +86,13 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
   const [jobsWorkspace, setJobsWorkspace] = useState<JobsWorkspaceResponse | null>(null);
   const [equipment, setEquipment] = useState<EquipmentSummary[]>([]);
+  const [suggestedEquipmentTypes, setSuggestedEquipmentTypes] = useState<string[]>([]);
+  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | undefined>();
+  const [selectedEquipmentDetail, setSelectedEquipmentDetail] = useState<EquipmentDetail | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingJobStatusChange, setPendingJobStatusChange] = useState<PendingJobStatusChange | null>(null);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
-  const [equipmentType, setEquipmentType] = useState('Condenser');
-  const [equipmentBrand, setEquipmentBrand] = useState('Carrier');
-  const [equipmentModel, setEquipmentModel] = useState('');
-  const [equipmentSerial, setEquipmentSerial] = useState('');
-  const [equipmentFilterSizes, setEquipmentFilterSizes] = useState('16x25x1');
-  const [equipmentLocationDescription, setEquipmentLocationDescription] = useState('');
-  const [equipmentInstallDate, setEquipmentInstallDate] = useState('');
-  const [equipmentNotes, setEquipmentNotes] = useState('');
-  const [equipmentLocationId, setEquipmentLocationId] = useState('');
-  const [equipmentStatus, setEquipmentStatus] = useState<EquipmentStatus>('active');
   const [jobLocationId, setJobLocationId] = useState('');
   const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
   const [jobType, setJobType] = useState('Service');
@@ -117,6 +113,15 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     void refreshWorkspace();
   }, [showInactiveEquipment]);
 
+  const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
+  const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
+
+  async function loadEquipmentDetail(equipmentId: string) {
+    const equipmentDetail = await getOfficeEquipmentDetail({ equipmentId, sessionToken, apiBaseUrl });
+    setSelectedEquipmentId(equipmentId);
+    setSelectedEquipmentDetail(equipmentDetail);
+  }
+
   async function refreshWorkspace() {
     setIsRefreshing(true);
     setErrorMessage(null);
@@ -135,14 +140,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       setRoles(roleResponse.roles);
       setJobsWorkspace(nextJobsWorkspace);
       setEquipment(nextEquipmentWorkspace.equipment);
+      setSuggestedEquipmentTypes(nextEquipmentWorkspace.suggestedEquipmentTypes);
 
       if (!jobLocationId && nextJobsWorkspace.locations[0]) {
         setJobLocationId(nextJobsWorkspace.locations[0].id);
         setJobBillToCustomerId(nextJobsWorkspace.locations[0].customerId);
-      }
-
-      if (!equipmentLocationId && nextJobsWorkspace.locations[0]) {
-        setEquipmentLocationId(nextJobsWorkspace.locations[0].id);
       }
 
       if (canViewEmployees(currentSession.employee)) {
@@ -150,6 +152,18 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         setEmployees(employeeResponse.employees);
       } else {
         setEmployees([]);
+      }
+
+      const nextSelectedEquipmentId =
+        selectedEquipmentId && nextEquipmentWorkspace.equipment.some((record) => record.id === selectedEquipmentId)
+          ? selectedEquipmentId
+          : nextEquipmentWorkspace.equipment[0]?.id;
+
+      if (nextSelectedEquipmentId) {
+        await loadEquipmentDetail(nextSelectedEquipmentId);
+      } else {
+        setSelectedEquipmentId(undefined);
+        setSelectedEquipmentDetail(null);
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the office workspace.');
@@ -167,61 +181,164 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
-  async function handleCreateEquipment() {
+  async function handleCreateEquipment(draft: EquipmentCreateDraft) {
     try {
       await createOfficeEquipment({
         sessionToken,
         apiBaseUrl,
-        locationId: equipmentLocationId || undefined,
-        equipmentType,
-        brand: equipmentBrand,
-        model: equipmentModel,
-        serialNumber: equipmentSerial,
-        filterSizes: equipmentFilterSizes.split(','),
-        equipmentLocationDescription: equipmentLocationDescription || undefined,
-        installDate: equipmentInstallDate || undefined,
-        notes: equipmentNotes || undefined,
-        status: equipmentStatus
+        locationId: draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
+        inventoryLocationLabel: draft.placementKind === 'inventory' ? draft.inventoryLocationLabel || undefined : undefined,
+        equipmentType: draft.equipmentType,
+        brand: draft.brand,
+        model: draft.model,
+        serialNumber: draft.serialNumber,
+        filterSizes: splitFilterSizes(draft.filterSizes),
+        equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
+        installDate: draft.installDate || undefined,
+        warrantyStartDate: draft.warrantyStartDate || undefined,
+        warrantyEndDate: draft.warrantyEndDate || undefined,
+        warrantyProviderNote: draft.warrantyProviderNote || undefined,
+        systemGroupName: draft.systemGroupName || undefined,
+        notes: draft.notes || undefined,
+        status: draft.status
       });
-      setEquipmentType('Condenser');
-      setEquipmentBrand('Carrier');
-      setEquipmentModel('');
-      setEquipmentSerial('');
-      setEquipmentFilterSizes('16x25x1');
-      setEquipmentLocationDescription('');
-      setEquipmentInstallDate('');
-      setEquipmentNotes('');
       await refreshWorkspace();
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Serial number is strongly recommended') &&
+        window.confirm('Serial number is blank. Create this equipment record anyway?')
+      ) {
+        await createOfficeEquipment({
+          sessionToken,
+          apiBaseUrl,
+          locationId: draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
+          inventoryLocationLabel: draft.placementKind === 'inventory' ? draft.inventoryLocationLabel || undefined : undefined,
+          equipmentType: draft.equipmentType,
+          brand: draft.brand,
+          model: draft.model,
+          serialNumber: draft.serialNumber,
+          filterSizes: splitFilterSizes(draft.filterSizes),
+          equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
+          installDate: draft.installDate || undefined,
+          warrantyStartDate: draft.warrantyStartDate || undefined,
+          warrantyEndDate: draft.warrantyEndDate || undefined,
+          warrantyProviderNote: draft.warrantyProviderNote || undefined,
+          systemGroupName: draft.systemGroupName || undefined,
+          notes: draft.notes || undefined,
+          status: draft.status,
+          confirmMissingSerial: true
+        });
+        await refreshWorkspace();
+        return;
+      }
+
       setErrorMessage(error instanceof Error ? error.message : 'Unable to add equipment.');
     }
   }
 
-  async function handleEquipmentUpdate(recordId: string, draft: {
-    model: string;
-    serialNumber: string;
-    filterSizes: string[];
-    equipmentLocationDescription?: string;
-    installDate?: string;
-    status: EquipmentStatus;
-    notes: string;
-  }) {
+  async function handleEquipmentUpdate(recordId: string, draft: EquipmentEditDraft) {
     try {
       await updateOfficeEquipment({
         equipmentId: recordId,
         sessionToken,
         apiBaseUrl,
+        locationId: draft.locationId,
+        inventoryLocationLabel: draft.inventoryLocationLabel,
+        equipmentType: draft.equipmentType,
+        brand: draft.brand,
         model: draft.model,
         serialNumber: draft.serialNumber,
-        filterSizes: draft.filterSizes,
+        filterSizes: splitFilterSizes(draft.filterSizes),
         equipmentLocationDescription: draft.equipmentLocationDescription,
         installDate: draft.installDate,
+        warrantyStartDate: draft.warrantyStartDate || undefined,
+        warrantyEndDate: draft.warrantyEndDate || undefined,
+        warrantyProviderNote: draft.warrantyProviderNote || undefined,
+        systemGroupName: draft.systemGroupName || undefined,
+        clearSystemGroup: draft.systemGroupName.trim().length === 0,
         status: draft.status,
         notes: draft.notes
       });
+      await loadEquipmentDetail(recordId);
       await refreshWorkspace();
     } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Serial number is strongly recommended') &&
+        window.confirm('Serial number is blank. Save this equipment change anyway?')
+      ) {
+        await updateOfficeEquipment({
+          equipmentId: recordId,
+          sessionToken,
+          apiBaseUrl,
+          locationId: draft.locationId,
+          inventoryLocationLabel: draft.inventoryLocationLabel,
+          equipmentType: draft.equipmentType,
+          brand: draft.brand,
+          model: draft.model,
+          serialNumber: draft.serialNumber,
+          filterSizes: splitFilterSizes(draft.filterSizes),
+          equipmentLocationDescription: draft.equipmentLocationDescription,
+          installDate: draft.installDate,
+          warrantyStartDate: draft.warrantyStartDate || undefined,
+          warrantyEndDate: draft.warrantyEndDate || undefined,
+          warrantyProviderNote: draft.warrantyProviderNote || undefined,
+          systemGroupName: draft.systemGroupName || undefined,
+          clearSystemGroup: draft.systemGroupName.trim().length === 0,
+          status: draft.status,
+          notes: draft.notes,
+          confirmMissingSerial: true
+        });
+        await loadEquipmentDetail(recordId);
+        await refreshWorkspace();
+        return;
+      }
+
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update equipment.');
+    }
+  }
+
+  async function handleEquipmentSelect(equipmentId: string) {
+    try {
+      await loadEquipmentDetail(equipmentId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load equipment detail.');
+    }
+  }
+
+  async function handleLinkReplacement(equipmentId: string, replacementEquipmentId: string) {
+    try {
+      await linkOfficeEquipmentReplacement({
+        equipmentId,
+        replacementEquipmentId,
+        sessionToken,
+        apiBaseUrl
+      });
+      await loadEquipmentDetail(equipmentId);
+      await refreshWorkspace();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to link replacement equipment.');
+    }
+  }
+
+  async function handleDeleteEquipment(equipmentId: string) {
+    if (!window.confirm('Delete this equipment record permanently?')) {
+      return;
+    }
+
+    try {
+      await deleteOfficeEquipment({
+        equipmentId,
+        sessionToken,
+        apiBaseUrl,
+        confirmDelete: true
+      });
+      setSelectedEquipmentId(undefined);
+      setSelectedEquipmentDetail(null);
+      await refreshWorkspace();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete equipment.');
     }
   }
 
@@ -384,30 +501,18 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       <EquipmentPanel
         locations={jobsWorkspace.locations}
         equipment={equipment}
-        equipmentLocationId={equipmentLocationId}
-        equipmentType={equipmentType}
-        equipmentBrand={equipmentBrand}
-        equipmentModel={equipmentModel}
-        equipmentSerial={equipmentSerial}
-        equipmentFilterSizes={equipmentFilterSizes}
-        equipmentLocationDescription={equipmentLocationDescription}
-        equipmentInstallDate={equipmentInstallDate}
-        equipmentNotes={equipmentNotes}
-        equipmentStatus={equipmentStatus}
+        suggestedEquipmentTypes={suggestedEquipmentTypes}
+        selectedEquipmentId={selectedEquipmentId}
+        selectedEquipmentDetail={selectedEquipmentDetail}
         showInactiveEquipment={showInactiveEquipment}
-        onEquipmentLocationChange={setEquipmentLocationId}
-        onEquipmentTypeChange={setEquipmentType}
-        onEquipmentBrandChange={setEquipmentBrand}
-        onEquipmentModelChange={setEquipmentModel}
-        onEquipmentSerialChange={setEquipmentSerial}
-        onEquipmentFilterSizesChange={setEquipmentFilterSizes}
-        onEquipmentLocationDescriptionChange={setEquipmentLocationDescription}
-        onEquipmentInstallDateChange={setEquipmentInstallDate}
-        onEquipmentNotesChange={setEquipmentNotes}
-        onEquipmentStatusChange={setEquipmentStatus}
+        canReplaceRemove={canReplaceRemoveEquipment}
+        canDelete={canDeleteEquipment}
+        onSelectEquipment={handleEquipmentSelect}
         onShowInactiveChange={setShowInactiveEquipment}
         onCreateEquipment={handleCreateEquipment}
         onRecordUpdate={handleEquipmentUpdate}
+        onLinkReplacement={handleLinkReplacement}
+        onDeleteEquipment={handleDeleteEquipment}
       />
 
       <JobsAppointmentsPanel
@@ -444,4 +549,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       />
     </main>
   );
+}
+
+function splitFilterSizes(filterSizes: string): string[] {
+  return filterSizes
+    .split(',')
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
 }

@@ -70,7 +70,35 @@ export type LocationRecord = {
 
 export type EquipmentStatus = ContractEquipmentStatus;
 
-export const equipmentStatuses = ['active', 'inactive', 'pendingInstall'] as const satisfies readonly EquipmentStatus[];
+export const equipmentStatuses = ['active', 'inactive', 'pendingInstall', 'removed'] as const satisfies readonly EquipmentStatus[];
+
+export type EquipmentGroupRecord = {
+  id: string;
+  name: string;
+  locationId?: string;
+  inventoryLocationLabel?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type EquipmentHistoryKind =
+  | 'created'
+  | 'edited'
+  | 'statusChanged'
+  | 'placementChanged'
+  | 'grouped'
+  | 'ungrouped'
+  | 'markedReplaced'
+  | 'replacementLinkChanged';
+
+export type EquipmentHistoryRecord = {
+  id: string;
+  equipmentId: string;
+  occurredAt: string;
+  actorName: string;
+  kind: EquipmentHistoryKind;
+  message: string;
+};
 
 export type EquipmentRecord = {
   id: string;
@@ -83,6 +111,12 @@ export type EquipmentRecord = {
   filterSizes: string[];
   equipmentLocationDescription?: string;
   installDate?: string;
+  warrantyStartDate?: string;
+  warrantyEndDate?: string;
+  warrantyProviderNote?: string;
+  systemGroupId?: string;
+  replacesEquipmentId?: string;
+  replacedByEquipmentId?: string;
   status: EquipmentStatus;
   notes: string;
   createdAt: string;
@@ -99,11 +133,17 @@ export type CreateEquipmentInput = {
   filterSizes: string[];
   equipmentLocationDescription?: string;
   installDate?: string;
+  warrantyStartDate?: string;
+  warrantyEndDate?: string;
+  warrantyProviderNote?: string;
+  systemGroupName?: string;
   status: EquipmentStatus;
   notes?: string;
 };
 
-export type UpdateEquipmentInput = Partial<CreateEquipmentInput>;
+export type UpdateEquipmentInput = Partial<CreateEquipmentInput> & {
+  clearSystemGroup?: boolean;
+};
 
 export type JobStatus = ContractJobStatus;
 

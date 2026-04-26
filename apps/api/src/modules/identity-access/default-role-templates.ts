@@ -20,6 +20,7 @@ const officeCore = [
 
 const adminCore = [
   ...officeCore,
+  ...permissionKeys('equipment', ['configure']),
   ...permissionKeys('invoices', ['view', 'create', 'edit', 'post']),
   ...permissionKeys('payments', ['view', 'create', 'edit']),
   ...permissionKeys('purchasing', ['view', 'create', 'edit']),
@@ -68,6 +69,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
     description: 'Broad customer, scheduling, and intake access.',
     permissions: uniquePermissions([
       ...officeCore,
+      ...permissionKeys('equipment', ['configure']),
       ...permissionKeys('invoices', ['view']),
       ...permissionKeys('payments', ['view'])
     ])
@@ -78,6 +80,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
     description: 'Scheduling and dispatch focused office access.',
     permissions: uniquePermissions([
       ...officeCore,
+      ...permissionKeys('equipment', ['configure']),
       ...permissionKeys('invoices', ['view']),
       ...permissionKeys('reports', ['view'])
     ])
@@ -101,7 +104,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...permissionKeys('customers', ['view']),
       ...permissionKeys('locations', ['view']),
       ...permissionKeys('contacts', ['view']),
-      ...permissionKeys('equipment', ['create', 'edit', 'delete']),
+      ...permissionKeys('equipment', ['create', 'edit']),
       ...permissionKeys('appointmentsDispatch', ['view', 'edit']),
       ...permissionKeys('estimates', ['view', 'create', 'edit']),
       ...permissionKeys('invoices', ['view', 'edit'])

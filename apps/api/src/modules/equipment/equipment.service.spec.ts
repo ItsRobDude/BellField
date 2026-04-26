@@ -1,4 +1,31 @@
+import { ForbiddenException } from '@nestjs/common';
 import { EquipmentService } from './equipment.service';
+
+function createEquipmentRecord(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'equipment-1',
+    locationId: 'location-2',
+    inventoryLocationLabel: undefined,
+    equipmentType: 'Gas Furnace',
+    brand: 'Carrier',
+    model: 'ABC',
+    serialNumber: '123',
+    filterSizes: [],
+    equipmentLocationDescription: undefined,
+    installDate: '2020-01-01',
+    warrantyStartDate: undefined,
+    warrantyEndDate: undefined,
+    warrantyProviderNote: undefined,
+    systemGroupId: undefined,
+    replacesEquipmentId: undefined,
+    replacedByEquipmentId: undefined,
+    status: 'active',
+    notes: '',
+    createdAt: '2026-04-14T09:00:00.000Z',
+    updatedAt: '2026-04-14T10:00:00.000Z',
+    ...overrides
+  };
+}
 
 function createService() {
   const referenceDataService = {
@@ -10,18 +37,41 @@ function createService() {
       city: 'Blaine',
       state: 'WA',
       postalCode: '98230',
-      contactIds: []
+      contacts: []
     }),
     getCustomerById: jest.fn().mockResolvedValue({
       id: 'customer-1',
       name: 'Acme'
     }),
+    getLocationDetail: jest.fn().mockResolvedValue({
+      id: 'location-2',
+      name: 'Main Shop',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      addressLine1: '123 Main',
+      city: 'Blaine',
+      state: 'WA',
+      postalCode: '98230',
+      contacts: [],
+      alternateBillToCustomerIds: []
+    }),
     listLocations: jest.fn().mockResolvedValue([])
   };
   const equipmentDataService = {
-    getEquipmentById: jest.fn(),
-    updateEquipment: jest.fn(),
-    listEquipment: jest.fn().mockResolvedValue([])
+    getEquipmentById: jest.fn().mockResolvedValue(createEquipmentRecord()),
+    updateEquipment: jest.fn().mockResolvedValue(createEquipmentRecord({ status: 'inactive', updatedAt: '2026-04-14T12:00:00.000Z' })),
+    listEquipment: jest.fn().mockResolvedValue([]),
+    getEquipmentHistory: jest.fn().mockResolvedValue([]),
+    getEquipmentGroupById: jest.fn().mockResolvedValue(null),
+    listEquipmentByIds: jest.fn().mockResolvedValue([]),
+    linkReplacement: jest.fn().mockResolvedValue({
+      oldEquipment: createEquipmentRecord({ status: 'removed', replacedByEquipmentId: 'equipment-2' }),
+      replacementEquipment: createEquipmentRecord({
+        id: 'equipment-2',
+        model: 'XYZ',
+        replacesEquipmentId: 'equipment-1'
+      })
+    })
   };
   const jobsDataService = {
     listAssignedJobsForEmployee: jest.fn().mockResolvedValue([])
@@ -51,19 +101,6 @@ describe('EquipmentService', () => {
       effectivePermissions: ['equipment:edit'],
       sessionSurface: 'field-mobile'
     });
-    equipmentDataService.getEquipmentById.mockResolvedValue({
-      id: 'equipment-1',
-      locationId: 'location-2',
-      equipmentType: 'furnace',
-      brand: 'Carrier',
-      model: 'ABC',
-      serialNumber: '123',
-      filterSizes: [],
-      status: 'active',
-      notes: '',
-      createdAt: '2026-04-14T09:00:00.000Z',
-      updatedAt: '2026-04-14T10:00:00.000Z'
-    });
 
     const response = await service.updateEquipment('session-token', 'equipment-1', {
       status: 'inactive',
@@ -86,32 +123,6 @@ describe('EquipmentService', () => {
       effectivePermissions: ['equipment:edit'],
       sessionSurface: 'field-mobile'
     });
-    equipmentDataService.getEquipmentById.mockResolvedValue({
-      id: 'equipment-1',
-      locationId: 'location-2',
-      equipmentType: 'furnace',
-      brand: 'Carrier',
-      model: 'ABC',
-      serialNumber: '123',
-      filterSizes: [],
-      status: 'active',
-      notes: '',
-      createdAt: '2026-04-14T09:00:00.000Z',
-      updatedAt: '2026-04-14T10:00:00.000Z'
-    });
-    equipmentDataService.updateEquipment.mockResolvedValue({
-      id: 'equipment-1',
-      locationId: 'location-2',
-      equipmentType: 'furnace',
-      brand: 'Carrier',
-      model: 'ABC',
-      serialNumber: '123',
-      filterSizes: [],
-      status: 'inactive',
-      notes: '',
-      createdAt: '2026-04-14T09:00:00.000Z',
-      updatedAt: '2026-04-14T12:00:00.000Z'
-    });
 
     const response = await service.updateEquipment('session-token', 'equipment-1', {
       status: 'inactive',
@@ -124,5 +135,22 @@ describe('EquipmentService', () => {
       status: 'applied',
       message: 'Equipment update synced after assignment changed while the device was offline.'
     });
+    expect(equipmentDataService.updateEquipment).toHaveBeenCalled();
+  });
+
+  it('requires equipment configure permission before linking a replacement', async () => {
+    const { service, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['equipment:edit'],
+      sessionSurface: 'office-web'
+    });
+
+    await expect(
+      service.linkEquipmentReplacement('session-token', 'equipment-1', {
+        replacementEquipmentId: 'equipment-2'
+      })
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

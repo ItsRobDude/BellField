@@ -3,6 +3,8 @@ import type {
   ContactLinkRecord,
   ContactRecord,
   CustomerAccountRecord,
+  EquipmentGroupRecord,
+  EquipmentHistoryRecord,
   EquipmentRecord,
   JobRecord,
   LocationRecord,
@@ -203,6 +205,10 @@ export const seededEquipment: EquipmentRecord[] = [
     filterSizes: ['16x25x1'],
     equipmentLocationDescription: 'Right side yard pad',
     installDate: '2020-08-14',
+    warrantyStartDate: '2020-08-14',
+    warrantyEndDate: '2030-08-14',
+    warrantyProviderNote: 'Carrier 10-year registered parts warranty',
+    systemGroupId: 'equipment-group-parkers-main-system',
     status: 'active',
     notes: 'Outdoor unit with visible hail wear on top panel.',
     createdAt: baseTimestamp,
@@ -218,6 +224,10 @@ export const seededEquipment: EquipmentRecord[] = [
     filterSizes: ['16x25x1', '20x20x1'],
     equipmentLocationDescription: 'Garage closet',
     installDate: '2020-08-14',
+    warrantyStartDate: '2020-08-14',
+    warrantyEndDate: '2030-08-14',
+    warrantyProviderNote: 'Carrier 10-year registered parts warranty',
+    systemGroupId: 'equipment-group-parkers-main-system',
     status: 'active',
     notes: 'Blower wheel was cleaned during last maintenance visit.',
     createdAt: baseTimestamp,
@@ -233,6 +243,8 @@ export const seededEquipment: EquipmentRecord[] = [
     filterSizes: ['20x25x2'],
     equipmentLocationDescription: 'Roof section B',
     installDate: '2018-03-09',
+    warrantyProviderNote: 'Warranty status unknown',
+    systemGroupId: 'equipment-group-sunrise-roof-b',
     status: 'active',
     notes: 'Economizer damper occasionally sticks during cold mornings.',
     createdAt: baseTimestamp,
@@ -248,10 +260,71 @@ export const seededEquipment: EquipmentRecord[] = [
     filterSizes: ['14x20x1'],
     equipmentLocationDescription: 'Hall closet',
     installDate: '2017-06-11',
+    warrantyProviderNote: 'Pending install replacement air handler',
+    systemGroupId: 'equipment-group-redwood-hall-system',
     status: 'pendingInstall',
     notes: 'Replacement air handler received before scheduled install visit.',
     createdAt: baseTimestamp,
     updatedAt: baseTimestamp
+  }
+];
+
+export const seededEquipmentGroups: EquipmentGroupRecord[] = [
+  {
+    id: 'equipment-group-parkers-main-system',
+    name: 'Main House System',
+    locationId: 'location-parkers-home',
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp
+  },
+  {
+    id: 'equipment-group-sunrise-roof-b',
+    name: 'Roof Section B',
+    locationId: 'location-sunrise-dental',
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp
+  },
+  {
+    id: 'equipment-group-redwood-hall-system',
+    name: 'Hall Closet System',
+    locationId: 'location-redwood-unit-12',
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp
+  }
+];
+
+export const seededEquipmentHistory: EquipmentHistoryRecord[] = [
+  {
+    id: 'equipment-condensing-unit-1--history-created',
+    equipmentId: 'equipment-condensing-unit-1',
+    occurredAt: baseTimestamp,
+    actorName: 'BellField bootstrap',
+    kind: 'created',
+    message: 'Equipment record created.'
+  },
+  {
+    id: 'equipment-furnace-1--history-created',
+    equipmentId: 'equipment-furnace-1',
+    occurredAt: baseTimestamp,
+    actorName: 'BellField bootstrap',
+    kind: 'created',
+    message: 'Equipment record created.'
+  },
+  {
+    id: 'equipment-package-unit-1--history-created',
+    equipmentId: 'equipment-package-unit-1',
+    occurredAt: baseTimestamp,
+    actorName: 'BellField bootstrap',
+    kind: 'created',
+    message: 'Equipment record created.'
+  },
+  {
+    id: 'equipment-air-handler-1--history-created',
+    equipmentId: 'equipment-air-handler-1',
+    occurredAt: baseTimestamp,
+    actorName: 'BellField bootstrap',
+    kind: 'created',
+    message: 'Equipment record created.'
   }
 ];
 

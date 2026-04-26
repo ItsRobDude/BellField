@@ -6,10 +6,12 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   row: { alignItems: 'center', display: 'flex', gap: '0.75rem', justifyContent: 'space-between', flexWrap: 'wrap' },
   grid: { display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(14rem, 1fr))' },
   splitGrid: { display: 'grid', gap: '1rem', gridTemplateColumns: 'repeat(auto-fit, minmax(20rem, 1fr))' },
+  wideSplitGrid: { display: 'grid', gap: '1rem', gridTemplateColumns: 'minmax(0, 2fr) minmax(20rem, 1fr)' },
   list: { display: 'grid', gap: '1rem' },
   formRow: { display: 'grid', gap: '0.75rem', gridTemplateColumns: 'repeat(auto-fit, minmax(12rem, 1fr))', margin: '1rem 0' },
   panel: { background: '#ffffff', border: '1px solid #eadfc9', borderRadius: 16, display: 'grid', gap: '0.75rem', padding: '1rem' },
   subpanel: { background: '#faf7ef', borderRadius: 12, display: 'grid', gap: '0.5rem', padding: '0.75rem' },
+  drawerPanel: { background: '#fffdf7', border: '1px solid #e5dcc8', borderRadius: 16, display: 'grid', gap: '0.85rem', minHeight: '18rem', padding: '1rem' },
   input: { background: '#ffffff', border: '1px solid #d9c8ad', borderRadius: 12, fontSize: '0.95rem', padding: '0.75rem 0.9rem' },
   textarea: {
     background: '#ffffff',
@@ -35,5 +37,18 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   muted: { color: '#52606d', margin: 0 },
   tinyMuted: { color: '#7b8794', fontSize: '0.85rem', margin: 0 },
   error: { color: '#b42318', margin: '0.75rem 0 0' },
-  timeline: { margin: 0, paddingInlineStart: '1.1rem' }
+  timeline: { margin: 0, paddingInlineStart: '1.1rem' },
+  tableWrap: { overflowX: 'auto' },
+  table: { borderCollapse: 'collapse', width: '100%' },
+  tableHeadCell: {
+    borderBottom: '1px solid #e5dcc8',
+    color: '#52606d',
+    fontSize: '0.85rem',
+    fontWeight: 700,
+    padding: '0.75rem 0.5rem',
+    textAlign: 'left',
+    textTransform: 'uppercase'
+  },
+  tableCell: { borderBottom: '1px solid #f0e7d7', padding: '0.75rem 0.5rem', verticalAlign: 'top' },
+  tableRowButton: { background: 'transparent', border: 'none', color: 'inherit', cursor: 'pointer', padding: 0, textAlign: 'left', width: '100%' }
 };

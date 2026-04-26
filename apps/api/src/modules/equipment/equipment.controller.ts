@@ -1,5 +1,9 @@
-import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
-import { CreateEquipmentRequestBodyDto, UpdateEquipmentFieldRequestBodyDto } from './equipment.dto';
+import { Body, Controller, Delete, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
+import {
+  CreateEquipmentRequestBodyDto,
+  LinkEquipmentReplacementRequestBodyDto,
+  UpdateEquipmentFieldRequestBodyDto
+} from './equipment.dto';
 import { EquipmentService } from './equipment.service';
 
 @Controller('operations/equipment')
@@ -22,6 +26,11 @@ export class EquipmentController {
     return this.equipmentService.createEquipment(this.getBearerToken(authorizationHeader), request);
   }
 
+  @Get(':equipmentId')
+  getEquipmentDetail(@Headers('authorization') authorizationHeader: string | undefined, @Param('equipmentId') equipmentId: string) {
+    return this.equipmentService.getEquipmentDetail(this.getBearerToken(authorizationHeader), equipmentId);
+  }
+
   @Patch(':equipmentId')
   updateEquipment(
     @Headers('authorization') authorizationHeader: string | undefined,
@@ -29,6 +38,28 @@ export class EquipmentController {
     @Body() request: UpdateEquipmentFieldRequestBodyDto
   ) {
     return this.equipmentService.updateEquipment(this.getBearerToken(authorizationHeader), equipmentId, request);
+  }
+
+  @Post(':equipmentId/replacement-link')
+  linkEquipmentReplacement(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('equipmentId') equipmentId: string,
+    @Body() request: LinkEquipmentReplacementRequestBodyDto
+  ) {
+    return this.equipmentService.linkEquipmentReplacement(this.getBearerToken(authorizationHeader), equipmentId, request);
+  }
+
+  @Delete(':equipmentId')
+  deleteEquipment(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('equipmentId') equipmentId: string,
+    @Query('confirm') confirmDelete?: string
+  ) {
+    return this.equipmentService.deleteEquipment(
+      this.getBearerToken(authorizationHeader),
+      equipmentId,
+      confirmDelete === 'true'
+    );
   }
 
   private getBearerToken(authorizationHeader: string | undefined): string {

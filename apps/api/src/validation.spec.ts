@@ -28,6 +28,8 @@ describe('Runtime validation', () => {
     addJobNote: jest.fn()
   };
   const equipmentService = {
+    createEquipment: jest.fn(),
+    linkEquipmentReplacement: jest.fn(),
     updateEquipment: jest.fn()
   };
   const crmService = {
@@ -129,6 +131,33 @@ describe('Runtime validation', () => {
 
     expect(response.status).toBe(400);
     expect(equipmentService.updateEquipment).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed equipment create payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/equipment')
+      .send({
+        equipmentType: '',
+        brand: 'Carrier',
+        model: 'ABC',
+        serialNumber: 123,
+        filterSizes: '16x25x1',
+        status: 'active'
+      });
+
+    expect(response.status).toBe(400);
+    expect(equipmentService.createEquipment).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed equipment replacement-link payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/equipment/equipment-1/replacement-link')
+      .send({
+        replacementEquipmentId: ''
+      });
+
+    expect(response.status).toBe(400);
+    expect(equipmentService.linkEquipmentReplacement).not.toHaveBeenCalled();
   });
 
   it('rejects malformed CRM customer payloads with 400', async () => {

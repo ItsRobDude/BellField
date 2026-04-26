@@ -1,6 +1,10 @@
-import { IsArray, IsIn, IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsIn, IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 import { equipmentStatuses, fieldSyncSources, type EquipmentStatus, type FieldSyncSource } from '../company-data/company-data.types';
-import type { CreateEquipmentRequestDto, UpdateEquipmentFieldRequestDto } from './equipment.types';
+import type {
+  CreateEquipmentRequestDto,
+  LinkEquipmentReplacementRequestDto,
+  UpdateEquipmentFieldRequestDto
+} from './equipment.types';
 
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -31,7 +35,6 @@ export class CreateEquipmentRequestBodyDto implements CreateEquipmentRequestDto 
   model!: string;
 
   @IsString()
-  @MinLength(1)
   @MaxLength(120)
   serialNumber!: string;
 
@@ -52,9 +55,31 @@ export class CreateEquipmentRequestBodyDto implements CreateEquipmentRequestDto 
   status!: EquipmentStatus;
 
   @IsOptional()
+  @Matches(isoDatePattern, { message: 'warrantyStartDate must be in YYYY-MM-DD format.' })
+  warrantyStartDate?: string;
+
+  @IsOptional()
+  @Matches(isoDatePattern, { message: 'warrantyEndDate must be in YYYY-MM-DD format.' })
+  warrantyEndDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  warrantyProviderNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  systemGroupName?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(4000)
   notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmMissingSerial?: boolean;
 }
 
 export class UpdateEquipmentFieldRequestBodyDto implements UpdateEquipmentFieldRequestDto {
@@ -88,7 +113,6 @@ export class UpdateEquipmentFieldRequestBodyDto implements UpdateEquipmentFieldR
 
   @IsOptional()
   @IsString()
-  @MinLength(1)
   @MaxLength(120)
   serialNumber?: string;
 
@@ -111,9 +135,35 @@ export class UpdateEquipmentFieldRequestBodyDto implements UpdateEquipmentFieldR
   status?: EquipmentStatus;
 
   @IsOptional()
+  @Matches(isoDatePattern, { message: 'warrantyStartDate must be in YYYY-MM-DD format.' })
+  warrantyStartDate?: string;
+
+  @IsOptional()
+  @Matches(isoDatePattern, { message: 'warrantyEndDate must be in YYYY-MM-DD format.' })
+  warrantyEndDate?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(240)
+  warrantyProviderNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  systemGroupName?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  clearSystemGroup?: boolean;
+
+  @IsOptional()
   @IsString()
   @MaxLength(4000)
   notes?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmMissingSerial?: boolean;
 
   @IsOptional()
   @IsISO8601()
@@ -126,4 +176,10 @@ export class UpdateEquipmentFieldRequestBodyDto implements UpdateEquipmentFieldR
   @IsOptional()
   @IsIn(fieldSyncSources)
   syncSource?: FieldSyncSource;
+}
+
+export class LinkEquipmentReplacementRequestBodyDto implements LinkEquipmentReplacementRequestDto {
+  @IsString()
+  @MinLength(1)
+  replacementEquipmentId!: string;
 }

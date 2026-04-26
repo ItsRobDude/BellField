@@ -16,12 +16,19 @@ import type {
   CustomerDetail,
   CustomerMutationResponse,
   DuplicateCandidate,
+  EquipmentDeleteResponse,
+  EquipmentDetail,
+  EquipmentHistoryEntry,
+  EquipmentGroupSummary,
+  EquipmentLinkedSummary,
   EquipmentStatus,
+  EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
   JobStatus,
   JobsWorkspaceResponse,
   JobSummary,
+  LinkEquipmentReplacementRequest,
   LinkContactRequest,
   LocationDetail,
   LocationMutationResponse,
@@ -53,7 +60,13 @@ export type {
   CustomerDetail,
   CustomerMutationResponse,
   DuplicateCandidate,
+  EquipmentDeleteResponse,
+  EquipmentDetail,
+  EquipmentHistoryEntry,
+  EquipmentGroupSummary,
+  EquipmentLinkedSummary,
   EquipmentStatus,
+  EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
   JobStatus,
@@ -103,6 +116,17 @@ export async function getOfficeEquipmentWorkspace(input: {
   });
 }
 
+export async function getOfficeEquipmentDetail(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  equipmentId: string;
+}): Promise<EquipmentDetail> {
+  return requestJson<EquipmentDetail>(`/operations/equipment/${input.equipmentId}`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
 export async function createOfficeEquipment(input: {
   sessionToken: string;
   apiBaseUrl?: string;
@@ -115,12 +139,17 @@ export async function createOfficeEquipment(input: {
   filterSizes: string[];
   equipmentLocationDescription?: string;
   installDate?: string;
+  warrantyStartDate?: string;
+  warrantyEndDate?: string;
+  warrantyProviderNote?: string;
+  systemGroupName?: string;
   status: EquipmentStatus;
   notes?: string;
-}): Promise<EquipmentSummary> {
+  confirmMissingSerial?: boolean;
+}): Promise<EquipmentMutationResponse> {
   const { sessionToken, apiBaseUrl, ...payload } = input;
 
-  return requestJson<EquipmentSummary>('/operations/equipment', {
+  return requestJson<EquipmentMutationResponse>('/operations/equipment', {
     apiBaseUrl,
     sessionToken,
     method: 'POST',
@@ -132,28 +161,77 @@ export async function updateOfficeEquipment(input: {
   equipmentId: string;
   sessionToken: string;
   apiBaseUrl?: string;
+  locationId?: string;
+  inventoryLocationLabel?: string;
+  equipmentType?: string;
+  brand?: string;
   model?: string;
   serialNumber?: string;
   filterSizes?: string[];
   equipmentLocationDescription?: string;
   installDate?: string;
+  warrantyStartDate?: string;
+  warrantyEndDate?: string;
+  warrantyProviderNote?: string;
+  systemGroupName?: string;
+  clearSystemGroup?: boolean;
   status?: EquipmentStatus;
   notes?: string;
-}): Promise<EquipmentSummary> {
-  return requestJson<EquipmentSummary>(`/operations/equipment/${input.equipmentId}`, {
+  confirmMissingSerial?: boolean;
+}): Promise<EquipmentMutationResponse> {
+  return requestJson<EquipmentMutationResponse>(`/operations/equipment/${input.equipmentId}`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken,
     method: 'PATCH',
     body: JSON.stringify({
+      locationId: input.locationId,
+      inventoryLocationLabel: input.inventoryLocationLabel,
+      equipmentType: input.equipmentType,
+      brand: input.brand,
       model: input.model,
       serialNumber: input.serialNumber,
       filterSizes: input.filterSizes,
       equipmentLocationDescription: input.equipmentLocationDescription,
       installDate: input.installDate,
+      warrantyStartDate: input.warrantyStartDate,
+      warrantyEndDate: input.warrantyEndDate,
+      warrantyProviderNote: input.warrantyProviderNote,
+      systemGroupName: input.systemGroupName,
+      clearSystemGroup: input.clearSystemGroup,
       status: input.status,
-      notes: input.notes
+      notes: input.notes,
+      confirmMissingSerial: input.confirmMissingSerial
     })
   });
+}
+
+export async function linkOfficeEquipmentReplacement(
+  input: LinkEquipmentReplacementRequest & { equipmentId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<EquipmentMutationResponse> {
+  const { equipmentId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<EquipmentMutationResponse>(`/operations/equipment/${equipmentId}/replacement-link`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function deleteOfficeEquipment(input: {
+  equipmentId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+  confirmDelete: boolean;
+}): Promise<EquipmentDeleteResponse> {
+  return requestJson<EquipmentDeleteResponse>(
+    `/operations/equipment/${input.equipmentId}?confirm=${input.confirmDelete ? 'true' : 'false'}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken,
+      method: 'DELETE'
+    }
+  );
 }
 
 export async function getOfficeJobsWorkspace(input: {

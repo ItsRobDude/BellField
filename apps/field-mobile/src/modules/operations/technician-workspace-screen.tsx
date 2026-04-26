@@ -3,7 +3,9 @@ import { StatusBar } from 'expo-status-bar';
 import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import {
   addFieldJobNote,
+  createFieldEquipment,
   getAssignedFieldWork,
+  linkFieldEquipmentReplacement,
   updateFieldAppointmentStatus,
   updateFieldEquipment,
   type AppointmentStatus,
@@ -41,6 +43,22 @@ type EquipmentDraft = {
   notes: string;
 };
 
+type EquipmentCreateDraft = {
+  equipmentType: string;
+  brand: string;
+  model: string;
+  serialNumber: string;
+  filterSizes: string;
+  equipmentLocationDescription: string;
+  installDate: string;
+  warrantyStartDate: string;
+  warrantyEndDate: string;
+  warrantyProviderNote: string;
+  systemGroupName: string;
+  status: EquipmentStatus;
+  notes: string;
+};
+
 type FinishReviewState = {
   jobId: string;
   appointmentId: string;
@@ -71,6 +89,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata>(defaultSyncMetadata);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [equipmentDrafts, setEquipmentDrafts] = useState<Record<string, EquipmentDraft>>({});
+  const [equipmentCreateDrafts, setEquipmentCreateDrafts] = useState<Record<string, EquipmentCreateDraft>>({});
+  const [replacementSelections, setReplacementSelections] = useState<Record<string, string>>({});
   const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -90,6 +110,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const pendingCount = pendingOperations.filter((operation) => operation.state === 'pending').length;
   const conflictedCount = pendingOperations.filter((operation) => operation.state === 'conflict').length;
   const rejectedCount = pendingOperations.filter((operation) => operation.state === 'rejected').length;
+  const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
 
   useEffect(() => {
     async function initializeWorkspace() {
@@ -256,6 +277,111 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
         ...patch
       }
     }));
+  }
+
+  function updateEquipmentCreateDraft(locationId: string, patch: Partial<EquipmentCreateDraft>) {
+    setEquipmentCreateDrafts((current) => ({
+      ...current,
+      [locationId]: {
+        ...(current[locationId] ?? createEquipmentCreateDraft()),
+        ...patch
+      }
+    }));
+  }
+
+  async function createEquipmentAtLocation(locationId: string) {
+    const draft = equipmentCreateDrafts[locationId] ?? createEquipmentCreateDraft();
+
+    try {
+      await createFieldEquipment({
+        sessionToken,
+        apiBaseUrl,
+        locationId,
+        equipmentType: draft.equipmentType,
+        brand: draft.brand,
+        model: draft.model,
+        serialNumber: draft.serialNumber,
+        filterSizes: draft.filterSizes
+          .split(',')
+          .map((value) => value.trim())
+          .filter((value) => value.length > 0),
+        equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
+        installDate: draft.installDate || undefined,
+        warrantyStartDate: draft.warrantyStartDate || undefined,
+        warrantyEndDate: draft.warrantyEndDate || undefined,
+        warrantyProviderNote: draft.warrantyProviderNote || undefined,
+        systemGroupName: draft.systemGroupName || undefined,
+        status: draft.status,
+        notes: draft.notes || undefined
+      });
+      setEquipmentCreateDrafts((current) => ({
+        ...current,
+        [locationId]: createEquipmentCreateDraft()
+      }));
+      await refreshAssignedWork(false);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message.includes('Serial number is strongly recommended')
+      ) {
+        Alert.alert('Create without serial?', 'Serial number is blank. Create this equipment record anyway?', [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Create',
+            onPress: () => {
+              void createFieldEquipment({
+                sessionToken,
+                apiBaseUrl,
+                locationId,
+                equipmentType: draft.equipmentType,
+                brand: draft.brand,
+                model: draft.model,
+                serialNumber: draft.serialNumber,
+                filterSizes: draft.filterSizes
+                  .split(',')
+                  .map((value) => value.trim())
+                  .filter((value) => value.length > 0),
+                equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
+                installDate: draft.installDate || undefined,
+                warrantyStartDate: draft.warrantyStartDate || undefined,
+                warrantyEndDate: draft.warrantyEndDate || undefined,
+                warrantyProviderNote: draft.warrantyProviderNote || undefined,
+                systemGroupName: draft.systemGroupName || undefined,
+                status: draft.status,
+                notes: draft.notes || undefined,
+                confirmMissingSerial: true
+              }).then(() => refreshAssignedWork(false)).catch((createError) => {
+                setErrorMessage(createError instanceof Error ? createError.message : 'Unable to create equipment.');
+              });
+            }
+          }
+        ]);
+        return;
+      }
+
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to create equipment.');
+    }
+  }
+
+  async function linkReplacement(recordId: string) {
+    const replacementEquipmentId = replacementSelections[recordId];
+
+    if (!replacementEquipmentId) {
+      return;
+    }
+
+    try {
+      await linkFieldEquipmentReplacement({
+        equipmentId: recordId,
+        replacementEquipmentId,
+        sessionToken,
+        apiBaseUrl
+      });
+      setReplacementSelections((current) => ({ ...current, [recordId]: '' }));
+      await refreshAssignedWork(false);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to link replacement equipment.');
+    }
   }
 
   function beginFinishReview(jobId: string, appointmentId: string) {
@@ -669,6 +795,12 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                   <View key={record.id} style={styles.block}>
                     {(() => {
                       const equipmentDraft = equipmentDrafts[record.id] ?? createEquipmentDraft(record);
+                      const replacementOptions = equipment.filter(
+                        (candidate) =>
+                          candidate.id !== record.id &&
+                          candidate.locationId === record.locationId &&
+                          candidate.inventoryLocationLabel === record.inventoryLocationLabel
+                      );
 
                       return (
                         <>
@@ -676,9 +808,16 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       {record.equipmentType}: {record.brand} {record.model}
                     </Text>
                     <Text style={styles.summaryText}>Serial: {record.serialNumber}</Text>
+                    <Text style={styles.summaryText}>Age: {record.ageLabel ?? 'Unknown age'}</Text>
+                    <Text style={styles.summaryText}>System group: {record.systemGroup?.name ?? 'Ungrouped'}</Text>
                     <Text style={styles.summaryText}>Current local equipment status: {record.status}</Text>
                     <View style={styles.actionRow}>
-                      {(['active', 'pendingInstall', 'inactive'] as EquipmentStatus[]).map((status) => (
+                      {([
+                        'active',
+                        'pendingInstall',
+                        'inactive',
+                        ...(canReplaceRemoveEquipment ? (['removed'] as EquipmentStatus[]) : [])
+                      ] as EquipmentStatus[]).map((status) => (
                         <Pressable
                           key={status}
                           onPress={() => updateEquipmentDraft(record, { status })}
@@ -718,6 +857,9 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       placeholder="Install date (YYYY-MM-DD)"
                       style={styles.input}
                     />
+                    {record.warrantyProviderNote ? (
+                      <Text style={styles.summaryText}>Warranty: {record.warrantyProviderNote}</Text>
+                    ) : null}
                     <TextInput
                       value={equipmentDraft.notes}
                       onChangeText={(value) => updateEquipmentDraft(record, { notes: value })}
@@ -728,11 +870,119 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                     <Pressable onPress={() => void queueEquipmentUpdate(record)} style={styles.secondaryButton}>
                       <Text style={styles.secondaryButtonText}>Save equipment locally</Text>
                     </Pressable>
+                    {canReplaceRemoveEquipment && replacementOptions.length > 0 ? (
+                      <View style={styles.block}>
+                        <Text style={styles.sectionTitleSmall}>Link replacement</Text>
+                        <TextInput
+                          value={replacementSelections[record.id] ?? ''}
+                          onChangeText={(value) => setReplacementSelections((current) => ({ ...current, [record.id]: value }))}
+                          placeholder={`Replacement equipment id (${replacementOptions[0]?.id ?? 'select from office list'})`}
+                          style={styles.input}
+                        />
+                        <Pressable onPress={() => void linkReplacement(record.id)} style={styles.secondaryButton}>
+                          <Text style={styles.secondaryButtonText}>Link replacement now</Text>
+                        </Pressable>
+                      </View>
+                    ) : null}
                         </>
                       );
                     })()}
                   </View>
                 ))}
+
+                <View style={styles.block}>
+                  <Text style={styles.sectionTitleSmall}>Add equipment at this location</Text>
+                  {(() => {
+                    const createDraft = equipmentCreateDrafts[job.locationId] ?? createEquipmentCreateDraft();
+
+                    return (
+                      <>
+                        <TextInput
+                          value={createDraft.equipmentType}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { equipmentType: value })}
+                          placeholder="Equipment type"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.brand}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { brand: value })}
+                          placeholder="Brand"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.model}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { model: value })}
+                          placeholder="Model"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.serialNumber}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { serialNumber: value })}
+                          placeholder="Serial number"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.filterSizes}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { filterSizes: value })}
+                          placeholder="Filters (comma separated)"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.equipmentLocationDescription}
+                          onChangeText={(value) =>
+                            updateEquipmentCreateDraft(job.locationId, { equipmentLocationDescription: value })
+                          }
+                          placeholder="Equipment location"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.installDate}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { installDate: value })}
+                          placeholder="Install date (YYYY-MM-DD)"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.warrantyStartDate}
+                          onChangeText={(value) =>
+                            updateEquipmentCreateDraft(job.locationId, { warrantyStartDate: value })
+                          }
+                          placeholder="Warranty start (YYYY-MM-DD)"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.warrantyEndDate}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { warrantyEndDate: value })}
+                          placeholder="Warranty end (YYYY-MM-DD)"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.warrantyProviderNote}
+                          onChangeText={(value) =>
+                            updateEquipmentCreateDraft(job.locationId, { warrantyProviderNote: value })
+                          }
+                          placeholder="Warranty provider or note"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.systemGroupName}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { systemGroupName: value })}
+                          placeholder="System group name"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.notes}
+                          onChangeText={(value) => updateEquipmentCreateDraft(job.locationId, { notes: value })}
+                          multiline
+                          placeholder="Equipment notes"
+                          style={styles.input}
+                        />
+                        <Pressable onPress={() => void createEquipmentAtLocation(job.locationId)} style={styles.secondaryButton}>
+                          <Text style={styles.secondaryButtonText}>Create equipment now</Text>
+                        </Pressable>
+                      </>
+                    );
+                  })()}
+                </View>
               </View>
             );
           })}
@@ -861,6 +1111,24 @@ function createEquipmentDraft(record: FieldAssignedWorkResponse['equipment'][num
     installDate: record.installDate ?? '',
     status: record.status,
     notes: record.notes
+  };
+}
+
+function createEquipmentCreateDraft(): EquipmentCreateDraft {
+  return {
+    equipmentType: 'Condenser',
+    brand: 'Carrier',
+    model: '',
+    serialNumber: '',
+    filterSizes: '16x25x1',
+    equipmentLocationDescription: '',
+    installDate: '',
+    warrantyStartDate: '',
+    warrantyEndDate: '',
+    warrantyProviderNote: '',
+    systemGroupName: '',
+    status: 'active',
+    notes: ''
   };
 }
 

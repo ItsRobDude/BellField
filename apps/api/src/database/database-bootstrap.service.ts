@@ -5,6 +5,8 @@ import {
   seededContacts,
   seededCustomers,
   seededEquipment,
+  seededEquipmentGroups,
+  seededEquipmentHistory,
   seededJobs,
   seededLocationContactLinks,
   seededLocations,
@@ -32,7 +34,9 @@ export class DatabaseBootstrapService implements OnModuleInit {
     await this.seedLocations();
     await this.seedLocationContactLinks();
     await this.seedLocationOwnershipHistory();
+    await this.seedEquipmentGroups();
     await this.seedEquipment();
+    await this.seedEquipmentHistory();
     await this.seedJobs();
     await this.seedAppointments();
     await this.seedTimelineEntries();
@@ -244,12 +248,17 @@ export class DatabaseBootstrapService implements OnModuleInit {
             filter_sizes,
             equipment_location_description,
             install_date,
+            warranty_start_date,
+            warranty_end_date,
+            warranty_provider_note,
+            system_group_id,
+            replaces_equipment_id,
             status,
             notes,
             created_at,
             updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9, $10, $11, $12, $13, $14)
+          values ($1, $2, $3, $4, $5, $6, $7, $8::text[], $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
           on conflict (id) do nothing
         `,
         [
@@ -263,11 +272,63 @@ export class DatabaseBootstrapService implements OnModuleInit {
           equipmentRecord.filterSizes,
           equipmentRecord.equipmentLocationDescription ?? null,
           equipmentRecord.installDate ?? null,
+          equipmentRecord.warrantyStartDate ?? null,
+          equipmentRecord.warrantyEndDate ?? null,
+          equipmentRecord.warrantyProviderNote ?? null,
+          equipmentRecord.systemGroupId ?? null,
+          equipmentRecord.replacesEquipmentId ?? null,
           equipmentRecord.status,
           equipmentRecord.notes,
           equipmentRecord.createdAt,
           equipmentRecord.updatedAt
         ]
+      );
+    }
+  }
+
+  private async seedEquipmentGroups(): Promise<void> {
+    for (const equipmentGroup of seededEquipmentGroups) {
+      await this.databaseService.query(
+        `
+          insert into equipment_system_groups (
+            id,
+            name,
+            location_id,
+            inventory_location_label,
+            created_at,
+            updated_at
+          )
+          values ($1, $2, $3, $4, $5, $6)
+          on conflict (id) do nothing
+        `,
+        [
+          equipmentGroup.id,
+          equipmentGroup.name,
+          equipmentGroup.locationId ?? null,
+          equipmentGroup.inventoryLocationLabel ?? null,
+          equipmentGroup.createdAt,
+          equipmentGroup.updatedAt
+        ]
+      );
+    }
+  }
+
+  private async seedEquipmentHistory(): Promise<void> {
+    for (const entry of seededEquipmentHistory) {
+      await this.databaseService.query(
+        `
+          insert into equipment_history_entries (
+            id,
+            equipment_id,
+            occurred_at,
+            actor_name,
+            kind,
+            message
+          )
+          values ($1, $2, $3, $4, $5, $6)
+          on conflict (id) do nothing
+        `,
+        [entry.id, entry.equipmentId, entry.occurredAt, entry.actorName, entry.kind, entry.message]
       );
     }
   }

@@ -1,15 +1,19 @@
 import type {
   AppointmentStatus,
+  CreateEquipmentRequest,
   EquipmentMutationResponse,
+  EquipmentSummary,
   EquipmentStatus,
   FieldAssignedWorkResponse,
   JobMutationResponse,
+  LinkEquipmentReplacementRequest,
   SyncResult
 } from '@bellfield/contracts';
 import { resolveFieldApiBaseUrl } from './api-base-url';
 
 export type {
   AppointmentStatus,
+  EquipmentSummary,
   EquipmentMutationResponse,
   EquipmentStatus,
   FieldAssignedWorkResponse,
@@ -93,31 +97,84 @@ export async function updateFieldEquipment(input: {
   sessionToken: string;
   apiBaseUrl?: string;
   equipmentId: string;
+  locationId?: string;
+  inventoryLocationLabel?: string;
+  equipmentType?: string;
+  brand?: string;
   model?: string;
   serialNumber?: string;
   filterSizes?: string[];
   equipmentLocationDescription?: string;
   installDate?: string;
+  warrantyStartDate?: string;
+  warrantyEndDate?: string;
+  warrantyProviderNote?: string;
+  systemGroupName?: string;
+  clearSystemGroup?: boolean;
   status?: EquipmentStatus;
   notes?: string;
   occurredAt?: string;
   baseUpdatedAt?: string;
+  confirmMissingSerial?: boolean;
 }) {
   return requestJson<EquipmentMutationResponse>(`/operations/equipment/${input.equipmentId}`, {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl,
     method: 'PATCH',
     body: JSON.stringify({
+      locationId: input.locationId,
+      inventoryLocationLabel: input.inventoryLocationLabel,
+      equipmentType: input.equipmentType,
+      brand: input.brand,
       model: input.model,
       serialNumber: input.serialNumber,
       filterSizes: input.filterSizes,
       equipmentLocationDescription: input.equipmentLocationDescription,
       installDate: input.installDate,
+      warrantyStartDate: input.warrantyStartDate,
+      warrantyEndDate: input.warrantyEndDate,
+      warrantyProviderNote: input.warrantyProviderNote,
+      systemGroupName: input.systemGroupName,
+      clearSystemGroup: input.clearSystemGroup,
       status: input.status,
       notes: input.notes,
       occurredAt: input.occurredAt,
       baseUpdatedAt: input.baseUpdatedAt,
+      confirmMissingSerial: input.confirmMissingSerial,
       syncSource: 'field-save-queue'
     })
+  });
+}
+
+export async function createFieldEquipment(
+  input: CreateEquipmentRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+  }
+) {
+  const { sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<EquipmentMutationResponse>('/operations/equipment', {
+    sessionToken,
+    apiBaseUrl,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function linkFieldEquipmentReplacement(
+  input: LinkEquipmentReplacementRequest & {
+    equipmentId: string;
+    sessionToken: string;
+    apiBaseUrl?: string;
+  }
+) {
+  const { equipmentId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<EquipmentMutationResponse>(`/operations/equipment/${equipmentId}/replacement-link`, {
+    sessionToken,
+    apiBaseUrl,
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
