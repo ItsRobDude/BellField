@@ -155,6 +155,50 @@ describe('JobsAppointmentsService', () => {
     expect(jobsDataService.countCancellableAppointments).toHaveBeenCalledWith('job-1');
   });
 
+  it('warns clearly before closing a job that still has future appointments', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('completed'));
+    jobsDataService.hasFutureAppointments.mockResolvedValue(true);
+    jobsDataService.updateJobStatus.mockResolvedValue(createJob('closed'));
+
+    const response = await service.updateJobStatus('session-token', 'job-1', {
+      status: 'closed',
+      occurredAt: '2026-04-14T11:00:00.000Z'
+    });
+
+    expect(response.warningMessages).toContain(
+      'This job still has future appointments scheduled. Confirm before closing it out.'
+    );
+    expect(jobsDataService.hasFutureAppointments).toHaveBeenCalledWith('job-1', '2026-04-14');
+  });
+
+  it('warns that reopening keeps history and allows follow-up appointments', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:configure'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('closed'));
+    jobsDataService.updateJobStatus.mockResolvedValue(createJob('scheduled'));
+
+    const response = await service.updateJobStatus('session-token', 'job-1', {
+      status: 'scheduled',
+      occurredAt: '2026-04-14T11:00:00.000Z'
+    });
+
+    expect(response.warningMessages).toContain(
+      'Reopening this job keeps prior appointments and history intact, and follow-up appointments can be added under this job.'
+    );
+  });
+
   it('rejects out-of-scope field appointment updates without replay provenance', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     const job = createJob('scheduled');

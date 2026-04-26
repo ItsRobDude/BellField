@@ -186,7 +186,7 @@ export class EquipmentDataService {
         occurredAt,
         actorName,
         kind: 'statusChanged',
-        message: `Status changed from ${previousEquipment.status} to ${nextEquipment.status}.`
+        message: `Status changed from ${formatEquipmentStatus(previousEquipment.status)} to ${formatEquipmentStatus(nextEquipment.status)}.`
       });
     }
 
@@ -212,7 +212,7 @@ export class EquipmentDataService {
           occurredAt,
           actorName,
           kind: 'grouped',
-          message: `Added to system group ${nextGroup.name}.`
+          message: `Added to system group "${nextGroup.name}".`
         });
       } else if (previousGroup && !nextGroup) {
         entries.push({
@@ -221,7 +221,7 @@ export class EquipmentDataService {
           occurredAt,
           actorName,
           kind: 'ungrouped',
-          message: `Removed from system group ${previousGroup.name}.`
+          message: `Removed from system group "${previousGroup.name}".`
         });
       } else if (previousGroup && nextGroup) {
         entries.push({
@@ -230,7 +230,7 @@ export class EquipmentDataService {
           occurredAt,
           actorName,
           kind: 'grouped',
-          message: `System group changed from ${previousGroup.name} to ${nextGroup.name}.`
+          message: `System group changed from "${previousGroup.name}" to "${nextGroup.name}".`
         });
       }
     }
@@ -303,7 +303,19 @@ function collectEditedFields(previousEquipment: EquipmentRecord, nextEquipment: 
 }
 
 function formatPlacementLabel(equipment: EquipmentRecord): string {
-  return equipment.locationId ? 'the selected location' : equipment.inventoryLocationLabel || 'inventory';
+  if (equipment.locationId) {
+    return 'the service location';
+  }
+
+  return equipment.inventoryLocationLabel ? `inventory location "${equipment.inventoryLocationLabel}"` : 'inventory';
+}
+
+function formatEquipmentStatus(status: EquipmentRecord['status']): string {
+  if (status === 'pendingInstall') {
+    return 'pending install';
+  }
+
+  return status;
 }
 
 function formatEquipmentLabel(equipment: EquipmentRecord): string {

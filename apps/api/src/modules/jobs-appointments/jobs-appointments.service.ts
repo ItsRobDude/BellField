@@ -101,7 +101,7 @@ export class JobsAppointmentsService {
     }
 
     if (request.status === 'closed' && (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))) {
-      warningMessages.push('This job still has a future appointment scheduled. Confirm before closing it out.');
+      warningMessages.push('This job still has future appointments scheduled. Confirm before closing it out.');
     }
 
     if (request.status === 'cancelled') {
@@ -114,7 +114,9 @@ export class JobsAppointmentsService {
     }
 
     if (this.isReopenTransition(jobBeforeUpdate.status, request.status)) {
-      warningMessages.push('Reopening this job keeps prior appointments and history intact while making the work active again.');
+      warningMessages.push(
+        'Reopening this job keeps prior appointments and history intact, and follow-up appointments can be added under this job.'
+      );
     }
 
     const job = await this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);

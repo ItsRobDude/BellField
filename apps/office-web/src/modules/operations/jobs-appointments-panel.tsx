@@ -164,6 +164,9 @@ export function JobsAppointmentsPanel({
       {unscheduledJobs.length > 0 ? (
         <div style={styles.list}>
           <h3 style={styles.subheading}>Unscheduled jobs</h3>
+          <p style={styles.muted}>
+            These are valid open jobs without a non-cancelled scheduled appointment yet. Add an appointment when the office is ready to put the work on the schedule.
+          </p>
           {unscheduledJobs.map((job) =>
             renderJobCard({
               job,
@@ -261,6 +264,7 @@ function renderJobCard({
   onAddAppointment: JobsAppointmentsPanelProps['onAddAppointment'];
 }) {
   const draft = appointmentDrafts[job.id] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
+  const canAddAppointment = job.status !== 'closed' && job.status !== 'cancelled';
 
   return (
     <article key={job.id} style={styles.panel}>
@@ -282,6 +286,11 @@ function renderJobCard({
           {job.status === 'waitingOnParts' ? <span style={styles.badge}>Waiting on parts</span> : null}
         </div>
       </div>
+      {job.needsScheduling ? (
+        <p style={styles.tinyMuted}>
+          This job is still valid; it stays out of technician schedule views until a non-cancelled scheduled appointment is added.
+        </p>
+      ) : null}
 
       <div style={styles.row}>
         <select
@@ -416,35 +425,39 @@ function renderJobCard({
         })}
       </div>
 
-      <div style={styles.formRow}>
-        <input
-          value={draft.scheduledDate}
-          onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, scheduledDate: event.target.value })}
-          type="date"
-          style={styles.input}
-        />
-        <input
-          value={draft.timeWindowLabel}
-          onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, timeWindowLabel: event.target.value })}
-          placeholder="Time window"
-          style={styles.input}
-        />
-        <select
-          value={draft.technicianId}
-          onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, technicianId: event.target.value })}
-          style={styles.input}
-        >
-          <option value="">Unassigned</option>
-          {jobsWorkspace.technicians.map((technician) => (
-            <option key={technician.id} value={technician.id}>
-              {technician.displayName}
-            </option>
-          ))}
-        </select>
-        <button type="button" onClick={() => void onAddAppointment(job.id)} style={styles.button}>
-          Add appointment
-        </button>
-      </div>
+      {canAddAppointment ? (
+        <div style={styles.formRow}>
+          <input
+            value={draft.scheduledDate}
+            onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, scheduledDate: event.target.value })}
+            type="date"
+            style={styles.input}
+          />
+          <input
+            value={draft.timeWindowLabel}
+            onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, timeWindowLabel: event.target.value })}
+            placeholder="Time window"
+            style={styles.input}
+          />
+          <select
+            value={draft.technicianId}
+            onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, technicianId: event.target.value })}
+            style={styles.input}
+          >
+            <option value="">Unassigned</option>
+            {jobsWorkspace.technicians.map((technician) => (
+              <option key={technician.id} value={technician.id}>
+                {technician.displayName}
+              </option>
+            ))}
+          </select>
+          <button type="button" onClick={() => void onAddAppointment(job.id)} style={styles.button}>
+            Add appointment
+          </button>
+        </div>
+      ) : (
+        <p style={styles.tinyMuted}>Reopen this job before adding another appointment.</p>
+      )}
 
       <ul style={styles.timeline}>
         {job.timeline.map((entry) => (
