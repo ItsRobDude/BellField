@@ -299,7 +299,7 @@ function renderJobCard({
           <option value="closed">Closed</option>
           <option value="cancelled">Cancelled</option>
         </select>
-        <div style={styles.muted}>Work order: {job.workOrderNumber ?? 'Not set'}</div>
+        {job.workOrderNumber ? <div style={styles.muted}>Work order: {job.workOrderNumber}</div> : null}
       </div>
 
       {pendingJobStatusChange?.jobId === job.id ? (

@@ -84,4 +84,17 @@ describe('JobsDataRepository', () => {
     expect(appointmentUpdateSql).not.toContain('scheduled_date');
     expect(appointmentUpdateCall?.[1]).toEqual(['job-1', '2026-04-14T11:00:00.000Z']);
   });
+
+  it('counts only non-cancelled appointments for cancellation warnings', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [{ appointmentCount: '2' }] }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const count = await repository.countCancellableAppointments('job-1');
+
+    expect(count).toBe(2);
+    expect(databaseService.query.mock.calls[0]?.[0]).toContain("status <> 'cancelled'");
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['job-1']);
+  });
 });

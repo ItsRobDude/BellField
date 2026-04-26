@@ -599,19 +599,21 @@ export class JobsDataRepository {
   }
 
   async hasCancellableAppointments(jobId: string): Promise<boolean> {
-    const result = await this.databaseService.query<{ hasCancellableAppointment: boolean }>(
+    return (await this.countCancellableAppointments(jobId)) > 0;
+  }
+
+  async countCancellableAppointments(jobId: string): Promise<number> {
+    const result = await this.databaseService.query<{ appointmentCount: number | string }>(
       `
-        select exists(
-          select 1
-          from appointments
-          where job_id = $1
-            and status <> 'cancelled'
-        ) as "hasCancellableAppointment"
+        select count(*) as "appointmentCount"
+        from appointments
+        where job_id = $1
+          and status <> 'cancelled'
       `,
       [jobId]
     );
 
-    return Boolean(result.rows[0]?.hasCancellableAppointment);
+    return Number(result.rows[0]?.appointmentCount ?? 0);
   }
 
   async hasIncompleteAppointments(jobId: string): Promise<boolean> {

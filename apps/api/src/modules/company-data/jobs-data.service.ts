@@ -150,6 +150,10 @@ export class JobsDataService {
     return this.jobsDataRepository.hasCancellableAppointments(jobId);
   }
 
+  async countCancellableAppointments(jobId: string): Promise<number> {
+    return this.jobsDataRepository.countCancellableAppointments(jobId);
+  }
+
   async hasIncompleteAppointments(jobId: string): Promise<boolean> {
     return this.jobsDataRepository.hasIncompleteAppointments(jobId);
   }

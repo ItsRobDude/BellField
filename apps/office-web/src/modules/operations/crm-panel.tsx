@@ -97,6 +97,7 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
   const [locationDuplicateWarnings, setLocationDuplicateWarnings] = useState<DuplicateCandidate[]>([]);
   const [createLocationMissingContactConfirmation, setCreateLocationMissingContactConfirmation] = useState(false);
   const [saveLocationMissingContactConfirmation, setSaveLocationMissingContactConfirmation] = useState(false);
+  const [crmNoticeMessage, setCrmNoticeMessage] = useState<string | null>(null);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
 
   useEffect(() => {
@@ -436,7 +437,11 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
       return;
     }
 
+    const targetContacts = selectedCustomer?.contacts ?? selectedLocation?.contacts ?? [];
+    const isAlreadyLinked = targetContacts.some((contact) => contact.contactId === existingContactId);
+
     try {
+      setCrmNoticeMessage(null);
       await linkOfficeContact({
         sessionToken,
         apiBaseUrl,
@@ -446,7 +451,13 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
       });
       await reloadSelectedRecord();
       await refreshWorkspace();
+      setCrmNoticeMessage(
+        isAlreadyLinked
+          ? 'Contact was already linked; the existing link was refreshed.'
+          : 'Contact linked.'
+      );
     } catch (error) {
+      setCrmNoticeMessage(null);
       onErrorMessage(error instanceof Error ? error.message : 'Unable to link contact.');
     }
   }
@@ -595,6 +606,8 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         </button>
       </div>
 
+      {crmNoticeMessage ? <p style={styles.notice}>{crmNoticeMessage}</p> : null}
+
       <div style={styles.splitGrid}>
         <div style={styles.panel}>
           <h3 style={styles.subheading}>Search and select</h3>
@@ -740,7 +753,10 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
           {createLocationMissingContactConfirmation ? (
             <div style={styles.subpanel}>
               <strong>Location has no phone or email</strong>
-              <div style={styles.tinyMuted}>Confirm this is intentional before saving this location.</div>
+              <div style={styles.tinyMuted}>This location has no phone or email. Is that okay?</div>
+              {locationForm.fax.trim() ? (
+                <div style={styles.tinyMuted}>Fax will be saved, but phone and email are still missing.</div>
+              ) : null}
               <div style={styles.row}>
                 <button
                   type="button"
@@ -861,7 +877,10 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
               {saveLocationMissingContactConfirmation ? (
                 <div style={styles.subpanel}>
                   <strong>Location has no phone or email</strong>
-                  <div style={styles.tinyMuted}>Confirm this is intentional before saving this location.</div>
+                  <div style={styles.tinyMuted}>This location has no phone or email. Is that okay?</div>
+                  {selectedLocation.fax?.trim() ? (
+                    <div style={styles.tinyMuted}>Fax will be saved, but phone and email are still missing.</div>
+                  ) : null}
                   <div style={styles.row}>
                     <button type="button" onClick={() => void handleSaveLocation()} style={styles.primaryButton}>
                       Save without phone or email

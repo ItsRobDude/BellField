@@ -54,6 +54,7 @@ type PendingJobStatusChange = {
   nextStatus: JobStatus;
   jobSummary: string;
   reviewMessage: string;
+  cancellableAppointmentCount: number;
   isSubmitting: boolean;
 };
 
@@ -64,7 +65,8 @@ function canViewEmployees(employee: EmployeeSummary | null): boolean {
 function getJobStatusReviewMessage(
   currentStatus: JobStatus,
   nextStatus: JobStatus,
-  jobSummary: string
+  jobSummary: string,
+  cancellableAppointmentCount = 0
 ): string {
   if (currentStatus === nextStatus) {
     return `Job "${jobSummary}" is already ${nextStatus}.`;
@@ -79,7 +81,11 @@ function getJobStatusReviewMessage(
   }
 
   if (nextStatus === 'cancelled') {
-    return `Cancelling "${jobSummary}" stops work under this job and cancels its appointments.`;
+    if (cancellableAppointmentCount === 0) {
+      return `Cancelling "${jobSummary}" will not cancel any appointments because none are active. Is that okay?`;
+    }
+
+    return `Cancelling "${jobSummary}" will also cancel ${formatAppointmentCount(cancellableAppointmentCount)} under it. Is that okay?`;
   }
 
   if (nextStatus === 'waitingOnParts') {
@@ -93,6 +99,15 @@ function getJobStatusReviewMessage(
   return `Moving "${jobSummary}" back into an active status keeps its history intact while the office continues work or schedules follow-up appointments.`;
 }
 
+function countCancellableAppointmentsForJob(workspace: JobsWorkspaceResponse | null, jobId: string): number {
+  const job = workspace?.jobs.find((workspaceJob) => workspaceJob.id === jobId);
+  return job?.appointments.filter((appointment) => appointment.status !== 'cancelled').length ?? 0;
+}
+
+function formatAppointmentCount(count: number): string {
+  return `${count} ${count === 1 ? 'appointment' : 'appointments'}`;
+}
+
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
   const [roles, setRoles] = useState<RoleTemplate[]>([]);
@@ -103,6 +118,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | undefined>();
   const [selectedEquipmentDetail, setSelectedEquipmentDetail] = useState<EquipmentDetail | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [pendingJobStatusChange, setPendingJobStatusChange] = useState<PendingJobStatusChange | null>(null);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
@@ -392,12 +408,16 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       return;
     }
 
+    const cancellableAppointmentCount =
+      nextStatus === 'cancelled' ? countCancellableAppointmentsForJob(jobsWorkspace, jobId) : 0;
+
     setPendingJobStatusChange({
       jobId,
       currentStatus,
       nextStatus,
       jobSummary,
-      reviewMessage: getJobStatusReviewMessage(currentStatus, nextStatus, jobSummary),
+      reviewMessage: getJobStatusReviewMessage(currentStatus, nextStatus, jobSummary, cancellableAppointmentCount),
+      cancellableAppointmentCount,
       isSubmitting: false
     });
   }
@@ -408,6 +428,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
 
     setPendingJobStatusChange((current) => (current ? { ...current, isSubmitting: true } : current));
+    setNoticeMessage(null);
 
     try {
       const response = await updateOfficeJobStatus({
@@ -417,9 +438,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         apiBaseUrl
       });
 
-      if (response.warningMessages?.length) {
-        window.alert(response.warningMessages.join('\n'));
-      }
+      setNoticeMessage(response.warningMessages?.join(' ') ?? 'Job status updated.');
 
       setPendingJobStatusChange(null);
       await refreshWorkspace();
@@ -531,6 +550,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
           {employee.email} - permissions {employee.effectivePermissions.length} - planned areas: {plannedOfficeAreas.join(', ')}
         </p>
         {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
       </section>
 
       {canViewEmployees(employee) ? (

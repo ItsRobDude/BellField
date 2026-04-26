@@ -104,8 +104,13 @@ export class JobsAppointmentsService {
       warningMessages.push('This job still has a future appointment scheduled. Confirm before closing it out.');
     }
 
-    if (request.status === 'cancelled' && (await this.jobsDataService.hasCancellableAppointments(jobId))) {
-      warningMessages.push('Cancelling this job will also cancel its appointments.');
+    if (request.status === 'cancelled') {
+      const cancellableAppointmentCount = await this.jobsDataService.countCancellableAppointments(jobId);
+      warningMessages.push(
+        cancellableAppointmentCount > 0
+          ? `Cancelling this job will also cancel ${formatAppointmentCount(cancellableAppointmentCount)} under it.`
+          : 'Cancelling this job will not cancel any appointments because none are active.'
+      );
     }
 
     if (this.isReopenTransition(jobBeforeUpdate.status, request.status)) {
@@ -653,4 +658,8 @@ function deriveEquipmentAge(installDate?: string): { ageYears?: number; ageLabel
     ageYears,
     ageLabel: ageYears === 0 ? 'Less than 1 year' : ageYears === 1 ? '1 year' : `${ageYears} years`
   };
+}
+
+function formatAppointmentCount(count: number): string {
+  return `${count} ${count === 1 ? 'appointment' : 'appointments'}`;
 }

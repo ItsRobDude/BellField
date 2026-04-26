@@ -36,6 +36,7 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   kicker: { color: '#9a6b2f', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.12em', marginBottom: '0.5rem', textTransform: 'uppercase' },
   muted: { color: '#52606d', margin: 0 },
   tinyMuted: { color: '#7b8794', fontSize: '0.85rem', margin: 0 },
+  notice: { background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 12, color: '#065f46', margin: '0.75rem 0 0', padding: '0.75rem 0.9rem' },
   error: { color: '#b42318', margin: '0.75rem 0 0' },
   timeline: { margin: 0, paddingInlineStart: '1.1rem' },
   tableWrap: { overflowX: 'auto' },

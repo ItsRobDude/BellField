@@ -52,6 +52,7 @@ function createService() {
     getJobById: jest.fn(),
     hasFutureAppointments: jest.fn().mockResolvedValue(false),
     hasCancellableAppointments: jest.fn().mockResolvedValue(false),
+    countCancellableAppointments: jest.fn().mockResolvedValue(0),
     hasIncompleteAppointments: jest.fn().mockResolvedValue(false),
     updateJobStatus: jest.fn(),
     createAppointment: jest.fn(),
@@ -127,7 +128,11 @@ describe('JobsAppointmentsService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  it('warns that cancelling a job cancels appointments under it', async () => {
+  it.each([
+    [0, 'Cancelling this job will not cancel any appointments because none are active.'],
+    [1, 'Cancelling this job will also cancel 1 appointment under it.'],
+    [3, 'Cancelling this job will also cancel 3 appointments under it.']
+  ])('warns with the cancellable appointment count when cancelling a job', async (count, warning) => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
       id: 'office-1',
@@ -136,7 +141,7 @@ describe('JobsAppointmentsService', () => {
       sessionSurface: 'office-web'
     });
     jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
-    jobsDataService.hasCancellableAppointments.mockResolvedValue(true);
+    jobsDataService.countCancellableAppointments.mockResolvedValue(count);
     jobsDataService.updateJobStatus.mockResolvedValue(createJob('cancelled'));
 
     const response = await service.updateJobStatus('session-token', 'job-1', {
@@ -144,8 +149,9 @@ describe('JobsAppointmentsService', () => {
       occurredAt: '2026-04-14T11:00:00.000Z'
     });
 
-    expect(response.warningMessages).toContain('Cancelling this job will also cancel its appointments.');
+    expect(response.warningMessages).toContain(warning);
     expect(jobsDataService.hasFutureAppointments).not.toHaveBeenCalled();
+    expect(jobsDataService.countCancellableAppointments).toHaveBeenCalledWith('job-1');
   });
 
   it('rejects out-of-scope field appointment updates without replay provenance', async () => {
