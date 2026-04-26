@@ -434,6 +434,14 @@ BellField reviews should focus on substance, not style nitpicks already handled 
 - does it introduce duplication?
 - does it create hidden behavior?
 
+### Docs/code drift checklist
+For any change that touches product behavior, workflow rules, shared contracts, permissions, or persistence, reviewers should confirm:
+- relevant product/workflow/modeling docs were checked
+- docs were updated when behavior changed
+- shared contract types changed when API request/response shape changed
+- tests protect the business rule, not just the happy path
+- validation included the narrow relevant checks plus `pnpm check:architecture` when boundaries or shared contracts changed
+
 ### BellField review principle
 A change should not be approved just because it passes technically if it makes the codebase harder to understand later.
 
