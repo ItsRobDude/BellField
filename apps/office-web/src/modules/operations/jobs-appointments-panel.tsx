@@ -326,6 +326,22 @@ function renderJobCard({
         </div>
       ) : null}
 
+      {job.needsOfficeReview ? (
+        <div style={styles.subpanel}>
+          <strong>Finished visit review</strong>
+          <p style={styles.muted}>
+            Finished visits do not close the job. Mark the job completed when the office is ready, or add another appointment below if follow-up work still belongs here.
+          </p>
+          <button
+            type="button"
+            onClick={() => onJobStatusReviewRequested(job.id, job.status, 'completed', job.summary)}
+            style={styles.button}
+          >
+            Mark job completed
+          </button>
+        </div>
+      ) : null}
+
       <div style={styles.grid}>
         {job.appointments.map((appointment) => {
           const editDraft = appointmentEditDrafts[appointment.id] ?? {
@@ -456,7 +472,9 @@ function renderJobCard({
           </button>
         </div>
       ) : (
-        <p style={styles.tinyMuted}>Reopen this job before adding another appointment.</p>
+        <p style={styles.tinyMuted}>
+          Reopen this job before adding another appointment. Prior appointments and history stay intact, and follow-up appointments can be added after reopening.
+        </p>
       )}
 
       <ul style={styles.timeline}>

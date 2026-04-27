@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "pnpm run typecheck",
+    "test": "pnpm run typecheck && pnpm run test:ui",
+    "test:ui": "vitest run",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -18,11 +19,17 @@
   },
   "devDependencies": {
     "@next/eslint-plugin-next": "15.5.7",
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "16.3.2",
     "@types/node": "22.15.17",
     "@types/react": "19.1.2",
     "@types/react-dom": "19.1.2",
+    "@vitejs/plugin-react": "6.0.1",
     "eslint": "9.25.0",
     "eslint-config-next": "15.5.7",
-    "typescript": "5.8.3"
+    "jsdom": "29.1.0",
+    "typescript": "5.8.3",
+    "vite": "8.0.10",
+    "vitest": "4.1.5"
   }
 }
