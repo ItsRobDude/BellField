@@ -150,7 +150,7 @@ export class DatabaseBootstrapService implements OnModuleInit {
             email,
             fax,
             is_active,
-            alternate_bill_to_customer_ids,
+            alternate_bill_to_customer_ids
           )
           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::text[])
           on conflict (id) do nothing
