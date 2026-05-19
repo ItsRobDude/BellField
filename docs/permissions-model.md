@@ -254,7 +254,7 @@ By default, technicians should be allowed to:
 - create estimates
 - add equipment
 - edit equipment
-- remove equipment
+- remove equipment from active service or link replacement equipment
 - update appointment statuses
 - add notes
 - add register items
@@ -328,7 +328,7 @@ These should still be individually grantable if the company wants to loosen acce
 By default, technicians should be allowed to:
 - add equipment
 - edit equipment
-- remove equipment
+- remove equipment from active service or link replacement equipment
 - create estimates
 - edit invoice draft items through the register workflow
 - view old invoices
@@ -342,6 +342,7 @@ Technicians should not automatically have:
 - permissions management
 - posting authority
 - destructive office-wide controls
+- true equipment deletion, which remains separate from operational remove/replacement behavior
 
 Reopening closed jobs for technicians should be controlled by a permission toggle.
 

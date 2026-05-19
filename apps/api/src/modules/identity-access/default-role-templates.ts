@@ -104,7 +104,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...permissionKeys('customers', ['view']),
       ...permissionKeys('locations', ['view']),
       ...permissionKeys('contacts', ['view']),
-      ...permissionKeys('equipment', ['create', 'edit']),
+      ...permissionKeys('equipment', ['create', 'edit', 'configure']),
       ...permissionKeys('appointmentsDispatch', ['view', 'edit']),
       ...permissionKeys('estimates', ['view', 'create', 'edit']),
       ...permissionKeys('invoices', ['view', 'edit'])

@@ -3,6 +3,30 @@ import { IdentityAccessRepository } from './identity-access.repository';
 import { IdentityAccessService } from './identity-access.service';
 
 describe('IdentityAccessService', () => {
+  it('pins technician default permissions to field equipment work without true delete', () => {
+    const service = new IdentityAccessService({} as IdentityAccessRepository);
+    const technicianRole = service.getRoleTemplates().find((role) => role.id === 'technician');
+
+    expect(technicianRole).toBeDefined();
+    expect(technicianRole?.permissions).toEqual([
+      'customers:view',
+      'locations:view',
+      'contacts:view',
+      'equipment:create',
+      'equipment:edit',
+      'equipment:configure',
+      'appointmentsDispatch:view',
+      'appointmentsDispatch:edit',
+      'estimates:view',
+      'estimates:create',
+      'estimates:edit',
+      'invoices:view',
+      'invoices:edit'
+    ]);
+    expect(technicianRole?.permissions).not.toContain('equipment:view');
+    expect(technicianRole?.permissions).not.toContain('equipment:delete');
+  });
+
   it('rejects office-only authorization checks for field sessions', async () => {
     const repository = {
       findSessionByToken: jest.fn().mockResolvedValue({
