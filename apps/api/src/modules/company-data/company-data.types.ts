@@ -251,6 +251,32 @@ export type JobRecord = {
   updatedAt: string;
 };
 
+export type DispatchAppointmentRecord = {
+  appointmentId: string;
+  jobId: string;
+  jobNumber: string;
+  jobSummary: string;
+  jobStatus: JobStatus;
+  jobType: string;
+  workOrderNumber?: string;
+  status: AppointmentStatus;
+  scheduledDate: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+  technicianName?: string;
+  locationId: string;
+  locationName: string;
+  locationAddressLine1: string;
+  locationCity: string;
+  locationState: string;
+  billToCustomerId: string;
+  billToCustomerName: string;
+  customerName: string;
+  needsOfficeReview: boolean;
+};
+
 export type CreateJobInput = {
   locationId: string;
   billToCustomerId?: string;

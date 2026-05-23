@@ -131,6 +131,48 @@ export class EquipmentDataRepository {
     return result.rows.map((row) => this.toEquipmentRecord(row));
   }
 
+  async listEquipmentByLocations(locationIds: string[], includeInactive: boolean): Promise<EquipmentRecord[]> {
+    if (locationIds.length === 0) {
+      return [];
+    }
+
+    const result = await this.databaseService.query<EquipmentRow>(
+      `
+        select
+          equipment.id,
+          equipment.location_id as "locationId",
+          equipment.inventory_location_label as "inventoryLocationLabel",
+          equipment.equipment_type as "equipmentType",
+          equipment.brand,
+          equipment.model,
+          equipment.serial_number as "serialNumber",
+          equipment.filter_sizes as "filterSizes",
+          equipment.equipment_location_description as "equipmentLocationDescription",
+          equipment.install_date as "installDate",
+          equipment.warranty_start_date as "warrantyStartDate",
+          equipment.warranty_end_date as "warrantyEndDate",
+          equipment.warranty_provider_note as "warrantyProviderNote",
+          equipment.system_group_id as "systemGroupId",
+          equipment_group.name as "systemGroupName",
+          equipment.replaces_equipment_id as "replacesEquipmentId",
+          replacement.id as "replacedByEquipmentId",
+          equipment.status,
+          equipment.notes,
+          equipment.created_at as "createdAt",
+          equipment.updated_at as "updatedAt"
+        from equipment
+        left join equipment_system_groups equipment_group on equipment_group.id = equipment.system_group_id
+        left join equipment replacement on replacement.replaces_equipment_id = equipment.id
+        where equipment.location_id = any($1::text[])
+          and ($2::boolean = true or equipment.status not in ('inactive', 'removed'))
+        order by equipment.location_id asc, equipment.created_at asc
+      `,
+      [locationIds, includeInactive]
+    );
+
+    return result.rows.map((row) => this.toEquipmentRecord(row));
+  }
+
   async listEquipmentByIds(equipmentIds: string[]): Promise<EquipmentRecord[]> {
     if (equipmentIds.length === 0) {
       return [];

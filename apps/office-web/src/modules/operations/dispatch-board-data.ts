@@ -1,17 +1,7 @@
-import type {
-  AppointmentSummary,
-  CustomerAccountSummary,
-  JobSummary,
-  JobsWorkspaceResponse,
-  LocationSummary
-} from '@bellfield/contracts';
+import type { DispatchBoardResponse } from '@bellfield/contracts';
 
 /**
  * Dispatch board data model.
- *
- * Built entirely from JobsWorkspaceResponse to avoid duplicating job/appointment
- * business logic on the client. The dispatch board reads the same backend truth
- * the jobs/appointments panel already consumes.
  */
 
 export type DispatchAppointmentCard = {
@@ -19,9 +9,9 @@ export type DispatchAppointmentCard = {
   jobId: string;
   jobNumber: string;
   jobSummary: string;
-  jobStatus: JobSummary['status'];
+  jobStatus: DispatchBoardResponse['appointments'][number]['jobStatus'];
   jobType: string;
-  status: AppointmentSummary['status'];
+  status: DispatchBoardResponse['appointments'][number]['status'];
   scheduledDate?: string;
   scheduledStartTime?: string;
   scheduledEndTime?: string;
@@ -30,12 +20,14 @@ export type DispatchAppointmentCard = {
   technicianName?: string;
   locationId: string;
   locationName: string;
+  locationAddressLine1: string;
   locationCity?: string;
   locationState?: string;
   customerName: string;
   billToCustomerName: string;
   needsOfficeReview: boolean;
-  finishOutcome?: AppointmentSummary['finishOutcome'];
+  equipment: DispatchBoardResponse['appointments'][number]['equipment'];
+  equipmentCount: number;
 };
 
 export type DispatchTechnicianRow = {
@@ -53,68 +45,14 @@ export type DispatchBoardModel = {
 };
 
 export function buildDispatchBoardModel(
-  workspace: JobsWorkspaceResponse,
-  viewDate?: string
+  dispatchBoard: DispatchBoardResponse
 ): DispatchBoardModel {
-  const locationLookup = new Map<string, LocationSummary>();
-  for (const location of workspace.locations) {
-    locationLookup.set(location.id, location);
-  }
+  const sortedCards = dispatchBoard.appointments
+    .filter(isDispatchableAppointment)
+    .map(toDispatchAppointmentCard)
+    .sort(compareCardsForBoard);
 
-  const customerLookup = new Map<string, CustomerAccountSummary>();
-  for (const customer of workspace.customers) {
-    customerLookup.set(customer.id, customer);
-  }
-
-  const cards: DispatchAppointmentCard[] = [];
-
-  for (const job of workspace.jobs) {
-    if (!isDispatchableJobStatus(job.status)) {
-      continue;
-    }
-
-    for (const appointment of job.appointments) {
-      if (appointment.status === 'cancelled') {
-        continue;
-      }
-
-      if (viewDate && appointment.scheduledDate !== viewDate) {
-        continue;
-      }
-
-      const location = locationLookup.get(job.locationId);
-      const billToCustomer = customerLookup.get(job.billToCustomerId);
-      const ownerCustomer = location ? customerLookup.get(location.customerId) : undefined;
-
-      cards.push({
-        appointmentId: appointment.id,
-        jobId: job.id,
-        jobNumber: job.jobNumber,
-        jobSummary: job.summary,
-        jobStatus: job.status,
-        jobType: job.jobType,
-        status: appointment.status,
-        scheduledDate: appointment.scheduledDate,
-        scheduledStartTime: appointment.scheduledStartTime,
-        scheduledEndTime: appointment.scheduledEndTime,
-        timeWindowLabel: appointment.timeWindowLabel,
-        technicianId: appointment.technicianId,
-        technicianName: appointment.technicianName,
-        locationId: job.locationId,
-        locationName: location?.name ?? job.locationName,
-        locationCity: location?.city,
-        locationState: location?.state,
-        customerName: ownerCustomer?.name ?? location?.customerName ?? job.billToCustomerName,
-        billToCustomerName: billToCustomer?.name ?? job.billToCustomerName,
-        needsOfficeReview: appointment.needsOfficeReview || job.needsOfficeReview,
-        finishOutcome: appointment.finishOutcome
-      });
-    }
-  }
-
-  const sortedCards = [...cards].sort(compareCardsForBoard);
-
-  const technicianRows: DispatchTechnicianRow[] = workspace.technicians.map((technician) => ({
+  const technicianRows: DispatchTechnicianRow[] = dispatchBoard.technicians.map((technician) => ({
     technicianId: technician.id,
     technicianName: technician.displayName,
     roleId: technician.roleId,
@@ -126,15 +64,43 @@ export function buildDispatchBoardModel(
   const cardLookup = new Map(sortedCards.map((card) => [card.appointmentId, card]));
 
   return {
-    viewDate,
+    viewDate: dispatchBoard.startDate === dispatchBoard.endDate ? dispatchBoard.startDate : undefined,
     technicianRows,
     unassignedQueue,
     cardLookup
   };
 }
 
-function isDispatchableJobStatus(status: JobSummary['status']): boolean {
-  return status !== 'cancelled' && status !== 'closed';
+function toDispatchAppointmentCard(appointment: DispatchBoardResponse['appointments'][number]): DispatchAppointmentCard {
+  return {
+    appointmentId: appointment.appointmentId,
+    jobId: appointment.jobId,
+    jobNumber: appointment.jobNumber,
+    jobSummary: appointment.jobSummary,
+    jobStatus: appointment.jobStatus,
+    jobType: appointment.jobType,
+    status: appointment.status,
+    scheduledDate: appointment.scheduledDate,
+    scheduledStartTime: appointment.scheduledStartTime,
+    scheduledEndTime: appointment.scheduledEndTime,
+    timeWindowLabel: appointment.timeWindowLabel,
+    technicianId: appointment.technicianId,
+    technicianName: appointment.technicianName,
+    locationId: appointment.locationId,
+    locationName: appointment.locationName,
+    locationAddressLine1: appointment.locationAddressLine1,
+    locationCity: appointment.locationCity,
+    locationState: appointment.locationState,
+    customerName: appointment.customerName,
+    billToCustomerName: appointment.billToCustomerName,
+    needsOfficeReview: appointment.needsOfficeReview,
+    equipment: appointment.equipment,
+    equipmentCount: appointment.equipmentCount
+  };
+}
+
+function isDispatchableAppointment(appointment: DispatchBoardResponse['appointments'][number]): boolean {
+  return appointment.status !== 'cancelled' && appointment.jobStatus !== 'cancelled' && appointment.jobStatus !== 'closed';
 }
 
 function compareCardsForBoard(left: DispatchAppointmentCard, right: DispatchAppointmentCard): number {

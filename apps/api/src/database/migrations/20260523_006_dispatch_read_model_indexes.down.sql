@@ -1,0 +1,1 @@
+drop index if exists appointments_scheduled_date_start_idx;

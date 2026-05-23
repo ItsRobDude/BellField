@@ -237,6 +237,57 @@ describe('JobsDataRepository', () => {
     expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain('scheduled_start_time asc nulls last');
   });
 
+  it('lists dispatch appointments from the date window without hydrating timelines', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [
+          {
+            appointmentId: 'appointment-1',
+            jobId: 'job-1',
+            jobNumber: '1001',
+            jobSummary: 'No cooling',
+            jobStatus: 'scheduled',
+            jobType: 'Service',
+            workOrderNumber: null,
+            status: 'scheduled',
+            scheduledDate: '2026-05-23',
+            scheduledStartTime: '08:30:00',
+            scheduledEndTime: '10:15:00',
+            timeWindowLabel: null,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            locationId: 'location-1',
+            locationName: 'Main Shop',
+            locationAddressLine1: '123 Main',
+            locationCity: 'Blaine',
+            locationState: 'WA',
+            billToCustomerId: 'customer-1',
+            billToCustomerName: 'Acme',
+            customerName: 'Acme',
+            needsOfficeReview: true
+          }
+        ]
+      }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const appointments = await repository.listDispatchAppointments('2026-05-23', '2026-05-23');
+    const sql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+
+    expect(appointments[0]).toMatchObject({
+      appointmentId: 'appointment-1',
+      scheduledDate: '2026-05-23',
+      scheduledStartTime: '08:30',
+      scheduledEndTime: '10:15',
+      needsOfficeReview: true
+    });
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['2026-05-23', '2026-05-23']);
+    expect(sql).toContain('appointment.scheduled_date between $1::date and $2::date');
+    expect(sql).toContain("appointment.status <> 'cancelled'");
+    expect(sql).toContain("job.status not in ('closed', 'cancelled')");
+    expect(sql).not.toContain('job_timeline_entries');
+  });
+
   it('acknowledges prior finished visit review when a follow-up appointment is added', async () => {
     const { databaseService, queryable } = createDatabaseService();
     (queryable.query as jest.Mock).mockImplementation(async (sql: string, _params?: unknown[]) => {

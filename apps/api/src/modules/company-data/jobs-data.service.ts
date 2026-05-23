@@ -5,6 +5,7 @@ import type {
   AppointmentStatus,
   CreateAppointmentInput,
   CreateMediaAttachmentInput,
+  DispatchAppointmentRecord,
   FinishedVisitReviewDecision,
   CreateJobInput,
   JobRecord,
@@ -24,6 +25,10 @@ export class JobsDataService {
 
   async listJobs(): Promise<JobRecord[]> {
     return this.jobsDataRepository.listJobs();
+  }
+
+  async listDispatchAppointments(startDate: string, endDate: string): Promise<DispatchAppointmentRecord[]> {
+    return this.jobsDataRepository.listDispatchAppointments(startDate, endDate);
   }
 
   async getJobById(jobId: string): Promise<JobRecord> {

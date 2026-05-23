@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentSummary,
+  DispatchBoardResponse,
   JobSummary,
   JobsWorkspaceResponse,
   MediaAttachmentSummary,
@@ -20,6 +21,7 @@ vi.mock('@/lib/operations-api', () => ({
   deleteOfficeEquipment: vi.fn(),
   getOfficeEquipmentDetail: vi.fn(),
   getOfficeEquipmentWorkspace: vi.fn(),
+  getOfficeDispatchBoard: vi.fn(),
   getOfficeJobsWorkspace: vi.fn(),
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
@@ -202,9 +204,49 @@ function buildWorkspace(jobs: JobSummary[]): JobsWorkspaceResponse {
   };
 }
 
+function buildDispatchBoard(workspace: JobsWorkspaceResponse): DispatchBoardResponse {
+  return {
+    startDate: getTodayDateInputValue(),
+    endDate: getTodayDateInputValue(),
+    technicians: workspace.technicians,
+    appointments: workspace.jobs.flatMap((job) =>
+      job.appointments
+        .filter((appointment) => appointment.scheduledDate === getTodayDateInputValue())
+        .map((appointment) => ({
+          appointmentId: appointment.id,
+          jobId: job.id,
+          jobNumber: job.jobNumber,
+          jobSummary: job.summary,
+          jobStatus: job.status,
+          jobType: job.jobType,
+          workOrderNumber: job.workOrderNumber,
+          status: appointment.status,
+          scheduledDate: appointment.scheduledDate ?? getTodayDateInputValue(),
+          scheduledStartTime: appointment.scheduledStartTime,
+          scheduledEndTime: appointment.scheduledEndTime,
+          timeWindowLabel: appointment.timeWindowLabel,
+          technicianId: appointment.technicianId,
+          technicianName: appointment.technicianName,
+          locationId: job.locationId,
+          locationName: job.locationName,
+          locationAddressLine1: '123 Main',
+          locationCity: 'Blaine',
+          locationState: 'WA',
+          billToCustomerId: job.billToCustomerId,
+          billToCustomerName: job.billToCustomerName,
+          customerName: job.billToCustomerName,
+          needsOfficeReview: appointment.needsOfficeReview || job.needsOfficeReview,
+          equipment: [],
+          equipmentCount: 0
+        }))
+    )
+  };
+}
+
 function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee });
   mockedOperationsApi.getOfficeJobsWorkspace.mockResolvedValue(workspace);
+  mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
   mockedOperationsApi.getOfficeEquipmentWorkspace.mockResolvedValue({
     locations: [],
     equipment: [],
@@ -525,10 +567,10 @@ describe('OfficeWorkspaceShell IA', () => {
       })
     ]);
     arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(refreshedWorkspace)
-      .mockResolvedValue(refreshedWorkspace);
+    mockedOperationsApi.getOfficeDispatchBoard
+      .mockResolvedValueOnce(buildDispatchBoard(initialWorkspace))
+      .mockResolvedValueOnce(buildDispatchBoard(refreshedWorkspace))
+      .mockResolvedValue(buildDispatchBoard(refreshedWorkspace));
 
     renderShell();
 
@@ -540,7 +582,7 @@ describe('OfficeWorkspaceShell IA', () => {
     });
 
     await waitFor(() => {
-      expect(mockedOperationsApi.getOfficeJobsWorkspace).toHaveBeenCalledTimes(2);
+      expect(mockedOperationsApi.getOfficeDispatchBoard).toHaveBeenCalledTimes(2);
     });
     await waitFor(() => {
       expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();

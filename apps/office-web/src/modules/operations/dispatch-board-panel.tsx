@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, type CSSProperties } from 'react';
-import type { JobsWorkspaceResponse } from '@/lib/operations-api';
+import type { DispatchBoardResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildDispatchBoardModel,
@@ -33,7 +33,7 @@ const timelineTickLabels = [
 ];
 
 type DispatchBoardPanelProps = {
-  jobsWorkspace: JobsWorkspaceResponse;
+  dispatchBoard: DispatchBoardResponse;
   viewDate?: string;
   onViewDateChange?: (date: string) => void;
   onOpenJobDetail?: (jobId: string, appointmentId?: string) => void;
@@ -43,7 +43,7 @@ type DispatchBoardPanelProps = {
 };
 
 export function DispatchBoardPanel({
-  jobsWorkspace,
+  dispatchBoard,
   viewDate,
   onViewDateChange,
   onOpenJobDetail,
@@ -53,8 +53,8 @@ export function DispatchBoardPanel({
 }: DispatchBoardPanelProps) {
   const effectiveViewDate = viewDate || getDateInputValue();
   const model = useMemo<DispatchBoardModel>(
-    () => buildDispatchBoardModel(jobsWorkspace, effectiveViewDate),
-    [jobsWorkspace, effectiveViewDate]
+    () => buildDispatchBoardModel(dispatchBoard),
+    [dispatchBoard]
   );
   const totalCardCount = model.cardLookup.size;
   const unassignedCount = model.unassignedQueue.length;
@@ -184,12 +184,20 @@ function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchC
       <span style={styles.tinyMuted}>
         {card.customerName} - {card.locationName}
       </span>
+      {card.equipmentCount > 0 ? <span style={styles.tinyMuted}>{formatEquipmentGlance(card)}</span> : null}
       <div style={styles.badgeRow}>
         <span style={styles.badge}>{appointmentStatusLabels[card.status]}</span>
         {card.needsOfficeReview ? <span style={styles.dangerBadge}>Review</span> : null}
       </div>
     </button>
   );
+}
+
+function formatEquipmentGlance(card: DispatchAppointmentCard): string {
+  const labels = card.equipment.map((equipment) => `${equipment.equipmentType} ${equipment.brand} ${equipment.model}`.trim());
+  const hiddenCount = card.equipmentCount - card.equipment.length;
+
+  return hiddenCount > 0 ? `${labels.join(', ')} +${hiddenCount}` : labels.join(', ');
 }
 
 function getTimelineCardPlacementStyle(card: DispatchAppointmentCard, index: number): CSSProperties {

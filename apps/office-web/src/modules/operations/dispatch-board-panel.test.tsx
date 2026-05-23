@@ -2,138 +2,86 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentStatus,
-  AppointmentSummary,
-  JobStatus,
-  JobSummary,
-  JobsWorkspaceResponse
+  DispatchAppointmentSummary,
+  DispatchBoardResponse,
+  JobStatus
 } from '@/lib/operations-api';
 import { buildDispatchBoardModel } from './dispatch-board-data';
 import { DispatchBoardPanel } from './dispatch-board-panel';
-
-const baseTimestamp = '2026-05-22T10:00:00.000Z';
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function buildAppointment(overrides: Partial<AppointmentSummary> = {}): AppointmentSummary {
+function buildDispatchAppointment(overrides: Partial<DispatchAppointmentSummary> = {}): DispatchAppointmentSummary {
   return {
-    id: 'appt-1',
+    appointmentId: 'appt-1',
     jobId: 'job-1',
-    status: 'scheduled' as AppointmentStatus,
-    needsOfficeReview: false,
-    createdAt: baseTimestamp,
-    updatedAt: baseTimestamp,
-    ...overrides
-  };
-}
-
-function buildJob(overrides: Partial<JobSummary> = {}): JobSummary {
-  return {
-    id: 'job-1',
     jobNumber: '1001',
+    jobSummary: 'No cooling',
+    jobStatus: 'scheduled' as JobStatus,
+    jobType: 'Service',
+    status: 'scheduled' as AppointmentStatus,
+    scheduledDate: '2026-05-22',
+    scheduledStartTime: '08:00',
+    scheduledEndTime: '10:00',
+    technicianId: 'tech-1',
+    technicianName: 'Taylor Tech',
     locationId: 'location-1',
     locationName: 'Main Shop',
+    locationAddressLine1: '123 Main',
+    locationCity: 'Blaine',
+    locationState: 'WA',
     billToCustomerId: 'customer-1',
     billToCustomerName: 'Acme',
-    jobType: 'Service',
-    category: 'General',
-    origin: 'Inbound phone call',
-    summary: 'No cooling',
-    status: 'scheduled' as JobStatus,
-    needsScheduling: false,
+    customerName: 'Acme',
     needsOfficeReview: false,
-    appointments: [buildAppointment()],
-    timeline: [],
-    createdAt: baseTimestamp,
-    updatedAt: baseTimestamp,
+    equipment: [],
+    equipmentCount: 0,
     ...overrides
   };
 }
 
-function buildWorkspace(jobs: JobSummary[]): JobsWorkspaceResponse {
+function buildDispatchBoard(appointments: DispatchAppointmentSummary[]): DispatchBoardResponse {
   return {
-    customers: [
-      {
-        id: 'customer-1',
-        name: 'Acme',
-        accountType: 'company',
-        billingAddressLine1: '123 Main',
-        billingCity: 'Blaine',
-        billingState: 'WA',
-        billingPostalCode: '98230',
-        isActive: true,
-        flags: []
-      }
-    ],
-    locations: [
-      {
-        id: 'location-1',
-        name: 'Main Shop',
-        customerId: 'customer-1',
-        customerName: 'Acme',
-        addressLine1: '123 Main',
-        city: 'Blaine',
-        state: 'WA',
-        postalCode: '98230',
-        isActive: true,
-        contacts: [],
-        alternateBillToCustomerIds: []
-      }
-    ],
+    startDate: '2026-05-22',
+    endDate: '2026-05-22',
     technicians: [
       { id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' },
       { id: 'tech-2', displayName: 'Sam Tech', roleId: 'technician' }
     ],
-    jobs
+    appointments
   };
 }
 
 describe('buildDispatchBoardModel', () => {
   it('groups assigned appointments under technician rows and lists unassigned ones in the queue', () => {
-    const workspace = buildWorkspace([
-      buildJob({
-        id: 'job-1',
-        jobNumber: '1001',
-        appointments: [
-          buildAppointment({
-            id: 'appt-tech1',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            scheduledDate: '2026-05-22',
-            timeWindowLabel: '8-10'
-          })
-        ]
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        appointmentId: 'appt-tech1',
+        technicianId: 'tech-1',
+        technicianName: 'Taylor Tech',
+        timeWindowLabel: '8-10'
       }),
-      buildJob({
-        id: 'job-2',
+      buildDispatchAppointment({
+        appointmentId: 'appt-unassigned',
+        jobId: 'job-2',
         jobNumber: '1002',
-        appointments: [
-          buildAppointment({
-            id: 'appt-unassigned',
-            jobId: 'job-2',
-            scheduledDate: '2026-05-22',
-            timeWindowLabel: '1-3'
-          })
-        ]
+        technicianId: undefined,
+        technicianName: undefined,
+        timeWindowLabel: '1-3'
       }),
-      buildJob({
-        id: 'job-3',
+      buildDispatchAppointment({
+        appointmentId: 'appt-tech2',
+        jobId: 'job-3',
         jobNumber: '1003',
-        appointments: [
-          buildAppointment({
-            id: 'appt-tech2',
-            jobId: 'job-3',
-            technicianId: 'tech-2',
-            technicianName: 'Sam Tech',
-            scheduledDate: '2026-05-22',
-            timeWindowLabel: '10-12'
-          })
-        ]
+        technicianId: 'tech-2',
+        technicianName: 'Sam Tech',
+        timeWindowLabel: '10-12'
       })
     ]);
 
-    const model = buildDispatchBoardModel(workspace);
+    const model = buildDispatchBoardModel(dispatchBoard);
 
     expect(model.technicianRows).toHaveLength(2);
     expect(model.technicianRows[0]?.technicianId).toBe('tech-1');
@@ -143,88 +91,51 @@ describe('buildDispatchBoardModel', () => {
     expect(model.cardLookup.size).toBe(3);
   });
 
-  it('hides cancelled jobs and cancelled appointments from the board', () => {
-    const workspace = buildWorkspace([
-      buildJob({
-        id: 'job-cancelled-job',
-        status: 'cancelled',
-        appointments: [buildAppointment({ id: 'appt-from-cancel', jobId: 'job-cancelled-job' })]
+  it('defensively hides cancelled jobs and cancelled appointments from the board', () => {
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        appointmentId: 'appt-from-cancelled-job',
+        jobId: 'job-cancelled',
+        jobStatus: 'cancelled'
       }),
-      buildJob({
-        id: 'job-with-cancelled-appt',
-        appointments: [
-          buildAppointment({ id: 'appt-cancelled', jobId: 'job-with-cancelled-appt', status: 'cancelled' }),
-          buildAppointment({ id: 'appt-active', jobId: 'job-with-cancelled-appt' })
-        ]
-      })
+      buildDispatchAppointment({
+        appointmentId: 'appt-cancelled',
+        jobId: 'job-with-cancelled-appt',
+        status: 'cancelled'
+      }),
+      buildDispatchAppointment({ appointmentId: 'appt-active' })
     ]);
 
-    const model = buildDispatchBoardModel(workspace);
+    const model = buildDispatchBoardModel(dispatchBoard);
     const visibleIds = [...model.cardLookup.keys()].sort();
 
     expect(visibleIds).toEqual(['appt-active']);
   });
 
-  it('filters by viewDate when one is supplied', () => {
-    const workspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({ id: 'appt-today', scheduledDate: '2026-05-22', technicianId: 'tech-1' }),
-          buildAppointment({ id: 'appt-tomorrow', scheduledDate: '2026-05-23', technicianId: 'tech-1' }),
-          buildAppointment({ id: 'appt-unscheduled', technicianId: 'tech-1' })
-        ]
-      })
-    ]);
-
-    const model = buildDispatchBoardModel(workspace, '2026-05-22');
-
-    expect(model.cardLookup.size).toBe(1);
-    expect(model.cardLookup.has('appt-today')).toBe(true);
-  });
-
   it('sorts cards by scheduled date, structured start time, and job number', () => {
-    const workspace = buildWorkspace([
-      buildJob({
-        id: 'job-untimed',
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        appointmentId: 'appt-untimed',
+        jobId: 'job-untimed',
         jobNumber: '1001',
-        appointments: [
-          buildAppointment({
-            id: 'appt-untimed',
-            jobId: 'job-untimed',
-            technicianId: 'tech-1',
-            scheduledDate: '2026-05-22'
-          })
-        ]
+        scheduledStartTime: undefined,
+        scheduledEndTime: undefined
       }),
-      buildJob({
-        id: 'job-late',
+      buildDispatchAppointment({
+        appointmentId: 'appt-late',
+        jobId: 'job-late',
         jobNumber: '1002',
-        appointments: [
-          buildAppointment({
-            id: 'appt-late',
-            jobId: 'job-late',
-            technicianId: 'tech-1',
-            scheduledDate: '2026-05-22',
-            scheduledStartTime: '13:00'
-          })
-        ]
+        scheduledStartTime: '13:00'
       }),
-      buildJob({
-        id: 'job-early',
+      buildDispatchAppointment({
+        appointmentId: 'appt-early',
+        jobId: 'job-early',
         jobNumber: '1003',
-        appointments: [
-          buildAppointment({
-            id: 'appt-early',
-            jobId: 'job-early',
-            technicianId: 'tech-1',
-            scheduledDate: '2026-05-22',
-            scheduledStartTime: '08:00'
-          })
-        ]
+        scheduledStartTime: '08:00'
       })
     ]);
 
-    const model = buildDispatchBoardModel(workspace, '2026-05-22');
+    const model = buildDispatchBoardModel(dispatchBoard);
     const techRow = model.technicianRows.find((row) => row.technicianId === 'tech-1');
 
     expect(techRow?.cards.map((card) => card.appointmentId)).toEqual(['appt-early', 'appt-late', 'appt-untimed']);
@@ -233,26 +144,23 @@ describe('buildDispatchBoardModel', () => {
 
 describe('DispatchBoardPanel', () => {
   it('renders a compact dated board with technician rows and unassigned work', () => {
-    const workspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            id: 'appt-tech1',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            scheduledDate: '2026-05-22'
-          })
-        ]
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        appointmentId: 'appt-tech1',
+        technicianId: 'tech-1',
+        technicianName: 'Taylor Tech'
       }),
-      buildJob({
-        id: 'job-2',
+      buildDispatchAppointment({
+        appointmentId: 'appt-unassigned',
+        jobId: 'job-2',
         jobNumber: '1002',
-        summary: 'Heat not working',
-        appointments: [buildAppointment({ id: 'appt-unassigned', jobId: 'job-2', scheduledDate: '2026-05-22' })]
+        jobSummary: 'Heat not working',
+        technicianId: undefined,
+        technicianName: undefined
       })
     ]);
 
-    render(<DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" />);
+    render(<DispatchBoardPanel dispatchBoard={dispatchBoard} viewDate="2026-05-22" />);
 
     expect(screen.getByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Dispatch' })).toBeInTheDocument();
@@ -271,21 +179,13 @@ describe('DispatchBoardPanel', () => {
 
   it('surfaces a controlled dispatch date input', () => {
     const onViewDateChange = vi.fn();
-    const workspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            id: 'appt-tech1',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            scheduledDate: '2026-05-22'
-          })
-        ]
-      })
-    ]);
 
     render(
-      <DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" onViewDateChange={onViewDateChange} />
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([buildDispatchAppointment()])}
+        viewDate="2026-05-22"
+        onViewDateChange={onViewDateChange}
+      />
     );
 
     fireEvent.change(screen.getByLabelText('Dispatch date'), { target: { value: '2026-05-23' } });
@@ -295,11 +195,11 @@ describe('DispatchBoardPanel', () => {
 
   it('calls refresh and reflects refresh state', async () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
-    const workspace = buildWorkspace([buildJob()]);
+    const dispatchBoard = buildDispatchBoard([buildDispatchAppointment()]);
 
     const { rerender } = render(
       <DispatchBoardPanel
-        jobsWorkspace={workspace}
+        dispatchBoard={dispatchBoard}
         viewDate="2026-05-22"
         lastRefreshedAt="2026-05-22T15:30:00.000Z"
         onRefresh={onRefresh}
@@ -316,7 +216,7 @@ describe('DispatchBoardPanel', () => {
 
     rerender(
       <DispatchBoardPanel
-        jobsWorkspace={workspace}
+        dispatchBoard={dispatchBoard}
         viewDate="2026-05-22"
         lastRefreshedAt="2026-05-22T15:30:00.000Z"
         isRefreshing={true}
@@ -330,22 +230,10 @@ describe('DispatchBoardPanel', () => {
 
   it('opens job detail when an appointment card is clicked', () => {
     const onOpenJobDetail = vi.fn();
-    const workspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            id: 'appt-tech1',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            scheduledDate: '2026-05-22'
-          })
-        ]
-      })
-    ]);
 
     render(
       <DispatchBoardPanel
-        jobsWorkspace={workspace}
+        dispatchBoard={buildDispatchBoard([buildDispatchAppointment({ appointmentId: 'appt-tech1' })])}
         viewDate="2026-05-22"
         onOpenJobDetail={onOpenJobDetail}
       />
@@ -356,26 +244,39 @@ describe('DispatchBoardPanel', () => {
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
   });
 
-  it('shows a review badge when the appointment or job is flagged for review', () => {
-    const workspace = buildWorkspace([
-      buildJob({
+  it('shows review and equipment glance when supplied by the dispatch feed', () => {
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        status: 'finished',
         needsOfficeReview: true,
-        appointments: [
-          buildAppointment({
-            id: 'appt-tech1',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            scheduledDate: '2026-05-22',
-            needsOfficeReview: true,
-            status: 'finished',
-            finishOutcome: 'followUpNeeded'
-          })
+        equipmentCount: 4,
+        equipment: [
+          {
+            id: 'equipment-1',
+            equipmentType: 'Condenser',
+            brand: 'Carrier',
+            model: 'ABC',
+            serialNumber: 'SN-1',
+            filterSizes: ['16x20x1'],
+            installDate: '2021-05-01',
+            status: 'active'
+          },
+          {
+            id: 'equipment-2',
+            equipmentType: 'Furnace',
+            brand: 'Trane',
+            model: 'XYZ',
+            serialNumber: 'SN-2',
+            filterSizes: [],
+            status: 'active'
+          }
         ]
       })
     ]);
 
-    render(<DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" />);
+    render(<DispatchBoardPanel dispatchBoard={dispatchBoard} viewDate="2026-05-22" />);
 
     expect(screen.getByText('Review')).toBeInTheDocument();
+    expect(screen.getByText(/Condenser Carrier ABC, Furnace Trane XYZ \+2/)).toBeInTheDocument();
   });
 });

@@ -40,6 +40,10 @@ export class EquipmentDataService {
     return this.equipmentDataRepository.listEquipmentByLocation(locationId, includeInactive);
   }
 
+  async listEquipmentByLocations(locationIds: string[], includeInactive: boolean): Promise<EquipmentRecord[]> {
+    return this.equipmentDataRepository.listEquipmentByLocations(locationIds, includeInactive);
+  }
+
   async listEquipmentByIds(equipmentIds: string[]): Promise<EquipmentRecord[]> {
     return this.equipmentDataRepository.listEquipmentByIds(equipmentIds);
   }

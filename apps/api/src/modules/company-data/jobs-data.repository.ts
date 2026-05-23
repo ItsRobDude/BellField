@@ -9,6 +9,7 @@ import type {
   CreateAppointmentInput,
   CreateJobInput,
   CreateMediaAttachmentInput,
+  DispatchAppointmentRecord,
   FinishedVisitReviewDecision,
   CreateRegisterEntryInput,
   JobRecord,
@@ -56,6 +57,32 @@ type AppointmentRow = {
   finishedReviewDecision: FinishedVisitReviewDecision | null;
   createdAt: string | Date;
   updatedAt: string | Date;
+};
+
+type DispatchAppointmentRow = {
+  appointmentId: string;
+  jobId: string;
+  jobNumber: string;
+  jobSummary: string;
+  jobStatus: JobStatus;
+  jobType: string;
+  workOrderNumber: string | null;
+  status: AppointmentStatus;
+  scheduledDate: string | Date;
+  scheduledStartTime: string | Date | null;
+  scheduledEndTime: string | Date | null;
+  timeWindowLabel: string | null;
+  technicianId: string | null;
+  technicianName: string | null;
+  locationId: string;
+  locationName: string;
+  locationAddressLine1: string;
+  locationCity: string;
+  locationState: string;
+  billToCustomerId: string;
+  billToCustomerName: string;
+  customerName: string;
+  needsOfficeReview: boolean;
 };
 
 type TimelineRow = {
@@ -142,6 +169,63 @@ export class JobsDataRepository {
     );
 
     return this.hydrateJobs(jobsResult.rows);
+  }
+
+  async listDispatchAppointments(startDate: string, endDate: string): Promise<DispatchAppointmentRecord[]> {
+    const result = await this.databaseService.query<DispatchAppointmentRow>(
+      `
+        select
+          appointment.id as "appointmentId",
+          appointment.job_id as "jobId",
+          job.job_number as "jobNumber",
+          job.summary as "jobSummary",
+          job.status as "jobStatus",
+          job.job_type as "jobType",
+          job.work_order_number as "workOrderNumber",
+          appointment.status,
+          appointment.scheduled_date as "scheduledDate",
+          appointment.scheduled_start_time as "scheduledStartTime",
+          appointment.scheduled_end_time as "scheduledEndTime",
+          appointment.time_window_label as "timeWindowLabel",
+          appointment.technician_id as "technicianId",
+          technician.display_name as "technicianName",
+          location.id as "locationId",
+          location.name as "locationName",
+          location.address_line1 as "locationAddressLine1",
+          location.city as "locationCity",
+          location.state as "locationState",
+          bill_to_customer.id as "billToCustomerId",
+          bill_to_customer.name as "billToCustomerName",
+          owner_customer.name as "customerName",
+          (
+            job.status not in ('completed', 'closed', 'cancelled')
+            and exists (
+              select 1
+              from appointments review_appointment
+              where review_appointment.job_id = job.id
+                and review_appointment.status = 'finished'
+                and review_appointment.finished_reviewed_at is null
+            )
+          ) as "needsOfficeReview"
+        from appointments appointment
+        inner join jobs job on job.id = appointment.job_id
+        inner join locations location on location.id = job.location_id
+        inner join customers owner_customer on owner_customer.id = location.customer_id
+        inner join customers bill_to_customer on bill_to_customer.id = job.bill_to_customer_id
+        left join employees technician on technician.id = appointment.technician_id
+        where appointment.scheduled_date between $1::date and $2::date
+          and appointment.status <> 'cancelled'
+          and job.status not in ('closed', 'cancelled')
+        order by
+          appointment.scheduled_date asc,
+          appointment.scheduled_start_time asc nulls last,
+          job.job_number asc,
+          appointment.created_at asc
+      `,
+      [startDate, endDate]
+    );
+
+    return result.rows.map((row) => this.toDispatchAppointmentRecord(row));
   }
 
   async listJobsByIds(jobIds: string[]): Promise<JobRecord[]> {
@@ -1657,6 +1741,34 @@ export class JobsDataRepository {
       finishedReviewDecision: row.finishedReviewDecision ?? undefined,
       createdAt: toIsoString(row.createdAt),
       updatedAt: toIsoString(row.updatedAt)
+    };
+  }
+
+  private toDispatchAppointmentRecord(row: DispatchAppointmentRow): DispatchAppointmentRecord {
+    return {
+      appointmentId: row.appointmentId,
+      jobId: row.jobId,
+      jobNumber: row.jobNumber,
+      jobSummary: row.jobSummary,
+      jobStatus: row.jobStatus,
+      jobType: row.jobType,
+      workOrderNumber: row.workOrderNumber ?? undefined,
+      status: row.status,
+      scheduledDate: toOptionalDateString(row.scheduledDate) as string,
+      scheduledStartTime: toOptionalTimeString(row.scheduledStartTime),
+      scheduledEndTime: toOptionalTimeString(row.scheduledEndTime),
+      timeWindowLabel: row.timeWindowLabel ?? undefined,
+      technicianId: row.technicianId ?? undefined,
+      technicianName: row.technicianName ?? undefined,
+      locationId: row.locationId,
+      locationName: row.locationName,
+      locationAddressLine1: row.locationAddressLine1,
+      locationCity: row.locationCity,
+      locationState: row.locationState,
+      billToCustomerId: row.billToCustomerId,
+      billToCustomerName: row.billToCustomerName,
+      customerName: row.customerName,
+      needsOfficeReview: row.needsOfficeReview
     };
   }
 

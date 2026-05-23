@@ -17,6 +17,9 @@ import type {
   CustomerAccountSummary,
   CustomerDetail,
   CustomerMutationResponse,
+  DispatchAppointmentSummary,
+  DispatchBoardResponse,
+  DispatchEquipmentGlance,
   DuplicateCandidate,
   EquipmentDeleteResponse,
   EquipmentDetail,
@@ -75,6 +78,9 @@ export type {
   CustomerAccountSummary,
   CustomerDetail,
   CustomerMutationResponse,
+  DispatchAppointmentSummary,
+  DispatchBoardResponse,
+  DispatchEquipmentGlance,
   DuplicateCandidate,
   EquipmentDeleteResponse,
   EquipmentDetail,
@@ -281,6 +287,24 @@ export async function getOfficeJobsWorkspace(input: {
   apiBaseUrl?: string;
 }): Promise<JobsWorkspaceResponse> {
   return requestJson<JobsWorkspaceResponse>('/operations/jobs', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function getOfficeDispatchBoard(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  startDate: string;
+  endDate?: string;
+}): Promise<DispatchBoardResponse> {
+  const searchParams = new URLSearchParams({ startDate: input.startDate });
+
+  if (input.endDate) {
+    searchParams.set('endDate', input.endDate);
+  }
+
+  return requestJson<DispatchBoardResponse>(`/operations/dispatch?${searchParams.toString()}`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
   });
