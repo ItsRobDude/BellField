@@ -249,10 +249,10 @@ export class JobsAppointmentsService {
     if (request.occurredAt) {
       await this.jobsDataService.addSyncFlag(
         appointment.jobId,
-        accessCheck.status === 'preservedReplay'
-          ? 'Field appointment update synced after assignment changed while the device was offline.'
-          : currentJob.status === 'cancelled'
-            ? 'Field appointment update synced after the job had already been cancelled.'
+        currentJob.status === 'cancelled'
+          ? 'Field appointment update synced after the job had already been cancelled.'
+          : accessCheck.status === 'preservedReplay'
+            ? 'Field appointment update synced after assignment changed while the device was offline.'
             : 'Field update synced after local save queue replay.',
         actor.displayName,
         new Date().toISOString()

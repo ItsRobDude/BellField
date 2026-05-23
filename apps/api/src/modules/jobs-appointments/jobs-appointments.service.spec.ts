@@ -536,7 +536,7 @@ describe('JobsAppointmentsService', () => {
     expect(response.jobs[0]?.needsOfficeReview).toBe(false);
   });
 
-  it('writes a sync flag note when a field replay update lands after the job was cancelled', async () => {
+  it('writes a sync flag note when a valid field replay lands after the job was cancelled', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     const job = createJob('cancelled');
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
@@ -545,7 +545,7 @@ describe('JobsAppointmentsService', () => {
       effectivePermissions: ['appointmentsDispatch:edit'],
       sessionSurface: 'field-mobile'
     });
-    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([job]);
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([]);
     jobsDataService.getAppointmentById.mockResolvedValue({
       id: 'appointment-1',
       jobId: 'job-1',
@@ -564,9 +564,12 @@ describe('JobsAppointmentsService', () => {
 
     await service.updateAppointmentStatus('session-token', 'appointment-1', {
       status: 'working',
-      occurredAt: '2026-04-14T11:00:00.000Z'
+      occurredAt: '2026-04-14T11:00:00.000Z',
+      baseUpdatedAt: '2026-04-14T10:00:00.000Z',
+      syncSource: 'field-save-queue'
     });
 
+    expect(jobsDataService.listAssignedJobsForEmployee).toHaveBeenCalled();
     expect(jobsDataService.addSyncFlag).toHaveBeenCalledWith(
       'job-1',
       'Field appointment update synced after the job had already been cancelled.',
