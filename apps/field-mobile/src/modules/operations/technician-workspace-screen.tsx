@@ -50,6 +50,12 @@ import {
   summarizeAppointmentQueueState,
   summarizeOfficeAppointmentChanges
 } from './field-appointment-display';
+import {
+  discardPendingOperation as discardPendingOperationFromQueue,
+  getReplayablePendingOperations,
+  markPendingOperationForRetry,
+  shouldOfferQueueResolution
+} from './field-queue-resolution';
 
 type Props = {
   apiBaseUrl: string;
@@ -557,6 +563,45 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     })();
   }
 
+  async function retryQueuedOperation(operationId: string) {
+    setErrorMessage(null);
+
+    try {
+      await updatePendingOperationState(operationId, 'pending');
+      setPendingOperations((current) => markPendingOperationForRetry(current, operationId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to mark the local change for retry.');
+    }
+  }
+
+  function confirmDiscardQueuedOperation(operation: PendingOperation) {
+    Alert.alert(
+      'Discard local change?',
+      'This removes the saved local change from this device and it will not sync to the office.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Discard',
+          style: 'destructive',
+          onPress: () => {
+            void discardQueuedOperation(operation.id);
+          }
+        }
+      ]
+    );
+  }
+
+  async function discardQueuedOperation(operationId: string) {
+    setErrorMessage(null);
+
+    try {
+      await removePendingOperation(operationId);
+      setPendingOperations((current) => discardPendingOperationFromQueue(current, operationId));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to discard the local change.');
+    }
+  }
+
   async function syncNow() {
     setIsSyncing(true);
     setErrorMessage(null);
@@ -588,7 +633,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
         setPendingOperations((current) => current.filter((entry) => entry.id !== operationId));
       }
 
-      for (const operation of [...pendingOperations].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))) {
+      for (const operation of getReplayablePendingOperations(pendingOperations)) {
         if (shouldStopEarly) {
           break;
         }
@@ -1235,9 +1280,19 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
               <Text style={styles.summaryText}>No local changes waiting for sync.</Text>
             ) : (
               pendingOperations.map((operation) => (
-                <Text key={operation.id} style={styles.summaryText}>
-                  {formatPendingOperation(operation)}
-                </Text>
+                <View key={operation.id} style={styles.queueItem}>
+                  <Text style={styles.summaryText}>{formatPendingOperation(operation)}</Text>
+                  {shouldOfferQueueResolution(operation) ? (
+                    <View style={styles.actionRow}>
+                      <Pressable onPress={() => void retryQueuedOperation(operation.id)} style={styles.secondaryButton}>
+                        <Text style={styles.secondaryButtonText}>Retry on next sync</Text>
+                      </Pressable>
+                      <Pressable onPress={() => confirmDiscardQueuedOperation(operation)} style={styles.dangerButton}>
+                        <Text style={styles.dangerButtonText}>Discard local change</Text>
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
               ))
             )}
           </View>
@@ -1308,6 +1363,7 @@ const styles = StyleSheet.create({
   summaryCard: { backgroundColor: '#ffffff', borderColor: '#ebdec6', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
   noticeCard: { backgroundColor: '#eef6f7', borderColor: '#bdd9df', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
   block: { backgroundColor: '#faf7ef', borderRadius: 14, gap: 8, padding: 12 },
+  queueItem: { borderColor: '#ebdec6', borderTopWidth: 1, gap: 8, paddingTop: 10 },
   reviewCard: { backgroundColor: '#f3f7ef', borderColor: '#d5e2cd', borderRadius: 14, borderWidth: 1, gap: 8, padding: 12 },
   sectionTitle: { color: '#1f2933', fontSize: 17, fontWeight: '600' },
   sectionTitleSmall: { color: '#1f2933', fontSize: 15, fontWeight: '600' },
@@ -1328,6 +1384,8 @@ const styles = StyleSheet.create({
   primaryButtonText: { color: '#ffffff', fontSize: 15, fontWeight: '700' },
   secondaryButton: { alignItems: 'center', borderColor: '#cdbfa6', borderRadius: 999, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
   secondaryButtonText: { color: '#1f2933', fontSize: 14, fontWeight: '600' },
+  dangerButton: { alignItems: 'center', borderColor: '#d79b92', borderRadius: 999, borderWidth: 1, paddingHorizontal: 16, paddingVertical: 12 },
+  dangerButtonText: { color: '#9f1d15', fontSize: 14, fontWeight: '700' },
   tagButton: { backgroundColor: '#eef2e5', borderRadius: 999, paddingHorizontal: 12, paddingVertical: 8 },
   tagButtonText: { color: '#33523d', fontSize: 13, fontWeight: '600' },
   errorText: { color: '#b42318', fontSize: 14 }

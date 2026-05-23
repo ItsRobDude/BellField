@@ -17,6 +17,7 @@ Behaviors backed by tests in `apps/field-mobile/src/modules/operations/__tests__
 - **Refresh after office change** — when `refreshAssignedWork` pulls a new snapshot, locally queued notes/status/equipment edits still apply on top of the new server values. Pending queue order is `occurredAt`-sorted before drain.
 - **Field cancel boundary** — the screen's `fieldAppointmentStatuses` list excludes `cancelled`, matching the backend's `ForbiddenException` on technician-initiated cancel.
 - **Field trust display helpers** — work order number, full location address, structured schedule display, finished-review acknowledgement, per-appointment queue badges, and office-change refresh summaries are covered by pure helper tests.
+- **Queue resolution controls** — conflicted/rejected local operations stay visible but are no longer replayed by ordinary `Sync Now` until the technician explicitly marks them for retry. The technician can also discard one conflicted/rejected local change after confirmation.
 
 ---
 
@@ -50,15 +51,20 @@ Covered by `field-assignment-display.test.ts`.
 
 Covered by `field-appointment-display.test.ts`.
 
+**Conflicted or rejected queue items now have explicit resolution actions.**
+
+The pending queue shows `Retry on next sync` and `Discard local change` only for `conflict` and `rejected` operations. Normal `Sync Now` drains only `pending` operations, which keeps failed items preserved until a technician intentionally retries or discards them. Discard requires confirmation because it removes the local overlay from the device and will not sync to the office.
+
+Covered by `field-queue-resolution.test.ts`.
+
 ---
 
 ## Display gaps (Milestone 6 punch list — not fixed here)
 
 These are real gaps a technician will notice once dispatch starts driving real-world schedule changes. None of them needed a fix to make the lane safe to land, but they should be on a later field lane's plate.
 
-1. **No retry/discard control for conflicted/rejected queue entries.** Once an item flips to `conflict` or `rejected` it stays in the queue with provenance, but the UI has no "discard" or "resolve" affordance. Today the technician has to sign out (which warns) or live with the alert tone.
-2. **No explicit route/navigation action from the address.** The full address is visible now, but there is no tap target to hand it to device maps.
-3. **No field-side detail drawer.** The screen remains one scrollable operational card, so the new trust signals are readable but not organized into the dashboard/detail pattern described in the screen behavior spec.
+1. **No explicit route/navigation action from the address.** The full address is visible now, but there is no tap target to hand it to device maps.
+2. **No field-side detail drawer.** The screen remains one scrollable operational card, so the new trust signals are readable but not organized into the dashboard/detail pattern described in the screen behavior spec.
 
 ---
 
@@ -90,6 +96,8 @@ Cross-referenced against `docs/milestone-implementation-plan.md` §11 and `docs/
 These are now pinned by tests and should stay true:
 
 - Conflict and rejected ops are kept in the queue with `lastResultMessage`, not deleted.
+- Ordinary `Sync Now` replays `pending` operations only; conflict/rejected entries require an explicit retry action before another server attempt.
+- Discarding a conflict/rejected queue entry is an explicit destructive action and removes only that one local operation.
 - A network failure during `syncNow` leaves the entire queue untouched and only flips tone to alert via `lastSyncError`.
 - Merge helpers only mutate cache entries that exist locally — they never invent new cached jobs or equipment from a response.
 - Merge helpers strip `syncResult`/`warningMessages`/`history`/replacement links before folding into the snapshot.
@@ -99,9 +107,8 @@ These are now pinned by tests and should stay true:
 
 ## Recommended next field lane
 
-1. **Queue resolution controls.** Give technicians a controlled way to discard or resolve conflicted/rejected local changes without signing out.
-2. **Register / media queueing.** Real Milestone 6 scope, currently absent.
-3. **Auto-sync loop.** Quiet background drain so technicians don't have to remember to press Sync Now.
-4. **Field dashboard/detail split.** Move the single long card toward the documented technician home/detail workflow once the data and sync trust surfaces are stable.
+1. **Register / media queueing.** Real Milestone 6 scope, currently absent.
+2. **Auto-sync loop.** Quiet background drain so technicians don't have to remember to press Sync Now.
+3. **Field dashboard/detail split.** Move the single long card toward the documented technician home/detail workflow once the data and sync trust surfaces are stable.
 
 Each item is small enough to ship as its own lane and none of them require dispatch-model decisions to be settled first.
