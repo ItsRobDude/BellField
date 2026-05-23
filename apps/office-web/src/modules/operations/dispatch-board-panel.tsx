@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { JobsWorkspaceResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -9,11 +9,18 @@ import {
   type DispatchBoardModel
 } from './dispatch-board-data';
 
+export type DispatchScheduleDraft = {
+  scheduledDate: string;
+  timeWindowLabel: string;
+  technicianId: string;
+};
+
 type DispatchBoardPanelProps = {
   jobsWorkspace: JobsWorkspaceResponse;
   viewDate?: string;
   onViewDateChange?: (date: string) => void;
   onOpenInJobsPanel?: (jobId: string) => void;
+  onSaveAppointmentSchedule?: (appointmentId: string, draft: DispatchScheduleDraft) => Promise<void>;
 };
 
 const appointmentStatusLabels: Record<DispatchAppointmentCard['status'], string> = {
@@ -32,11 +39,13 @@ export function DispatchBoardPanel({
   jobsWorkspace,
   viewDate,
   onViewDateChange,
-  onOpenInJobsPanel
+  onOpenInJobsPanel,
+  onSaveAppointmentSchedule
 }: DispatchBoardPanelProps) {
+  const effectiveViewDate = viewDate || getDateInputValue();
   const model = useMemo<DispatchBoardModel>(
-    () => buildDispatchBoardModel(jobsWorkspace, viewDate),
-    [jobsWorkspace, viewDate]
+    () => buildDispatchBoardModel(jobsWorkspace, effectiveViewDate),
+    [jobsWorkspace, effectiveViewDate]
   );
 
   const [selectedAppointmentId, setSelectedAppointmentId] = useState<string | undefined>();
@@ -45,6 +54,12 @@ export function DispatchBoardPanel({
   const totalCardCount = model.cardLookup.size;
   const unassignedCount = model.unassignedQueue.length;
 
+  useEffect(() => {
+    if (selectedAppointmentId && !model.cardLookup.has(selectedAppointmentId)) {
+      setSelectedAppointmentId(undefined);
+    }
+  }, [model.cardLookup, selectedAppointmentId]);
+
   return (
     <section style={styles.card} aria-label="Dispatch board v1 foundation">
       <div style={styles.row}>
@@ -52,8 +67,8 @@ export function DispatchBoardPanel({
           <div style={styles.kicker}>Dispatch board</div>
           <h2 style={styles.heading}>Office dispatch v1</h2>
           <p style={styles.muted}>
-            Reads jobs and appointments from the same workspace the office panel already loads. Reassignment and
-            scheduling still happen through the jobs/appointments panel until v1 wires those actions through.
+            Reads jobs and appointments from the same workspace the office panel already loads. Use the detail drawer
+            to assign technicians or reschedule the visible day view.
           </p>
         </div>
         <div style={styles.badgeRow}>
@@ -67,8 +82,8 @@ export function DispatchBoardPanel({
         <input
           type="date"
           aria-label="Dispatch date"
-          value={viewDate ?? ''}
-          onChange={(event) => onViewDateChange?.(event.target.value)}
+          value={effectiveViewDate}
+          onChange={(event) => onViewDateChange?.(event.target.value || getDateInputValue())}
           style={styles.input}
         />
       </label>
@@ -119,9 +134,7 @@ export function DispatchBoardPanel({
                       </div>
                       <span style={styles.tinyMuted}>
                         {row.cards.length === 0
-                          ? viewDate
-                            ? 'No appointments on this date.'
-                            : 'No appointments in this view.'
+                          ? 'No appointments on this date.'
                           : `${row.cards.length} ${row.cards.length === 1 ? 'appointment' : 'appointments'}`}
                       </span>
                     </div>
@@ -148,15 +161,17 @@ export function DispatchBoardPanel({
           {selectedCard ? (
             <DispatchDetailDrawer
               card={selectedCard}
+              technicians={jobsWorkspace.technicians}
               onOpenInJobsPanel={onOpenInJobsPanel}
+              onSaveAppointmentSchedule={onSaveAppointmentSchedule}
               onClose={() => setSelectedAppointmentId(undefined)}
             />
           ) : (
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               <h3 style={styles.subheading}>Detail drawer</h3>
-              <p style={styles.tinyMuted}>Click an appointment card to review who, where, and when.</p>
+              <p style={styles.tinyMuted}>Click an appointment card to review or change dispatch scheduling.</p>
               <p style={styles.tinyMuted}>
-                Reassignment, rescheduling, and status edits remain in the jobs/appointments panel for v1.
+                Status edits remain in the jobs/appointments panel while board scheduling stabilizes.
               </p>
             </div>
           )}
@@ -205,11 +220,44 @@ function DispatchCardButton({ card, isSelected, onSelect }: DispatchCardButtonPr
 
 type DispatchDetailDrawerProps = {
   card: DispatchAppointmentCard;
+  technicians: JobsWorkspaceResponse['technicians'];
   onOpenInJobsPanel?: (jobId: string) => void;
+  onSaveAppointmentSchedule?: (appointmentId: string, draft: DispatchScheduleDraft) => Promise<void>;
   onClose: () => void;
 };
 
-function DispatchDetailDrawer({ card, onOpenInJobsPanel, onClose }: DispatchDetailDrawerProps) {
+function DispatchDetailDrawer({
+  card,
+  technicians,
+  onOpenInJobsPanel,
+  onSaveAppointmentSchedule,
+  onClose
+}: DispatchDetailDrawerProps) {
+  const [draft, setDraft] = useState<DispatchScheduleDraft>(() => createDraftFromCard(card));
+  const [isSaving, setIsSaving] = useState(false);
+  const hasCurrentTechnicianOption =
+    !draft.technicianId || technicians.some((technician) => technician.id === draft.technicianId);
+  const isUnchanged = isSameScheduleDraft(card, draft);
+
+  useEffect(() => {
+    setDraft(createDraftFromCard(card));
+    setIsSaving(false);
+  }, [card.appointmentId, card.scheduledDate, card.timeWindowLabel, card.technicianId]);
+
+  async function handleSave() {
+    if (!onSaveAppointmentSchedule || isSaving || isUnchanged) {
+      return;
+    }
+
+    setIsSaving(true);
+
+    try {
+      await onSaveAppointmentSchedule(card.appointmentId, draft);
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <div style={{ display: 'grid', gap: '0.6rem' }}>
       <div style={styles.row}>
@@ -231,11 +279,59 @@ function DispatchDetailDrawer({ card, onOpenInJobsPanel, onClose }: DispatchDeta
           label="Location"
           value={`${card.locationName}${card.locationCity ? ` - ${card.locationCity}, ${card.locationState ?? ''}`.trimEnd() : ''}`}
         />
-        <DrawerField label="Technician" value={card.technicianName ?? 'Unassigned'} />
-        <DrawerField label="Date" value={card.scheduledDate ?? 'Unscheduled'} />
-        <DrawerField label="Time window" value={card.timeWindowLabel ?? 'No window'} />
         {card.finishOutcome ? <DrawerField label="Finish outcome" value={card.finishOutcome} /> : null}
       </dl>
+      <div style={dispatchEditGridStyle}>
+        <label style={editFieldLabelStyle}>
+          <span style={styles.tinyMuted}>Date</span>
+          <input
+            type="date"
+            aria-label="Dispatch appointment date"
+            value={draft.scheduledDate}
+            onChange={(event) => setDraft((current) => ({ ...current, scheduledDate: event.target.value }))}
+            style={styles.input}
+          />
+        </label>
+        <label style={editFieldLabelStyle}>
+          <span style={styles.tinyMuted}>Time window</span>
+          <input
+            aria-label="Dispatch time window"
+            value={draft.timeWindowLabel}
+            onChange={(event) => setDraft((current) => ({ ...current, timeWindowLabel: event.target.value }))}
+            placeholder="1:00 PM - 3:00 PM"
+            style={styles.input}
+          />
+        </label>
+        <label style={editFieldLabelStyle}>
+          <span style={styles.tinyMuted}>Technician</span>
+          <select
+            aria-label="Dispatch technician"
+            value={draft.technicianId}
+            onChange={(event) => setDraft((current) => ({ ...current, technicianId: event.target.value }))}
+            style={styles.input}
+          >
+            <option value="">Unassigned</option>
+            {!hasCurrentTechnicianOption ? (
+              <option value={draft.technicianId}>{card.technicianName ?? 'Current technician'}</option>
+            ) : null}
+            {technicians.map((technician) => (
+              <option key={technician.id} value={technician.id}>
+                {technician.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {onSaveAppointmentSchedule ? (
+        <button
+          type="button"
+          style={styles.primaryButton}
+          onClick={() => void handleSave()}
+          disabled={isSaving || isUnchanged}
+        >
+          {isSaving ? 'Saving dispatch changes...' : 'Save dispatch changes'}
+        </button>
+      ) : null}
       {onOpenInJobsPanel ? (
         <button
           type="button"
@@ -267,6 +363,29 @@ function formatTimeSlot(card: DispatchAppointmentCard): string {
   }
 
   return [card.scheduledDate, card.timeWindowLabel].filter(Boolean).join(' - ');
+}
+
+function createDraftFromCard(card: DispatchAppointmentCard): DispatchScheduleDraft {
+  return {
+    scheduledDate: card.scheduledDate ?? '',
+    timeWindowLabel: card.timeWindowLabel ?? '',
+    technicianId: card.technicianId ?? ''
+  };
+}
+
+function isSameScheduleDraft(card: DispatchAppointmentCard, draft: DispatchScheduleDraft): boolean {
+  return (
+    draft.scheduledDate === (card.scheduledDate ?? '') &&
+    draft.timeWindowLabel === (card.timeWindowLabel ?? '') &&
+    draft.technicianId === (card.technicianId ?? '')
+  );
+}
+
+function getDateInputValue(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${date.getFullYear()}-${month}-${day}`;
 }
 
 const dispatchSplitStyle: CSSProperties = {
@@ -302,6 +421,16 @@ const drawerDefinitionStyle: CSSProperties = {
   display: 'grid',
   gap: '0.5rem',
   margin: 0
+};
+
+const dispatchEditGridStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.5rem'
+};
+
+const editFieldLabelStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.25rem'
 };
 
 const drawerFieldStyle: CSSProperties = {

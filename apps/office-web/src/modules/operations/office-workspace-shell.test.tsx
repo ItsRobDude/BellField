@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppointmentSummary, JobSummary, JobsWorkspaceResponse } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
@@ -63,6 +63,12 @@ function getTodayDateInputValue(date = new Date()): string {
   const day = String(date.getDate()).padStart(2, '0');
 
   return `${date.getFullYear()}-${month}-${day}`;
+}
+
+function getDateInputValueOffset(dayOffset: number): string {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  return getTodayDateInputValue(date);
 }
 
 function buildAppointment(overrides: Partial<AppointmentSummary> = {}): AppointmentSummary {
@@ -211,5 +217,165 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
       expect(focusedJob).toHaveAttribute('aria-current', 'true');
       expect(scrollIntoView).toHaveBeenCalled();
     });
+  });
+
+  it('saves dispatch drawer changes through the appointment schedule API and normalizes unassigned technicians', async () => {
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            timeWindowLabel: '8-10',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const updatedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(updatedWorkspace)
+      .mockResolvedValue(updatedWorkspace);
+    mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(updatedWorkspace.jobs[0]!);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch technician'), {
+      target: { value: '' }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save dispatch changes/i }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        scheduledDate: today,
+        timeWindowLabel: '8-10',
+        technicianId: undefined
+      });
+    });
+    expect(await screen.findByText('Dispatch schedule updated.')).toBeInTheDocument();
+  });
+
+  it('removes appointments from the current dispatch board after they are moved to another date', async () => {
+    const today = getTodayDateInputValue();
+    const tomorrow = getDateInputValueOffset(1);
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            timeWindowLabel: '8-10',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const updatedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: tomorrow,
+            timeWindowLabel: '8-10',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(updatedWorkspace)
+      .mockResolvedValue(updatedWorkspace);
+    mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(updatedWorkspace.jobs[0]!);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment date'), {
+      target: { value: tomorrow }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save dispatch changes/i }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appointmentId: 'appointment-1',
+          scheduledDate: tomorrow
+        })
+      );
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();
+    });
+    expect(
+      await screen.findByText(
+        `Appointment moved to ${tomorrow}. It is no longer shown on the ${today} dispatch board.`
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('resets a cleared dispatch date to today without showing unscheduled appointments', async () => {
+    const today = getTodayDateInputValue();
+    arrangeWorkspace(
+      buildWorkspace([
+        buildJob({
+          appointments: [
+            buildAppointment({
+              scheduledDate: today,
+              technicianId: 'tech-1',
+              technicianName: 'Taylor Tech'
+            })
+          ]
+        }),
+        buildJob({
+          id: 'job-2',
+          jobNumber: '1002',
+          summary: 'Heat not working',
+          needsScheduling: true,
+          appointments: [
+            buildAppointment({
+              id: 'appointment-2',
+              jobId: 'job-2',
+              technicianId: 'tech-1',
+              technicianName: 'Taylor Tech'
+            })
+          ]
+        })
+      ])
+    );
+
+    renderShell();
+
+    expect(await screen.findByLabelText(/Appointment 1001 for Acme/i)).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Dispatch date'), {
+      target: { value: '' }
+    });
+
+    await waitFor(() => {
+      expect(screen.getByLabelText('Dispatch date')).toHaveValue(today);
+    });
+    expect(screen.queryByLabelText(/Appointment 1002 for Acme/i)).not.toBeInTheDocument();
   });
 });

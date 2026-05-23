@@ -32,7 +32,7 @@ import {
 } from '@/lib/identity-api';
 import { EmployeeManagementPanel } from './employee-management-panel';
 import { CrmPanel } from './crm-panel';
-import { DispatchBoardPanel } from './dispatch-board-panel';
+import { DispatchBoardPanel, type DispatchScheduleDraft } from './dispatch-board-panel';
 import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
 import {
   getOfficeJobElementId,
@@ -496,6 +496,44 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
+  async function handleSaveDispatchSchedule(appointmentId: string, draft: DispatchScheduleDraft) {
+    const previousDispatchDate = dispatchViewDate;
+
+    try {
+      setNoticeMessage(null);
+      await updateOfficeAppointmentSchedule({
+        appointmentId,
+        sessionToken,
+        apiBaseUrl,
+        scheduledDate: draft.scheduledDate || undefined,
+        timeWindowLabel: draft.timeWindowLabel || undefined,
+        technicianId: draft.technicianId || undefined
+      });
+      setAppointmentEditDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[appointmentId];
+        return nextDrafts;
+      });
+      await refreshWorkspace();
+
+      if (draft.scheduledDate && draft.scheduledDate !== previousDispatchDate) {
+        setNoticeMessage(
+          `Appointment moved to ${draft.scheduledDate}. It is no longer shown on the ${previousDispatchDate} dispatch board.`
+        );
+        return;
+      }
+
+      if (!draft.scheduledDate) {
+        setNoticeMessage(`Appointment moved off the ${previousDispatchDate} dispatch board as unscheduled work.`);
+        return;
+      }
+
+      setNoticeMessage('Dispatch schedule updated.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update dispatch scheduling.');
+    }
+  }
+
   async function handleAddAppointment(jobId: string) {
     const draft = appointmentDrafts[jobId] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
 
@@ -546,6 +584,10 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       behavior: 'smooth',
       block: 'start'
     });
+  }
+
+  function handleDispatchViewDateChange(nextDate: string) {
+    setDispatchViewDate(nextDate || getDateInputValue());
   }
 
   if (!jobsWorkspace) {
@@ -615,8 +657,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       <DispatchBoardPanel
         jobsWorkspace={jobsWorkspace}
         viewDate={dispatchViewDate}
-        onViewDateChange={setDispatchViewDate}
+        onViewDateChange={handleDispatchViewDateChange}
         onOpenInJobsPanel={handleOpenDispatchJob}
+        onSaveAppointmentSchedule={handleSaveDispatchSchedule}
       />
 
       <JobsAppointmentsPanel

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentStatus,
@@ -236,18 +236,23 @@ describe('DispatchBoardPanel', () => {
     const workspace = buildWorkspace([
       buildJob({
         appointments: [
-          buildAppointment({ id: 'appt-tech1', technicianId: 'tech-1', technicianName: 'Taylor Tech' })
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22'
+          })
         ]
       }),
       buildJob({
         id: 'job-2',
         jobNumber: '1002',
         summary: 'Heat not working',
-        appointments: [buildAppointment({ id: 'appt-unassigned', jobId: 'job-2' })]
+        appointments: [buildAppointment({ id: 'appt-unassigned', jobId: 'job-2', scheduledDate: '2026-05-22' })]
       })
     ]);
 
-    render(<DispatchBoardPanel jobsWorkspace={workspace} />);
+    render(<DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" />);
 
     expect(screen.getByRole('region', { name: /Dispatch board v1 foundation/i })).toBeInTheDocument();
     expect(screen.getByText('Taylor Tech')).toBeInTheDocument();
@@ -284,7 +289,7 @@ describe('DispatchBoardPanel', () => {
     expect(onViewDateChange).toHaveBeenCalledWith('2026-05-23');
   });
 
-  it('opens the read-only drawer when an appointment card is clicked and surfaces deep-link callback', () => {
+  it('opens the drawer when an appointment card is clicked and surfaces deep-link callback', () => {
     const onOpenInJobsPanel = vi.fn();
     const workspace = buildWorkspace([
       buildJob({
@@ -300,17 +305,114 @@ describe('DispatchBoardPanel', () => {
       })
     ]);
 
-    render(<DispatchBoardPanel jobsWorkspace={workspace} onOpenInJobsPanel={onOpenInJobsPanel} />);
+    render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onOpenInJobsPanel={onOpenInJobsPanel}
+      />
+    );
 
     fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
 
     const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
     expect(within(drawer).getByText('Job 1001')).toBeInTheDocument();
     expect(within(drawer).getByText('Taylor Tech')).toBeInTheDocument();
-    expect(within(drawer).getByText(/2026-05-22/)).toBeInTheDocument();
+    expect(within(drawer).getByLabelText('Dispatch appointment date')).toHaveValue('2026-05-22');
 
     fireEvent.click(within(drawer).getByRole('button', { name: /Open job 1001 in the jobs panel/i }));
     expect(onOpenInJobsPanel).toHaveBeenCalledWith('job-1');
+  });
+
+  it('saves edited dispatch schedule details from the drawer', async () => {
+    const onSaveAppointmentSchedule = vi.fn().mockResolvedValue(undefined);
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onSaveAppointmentSchedule={onSaveAppointmentSchedule}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
+    const saveButton = within(drawer).getByRole('button', { name: /Save dispatch changes/i });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment date'), {
+      target: { value: '2026-05-23' }
+    });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch time window'), {
+      target: { value: '10-12' }
+    });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch technician'), {
+      target: { value: 'tech-2' }
+    });
+    fireEvent.click(saveButton);
+
+    await waitFor(() => {
+      expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-tech1', {
+        scheduledDate: '2026-05-23',
+        timeWindowLabel: '10-12',
+        technicianId: 'tech-2'
+      });
+    });
+  });
+
+  it('sends a blank technician when the dispatcher selects Unassigned', async () => {
+    const onSaveAppointmentSchedule = vi.fn().mockResolvedValue(undefined);
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onSaveAppointmentSchedule={onSaveAppointmentSchedule}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch technician'), {
+      target: { value: '' }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save dispatch changes/i }));
+
+    await waitFor(() => {
+      expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-tech1', {
+        scheduledDate: '2026-05-22',
+        timeWindowLabel: '8-10',
+        technicianId: ''
+      });
+    });
   });
 
   it('shows an office-review badge when the appointment or job is flagged for review', () => {
@@ -322,6 +424,7 @@ describe('DispatchBoardPanel', () => {
             id: 'appt-tech1',
             technicianId: 'tech-1',
             technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
             needsOfficeReview: true,
             status: 'finished',
             finishOutcome: 'followUpNeeded'
@@ -330,7 +433,7 @@ describe('DispatchBoardPanel', () => {
       })
     ]);
 
-    render(<DispatchBoardPanel jobsWorkspace={workspace} />);
+    render(<DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" />);
 
     expect(screen.getByText(/Office review/i)).toBeInTheDocument();
 
@@ -344,12 +447,17 @@ describe('DispatchBoardPanel', () => {
     const workspace = buildWorkspace([
       buildJob({
         appointments: [
-          buildAppointment({ id: 'appt-tech1', technicianId: 'tech-1', technicianName: 'Taylor Tech' })
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22'
+          })
         ]
       })
     ]);
 
-    render(<DispatchBoardPanel jobsWorkspace={workspace} />);
+    render(<DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" />);
     fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
 
     const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
