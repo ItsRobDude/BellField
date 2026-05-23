@@ -26,6 +26,15 @@ import {
   updatePendingOperationState
 } from './field-sync-store';
 import type { AssignedWorkSnapshot, PendingOperation, SyncMetadata } from './field-sync-types';
+import {
+  applyPendingOperations,
+  findAppointmentBaseUpdatedAt,
+  findEquipmentBaseUpdatedAt,
+  findJobBaseUpdatedAt,
+  formatFinishOutcome,
+  formatPendingOperation
+} from './field-pending-replay';
+import { summarizeSyncHealth, type SyncTone } from './field-sync-status';
 
 type Props = {
   apiBaseUrl: string;
@@ -87,6 +96,18 @@ const defaultSyncMetadata: SyncMetadata = {
   lastSyncError: null
 };
 
+function getSyncHealthCardStyle(tone: SyncTone) {
+  if (tone === 'alert') {
+    return { backgroundColor: '#fdecea', borderColor: '#f1b1ab' };
+  }
+
+  if (tone === 'attention') {
+    return { backgroundColor: '#fff7e1', borderColor: '#e7d391' };
+  }
+
+  return undefined;
+}
+
 export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, onSignOut }: Props) {
   const [serverSnapshot, setServerSnapshot] = useState<AssignedWorkSnapshot | null>(null);
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
@@ -111,9 +132,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     [assignedWork]
   );
 
-  const pendingCount = pendingOperations.filter((operation) => operation.state === 'pending').length;
-  const conflictedCount = pendingOperations.filter((operation) => operation.state === 'conflict').length;
-  const rejectedCount = pendingOperations.filter((operation) => operation.state === 'rejected').length;
+  const syncHealth = useMemo(
+    () => summarizeSyncHealth(syncMetadata, pendingOperations),
+    [pendingOperations, syncMetadata]
+  );
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
 
   useEffect(() => {
@@ -755,17 +777,22 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             changes after save and successful sync.
           </Text>
 
-          <View style={styles.summaryCard}>
-            <Text style={styles.sectionTitle}>Sync foundation</Text>
-            <Text style={styles.summaryText}>Pending local saves: {pendingCount}</Text>
-            <Text style={styles.summaryText}>Conflicts to review: {conflictedCount}</Text>
-            <Text style={styles.summaryText}>Rejected items: {rejectedCount}</Text>
-            <Text style={styles.summaryText}>Server snapshot: {assignedWork?.serverTime ?? 'Not loaded yet'}</Text>
-            <Text style={styles.summaryText}>Snapshot version: {assignedWork?.snapshotVersion ?? 'Not loaded yet'}</Text>
-            <Text style={styles.summaryText}>Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}</Text>
-            <Text style={styles.summaryText}>Last attempted sync: {syncMetadata.lastAttemptedSyncAt ?? 'Not attempted yet'}</Text>
+          <View
+            accessibilityLabel={`Sync status: ${syncHealth.headline}`}
+            style={[styles.summaryCard, getSyncHealthCardStyle(syncHealth.tone)]}
+          >
+            <Text style={styles.sectionTitle}>{syncHealth.headline}</Text>
+            {syncHealth.detail ? <Text style={styles.summaryText}>{syncHealth.detail}</Text> : null}
+            {syncHealth.tone === 'quiet' ? (
+              <Text style={styles.summaryText}>
+                Background sync is healthy. Field edits stay protected on this device until the next sync.
+              </Text>
+            ) : null}
             <Text style={styles.summaryText}>
               Scope: {assignedWork?.windowStartDate ?? 'today'} through {assignedWork?.windowEndDate ?? 'tomorrow'}
+            </Text>
+            <Text style={styles.summaryText}>
+              Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
             </Text>
           </View>
 
@@ -782,7 +809,6 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
           </View>
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
-          {syncMetadata.lastSyncError ? <Text style={styles.errorText}>{syncMetadata.lastSyncError}</Text> : null}
 
           {(assignedWork?.jobs ?? []).map((job) => {
             const location = locationLookup.get(job.locationId);
@@ -1141,138 +1167,6 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   );
 }
 
-function applyPendingOperations(
-  snapshot: AssignedWorkSnapshot | null,
-  pendingOperations: PendingOperation[],
-  actorName: string
-): FieldAssignedWorkResponse | null {
-  if (!snapshot) {
-    return null;
-  }
-
-  let nextSnapshot: FieldAssignedWorkResponse = {
-    ...snapshot,
-    jobs: snapshot.jobs.map((job) => ({
-      ...job,
-      appointments: job.appointments.map((appointment) => ({ ...appointment })),
-      timeline: job.timeline.map((entry) => ({ ...entry }))
-    })),
-    locations: snapshot.locations.map((location) => ({
-      ...location,
-      contacts: location.contacts.map((contact) => ({ ...contact }))
-    })),
-    customers: snapshot.customers.map((customer) => ({ ...customer })),
-    equipment: snapshot.equipment.map((record) => ({ ...record }))
-  };
-
-  for (const operation of pendingOperations) {
-    if (operation.kind === 'jobNote') {
-      nextSnapshot = {
-        ...nextSnapshot,
-        jobs: nextSnapshot.jobs.map((job) =>
-          job.id === operation.jobId
-            ? {
-                ...job,
-                timeline: [
-                  ...job.timeline,
-                  {
-                    id: `${operation.id}-local`,
-                    occurredAt: operation.occurredAt,
-                    actorName,
-                    message: operation.note,
-                    kind: 'jobNote'
-                  }
-                ]
-              }
-            : job
-        )
-      };
-    }
-
-    if (operation.kind === 'appointmentStatus') {
-      nextSnapshot = {
-        ...nextSnapshot,
-        jobs: nextSnapshot.jobs.map((job) => ({
-          ...job,
-          appointments: job.appointments.map((appointment) =>
-            appointment.id === operation.appointmentId ? { ...appointment, status: operation.status } : appointment
-          )
-        }))
-      };
-    }
-
-    if (operation.kind === 'appointmentFinishReview') {
-      nextSnapshot = {
-        ...nextSnapshot,
-        jobs: nextSnapshot.jobs.map((job) => ({
-          ...job,
-          needsOfficeReview: job.id === findJobIdForAppointment(nextSnapshot, operation.appointmentId) ? true : job.needsOfficeReview,
-          appointments: job.appointments.map((appointment) =>
-            appointment.id === operation.appointmentId
-              ? {
-                  ...appointment,
-                  status: operation.status,
-                  finishOutcome: operation.finishOutcome,
-                  visitNotes: operation.visitNotes,
-                  hasChargeActivity: operation.hasChargeActivity,
-                  registerFollowUpNote: operation.registerFollowUpNote,
-                  needsOfficeReview: true
-                }
-              : appointment
-          ),
-          timeline:
-            job.id === findJobIdForAppointment(nextSnapshot, operation.appointmentId)
-              ? [
-                  ...job.timeline,
-                  {
-                    id: `${operation.id}-local-finish`,
-                    occurredAt: operation.occurredAt,
-                    actorName,
-                    message: `Finish review saved locally with outcome ${formatFinishOutcome(operation.finishOutcome)}.`,
-                    kind: 'appointmentFinishedReview'
-                  }
-                ]
-              : job.timeline
-        }))
-      };
-    }
-
-    if (operation.kind === 'equipmentUpdate') {
-      nextSnapshot = {
-        ...nextSnapshot,
-        equipment: nextSnapshot.equipment.map((record) =>
-          record.id === operation.equipmentId
-            ? {
-                ...record,
-                model: operation.model ?? record.model,
-                serialNumber: operation.serialNumber ?? record.serialNumber,
-                filterSizes: operation.filterSizes ?? record.filterSizes,
-                equipmentLocationDescription: operation.equipmentLocationDescription ?? record.equipmentLocationDescription,
-                installDate: operation.installDate ?? record.installDate,
-                status: operation.status,
-                notes: operation.notes
-              }
-            : record
-        )
-      };
-    }
-  }
-
-  return nextSnapshot;
-}
-
-function findAppointmentBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, appointmentId: string): string | undefined {
-  return snapshot?.jobs.flatMap((job) => job.appointments).find((appointment) => appointment.id === appointmentId)?.updatedAt;
-}
-
-function findJobBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, jobId: string): string | undefined {
-  return snapshot?.jobs.find((job) => job.id === jobId)?.updatedAt;
-}
-
-function findEquipmentBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, equipmentId: string): string | undefined {
-  return snapshot?.equipment.find((record) => record.id === equipmentId)?.updatedAt;
-}
-
 function createEquipmentDraft(record: FieldAssignedWorkResponse['equipment'][number]): EquipmentDraft {
   return {
     model: record.model,
@@ -1301,48 +1195,6 @@ function createEquipmentCreateDraft(): EquipmentCreateDraft {
     status: 'active',
     notes: ''
   };
-}
-
-function formatPendingOperation(operation: PendingOperation): string {
-  const stateSuffix =
-    operation.state === 'pending'
-      ? 'pending sync'
-      : operation.state === 'conflict'
-        ? `conflict${operation.lastResultMessage ? `: ${operation.lastResultMessage}` : ''}`
-        : `rejected${operation.lastResultMessage ? `: ${operation.lastResultMessage}` : ''}`;
-
-  if (operation.kind === 'jobNote') {
-    return `Job note saved locally at ${new Date(operation.occurredAt).toLocaleTimeString()} (${stateSuffix})`;
-  }
-
-  if (operation.kind === 'appointmentStatus') {
-    return `Appointment status queued: ${operation.status} (${stateSuffix})`;
-  }
-
-  if (operation.kind === 'appointmentFinishReview') {
-    return `Finish review queued: ${formatFinishOutcome(operation.finishOutcome)} (${stateSuffix})`;
-  }
-
-  return `Equipment update queued: ${operation.status} (${stateSuffix})`;
-}
-
-function findJobIdForAppointment(
-  snapshot: FieldAssignedWorkResponse,
-  appointmentId: string
-): string | undefined {
-  return snapshot.jobs.find((job) => job.appointments.some((appointment) => appointment.id === appointmentId))?.id;
-}
-
-function formatFinishOutcome(value: AppointmentFinishOutcome): string {
-  if (value === 'followUpNeeded') {
-    return 'Follow-up needed';
-  }
-
-  if (value === 'noAccess') {
-    return 'No access';
-  }
-
-  return 'Completed';
 }
 
 const styles = StyleSheet.create({
