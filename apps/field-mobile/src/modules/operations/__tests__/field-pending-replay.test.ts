@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import type {
   AppointmentSummary,
   CustomerAccountSummary,
+  EquipmentMutationResponse,
   EquipmentSummary,
   FieldAssignedWorkResponse,
+  JobMutationResponse,
   JobSummary,
   LocationSummary
 } from '@bellfield/contracts';
@@ -14,7 +16,9 @@ import {
   findJobBaseUpdatedAt,
   findJobIdForAppointment,
   formatFinishOutcome,
-  formatPendingOperation
+  formatPendingOperation,
+  mergeEquipmentMutationIntoAssignedWork,
+  mergeJobMutationIntoAssignedWork
 } from '../field-pending-replay';
 import type { PendingOperation } from '../field-sync-types';
 
@@ -255,6 +259,104 @@ describe('applyPendingOperations', () => {
       'Conflict with office edit.',
       'Server rejected this note.'
     ]);
+  });
+});
+
+describe('applied sync result merging', () => {
+  it('merges an applied job mutation into the cached assigned-work snapshot', () => {
+    const snapshot = buildSnapshot();
+    const response: JobMutationResponse = {
+      ...buildJob({
+        summary: 'No cooling - compressor running',
+        appointments: [buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })],
+        timeline: [
+          {
+            id: 'timeline-1',
+            actorName: 'Taylor Tech',
+            occurredAt: '2026-05-22T11:00:00.000Z',
+            kind: 'jobNote',
+            message: 'Filter cleaned.'
+          }
+        ],
+        updatedAt: '2026-05-22T11:00:00.000Z'
+      }),
+      syncResult: { status: 'applied' }
+    };
+
+    const result = mergeJobMutationIntoAssignedWork(snapshot, response);
+
+    expect(result.jobs[0]?.summary).toBe('No cooling - compressor running');
+    expect(result.jobs[0]?.appointments[0]?.status).toBe('working');
+    expect(result.jobs[0]?.timeline[0]?.message).toBe('Filter cleaned.');
+    expect(snapshot.jobs[0]?.summary).toBe('No cooling');
+  });
+
+  it('merges an applied equipment mutation into the cached assigned-work snapshot', () => {
+    const snapshot = buildSnapshot();
+    const response: EquipmentMutationResponse = {
+      equipment: {
+        ...buildEquipment({
+          model: 'NewModel',
+          serialNumber: 'SER-NEW',
+          updatedAt: '2026-05-22T11:00:00.000Z'
+        }),
+        history: []
+      },
+      syncResult: { status: 'applied' }
+    };
+
+    const result = mergeEquipmentMutationIntoAssignedWork(snapshot, response);
+
+    expect(result.equipment[0]?.model).toBe('NewModel');
+    expect(result.equipment[0]?.serialNumber).toBe('SER-NEW');
+    expect(snapshot.equipment[0]?.model).toBe('OldModel');
+  });
+
+  it('preserves applied cache changes when a later queued operation still needs retry', () => {
+    const snapshot = buildSnapshot();
+    const appliedOperation: PendingOperation = {
+      id: 'op-note',
+      kind: 'jobNote',
+      jobId: 'job-1',
+      note: 'Filter cleaned.',
+      occurredAt: '2026-05-22T11:00:00.000Z',
+      state: 'pending'
+    };
+    const failedOperation: PendingOperation = {
+      id: 'op-equipment',
+      kind: 'equipmentUpdate',
+      equipmentId: 'equipment-1',
+      model: 'QueuedModel',
+      status: 'active',
+      notes: 'Retry later.',
+      occurredAt: '2026-05-22T11:05:00.000Z',
+      state: 'pending'
+    };
+    const appliedResponse: JobMutationResponse = {
+      ...buildJob({
+        timeline: [
+          {
+            id: 'timeline-1',
+            actorName: 'Taylor Tech',
+            occurredAt: appliedOperation.occurredAt,
+            kind: 'jobNote',
+            message: appliedOperation.note
+          }
+        ],
+        updatedAt: '2026-05-22T11:00:00.000Z'
+      }),
+      syncResult: { status: 'applied' }
+    };
+
+    const cachedSnapshot = mergeJobMutationIntoAssignedWork(snapshot, appliedResponse);
+    const remainingQueue = [appliedOperation, failedOperation].filter(
+      (operation) => operation.id !== appliedOperation.id
+    );
+    const localView = applyPendingOperations(cachedSnapshot, remainingQueue, 'Taylor Tech');
+
+    expect(cachedSnapshot.jobs[0]?.timeline[0]?.message).toBe('Filter cleaned.');
+    expect(remainingQueue.map((operation) => operation.id)).toEqual(['op-equipment']);
+    expect(localView?.equipment[0]?.model).toBe('QueuedModel');
   });
 });
 

@@ -83,6 +83,21 @@ export function summarizeSyncHealth(
   };
 }
 
+export function buildSuccessfulSyncMetadata(
+  metadata: SyncMetadata,
+  snapshotVersion: string,
+  successfulAt: string,
+  attemptedAt = successfulAt
+): SyncMetadata {
+  return {
+    ...metadata,
+    lastAttemptedSyncAt: attemptedAt,
+    lastSuccessfulSyncAt: successfulAt,
+    lastSnapshotVersion: snapshotVersion,
+    lastSyncError: null
+  };
+}
+
 function buildReviewHeadline(conflictCount: number, rejectedCount: number): string {
   const conflictPhrase =
     conflictCount === 1 ? '1 conflict' : conflictCount > 1 ? `${conflictCount} conflicts` : null;

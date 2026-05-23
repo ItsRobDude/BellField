@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeSyncHealth } from '../field-sync-status';
+import { buildSuccessfulSyncMetadata, summarizeSyncHealth } from '../field-sync-status';
 import type { PendingOperation, SyncMetadata } from '../field-sync-types';
 
 function buildMetadata(overrides: Partial<SyncMetadata> = {}): SyncMetadata {
@@ -101,5 +101,39 @@ describe('summarizeSyncHealth', () => {
     expect(summary.tone).toBe('alert');
     expect(summary.headline).toBe('Not synced yet on this device');
     expect(summary.detail).toContain('BellField needs at least one successful sync');
+  });
+});
+
+describe('buildSuccessfulSyncMetadata', () => {
+  it('marks a successful assigned-work fetch as the latest successful sync', () => {
+    const metadata = buildSuccessfulSyncMetadata(
+      buildMetadata({
+        lastSuccessfulSyncAt: null,
+        lastAttemptedSyncAt: null,
+        lastSyncError: 'Network unreachable'
+      }),
+      'v2',
+      '2026-05-22T10:00:00.000Z'
+    );
+
+    expect(metadata).toMatchObject({
+      lastAttemptedSyncAt: '2026-05-22T10:00:00.000Z',
+      lastSuccessfulSyncAt: '2026-05-22T10:00:00.000Z',
+      lastSnapshotVersion: 'v2',
+      lastSyncError: null
+    });
+    expect(summarizeSyncHealth(metadata, []).tone).toBe('quiet');
+  });
+
+  it('preserves the sync attempt time when replay finishes later', () => {
+    const metadata = buildSuccessfulSyncMetadata(
+      buildMetadata(),
+      'v3',
+      '2026-05-22T10:03:00.000Z',
+      '2026-05-22T10:00:00.000Z'
+    );
+
+    expect(metadata.lastAttemptedSyncAt).toBe('2026-05-22T10:00:00.000Z');
+    expect(metadata.lastSuccessfulSyncAt).toBe('2026-05-22T10:03:00.000Z');
   });
 });

@@ -76,7 +76,7 @@ export function buildDispatchBoardModel(
         continue;
       }
 
-      if (viewDate && appointment.scheduledDate && appointment.scheduledDate !== viewDate) {
+      if (viewDate && appointment.scheduledDate !== viewDate) {
         continue;
       }
 

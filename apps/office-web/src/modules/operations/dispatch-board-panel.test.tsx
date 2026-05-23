@@ -166,7 +166,8 @@ describe('buildDispatchBoardModel', () => {
       buildJob({
         appointments: [
           buildAppointment({ id: 'appt-today', scheduledDate: '2026-05-22', technicianId: 'tech-1' }),
-          buildAppointment({ id: 'appt-tomorrow', scheduledDate: '2026-05-23', technicianId: 'tech-1' })
+          buildAppointment({ id: 'appt-tomorrow', scheduledDate: '2026-05-23', technicianId: 'tech-1' }),
+          buildAppointment({ id: 'appt-unscheduled', technicianId: 'tech-1' })
         ]
       })
     ]);
@@ -256,6 +257,31 @@ describe('DispatchBoardPanel', () => {
     expect(within(unassignedRegion).getByText(/Job 1002/)).toBeInTheDocument();
 
     expect(screen.getByText(/Click an appointment card/i)).toBeInTheDocument();
+  });
+
+  it('surfaces a controlled dispatch date input', () => {
+    const onViewDateChange = vi.fn();
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22'
+          })
+        ]
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel jobsWorkspace={workspace} viewDate="2026-05-22" onViewDateChange={onViewDateChange} />
+    );
+
+    expect(screen.getByLabelText('Dispatch date')).toHaveValue('2026-05-22');
+    fireEvent.change(screen.getByLabelText('Dispatch date'), { target: { value: '2026-05-23' } });
+
+    expect(onViewDateChange).toHaveBeenCalledWith('2026-05-23');
   });
 
   it('opens the read-only drawer when an appointment card is clicked and surfaces deep-link callback', () => {

@@ -82,6 +82,7 @@ function renderJobsPanel(input: {
   onJobStatusReviewRequested?: ReturnType<typeof vi.fn<JobStatusReviewHandler>>;
   onAddAppointment?: ReturnType<typeof vi.fn<(jobId: string) => Promise<void>>>;
   onKeepJobOpen?: ReturnType<typeof vi.fn<(jobId: string) => Promise<void>>>;
+  focusedJobId?: string | null;
 }) {
   const onJobStatusReviewRequested = input.onJobStatusReviewRequested ?? vi.fn<JobStatusReviewHandler>();
   const onAddAppointment = input.onAddAppointment ?? vi.fn(async () => undefined);
@@ -121,6 +122,7 @@ function renderJobsPanel(input: {
       onSaveAppointmentSchedule={noopAsync}
       onAddAppointment={onAddAppointment}
       onKeepJobOpen={onKeepJobOpen}
+      focusedJobId={input.focusedJobId}
     />
   );
 
@@ -223,5 +225,22 @@ describe('JobsAppointmentsPanel', () => {
     expect(screen.getByRole('heading', { name: 'Unscheduled jobs' })).toBeInTheDocument();
     expect(screen.getByText(/These are valid open jobs/i)).toBeInTheDocument();
     expect(screen.getByText(/This job is still valid/i)).toBeInTheDocument();
+  });
+
+  it('marks a focused job as the current jump target', () => {
+    renderJobsPanel({
+      focusedJobId: 'job-2',
+      jobs: [
+        createJob({ id: 'job-1', jobNumber: '1001', summary: 'No cooling' }),
+        createJob({ id: 'job-2', jobNumber: '1002', summary: 'Heat not working' })
+      ]
+    });
+
+    const focusedJob = screen.getByText(/Job 1002: Heat not working/i).closest('article');
+    const otherJob = screen.getByText(/Job 1001: No cooling/i).closest('article');
+
+    expect(focusedJob).toHaveAttribute('id', 'office-job-job-2');
+    expect(focusedJob).toHaveAttribute('aria-current', 'true');
+    expect(otherJob).not.toHaveAttribute('aria-current');
   });
 });

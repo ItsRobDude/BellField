@@ -1,4 +1,9 @@
-import type { AppointmentFinishOutcome, FieldAssignedWorkResponse } from '@/lib/operations-api';
+import type {
+  AppointmentFinishOutcome,
+  EquipmentMutationResponse,
+  FieldAssignedWorkResponse,
+  JobMutationResponse
+} from '@/lib/operations-api';
 import type { AssignedWorkSnapshot, PendingOperation } from './field-sync-types';
 
 export function applyPendingOperations(
@@ -121,6 +126,45 @@ export function applyPendingOperations(
   }
 
   return nextSnapshot;
+}
+
+export function mergeJobMutationIntoAssignedWork(
+  snapshot: AssignedWorkSnapshot,
+  response: JobMutationResponse
+): AssignedWorkSnapshot {
+  const { syncResult: _syncResult, warningMessages: _warningMessages, ...jobSummary } = response;
+  const hasJob = snapshot.jobs.some((job) => job.id === jobSummary.id);
+
+  if (!hasJob) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    jobs: snapshot.jobs.map((job) => (job.id === jobSummary.id ? jobSummary : job))
+  };
+}
+
+export function mergeEquipmentMutationIntoAssignedWork(
+  snapshot: AssignedWorkSnapshot,
+  response: EquipmentMutationResponse
+): AssignedWorkSnapshot {
+  const {
+    history: _history,
+    replacedByEquipment: _replacedByEquipment,
+    replacesEquipment: _replacesEquipment,
+    ...equipmentSummary
+  } = response.equipment;
+  const hasEquipment = snapshot.equipment.some((record) => record.id === equipmentSummary.id);
+
+  if (!hasEquipment) {
+    return snapshot;
+  }
+
+  return {
+    ...snapshot,
+    equipment: snapshot.equipment.map((record) => (record.id === equipmentSummary.id ? equipmentSummary : record))
+  };
 }
 
 export function findJobIdForAppointment(

@@ -32,8 +32,10 @@ import {
 } from '@/lib/identity-api';
 import { EmployeeManagementPanel } from './employee-management-panel';
 import { CrmPanel } from './crm-panel';
+import { DispatchBoardPanel } from './dispatch-board-panel';
 import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
 import {
+  getOfficeJobElementId,
   JobsAppointmentsPanel,
   type AppointmentDraft,
   type AppointmentEditDraft
@@ -109,6 +111,13 @@ function formatAppointmentCount(count: number): string {
   return `${count} ${count === 1 ? 'appointment' : 'appointments'}`;
 }
 
+function getDateInputValue(date = new Date()): string {
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+
+  return `${date.getFullYear()}-${month}-${day}`;
+}
+
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
   const [roles, setRoles] = useState<RoleTemplate[]>([]);
@@ -134,6 +143,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [jobWindow, setJobWindow] = useState('');
   const [appointmentDrafts, setAppointmentDrafts] = useState<Record<string, AppointmentDraft>>({});
   const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
+  const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
+  const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
 
   const locationLookup = useMemo(
     () => new Map((jobsWorkspace?.locations ?? []).map((location) => [location.id, location])),
@@ -529,6 +540,14 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     setJobBillToCustomerId(nextLocation?.customerId ?? '');
   }
 
+  function handleOpenDispatchJob(jobId: string) {
+    setFocusedJobId(jobId);
+    document.getElementById(getOfficeJobElementId(jobId))?.scrollIntoView?.({
+      behavior: 'smooth',
+      block: 'start'
+    });
+  }
+
   if (!jobsWorkspace) {
     return (
       <main style={styles.page}>
@@ -593,6 +612,13 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onDeleteEquipment={handleDeleteEquipment}
       />
 
+      <DispatchBoardPanel
+        jobsWorkspace={jobsWorkspace}
+        viewDate={dispatchViewDate}
+        onViewDateChange={setDispatchViewDate}
+        onOpenInJobsPanel={handleOpenDispatchJob}
+      />
+
       <JobsAppointmentsPanel
         jobsWorkspace={jobsWorkspace}
         jobLocationId={jobLocationId}
@@ -630,6 +656,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
         onAddAppointment={handleAddAppointment}
         onKeepJobOpen={handleKeepJobOpen}
+        focusedJobId={focusedJobId}
       />
     </main>
   );

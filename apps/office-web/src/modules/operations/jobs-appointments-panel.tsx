@@ -56,6 +56,7 @@ type JobsAppointmentsPanelProps = {
   onSaveAppointmentSchedule: (appointmentId: string) => Promise<void>;
   onAddAppointment: (jobId: string) => Promise<void>;
   onKeepJobOpen: (jobId: string) => Promise<void>;
+  focusedJobId?: string | null;
 };
 
 export function JobsAppointmentsPanel({
@@ -90,7 +91,8 @@ export function JobsAppointmentsPanel({
   onAppointmentStatusChange,
   onSaveAppointmentSchedule,
   onAddAppointment,
-  onKeepJobOpen
+  onKeepJobOpen,
+  focusedJobId
 }: JobsAppointmentsPanelProps) {
   const selectedLocation = jobsWorkspace.locations.find((location) => location.id === jobLocationId) ?? null;
   const orderedJobs = [...jobsWorkspace.jobs].sort((left, right) => {
@@ -184,7 +186,8 @@ export function JobsAppointmentsPanel({
               onAppointmentDraftChange,
               onAppointmentEditDraftChange,
               onAddAppointment,
-              onKeepJobOpen
+              onKeepJobOpen,
+              focusedJobId
             })
           )}
         </div>
@@ -208,7 +211,8 @@ export function JobsAppointmentsPanel({
               onAppointmentDraftChange,
               onAppointmentEditDraftChange,
               onAddAppointment,
-              onKeepJobOpen
+              onKeepJobOpen,
+              focusedJobId
             })
           )}
         </div>
@@ -231,7 +235,8 @@ export function JobsAppointmentsPanel({
             onAppointmentDraftChange,
             onAppointmentEditDraftChange,
             onAddAppointment,
-            onKeepJobOpen
+            onKeepJobOpen,
+            focusedJobId
           })
         )}
       </div>
@@ -253,7 +258,8 @@ function renderJobCard({
   onAppointmentDraftChange,
   onAppointmentEditDraftChange,
   onAddAppointment,
-  onKeepJobOpen
+  onKeepJobOpen,
+  focusedJobId
 }: {
   job: JobsWorkspaceResponse['jobs'][number];
   jobsWorkspace: JobsWorkspaceResponse;
@@ -269,12 +275,19 @@ function renderJobCard({
   onAppointmentEditDraftChange: JobsAppointmentsPanelProps['onAppointmentEditDraftChange'];
   onAddAppointment: JobsAppointmentsPanelProps['onAddAppointment'];
   onKeepJobOpen: JobsAppointmentsPanelProps['onKeepJobOpen'];
+  focusedJobId?: string | null;
 }) {
   const draft = appointmentDrafts[job.id] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
   const canAddAppointment = job.status !== 'closed' && job.status !== 'cancelled';
+  const isFocused = focusedJobId === job.id;
 
   return (
-    <article key={job.id} style={styles.panel}>
+    <article
+      key={job.id}
+      id={getOfficeJobElementId(job.id)}
+      aria-current={isFocused ? 'true' : undefined}
+      style={getJobCardStyle(isFocused)}
+    >
       <div style={styles.row}>
         <div>
           <strong>
@@ -503,6 +516,22 @@ function renderJobCard({
       </ul>
     </article>
   );
+}
+
+export function getOfficeJobElementId(jobId: string): string {
+  return `office-job-${jobId}`;
+}
+
+function getJobCardStyle(isFocused: boolean) {
+  if (!isFocused) {
+    return styles.panel;
+  }
+
+  return {
+    ...styles.panel,
+    borderColor: '#1c6b57',
+    boxShadow: '0 0 0 3px rgba(28, 107, 87, 0.16)'
+  };
 }
 
 function getJobPriorityScore(job: JobsWorkspaceResponse['jobs'][number]): number {

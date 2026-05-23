@@ -12,6 +12,7 @@ import {
 type DispatchBoardPanelProps = {
   jobsWorkspace: JobsWorkspaceResponse;
   viewDate?: string;
+  onViewDateChange?: (date: string) => void;
   onOpenInJobsPanel?: (jobId: string) => void;
 };
 
@@ -27,7 +28,12 @@ const appointmentStatusLabels: Record<DispatchAppointmentCard['status'], string>
   cancelled: 'Cancelled'
 };
 
-export function DispatchBoardPanel({ jobsWorkspace, viewDate, onOpenInJobsPanel }: DispatchBoardPanelProps) {
+export function DispatchBoardPanel({
+  jobsWorkspace,
+  viewDate,
+  onViewDateChange,
+  onOpenInJobsPanel
+}: DispatchBoardPanelProps) {
   const model = useMemo<DispatchBoardModel>(
     () => buildDispatchBoardModel(jobsWorkspace, viewDate),
     [jobsWorkspace, viewDate]
@@ -55,6 +61,17 @@ export function DispatchBoardPanel({ jobsWorkspace, viewDate, onOpenInJobsPanel 
           <span style={unassignedCount > 0 ? styles.dangerBadge : styles.badge}>{unassignedCount} unassigned</span>
         </div>
       </div>
+
+      <label style={dateInputLabelStyle}>
+        <span style={styles.tinyMuted}>Dispatch date</span>
+        <input
+          type="date"
+          aria-label="Dispatch date"
+          value={viewDate ?? ''}
+          onChange={(event) => onViewDateChange?.(event.target.value)}
+          style={styles.input}
+        />
+      </label>
 
       <div style={dispatchSplitStyle}>
         <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -102,7 +119,9 @@ export function DispatchBoardPanel({ jobsWorkspace, viewDate, onOpenInJobsPanel 
                       </div>
                       <span style={styles.tinyMuted}>
                         {row.cards.length === 0
-                          ? 'No appointments today.'
+                          ? viewDate
+                            ? 'No appointments on this date.'
+                            : 'No appointments in this view.'
                           : `${row.cards.length} ${row.cards.length === 1 ? 'appointment' : 'appointments'}`}
                       </span>
                     </div>
@@ -255,6 +274,13 @@ const dispatchSplitStyle: CSSProperties = {
   gap: '1rem',
   gridTemplateColumns: 'minmax(0, 2fr) minmax(18rem, 1fr)',
   marginTop: '1rem'
+};
+
+const dateInputLabelStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.35rem',
+  marginTop: '1rem',
+  maxWidth: '16rem'
 };
 
 const technicianRowStyle: CSSProperties = {

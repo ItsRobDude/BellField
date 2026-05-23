@@ -32,9 +32,11 @@ import {
   findEquipmentBaseUpdatedAt,
   findJobBaseUpdatedAt,
   formatFinishOutcome,
-  formatPendingOperation
+  formatPendingOperation,
+  mergeEquipmentMutationIntoAssignedWork,
+  mergeJobMutationIntoAssignedWork
 } from './field-pending-replay';
-import { summarizeSyncHealth, type SyncTone } from './field-sync-status';
+import { buildSuccessfulSyncMetadata, summarizeSyncHealth, type SyncTone } from './field-sync-status';
 
 type Props = {
   apiBaseUrl: string;
@@ -155,11 +157,12 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
         setPendingOperations(persistedOperations);
         setSyncMetadata(persistedMetadata);
         const nextAssignedWork = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
-        const nextSyncMetadata: SyncMetadata = {
-          ...persistedMetadata,
-          lastSnapshotVersion: nextAssignedWork.snapshotVersion,
-          lastSyncError: null
-        };
+        const fetchedAt = new Date().toISOString();
+        const nextSyncMetadata = buildSuccessfulSyncMetadata(
+          persistedMetadata,
+          nextAssignedWork.snapshotVersion,
+          fetchedAt
+        );
 
         await saveAssignedWorkSnapshot(nextAssignedWork);
         await saveSyncMetadata(nextSyncMetadata);
@@ -184,11 +187,12 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
     try {
       const nextAssignedWork = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
-      const nextSyncMetadata: SyncMetadata = {
-        ...(metadataOverride ?? syncMetadata),
-        lastSnapshotVersion: nextAssignedWork.snapshotVersion,
-        lastSyncError: null
-      };
+      const fetchedAt = new Date().toISOString();
+      const nextSyncMetadata = buildSuccessfulSyncMetadata(
+        metadataOverride ?? syncMetadata,
+        nextAssignedWork.snapshotVersion,
+        fetchedAt
+      );
 
       await saveAssignedWorkSnapshot(nextAssignedWork);
       await saveSyncMetadata(nextSyncMetadata);
@@ -538,8 +542,17 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       await saveAssignedWorkSnapshot(latestSnapshot);
       setServerSnapshot(latestSnapshot);
 
+      let currentServerSnapshot: AssignedWorkSnapshot = latestSnapshot;
       let shouldStopEarly = false;
       let hadSyncFailure = false;
+
+      async function preserveAppliedOperation(operationId: string, nextSnapshot: AssignedWorkSnapshot) {
+        currentServerSnapshot = nextSnapshot;
+        await saveAssignedWorkSnapshot(currentServerSnapshot);
+        setServerSnapshot(currentServerSnapshot);
+        await removePendingOperation(operationId);
+        setPendingOperations((current) => current.filter((entry) => entry.id !== operationId));
+      }
 
       for (const operation of [...pendingOperations].sort((left, right) => left.occurredAt.localeCompare(right.occurredAt))) {
         if (shouldStopEarly) {
@@ -576,8 +589,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 )
               );
             } else {
-              await removePendingOperation(operation.id);
-              setPendingOperations((current) => current.filter((entry) => entry.id !== operation.id));
+              await preserveAppliedOperation(
+                operation.id,
+                mergeJobMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
             }
           }
 
@@ -610,8 +625,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 )
               );
             } else {
-              await removePendingOperation(operation.id);
-              setPendingOperations((current) => current.filter((entry) => entry.id !== operation.id));
+              await preserveAppliedOperation(
+                operation.id,
+                mergeJobMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
             }
           }
 
@@ -648,8 +665,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 )
               );
             } else {
-              await removePendingOperation(operation.id);
-              setPendingOperations((current) => current.filter((entry) => entry.id !== operation.id));
+              await preserveAppliedOperation(
+                operation.id,
+                mergeJobMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
             }
           }
 
@@ -688,8 +707,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 )
               );
             } else {
-              await removePendingOperation(operation.id);
-              setPendingOperations((current) => current.filter((entry) => entry.id !== operation.id));
+              await preserveAppliedOperation(
+                operation.id,
+                mergeEquipmentMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
             }
           }
         } catch (error) {
@@ -712,13 +733,12 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       }
 
       const refreshedSnapshot = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
-      const nextSyncMetadata: SyncMetadata = {
-        ...attemptedMetadata,
-        lastAttemptedSyncAt: attemptedAt,
-        lastSuccessfulSyncAt: new Date().toISOString(),
-        lastSnapshotVersion: refreshedSnapshot.snapshotVersion,
-        lastSyncError: null
-      };
+      const nextSyncMetadata = buildSuccessfulSyncMetadata(
+        attemptedMetadata,
+        refreshedSnapshot.snapshotVersion,
+        new Date().toISOString(),
+        attemptedAt
+      );
 
       await saveAssignedWorkSnapshot(refreshedSnapshot);
       await saveSyncMetadata(nextSyncMetadata);
