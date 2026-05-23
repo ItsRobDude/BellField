@@ -4,12 +4,15 @@ import type {
   AppointmentRecord,
   AppointmentStatus,
   CreateAppointmentInput,
+  CreateMediaAttachmentInput,
   FinishedVisitReviewDecision,
   CreateJobInput,
   JobRecord,
   JobStatus,
+  MediaAttachmentRecord,
   RegisterEntryRecord,
   CreateRegisterEntryInput,
+  UpdateMediaAttachmentCaptionInput,
   UpdateRegisterEntryInput
 } from './company-data.types';
 import type { UpdateAppointmentScheduleInput } from './company-data.types';
@@ -240,5 +243,77 @@ export class JobsDataService {
 
   async hasIncompleteAppointments(jobId: string): Promise<boolean> {
     return this.jobsDataRepository.hasIncompleteAppointments(jobId);
+  }
+
+  async listMediaAttachmentsForJob(jobId: string, includeVoided = false): Promise<MediaAttachmentRecord[]> {
+    await this.getJobById(jobId);
+    return this.jobsDataRepository.listMediaAttachmentsForJob(jobId, includeVoided);
+  }
+
+  async getMediaAttachmentById(mediaId: string): Promise<MediaAttachmentRecord> {
+    const media = await this.jobsDataRepository.getMediaAttachmentById(mediaId);
+
+    if (!media) {
+      throw new NotFoundException('Media attachment not found.');
+    }
+
+    return media;
+  }
+
+  async findMediaAttachmentByJobAndSha(jobId: string, sha256: string): Promise<MediaAttachmentRecord | null> {
+    return this.jobsDataRepository.findMediaAttachmentByJobAndSha(jobId, sha256);
+  }
+
+  async createMediaAttachment(
+    jobId: string,
+    input: CreateMediaAttachmentInput,
+    occurredAt?: string
+  ): Promise<MediaAttachmentRecord> {
+    await this.getJobById(jobId);
+    return this.jobsDataRepository.createMediaAttachment(jobId, input, occurredAt);
+  }
+
+  async markMediaAttachmentBlobUploaded(
+    mediaId: string,
+    storagePath: string,
+    uploadedAt: string
+  ): Promise<MediaAttachmentRecord> {
+    const media = await this.jobsDataRepository.markMediaAttachmentBlobUploaded(mediaId, storagePath, uploadedAt);
+
+    if (!media) {
+      throw new NotFoundException('Media attachment not found.');
+    }
+
+    return media;
+  }
+
+  async updateMediaAttachmentCaption(
+    mediaId: string,
+    input: UpdateMediaAttachmentCaptionInput,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<MediaAttachmentRecord> {
+    const media = await this.jobsDataRepository.updateMediaAttachmentCaption(mediaId, input, actorName, occurredAt);
+
+    if (!media) {
+      throw new NotFoundException('Media attachment not found.');
+    }
+
+    return media;
+  }
+
+  async voidMediaAttachment(
+    mediaId: string,
+    reason: string | undefined,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<MediaAttachmentRecord> {
+    const media = await this.jobsDataRepository.voidMediaAttachment(mediaId, reason, actorName, occurredAt);
+
+    if (!media) {
+      throw new NotFoundException('Media attachment not found.');
+    }
+
+    return media;
   }
 }

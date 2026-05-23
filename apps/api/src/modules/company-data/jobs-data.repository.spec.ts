@@ -609,4 +609,227 @@ describe('JobsDataRepository', () => {
     expect(timelineCall?.[1]?.[4]).toBe('registerEntryVoided');
     expect(timelineCall?.[1]?.[5]).toBe('Register entry voided: Contactor. Reason: Duplicate line.');
   });
+
+  it('persists a new media attachment row with the mediaAttached timeline entry', async () => {
+    const insertedMediaRow = {
+      id: 'pending',
+      jobId: 'job-1',
+      appointmentId: 'appointment-1',
+      kind: 'image',
+      contentType: 'image/jpeg',
+      byteSize: 12345,
+      sha256: 'a'.repeat(64),
+      originalFilename: 'compressor.jpg',
+      caption: 'Compressor before cleaning',
+      capturedByEmployeeId: 'tech-1',
+      capturedByName: 'Field Tech',
+      capturedAt: '2026-04-14T11:00:00.000Z',
+      storagePath: null,
+      uploadedAt: null,
+      isVoid: false,
+      voidReason: null,
+      createdAt: '2026-04-14T11:00:00.000Z',
+      updatedAt: '2026-04-14T11:00:00.000Z'
+    };
+    let writtenMediaId: string | undefined;
+    const queryable = {
+      query: jest.fn(async (sql: string, params?: unknown[]) => {
+        if (sql.includes('insert into media_attachments') && params) {
+          writtenMediaId = params[0] as string;
+        }
+        return { rows: [] };
+      })
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from media_attachments')) {
+          return { rows: [{ ...insertedMediaRow, id: writtenMediaId ?? insertedMediaRow.id }] };
+        }
+        return { rows: [] };
+      }),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.createMediaAttachment(
+      'job-1',
+      {
+        appointmentId: 'appointment-1',
+        kind: 'image',
+        contentType: 'image/jpeg',
+        byteSize: 12345,
+        sha256: 'a'.repeat(64),
+        originalFilename: 'compressor.jpg',
+        caption: 'Compressor before cleaning',
+        capturedAt: '2026-04-14T11:00:00.000Z',
+        capturedByEmployeeId: 'tech-1',
+        capturedByName: 'Field Tech'
+      },
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const insertCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('insert into media_attachments'));
+    expect(insertCall).toBeTruthy();
+    // Confirm storage_path / uploaded_at start null and is_void starts false.
+    const insertSql = String(insertCall?.[0] ?? '');
+    expect(insertSql).toContain('null, null, false, null');
+
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('mediaAttached');
+    expect(timelineCall?.[1]?.[5]).toBe('Field Tech attached compressor.jpg.');
+  });
+
+  it('marks a media row as uploaded by writing storage_path and uploaded_at together', async () => {
+    const mediaRow = {
+      id: 'media-1',
+      jobId: 'job-1',
+      appointmentId: null,
+      kind: 'image',
+      contentType: 'image/jpeg',
+      byteSize: 1024,
+      sha256: 'b'.repeat(64),
+      originalFilename: 'photo.jpg',
+      caption: null,
+      capturedByEmployeeId: 'tech-1',
+      capturedByName: 'Field Tech',
+      capturedAt: '2026-04-14T11:00:00.000Z',
+      storagePath: 'job-1/media-1.jpg',
+      uploadedAt: '2026-04-14T11:05:00.000Z',
+      isVoid: false,
+      voidReason: null,
+      createdAt: '2026-04-14T11:00:00.000Z',
+      updatedAt: '2026-04-14T11:05:00.000Z'
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from media_attachments')) {
+          return { rows: [mediaRow] };
+        }
+        return { rows: [] };
+      })
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.markMediaAttachmentBlobUploaded('media-1', 'job-1/media-1.jpg', '2026-04-14T11:05:00.000Z');
+
+    const updateCall = databaseService.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update media_attachments')
+    );
+    const updateSql = String(updateCall?.[0] ?? '');
+    expect(updateSql).toContain('storage_path = $2');
+    expect(updateSql).toContain('uploaded_at = $3');
+    expect(updateCall?.[1]).toEqual(['media-1', 'job-1/media-1.jpg', '2026-04-14T11:05:00.000Z']);
+  });
+
+  it('voids a media attachment while keeping the row and writing mediaVoided history', async () => {
+    const queryable = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from media_attachments')) {
+          return {
+            rows: [
+              {
+                id: 'media-1',
+                jobId: 'job-1',
+                appointmentId: null,
+                kind: 'image',
+                contentType: 'image/jpeg',
+                byteSize: 1024,
+                sha256: 'c'.repeat(64),
+                originalFilename: 'photo.jpg',
+                caption: null,
+                capturedByEmployeeId: 'tech-1',
+                capturedByName: 'Field Tech',
+                capturedAt: '2026-04-14T11:00:00.000Z',
+                storagePath: 'job-1/media-1.jpg',
+                uploadedAt: '2026-04-14T11:05:00.000Z',
+                isVoid: false,
+                voidReason: null,
+                createdAt: '2026-04-14T11:00:00.000Z',
+                updatedAt: '2026-04-14T11:05:00.000Z'
+              }
+            ]
+          };
+        }
+        return { rows: [] };
+      })
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, params?: unknown[]) => queryable.query(sql, params)),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.voidMediaAttachment('media-1', 'Wrong job', 'Dispatcher', '2026-04-14T12:00:00.000Z');
+
+    const updateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update media_attachments')
+    );
+    expect(String(updateCall?.[0] ?? '')).toContain('is_void = true');
+    expect(updateCall?.[1]).toEqual(['media-1', 'Wrong job', '2026-04-14T12:00:00.000Z']);
+
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('mediaVoided');
+    expect(timelineCall?.[1]?.[5]).toBe('photo.jpg voided (reason: Wrong job).');
+  });
+
+  it('records caption edits without touching storage_path or void state', async () => {
+    const queryable = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from media_attachments')) {
+          return {
+            rows: [
+              {
+                id: 'media-1',
+                jobId: 'job-1',
+                appointmentId: null,
+                kind: 'image',
+                contentType: 'image/jpeg',
+                byteSize: 1024,
+                sha256: 'd'.repeat(64),
+                originalFilename: 'photo.jpg',
+                caption: 'Old caption',
+                capturedByEmployeeId: 'tech-1',
+                capturedByName: 'Field Tech',
+                capturedAt: '2026-04-14T11:00:00.000Z',
+                storagePath: 'job-1/media-1.jpg',
+                uploadedAt: '2026-04-14T11:05:00.000Z',
+                isVoid: false,
+                voidReason: null,
+                createdAt: '2026-04-14T11:00:00.000Z',
+                updatedAt: '2026-04-14T11:05:00.000Z'
+              }
+            ]
+          };
+        }
+        return { rows: [] };
+      })
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, params?: unknown[]) => queryable.query(sql, params)),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.updateMediaAttachmentCaption('media-1', { caption: 'New caption' }, 'Dispatcher', '2026-04-14T12:00:00.000Z');
+
+    const updateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update media_attachments')
+    );
+    const updateSql = String(updateCall?.[0] ?? '');
+    expect(updateSql).toContain('caption = $2');
+    expect(updateSql).not.toContain('storage_path');
+    expect(updateSql).not.toContain('is_void');
+    expect(updateCall?.[1]).toEqual(['media-1', 'New caption', '2026-04-14T12:00:00.000Z']);
+
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('mediaCaptionEdited');
+    expect(timelineCall?.[1]?.[5]).toContain('photo.jpg');
+    expect(timelineCall?.[1]?.[5]).toContain('New caption');
+  });
 });

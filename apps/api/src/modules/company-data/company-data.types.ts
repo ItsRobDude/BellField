@@ -5,6 +5,7 @@ import type {
   FieldSyncSource as ContractFieldSyncSource,
   FinishedVisitReviewDecision as ContractFinishedVisitReviewDecision,
   JobStatus as ContractJobStatus,
+  MediaAttachmentKind as ContractMediaAttachmentKind,
   RegisterEntryKind as ContractRegisterEntryKind,
   SyncResult as ContractSyncResult
 } from '@bellfield/contracts';
@@ -177,6 +178,7 @@ export const appointmentStatuses = [
 export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
 export type FinishedVisitReviewDecision = ContractFinishedVisitReviewDecision;
 export type RegisterEntryKind = ContractRegisterEntryKind;
+export type MediaAttachmentKind = ContractMediaAttachmentKind;
 
 export const appointmentFinishOutcomes = [
   'completed',
@@ -196,6 +198,12 @@ export const registerEntryKinds = [
   'membership',
   'other'
 ] as const satisfies readonly RegisterEntryKind[];
+
+export const mediaAttachmentKinds = [
+  'image',
+  'video',
+  'document'
+] as const satisfies readonly MediaAttachmentKind[];
 
 export type FieldSyncSource = ContractFieldSyncSource;
 
@@ -218,6 +226,9 @@ export type JobTimelineEntry = {
     | 'registerEntryAdded'
     | 'registerEntryEdited'
     | 'registerEntryVoided'
+    | 'mediaAttached'
+    | 'mediaCaptionEdited'
+    | 'mediaVoided'
     | 'jobNote'
     | 'syncFlag';
   message: string;
@@ -327,4 +338,42 @@ export type CreateRegisterEntryInput = {
 export type UpdateRegisterEntryInput = Partial<Omit<CreateRegisterEntryInput, 'appointmentId' | 'unitPrice'>> & {
   appointmentId?: string | null;
   unitPrice?: number | null;
+};
+
+export type MediaAttachmentRecord = {
+  id: string;
+  jobId: string;
+  appointmentId?: string;
+  kind: MediaAttachmentKind;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+  originalFilename: string;
+  caption?: string;
+  capturedByEmployeeId: string;
+  capturedByName: string;
+  capturedAt: string;
+  storagePath?: string;
+  uploadedAt?: string;
+  isVoid: boolean;
+  voidReason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateMediaAttachmentInput = {
+  appointmentId?: string;
+  kind: MediaAttachmentKind;
+  contentType: string;
+  byteSize: number;
+  sha256: string;
+  originalFilename: string;
+  caption?: string;
+  capturedAt: string;
+  capturedByEmployeeId: string;
+  capturedByName: string;
+};
+
+export type UpdateMediaAttachmentCaptionInput = {
+  caption: string | null;
 };

@@ -6,7 +6,11 @@ import { log } from './common/logger';
 import { getApiRuntimeConfig } from './common/config/runtime-config';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bufferLogs: true });
+  // rawBody: true preserves the raw request body buffer on `req.rawBody`
+  // alongside the normal parsed body. JSON parsing for every other route is
+  // unchanged. The MediaController reads `req.rawBody` only on the media
+  // blob upload path; no other route consumes it.
+  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
   const runtimeConfig = getApiRuntimeConfig();
 
   // Keep local app-to-api wiring simple while the persistent auth/session layer is still forming.

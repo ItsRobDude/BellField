@@ -5,8 +5,17 @@ import { CrmModule } from './crm/crm.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { IdentityAccessModule } from './identity-access/identity-access.module';
 import { JobsAppointmentsModule } from './jobs-appointments/jobs-appointments.module';
+import { MediaModule } from './media/media.module';
 
 @Module({
-  imports: [DatabaseModule, HealthModule, IdentityAccessModule, CrmModule, EquipmentModule, JobsAppointmentsModule]
+  imports: [
+    DatabaseModule,
+    HealthModule,
+    IdentityAccessModule,
+    CrmModule,
+    EquipmentModule,
+    JobsAppointmentsModule,
+    MediaModule
+  ]
 })
 export class AppModule {}
