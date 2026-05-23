@@ -1,30 +1,35 @@
 'use client';
 
-import type { JobsWorkspaceResponse } from '@/lib/operations-api';
+import type { JobsQueueKey, JobsQueueResponse } from '@/lib/operations-api';
 import { formatAppointmentScheduleDisplay } from './appointment-schedule-format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type JobsQueuePanelProps = {
-  jobsWorkspace: JobsWorkspaceResponse;
+  jobsQueue: JobsQueueResponse;
   onOpenJobDetail: (jobId: string, appointmentId?: string) => void;
   onNewJob: () => void;
+  onLoadMoreQueue?: (queueKey: JobsQueueKey, cursor: string) => void;
 };
 
-export function JobsQueuePanel({ jobsWorkspace, onOpenJobDetail, onNewJob }: JobsQueuePanelProps) {
-  const reviewJobs = jobsWorkspace.jobs.filter((job) => job.needsOfficeReview);
-  const unscheduledJobs = jobsWorkspace.jobs.filter(
-    (job) => job.needsScheduling && job.status !== 'closed' && job.status !== 'cancelled'
-  );
-  const activeJobs = jobsWorkspace.jobs.filter(
-    (job) => !job.needsOfficeReview && !job.needsScheduling && job.status !== 'closed' && job.status !== 'cancelled'
-  );
+type JobsQueueSection = JobsQueueResponse['queues'][number];
+type JobsQueueItem = JobsQueueSection['jobs'][number];
+
+const queueLabels: Record<JobsQueueKey, string> = {
+  review: 'Review',
+  waitingOnParts: 'Waiting',
+  unscheduled: 'Unscheduled',
+  open: 'Open'
+};
+
+export function JobsQueuePanel({ jobsQueue, onOpenJobDetail, onNewJob, onLoadMoreQueue }: JobsQueuePanelProps) {
+  const totalCount = jobsQueue.queues.reduce((sum, section) => sum + section.totalCount, 0);
 
   return (
     <section aria-label="Jobs queue" style={styles.workspacePanel}>
       <div style={styles.row}>
         <div>
           <h1 style={styles.compactTitle}>Jobs</h1>
-          <p style={styles.muted}>{jobsWorkspace.jobs.length} total</p>
+          <p style={styles.muted}>{totalCount} active</p>
         </div>
         <button type="button" style={styles.primaryButton} onClick={onNewJob}>
           New job
@@ -32,39 +37,46 @@ export function JobsQueuePanel({ jobsWorkspace, onOpenJobDetail, onNewJob }: Job
       </div>
 
       <div style={styles.queueGrid}>
-        <QueueColumn title="Review" jobs={reviewJobs} onOpenJobDetail={onOpenJobDetail} />
-        <QueueColumn title="Unscheduled" jobs={unscheduledJobs} onOpenJobDetail={onOpenJobDetail} />
-        <QueueColumn title="Open" jobs={activeJobs} onOpenJobDetail={onOpenJobDetail} />
+        {jobsQueue.queues.map((section) => (
+          <QueueColumn
+            key={section.key}
+            section={section}
+            onOpenJobDetail={onOpenJobDetail}
+            onLoadMoreQueue={onLoadMoreQueue}
+          />
+        ))}
       </div>
     </section>
   );
 }
 
 function QueueColumn({
-  title,
-  jobs,
-  onOpenJobDetail
+  section,
+  onOpenJobDetail,
+  onLoadMoreQueue
 }: {
-  title: string;
-  jobs: JobsWorkspaceResponse['jobs'];
+  section: JobsQueueSection;
   onOpenJobDetail: JobsQueuePanelProps['onOpenJobDetail'];
+  onLoadMoreQueue?: JobsQueuePanelProps['onLoadMoreQueue'];
 }) {
+  const title = queueLabels[section.key];
+
   return (
     <section style={styles.panel} aria-label={`${title} jobs`}>
       <div style={styles.row}>
         <strong>{title}</strong>
-        <span style={styles.badge}>{jobs.length}</span>
+        <span style={styles.badge}>{section.totalCount}</span>
       </div>
-      {jobs.length === 0 ? (
+      {section.jobs.length === 0 ? (
         <p style={styles.tinyMuted}>None</p>
       ) : (
         <div style={styles.listCompact}>
-          {jobs.map((job) => (
+          {section.jobs.map((job) => (
             <button
               key={job.id}
               type="button"
               style={styles.cardButton}
-              onClick={() => onOpenJobDetail(job.id, job.appointments[0]?.id)}
+              onClick={() => onOpenJobDetail(job.id, job.nextAppointment?.id)}
             >
               <div style={styles.row}>
                 <strong>Job {job.jobNumber}</strong>
@@ -76,13 +88,17 @@ function QueueColumn({
               </span>
             </button>
           ))}
+          {section.nextCursor && onLoadMoreQueue ? (
+            <button type="button" style={styles.button} onClick={() => onLoadMoreQueue(section.key, section.nextCursor!)}>
+              Load more
+            </button>
+          ) : null}
         </div>
       )}
     </section>
   );
 }
 
-function nextAppointmentLabel(job: JobsWorkspaceResponse['jobs'][number]): string {
-  const appointment = job.appointments.find((candidate) => candidate.status !== 'cancelled') ?? job.appointments[0];
-  return appointment ? formatAppointmentScheduleDisplay(appointment) : 'No appointment';
+function nextAppointmentLabel(job: JobsQueueItem): string {
+  return job.nextAppointment ? formatAppointmentScheduleDisplay(job.nextAppointment) : 'No appointment';
 }

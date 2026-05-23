@@ -5,6 +5,7 @@ import type {
   DispatchBoardResponse,
   JobDetailResponse,
   JobSummary,
+  JobsQueueResponse,
   JobsWorkspaceResponse,
   MediaAttachmentSummary,
   RegisterEntrySummary
@@ -24,6 +25,7 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeEquipmentWorkspace: vi.fn(),
   getOfficeDispatchBoard: vi.fn(),
   getOfficeJobDetail: vi.fn(),
+  getOfficeJobsQueue: vi.fn(),
   getOfficeJobsWorkspace: vi.fn(),
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
@@ -245,6 +247,68 @@ function buildDispatchBoard(workspace: JobsWorkspaceResponse): DispatchBoardResp
   };
 }
 
+function buildJobsQueue(workspace: JobsWorkspaceResponse): JobsQueueResponse {
+  const queues: JobsQueueResponse['queues'] = [
+    { key: 'review', totalCount: 0, jobs: [] },
+    { key: 'waitingOnParts', totalCount: 0, jobs: [] },
+    { key: 'unscheduled', totalCount: 0, jobs: [] },
+    { key: 'open', totalCount: 0, jobs: [] }
+  ];
+
+  workspace.jobs.forEach((job) => {
+    if (job.status === 'completed' || job.status === 'closed' || job.status === 'cancelled') {
+      return;
+    }
+
+    const queueKey = job.needsOfficeReview
+      ? 'review'
+      : job.status === 'waitingOnParts'
+        ? 'waitingOnParts'
+        : job.needsScheduling
+          ? 'unscheduled'
+          : 'open';
+    const section = queues.find((candidate) => candidate.key === queueKey);
+
+    section?.jobs.push({
+      id: job.id,
+      jobNumber: job.jobNumber,
+      locationId: job.locationId,
+      locationName: job.locationName,
+      billToCustomerId: job.billToCustomerId,
+      billToCustomerName: job.billToCustomerName,
+      jobType: job.jobType,
+      category: job.category,
+      origin: job.origin,
+      summary: job.summary,
+      status: job.status,
+      workOrderNumber: job.workOrderNumber,
+      needsScheduling: job.needsScheduling,
+      needsOfficeReview: job.needsOfficeReview,
+      nextAppointment: job.appointments[0]
+        ? {
+            id: job.appointments[0].id,
+            jobId: job.appointments[0].jobId,
+            scheduledDate: job.appointments[0].scheduledDate,
+            scheduledStartTime: job.appointments[0].scheduledStartTime,
+            scheduledEndTime: job.appointments[0].scheduledEndTime,
+            timeWindowLabel: job.appointments[0].timeWindowLabel,
+            technicianId: job.appointments[0].technicianId,
+            technicianName: job.appointments[0].technicianName,
+            status: job.appointments[0].status,
+            needsOfficeReview: job.appointments[0].needsOfficeReview
+          }
+        : undefined,
+      createdAt: job.createdAt,
+      updatedAt: job.updatedAt
+    });
+  });
+
+  return {
+    limit: 20,
+    queues: queues.map((section) => ({ ...section, totalCount: section.jobs.length }))
+  };
+}
+
 function buildJobDetail(
   job: JobSummary,
   registerEntries: RegisterEntrySummary[] = [],
@@ -266,6 +330,7 @@ function buildJobDetail(
 function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee });
   mockedOperationsApi.getOfficeJobsWorkspace.mockResolvedValue(workspace);
+  mockedOperationsApi.getOfficeJobsQueue.mockResolvedValue(buildJobsQueue(workspace));
   mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
   mockedOperationsApi.getOfficeJobDetail.mockImplementation(async ({ jobId }) => {
     const job = workspace.jobs.find((candidate) => candidate.id === jobId) ?? workspace.jobs[0] ?? buildJob();
@@ -384,6 +449,44 @@ describe('OfficeWorkspaceShell IA', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Job 1002/i }));
 
     expect(await screen.findByRole('region', { name: 'Job 1002 detail' })).toBeInTheDocument();
+  });
+
+  it('loads more jobs queue rows through the compact queue API', async () => {
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        id: 'job-open',
+        jobNumber: '1002',
+        summary: 'Open first'
+      })
+    ]);
+    const secondJob = buildJob({
+      id: 'job-open-2',
+      jobNumber: '1003',
+      summary: 'Open second'
+    });
+    const initialQueue = buildJobsQueue(initialWorkspace);
+    initialQueue.queues = initialQueue.queues.map((section) =>
+      section.key === 'open' ? { ...section, totalCount: 2, nextCursor: 'cursor-open' } : section
+    );
+    const nextQueue = buildJobsQueue(buildWorkspace([secondJob]));
+
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsQueue.mockResolvedValueOnce(initialQueue).mockResolvedValueOnce(nextQueue);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Jobs' }));
+    fireEvent.click(await within(screen.getByRole('region', { name: 'Open jobs' })).findByRole('button', { name: 'Load more' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeJobsQueue).toHaveBeenLastCalledWith({
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        limit: 20,
+        cursors: { open: 'cursor-open' }
+      });
+    });
+    expect(await screen.findByText('Open second')).toBeInTheDocument();
   });
 
   it('creates jobs from the focused new-job form using the existing API helper', async () => {

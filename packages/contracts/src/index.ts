@@ -590,6 +590,53 @@ export interface JobDetailResponse {
   timelineHasMore: boolean;
 }
 
+export type JobsQueueKey = 'review' | 'waitingOnParts' | 'unscheduled' | 'open';
+
+export interface JobsQueueAppointmentSummary {
+  id: string;
+  jobId: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+  technicianName?: string;
+  status: AppointmentStatus;
+  needsOfficeReview: boolean;
+}
+
+export interface JobsQueueItem {
+  id: string;
+  jobNumber: string;
+  locationId: string;
+  locationName: string;
+  billToCustomerId: string;
+  billToCustomerName: string;
+  jobType: string;
+  category: string;
+  origin: string;
+  summary: string;
+  status: JobStatus;
+  workOrderNumber?: string;
+  needsScheduling: boolean;
+  needsOfficeReview: boolean;
+  nextAppointment?: JobsQueueAppointmentSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface JobsQueueSection {
+  key: JobsQueueKey;
+  totalCount: number;
+  jobs: JobsQueueItem[];
+  nextCursor?: string;
+}
+
+export interface JobsQueueResponse {
+  limit: number;
+  queues: JobsQueueSection[];
+}
+
 export interface DispatchEquipmentGlance {
   id: string;
   equipmentType: string;

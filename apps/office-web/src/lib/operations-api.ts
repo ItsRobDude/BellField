@@ -32,6 +32,8 @@ import type {
   EquipmentWorkspaceResponse,
   JobDetailResponse,
   JobStatus,
+  JobsQueueKey,
+  JobsQueueResponse,
   JobsWorkspaceResponse,
   JobSummary,
   JobMutationResponse,
@@ -94,6 +96,8 @@ export type {
   EquipmentWorkspaceResponse,
   JobDetailResponse,
   JobStatus,
+  JobsQueueKey,
+  JobsQueueResponse,
   JobsWorkspaceResponse,
   JobSummary,
   JobMutationResponse,
@@ -327,6 +331,32 @@ export async function getOfficeJobDetail(input: {
   const query = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
 
   return requestJson<JobDetailResponse>(`/operations/jobs/${input.jobId}/detail${query}`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function getOfficeJobsQueue(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  limit?: number;
+  cursors?: Partial<Record<JobsQueueKey, string>>;
+}): Promise<JobsQueueResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (input.limit !== undefined) {
+    searchParams.set('limit', String(input.limit));
+  }
+
+  Object.entries(input.cursors ?? {}).forEach(([queueKey, cursor]) => {
+    if (cursor) {
+      searchParams.set(`${queueKey}Cursor`, cursor);
+    }
+  });
+
+  const query = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+
+  return requestJson<JobsQueueResponse>(`/operations/jobs/queue${query}`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
   });

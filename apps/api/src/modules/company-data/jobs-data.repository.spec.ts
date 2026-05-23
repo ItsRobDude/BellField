@@ -360,6 +360,90 @@ describe('JobsDataRepository', () => {
     expect(timelineQuery?.[1]).toEqual(['job-1', 3]);
   });
 
+  it('lists compact jobs queue pages without hydrating timelines', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [
+          {
+            id: 'job-1',
+            jobNumber: '1001',
+            locationId: 'location-1',
+            locationName: 'Main Shop',
+            billToCustomerId: 'customer-1',
+            billToCustomerName: 'Acme',
+            jobType: 'Service',
+            category: 'General',
+            origin: 'Phone',
+            summary: 'No cooling',
+            status: 'scheduled',
+            workOrderNumber: null,
+            needsScheduling: false,
+            needsOfficeReview: true,
+            nextAppointmentId: 'appointment-1',
+            nextAppointmentJobId: 'job-1',
+            nextAppointmentScheduledDate: '2026-05-23',
+            nextAppointmentScheduledStartTime: '08:00:00',
+            nextAppointmentScheduledEndTime: '10:00:00',
+            nextAppointmentTimeWindowLabel: null,
+            nextAppointmentTechnicianId: 'tech-1',
+            nextAppointmentTechnicianName: 'Taylor Tech',
+            nextAppointmentStatus: 'finished',
+            nextAppointmentNeedsOfficeReview: true,
+            createdAt: '2026-05-22T10:00:00.000Z',
+            updatedAt: '2026-05-23T10:00:00.000Z',
+            totalCount: '12'
+          }
+        ]
+      }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const page = await repository.listJobsQueuePage('review', 21, {
+      updatedAt: '2026-05-24T10:00:00.000Z',
+      id: 'job-0'
+    });
+    const sql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+
+    expect(page.totalCount).toBe(12);
+    expect(page.jobs[0]).toMatchObject({
+      id: 'job-1',
+      needsOfficeReview: true,
+      nextAppointment: {
+        id: 'appointment-1',
+        scheduledDate: '2026-05-23',
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00',
+        technicianName: 'Taylor Tech',
+        needsOfficeReview: true
+      }
+    });
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['2026-05-24T10:00:00.000Z', 'job-0', 21]);
+    expect(sql).toContain("job.status in ('new', 'scheduled', 'inProgress', 'waitingOnParts')");
+    expect(sql).toContain('needs_office_review = true');
+    expect(sql).toContain('next_appointment');
+    expect(sql).not.toContain('job_timeline_entries');
+  });
+
+  it('keeps jobs queue sections distinct by priority', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.listJobsQueuePage('waitingOnParts', 20);
+    await repository.listJobsQueuePage('unscheduled', 20);
+    await repository.listJobsQueuePage('open', 20);
+
+    const [waitingSql, unscheduledSql, openSql] = databaseService.query.mock.calls.map(([sql]) => String(sql));
+    expect(waitingSql).toContain("needs_office_review = false and status = 'waitingOnParts'");
+    expect(unscheduledSql).toContain(
+      "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = true"
+    );
+    expect(openSql).toContain(
+      "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = false"
+    );
+  });
+
   it('acknowledges prior finished visit review when a follow-up appointment is added', async () => {
     const { databaseService, queryable } = createDatabaseService();
     (queryable.query as jest.Mock).mockImplementation(async (sql: string, _params?: unknown[]) => {

@@ -5,6 +5,7 @@ import type {
   FieldSyncSource as ContractFieldSyncSource,
   FinishedVisitReviewDecision as ContractFinishedVisitReviewDecision,
   JobStatus as ContractJobStatus,
+  JobsQueueKey as ContractJobsQueueKey,
   MediaAttachmentKind as ContractMediaAttachmentKind,
   RegisterEntryKind as ContractRegisterEntryKind,
   SyncResult as ContractSyncResult
@@ -150,6 +151,7 @@ export type UpdateEquipmentInput = Partial<CreateEquipmentInput> & {
 };
 
 export type JobStatus = ContractJobStatus;
+export type JobsQueueKey = ContractJobsQueueKey;
 
 export const jobStatuses = [
   'new',
@@ -256,6 +258,49 @@ export type JobDetailRecord = {
   appointments: AppointmentRecord[];
   timelineLimit: number;
   timelineHasMore: boolean;
+};
+
+export type JobsQueueCursor = {
+  updatedAt: string;
+  id: string;
+};
+
+export type JobsQueueAppointmentRecord = {
+  id: string;
+  jobId: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  timeWindowLabel?: string;
+  technicianId?: string;
+  technicianName?: string;
+  status: AppointmentStatus;
+  needsOfficeReview: boolean;
+};
+
+export type JobsQueueItemRecord = {
+  id: string;
+  jobNumber: string;
+  locationId: string;
+  locationName: string;
+  billToCustomerId: string;
+  billToCustomerName: string;
+  jobType: string;
+  category: string;
+  origin: string;
+  summary: string;
+  status: JobStatus;
+  workOrderNumber?: string;
+  needsScheduling: boolean;
+  needsOfficeReview: boolean;
+  nextAppointment?: JobsQueueAppointmentRecord;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type JobsQueuePageRecord = {
+  jobs: JobsQueueItemRecord[];
+  totalCount: number;
 };
 
 export type DispatchAppointmentRecord = {

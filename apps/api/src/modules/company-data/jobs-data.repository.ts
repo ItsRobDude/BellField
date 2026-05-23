@@ -16,6 +16,10 @@ import type {
   JobRecord,
   JobStatus,
   JobTimelineEntry,
+  JobsQueueCursor,
+  JobsQueueItemRecord,
+  JobsQueueKey,
+  JobsQueuePageRecord,
   MediaAttachmentKind,
   MediaAttachmentRecord,
   RegisterEntryKind,
@@ -84,6 +88,36 @@ type DispatchAppointmentRow = {
   billToCustomerName: string;
   customerName: string;
   needsOfficeReview: boolean;
+};
+
+type JobsQueueItemRow = {
+  id: string;
+  jobNumber: string;
+  locationId: string;
+  locationName: string;
+  billToCustomerId: string;
+  billToCustomerName: string;
+  jobType: string;
+  category: string;
+  origin: string;
+  summary: string;
+  status: JobStatus;
+  workOrderNumber: string | null;
+  needsScheduling: boolean;
+  needsOfficeReview: boolean;
+  nextAppointmentId: string | null;
+  nextAppointmentJobId: string | null;
+  nextAppointmentScheduledDate: string | Date | null;
+  nextAppointmentScheduledStartTime: string | Date | null;
+  nextAppointmentScheduledEndTime: string | Date | null;
+  nextAppointmentTimeWindowLabel: string | null;
+  nextAppointmentTechnicianId: string | null;
+  nextAppointmentTechnicianName: string | null;
+  nextAppointmentStatus: AppointmentStatus | null;
+  nextAppointmentNeedsOfficeReview: boolean | null;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+  totalCount: string | number;
 };
 
 type TimelineRow = {
@@ -227,6 +261,125 @@ export class JobsDataRepository {
     );
 
     return result.rows.map((row) => this.toDispatchAppointmentRecord(row));
+  }
+
+  async listJobsQueuePage(
+    queueKey: JobsQueueKey,
+    limit: number,
+    cursor?: JobsQueueCursor
+  ): Promise<JobsQueuePageRecord> {
+    const result = await this.databaseService.query<JobsQueueItemRow>(
+      `
+        with base_jobs as (
+          select
+            job.id,
+            job.job_number,
+            job.location_id,
+            location.name as location_name,
+            job.bill_to_customer_id,
+            bill_to_customer.name as bill_to_customer_name,
+            job.job_type,
+            job.category,
+            job.origin,
+            job.summary,
+            job.status,
+            job.work_order_number,
+            job.created_at,
+            job.updated_at,
+            (
+              job.status not in ('completed', 'closed', 'cancelled')
+              and exists (
+                select 1
+                from appointments review_appointment
+                where review_appointment.job_id = job.id
+                  and review_appointment.status = 'finished'
+                  and review_appointment.finished_reviewed_at is null
+              )
+            ) as needs_office_review,
+            not exists (
+              select 1
+              from appointments scheduled_appointment
+              where scheduled_appointment.job_id = job.id
+                and scheduled_appointment.status <> 'cancelled'
+                and scheduled_appointment.scheduled_date is not null
+            ) as needs_scheduling
+          from jobs job
+          inner join locations location on location.id = job.location_id
+          inner join customers bill_to_customer on bill_to_customer.id = job.bill_to_customer_id
+          where job.status in ('new', 'scheduled', 'inProgress', 'waitingOnParts')
+        ),
+        queued_jobs as (
+          select *
+          from base_jobs
+          where ${this.getJobsQueueCondition(queueKey)}
+        )
+        select
+          queued_job.id,
+          queued_job.job_number as "jobNumber",
+          queued_job.location_id as "locationId",
+          queued_job.location_name as "locationName",
+          queued_job.bill_to_customer_id as "billToCustomerId",
+          queued_job.bill_to_customer_name as "billToCustomerName",
+          queued_job.job_type as "jobType",
+          queued_job.category,
+          queued_job.origin,
+          queued_job.summary,
+          queued_job.status,
+          queued_job.work_order_number as "workOrderNumber",
+          queued_job.needs_scheduling as "needsScheduling",
+          queued_job.needs_office_review as "needsOfficeReview",
+          next_appointment.id as "nextAppointmentId",
+          next_appointment.job_id as "nextAppointmentJobId",
+          next_appointment.scheduled_date as "nextAppointmentScheduledDate",
+          next_appointment.scheduled_start_time as "nextAppointmentScheduledStartTime",
+          next_appointment.scheduled_end_time as "nextAppointmentScheduledEndTime",
+          next_appointment.time_window_label as "nextAppointmentTimeWindowLabel",
+          next_appointment.technician_id as "nextAppointmentTechnicianId",
+          technician.display_name as "nextAppointmentTechnicianName",
+          next_appointment.status as "nextAppointmentStatus",
+          (
+            next_appointment.status = 'finished'
+            and next_appointment.finished_reviewed_at is null
+            and queued_job.status not in ('completed', 'closed', 'cancelled')
+          ) as "nextAppointmentNeedsOfficeReview",
+          queued_job.created_at as "createdAt",
+          queued_job.updated_at as "updatedAt",
+          (select count(*) from queued_jobs) as "totalCount"
+        from queued_jobs queued_job
+        left join lateral (
+          select
+            appointment.id,
+            appointment.job_id,
+            appointment.scheduled_date,
+            appointment.scheduled_start_time,
+            appointment.scheduled_end_time,
+            appointment.time_window_label,
+            appointment.technician_id,
+            appointment.status,
+            appointment.finished_reviewed_at,
+            appointment.created_at
+          from appointments appointment
+          where appointment.job_id = queued_job.id
+            and appointment.status <> 'cancelled'
+          order by appointment.scheduled_date asc nulls last, appointment.scheduled_start_time asc nulls last, appointment.created_at asc
+          limit 1
+        ) next_appointment on true
+        left join employees technician on technician.id = next_appointment.technician_id
+        where (
+          $1::timestamptz is null
+          or queued_job.updated_at < $1::timestamptz
+          or (queued_job.updated_at = $1::timestamptz and queued_job.id > $2::text)
+        )
+        order by queued_job.updated_at desc, queued_job.id asc
+        limit $3
+      `,
+      [cursor?.updatedAt ?? null, cursor?.id ?? '', limit]
+    );
+
+    return {
+      jobs: result.rows.map((row) => this.toJobsQueueItemRecord(row)),
+      totalCount: Number(result.rows[0]?.totalCount ?? 0)
+    };
   }
 
   async jobExists(jobId: string): Promise<boolean> {
@@ -1885,6 +2038,55 @@ export class JobsDataRepository {
       customerName: row.customerName,
       needsOfficeReview: row.needsOfficeReview
     };
+  }
+
+  private toJobsQueueItemRecord(row: JobsQueueItemRow): JobsQueueItemRecord {
+    return {
+      id: row.id,
+      jobNumber: row.jobNumber,
+      locationId: row.locationId,
+      locationName: row.locationName,
+      billToCustomerId: row.billToCustomerId,
+      billToCustomerName: row.billToCustomerName,
+      jobType: row.jobType,
+      category: row.category,
+      origin: row.origin,
+      summary: row.summary,
+      status: row.status,
+      workOrderNumber: row.workOrderNumber ?? undefined,
+      needsScheduling: row.needsScheduling,
+      needsOfficeReview: row.needsOfficeReview,
+      nextAppointment:
+        row.nextAppointmentId && row.nextAppointmentJobId && row.nextAppointmentStatus
+          ? {
+              id: row.nextAppointmentId,
+              jobId: row.nextAppointmentJobId,
+              scheduledDate: toOptionalDateString(row.nextAppointmentScheduledDate),
+              scheduledStartTime: toOptionalTimeString(row.nextAppointmentScheduledStartTime),
+              scheduledEndTime: toOptionalTimeString(row.nextAppointmentScheduledEndTime),
+              timeWindowLabel: row.nextAppointmentTimeWindowLabel ?? undefined,
+              technicianId: row.nextAppointmentTechnicianId ?? undefined,
+              technicianName: row.nextAppointmentTechnicianName ?? undefined,
+              status: row.nextAppointmentStatus,
+              needsOfficeReview: Boolean(row.nextAppointmentNeedsOfficeReview)
+            }
+          : undefined,
+      createdAt: toIsoString(row.createdAt),
+      updatedAt: toIsoString(row.updatedAt)
+    };
+  }
+
+  private getJobsQueueCondition(queueKey: JobsQueueKey): string {
+    switch (queueKey) {
+      case 'review':
+        return 'needs_office_review = true';
+      case 'waitingOnParts':
+        return "needs_office_review = false and status = 'waitingOnParts'";
+      case 'unscheduled':
+        return "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = true";
+      case 'open':
+        return "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = false";
+    }
   }
 
   private buildMediaCaptionMessage(filename: string, caption: string | null): string {

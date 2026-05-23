@@ -14,6 +14,7 @@ import {
   getOfficeJobDetail,
   createOfficeJob,
   getOfficeEquipmentWorkspace,
+  getOfficeJobsQueue,
   getOfficeJobsWorkspace,
   linkOfficeEquipmentReplacement,
   updateOfficeAppointmentSchedule,
@@ -30,6 +31,8 @@ import {
   type EquipmentSummary,
   type JobDetailResponse,
   type JobStatus,
+  type JobsQueueKey,
+  type JobsQueueResponse,
   type JobsWorkspaceResponse,
   type MediaAttachmentSummary,
   type RegisterEntrySummary
@@ -56,6 +59,7 @@ import { JobsQueuePanel } from './jobs-queue-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
+const jobsQueuePageLimit = 20;
 type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'equipment' | 'jobDetail';
 
 type Props = {
@@ -184,9 +188,36 @@ function optionalString(value: string): string | undefined {
   return trimmed ? trimmed : undefined;
 }
 
+function mergeJobsQueueSection(
+  current: JobsQueueResponse,
+  nextPage: JobsQueueResponse,
+  queueKey: JobsQueueKey
+): JobsQueueResponse {
+  const nextSection = nextPage.queues.find((section) => section.key === queueKey);
+
+  if (!nextSection) {
+    return current;
+  }
+
+  return {
+    limit: current.limit,
+    queues: current.queues.map((section) =>
+      section.key === queueKey
+        ? {
+            ...nextSection,
+            jobs: [...section.jobs, ...nextSection.jobs],
+            totalCount:
+              nextSection.totalCount === 0 && nextSection.jobs.length === 0 ? section.totalCount : nextSection.totalCount
+          }
+        : section
+    )
+  };
+}
+
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
   const [jobsWorkspace, setJobsWorkspace] = useState<JobsWorkspaceResponse | null>(null);
+  const [jobsQueue, setJobsQueue] = useState<JobsQueueResponse | null>(null);
   const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
   const [jobDetailsById, setJobDetailsById] = useState<Record<string, JobDetailResponse>>({});
   const [equipment, setEquipment] = useState<EquipmentSummary[]>([]);
@@ -197,6 +228,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDispatchRefreshing, setIsDispatchRefreshing] = useState(false);
+  const [isJobsQueueRefreshing, setIsJobsQueueRefreshing] = useState(false);
   const [isJobDetailLoading, setIsJobDetailLoading] = useState(false);
   const [lastDispatchRefreshedAt, setLastDispatchRefreshedAt] = useState<string | null>(null);
   const [pendingJobStatusChange, setPendingJobStatusChange] = useState<PendingJobStatusChange | null>(null);
@@ -223,6 +255,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [isJobIntakeOpen, setIsJobIntakeOpen] = useState(false);
   const refreshInFlightRef = useRef(false);
   const dispatchRefreshInFlightRef = useRef(false);
+  const jobsQueueRefreshInFlightRef = useRef(false);
   const jobLocationIdRef = useRef(jobLocationId);
   const selectedEquipmentIdRef = useRef(selectedEquipmentId);
 
@@ -276,6 +309,32 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }, [apiBaseUrl, dispatchViewDate, sessionToken]);
 
+  const refreshJobsQueue = useCallback(async (): Promise<boolean> => {
+    if (jobsQueueRefreshInFlightRef.current) {
+      return false;
+    }
+
+    jobsQueueRefreshInFlightRef.current = true;
+    setIsJobsQueueRefreshing(true);
+    setErrorMessage(null);
+
+    try {
+      const nextJobsQueue = await getOfficeJobsQueue({
+        sessionToken,
+        apiBaseUrl,
+        limit: jobsQueuePageLimit
+      });
+      setJobsQueue(nextJobsQueue);
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the jobs queue.');
+      return false;
+    } finally {
+      jobsQueueRefreshInFlightRef.current = false;
+      setIsJobsQueueRefreshing(false);
+    }
+  }, [apiBaseUrl, sessionToken]);
+
   const refreshWorkspace = useCallback(async (): Promise<boolean> => {
     if (refreshInFlightRef.current) {
       return false;
@@ -327,13 +386,14 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   }, [apiBaseUrl, loadEquipmentDetail, sessionToken, showInactiveEquipment]);
 
   const refreshAllWorkspace = useCallback(async (): Promise<boolean> => {
-    const [didRefreshWorkspace, didRefreshDispatch] = await Promise.all([
+    const [didRefreshWorkspace, didRefreshDispatch, didRefreshJobsQueue] = await Promise.all([
       refreshWorkspace(),
-      refreshDispatchBoard()
+      refreshDispatchBoard(),
+      refreshJobsQueue()
     ]);
 
-    return didRefreshWorkspace || didRefreshDispatch;
-  }, [refreshDispatchBoard, refreshWorkspace]);
+    return didRefreshWorkspace || didRefreshDispatch || didRefreshJobsQueue;
+  }, [refreshDispatchBoard, refreshJobsQueue, refreshWorkspace]);
 
   const loadJobDetail = useCallback(async (jobId: string): Promise<JobDetailResponse | null> => {
     setIsJobDetailLoading(true);
@@ -367,12 +427,30 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   }, [refreshDispatchBoard]);
 
   useEffect(() => {
+    void refreshJobsQueue();
+  }, [refreshJobsQueue]);
+
+  useEffect(() => {
     const intervalId = window.setInterval(() => {
       void refreshDispatchBoard();
     }, dispatchAutoRefreshIntervalMs);
 
     return () => window.clearInterval(intervalId);
   }, [refreshDispatchBoard]);
+
+  async function handleLoadMoreJobsQueue(queueKey: JobsQueueKey, cursor: string) {
+    try {
+      const nextPage = await getOfficeJobsQueue({
+        sessionToken,
+        apiBaseUrl,
+        limit: jobsQueuePageLimit,
+        cursors: { [queueKey]: cursor }
+      });
+      setJobsQueue((current) => (current ? mergeJobsQueueSection(current, nextPage, queueKey) : nextPage));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load more jobs.');
+    }
+  }
 
   async function loadCapturedWork(jobId: string) {
     setCapturedWorkByJobId((current) => ({
@@ -1008,7 +1086,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
                 New job
               </button>
               <button type="button" onClick={() => void refreshAllWorkspace()} style={styles.button}>
-                {isRefreshing || isDispatchRefreshing ? 'Refreshing...' : 'Refresh'}
+                {isRefreshing || isDispatchRefreshing || isJobsQueueRefreshing ? 'Refreshing...' : 'Refresh'}
               </button>
               <button type="button" onClick={onSignOut} style={styles.button}>
                 Sign out
@@ -1065,15 +1143,16 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
             <CrmPanel apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} onErrorMessage={setErrorMessage} />
           ) : null}
 
-          {activeOfficeView === 'jobs' && jobsWorkspace ? (
+          {activeOfficeView === 'jobs' && jobsQueue ? (
             <JobsQueuePanel
-              jobsWorkspace={jobsWorkspace}
+              jobsQueue={jobsQueue}
               onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
               onNewJob={() => setIsJobIntakeOpen(true)}
+              onLoadMoreQueue={handleLoadMoreJobsQueue}
             />
           ) : null}
 
-          {activeOfficeView === 'jobs' && !jobsWorkspace ? (
+          {activeOfficeView === 'jobs' && !jobsQueue ? (
             <section style={styles.workspacePanel} aria-label="Jobs queue">
               <p style={styles.muted}>Loading jobs...</p>
             </section>
@@ -1150,15 +1229,16 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
             </section>
           ) : null}
 
-          {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && jobsWorkspace ? (
+          {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && jobsQueue ? (
             <JobsQueuePanel
-              jobsWorkspace={jobsWorkspace}
+              jobsQueue={jobsQueue}
               onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
               onNewJob={() => setIsJobIntakeOpen(true)}
+              onLoadMoreQueue={handleLoadMoreJobsQueue}
             />
           ) : null}
 
-          {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && !jobsWorkspace ? (
+          {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && !jobsQueue ? (
             <section style={styles.workspacePanel} aria-label="Job detail loading">
               <p style={styles.muted}>Loading job...</p>
             </section>

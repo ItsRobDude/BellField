@@ -11,6 +11,9 @@ import type {
   JobDetailRecord,
   JobRecord,
   JobStatus,
+  JobsQueueCursor,
+  JobsQueueKey,
+  JobsQueuePageRecord,
   MediaAttachmentRecord,
   RegisterEntryRecord,
   CreateRegisterEntryInput,
@@ -30,6 +33,14 @@ export class JobsDataService {
 
   async listDispatchAppointments(startDate: string, endDate: string): Promise<DispatchAppointmentRecord[]> {
     return this.jobsDataRepository.listDispatchAppointments(startDate, endDate);
+  }
+
+  async listJobsQueuePage(
+    queueKey: JobsQueueKey,
+    limit: number,
+    cursor?: JobsQueueCursor
+  ): Promise<JobsQueuePageRecord> {
+    return this.jobsDataRepository.listJobsQueuePage(queueKey, limit, cursor);
   }
 
   async getJobById(jobId: string): Promise<JobRecord> {
