@@ -30,6 +30,7 @@ import type {
   EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
+  JobDetailResponse,
   JobStatus,
   JobsWorkspaceResponse,
   JobSummary,
@@ -91,6 +92,7 @@ export type {
   EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
+  JobDetailResponse,
   JobStatus,
   JobsWorkspaceResponse,
   JobSummary,
@@ -305,6 +307,26 @@ export async function getOfficeDispatchBoard(input: {
   }
 
   return requestJson<DispatchBoardResponse>(`/operations/dispatch?${searchParams.toString()}`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function getOfficeJobDetail(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  jobId: string;
+  timelineLimit?: number;
+}): Promise<JobDetailResponse> {
+  const searchParams = new URLSearchParams();
+
+  if (input.timelineLimit !== undefined) {
+    searchParams.set('timelineLimit', String(input.timelineLimit));
+  }
+
+  const query = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
+
+  return requestJson<JobDetailResponse>(`/operations/jobs/${input.jobId}/detail${query}`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
   });

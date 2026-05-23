@@ -8,6 +8,7 @@ import type {
   DispatchAppointmentRecord,
   FinishedVisitReviewDecision,
   CreateJobInput,
+  JobDetailRecord,
   JobRecord,
   JobStatus,
   MediaAttachmentRecord,
@@ -39,6 +40,16 @@ export class JobsDataService {
     }
 
     return job;
+  }
+
+  async getJobDetailById(jobId: string, timelineLimit: number): Promise<JobDetailRecord> {
+    const detail = await this.jobsDataRepository.getJobDetailById(jobId, timelineLimit);
+
+    if (!detail) {
+      throw new NotFoundException('Job not found.');
+    }
+
+    return detail;
   }
 
   async listAppointmentsForJob(jobId: string): Promise<AppointmentRecord[]> {
@@ -156,7 +167,7 @@ export class JobsDataService {
   }
 
   async listRegisterEntriesForJob(jobId: string, includeVoided = false): Promise<RegisterEntryRecord[]> {
-    await this.getJobById(jobId);
+    await this.ensureJobExists(jobId);
     return this.jobsDataRepository.listRegisterEntriesForJob(jobId, includeVoided);
   }
 
@@ -176,7 +187,7 @@ export class JobsDataService {
     actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord> {
-    await this.getJobById(jobId);
+    await this.ensureJobExists(jobId);
     return this.jobsDataRepository.createRegisterEntry(jobId, input, actor, occurredAt);
   }
 
@@ -251,7 +262,7 @@ export class JobsDataService {
   }
 
   async listMediaAttachmentsForJob(jobId: string, includeVoided = false): Promise<MediaAttachmentRecord[]> {
-    await this.getJobById(jobId);
+    await this.ensureJobExists(jobId);
     return this.jobsDataRepository.listMediaAttachmentsForJob(jobId, includeVoided);
   }
 
@@ -274,7 +285,7 @@ export class JobsDataService {
     input: CreateMediaAttachmentInput,
     occurredAt?: string
   ): Promise<MediaAttachmentRecord> {
-    await this.getJobById(jobId);
+    await this.ensureJobExists(jobId);
     return this.jobsDataRepository.createMediaAttachment(jobId, input, occurredAt);
   }
 
@@ -320,5 +331,11 @@ export class JobsDataService {
     }
 
     return media;
+  }
+
+  private async ensureJobExists(jobId: string): Promise<void> {
+    if (!(await this.jobsDataRepository.jobExists(jobId))) {
+      throw new NotFoundException('Job not found.');
+    }
   }
 }

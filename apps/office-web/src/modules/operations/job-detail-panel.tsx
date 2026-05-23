@@ -3,6 +3,7 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type {
   AppointmentStatus,
+  JobSummary,
   JobStatus,
   JobsWorkspaceResponse,
   MediaAttachmentSummary,
@@ -26,10 +27,12 @@ import {
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type JobDetailPanelProps = {
-  jobsWorkspace: JobsWorkspaceResponse;
-  job: JobsWorkspaceResponse['jobs'][number];
+  technicians: JobsWorkspaceResponse['technicians'];
+  job: JobSummary;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
+  timelineHasMore?: boolean;
+  timelineLimit?: number;
   pendingJobStatusChange: PendingJobStatusChange | null;
   appointmentDrafts: Record<string, AppointmentDraft>;
   appointmentEditDrafts: Record<string, AppointmentEditDraft>;
@@ -98,10 +101,12 @@ const tabs: Array<{ id: JobDetailTab; label: string }> = [
 ];
 
 export function JobDetailPanel({
-  jobsWorkspace,
+  technicians,
   job,
   initialTab = 'overview',
   focusedAppointmentId,
+  timelineHasMore = false,
+  timelineLimit = 50,
   pendingJobStatusChange,
   appointmentDrafts,
   appointmentEditDrafts,
@@ -204,7 +209,7 @@ export function JobDetailPanel({
       {activeTab === 'appointments'
         ? renderAppointments({
             job,
-            technicians: jobsWorkspace.technicians,
+            technicians,
             appointmentDrafts,
             appointmentEditDrafts,
             focusedAppointmentId,
@@ -236,7 +241,7 @@ export function JobDetailPanel({
             onOpenMediaAttachment
           })
         : null}
-      {activeTab === 'timeline' ? renderTimeline(job) : null}
+      {activeTab === 'timeline' ? renderTimeline(job, timelineHasMore, timelineLimit) : null}
     </section>
   );
 }
@@ -245,7 +250,7 @@ function renderOverview({
   job,
   onJobStatusReviewRequested
 }: {
-  job: JobsWorkspaceResponse['jobs'][number];
+  job: JobSummary;
   onJobStatusReviewRequested: JobDetailPanelProps['onJobStatusReviewRequested'];
 }) {
   return (
@@ -294,7 +299,7 @@ function renderAppointments({
   onSaveAppointmentSchedule,
   onAddAppointment
 }: {
-  job: JobsWorkspaceResponse['jobs'][number];
+  job: JobSummary;
   technicians: JobsWorkspaceResponse['technicians'];
   appointmentDrafts: Record<string, AppointmentDraft>;
   appointmentEditDrafts: Record<string, AppointmentEditDraft>;
@@ -484,7 +489,7 @@ function renderCapturedRegister({
   onRegisterVoidReasonChange,
   onVoidRegisterEntry
 }: {
-  job: JobsWorkspaceResponse['jobs'][number];
+  job: JobSummary;
   capturedWork?: CapturedWorkDetails;
   onRegisterDraftChange: JobDetailPanelProps['onRegisterDraftChange'];
   onSaveRegisterEntry: JobDetailPanelProps['onSaveRegisterEntry'];
@@ -527,7 +532,7 @@ function renderRegisterEntry({
   onRegisterVoidReasonChange,
   onVoidRegisterEntry
 }: {
-  job: JobsWorkspaceResponse['jobs'][number];
+  job: JobSummary;
   entry: RegisterEntrySummary;
   draft: RegisterEntryEditDraft | undefined;
   voidReason: string;
@@ -689,7 +694,7 @@ function renderMedia({
   onVoidMediaAttachment,
   onOpenMediaAttachment
 }: {
-  job: JobsWorkspaceResponse['jobs'][number];
+  job: JobSummary;
   capturedWork?: CapturedWorkDetails;
   onMediaCaptionChange: JobDetailPanelProps['onMediaCaptionChange'];
   onSaveMediaCaption: JobDetailPanelProps['onSaveMediaCaption'];
@@ -735,7 +740,7 @@ function renderMediaAttachment({
   onVoidMediaAttachment,
   onOpenMediaAttachment
 }: {
-  job: JobsWorkspaceResponse['jobs'][number];
+  job: JobSummary;
   media: MediaAttachmentSummary;
   captionDraft: string;
   voidReason: string;
@@ -805,20 +810,23 @@ function renderMediaAttachment({
   );
 }
 
-function renderTimeline(job: JobsWorkspaceResponse['jobs'][number]) {
+function renderTimeline(job: JobSummary, timelineHasMore: boolean, timelineLimit: number) {
   if (job.timeline.length === 0) {
     return <p style={styles.muted}>No timeline entries.</p>;
   }
 
   return (
-    <ol style={styles.timeline}>
-      {job.timeline.map((entry) => (
-        <li key={entry.id}>
-          <strong>{entry.actorName ?? 'System'}</strong>: {entry.message}{' '}
-          <span style={styles.tinyMuted}>{formatDateTime(entry.occurredAt)}</span>
-        </li>
-      ))}
-    </ol>
+    <>
+      <ol style={styles.timeline}>
+        {job.timeline.map((entry) => (
+          <li key={entry.id}>
+            <strong>{entry.actorName ?? 'System'}</strong>: {entry.message}{' '}
+            <span style={styles.tinyMuted}>{formatDateTime(entry.occurredAt)}</span>
+          </li>
+        ))}
+      </ol>
+      {timelineHasMore ? <p style={styles.tinyMuted}>Latest {timelineLimit} shown.</p> : null}
+    </>
   );
 }
 
@@ -859,7 +867,7 @@ function TextField({
   );
 }
 
-function formatAppointmentReference(job: JobsWorkspaceResponse['jobs'][number], appointmentId: string): string {
+function formatAppointmentReference(job: JobSummary, appointmentId: string): string {
   const appointment = job.appointments.find((candidate) => candidate.id === appointmentId);
   if (!appointment) {
     return 'Appointment';

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentSummary,
   DispatchBoardResponse,
+  JobDetailResponse,
   JobSummary,
   JobsWorkspaceResponse,
   MediaAttachmentSummary,
@@ -22,6 +23,7 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeEquipmentDetail: vi.fn(),
   getOfficeEquipmentWorkspace: vi.fn(),
   getOfficeDispatchBoard: vi.fn(),
+  getOfficeJobDetail: vi.fn(),
   getOfficeJobsWorkspace: vi.fn(),
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
@@ -243,10 +245,32 @@ function buildDispatchBoard(workspace: JobsWorkspaceResponse): DispatchBoardResp
   };
 }
 
+function buildJobDetail(
+  job: JobSummary,
+  registerEntries: RegisterEntrySummary[] = [],
+  mediaAttachments: MediaAttachmentSummary[] = []
+): JobDetailResponse {
+  return {
+    job,
+    location: buildWorkspace([job]).locations[0],
+    billToCustomer: buildWorkspace([job]).customers[0],
+    technicians: buildWorkspace([job]).technicians,
+    equipment: [],
+    registerEntries,
+    mediaAttachments,
+    timelineLimit: 50,
+    timelineHasMore: false
+  };
+}
+
 function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee });
   mockedOperationsApi.getOfficeJobsWorkspace.mockResolvedValue(workspace);
   mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
+  mockedOperationsApi.getOfficeJobDetail.mockImplementation(async ({ jobId }) => {
+    const job = workspace.jobs.find((candidate) => candidate.id === jobId) ?? workspace.jobs[0] ?? buildJob();
+    return buildJobDetail(job);
+  });
   mockedOperationsApi.getOfficeEquipmentWorkspace.mockResolvedValue({
     locations: [],
     equipment: [],
@@ -332,6 +356,11 @@ describe('OfficeWorkspaceShell IA', () => {
     fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
 
     expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeJobDetail).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
     expect(screen.getByLabelText('Appointment end time')).toHaveValue('10:00');
   });
 
@@ -462,14 +491,12 @@ describe('OfficeWorkspaceShell IA', () => {
     });
   });
 
-  it('lazy-loads captured work and routes register/media actions through office API helpers', async () => {
-    arrangeWorkspace(buildWorkspace([buildJob()]));
-    mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({
-      registerEntries: [buildRegisterEntry()]
-    });
-    mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({
-      mediaAttachments: [buildMediaAttachment()]
-    });
+  it('loads captured work from job detail and routes register/media actions through office API helpers', async () => {
+    const job = buildJob();
+    const registerEntry = buildRegisterEntry();
+    const mediaAttachment = buildMediaAttachment();
+    arrangeWorkspace(buildWorkspace([job]));
+    mockedOperationsApi.getOfficeJobDetail.mockResolvedValue(buildJobDetail(job, [registerEntry], [mediaAttachment]));
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:media-1');
@@ -481,7 +508,7 @@ describe('OfficeWorkspaceShell IA', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Captured' }));
 
     await waitFor(() => {
-      expect(mockedOperationsApi.getOfficeRegisterEntries).toHaveBeenCalledWith({
+      expect(mockedOperationsApi.getOfficeJobDetail).toHaveBeenCalledWith({
         jobId: 'job-1',
         sessionToken: 'session-token',
         apiBaseUrl: 'http://api.test'

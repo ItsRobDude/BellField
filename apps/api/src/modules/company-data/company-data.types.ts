@@ -251,6 +251,13 @@ export type JobRecord = {
   updatedAt: string;
 };
 
+export type JobDetailRecord = {
+  job: JobRecord;
+  appointments: AppointmentRecord[];
+  timelineLimit: number;
+  timelineHasMore: boolean;
+};
+
 export type DispatchAppointmentRecord = {
   appointmentId: string;
   jobId: string;

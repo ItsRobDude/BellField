@@ -578,6 +578,18 @@ export interface JobsWorkspaceResponse {
   jobs: JobSummary[];
 }
 
+export interface JobDetailResponse {
+  job: JobSummary;
+  location: LocationSummary;
+  billToCustomer: CustomerAccountSummary;
+  technicians: JobsWorkspaceResponse['technicians'];
+  equipment: EquipmentSummary[];
+  registerEntries: RegisterEntrySummary[];
+  mediaAttachments: MediaAttachmentSummary[];
+  timelineLimit: number;
+  timelineHasMore: boolean;
+}
+
 export interface DispatchEquipmentGlance {
   id: string;
   equipmentType: string;

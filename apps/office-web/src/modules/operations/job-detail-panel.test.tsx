@@ -159,7 +159,7 @@ function renderDetail(input: {
 } = {}) {
   const job = input.job ?? buildJob();
   const props: Parameters<typeof JobDetailPanel>[0] = {
-    jobsWorkspace: buildWorkspace(job),
+    technicians: buildWorkspace(job).technicians,
     job,
     initialTab: input.initialTab,
     focusedAppointmentId: input.focusedAppointmentId,
@@ -389,7 +389,7 @@ describe('JobDetailPanel', () => {
 function renderProps(overrides: Partial<Parameters<typeof JobDetailPanel>[0]> = {}): Parameters<typeof JobDetailPanel>[0] {
   const job = overrides.job ?? buildJob();
   return {
-    jobsWorkspace: buildWorkspace(job),
+    technicians: buildWorkspace(job).technicians,
     job,
     pendingJobStatusChange: null,
     appointmentDrafts: {},

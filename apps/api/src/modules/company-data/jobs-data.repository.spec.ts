@@ -288,6 +288,78 @@ describe('JobsDataRepository', () => {
     expect(sql).not.toContain('job_timeline_entries');
   });
 
+  it('loads one job detail with a bounded recent timeline window', async () => {
+    const databaseService = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (String(sql).includes('from jobs')) {
+          return { rows: [createJobRow()] };
+        }
+
+        if (String(sql).includes('from appointments')) {
+          return {
+            rows: [
+              createAppointmentRow({
+                scheduledDate: '2026-05-23',
+                scheduledStartTime: '08:00:00'
+              })
+            ]
+          };
+        }
+
+        if (String(sql).includes('from job_timeline_entries')) {
+          return {
+            rows: [
+              {
+                id: 'timeline-3',
+                jobId: 'job-1',
+                occurredAt: '2026-05-23T12:00:00.000Z',
+                actorName: 'Dispatcher',
+                kind: 'jobNote',
+                message: 'Third entry.'
+              },
+              {
+                id: 'timeline-2',
+                jobId: 'job-1',
+                occurredAt: '2026-05-23T11:00:00.000Z',
+                actorName: 'Dispatcher',
+                kind: 'jobNote',
+                message: 'Second entry.'
+              },
+              {
+                id: 'timeline-1',
+                jobId: 'job-1',
+                occurredAt: '2026-05-23T10:00:00.000Z',
+                actorName: 'Dispatcher',
+                kind: 'jobNote',
+                message: 'First entry.'
+              }
+            ]
+          };
+        }
+
+        return { rows: [] };
+      })
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const detail = await repository.getJobDetailById('job-1', 2);
+    const timelineQuery = databaseService.query.mock.calls.find(([sql]) =>
+      String(sql).includes('from job_timeline_entries')
+    );
+
+    expect(detail?.timelineHasMore).toBe(true);
+    expect(detail?.timelineLimit).toBe(2);
+    expect(detail?.appointments[0]).toMatchObject({
+      id: 'appointment-1',
+      scheduledDate: '2026-05-23',
+      scheduledStartTime: '08:00'
+    });
+    expect(detail?.job.timeline.map((entry) => entry.id)).toEqual(['timeline-2', 'timeline-3']);
+    expect(String(timelineQuery?.[0] ?? '')).toContain('order by occurred_at desc, id desc');
+    expect(String(timelineQuery?.[0] ?? '')).toContain('limit $2');
+    expect(timelineQuery?.[1]).toEqual(['job-1', 3]);
+  });
+
   it('acknowledges prior finished visit review when a follow-up appointment is added', async () => {
     const { databaseService, queryable } = createDatabaseService();
     (queryable.query as jest.Mock).mockImplementation(async (sql: string, _params?: unknown[]) => {

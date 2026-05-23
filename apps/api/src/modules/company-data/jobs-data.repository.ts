@@ -12,6 +12,7 @@ import type {
   DispatchAppointmentRecord,
   FinishedVisitReviewDecision,
   CreateRegisterEntryInput,
+  JobDetailRecord,
   JobRecord,
   JobStatus,
   JobTimelineEntry,
@@ -228,6 +229,21 @@ export class JobsDataRepository {
     return result.rows.map((row) => this.toDispatchAppointmentRecord(row));
   }
 
+  async jobExists(jobId: string): Promise<boolean> {
+    const result = await this.databaseService.query<{ exists: boolean }>(
+      `
+        select exists(
+          select 1
+          from jobs
+          where id = $1
+        ) as "exists"
+      `,
+      [jobId]
+    );
+
+    return Boolean(result.rows[0]?.exists);
+  }
+
   async listJobsByIds(jobIds: string[]): Promise<JobRecord[]> {
     if (jobIds.length === 0) {
       return [];
@@ -287,6 +303,105 @@ export class JobsDataRepository {
 
     const [job] = await this.hydrateJobs(result.rows);
     return job ?? null;
+  }
+
+  async getJobDetailById(jobId: string, timelineLimit: number): Promise<JobDetailRecord | null> {
+    const result = await this.databaseService.query<JobRow>(
+      `
+        select
+          id,
+          job_number as "jobNumber",
+          location_id as "locationId",
+          bill_to_customer_id as "billToCustomerId",
+          job_type as "jobType",
+          category,
+          origin,
+          summary,
+          status,
+          work_order_number as "workOrderNumber",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
+        from jobs
+        where id = $1
+        limit 1
+      `,
+      [jobId]
+    );
+
+    const jobRow = result.rows[0];
+    if (!jobRow) {
+      return null;
+    }
+
+    const [appointmentsResult, timelineResult] = await Promise.all([
+      this.databaseService.query<AppointmentRow>(
+        `
+          select
+            id,
+            job_id as "jobId",
+            scheduled_date as "scheduledDate",
+            scheduled_start_time as "scheduledStartTime",
+            scheduled_end_time as "scheduledEndTime",
+            time_window_label as "timeWindowLabel",
+            technician_id as "technicianId",
+            status,
+            finish_outcome as "finishOutcome",
+            visit_notes as "visitNotes",
+            has_charge_activity as "hasChargeActivity",
+            register_follow_up_note as "registerFollowUpNote",
+            finished_reviewed_at as "finishedReviewedAt",
+            finished_reviewed_by as "finishedReviewedBy",
+            finished_review_decision as "finishedReviewDecision",
+            created_at as "createdAt",
+            updated_at as "updatedAt"
+          from appointments
+          where job_id = $1
+          order by scheduled_date asc nulls last, scheduled_start_time asc nulls last, time_window_label asc nulls last, created_at asc
+        `,
+        [jobId]
+      ),
+      this.databaseService.query<TimelineRow>(
+        `
+          select
+            id,
+            job_id as "jobId",
+            occurred_at as "occurredAt",
+            actor_name as "actorName",
+            kind,
+            message
+          from job_timeline_entries
+          where job_id = $1
+          order by occurred_at desc, id desc
+          limit $2
+        `,
+        [jobId, timelineLimit + 1]
+      )
+    ]);
+
+    const appointments = appointmentsResult.rows.map((row) => this.toAppointmentRecord(row));
+    const timelineRows = timelineResult.rows.slice(0, timelineLimit).reverse();
+
+    return {
+      job: {
+        id: jobRow.id,
+        jobNumber: jobRow.jobNumber,
+        locationId: jobRow.locationId,
+        billToCustomerId: jobRow.billToCustomerId,
+        jobType: jobRow.jobType,
+        category: jobRow.category,
+        origin: jobRow.origin,
+        summary: jobRow.summary,
+        status: jobRow.status,
+        workOrderNumber: jobRow.workOrderNumber ?? undefined,
+        appointmentIds: appointments.map((appointment) => appointment.id),
+        timeline: timelineRows.map((row) => this.toTimelineEntry(row)),
+        createdAt: toIsoString(jobRow.createdAt),
+        updatedAt: toIsoString(jobRow.updatedAt)
+      },
+      appointments,
+      timelineLimit,
+      timelineHasMore: timelineResult.rows.length > timelineLimit
+    };
   }
 
   async listAppointmentsForJob(jobId: string): Promise<AppointmentRecord[]> {
