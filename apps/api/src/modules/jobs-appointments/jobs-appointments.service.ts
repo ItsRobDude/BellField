@@ -17,21 +17,30 @@ import type {
   AppointmentSummaryDto,
   CreateAppointmentRequestDto,
   CreateJobRequestDto,
+  CreateRegisterEntryRequestDto,
   CustomerAccountSummaryDto,
   FieldAssignedWorkResponseDto,
   JobMutationResponseDto,
   JobSummaryDto,
   JobsWorkspaceResponseDto,
   LocationSummaryDto,
+  RegisterEntriesResponseDto,
+  RegisterEntrySummaryDto,
   TechnicianOptionDto,
   UpdateAppointmentScheduleRequestDto,
   UpdateAppointmentStatusRequestDto,
+  UpdateRegisterEntryRequestDto,
   UpdateJobStatusRequestDto,
-  UpdateJobStatusResponseDto
+  UpdateJobStatusResponseDto,
+  VoidRegisterEntryRequestDto
 } from './jobs-appointments.types';
 
 const activeJobStatuses: JobStatus[] = ['new', 'scheduled', 'inProgress', 'waitingOnParts'];
 const finalJobStatuses: JobStatus[] = ['completed', 'closed', 'cancelled'];
+
+type JobSummaryOptions = {
+  includeRegisterEntries?: boolean;
+};
 
 @Injectable()
 export class JobsAppointmentsService {
@@ -43,7 +52,8 @@ export class JobsAppointmentsService {
   ) {}
 
   async getWorkspace(sessionToken: string): Promise<JobsWorkspaceResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+    const includeRegisterEntries = this.canViewRegisterEntries(actor);
 
     const [customers, locations, technicians, jobs] = await Promise.all([
       this.referenceDataService.listCustomers(false),
@@ -73,7 +83,7 @@ export class JobsAppointmentsService {
           .filter((employee) => employee.roleId === 'technician')
           .map((employee) => this.toTechnicianOption(employee.id))
       ),
-      jobs: await Promise.all(jobs.map((job) => this.toJobSummaryFromRecord(job)))
+      jobs: await Promise.all(jobs.map((job) => this.toJobSummaryFromRecord(job, { includeRegisterEntries })))
     };
   }
 
@@ -83,7 +93,7 @@ export class JobsAppointmentsService {
     const billToCustomerId = request.billToCustomerId ?? location.customerId;
     await this.referenceDataService.getCustomerById(billToCustomerId);
     const job = await this.jobsDataService.createJob(request, actor.displayName, billToCustomerId, location.name);
-    return this.toJobSummaryFromRecord(job);
+    return this.toJobSummaryFromRecord(job, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
   }
 
   async updateJobStatus(
@@ -123,7 +133,7 @@ export class JobsAppointmentsService {
     const job = await this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
 
     return {
-      ...(await this.toJobSummary(job.id)),
+      ...(await this.toJobSummary(job.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
       ...(warningMessages.length > 0 ? { warningMessages } : {})
     };
   }
@@ -145,7 +155,7 @@ export class JobsAppointmentsService {
     }
 
     await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
-    return this.toJobSummary(jobId);
+    return this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
   }
 
   async acknowledgeFinishedVisitReview(
@@ -161,7 +171,7 @@ export class JobsAppointmentsService {
       request.occurredAt
     );
 
-    return this.toJobSummaryFromRecord(job);
+    return this.toJobSummaryFromRecord(job, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
   }
 
   async updateAppointmentSchedule(
@@ -181,7 +191,7 @@ export class JobsAppointmentsService {
       actor.displayName,
       request.occurredAt
     );
-    return this.toJobSummary(appointment.jobId);
+    return this.toJobSummary(appointment.jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
   }
 
   async updateAppointmentStatus(
@@ -201,7 +211,7 @@ export class JobsAppointmentsService {
 
     if (accessCheck.status === 'rejected') {
       return {
-        ...(await this.toJobSummary(currentJob.id)),
+        ...(await this.toJobSummary(currentJob.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
         syncResult: {
           status: 'rejected',
           message: accessCheck.message
@@ -222,7 +232,9 @@ export class JobsAppointmentsService {
       );
 
       return {
-        ...(await this.toJobSummary(currentAppointment.jobId)),
+        ...(await this.toJobSummary(currentAppointment.jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
         syncResult: {
           status: 'conflict',
           message: 'Appointment changed before this offline update could sync.'
@@ -260,7 +272,7 @@ export class JobsAppointmentsService {
     }
 
     return {
-      ...(await this.toJobSummary(appointment.jobId)),
+      ...(await this.toJobSummary(appointment.jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
       ...(warningMessages.length > 0 ? { warningMessages } : {}),
       ...(request.baseUpdatedAt
         ? {
@@ -284,7 +296,7 @@ export class JobsAppointmentsService {
 
     if (accessCheck.status === 'rejected') {
       return {
-        ...(await this.toJobSummary(jobId)),
+        ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
         syncResult: {
           status: 'rejected',
           message: accessCheck.message
@@ -308,8 +320,239 @@ export class JobsAppointmentsService {
     }
 
     return {
-      ...(await this.toJobSummary(jobId)),
+      ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
       ...(request.occurredAt
+        ? {
+            syncResult: {
+              status: 'applied'
+            }
+          }
+        : {})
+    };
+  }
+
+  async listRegisterEntries(
+    sessionToken: string,
+    jobId: string,
+    includeVoided = false
+  ): Promise<RegisterEntriesResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:view');
+    const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {});
+
+    if (accessCheck.status === 'rejected') {
+      throw new ForbiddenException(accessCheck.message);
+    }
+
+    const registerEntries = await this.jobsDataService.listRegisterEntriesForJob(jobId, includeVoided);
+    return {
+      registerEntries: registerEntries.map((entry) => this.toRegisterEntrySummary(entry))
+    };
+  }
+
+  async createRegisterEntry(
+    sessionToken: string,
+    jobId: string,
+    request: CreateRegisterEntryRequestDto
+  ): Promise<JobMutationResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:create');
+    this.validateRegisterEntryCreate(request);
+    const currentJob = await this.jobsDataService.getJobById(jobId);
+    await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
+    const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {
+      occurredAt: request.occurredAt,
+      baseUpdatedAt: request.baseUpdatedAt,
+      syncSource: request.syncSource
+    });
+
+    if (accessCheck.status === 'rejected') {
+      return {
+        ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+        syncResult: {
+          status: 'rejected',
+          message: accessCheck.message
+        }
+      };
+    }
+
+    if (currentJob.status === 'cancelled' && accessCheck.status !== 'preservedReplay') {
+      throw new ConflictException(
+        'Register entries cannot be added to cancelled jobs. Reopen the job before adding new entries.'
+      );
+    }
+
+    await this.jobsDataService.createRegisterEntry(jobId, request, actor, request.occurredAt);
+
+    if (request.syncSource === 'field-save-queue') {
+      await this.jobsDataService.addSyncFlag(
+        jobId,
+        currentJob.status === 'cancelled'
+          ? 'Field register entry synced after the job had already been cancelled.'
+          : accessCheck.status === 'preservedReplay'
+            ? 'Field register entry synced after assignment changed while the device was offline.'
+            : 'Field register entry synced after local save queue replay.',
+        actor.displayName,
+        new Date().toISOString()
+      );
+    }
+
+    return {
+      ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+      ...(request.syncSource === 'field-save-queue'
+        ? {
+            syncResult: {
+              status: 'applied'
+            }
+          }
+        : {})
+    };
+  }
+
+  async updateRegisterEntry(
+    sessionToken: string,
+    registerEntryId: string,
+    request: UpdateRegisterEntryRequestDto
+  ): Promise<JobMutationResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:edit');
+    this.validateRegisterEntryUpdate(request);
+    const currentEntry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
+    const currentJob = await this.jobsDataService.getJobById(currentEntry.jobId);
+    await this.ensureRegisterEntryAppointmentBelongsToJob(currentEntry.jobId, request.appointmentId);
+    const accessCheck = await this.evaluateFieldJobMutationAccess(actor, currentEntry.jobId, {
+      occurredAt: request.occurredAt,
+      baseUpdatedAt: request.baseUpdatedAt,
+      syncSource: request.syncSource
+    });
+
+    if (accessCheck.status === 'rejected') {
+      return {
+        ...(await this.toJobSummary(currentEntry.jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
+        syncResult: {
+          status: 'rejected',
+          message: accessCheck.message
+        }
+      };
+    }
+
+    if (request.baseUpdatedAt && currentEntry.updatedAt > request.baseUpdatedAt) {
+      await this.jobsDataService.addSyncFlag(
+        currentEntry.jobId,
+        'Field register entry update conflicted with a newer BellField register change.',
+        actor.displayName,
+        new Date().toISOString()
+      );
+
+      return {
+        ...(await this.toJobSummary(currentEntry.jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
+        syncResult: {
+          status: 'conflict',
+          message: 'Register entry changed before this offline update could sync.'
+        }
+      };
+    }
+
+    await this.jobsDataService.updateRegisterEntry(registerEntryId, request, actor.displayName, request.occurredAt);
+
+    if (request.syncSource === 'field-save-queue') {
+      await this.jobsDataService.addSyncFlag(
+        currentEntry.jobId,
+        currentJob.status === 'cancelled'
+          ? 'Field register entry update synced after the job had already been cancelled.'
+          : accessCheck.status === 'preservedReplay'
+            ? 'Field register entry update synced after assignment changed while the device was offline.'
+            : 'Field register entry update synced after local save queue replay.',
+        actor.displayName,
+        new Date().toISOString()
+      );
+    }
+
+    return {
+      ...(await this.toJobSummary(currentEntry.jobId, {
+        includeRegisterEntries: this.canViewRegisterEntries(actor)
+      })),
+      ...(request.syncSource === 'field-save-queue'
+        ? {
+            syncResult: {
+              status: 'applied'
+            }
+          }
+        : {})
+    };
+  }
+
+  async voidRegisterEntry(
+    sessionToken: string,
+    registerEntryId: string,
+    request: VoidRegisterEntryRequestDto
+  ): Promise<JobMutationResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:edit');
+    const currentEntry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
+    const currentJob = await this.jobsDataService.getJobById(currentEntry.jobId);
+    const accessCheck = await this.evaluateFieldJobMutationAccess(actor, currentEntry.jobId, {
+      occurredAt: request.occurredAt,
+      baseUpdatedAt: request.baseUpdatedAt,
+      syncSource: request.syncSource
+    });
+
+    if (accessCheck.status === 'rejected') {
+      return {
+        ...(await this.toJobSummary(currentEntry.jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
+        syncResult: {
+          status: 'rejected',
+          message: accessCheck.message
+        }
+      };
+    }
+
+    if (request.baseUpdatedAt && currentEntry.updatedAt > request.baseUpdatedAt) {
+      await this.jobsDataService.addSyncFlag(
+        currentEntry.jobId,
+        'Field register entry void conflicted with a newer BellField register change.',
+        actor.displayName,
+        new Date().toISOString()
+      );
+
+      return {
+        ...(await this.toJobSummary(currentEntry.jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
+        syncResult: {
+          status: 'conflict',
+          message: 'Register entry changed before this offline void could sync.'
+        }
+      };
+    }
+
+    await this.jobsDataService.voidRegisterEntry(
+      registerEntryId,
+      request.reason,
+      actor.displayName,
+      request.occurredAt
+    );
+
+    if (request.syncSource === 'field-save-queue') {
+      await this.jobsDataService.addSyncFlag(
+        currentEntry.jobId,
+        currentJob.status === 'cancelled'
+          ? 'Field register entry void synced after the job had already been cancelled.'
+          : accessCheck.status === 'preservedReplay'
+            ? 'Field register entry void synced after assignment changed while the device was offline.'
+            : 'Field register entry void synced after local save queue replay.',
+        actor.displayName,
+        new Date().toISOString()
+      );
+    }
+
+    return {
+      ...(await this.toJobSummary(currentEntry.jobId, {
+        includeRegisterEntries: this.canViewRegisterEntries(actor)
+      })),
+      ...(request.syncSource === 'field-save-queue'
         ? {
             syncResult: {
               status: 'applied'
@@ -332,7 +575,9 @@ export class JobsAppointmentsService {
     const serverTime = new Date().toISOString();
 
     return {
-      jobs: await Promise.all(jobs.map((job) => this.toJobSummary(job.id))),
+      jobs: await Promise.all(
+        jobs.map((job) => this.toJobSummary(job.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) }))
+      ),
       locations: await Promise.all(locationIds.map((locationId) => this.toLocationSummary(locationId))),
       customers: await Promise.all(
         [
@@ -475,17 +720,20 @@ export class JobsAppointmentsService {
     };
   }
 
-  private async toJobSummary(jobId: string): Promise<JobSummaryDto> {
+  private async toJobSummary(jobId: string, options: JobSummaryOptions = {}): Promise<JobSummaryDto> {
     const job = await this.jobsDataService.getJobById(jobId);
-    return this.toJobSummaryFromRecord(job);
+    return this.toJobSummaryFromRecord(job, options);
   }
 
-  private async toJobSummaryFromRecord(job: JobRecord): Promise<JobSummaryDto> {
+  private async toJobSummaryFromRecord(job: JobRecord, options: JobSummaryOptions = {}): Promise<JobSummaryDto> {
     const location = await this.referenceDataService.getLocationById(job.locationId);
     const billToCustomer = await this.referenceDataService.getCustomerById(job.billToCustomerId);
     const appointments = await Promise.all(
       job.appointmentIds.map((appointmentId) => this.toAppointmentSummary(appointmentId, job.status))
     );
+    const registerEntries = options.includeRegisterEntries
+      ? await this.jobsDataService.listRegisterEntriesForJob(job.id)
+      : [];
 
     return {
       id: job.id,
@@ -505,10 +753,21 @@ export class JobsAppointmentsService {
       ),
       needsOfficeReview: appointments.some((appointment) => appointment.needsOfficeReview),
       appointments,
+      ...(options.includeRegisterEntries
+        ? { registerEntries: registerEntries.map((entry) => this.toRegisterEntrySummary(entry)) }
+        : {}),
       timeline: job.timeline.map((entry) => ({ ...entry })),
       createdAt: job.createdAt,
       updatedAt: job.updatedAt
     };
+  }
+
+  private toRegisterEntrySummary(entry: RegisterEntrySummaryDto): RegisterEntrySummaryDto {
+    return { ...entry };
+  }
+
+  private canViewRegisterEntries(actor: AuthorizedEmployee): boolean {
+    return actor.effectivePermissions.includes('register:view');
   }
 
   private ensureOfficeJobLifecyclePermission(
@@ -537,6 +796,60 @@ export class JobsAppointmentsService {
 
     if (!permissions.has(requiredPermission)) {
       throw new ForbiddenException('You do not have permission to add job notes.');
+    }
+  }
+
+  private async ensureRegisterEntryAppointmentBelongsToJob(
+    jobId: string,
+    appointmentId: string | null | undefined
+  ): Promise<void> {
+    if (!appointmentId) {
+      return;
+    }
+
+    const appointment = await this.jobsDataService.getAppointmentById(appointmentId);
+
+    if (appointment.jobId !== jobId) {
+      throw new ConflictException('Register entry appointment must belong to the same job.');
+    }
+  }
+
+  private validateRegisterEntryCreate(request: CreateRegisterEntryRequestDto): void {
+    this.validatePositiveNumber(request.quantity, 'Register entry quantity must be greater than zero.');
+    this.validateNonNegativeNumber(request.unitPrice, 'Register entry unit price cannot be negative.');
+    this.validateNonNegativeNumber(request.totalAmount, 'Register entry total amount cannot be negative.');
+  }
+
+  private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {
+    const hasEditableField =
+      request.appointmentId !== undefined ||
+      request.kind !== undefined ||
+      request.description !== undefined ||
+      request.quantity !== undefined ||
+      request.unitOfMeasure !== undefined ||
+      request.unitPrice !== undefined ||
+      request.totalAmount !== undefined ||
+      request.partNumber !== undefined ||
+      request.inventorySourceLabel !== undefined;
+
+    if (!hasEditableField) {
+      throw new ConflictException('Register entry update must include at least one editable field.');
+    }
+
+    this.validatePositiveNumber(request.quantity, 'Register entry quantity must be greater than zero.');
+    this.validateNonNegativeNumber(request.unitPrice, 'Register entry unit price cannot be negative.');
+    this.validateNonNegativeNumber(request.totalAmount, 'Register entry total amount cannot be negative.');
+  }
+
+  private validatePositiveNumber(value: number | undefined, message: string): void {
+    if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
+      throw new ConflictException(message);
+    }
+  }
+
+  private validateNonNegativeNumber(value: number | null | undefined, message: string): void {
+    if (value !== undefined && value !== null && (!Number.isFinite(value) || value < 0)) {
+      throw new ConflictException(message);
     }
   }
 

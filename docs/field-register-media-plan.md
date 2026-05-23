@@ -167,8 +167,8 @@ All endpoints require an authenticated session with `surface = 'field-mobile'`. 
   }
   ```
   Returns `JobMutationResponse` (mirrors existing field write shape) so `mergeJobMutationIntoAssignedWork` can keep doing its job.
-- `PATCH /operations/register-entries/{registerEntryId}` — edit fields. Same replay/conflict shape.
-- `POST /operations/register-entries/{registerEntryId}/void` — void with optional reason. Returns updated job summary.
+- `PATCH /operations/jobs/register-entries/{registerEntryId}` — edit fields. Same replay/conflict shape.
+- `POST /operations/jobs/register-entries/{registerEntryId}/void` — void with optional reason. Returns updated job summary.
 
 ### Media
 - `POST /operations/jobs/{jobId}/media/upload-intents` — see §4.
@@ -190,9 +190,9 @@ Both should be filtered by the technician's assigned-work window the same way ap
 
 Office endpoints reuse the same backend module; only the surface check differs.
 
-- `GET /operations/jobs/{jobId}/register-entries` — list active + voided. Driven by `jobs:view`.
-- `PATCH /operations/register-entries/{registerEntryId}` — edit. Driven by `register:edit` (or `jobs:edit` if `register` area is rejected — see open Qs).
-- `POST /operations/register-entries/{registerEntryId}/void` — same.
+- `GET /operations/jobs/{jobId}/register-entries` — list active + voided. Driven by `register:view`.
+- `PATCH /operations/jobs/register-entries/{registerEntryId}` — edit. Driven by `register:edit`.
+- `POST /operations/jobs/register-entries/{registerEntryId}/void` — same.
 - `GET /operations/jobs/{jobId}/media` — list metadata. `jobs:view`.
 - `GET /operations/media/{mediaId}` and `/blob` — same as field.
 - `PATCH /operations/media/{mediaId}` — caption/void. `jobs:edit` or `media:edit`.
@@ -330,11 +330,11 @@ Recommended sequencing — one migration per slice:
 
 ## 13. Open product questions
 
-Inline-tagged above, summarized here so the next agent can hand these to Rob before the first migration lands:
+Inline-tagged above, summarized here. Slice 1 answered the first three as implementation assumptions; the remaining media/UX questions still need confirmation before their slices.
 
-1. **Are `labor`, `serviceItem`, `part`, `membership`, `other` the right v1 kinds?** Or do you also want `discount` / `fee` / `tax` now? (Affects enum in migration 1.)
-2. **Should `unit_price` and `total_amount` allow negative values?** Discounts and corrections need them; v1 may not.
-3. **Is `register` (and `media`) a justified new `PermissionArea`, or should we reuse `jobs:edit` / `jobs:configure`?** Recommended: new areas. Fallback path documented.
+1. **Are `labor`, `serviceItem`, `part`, `membership`, `other` the right v1 kinds?** Slice 1 uses these values only. `discount`, `fee`, and `tax` remain later additions.
+2. **Should `unit_price` and `total_amount` allow negative values?** Slice 1 keeps money fields nonnegative. Discounts/corrections need a later explicit model.
+3. **Is `register` (and `media`) a justified new `PermissionArea`, or should we reuse `jobs:edit` / `jobs:configure`?** Slice 1 adds `register`. `media` is still proposed for Slice 2.
 4. **Should technicians be able to edit any register entry on the job, or only the ones they captured?** This plan assumes "any entry on a job they're assigned to" mirroring current note/equipment-edit behavior. Tighter is possible.
 5. **What is the max byte size for an uploaded media file?** v1 needs a configured ceiling (e.g. 50 MB) to keep filesystem and request-body limits honest. Default suggestion: 50 MB. Larger video uploads can wait for chunked-upload support post-v1.
 6. **Should a voided media row delete the blob file from disk?** Recommendation: no — voided keeps the file, true delete deletes the file. Confirm.
@@ -359,7 +359,7 @@ Inline-tagged above, summarized here so the next agent can hand these to Rob bef
 
 Captured for traceability:
 
-- **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Current code provides only `registerFollowUpNote: string`. This plan resolves the gap by adding structured register entries without removing the existing text field.
+- **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Slice 1 now provides backend register entries without removing `registerFollowUpNote`; invoice-draft reflection still waits for the invoice-draft entity.
 - **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Current code has no media surface at all. This plan resolves the gap by introducing both the metadata entity and the upload pipeline outlined in §3–§4.
 - No other doc/code disagreements found in this audit.
 
@@ -384,7 +384,7 @@ The pending-operation queue extensions in §7 will need additions to `field-sync
 Recommended smallest-safe-first order, one PR per item:
 
 - [ ] Confirm open questions §13 with Rob.
-- [ ] Slice 1 — `register_entries` migration + contracts + service + tests. No client changes yet.
+- [x] Slice 1 — `register_entries` migration + contracts + service + tests. No client changes yet.
 - [ ] Slice 2 — `media_attachments` migration + storage scaffolding + intent/blob endpoints + tests. Filesystem only, no UI.
 - [ ] Slice 3 — Field-mobile pending-operation extensions (register only). Test against the existing field harness. No media yet.
 - [ ] Slice 4 — Field-mobile media capture. Pause for product approval on the camera library dependency before opening.

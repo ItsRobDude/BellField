@@ -5,6 +5,7 @@ import type {
   FieldSyncSource as ContractFieldSyncSource,
   FinishedVisitReviewDecision as ContractFinishedVisitReviewDecision,
   JobStatus as ContractJobStatus,
+  RegisterEntryKind as ContractRegisterEntryKind,
   SyncResult as ContractSyncResult
 } from '@bellfield/contracts';
 
@@ -175,6 +176,7 @@ export const appointmentStatuses = [
 
 export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
 export type FinishedVisitReviewDecision = ContractFinishedVisitReviewDecision;
+export type RegisterEntryKind = ContractRegisterEntryKind;
 
 export const appointmentFinishOutcomes = [
   'completed',
@@ -186,6 +188,14 @@ export const finishedVisitReviewDecisions = [
   'keptOpen',
   'followUpScheduled'
 ] as const satisfies readonly FinishedVisitReviewDecision[];
+
+export const registerEntryKinds = [
+  'labor',
+  'serviceItem',
+  'part',
+  'membership',
+  'other'
+] as const satisfies readonly RegisterEntryKind[];
 
 export type FieldSyncSource = ContractFieldSyncSource;
 
@@ -205,6 +215,9 @@ export type JobTimelineEntry = {
     | 'appointmentStatusUpdated'
     | 'appointmentFinishedReview'
     | 'finishedVisitReviewAcknowledged'
+    | 'registerEntryAdded'
+    | 'registerEntryEdited'
+    | 'registerEntryVoided'
     | 'jobNote'
     | 'syncFlag';
   message: string;
@@ -276,4 +289,42 @@ export type UpdateAppointmentScheduleInput = {
   scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
+};
+
+export type RegisterEntryRecord = {
+  id: string;
+  jobId: string;
+  appointmentId?: string;
+  kind: RegisterEntryKind;
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice?: number;
+  totalAmount: number;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  capturedByEmployeeId: string;
+  capturedByName: string;
+  capturedAt: string;
+  isVoid: boolean;
+  voidReason?: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type CreateRegisterEntryInput = {
+  appointmentId?: string;
+  kind: RegisterEntryKind;
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice?: number;
+  totalAmount: number;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+};
+
+export type UpdateRegisterEntryInput = Partial<Omit<CreateRegisterEntryInput, 'appointmentId' | 'unitPrice'>> & {
+  appointmentId?: string | null;
+  unitPrice?: number | null;
 };

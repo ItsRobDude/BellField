@@ -41,6 +41,30 @@ function createAppointmentRow(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function createRegisterEntryRow(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'register-1',
+    jobId: 'job-1',
+    appointmentId: 'appointment-1',
+    kind: 'part',
+    description: 'Contactor',
+    quantity: '1.50',
+    unitOfMeasure: 'each',
+    unitPrice: '125.00',
+    totalAmount: '187.50',
+    partNumber: 'C-100',
+    inventorySourceLabel: 'truck',
+    capturedByEmployeeId: 'tech-1',
+    capturedByName: 'Field Tech',
+    capturedAt: '2026-04-14T11:00:00.000Z',
+    isVoid: false,
+    voidReason: null,
+    createdAt: '2026-04-14T11:00:00.000Z',
+    updatedAt: '2026-04-14T11:00:00.000Z',
+    ...overrides
+  };
+}
+
 function createDatabaseService(
   jobRowOverrides: Record<string, unknown> = {},
   appointmentRowOverrides?: Record<string, unknown>
@@ -445,5 +469,144 @@ describe('JobsDataRepository', () => {
     const querySql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
     expect(querySql).toContain("status <> 'cancelled'");
     expect(querySql).toContain('scheduled_date > $2::date');
+  });
+
+  it('maps register entries and excludes voided entries by default', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [createRegisterEntryRow()]
+      }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const registerEntries = await repository.listRegisterEntriesForJob('job-1');
+
+    expect(registerEntries[0]).toMatchObject({
+      id: 'register-1',
+      quantity: 1.5,
+      unitPrice: 125,
+      totalAmount: 187.5
+    });
+    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain(
+      '($2::boolean = true or is_void = false)'
+    );
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['job-1', false]);
+  });
+
+  it('creates register entries and writes register timeline history', async () => {
+    const queryable = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from register_entries')) {
+          return { rows: [createRegisterEntryRow()] };
+        }
+
+        return { rows: [] };
+      }),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        appointmentId: 'appointment-1',
+        kind: 'part',
+        description: '  Contactor  ',
+        quantity: 1.5,
+        unitOfMeasure: 'each',
+        unitPrice: 125,
+        totalAmount: 187.5,
+        partNumber: 'C-100',
+        inventorySourceLabel: 'truck'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' },
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const insertCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('insert into register_entries'));
+    expect(insertCall?.[1]?.[4]).toBe('Contactor');
+    expect(insertCall?.[1]?.[11]).toBe('tech-1');
+
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('registerEntryAdded');
+    expect(timelineCall?.[1]?.[5]).toBe('Register entry added: Contactor.');
+  });
+
+  it('updates register entries and can clear nullable fields', async () => {
+    const queryable = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from register_entries')) {
+          return { rows: [createRegisterEntryRow()] };
+        }
+
+        return { rows: [] };
+      }),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.updateRegisterEntry(
+      'register-1',
+      {
+        appointmentId: null,
+        unitPrice: null,
+        description: '  Updated contactor  '
+      },
+      'Dispatcher',
+      '2026-04-14T12:00:00.000Z'
+    );
+
+    const updateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update register_entries'));
+    expect(updateCall?.[1]?.[1]).toBeNull();
+    expect(updateCall?.[1]?.[3]).toBe('Updated contactor');
+    expect(updateCall?.[1]?.[6]).toBeNull();
+
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('registerEntryEdited');
+    expect(timelineCall?.[1]?.[5]).toBe('Register entry edited: Updated contactor.');
+  });
+
+  it('voids register entries without deleting the row', async () => {
+    const queryable = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (sql.includes('from register_entries')) {
+          return { rows: [createRegisterEntryRow()] };
+        }
+
+        return { rows: [] };
+      }),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.voidRegisterEntry(
+      'register-1',
+      'Duplicate line.',
+      'Dispatcher',
+      '2026-04-14T12:00:00.000Z'
+    );
+
+    const updateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update register_entries'));
+    expect(String(updateCall?.[0] ?? '')).toContain('is_void = true');
+    expect(updateCall?.[1]).toEqual(['register-1', 'Duplicate line.', '2026-04-14T12:00:00.000Z']);
+
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('registerEntryVoided');
+    expect(timelineCall?.[1]?.[5]).toBe('Register entry voided: Contactor. Reason: Duplicate line.');
   });
 });

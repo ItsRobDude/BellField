@@ -119,6 +119,7 @@ BellField permissions should be grouped into these major modules:
 - Equipment
 - Jobs
 - Appointments / Dispatch
+- Register
 - Estimates
 - Invoices
 - Payments

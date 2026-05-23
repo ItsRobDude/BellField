@@ -4,9 +4,12 @@ import {
   AcknowledgeFinishedVisitReviewRequestBodyDto,
   CreateAppointmentRequestBodyDto,
   CreateJobRequestBodyDto,
+  CreateRegisterEntryRequestBodyDto,
   UpdateAppointmentScheduleRequestBodyDto,
   UpdateAppointmentStatusRequestBodyDto,
-  UpdateJobStatusRequestBodyDto
+  UpdateRegisterEntryRequestBodyDto,
+  UpdateJobStatusRequestBodyDto,
+  VoidRegisterEntryRequestBodyDto
 } from './jobs-appointments.dto';
 import { JobsAppointmentsService } from './jobs-appointments.service';
 
@@ -78,6 +81,49 @@ export class JobsAppointmentsController {
     @Body() request: AddJobNoteRequestBodyDto
   ) {
     return this.jobsAppointmentsService.addJobNote(this.getBearerToken(authorizationHeader), jobId, request);
+  }
+
+  @Get(':jobId/register-entries')
+  async listRegisterEntries(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string
+  ) {
+    return this.jobsAppointmentsService.listRegisterEntries(this.getBearerToken(authorizationHeader), jobId, true);
+  }
+
+  @Post(':jobId/register-entries')
+  async createRegisterEntry(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string,
+    @Body() request: CreateRegisterEntryRequestBodyDto
+  ) {
+    return this.jobsAppointmentsService.createRegisterEntry(this.getBearerToken(authorizationHeader), jobId, request);
+  }
+
+  @Patch('register-entries/:registerEntryId')
+  async updateRegisterEntry(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('registerEntryId') registerEntryId: string,
+    @Body() request: UpdateRegisterEntryRequestBodyDto
+  ) {
+    return this.jobsAppointmentsService.updateRegisterEntry(
+      this.getBearerToken(authorizationHeader),
+      registerEntryId,
+      request
+    );
+  }
+
+  @Post('register-entries/:registerEntryId/void')
+  async voidRegisterEntry(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('registerEntryId') registerEntryId: string,
+    @Body() request: VoidRegisterEntryRequestBodyDto
+  ) {
+    return this.jobsAppointmentsService.voidRegisterEntry(
+      this.getBearerToken(authorizationHeader),
+      registerEntryId,
+      request
+    );
   }
 
   @Patch('appointments/:appointmentId/status')

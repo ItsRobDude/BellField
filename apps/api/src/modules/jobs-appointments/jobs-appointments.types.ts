@@ -6,6 +6,7 @@ import type {
   ContactSummary,
   CreateAppointmentRequest,
   CreateJobRequest,
+  CreateRegisterEntryRequest,
   CustomerAccountSummary,
   FieldAssignedWorkResponse,
   JobMutationResponse,
@@ -13,10 +14,14 @@ import type {
   JobSummary,
   JobTimelineEntry,
   LocationSummary,
+  RegisterEntriesResponse,
+  RegisterEntrySummary,
   UpdateAppointmentScheduleRequest,
   UpdateAppointmentStatusRequest,
+  UpdateRegisterEntryRequest,
   UpdateJobStatusRequest,
-  UpdateJobStatusResponse
+  UpdateJobStatusResponse,
+  VoidRegisterEntryRequest
 } from '@bellfield/contracts';
 
 export type CustomerAccountSummaryDto = CustomerAccountSummary;
@@ -27,6 +32,8 @@ export type JobTimelineEntryDto = JobTimelineEntry;
 export type AppointmentSummaryDto = AppointmentSummary;
 export type AppointmentFinishOutcomeDto = AppointmentFinishOutcome;
 export type JobSummaryDto = JobSummary;
+export type RegisterEntrySummaryDto = RegisterEntrySummary;
+export type RegisterEntriesResponseDto = RegisterEntriesResponse;
 export type JobsWorkspaceResponseDto = JobsWorkspaceResponse;
 export type CreateJobRequestDto = CreateJobRequest;
 export type UpdateJobStatusRequestDto = UpdateJobStatusRequest;
@@ -35,6 +42,9 @@ export type CreateAppointmentRequestDto = CreateAppointmentRequest;
 export type UpdateAppointmentScheduleRequestDto = UpdateAppointmentScheduleRequest;
 export type UpdateAppointmentStatusRequestDto = UpdateAppointmentStatusRequest;
 export type AddJobNoteRequestDto = AddJobNoteRequest;
+export type CreateRegisterEntryRequestDto = CreateRegisterEntryRequest;
+export type UpdateRegisterEntryRequestDto = UpdateRegisterEntryRequest;
+export type VoidRegisterEntryRequestDto = VoidRegisterEntryRequest;
 export type AcknowledgeFinishedVisitReviewRequestDto = AcknowledgeFinishedVisitReviewRequest;
 export type JobMutationResponseDto = JobMutationResponse;
 export type FieldAssignedWorkResponseDto = FieldAssignedWorkResponse;

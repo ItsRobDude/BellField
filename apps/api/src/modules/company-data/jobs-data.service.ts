@@ -7,7 +7,10 @@ import type {
   FinishedVisitReviewDecision,
   CreateJobInput,
   JobRecord,
-  JobStatus
+  JobStatus,
+  RegisterEntryRecord,
+  CreateRegisterEntryInput,
+  UpdateRegisterEntryInput
 } from './company-data.types';
 import type { UpdateAppointmentScheduleInput } from './company-data.types';
 import { JobsDataRepository } from './jobs-data.repository';
@@ -142,6 +145,71 @@ export class JobsDataService {
     }
 
     return job;
+  }
+
+  async listRegisterEntriesForJob(jobId: string, includeVoided = false): Promise<RegisterEntryRecord[]> {
+    await this.getJobById(jobId);
+    return this.jobsDataRepository.listRegisterEntriesForJob(jobId, includeVoided);
+  }
+
+  async getRegisterEntryById(registerEntryId: string): Promise<RegisterEntryRecord> {
+    const registerEntry = await this.jobsDataRepository.getRegisterEntryById(registerEntryId);
+
+    if (!registerEntry) {
+      throw new NotFoundException('Register entry not found.');
+    }
+
+    return registerEntry;
+  }
+
+  async createRegisterEntry(
+    jobId: string,
+    input: CreateRegisterEntryInput,
+    actor: { id: string; displayName: string },
+    occurredAt?: string
+  ): Promise<RegisterEntryRecord> {
+    await this.getJobById(jobId);
+    return this.jobsDataRepository.createRegisterEntry(jobId, input, actor, occurredAt);
+  }
+
+  async updateRegisterEntry(
+    registerEntryId: string,
+    input: UpdateRegisterEntryInput,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<RegisterEntryRecord> {
+    const registerEntry = await this.jobsDataRepository.updateRegisterEntry(
+      registerEntryId,
+      input,
+      actorName,
+      occurredAt
+    );
+
+    if (!registerEntry) {
+      throw new NotFoundException('Register entry not found.');
+    }
+
+    return registerEntry;
+  }
+
+  async voidRegisterEntry(
+    registerEntryId: string,
+    reason: string | undefined,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<RegisterEntryRecord> {
+    const registerEntry = await this.jobsDataRepository.voidRegisterEntry(
+      registerEntryId,
+      reason,
+      actorName,
+      occurredAt
+    );
+
+    if (!registerEntry) {
+      throw new NotFoundException('Register entry not found.');
+    }
+
+    return registerEntry;
   }
 
   async getAppointmentById(appointmentId: string): Promise<AppointmentRecord> {

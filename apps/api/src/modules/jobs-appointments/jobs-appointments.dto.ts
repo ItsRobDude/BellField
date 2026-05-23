@@ -2,10 +2,12 @@ import {
   IsBoolean,
   IsIn,
   IsISO8601,
+  IsNumber,
   IsOptional,
   IsString,
   Matches,
   MaxLength,
+  Min,
   MinLength,
   Validate,
   type ValidationArguments,
@@ -18,20 +20,25 @@ import {
   fieldSyncSources,
   finishedVisitReviewDecisions,
   jobStatuses,
+  registerEntryKinds,
   type AppointmentFinishOutcome,
   type AppointmentStatus,
   type FieldSyncSource,
   type FinishedVisitReviewDecision,
-  type JobStatus
+  type JobStatus,
+  type RegisterEntryKind
 } from '../company-data/company-data.types';
 import type {
   AddJobNoteRequestDto,
   AcknowledgeFinishedVisitReviewRequestDto,
   CreateAppointmentRequestDto,
   CreateJobRequestDto,
+  CreateRegisterEntryRequestDto,
   UpdateAppointmentScheduleRequestDto,
   UpdateAppointmentStatusRequestDto,
-  UpdateJobStatusRequestDto
+  UpdateRegisterEntryRequestDto,
+  UpdateJobStatusRequestDto,
+  VoidRegisterEntryRequestDto
 } from './jobs-appointments.types';
 
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
@@ -246,6 +253,139 @@ export class AddJobNoteRequestBodyDto implements AddJobNoteRequestDto {
   @MinLength(1)
   @MaxLength(4000)
   note!: string;
+
+  @IsOptional()
+  @IsISO8601()
+  occurredAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  baseUpdatedAt?: string;
+
+  @IsOptional()
+  @IsIn(fieldSyncSources)
+  syncSource?: FieldSyncSource;
+}
+
+export class CreateRegisterEntryRequestBodyDto implements CreateRegisterEntryRequestDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  appointmentId?: string;
+
+  @IsIn(registerEntryKinds)
+  kind!: RegisterEntryKind;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  description!: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  quantity!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unitOfMeasure?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  unitPrice?: number;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  totalAmount!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  partNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  inventorySourceLabel?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  occurredAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  baseUpdatedAt?: string;
+
+  @IsOptional()
+  @IsIn(fieldSyncSources)
+  syncSource?: FieldSyncSource;
+}
+
+export class UpdateRegisterEntryRequestBodyDto implements UpdateRegisterEntryRequestDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  appointmentId?: string | null;
+
+  @IsOptional()
+  @IsIn(registerEntryKinds)
+  kind?: RegisterEntryKind;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(500)
+  description?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  quantity?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(40)
+  unitOfMeasure?: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  unitPrice?: number | null;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  totalAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  partNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  inventorySourceLabel?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  occurredAt?: string;
+
+  @IsOptional()
+  @IsISO8601()
+  baseUpdatedAt?: string;
+
+  @IsOptional()
+  @IsIn(fieldSyncSources)
+  syncSource?: FieldSyncSource;
+}
+
+export class VoidRegisterEntryRequestBodyDto implements VoidRegisterEntryRequestDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
 
   @IsOptional()
   @IsISO8601()

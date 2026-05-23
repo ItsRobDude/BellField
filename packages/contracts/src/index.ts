@@ -25,6 +25,7 @@ export type PermissionArea =
   | 'equipment'
   | 'jobs'
   | 'appointmentsDispatch'
+  | 'register'
   | 'estimates'
   | 'invoices'
   | 'payments'
@@ -459,6 +460,7 @@ export type AppointmentStatus =
 
 export type AppointmentFinishOutcome = 'completed' | 'followUpNeeded' | 'noAccess';
 export type FinishedVisitReviewDecision = 'keptOpen' | 'followUpScheduled';
+export type RegisterEntryKind = 'labor' | 'serviceItem' | 'part' | 'membership' | 'other';
 
 export interface SyncResult {
   status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
@@ -497,6 +499,27 @@ export interface JobTimelineEntry {
   message: string;
 }
 
+export interface RegisterEntrySummary {
+  id: string;
+  jobId: string;
+  appointmentId?: string;
+  kind: RegisterEntryKind;
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice?: number;
+  totalAmount: number;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  capturedByEmployeeId: string;
+  capturedByName: string;
+  capturedAt: string;
+  isVoid: boolean;
+  voidReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface JobSummary {
   id: string;
   jobNumber: string;
@@ -513,6 +536,7 @@ export interface JobSummary {
   needsScheduling: boolean;
   needsOfficeReview: boolean;
   appointments: AppointmentSummary[];
+  registerEntries?: RegisterEntrySummary[];
   timeline: JobTimelineEntry[];
   createdAt: string;
   updatedAt: string;
@@ -584,6 +608,47 @@ export interface UpdateAppointmentStatusRequest {
 
 export interface AddJobNoteRequest {
   note: string;
+  occurredAt?: string;
+  baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
+}
+
+export interface RegisterEntriesResponse {
+  registerEntries: RegisterEntrySummary[];
+}
+
+export interface CreateRegisterEntryRequest {
+  appointmentId?: string;
+  kind: RegisterEntryKind;
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice?: number;
+  totalAmount: number;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  occurredAt?: string;
+  baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
+}
+
+export interface UpdateRegisterEntryRequest {
+  appointmentId?: string | null;
+  kind?: RegisterEntryKind;
+  description?: string;
+  quantity?: number;
+  unitOfMeasure?: string;
+  unitPrice?: number | null;
+  totalAmount?: number;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  occurredAt?: string;
+  baseUpdatedAt?: string;
+  syncSource?: FieldSyncSource;
+}
+
+export interface VoidRegisterEntryRequest {
+  reason?: string;
   occurredAt?: string;
   baseUpdatedAt?: string;
   syncSource?: FieldSyncSource;

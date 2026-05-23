@@ -35,6 +35,7 @@ export const permissionAreas = [
   'equipment',
   'jobs',
   'appointmentsDispatch',
+  'register',
   'estimates',
   'invoices',
   'payments',

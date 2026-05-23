@@ -1,6 +1,18 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Alert, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  AppState,
+  type AppStateStatus,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import {
   addFieldJobNote,
   createFieldEquipment,
@@ -56,6 +68,10 @@ import {
   markPendingOperationForRetry,
   shouldOfferQueueResolution
 } from './field-queue-resolution';
+import {
+  nextBackgroundSyncDelayMs,
+  shouldRunBackgroundSync
+} from './field-background-sync-schedule';
 
 type Props = {
   apiBaseUrl: string;
@@ -145,6 +161,24 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [isInitializing, setIsInitializing] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
+
+  // Refs for the background sync loop. Refs (not state) so we can read the
+  // current values from inside a stable interval callback without making
+  // every render reset the timer.
+  const isMountedRef = useRef(true);
+  const drainInFlightRef = useRef(false);
+  const backgroundFailureCountRef = useRef(0);
+  const backgroundTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingOperationsRef = useRef(pendingOperations);
+  const isInitializingRef = useRef(true);
+
+  useEffect(() => {
+    pendingOperationsRef.current = pendingOperations;
+  }, [pendingOperations]);
+
+  useEffect(() => {
+    isInitializingRef.current = isInitializing;
+  }, [isInitializing]);
 
   const assignedWork = useMemo(
     () => applyPendingOperations(serverSnapshot, pendingOperations, employee.displayName),
@@ -602,9 +636,16 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     }
   }
 
-  async function syncNow() {
-    setIsSyncing(true);
-    setErrorMessage(null);
+  // Internal drain orchestration. Called by both the manual Sync Now button
+  // and the background sync loop. Returns whether the drain finished cleanly
+  // so the background loop can update its backoff state.
+  //
+  // The caller is responsible for the mutex (drainInFlightRef) and any
+  // visible spinner state. This function only touches the data path.
+  async function runSyncDrain(options: { visible: boolean }): Promise<{ ok: boolean }> {
+    if (options.visible) {
+      setErrorMessage(null);
+    }
 
     const attemptedAt = new Date().toISOString();
     const attemptedMetadata: SyncMetadata = {
@@ -808,7 +849,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       }
 
       if (hadSyncFailure) {
-        return;
+        return { ok: false };
       }
 
       const refreshedSnapshot = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
@@ -823,6 +864,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       await saveSyncMetadata(nextSyncMetadata);
       setServerSnapshot(refreshedSnapshot);
       setSyncMetadata(nextSyncMetadata);
+      return { ok: true };
     } catch (error) {
       const nextErrorMessage = error instanceof Error ? error.message : 'Unable to sync queued field work.';
       const failedMetadata: SyncMetadata = {
@@ -832,11 +874,143 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
       await saveSyncMetadata(failedMetadata);
       setSyncMetadata(failedMetadata);
-      setErrorMessage(nextErrorMessage);
+      // Surface a visible error message only when the drain was user-initiated.
+      // Background failures stay quiet; the sync indicator card already
+      // flips to alert tone via lastSyncError so the technician can see it.
+      if (options.visible) {
+        setErrorMessage(nextErrorMessage);
+      }
+      return { ok: false };
+    }
+  }
+
+  async function syncNow() {
+    if (drainInFlightRef.current) {
+      // A background drain is already running; a second one would race
+      // against it. Manual presses during a background drain just yield.
+      return;
+    }
+
+    drainInFlightRef.current = true;
+    setIsSyncing(true);
+    try {
+      const result = await runSyncDrain({ visible: true });
+      if (result.ok) {
+        // A successful manual drain also resets the background backoff so
+        // the next scheduled background attempt fires at the base interval.
+        backgroundFailureCountRef.current = 0;
+      }
     } finally {
+      drainInFlightRef.current = false;
       setIsSyncing(false);
     }
   }
+
+  async function runBackgroundSyncAttempt() {
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    const gateState = {
+      isDrainInFlight: drainInFlightRef.current,
+      isInitializing: isInitializingRef.current,
+      replayableOperationCount: getReplayablePendingOperations(pendingOperationsRef.current).length,
+      isWorkspaceMounted: isMountedRef.current
+    };
+
+    if (!shouldRunBackgroundSync(gateState)) {
+      return;
+    }
+
+    drainInFlightRef.current = true;
+    setIsSyncing(true);
+    try {
+      const result = await runSyncDrain({ visible: false });
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (result.ok) {
+        backgroundFailureCountRef.current = 0;
+      } else {
+        backgroundFailureCountRef.current = Math.min(backgroundFailureCountRef.current + 1, 10);
+      }
+    } finally {
+      drainInFlightRef.current = false;
+      if (isMountedRef.current) {
+        setIsSyncing(false);
+      }
+    }
+  }
+
+  // Hold the latest runBackgroundSyncAttempt in a ref so the mount-only
+  // background timer effect can always call the freshest closure without
+  // re-creating the timer on every render.
+  const runBackgroundSyncAttemptRef = useRef<() => Promise<void>>(runBackgroundSyncAttempt);
+  useEffect(() => {
+    runBackgroundSyncAttemptRef.current = runBackgroundSyncAttempt;
+  });
+
+  // Background sync loop: drains the pending queue quietly while the
+  // technician workspace is mounted. Only `pending` operations are
+  // retried; `conflict` and `rejected` stay preserved until the
+  // technician explicitly retries or discards them via the queue
+  // resolution UI. Manual Sync Now and background sync are gated by the
+  // shared drainInFlightRef so they cannot overlap.
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    async function attempt() {
+      await runBackgroundSyncAttemptRef.current();
+    }
+
+    function scheduleNextAttempt() {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (backgroundTimerRef.current) {
+        clearTimeout(backgroundTimerRef.current);
+      }
+
+      const delayMs = nextBackgroundSyncDelayMs(backgroundFailureCountRef.current);
+      backgroundTimerRef.current = setTimeout(() => {
+        void (async () => {
+          await attempt();
+          if (isMountedRef.current) {
+            scheduleNextAttempt();
+          }
+        })();
+      }, delayMs);
+    }
+
+    function handleAppStateChange(nextAppState: AppStateStatus) {
+      // When the OS brings the app back to the foreground while the
+      // technician workspace is mounted, attempt a drain right away so
+      // the technician sees fresh data and queued work flushes without
+      // waiting on the next timer tick.
+      if (nextAppState === 'active') {
+        void (async () => {
+          await attempt();
+          if (isMountedRef.current) {
+            scheduleNextAttempt();
+          }
+        })();
+      }
+    }
+
+    scheduleNextAttempt();
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+
+    return () => {
+      isMountedRef.current = false;
+      if (backgroundTimerRef.current) {
+        clearTimeout(backgroundTimerRef.current);
+        backgroundTimerRef.current = null;
+      }
+      subscription.remove();
+    };
+  }, []);
 
   function handleSignOut() {
     if (pendingOperations.length === 0) {

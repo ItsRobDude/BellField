@@ -15,6 +15,7 @@ const officeCore = [
   ...permissionKeys('equipment', ['view', 'create', 'edit']),
   ...permissionKeys('jobs', ['view', 'create', 'edit']),
   ...permissionKeys('appointmentsDispatch', ['view', 'create', 'edit']),
+  ...permissionKeys('register', ['view', 'create', 'edit']),
   ...permissionKeys('estimates', ['view', 'create', 'edit'])
 ];
 
@@ -39,6 +40,7 @@ const ownerPermissions = [
   ...permissionKeys('equipment', ['delete']),
   ...permissionKeys('jobs', ['delete', 'configure']),
   ...permissionKeys('appointmentsDispatch', ['delete', 'configure']),
+  ...permissionKeys('register', ['delete', 'configure']),
   ...permissionKeys('estimates', ['delete', 'approve']),
   ...permissionKeys('invoices', ['delete', 'approve', 'configure']),
   ...permissionKeys('payments', ['delete', 'configure']),
@@ -106,6 +108,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...permissionKeys('contacts', ['view']),
       ...permissionKeys('equipment', ['create', 'edit', 'configure']),
       ...permissionKeys('appointmentsDispatch', ['view', 'edit']),
+      ...permissionKeys('register', ['view', 'create', 'edit']),
       ...permissionKeys('estimates', ['view', 'create', 'edit']),
       ...permissionKeys('invoices', ['view', 'edit'])
     ])

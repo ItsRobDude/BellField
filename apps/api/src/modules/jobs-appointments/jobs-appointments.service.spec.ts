@@ -65,7 +65,12 @@ function createService() {
     updateAppointmentStatus: jest.fn(),
     addSyncFlag: jest.fn(),
     listAssignedJobsForEmployee: jest.fn().mockResolvedValue([]),
-    addJobNote: jest.fn()
+    addJobNote: jest.fn(),
+    listRegisterEntriesForJob: jest.fn().mockResolvedValue([]),
+    getRegisterEntryById: jest.fn(),
+    createRegisterEntry: jest.fn(),
+    updateRegisterEntry: jest.fn(),
+    voidRegisterEntry: jest.fn()
   };
   const identityAccessService = {
     getAuthorizedEmployee: jest.fn(),
@@ -100,6 +105,29 @@ function createJob(status: JobRecord['status']): JobRecord {
     timeline: [],
     createdAt: '2026-04-14T10:00:00.000Z',
     updatedAt: '2026-04-14T10:00:00.000Z'
+  };
+}
+
+function createRegisterEntry(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'register-1',
+    jobId: 'job-1',
+    appointmentId: 'appointment-1',
+    kind: 'part',
+    description: 'Contactor',
+    quantity: 1,
+    unitOfMeasure: 'each',
+    unitPrice: 125,
+    totalAmount: 125,
+    partNumber: 'C-100',
+    inventorySourceLabel: 'truck',
+    capturedByEmployeeId: 'tech-1',
+    capturedByName: 'Field Tech',
+    capturedAt: '2026-04-14T11:00:00.000Z',
+    isVoid: false,
+    createdAt: '2026-04-14T11:00:00.000Z',
+    updatedAt: '2026-04-14T11:00:00.000Z',
+    ...overrides
   };
 }
 
@@ -584,5 +612,240 @@ describe('JobsAppointmentsService', () => {
       'Field Tech',
       expect.any(String)
     );
+  });
+
+  it('includes register entries on job summaries', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:view', 'register:view'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.listJobs.mockResolvedValue([createJob('inProgress')]);
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([createRegisterEntry()]);
+
+    const response = await service.getWorkspace('session-token');
+
+    expect(response.jobs[0]?.registerEntries).toEqual([
+      expect.objectContaining({
+        id: 'register-1',
+        description: 'Contactor',
+        totalAmount: 125
+      })
+    ]);
+  });
+
+  it('omits register entries from job summaries without register:view', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:view'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.listJobs.mockResolvedValue([createJob('inProgress')]);
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([createRegisterEntry()]);
+
+    const response = await service.getWorkspace('session-token');
+
+    expect(response.jobs[0]?.registerEntries).toBeUndefined();
+    expect(jobsDataService.listRegisterEntriesForJob).not.toHaveBeenCalled();
+  });
+
+  it('creates register entries with register:create permission and returns the updated job summary', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    const job = createJob('inProgress');
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getJobById.mockResolvedValue(job);
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'working',
+      updatedAt: '2026-04-14T10:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([job]);
+    jobsDataService.createRegisterEntry.mockResolvedValue(createRegisterEntry());
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([createRegisterEntry()]);
+
+    const response = await service.createRegisterEntry('session-token', 'job-1', {
+      appointmentId: 'appointment-1',
+      kind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      unitOfMeasure: 'each',
+      unitPrice: 125,
+      totalAmount: 125,
+      occurredAt: '2026-04-14T11:00:00.000Z',
+      baseUpdatedAt: '2026-04-14T10:00:00.000Z',
+      syncSource: 'field-save-queue'
+    });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'register:create');
+    expect(jobsDataService.createRegisterEntry).toHaveBeenCalledWith(
+      'job-1',
+      expect.objectContaining({ description: 'Contactor' }),
+      expect.objectContaining({ id: 'tech-1', displayName: 'Field Tech' }),
+      '2026-04-14T11:00:00.000Z'
+    );
+    expect(response.syncResult).toEqual({ status: 'applied' });
+    expect(response.registerEntries?.[0]?.description).toBe('Contactor');
+  });
+
+  it('rejects out-of-scope field register creates without replay provenance', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    const job = createJob('inProgress');
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getJobById.mockResolvedValue(job);
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([]);
+
+    const response = await service.createRegisterEntry('session-token', 'job-1', {
+      kind: 'labor',
+      description: 'Diagnostic labor',
+      quantity: 1,
+      unitPrice: 95,
+      totalAmount: 95
+    });
+
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+    expect(response.syncResult).toEqual({
+      status: 'rejected',
+      message: 'This field change is outside the current assigned-work scope and could not be validated as an offline replay.'
+    });
+  });
+
+  it('rejects direct register entry creates on cancelled jobs', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['register:create'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('cancelled'));
+
+    await expect(
+      service.createRegisterEntry('session-token', 'job-1', {
+        kind: 'labor',
+        description: 'Diagnostic labor',
+        quantity: 1,
+        unitPrice: 95,
+        totalAmount: 95
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+  });
+
+  it('preserves queued field register creates after a job was cancelled', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    const job = createJob('cancelled');
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getJobById.mockResolvedValue(job);
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([]);
+    jobsDataService.createRegisterEntry.mockResolvedValue(createRegisterEntry());
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([createRegisterEntry()]);
+
+    const response = await service.createRegisterEntry('session-token', 'job-1', {
+      kind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      unitPrice: 125,
+      totalAmount: 125,
+      occurredAt: '2026-04-14T11:00:00.000Z',
+      baseUpdatedAt: '2026-04-14T10:00:00.000Z',
+      syncSource: 'field-save-queue'
+    });
+
+    expect(jobsDataService.createRegisterEntry).toHaveBeenCalled();
+    expect(jobsDataService.addSyncFlag).toHaveBeenCalledWith(
+      'job-1',
+      'Field register entry synced after the job had already been cancelled.',
+      'Field Tech',
+      expect.any(String)
+    );
+    expect(response.syncResult).toEqual({ status: 'applied' });
+  });
+
+  it('flags stale field register updates as conflicts', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    const job = createJob('inProgress');
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:edit'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getRegisterEntryById.mockResolvedValue(
+      createRegisterEntry({ updatedAt: '2026-04-14T12:00:00.000Z' })
+    );
+    jobsDataService.getJobById.mockResolvedValue(job);
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([job]);
+
+    const response = await service.updateRegisterEntry('session-token', 'register-1', {
+      description: 'Updated contactor',
+      occurredAt: '2026-04-14T11:30:00.000Z',
+      baseUpdatedAt: '2026-04-14T11:00:00.000Z',
+      syncSource: 'field-save-queue'
+    });
+
+    expect(jobsDataService.updateRegisterEntry).not.toHaveBeenCalled();
+    expect(jobsDataService.addSyncFlag).toHaveBeenCalledWith(
+      'job-1',
+      'Field register entry update conflicted with a newer BellField register change.',
+      'Field Tech',
+      expect.any(String)
+    );
+    expect(response.syncResult).toEqual({
+      status: 'conflict',
+      message: 'Register entry changed before this offline update could sync.'
+    });
+  });
+
+  it('voids register entries through register:edit without deleting history', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['register:view', 'register:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getRegisterEntryById.mockResolvedValue(createRegisterEntry());
+    jobsDataService.getJobById.mockResolvedValue(createJob('inProgress'));
+    jobsDataService.voidRegisterEntry.mockResolvedValue(
+      createRegisterEntry({ isVoid: true, voidReason: 'Duplicate line.' })
+    );
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([
+      createRegisterEntry({ isVoid: true, voidReason: 'Duplicate line.' })
+    ]);
+
+    const response = await service.voidRegisterEntry('session-token', 'register-1', {
+      reason: 'Duplicate line.',
+      occurredAt: '2026-04-14T12:00:00.000Z'
+    });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'register:edit');
+    expect(jobsDataService.voidRegisterEntry).toHaveBeenCalledWith(
+      'register-1',
+      'Duplicate line.',
+      'Dispatcher',
+      '2026-04-14T12:00:00.000Z'
+    );
+    expect(response.registerEntries?.[0]).toMatchObject({ isVoid: true, voidReason: 'Duplicate line.' });
   });
 });
