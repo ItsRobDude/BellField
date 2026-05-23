@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentStatus,
   AppointmentSummary,
@@ -11,6 +11,10 @@ import { DispatchBoardPanel } from './dispatch-board-panel';
 import { buildDispatchBoardModel } from './dispatch-board-data';
 
 const baseTimestamp = '2026-05-22T10:00:00.000Z';
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 function buildAppointment(overrides: Partial<AppointmentSummary> = {}): AppointmentSummary {
   return {
@@ -413,6 +417,96 @@ describe('DispatchBoardPanel', () => {
         technicianId: ''
       });
     });
+  });
+
+  it('saves edited appointment status from the drawer and disables status save while unchanged or saving', async () => {
+    let resolveStatusSave: () => void = () => undefined;
+    const onUpdateAppointmentStatus = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveStatusSave = resolve;
+        })
+    );
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onUpdateAppointmentStatus={onUpdateAppointmentStatus}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
+    const saveButton = within(drawer).getByRole('button', { name: /Save status/i });
+    expect(saveButton).toBeDisabled();
+
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
+      target: { value: 'dispatched' }
+    });
+    fireEvent.click(saveButton);
+
+    expect(onUpdateAppointmentStatus).toHaveBeenCalledWith('appt-tech1', 'dispatched');
+    expect(within(drawer).getByRole('button', { name: /Saving status/i })).toBeDisabled();
+
+    resolveStatusSave();
+
+    await waitFor(() => {
+      expect(within(drawer).getByRole('button', { name: /Save status/i })).not.toBeDisabled();
+    });
+  });
+
+  it('requires confirmation before cancelling an appointment from the drawer', () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+    const onUpdateAppointmentStatus = vi.fn().mockResolvedValue(undefined);
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onUpdateAppointmentStatus={onUpdateAppointmentStatus}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
+      target: { value: 'cancelled' }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
+
+    expect(confirmSpy).toHaveBeenCalledWith(
+      'Cancel this appointment? It will leave the dispatch board after the workspace refreshes.'
+    );
+    expect(onUpdateAppointmentStatus).not.toHaveBeenCalled();
   });
 
   it('shows an office-review badge when the appointment or job is flagged for review', () => {

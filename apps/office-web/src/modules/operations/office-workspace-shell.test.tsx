@@ -378,4 +378,176 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
     });
     expect(screen.queryByLabelText(/Appointment 1002 for Acme/i)).not.toBeInTheDocument();
   });
+
+  it('saves dispatch drawer status changes through the appointment status API', async () => {
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const updatedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            status: 'confirmed'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(updatedWorkspace)
+      .mockResolvedValue(updatedWorkspace);
+    mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(updatedWorkspace.jobs[0]!);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
+      target: { value: 'confirmed' }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        status: 'confirmed'
+      });
+    });
+    expect(await screen.findByText('Dispatch status updated.')).toBeInTheDocument();
+  });
+
+  it('removes cancelled appointments from the dispatch board after status save', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const updatedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            status: 'cancelled'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(updatedWorkspace)
+      .mockResolvedValue(updatedWorkspace);
+    mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(updatedWorkspace.jobs[0]!);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
+      target: { value: 'cancelled' }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appointmentId: 'appointment-1',
+          status: 'cancelled'
+        })
+      );
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();
+    });
+    expect(
+      await screen.findByText('Appointment cancelled. It is no longer shown on the dispatch board.')
+    ).toBeInTheDocument();
+  });
+
+  it('surfaces office review after a dispatch drawer status save marks an appointment finished', async () => {
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const updatedWorkspace = buildWorkspace([
+      buildJob({
+        needsOfficeReview: true,
+        status: 'inProgress',
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            status: 'finished',
+            needsOfficeReview: true
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(updatedWorkspace)
+      .mockResolvedValue(updatedWorkspace);
+    mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(updatedWorkspace.jobs[0]!);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
+      target: { value: 'finished' }
+    });
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appointmentId: 'appointment-1',
+          status: 'finished'
+        })
+      );
+    });
+    expect(await screen.findByText('Appointment marked finished. Office review may be needed.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getAllByText(/Office review/i).length).toBeGreaterThan(1);
+    });
+  });
 });

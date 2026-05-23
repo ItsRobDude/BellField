@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react';
-import type { JobsWorkspaceResponse } from '@/lib/operations-api';
+import type { AppointmentStatus, JobsWorkspaceResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildDispatchBoardModel,
@@ -21,9 +21,10 @@ type DispatchBoardPanelProps = {
   onViewDateChange?: (date: string) => void;
   onOpenInJobsPanel?: (jobId: string) => void;
   onSaveAppointmentSchedule?: (appointmentId: string, draft: DispatchScheduleDraft) => Promise<void>;
+  onUpdateAppointmentStatus?: (appointmentId: string, status: AppointmentStatus) => Promise<void>;
 };
 
-const appointmentStatusLabels: Record<DispatchAppointmentCard['status'], string> = {
+const appointmentStatusLabels: Record<AppointmentStatus, string> = {
   scheduled: 'Scheduled',
   confirmed: 'Confirmed',
   dispatched: 'Dispatched',
@@ -35,12 +36,25 @@ const appointmentStatusLabels: Record<DispatchAppointmentCard['status'], string>
   cancelled: 'Cancelled'
 };
 
+const appointmentStatusOptions: AppointmentStatus[] = [
+  'scheduled',
+  'confirmed',
+  'dispatched',
+  'onTheWay',
+  'arrived',
+  'working',
+  'finished',
+  'noAnswer',
+  'cancelled'
+];
+
 export function DispatchBoardPanel({
   jobsWorkspace,
   viewDate,
   onViewDateChange,
   onOpenInJobsPanel,
-  onSaveAppointmentSchedule
+  onSaveAppointmentSchedule,
+  onUpdateAppointmentStatus
 }: DispatchBoardPanelProps) {
   const effectiveViewDate = viewDate || getDateInputValue();
   const model = useMemo<DispatchBoardModel>(
@@ -164,15 +178,14 @@ export function DispatchBoardPanel({
               technicians={jobsWorkspace.technicians}
               onOpenInJobsPanel={onOpenInJobsPanel}
               onSaveAppointmentSchedule={onSaveAppointmentSchedule}
+              onUpdateAppointmentStatus={onUpdateAppointmentStatus}
               onClose={() => setSelectedAppointmentId(undefined)}
             />
           ) : (
             <div style={{ display: 'grid', gap: '0.5rem' }}>
               <h3 style={styles.subheading}>Detail drawer</h3>
               <p style={styles.tinyMuted}>Click an appointment card to review or change dispatch scheduling.</p>
-              <p style={styles.tinyMuted}>
-                Status edits remain in the jobs/appointments panel while board scheduling stabilizes.
-              </p>
+              <p style={styles.tinyMuted}>Status edits can be made from the drawer after a card is selected.</p>
             </div>
           )}
         </aside>
@@ -223,6 +236,7 @@ type DispatchDetailDrawerProps = {
   technicians: JobsWorkspaceResponse['technicians'];
   onOpenInJobsPanel?: (jobId: string) => void;
   onSaveAppointmentSchedule?: (appointmentId: string, draft: DispatchScheduleDraft) => Promise<void>;
+  onUpdateAppointmentStatus?: (appointmentId: string, status: AppointmentStatus) => Promise<void>;
   onClose: () => void;
 };
 
@@ -231,18 +245,24 @@ function DispatchDetailDrawer({
   technicians,
   onOpenInJobsPanel,
   onSaveAppointmentSchedule,
+  onUpdateAppointmentStatus,
   onClose
 }: DispatchDetailDrawerProps) {
   const [draft, setDraft] = useState<DispatchScheduleDraft>(() => createDraftFromCard(card));
+  const [statusDraft, setStatusDraft] = useState<AppointmentStatus>(card.status);
   const [isSaving, setIsSaving] = useState(false);
+  const [isSavingStatus, setIsSavingStatus] = useState(false);
   const hasCurrentTechnicianOption =
     !draft.technicianId || technicians.some((technician) => technician.id === draft.technicianId);
   const isUnchanged = isSameScheduleDraft(card, draft);
+  const isStatusUnchanged = statusDraft === card.status;
 
   useEffect(() => {
     setDraft(createDraftFromCard(card));
+    setStatusDraft(card.status);
     setIsSaving(false);
-  }, [card.appointmentId, card.scheduledDate, card.timeWindowLabel, card.technicianId]);
+    setIsSavingStatus(false);
+  }, [card.appointmentId, card.scheduledDate, card.timeWindowLabel, card.technicianId, card.status]);
 
   async function handleSave() {
     if (!onSaveAppointmentSchedule || isSaving || isUnchanged) {
@@ -255,6 +275,27 @@ function DispatchDetailDrawer({
       await onSaveAppointmentSchedule(card.appointmentId, draft);
     } finally {
       setIsSaving(false);
+    }
+  }
+
+  async function handleStatusSave() {
+    if (!onUpdateAppointmentStatus || isSavingStatus || isStatusUnchanged) {
+      return;
+    }
+
+    if (
+      statusDraft === 'cancelled' &&
+      !window.confirm('Cancel this appointment? It will leave the dispatch board after the workspace refreshes.')
+    ) {
+      return;
+    }
+
+    setIsSavingStatus(true);
+
+    try {
+      await onUpdateAppointmentStatus(card.appointmentId, statusDraft);
+    } finally {
+      setIsSavingStatus(false);
     }
   }
 
@@ -281,6 +322,33 @@ function DispatchDetailDrawer({
         />
         {card.finishOutcome ? <DrawerField label="Finish outcome" value={card.finishOutcome} /> : null}
       </dl>
+      <div style={dispatchEditGridStyle}>
+        <label style={editFieldLabelStyle}>
+          <span style={styles.tinyMuted}>Status</span>
+          <select
+            aria-label="Dispatch appointment status"
+            value={statusDraft}
+            onChange={(event) => setStatusDraft(event.target.value as AppointmentStatus)}
+            style={styles.input}
+          >
+            {appointmentStatusOptions.map((status) => (
+              <option key={status} value={status}>
+                {appointmentStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </label>
+        {onUpdateAppointmentStatus ? (
+          <button
+            type="button"
+            style={styles.button}
+            onClick={() => void handleStatusSave()}
+            disabled={isSavingStatus || isStatusUnchanged}
+          >
+            {isSavingStatus ? 'Saving status...' : 'Save status'}
+          </button>
+        ) : null}
+      </div>
       <div style={dispatchEditGridStyle}>
         <label style={editFieldLabelStyle}>
           <span style={styles.tinyMuted}>Date</span>

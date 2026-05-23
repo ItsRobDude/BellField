@@ -496,6 +496,28 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
+  async function handleDispatchStatusChange(appointmentId: string, status: AppointmentStatus) {
+    try {
+      setNoticeMessage(null);
+      await updateOfficeAppointmentStatus({ appointmentId, status, sessionToken, apiBaseUrl });
+      await refreshWorkspace();
+
+      if (status === 'cancelled') {
+        setNoticeMessage('Appointment cancelled. It is no longer shown on the dispatch board.');
+        return;
+      }
+
+      if (status === 'finished') {
+        setNoticeMessage('Appointment marked finished. Office review may be needed.');
+        return;
+      }
+
+      setNoticeMessage('Dispatch status updated.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update dispatch status.');
+    }
+  }
+
   async function handleSaveDispatchSchedule(appointmentId: string, draft: DispatchScheduleDraft) {
     const previousDispatchDate = dispatchViewDate;
 
@@ -660,6 +682,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onViewDateChange={handleDispatchViewDateChange}
         onOpenInJobsPanel={handleOpenDispatchJob}
         onSaveAppointmentSchedule={handleSaveDispatchSchedule}
+        onUpdateAppointmentStatus={handleDispatchStatusChange}
       />
 
       <JobsAppointmentsPanel
