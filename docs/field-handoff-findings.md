@@ -18,6 +18,8 @@ Behaviors backed by tests in `apps/field-mobile/src/modules/operations/__tests__
 - **Field cancel boundary** — the screen's `fieldAppointmentStatuses` list excludes `cancelled`, matching the backend's `ForbiddenException` on technician-initiated cancel.
 - **Field trust display helpers** — work order number, full location address, structured schedule display, finished-review acknowledgement, per-appointment queue badges, and office-change refresh summaries are covered by pure helper tests.
 - **Queue resolution controls** — conflicted/rejected local operations stay visible but are no longer replayed by ordinary `Sync Now` until the technician explicitly marks them for retry. The technician can also discard one conflicted/rejected local change after confirmation.
+- **Register entries** — technicians can add line-item register entries, edit existing register lines, and void existing register lines locally. Register operations use the same pending queue, conflict/rejected preservation, Sync Now, background drain, and local overlay model as notes/status/equipment.
+- **Background sync** — the technician workspace now runs an in-screen background drain loop while mounted, plus an active-app regain trigger. It avoids OS-level background fetch dependencies.
 
 ---
 
@@ -79,11 +81,11 @@ Cross-referenced against `docs/milestone-implementation-plan.md` §11 and `docs/
 | Local cached job/location/equipment data | Present via `expo-sqlite` store. |
 | Notes | Present. Queueable + replay-safe. |
 | Appointment statuses | Present. Field side excludes `cancelled`. |
-| Register entries | **Not present.** Finish review captures a single free-text reminder but no line-item register. |
+| Register entries | Present for field-mobile line creation/edit/void with offline queue replay. Finish review still keeps its separate free-text reminder. |
 | Equipment edits | Present. |
 | Estimate drafting foundations | **Not present.** |
 | Photo/video/file queueing | **Not present.** |
-| Background sync | Partial. `syncNow` is manual; there is no scheduled auto-sync loop. |
+| Background sync | Present as an in-screen mounted-workspace loop plus active-app regain trigger. No OS-level background fetch. |
 | Sync Now button | Present. |
 | Pending sync indicator | Present (quiet-by-default tone). |
 | Conflict flagging foundations | Present (conflict/rejected states with provenance). |
@@ -101,14 +103,14 @@ These are now pinned by tests and should stay true:
 - A network failure during `syncNow` leaves the entire queue untouched and only flips tone to alert via `lastSyncError`.
 - Merge helpers only mutate cache entries that exist locally — they never invent new cached jobs or equipment from a response.
 - Merge helpers strip `syncResult`/`warningMessages`/`history`/replacement links before folding into the snapshot.
-- `buildSuccessfulSyncMetadata` always clears `lastSyncError`, so a successful refresh recovers the indicator from alert → quiet.
+- `buildSuccessfulSyncMetadata` always clears `lastSyncError`, so a successful refresh recovers the indicator from alert -> quiet.
 
 ---
 
 ## Recommended next field lane
 
-1. **Register / media queueing.** Real Milestone 6 scope, currently absent.
-2. **Auto-sync loop.** Quiet background drain so technicians don't have to remember to press Sync Now.
-3. **Field dashboard/detail split.** Move the single long card toward the documented technician home/detail workflow once the data and sync trust surfaces are stable.
+1. **Media queueing/capture.** Real Milestone 6 scope, still absent on field-mobile.
+2. **Field dashboard/detail split.** Move the single long card toward the documented technician home/detail workflow once the data and sync trust surfaces are stable.
+3. **Estimate drafting foundations.** Still absent and should wait until register/media trust is stable.
 
 Each item is small enough to ship as its own lane and none of them require dispatch-model decisions to be settled first.

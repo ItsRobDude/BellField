@@ -2,7 +2,8 @@ import type {
   AppointmentFinishOutcome,
   EquipmentMutationResponse,
   FieldAssignedWorkResponse,
-  JobMutationResponse
+  JobMutationResponse,
+  RegisterEntrySummary
 } from '@/lib/operations-api';
 import type { AssignedWorkSnapshot, PendingOperation } from './field-sync-types';
 
@@ -20,6 +21,7 @@ export function applyPendingOperations(
     jobs: snapshot.jobs.map((job) => ({
       ...job,
       appointments: job.appointments.map((appointment) => ({ ...appointment })),
+      registerEntries: job.registerEntries?.map((entry) => ({ ...entry })),
       timeline: job.timeline.map((entry) => ({ ...entry }))
     })),
     locations: snapshot.locations.map((location) => ({
@@ -123,6 +125,90 @@ export function applyPendingOperations(
         )
       };
     }
+
+    if (operation.kind === 'registerEntryCreate') {
+      const localEntry = buildLocalRegisterEntry(operation, actorName);
+      nextSnapshot = {
+        ...nextSnapshot,
+        jobs: nextSnapshot.jobs.map((job) =>
+          job.id === operation.jobId
+            ? {
+                ...job,
+                registerEntries: [...(job.registerEntries ?? []), localEntry],
+                timeline: [
+                  ...job.timeline,
+                  {
+                    id: `${operation.id}-local-register`,
+                    occurredAt: operation.occurredAt,
+                    actorName,
+                    message: `Register entry saved locally: ${operation.description}.`,
+                    kind: 'registerEntryAdded'
+                  }
+                ]
+              }
+            : job
+        )
+      };
+    }
+
+    if (operation.kind === 'registerEntryEdit') {
+      nextSnapshot = {
+        ...nextSnapshot,
+        jobs: nextSnapshot.jobs.map((job) =>
+          job.id === operation.jobId
+            ? {
+                ...job,
+                registerEntries: (job.registerEntries ?? []).map((entry) =>
+                  entry.id === operation.registerEntryId ? applyRegisterEntryEdit(entry, operation) : entry
+                ),
+                timeline: [
+                  ...job.timeline,
+                  {
+                    id: `${operation.id}-local-register-edit`,
+                    occurredAt: operation.occurredAt,
+                    actorName,
+                    message: `Register entry edit saved locally: ${operation.description ?? operation.registerEntryId}.`,
+                    kind: 'registerEntryEdited'
+                  }
+                ]
+              }
+            : job
+        )
+      };
+    }
+
+    if (operation.kind === 'registerEntryVoid') {
+      nextSnapshot = {
+        ...nextSnapshot,
+        jobs: nextSnapshot.jobs.map((job) =>
+          job.id === operation.jobId
+            ? {
+                ...job,
+                registerEntries: (job.registerEntries ?? []).map((entry) =>
+                  entry.id === operation.registerEntryId
+                    ? {
+                        ...entry,
+                        isVoid: true,
+                        voidReason: operation.reason,
+                        updatedAt: operation.occurredAt
+                      }
+                    : entry
+                ),
+                timeline: [
+                  ...job.timeline,
+                  {
+                    id: `${operation.id}-local-register-void`,
+                    occurredAt: operation.occurredAt,
+                    actorName,
+                    message: `Register entry void saved locally${operation.reason ? `: ${operation.reason}` : '.'}`,
+                    kind: 'registerEntryVoided'
+                  }
+                ]
+              }
+            : job
+        )
+      };
+    }
   }
 
   return nextSnapshot;
@@ -193,6 +279,15 @@ export function findEquipmentBaseUpdatedAt(
   return snapshot?.equipment.find((record) => record.id === equipmentId)?.updatedAt;
 }
 
+export function findRegisterEntryBaseUpdatedAt(
+  snapshot: AssignedWorkSnapshot | null,
+  registerEntryId: string
+): string | undefined {
+  return snapshot?.jobs
+    .flatMap((job) => job.registerEntries ?? [])
+    .find((registerEntry) => registerEntry.id === registerEntryId)?.updatedAt;
+}
+
 export function formatFinishOutcome(value: AppointmentFinishOutcome): string {
   if (value === 'followUpNeeded') {
     return 'Follow-up needed';
@@ -225,5 +320,67 @@ export function formatPendingOperation(operation: PendingOperation): string {
     return `Finish review queued: ${formatFinishOutcome(operation.finishOutcome)} (${stateSuffix})`;
   }
 
+  if (operation.kind === 'registerEntryCreate') {
+    return `Register entry queued: ${operation.description} (${stateSuffix})`;
+  }
+
+  if (operation.kind === 'registerEntryEdit') {
+    return `Register entry edit queued: ${operation.description ?? operation.registerEntryId} (${stateSuffix})`;
+  }
+
+  if (operation.kind === 'registerEntryVoid') {
+    return `Register entry void queued${operation.reason ? `: ${operation.reason}` : ''} (${stateSuffix})`;
+  }
+
   return `Equipment update queued: ${operation.status} (${stateSuffix})`;
+}
+
+type RegisterEntryCreateOperation = Extract<PendingOperation, { kind: 'registerEntryCreate' }>;
+type RegisterEntryEditOperation = Extract<PendingOperation, { kind: 'registerEntryEdit' }>;
+
+function buildLocalRegisterEntry(
+  operation: RegisterEntryCreateOperation,
+  actorName: string
+): RegisterEntrySummary {
+  return {
+    id: `${operation.id}-local`,
+    jobId: operation.jobId,
+    appointmentId: operation.appointmentId,
+    kind: operation.registerEntryKind,
+    description: operation.description,
+    quantity: operation.quantity,
+    unitOfMeasure: operation.unitOfMeasure,
+    unitPrice: operation.unitPrice,
+    totalAmount: operation.totalAmount,
+    partNumber: operation.partNumber,
+    inventorySourceLabel: operation.inventorySourceLabel,
+    capturedByEmployeeId: 'local-device',
+    capturedByName: actorName,
+    capturedAt: operation.occurredAt,
+    isVoid: false,
+    createdAt: operation.occurredAt,
+    updatedAt: operation.occurredAt
+  };
+}
+
+function applyRegisterEntryEdit(
+  entry: RegisterEntrySummary,
+  operation: RegisterEntryEditOperation
+): RegisterEntrySummary {
+  return {
+    ...entry,
+    appointmentId: operation.appointmentId !== undefined ? operation.appointmentId ?? undefined : entry.appointmentId,
+    kind: operation.registerEntryKind ?? entry.kind,
+    description: operation.description ?? entry.description,
+    quantity: operation.quantity ?? entry.quantity,
+    unitOfMeasure: operation.unitOfMeasure !== undefined ? operation.unitOfMeasure || undefined : entry.unitOfMeasure,
+    unitPrice: operation.unitPrice !== undefined ? operation.unitPrice ?? undefined : entry.unitPrice,
+    totalAmount: operation.totalAmount ?? entry.totalAmount,
+    partNumber: operation.partNumber !== undefined ? operation.partNumber || undefined : entry.partNumber,
+    inventorySourceLabel:
+      operation.inventorySourceLabel !== undefined
+        ? operation.inventorySourceLabel || undefined
+        : entry.inventorySourceLabel,
+    updatedAt: operation.occurredAt
+  };
 }

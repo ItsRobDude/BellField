@@ -7,7 +7,8 @@ import type {
   FieldAssignedWorkResponse,
   JobMutationResponse,
   JobSummary,
-  LocationSummary
+  LocationSummary,
+  RegisterEntrySummary
 } from '@bellfield/contracts';
 import {
   applyPendingOperations,
@@ -15,6 +16,7 @@ import {
   findEquipmentBaseUpdatedAt,
   findJobBaseUpdatedAt,
   findJobIdForAppointment,
+  findRegisterEntryBaseUpdatedAt,
   formatFinishOutcome,
   formatPendingOperation,
   mergeEquipmentMutationIntoAssignedWork,
@@ -30,6 +32,29 @@ function buildAppointment(overrides: Partial<AppointmentSummary> = {}): Appointm
     jobId: 'job-1',
     status: 'scheduled',
     needsOfficeReview: false,
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp,
+    ...overrides
+  };
+}
+
+function buildRegisterEntry(overrides: Partial<RegisterEntrySummary> = {}): RegisterEntrySummary {
+  return {
+    id: 'register-1',
+    jobId: 'job-1',
+    appointmentId: 'appt-1',
+    kind: 'part',
+    description: 'Contactor',
+    quantity: 1,
+    unitOfMeasure: 'each',
+    unitPrice: 125,
+    totalAmount: 125,
+    partNumber: 'C-100',
+    inventorySourceLabel: 'truck',
+    capturedByEmployeeId: 'employee-1',
+    capturedByName: 'Taylor Tech',
+    capturedAt: baseTimestamp,
+    isVoid: false,
     createdAt: baseTimestamp,
     updatedAt: baseTimestamp,
     ...overrides
@@ -52,6 +77,7 @@ function buildJob(overrides: Partial<JobSummary> = {}): JobSummary {
     needsScheduling: false,
     needsOfficeReview: false,
     appointments: [buildAppointment()],
+    registerEntries: [],
     timeline: [],
     createdAt: baseTimestamp,
     updatedAt: baseTimestamp,
@@ -229,6 +255,95 @@ describe('applyPendingOperations', () => {
     });
   });
 
+  it('adds a queued register entry to the local job view', () => {
+    const snapshot = buildSnapshot();
+    const operation: PendingOperation = {
+      id: 'op-register',
+      kind: 'registerEntryCreate',
+      jobId: 'job-1',
+      appointmentId: 'appt-1',
+      registerEntryKind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      unitOfMeasure: 'each',
+      unitPrice: 125,
+      totalAmount: 125,
+      partNumber: 'C-100',
+      inventorySourceLabel: 'truck',
+      occurredAt: '2026-05-22T13:30:00.000Z',
+      state: 'pending'
+    };
+
+    const result = applyPendingOperations(snapshot, [operation], 'Taylor Tech');
+    const registerEntry = result?.jobs[0]?.registerEntries?.[0];
+
+    expect(registerEntry).toMatchObject({
+      id: 'op-register-local',
+      description: 'Contactor',
+      totalAmount: 125,
+      capturedByName: 'Taylor Tech'
+    });
+    expect(result?.jobs[0]?.timeline[0]?.kind).toBe('registerEntryAdded');
+    expect(snapshot.jobs[0]?.registerEntries).toEqual([]);
+  });
+
+  it('applies queued register edits without dropping untouched fields', () => {
+    const snapshot = buildSnapshot({
+      jobs: [buildJob({ registerEntries: [buildRegisterEntry()] })]
+    });
+    const operation: PendingOperation = {
+      id: 'op-register-edit',
+      kind: 'registerEntryEdit',
+      jobId: 'job-1',
+      registerEntryId: 'register-1',
+      appointmentId: null,
+      description: 'Contactor and wiring repair',
+      quantity: 2,
+      unitPrice: null,
+      totalAmount: 190,
+      occurredAt: '2026-05-22T14:00:00.000Z',
+      state: 'pending'
+    };
+
+    const result = applyPendingOperations(snapshot, [operation], 'Taylor Tech');
+    const registerEntry = result?.jobs[0]?.registerEntries?.[0];
+
+    expect(registerEntry).toMatchObject({
+      appointmentId: undefined,
+      description: 'Contactor and wiring repair',
+      quantity: 2,
+      unitPrice: undefined,
+      totalAmount: 190,
+      partNumber: 'C-100'
+    });
+    expect(result?.jobs[0]?.timeline[0]?.kind).toBe('registerEntryEdited');
+  });
+
+  it('marks queued register voids locally while preserving the entry', () => {
+    const snapshot = buildSnapshot({
+      jobs: [buildJob({ registerEntries: [buildRegisterEntry()] })]
+    });
+    const operation: PendingOperation = {
+      id: 'op-register-void',
+      kind: 'registerEntryVoid',
+      jobId: 'job-1',
+      registerEntryId: 'register-1',
+      reason: 'Duplicate line',
+      occurredAt: '2026-05-22T14:30:00.000Z',
+      state: 'pending'
+    };
+
+    const result = applyPendingOperations(snapshot, [operation], 'Taylor Tech');
+    const registerEntry = result?.jobs[0]?.registerEntries?.[0];
+
+    expect(registerEntry).toMatchObject({
+      id: 'register-1',
+      isVoid: true,
+      voidReason: 'Duplicate line'
+    });
+    expect(result?.jobs[0]?.timeline[0]?.kind).toBe('registerEntryVoided');
+  });
+
   it('still applies pending edits even when sync marks them conflict or rejected (work is preserved)', () => {
     const snapshot = buildSnapshot();
     const operations: PendingOperation[] = [
@@ -269,6 +384,7 @@ describe('applied sync result merging', () => {
       ...buildJob({
         summary: 'No cooling - compressor running',
         appointments: [buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })],
+        registerEntries: [buildRegisterEntry({ description: 'Diagnostic labor', kind: 'labor', totalAmount: 95 })],
         timeline: [
           {
             id: 'timeline-1',
@@ -287,6 +403,7 @@ describe('applied sync result merging', () => {
 
     expect(result.jobs[0]?.summary).toBe('No cooling - compressor running');
     expect(result.jobs[0]?.appointments[0]?.status).toBe('working');
+    expect(result.jobs[0]?.registerEntries?.[0]?.description).toBe('Diagnostic labor');
     expect(result.jobs[0]?.timeline[0]?.message).toBe('Filter cleaned.');
     expect(snapshot.jobs[0]?.summary).toBe('No cooling');
   });
@@ -482,17 +599,21 @@ describe('findJobIdForAppointment / base lookups', () => {
   });
 
   it('returns the snapshot updatedAt timestamps for known records', () => {
-    const snapshot = buildSnapshot();
+    const snapshot = buildSnapshot({
+      jobs: [buildJob({ registerEntries: [buildRegisterEntry({ updatedAt: '2026-05-22T12:00:00.000Z' })] })]
+    });
 
     expect(findAppointmentBaseUpdatedAt(snapshot, 'appt-1')).toBe(baseTimestamp);
     expect(findJobBaseUpdatedAt(snapshot, 'job-1')).toBe(baseTimestamp);
     expect(findEquipmentBaseUpdatedAt(snapshot, 'equipment-1')).toBe(baseTimestamp);
+    expect(findRegisterEntryBaseUpdatedAt(snapshot, 'register-1')).toBe('2026-05-22T12:00:00.000Z');
   });
 
   it('returns undefined when the snapshot is null', () => {
     expect(findAppointmentBaseUpdatedAt(null, 'appt-1')).toBeUndefined();
     expect(findJobBaseUpdatedAt(null, 'job-1')).toBeUndefined();
     expect(findEquipmentBaseUpdatedAt(null, 'equipment-1')).toBeUndefined();
+    expect(findRegisterEntryBaseUpdatedAt(null, 'register-1')).toBeUndefined();
   });
 });
 
@@ -526,9 +647,32 @@ describe('formatPendingOperation', () => {
       state: 'rejected',
       lastResultMessage: 'Permission denied.'
     };
+    const registerCreate: PendingOperation = {
+      id: 'op-register',
+      kind: 'registerEntryCreate',
+      jobId: 'job-1',
+      registerEntryKind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      totalAmount: 125,
+      occurredAt: baseTimestamp,
+      state: 'pending'
+    };
+    const registerVoid: PendingOperation = {
+      id: 'op-register-void',
+      kind: 'registerEntryVoid',
+      jobId: 'job-1',
+      registerEntryId: 'register-1',
+      reason: 'Duplicate',
+      occurredAt: baseTimestamp,
+      state: 'conflict',
+      lastResultMessage: 'Office already changed this line.'
+    };
 
     expect(formatPendingOperation(pending)).toContain('pending sync');
     expect(formatPendingOperation(conflict)).toContain('conflict: Office already advanced this appointment.');
     expect(formatPendingOperation(rejected)).toContain('rejected: Permission denied.');
+    expect(formatPendingOperation(registerCreate)).toContain('Register entry queued: Contactor');
+    expect(formatPendingOperation(registerVoid)).toContain('conflict: Office already changed this line.');
   });
 });

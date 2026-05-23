@@ -16,14 +16,18 @@ import {
 import {
   addFieldJobNote,
   createFieldEquipment,
+  createFieldRegisterEntry,
   getAssignedFieldWork,
   linkFieldEquipmentReplacement,
   updateFieldAppointmentStatus,
   updateFieldEquipment,
+  updateFieldRegisterEntry,
+  voidFieldRegisterEntry,
   type AppointmentFinishOutcome,
   type AppointmentStatus,
   type EquipmentStatus,
-  type FieldAssignedWorkResponse
+  type FieldAssignedWorkResponse,
+  type RegisterEntryKind
 } from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import {
@@ -43,6 +47,7 @@ import {
   findAppointmentBaseUpdatedAt,
   findEquipmentBaseUpdatedAt,
   findJobBaseUpdatedAt,
+  findRegisterEntryBaseUpdatedAt,
   formatFinishOutcome,
   formatPendingOperation,
   mergeEquipmentMutationIntoAssignedWork,
@@ -106,6 +111,18 @@ type EquipmentCreateDraft = {
   notes: string;
 };
 
+type RegisterEntryDraft = {
+  appointmentId: string;
+  registerEntryKind: RegisterEntryKind;
+  description: string;
+  quantity: string;
+  unitOfMeasure: string;
+  unitPrice: string;
+  totalAmount: string;
+  partNumber: string;
+  inventorySourceLabel: string;
+};
+
 type FinishReviewState = {
   jobId: string;
   appointmentId: string;
@@ -127,6 +144,8 @@ const fieldAppointmentStatuses: AppointmentStatus[] = [
   'finished',
   'noAnswer'
 ];
+
+const registerEntryKinds: RegisterEntryKind[] = ['labor', 'serviceItem', 'part', 'membership', 'other'];
 
 const defaultSyncMetadata: SyncMetadata = {
   lastSuccessfulSyncAt: null,
@@ -154,6 +173,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [equipmentDrafts, setEquipmentDrafts] = useState<Record<string, EquipmentDraft>>({});
   const [equipmentCreateDrafts, setEquipmentCreateDrafts] = useState<Record<string, EquipmentCreateDraft>>({});
+  const [registerCreateDrafts, setRegisterCreateDrafts] = useState<Record<string, RegisterEntryDraft>>({});
+  const [registerEditDrafts, setRegisterEditDrafts] = useState<Record<string, RegisterEntryDraft>>({});
   const [replacementSelections, setReplacementSelections] = useState<Record<string, string>>({});
   const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
   const [officeChangeMessages, setOfficeChangeMessages] = useState<string[]>([]);
@@ -291,6 +312,167 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the note locally.');
+    }
+  }
+
+  function updateRegisterCreateDraft(jobId: string, patch: Partial<RegisterEntryDraft>) {
+    setRegisterCreateDrafts((current) => ({
+      ...current,
+      [jobId]: {
+        ...(current[jobId] ?? createRegisterEntryDraft()),
+        ...patch
+      }
+    }));
+  }
+
+  function updateRegisterEditDraft(
+    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number],
+    patch: Partial<RegisterEntryDraft>
+  ) {
+    setRegisterEditDrafts((current) => ({
+      ...current,
+      [entry.id]: {
+        ...(current[entry.id] ?? createRegisterEntryDraft(entry)),
+        ...patch
+      }
+    }));
+  }
+
+  async function queueRegisterEntryCreate(job: FieldAssignedWorkResponse['jobs'][number]) {
+    const draft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
+    const parsed = parseRegisterEntryDraft(draft, false);
+
+    if (!parsed.ok) {
+      setErrorMessage(parsed.message);
+      return;
+    }
+
+    const operation: PendingOperation = {
+      id: `${job.id}-register-${Date.now()}`,
+      kind: 'registerEntryCreate',
+      jobId: job.id,
+      appointmentId: draft.appointmentId || undefined,
+      registerEntryKind: draft.registerEntryKind,
+      description: parsed.value.description,
+      quantity: parsed.value.quantity,
+      unitOfMeasure: parsed.value.unitOfMeasure,
+      unitPrice: parsed.value.unitPrice ?? undefined,
+      totalAmount: parsed.value.totalAmount,
+      partNumber: parsed.value.partNumber,
+      inventorySourceLabel: parsed.value.inventorySourceLabel,
+      occurredAt: new Date().toISOString(),
+      baseUpdatedAt: findJobBaseUpdatedAt(serverSnapshot, job.id),
+      state: 'pending'
+    };
+
+    try {
+      await queuePendingOperation(operation);
+      setPendingOperations((current) => [...current, operation]);
+      setRegisterCreateDrafts((current) => ({
+        ...current,
+        [job.id]: createRegisterEntryDraft({ appointmentId: draft.appointmentId || undefined })
+      }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save the register entry locally.');
+    }
+  }
+
+  async function queueRegisterEntryEdit(
+    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]
+  ) {
+    const draft = registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
+    const parsed = parseRegisterEntryDraft(draft, true);
+
+    if (!parsed.ok) {
+      setErrorMessage(parsed.message);
+      return;
+    }
+
+    const operation: PendingOperation = {
+      id: `${entry.id}-register-edit-${Date.now()}`,
+      kind: 'registerEntryEdit',
+      jobId: entry.jobId,
+      registerEntryId: entry.id,
+      appointmentId: draft.appointmentId || null,
+      registerEntryKind: draft.registerEntryKind,
+      description: parsed.value.description,
+      quantity: parsed.value.quantity,
+      unitOfMeasure: parsed.value.unitOfMeasure,
+      unitPrice: parsed.value.unitPrice,
+      totalAmount: parsed.value.totalAmount,
+      partNumber: parsed.value.partNumber,
+      inventorySourceLabel: parsed.value.inventorySourceLabel,
+      occurredAt: new Date().toISOString(),
+      baseUpdatedAt: findRegisterEntryBaseUpdatedAt(serverSnapshot, entry.id),
+      state: 'pending'
+    };
+
+    try {
+      await queuePendingOperation(operation);
+      setPendingOperations((current) => [
+        ...current.filter(
+          (pendingOperation) =>
+            !(
+              (pendingOperation.kind === 'registerEntryEdit' ||
+                pendingOperation.kind === 'registerEntryVoid') &&
+              pendingOperation.registerEntryId === entry.id
+            )
+        ),
+        operation
+      ]);
+      setRegisterEditDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[entry.id];
+        return nextDrafts;
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save the register edit locally.');
+    }
+  }
+
+  function confirmVoidRegisterEntry(
+    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]
+  ) {
+    Alert.alert('Void register entry?', 'This keeps the line in job history and queues a void for office sync.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Void locally',
+        style: 'destructive',
+        onPress: () => {
+          void queueRegisterEntryVoid(entry);
+        }
+      }
+    ]);
+  }
+
+  async function queueRegisterEntryVoid(
+    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]
+  ) {
+    const operation: PendingOperation = {
+      id: `${entry.id}-register-void-${Date.now()}`,
+      kind: 'registerEntryVoid',
+      jobId: entry.jobId,
+      registerEntryId: entry.id,
+      occurredAt: new Date().toISOString(),
+      baseUpdatedAt: findRegisterEntryBaseUpdatedAt(serverSnapshot, entry.id),
+      state: 'pending'
+    };
+
+    try {
+      await queuePendingOperation(operation);
+      setPendingOperations((current) => [
+        ...current.filter(
+          (pendingOperation) =>
+            !(
+              (pendingOperation.kind === 'registerEntryEdit' ||
+                pendingOperation.kind === 'registerEntryVoid') &&
+              pendingOperation.registerEntryId === entry.id
+            )
+        ),
+        operation
+      ]);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to void the register entry locally.');
     }
   }
 
@@ -792,6 +974,130 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             }
           }
 
+          if (operation.kind === 'registerEntryCreate') {
+            const response = await createFieldRegisterEntry({
+              sessionToken,
+              apiBaseUrl,
+              jobId: operation.jobId,
+              appointmentId: operation.appointmentId,
+              kind: operation.registerEntryKind,
+              description: operation.description,
+              quantity: operation.quantity,
+              unitOfMeasure: operation.unitOfMeasure,
+              unitPrice: operation.unitPrice,
+              totalAmount: operation.totalAmount,
+              partNumber: operation.partNumber,
+              inventorySourceLabel: operation.inventorySourceLabel,
+              occurredAt: operation.occurredAt,
+              baseUpdatedAt: operation.baseUpdatedAt
+            });
+
+            if (response.syncResult?.status === 'conflict') {
+              await updatePendingOperationState(operation.id, 'conflict', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'conflict', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else if (response.syncResult?.status === 'rejected') {
+              await updatePendingOperationState(operation.id, 'rejected', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'rejected', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else {
+              await preserveAppliedOperation(
+                operation.id,
+                mergeJobMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
+            }
+          }
+
+          if (operation.kind === 'registerEntryEdit') {
+            const response = await updateFieldRegisterEntry({
+              sessionToken,
+              apiBaseUrl,
+              registerEntryId: operation.registerEntryId,
+              appointmentId: operation.appointmentId,
+              kind: operation.registerEntryKind,
+              description: operation.description,
+              quantity: operation.quantity,
+              unitOfMeasure: operation.unitOfMeasure,
+              unitPrice: operation.unitPrice,
+              totalAmount: operation.totalAmount,
+              partNumber: operation.partNumber,
+              inventorySourceLabel: operation.inventorySourceLabel,
+              occurredAt: operation.occurredAt,
+              baseUpdatedAt: operation.baseUpdatedAt
+            });
+
+            if (response.syncResult?.status === 'conflict') {
+              await updatePendingOperationState(operation.id, 'conflict', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'conflict', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else if (response.syncResult?.status === 'rejected') {
+              await updatePendingOperationState(operation.id, 'rejected', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'rejected', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else {
+              await preserveAppliedOperation(
+                operation.id,
+                mergeJobMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
+            }
+          }
+
+          if (operation.kind === 'registerEntryVoid') {
+            const response = await voidFieldRegisterEntry({
+              sessionToken,
+              apiBaseUrl,
+              registerEntryId: operation.registerEntryId,
+              reason: operation.reason,
+              occurredAt: operation.occurredAt,
+              baseUpdatedAt: operation.baseUpdatedAt
+            });
+
+            if (response.syncResult?.status === 'conflict') {
+              await updatePendingOperationState(operation.id, 'conflict', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'conflict', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else if (response.syncResult?.status === 'rejected') {
+              await updatePendingOperationState(operation.id, 'rejected', response.syncResult.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id
+                    ? { ...entry, state: 'rejected', lastResultMessage: response.syncResult?.message }
+                    : entry
+                )
+              );
+            } else {
+              await preserveAppliedOperation(
+                operation.id,
+                mergeJobMutationIntoAssignedWork(currentServerSnapshot, response)
+              );
+            }
+          }
+
           if (operation.kind === 'equipmentUpdate') {
             const response = await updateFieldEquipment({
               sessionToken,
@@ -1252,6 +1558,190 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                   </Pressable>
                 </View>
 
+                <View style={styles.block}>
+                  <Text style={styles.sectionTitleSmall}>Register entries</Text>
+                  {(job.registerEntries ?? []).length === 0 ? (
+                    <Text style={styles.summaryText}>No register lines saved for this job yet.</Text>
+                  ) : (
+                    (job.registerEntries ?? []).map((entry) => {
+                      const editDraft = registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
+                      const isLocalEntry = isLocalRegisterEntry(entry);
+
+                      return (
+                        <View key={entry.id} style={styles.queueItem}>
+                          <Text style={styles.summaryText}>
+                            {formatRegisterEntryKind(entry.kind)} - {entry.description} - {entry.quantity}
+                            {entry.unitOfMeasure ? ` ${entry.unitOfMeasure}` : ''} - {formatCurrency(entry.totalAmount)}
+                            {entry.isVoid ? ' - voided' : ''}
+                          </Text>
+                          {entry.voidReason ? <Text style={styles.pendingText}>Void reason: {entry.voidReason}</Text> : null}
+                          {isLocalEntry ? (
+                            <Text style={styles.pendingText}>
+                              This line is queued locally. Wait for sync or discard it from the pending queue before changing it.
+                            </Text>
+                          ) : null}
+                          {!entry.isVoid && !isLocalEntry ? (
+                            <>
+                              <View style={styles.actionRow}>
+                                {registerEntryKinds.map((entryKind) => (
+                                  <Pressable
+                                    key={entryKind}
+                                    onPress={() => updateRegisterEditDraft(entry, { registerEntryKind: entryKind })}
+                                    style={styles.tagButton}
+                                  >
+                                    <Text style={styles.tagButtonText}>{formatRegisterEntryKind(entryKind)}</Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                              <TextInput
+                                value={editDraft.description}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { description: value })}
+                                placeholder="Description"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={editDraft.quantity}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { quantity: value })}
+                                keyboardType="decimal-pad"
+                                placeholder="Quantity"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={editDraft.unitOfMeasure}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { unitOfMeasure: value })}
+                                placeholder="Unit"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={editDraft.unitPrice}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { unitPrice: value })}
+                                keyboardType="decimal-pad"
+                                placeholder="Unit price"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={editDraft.totalAmount}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { totalAmount: value })}
+                                keyboardType="decimal-pad"
+                                placeholder="Total amount"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={editDraft.partNumber}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { partNumber: value })}
+                                placeholder="Part number"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={editDraft.inventorySourceLabel}
+                                onChangeText={(value) => updateRegisterEditDraft(entry, { inventorySourceLabel: value })}
+                                placeholder="Source label"
+                                style={styles.input}
+                              />
+                              <View style={styles.actionRow}>
+                                <Pressable onPress={() => void queueRegisterEntryEdit(entry)} style={styles.secondaryButton}>
+                                  <Text style={styles.secondaryButtonText}>Save register edit locally</Text>
+                                </Pressable>
+                                <Pressable onPress={() => confirmVoidRegisterEntry(entry)} style={styles.dangerButton}>
+                                  <Text style={styles.dangerButtonText}>Void line locally</Text>
+                                </Pressable>
+                              </View>
+                            </>
+                          ) : null}
+                        </View>
+                      );
+                    })
+                  )}
+
+                  {(() => {
+                    const createDraft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
+
+                    return (
+                      <View style={styles.reviewCard}>
+                        <Text style={styles.sectionTitleSmall}>Add register line</Text>
+                        <View style={styles.actionRow}>
+                          {registerEntryKinds.map((entryKind) => (
+                            <Pressable
+                              key={entryKind}
+                              onPress={() => updateRegisterCreateDraft(job.id, { registerEntryKind: entryKind })}
+                              style={styles.tagButton}
+                            >
+                              <Text style={styles.tagButtonText}>{formatRegisterEntryKind(entryKind)}</Text>
+                            </Pressable>
+                          ))}
+                        </View>
+                        {job.appointments.length > 0 ? (
+                          <View style={styles.actionRow}>
+                            <Pressable
+                              onPress={() => updateRegisterCreateDraft(job.id, { appointmentId: '' })}
+                              style={styles.tagButton}
+                            >
+                              <Text style={styles.tagButtonText}>Job-level</Text>
+                            </Pressable>
+                            {job.appointments.map((appointment) => (
+                              <Pressable
+                                key={appointment.id}
+                                onPress={() => updateRegisterCreateDraft(job.id, { appointmentId: appointment.id })}
+                                style={styles.tagButton}
+                              >
+                                <Text style={styles.tagButtonText}>{formatAppointmentSchedule(appointment)}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                        ) : null}
+                        <TextInput
+                          value={createDraft.description}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { description: value })}
+                          placeholder="Description"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.quantity}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { quantity: value })}
+                          keyboardType="decimal-pad"
+                          placeholder="Quantity"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.unitOfMeasure}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { unitOfMeasure: value })}
+                          placeholder="Unit"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.unitPrice}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { unitPrice: value })}
+                          keyboardType="decimal-pad"
+                          placeholder="Unit price"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.totalAmount}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { totalAmount: value })}
+                          keyboardType="decimal-pad"
+                          placeholder="Total amount"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.partNumber}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { partNumber: value })}
+                          placeholder="Part number"
+                          style={styles.input}
+                        />
+                        <TextInput
+                          value={createDraft.inventorySourceLabel}
+                          onChangeText={(value) => updateRegisterCreateDraft(job.id, { inventorySourceLabel: value })}
+                          placeholder="Source label"
+                          style={styles.input}
+                        />
+                        <Pressable onPress={() => void queueRegisterEntryCreate(job)} style={styles.secondaryButton}>
+                          <Text style={styles.secondaryButtonText}>Save register line locally</Text>
+                        </Pressable>
+                      </View>
+                    );
+                  })()}
+                </View>
+
                 {equipment.map((record) => (
                   <View key={record.id} style={styles.block}>
                     {(() => {
@@ -1507,6 +1997,74 @@ function createEquipmentCreateDraft(): EquipmentCreateDraft {
   };
 }
 
+function createRegisterEntryDraft(
+  entry?: Partial<NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]>
+): RegisterEntryDraft {
+  return {
+    appointmentId: entry?.appointmentId ?? '',
+    registerEntryKind: entry?.kind ?? 'part',
+    description: entry?.description ?? '',
+    quantity: entry?.quantity !== undefined ? String(entry.quantity) : '1',
+    unitOfMeasure: entry?.unitOfMeasure ?? 'each',
+    unitPrice: entry?.unitPrice !== undefined ? String(entry.unitPrice) : '',
+    totalAmount: entry?.totalAmount !== undefined ? String(entry.totalAmount) : '',
+    partNumber: entry?.partNumber ?? '',
+    inventorySourceLabel: entry?.inventorySourceLabel ?? ''
+  };
+}
+
+function parseRegisterEntryDraft(
+  draft: RegisterEntryDraft,
+  allowClearedUnitPrice: boolean
+):
+  | {
+      ok: true;
+      value: {
+        description: string;
+        quantity: number;
+        unitOfMeasure?: string;
+        unitPrice?: number | null;
+        totalAmount: number;
+        partNumber?: string;
+        inventorySourceLabel?: string;
+      };
+    }
+  | { ok: false; message: string } {
+  const description = draft.description.trim();
+  const quantity = Number(draft.quantity);
+  const unitPrice = draft.unitPrice.trim() ? Number(draft.unitPrice) : allowClearedUnitPrice ? null : undefined;
+  const totalAmount = Number(draft.totalAmount);
+
+  if (!description) {
+    return { ok: false, message: 'Register entry description is required.' };
+  }
+
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return { ok: false, message: 'Register entry quantity must be greater than zero.' };
+  }
+
+  if (unitPrice !== undefined && unitPrice !== null && (!Number.isFinite(unitPrice) || unitPrice < 0)) {
+    return { ok: false, message: 'Register entry unit price cannot be negative.' };
+  }
+
+  if (!Number.isFinite(totalAmount) || totalAmount < 0) {
+    return { ok: false, message: 'Register entry total amount cannot be negative.' };
+  }
+
+  return {
+    ok: true,
+    value: {
+      description,
+      quantity,
+      unitOfMeasure: draft.unitOfMeasure.trim() || undefined,
+      unitPrice,
+      totalAmount,
+      partNumber: draft.partNumber.trim() || undefined,
+      inventorySourceLabel: draft.inventorySourceLabel.trim() || undefined
+    }
+  };
+}
+
 function formatAppointmentStatusLabel(status: AppointmentStatus): string {
   if (status === 'onTheWay') {
     return 'on the way';
@@ -1517,6 +2075,24 @@ function formatAppointmentStatusLabel(status: AppointmentStatus): string {
   }
 
   return status;
+}
+
+function formatRegisterEntryKind(kind: RegisterEntryKind): string {
+  if (kind === 'serviceItem') {
+    return 'Service item';
+  }
+
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function formatCurrency(value: number): string {
+  return `$${value.toFixed(2)}`;
+}
+
+function isLocalRegisterEntry(
+  entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]
+): boolean {
+  return entry.capturedByEmployeeId === 'local-device' || entry.id.endsWith('-local');
 }
 
 const styles = StyleSheet.create({

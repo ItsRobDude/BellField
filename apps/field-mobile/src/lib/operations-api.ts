@@ -1,6 +1,7 @@
 import type {
   AppointmentFinishOutcome,
   AppointmentStatus,
+  CreateRegisterEntryRequest,
   CreateEquipmentRequest,
   EquipmentMutationResponse,
   EquipmentSummary,
@@ -8,6 +9,8 @@ import type {
   FieldAssignedWorkResponse,
   JobMutationResponse,
   LinkEquipmentReplacementRequest,
+  RegisterEntryKind,
+  RegisterEntrySummary,
   SyncResult
 } from '@bellfield/contracts';
 import { resolveFieldApiBaseUrl } from './api-base-url';
@@ -20,6 +23,8 @@ export type {
   EquipmentStatus,
   FieldAssignedWorkResponse,
   JobMutationResponse,
+  RegisterEntryKind,
+  RegisterEntrySummary,
   SyncResult
 };
 
@@ -98,6 +103,76 @@ export async function addFieldJobNote(input: {
       note: input.note,
       occurredAt: input.occurredAt,
       baseUpdatedAt: input.baseUpdatedAt,
+      syncSource: 'field-save-queue'
+    })
+  });
+}
+
+export async function createFieldRegisterEntry(
+  input: CreateRegisterEntryRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    jobId: string;
+  }
+) {
+  const { sessionToken, apiBaseUrl, jobId, ...payload } = input;
+
+  return requestJson<JobMutationResponse>(`/operations/jobs/${jobId}/register-entries`, {
+    sessionToken,
+    apiBaseUrl,
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
+      syncSource: 'field-save-queue'
+    })
+  });
+}
+
+export async function updateFieldRegisterEntry(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  registerEntryId: string;
+  appointmentId?: string | null;
+  kind?: RegisterEntryKind;
+  description?: string;
+  quantity?: number;
+  unitOfMeasure?: string;
+  unitPrice?: number | null;
+  totalAmount?: number;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  occurredAt?: string;
+  baseUpdatedAt?: string;
+}) {
+  const { sessionToken, apiBaseUrl, registerEntryId, ...payload } = input;
+
+  return requestJson<JobMutationResponse>(`/operations/jobs/register-entries/${registerEntryId}`, {
+    sessionToken,
+    apiBaseUrl,
+    method: 'PATCH',
+    body: JSON.stringify({
+      ...payload,
+      syncSource: 'field-save-queue'
+    })
+  });
+}
+
+export async function voidFieldRegisterEntry(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  registerEntryId: string;
+  reason?: string;
+  occurredAt?: string;
+  baseUpdatedAt?: string;
+}) {
+  const { sessionToken, apiBaseUrl, registerEntryId, ...payload } = input;
+
+  return requestJson<JobMutationResponse>(`/operations/jobs/register-entries/${registerEntryId}/void`, {
+    sessionToken,
+    apiBaseUrl,
+    method: 'POST',
+    body: JSON.stringify({
+      ...payload,
       syncSource: 'field-save-queue'
     })
   });

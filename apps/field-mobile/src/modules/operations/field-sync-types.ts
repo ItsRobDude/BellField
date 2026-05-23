@@ -3,6 +3,7 @@ import type {
   AppointmentStatus,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  RegisterEntryKind,
   SyncResult
 } from '@/lib/operations-api';
 
@@ -36,6 +37,42 @@ export type PendingOperation =
       visitNotes?: string;
       hasChargeActivity: boolean;
       registerFollowUpNote?: string;
+      baseUpdatedAt?: string;
+    })
+  | (PendingOperationBase & {
+      kind: 'registerEntryCreate';
+      jobId: string;
+      appointmentId?: string;
+      registerEntryKind: RegisterEntryKind;
+      description: string;
+      quantity: number;
+      unitOfMeasure?: string;
+      unitPrice?: number;
+      totalAmount: number;
+      partNumber?: string;
+      inventorySourceLabel?: string;
+      baseUpdatedAt?: string;
+    })
+  | (PendingOperationBase & {
+      kind: 'registerEntryEdit';
+      jobId: string;
+      registerEntryId: string;
+      appointmentId?: string | null;
+      registerEntryKind?: RegisterEntryKind;
+      description?: string;
+      quantity?: number;
+      unitOfMeasure?: string;
+      unitPrice?: number | null;
+      totalAmount?: number;
+      partNumber?: string;
+      inventorySourceLabel?: string;
+      baseUpdatedAt?: string;
+    })
+  | (PendingOperationBase & {
+      kind: 'registerEntryVoid';
+      jobId: string;
+      registerEntryId: string;
+      reason?: string;
       baseUpdatedAt?: string;
     })
   | (PendingOperationBase & {

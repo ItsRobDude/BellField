@@ -21,7 +21,19 @@ function getEntityKey(operation: PendingOperation): string {
     return `equipment:${operation.equipmentId}`;
   }
 
+  if (operation.kind === 'registerEntryEdit' || operation.kind === 'registerEntryVoid') {
+    return `register-entry:${operation.registerEntryId}`;
+  }
+
+  if (operation.kind === 'registerEntryCreate') {
+    return `register-entry-create:${operation.id}`;
+  }
+
   return `job-note:${operation.id}`;
+}
+
+function shouldReplaceExistingOperation(operation: PendingOperation): boolean {
+  return operation.kind !== 'jobNote' && operation.kind !== 'registerEntryCreate';
 }
 
 async function getDatabase(): Promise<SQLiteDatabase> {
@@ -120,7 +132,7 @@ export async function queuePendingOperation(operation: PendingOperation): Promis
   const now = new Date().toISOString();
   const entityKey = getEntityKey(operation);
 
-  if (operation.kind !== 'jobNote') {
+  if (shouldReplaceExistingOperation(operation)) {
     await database.runAsync('delete from pending_operations where entity_key = $entityKey', {
       $entityKey: entityKey,
     });
