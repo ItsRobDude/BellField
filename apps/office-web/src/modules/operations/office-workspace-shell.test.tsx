@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AppointmentSummary, JobSummary, JobsWorkspaceResponse } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
@@ -170,6 +170,7 @@ beforeEach(() => {
 
 afterEach(() => {
   delete (window.HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
@@ -216,6 +217,150 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
       const focusedJob = screen.getByText(/Job 1001: No cooling/i).closest('article');
       expect(focusedJob).toHaveAttribute('aria-current', 'true');
       expect(scrollIntoView).toHaveBeenCalled();
+    });
+  });
+
+  it('refreshes the dispatch board from current workspace data without a schedule or status mutation', async () => {
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-2',
+        jobNumber: '1002',
+        summary: 'Heat not working',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-2',
+            jobId: 'job-2',
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const refreshedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            status: 'confirmed'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-2',
+        jobNumber: '1002',
+        summary: 'Heat not working',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-2',
+            jobId: 'job-2',
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            status: 'cancelled'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(refreshedWorkspace)
+      .mockResolvedValue(refreshedWorkspace);
+
+    renderShell();
+
+    expect(await screen.findByLabelText(/Appointment 1001 for Acme/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Appointment 1002 for Acme/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Refresh dispatch board/i }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeJobsWorkspace).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Appointment 1002 for Acme/i)).not.toBeInTheDocument();
+    });
+    expect(within(screen.getByLabelText(/Appointment 1001 for Acme/i)).getByText('Confirmed')).toBeInTheDocument();
+    expect(await screen.findByText('Dispatch board refreshed.')).toBeInTheDocument();
+  });
+
+  it('auto-refreshes the dispatch board while the office workspace stays open', async () => {
+    let nextIntervalId = 1;
+    const intervalHandlers = new Map<number, () => void>();
+    vi.spyOn(window, 'setInterval').mockImplementation(((handler: TimerHandler) => {
+      if (typeof handler === 'function') {
+        const intervalId = nextIntervalId;
+        intervalHandlers.set(intervalId, () => handler());
+        nextIntervalId += 1;
+
+        return intervalId;
+      }
+
+      return nextIntervalId++;
+    }) as typeof window.setInterval);
+    vi.spyOn(window, 'clearInterval').mockImplementation(((intervalId?: number) => {
+      if (typeof intervalId === 'number') {
+        intervalHandlers.delete(intervalId);
+      }
+    }) as typeof window.clearInterval);
+
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const refreshedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            status: 'cancelled'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(refreshedWorkspace)
+      .mockResolvedValue(refreshedWorkspace);
+
+    renderShell();
+
+    expect(await screen.findByLabelText(/Appointment 1001 for Acme/i)).toBeInTheDocument();
+    expect(intervalHandlers.size).toBe(1);
+
+    await act(async () => {
+      [...intervalHandlers.values()][0]?.();
+    });
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeJobsWorkspace).toHaveBeenCalledTimes(2);
+    });
+    await waitFor(() => {
+      expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();
     });
   });
 

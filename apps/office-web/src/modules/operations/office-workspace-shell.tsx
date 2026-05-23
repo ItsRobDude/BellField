@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   acknowledgeOfficeFinishedVisitReview,
   addOfficeAppointment,
@@ -43,6 +43,7 @@ import {
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const plannedOfficeAreas = ['Accounts', 'Locations', 'Jobs', 'Dispatch', 'Invoices', 'Reports'];
+const dispatchAutoRefreshIntervalMs = 60_000;
 
 type Props = {
   apiBaseUrl: string;
@@ -130,6 +131,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [lastJobsWorkspaceRefreshedAt, setLastJobsWorkspaceRefreshedAt] = useState<string | null>(null);
   const [pendingJobStatusChange, setPendingJobStatusChange] = useState<PendingJobStatusChange | null>(null);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
   const [jobLocationId, setJobLocationId] = useState('');
@@ -145,26 +147,38 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
   const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
   const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
+  const refreshInFlightRef = useRef(false);
+  const jobLocationIdRef = useRef(jobLocationId);
+  const selectedEquipmentIdRef = useRef(selectedEquipmentId);
 
   const locationLookup = useMemo(
     () => new Map((jobsWorkspace?.locations ?? []).map((location) => [location.id, location])),
     [jobsWorkspace]
   );
 
-  useEffect(() => {
-    void refreshWorkspace();
-  }, [showInactiveEquipment]);
-
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
   const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
 
-  async function loadEquipmentDetail(equipmentId: string) {
+  useEffect(() => {
+    jobLocationIdRef.current = jobLocationId;
+  }, [jobLocationId]);
+
+  useEffect(() => {
+    selectedEquipmentIdRef.current = selectedEquipmentId;
+  }, [selectedEquipmentId]);
+
+  const loadEquipmentDetail = useCallback(async (equipmentId: string) => {
     const equipmentDetail = await getOfficeEquipmentDetail({ equipmentId, sessionToken, apiBaseUrl });
     setSelectedEquipmentId(equipmentId);
     setSelectedEquipmentDetail(equipmentDetail);
-  }
+  }, [apiBaseUrl, sessionToken]);
 
-  async function refreshWorkspace() {
+  const refreshWorkspace = useCallback(async (): Promise<boolean> => {
+    if (refreshInFlightRef.current) {
+      return false;
+    }
+
+    refreshInFlightRef.current = true;
     setIsRefreshing(true);
     setErrorMessage(null);
 
@@ -184,7 +198,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       setEquipment(nextEquipmentWorkspace.equipment);
       setSuggestedEquipmentTypes(nextEquipmentWorkspace.suggestedEquipmentTypes);
 
-      if (!jobLocationId && nextJobsWorkspace.locations[0]) {
+      if (!jobLocationIdRef.current && nextJobsWorkspace.locations[0]) {
         setJobLocationId(nextJobsWorkspace.locations[0].id);
         setJobBillToCustomerId(nextJobsWorkspace.locations[0].customerId);
       }
@@ -197,8 +211,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       }
 
       const nextSelectedEquipmentId =
-        selectedEquipmentId && nextEquipmentWorkspace.equipment.some((record) => record.id === selectedEquipmentId)
-          ? selectedEquipmentId
+        selectedEquipmentIdRef.current &&
+        nextEquipmentWorkspace.equipment.some((record) => record.id === selectedEquipmentIdRef.current)
+          ? selectedEquipmentIdRef.current
           : nextEquipmentWorkspace.equipment[0]?.id;
 
       if (nextSelectedEquipmentId) {
@@ -207,12 +222,29 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         setSelectedEquipmentId(undefined);
         setSelectedEquipmentDetail(null);
       }
+      setLastJobsWorkspaceRefreshedAt(new Date().toISOString());
+
+      return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the office workspace.');
+      return false;
     } finally {
+      refreshInFlightRef.current = false;
       setIsRefreshing(false);
     }
-  }
+  }, [apiBaseUrl, loadEquipmentDetail, sessionToken, showInactiveEquipment]);
+
+  useEffect(() => {
+    void refreshWorkspace();
+  }, [refreshWorkspace]);
+
+  useEffect(() => {
+    const intervalId = window.setInterval(() => {
+      void refreshWorkspace();
+    }, dispatchAutoRefreshIntervalMs);
+
+    return () => window.clearInterval(intervalId);
+  }, [refreshWorkspace]);
 
   async function handleEmployeeUpdate(employeeId: string, roleId: EmployeeRoleId, isActive: boolean) {
     try {
@@ -612,6 +644,14 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     setDispatchViewDate(nextDate || getDateInputValue());
   }
 
+  async function handleDispatchRefresh() {
+    const didRefresh = await refreshWorkspace();
+
+    if (didRefresh) {
+      setNoticeMessage('Dispatch board refreshed.');
+    }
+  }
+
   if (!jobsWorkspace) {
     return (
       <main style={styles.page}>
@@ -683,6 +723,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onOpenInJobsPanel={handleOpenDispatchJob}
         onSaveAppointmentSchedule={handleSaveDispatchSchedule}
         onUpdateAppointmentStatus={handleDispatchStatusChange}
+        isRefreshing={isRefreshing}
+        lastRefreshedAt={lastJobsWorkspaceRefreshedAt}
+        onRefresh={handleDispatchRefresh}
       />
 
       <JobsAppointmentsPanel

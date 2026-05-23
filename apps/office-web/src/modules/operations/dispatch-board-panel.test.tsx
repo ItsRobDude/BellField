@@ -293,6 +293,52 @@ describe('DispatchBoardPanel', () => {
     expect(onViewDateChange).toHaveBeenCalledWith('2026-05-23');
   });
 
+  it('surfaces dispatch refresh state and calls the refresh handler', async () => {
+    const onRefresh = vi.fn().mockResolvedValue(undefined);
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22'
+          })
+        ]
+      })
+    ]);
+
+    const { rerender } = render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        lastRefreshedAt="2026-05-22T15:30:00.000Z"
+        onRefresh={onRefresh}
+      />
+    );
+
+    expect(screen.getByText(/Last refreshed/i)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Refresh dispatch board/i }));
+
+    await waitFor(() => {
+      expect(onRefresh).toHaveBeenCalled();
+    });
+
+    rerender(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        lastRefreshedAt="2026-05-22T15:30:00.000Z"
+        isRefreshing={true}
+        onRefresh={onRefresh}
+      />
+    );
+
+    expect(screen.getByRole('button', { name: /Refreshing dispatch/i })).toBeDisabled();
+    expect(screen.getByText('Refreshing dispatch board...')).toBeInTheDocument();
+  });
+
   it('opens the drawer when an appointment card is clicked and surfaces deep-link callback', () => {
     const onOpenInJobsPanel = vi.fn();
     const workspace = buildWorkspace([
@@ -326,6 +372,66 @@ describe('DispatchBoardPanel', () => {
 
     fireEvent.click(within(drawer).getByRole('button', { name: /Open job 1001 in the jobs panel/i }));
     expect(onOpenInJobsPanel).toHaveBeenCalledWith('job-1');
+  });
+
+  it('preserves active drawer edits when refreshed appointment data changes under the same selection', () => {
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+    const refreshedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            timeWindowLabel: '9-11',
+            status: 'confirmed'
+          })
+        ]
+      })
+    ]);
+
+    const { rerender } = render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onSaveAppointmentSchedule={vi.fn().mockResolvedValue(undefined)}
+        onUpdateAppointmentStatus={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+
+    fireEvent.change(screen.getByLabelText('Dispatch time window'), {
+      target: { value: '10-12' }
+    });
+    fireEvent.change(screen.getByLabelText('Dispatch appointment status'), {
+      target: { value: 'dispatched' }
+    });
+
+    rerender(
+      <DispatchBoardPanel
+        jobsWorkspace={refreshedWorkspace}
+        viewDate="2026-05-22"
+        onSaveAppointmentSchedule={vi.fn().mockResolvedValue(undefined)}
+        onUpdateAppointmentStatus={vi.fn().mockResolvedValue(undefined)}
+      />
+    );
+
+    expect(screen.getByLabelText('Dispatch time window')).toHaveValue('10-12');
+    expect(screen.getByLabelText('Dispatch appointment status')).toHaveValue('dispatched');
   });
 
   it('saves edited dispatch schedule details from the drawer', async () => {

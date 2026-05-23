@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AppointmentStatus, JobsWorkspaceResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -22,6 +22,9 @@ type DispatchBoardPanelProps = {
   onOpenInJobsPanel?: (jobId: string) => void;
   onSaveAppointmentSchedule?: (appointmentId: string, draft: DispatchScheduleDraft) => Promise<void>;
   onUpdateAppointmentStatus?: (appointmentId: string, status: AppointmentStatus) => Promise<void>;
+  isRefreshing?: boolean;
+  lastRefreshedAt?: string | null;
+  onRefresh?: () => Promise<void>;
 };
 
 const appointmentStatusLabels: Record<AppointmentStatus, string> = {
@@ -54,7 +57,10 @@ export function DispatchBoardPanel({
   onViewDateChange,
   onOpenInJobsPanel,
   onSaveAppointmentSchedule,
-  onUpdateAppointmentStatus
+  onUpdateAppointmentStatus,
+  isRefreshing = false,
+  lastRefreshedAt,
+  onRefresh
 }: DispatchBoardPanelProps) {
   const effectiveViewDate = viewDate || getDateInputValue();
   const model = useMemo<DispatchBoardModel>(
@@ -91,16 +97,28 @@ export function DispatchBoardPanel({
         </div>
       </div>
 
-      <label style={dateInputLabelStyle}>
-        <span style={styles.tinyMuted}>Dispatch date</span>
-        <input
-          type="date"
-          aria-label="Dispatch date"
-          value={effectiveViewDate}
-          onChange={(event) => onViewDateChange?.(event.target.value || getDateInputValue())}
-          style={styles.input}
-        />
-      </label>
+      <div style={dispatchToolbarStyle}>
+        <label style={dateInputLabelStyle}>
+          <span style={styles.tinyMuted}>Dispatch date</span>
+          <input
+            type="date"
+            aria-label="Dispatch date"
+            value={effectiveViewDate}
+            onChange={(event) => onViewDateChange?.(event.target.value || getDateInputValue())}
+            style={styles.input}
+          />
+        </label>
+        <div style={refreshControlStyle}>
+          {onRefresh ? (
+            <button type="button" onClick={() => void onRefresh()} disabled={isRefreshing} style={styles.button}>
+              {isRefreshing ? 'Refreshing dispatch...' : 'Refresh dispatch board'}
+            </button>
+          ) : null}
+          <span aria-live="polite" style={styles.tinyMuted}>
+            {isRefreshing ? 'Refreshing dispatch board...' : formatLastRefreshedAt(lastRefreshedAt)}
+          </span>
+        </div>
+      </div>
 
       <div style={dispatchSplitStyle}>
         <div style={{ display: 'grid', gap: '0.75rem' }}>
@@ -252,14 +270,42 @@ function DispatchDetailDrawer({
   const [statusDraft, setStatusDraft] = useState<AppointmentStatus>(card.status);
   const [isSaving, setIsSaving] = useState(false);
   const [isSavingStatus, setIsSavingStatus] = useState(false);
+  const previousAppointmentIdRef = useRef(card.appointmentId);
+  const previousServerDraftRef = useRef(createDraftFromCard(card));
+  const previousServerStatusRef = useRef<AppointmentStatus>(card.status);
   const hasCurrentTechnicianOption =
     !draft.technicianId || technicians.some((technician) => technician.id === draft.technicianId);
   const isUnchanged = isSameScheduleDraft(card, draft);
   const isStatusUnchanged = statusDraft === card.status;
 
   useEffect(() => {
-    setDraft(createDraftFromCard(card));
-    setStatusDraft(card.status);
+    const nextServerDraft = createDraftFromCard(card);
+    const previousAppointmentId = previousAppointmentIdRef.current;
+    const previousServerDraft = previousServerDraftRef.current;
+    const previousServerStatus = previousServerStatusRef.current;
+    const selectedAppointmentChanged = previousAppointmentId !== card.appointmentId;
+
+    setDraft((currentDraft) => {
+      if (
+        selectedAppointmentChanged ||
+        areScheduleDraftsEqual(currentDraft, previousServerDraft) ||
+        areScheduleDraftsEqual(currentDraft, nextServerDraft)
+      ) {
+        return nextServerDraft;
+      }
+
+      return currentDraft;
+    });
+    setStatusDraft((currentStatus) => {
+      if (selectedAppointmentChanged || currentStatus === previousServerStatus || currentStatus === card.status) {
+        return card.status;
+      }
+
+      return currentStatus;
+    });
+    previousAppointmentIdRef.current = card.appointmentId;
+    previousServerDraftRef.current = nextServerDraft;
+    previousServerStatusRef.current = card.status;
     setIsSaving(false);
     setIsSavingStatus(false);
   }, [card.appointmentId, card.scheduledDate, card.timeWindowLabel, card.technicianId, card.status]);
@@ -442,11 +488,29 @@ function createDraftFromCard(card: DispatchAppointmentCard): DispatchScheduleDra
 }
 
 function isSameScheduleDraft(card: DispatchAppointmentCard, draft: DispatchScheduleDraft): boolean {
+  return areScheduleDraftsEqual(createDraftFromCard(card), draft);
+}
+
+function areScheduleDraftsEqual(left: DispatchScheduleDraft, right: DispatchScheduleDraft): boolean {
   return (
-    draft.scheduledDate === (card.scheduledDate ?? '') &&
-    draft.timeWindowLabel === (card.timeWindowLabel ?? '') &&
-    draft.technicianId === (card.technicianId ?? '')
+    left.scheduledDate === right.scheduledDate &&
+    left.timeWindowLabel === right.timeWindowLabel &&
+    left.technicianId === right.technicianId
   );
+}
+
+function formatLastRefreshedAt(value?: string | null): string {
+  if (!value) {
+    return 'Not refreshed yet.';
+  }
+
+  const refreshedAt = new Date(value);
+
+  if (Number.isNaN(refreshedAt.getTime())) {
+    return 'Last refreshed recently.';
+  }
+
+  return `Last refreshed ${refreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
 function getDateInputValue(date = new Date()): string {
@@ -466,8 +530,24 @@ const dispatchSplitStyle: CSSProperties = {
 const dateInputLabelStyle: CSSProperties = {
   display: 'grid',
   gap: '0.35rem',
-  marginTop: '1rem',
   maxWidth: '16rem'
+};
+
+const dispatchToolbarStyle: CSSProperties = {
+  alignItems: 'end',
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.75rem',
+  justifyContent: 'space-between',
+  marginTop: '1rem'
+};
+
+const refreshControlStyle: CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: '0.5rem',
+  justifyContent: 'flex-end'
 };
 
 const technicianRowStyle: CSSProperties = {
