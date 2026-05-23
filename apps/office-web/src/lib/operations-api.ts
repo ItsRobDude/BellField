@@ -31,6 +31,7 @@ import type {
   EquipmentSummary,
   EquipmentWorkspaceResponse,
   JobDetailResponse,
+  JobIntakeContextResponse,
   JobStatus,
   JobsQueueKey,
   JobsQueueResponse,
@@ -95,6 +96,7 @@ export type {
   EquipmentSummary,
   EquipmentWorkspaceResponse,
   JobDetailResponse,
+  JobIntakeContextResponse,
   JobStatus,
   JobsQueueKey,
   JobsQueueResponse,
@@ -293,6 +295,16 @@ export async function getOfficeJobsWorkspace(input: {
   apiBaseUrl?: string;
 }): Promise<JobsWorkspaceResponse> {
   return requestJson<JobsWorkspaceResponse>('/operations/jobs', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function getOfficeJobIntakeContext(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<JobIntakeContextResponse> {
+  return requestJson<JobIntakeContextResponse>('/operations/jobs/intake-context', {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
   });

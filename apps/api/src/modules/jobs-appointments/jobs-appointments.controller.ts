@@ -22,6 +22,11 @@ export class JobsAppointmentsController {
     return this.jobsAppointmentsService.getWorkspace(this.getBearerToken(authorizationHeader));
   }
 
+  @Get('intake-context')
+  async getIntakeContext(@Headers('authorization') authorizationHeader?: string) {
+    return this.jobsAppointmentsService.getIntakeContext(this.getBearerToken(authorizationHeader));
+  }
+
   @Post()
   async createJob(
     @Headers('authorization') authorizationHeader: string | undefined,

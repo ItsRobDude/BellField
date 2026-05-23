@@ -9,6 +9,7 @@ import type {
   CreateRegisterEntryRequest,
   CustomerAccountSummary,
   FieldAssignedWorkResponse,
+  JobIntakeContextResponse,
   JobMutationResponse,
   JobsWorkspaceResponse,
   JobSummary,
@@ -35,6 +36,7 @@ export type JobSummaryDto = JobSummary;
 export type RegisterEntrySummaryDto = RegisterEntrySummary;
 export type RegisterEntriesResponseDto = RegisterEntriesResponse;
 export type JobsWorkspaceResponseDto = JobsWorkspaceResponse;
+export type JobIntakeContextResponseDto = JobIntakeContextResponse;
 export type CreateJobRequestDto = CreateJobRequest;
 export type UpdateJobStatusRequestDto = UpdateJobStatusRequest;
 export type UpdateJobStatusResponseDto = UpdateJobStatusResponse;

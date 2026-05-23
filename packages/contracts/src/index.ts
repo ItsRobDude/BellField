@@ -578,6 +578,25 @@ export interface JobsWorkspaceResponse {
   jobs: JobSummary[];
 }
 
+export interface JobIntakeLocationSummary {
+  id: string;
+  name: string;
+  customerId: string;
+  customerName: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+  isActive: boolean;
+  alternateBillToCustomerIds: string[];
+}
+
+export interface JobIntakeContextResponse {
+  customers: CustomerAccountSummary[];
+  locations: JobIntakeLocationSummary[];
+  technicians: JobsWorkspaceResponse['technicians'];
+}
+
 export interface JobDetailResponse {
   job: JobSummary;
   location: LocationSummary;

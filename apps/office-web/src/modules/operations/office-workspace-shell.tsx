@@ -14,8 +14,8 @@ import {
   getOfficeJobDetail,
   createOfficeJob,
   getOfficeEquipmentWorkspace,
+  getOfficeJobIntakeContext,
   getOfficeJobsQueue,
-  getOfficeJobsWorkspace,
   linkOfficeEquipmentReplacement,
   updateOfficeAppointmentSchedule,
   updateOfficeAppointmentStatus,
@@ -30,10 +30,10 @@ import {
   type EquipmentDetail,
   type EquipmentSummary,
   type JobDetailResponse,
+  type JobIntakeContextResponse,
   type JobStatus,
   type JobsQueueKey,
   type JobsQueueResponse,
-  type JobsWorkspaceResponse,
   type MediaAttachmentSummary,
   type RegisterEntrySummary
 } from '@/lib/operations-api';
@@ -88,11 +88,6 @@ function getJobStatusReviewMessage(
   }
 
   return `Change status to ${formatJobStatusLabel(nextStatus)}?`;
-}
-
-function countCancellableAppointmentsForJob(workspace: JobsWorkspaceResponse | null, jobId: string): number {
-  const job = workspace?.jobs.find((workspaceJob) => workspaceJob.id === jobId);
-  return job?.appointments.filter((appointment) => appointment.status !== 'cancelled').length ?? 0;
 }
 
 function formatAppointmentCount(count: number): string {
@@ -216,7 +211,7 @@ function mergeJobsQueueSection(
 
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
-  const [jobsWorkspace, setJobsWorkspace] = useState<JobsWorkspaceResponse | null>(null);
+  const [jobIntakeContext, setJobIntakeContext] = useState<JobIntakeContextResponse | null>(null);
   const [jobsQueue, setJobsQueue] = useState<JobsQueueResponse | null>(null);
   const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
   const [jobDetailsById, setJobDetailsById] = useState<Record<string, JobDetailResponse>>({});
@@ -260,8 +255,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const selectedEquipmentIdRef = useRef(selectedEquipmentId);
 
   const locationLookup = useMemo(
-    () => new Map((jobsWorkspace?.locations ?? []).map((location) => [location.id, location])),
-    [jobsWorkspace]
+    () => new Map((jobIntakeContext?.locations ?? []).map((location) => [location.id, location])),
+    [jobIntakeContext]
   );
 
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
@@ -346,7 +341,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
     try {
       const currentSession = await getCurrentOfficeSession({ sessionToken, apiBaseUrl });
-      const nextJobsWorkspace = await getOfficeJobsWorkspace({ sessionToken, apiBaseUrl });
+      const nextJobIntakeContext = await getOfficeJobIntakeContext({ sessionToken, apiBaseUrl });
       const nextEquipmentWorkspace = await getOfficeEquipmentWorkspace({
         sessionToken,
         apiBaseUrl,
@@ -354,13 +349,13 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       });
 
       setEmployee(currentSession.employee);
-      setJobsWorkspace(nextJobsWorkspace);
+      setJobIntakeContext(nextJobIntakeContext);
       setEquipment(nextEquipmentWorkspace.equipment);
       setSuggestedEquipmentTypes(nextEquipmentWorkspace.suggestedEquipmentTypes);
 
-      if (!jobLocationIdRef.current && nextJobsWorkspace.locations[0]) {
-        setJobLocationId(nextJobsWorkspace.locations[0].id);
-        setJobBillToCustomerId(nextJobsWorkspace.locations[0].customerId);
+      if (!jobLocationIdRef.current && nextJobIntakeContext.locations[0]) {
+        setJobLocationId(nextJobIntakeContext.locations[0].id);
+        setJobBillToCustomerId(nextJobIntakeContext.locations[0].customerId);
       }
 
       const nextSelectedEquipmentId =
@@ -845,7 +840,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
 
     const cancellableAppointmentCount =
-      nextStatus === 'cancelled' ? countCancellableAppointmentsForJob(jobsWorkspace, jobId) : 0;
+      nextStatus === 'cancelled'
+        ? jobDetailsById[jobId]?.job.appointments.filter((appointment) => appointment.status !== 'cancelled').length ?? 0
+        : 0;
 
     setPendingJobStatusChange({
       jobId,
@@ -864,10 +861,10 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       return selectedDetail.job.id;
     }
 
-    const workspaceJob = jobsWorkspace?.jobs.find((job) =>
-      job.appointments.some((appointment) => appointment.id === appointmentId)
+    const loadedJobDetail = Object.values(jobDetailsById).find((detail) =>
+      detail.job.appointments.some((appointment) => appointment.id === appointmentId)
     );
-    return workspaceJob?.id ?? null;
+    return loadedJobDetail?.job.id ?? null;
   }
 
   async function refreshOpenJobDetail(jobId?: string | null) {
@@ -1080,7 +1077,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
               <button
                 type="button"
                 onClick={() => setIsJobIntakeOpen(true)}
-                disabled={!jobsWorkspace}
+                disabled={!jobIntakeContext}
                 style={styles.primaryButton}
               >
                 New job
@@ -1097,9 +1094,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
           {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
           {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
 
-          {isJobIntakeOpen && jobsWorkspace ? (
+          {isJobIntakeOpen && jobIntakeContext ? (
             <JobIntakePanel
-              jobsWorkspace={jobsWorkspace}
+              intakeContext={jobIntakeContext}
               jobLocationId={jobLocationId}
               jobBillToCustomerId={jobBillToCustomerId}
               jobType={jobType}
@@ -1158,9 +1155,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
             </section>
           ) : null}
 
-          {activeOfficeView === 'equipment' && jobsWorkspace ? (
+          {activeOfficeView === 'equipment' && jobIntakeContext ? (
             <EquipmentPanel
-              locations={jobsWorkspace.locations}
+              locations={jobIntakeContext.locations}
               equipment={equipment}
               suggestedEquipmentTypes={suggestedEquipmentTypes}
               selectedEquipmentId={selectedEquipmentId}
@@ -1177,7 +1174,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
             />
           ) : null}
 
-          {activeOfficeView === 'equipment' && !jobsWorkspace ? (
+          {activeOfficeView === 'equipment' && !jobIntakeContext ? (
             <section style={styles.workspacePanel} aria-label="Equipment panel">
               <p style={styles.muted}>Loading equipment...</p>
             </section>

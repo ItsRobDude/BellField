@@ -1,10 +1,10 @@
 'use client';
 
-import type { JobsWorkspaceResponse } from '@/lib/operations-api';
+import type { JobIntakeContextResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type JobIntakePanelProps = {
-  jobsWorkspace: JobsWorkspaceResponse;
+  intakeContext: JobIntakeContextResponse;
   jobLocationId: string;
   jobBillToCustomerId: string;
   jobType: string;
@@ -32,7 +32,7 @@ type JobIntakePanelProps = {
 };
 
 export function JobIntakePanel({
-  jobsWorkspace,
+  intakeContext,
   jobLocationId,
   jobBillToCustomerId,
   jobType,
@@ -58,7 +58,7 @@ export function JobIntakePanel({
   onCreateJob,
   onClose
 }: JobIntakePanelProps) {
-  const selectedLocation = jobsWorkspace.locations.find((location) => location.id === jobLocationId) ?? null;
+  const selectedLocation = intakeContext.locations.find((location) => location.id === jobLocationId) ?? null;
   const billToCustomerIds = selectedLocation
     ? [selectedLocation.customerId, ...selectedLocation.alternateBillToCustomerIds]
     : [];
@@ -75,7 +75,7 @@ export function JobIntakePanel({
         <label style={styles.fieldLabel}>
           <span>Location</span>
           <select value={jobLocationId} onChange={(event) => onJobLocationChange(event.target.value)} style={styles.input}>
-            {jobsWorkspace.locations.map((location) => (
+            {intakeContext.locations.map((location) => (
               <option key={location.id} value={location.id}>
                 {location.name}
               </option>
@@ -90,7 +90,7 @@ export function JobIntakePanel({
             style={styles.input}
           >
             {billToCustomerIds.map((customerId) => {
-              const customer = jobsWorkspace.customers.find((candidate) => candidate.id === customerId);
+              const customer = intakeContext.customers.find((candidate) => candidate.id === customerId);
               return customer ? (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
@@ -121,7 +121,7 @@ export function JobIntakePanel({
             style={styles.input}
           >
             <option value="">Unassigned</option>
-            {jobsWorkspace.technicians.map((technician) => (
+            {intakeContext.technicians.map((technician) => (
               <option key={technician.id} value={technician.id}>
                 {technician.displayName}
               </option>

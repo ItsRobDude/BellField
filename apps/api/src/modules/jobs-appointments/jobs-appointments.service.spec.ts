@@ -85,6 +85,7 @@ function createService() {
       jobsDataService as never,
       identityAccessService as never
     ),
+    referenceDataService,
     jobsDataService,
     identityAccessService
   };
@@ -132,6 +133,83 @@ function createRegisterEntry(overrides: Record<string, unknown> = {}) {
 }
 
 describe('JobsAppointmentsService', () => {
+  it('returns compact job intake context without listing jobs', async () => {
+    const { service, referenceDataService, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:view'],
+      sessionSurface: 'office-web'
+    });
+    referenceDataService.listCustomers.mockResolvedValue([
+      {
+        id: 'customer-1',
+        name: 'Acme',
+        accountType: 'company',
+        billingAddressLine1: '123 Main',
+        billingCity: 'Blaine',
+        billingState: 'WA',
+        billingPostalCode: '98230',
+        phone: undefined,
+        email: undefined,
+        fax: undefined,
+        isActive: true,
+        flags: []
+      }
+    ]);
+    referenceDataService.listLocations.mockResolvedValue([
+      {
+        id: 'location-1',
+        name: 'Main Shop',
+        customerId: 'customer-1',
+        addressLine1: '123 Main',
+        city: 'Blaine',
+        state: 'WA',
+        postalCode: '98230',
+        phone: undefined,
+        email: undefined,
+        fax: undefined,
+        isActive: true,
+        alternateBillToCustomerIds: ['customer-2']
+      }
+    ]);
+    identityAccessService.getActiveEmployees.mockResolvedValue([
+      { id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' },
+      { id: 'office-1', displayName: 'Dispatcher', roleId: 'dispatcher' }
+    ]);
+
+    const response = await service.getIntakeContext('session-token');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'jobs:view', [
+      'office-web'
+    ]);
+    expect(jobsDataService.listJobs).not.toHaveBeenCalled();
+    expect(referenceDataService.getLocationDetail).not.toHaveBeenCalled();
+    expect(response).toEqual({
+      customers: [
+        expect.objectContaining({
+          id: 'customer-1',
+          name: 'Acme'
+        })
+      ],
+      locations: [
+        {
+          id: 'location-1',
+          name: 'Main Shop',
+          customerId: 'customer-1',
+          customerName: 'Acme',
+          addressLine1: '123 Main',
+          city: 'Blaine',
+          state: 'WA',
+          postalCode: '98230',
+          isActive: true,
+          alternateBillToCustomerIds: ['customer-2']
+        }
+      ],
+      technicians: [{ id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' }]
+    });
+  });
+
   it('keeps finished appointments in office review until they are acknowledged', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({

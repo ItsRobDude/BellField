@@ -4,6 +4,7 @@ import type {
   AppointmentSummary,
   DispatchBoardResponse,
   JobDetailResponse,
+  JobIntakeContextResponse,
   JobSummary,
   JobsQueueResponse,
   JobsWorkspaceResponse,
@@ -25,8 +26,8 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeEquipmentWorkspace: vi.fn(),
   getOfficeDispatchBoard: vi.fn(),
   getOfficeJobDetail: vi.fn(),
+  getOfficeJobIntakeContext: vi.fn(),
   getOfficeJobsQueue: vi.fn(),
-  getOfficeJobsWorkspace: vi.fn(),
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
   getOfficeRegisterEntries: vi.fn(),
@@ -309,6 +310,25 @@ function buildJobsQueue(workspace: JobsWorkspaceResponse): JobsQueueResponse {
   };
 }
 
+function buildJobIntakeContext(workspace: JobsWorkspaceResponse): JobIntakeContextResponse {
+  return {
+    customers: workspace.customers,
+    locations: workspace.locations.map((location) => ({
+      id: location.id,
+      name: location.name,
+      customerId: location.customerId,
+      customerName: location.customerName,
+      addressLine1: location.addressLine1,
+      city: location.city,
+      state: location.state,
+      postalCode: location.postalCode,
+      isActive: location.isActive,
+      alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
+    })),
+    technicians: workspace.technicians
+  };
+}
+
 function buildJobDetail(
   job: JobSummary,
   registerEntries: RegisterEntrySummary[] = [],
@@ -329,7 +349,7 @@ function buildJobDetail(
 
 function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee });
-  mockedOperationsApi.getOfficeJobsWorkspace.mockResolvedValue(workspace);
+  mockedOperationsApi.getOfficeJobIntakeContext.mockResolvedValue(buildJobIntakeContext(workspace));
   mockedOperationsApi.getOfficeJobsQueue.mockResolvedValue(buildJobsQueue(workspace));
   mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
   mockedOperationsApi.getOfficeJobDetail.mockImplementation(async ({ jobId }) => {

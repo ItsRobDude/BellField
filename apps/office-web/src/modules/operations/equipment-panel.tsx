@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import type { EquipmentDetail, EquipmentStatus, EquipmentSummary, LocationSummary } from '@/lib/operations-api';
+import type { EquipmentDetail, EquipmentStatus, EquipmentSummary } from '@/lib/operations-api';
 
 export type EquipmentCreateDraft = {
   placementKind: 'location' | 'inventory';
@@ -42,7 +42,7 @@ export type EquipmentEditDraft = {
 };
 
 type EquipmentPanelProps = {
-  locations: LocationSummary[];
+  locations: Array<{ id: string; name: string }>;
   equipment: EquipmentSummary[];
   suggestedEquipmentTypes: string[];
   selectedEquipmentId?: string;

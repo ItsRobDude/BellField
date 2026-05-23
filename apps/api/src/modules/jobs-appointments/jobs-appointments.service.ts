@@ -20,6 +20,7 @@ import type {
   CreateRegisterEntryRequestDto,
   CustomerAccountSummaryDto,
   FieldAssignedWorkResponseDto,
+  JobIntakeContextResponseDto,
   JobMutationResponseDto,
   JobSummaryDto,
   JobsWorkspaceResponseDto,
@@ -84,6 +85,44 @@ export class JobsAppointmentsService {
           .map((employee) => this.toTechnicianOption(employee.id))
       ),
       jobs: await Promise.all(jobs.map((job) => this.toJobSummaryFromRecord(job, { includeRegisterEntries })))
+    };
+  }
+
+  async getIntakeContext(sessionToken: string): Promise<JobIntakeContextResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+
+    const [customers, locations, technicians] = await Promise.all([
+      this.referenceDataService.listCustomers(false),
+      this.referenceDataService.listLocations(false),
+      this.identityAccessService.getActiveEmployees()
+    ]);
+    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+
+    return {
+      customers: customers.map((customer) => this.toCustomerSummaryFromRecord(customer)),
+      locations: locations.map((location) => {
+        const customer = customerById.get(location.customerId);
+
+        return {
+          id: location.id,
+          name: location.name,
+          customerId: location.customerId,
+          customerName: customer?.name ?? 'Unknown customer',
+          addressLine1: location.addressLine1,
+          city: location.city,
+          state: location.state,
+          postalCode: location.postalCode,
+          isActive: location.isActive,
+          alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
+        };
+      }),
+      technicians: technicians
+        .filter((employee) => employee.roleId === 'technician')
+        .map((employee) => ({
+          id: employee.id,
+          displayName: employee.displayName,
+          roleId: employee.roleId
+        }))
     };
   }
 
@@ -630,6 +669,23 @@ export class JobsAppointmentsService {
   private async toCustomerSummary(customerId: string): Promise<CustomerAccountSummaryDto> {
     const customer = await this.referenceDataService.getCustomerById(customerId);
 
+    return this.toCustomerSummaryFromRecord(customer);
+  }
+
+  private toCustomerSummaryFromRecord(customer: {
+    id: string;
+    name: string;
+    accountType: string;
+    billingAddressLine1: string;
+    billingCity: string;
+    billingState: string;
+    billingPostalCode: string;
+    phone?: string;
+    email?: string;
+    fax?: string;
+    isActive: boolean;
+    flags: string[];
+  }): CustomerAccountSummaryDto {
     return {
       id: customer.id,
       name: customer.name,
