@@ -38,8 +38,9 @@ import {
 } from './field-pending-replay';
 import { buildSuccessfulSyncMetadata, summarizeSyncHealth, type SyncTone } from './field-sync-status';
 import {
-  describeAppointmentAssignment,
-  isAppointmentAssignedToCurrentTechnician
+  buildAppointmentOwnershipWarning,
+  formatAppointmentAssignmentLine,
+  shouldConfirmAppointmentOwnership
 } from './field-assignment-display';
 
 type Props = {
@@ -83,6 +84,8 @@ type FinishReviewState = {
   hasChargeActivity: boolean;
   registerReminder: string;
 };
+
+type FieldAppointment = FieldAssignedWorkResponse['jobs'][number]['appointments'][number];
 
 const fieldAppointmentStatuses: AppointmentStatus[] = [
   'scheduled',
@@ -472,14 +475,30 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     );
   }
 
-  function handleAppointmentStatusPress(jobId: string, appointmentId: string, status: AppointmentStatus) {
-    if (status === 'finished') {
-      beginFinishReview(jobId, appointmentId);
+  function handleAppointmentStatusPress(jobId: string, appointment: FieldAppointment, status: AppointmentStatus) {
+    const continueStatusChange = () => {
+      if (status === 'finished') {
+        beginFinishReview(jobId, appointment.id);
+        return;
+      }
+
+      setFinishReview((current) => (current?.appointmentId === appointment.id ? null : current));
+      void queueAppointmentStatus(appointment.id, status);
+    };
+
+    if (shouldConfirmAppointmentOwnership(appointment, employee.id)) {
+      Alert.alert(
+        'Appointment not assigned to you',
+        buildAppointmentOwnershipWarning(appointment, employee.id, `marking it ${formatAppointmentStatusLabel(status)}`),
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', onPress: continueStatusChange }
+        ]
+      );
       return;
     }
 
-    setFinishReview((current) => (current?.appointmentId === appointmentId ? null : current));
-    void queueAppointmentStatus(appointmentId, status);
+    continueStatusChange();
   }
 
   function commitFinishReview(allowEmptyNotes: boolean, allowNoNotesAndNoCharges: boolean) {
@@ -851,31 +870,28 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 </Text>
 
                 {job.appointments.map((appointment) => {
-                  const assignmentLabel = describeAppointmentAssignment(appointment, employee.id);
-                  const isMine = isAppointmentAssignedToCurrentTechnician(appointment, employee.id);
+                  const assignmentLine = formatAppointmentAssignmentLine(appointment, employee.id);
                   return (
-                  <View key={appointment.id} style={styles.block}>
-                    <Text style={styles.sectionTitleSmall}>
-                      {appointment.scheduledDate || 'Unscheduled'} - {appointment.timeWindowLabel || 'No window'}
-                    </Text>
-                    <Text style={styles.summaryText}>
-                      {isMine ? `Assigned to you (${assignmentLabel})` : `Assigned to ${assignmentLabel}`}
-                    </Text>
-                    <Text style={styles.summaryText}>Latest local appointment status: {appointment.status}</Text>
-                    <View style={styles.actionRow}>
-                      {fieldAppointmentStatuses.map((status) => (
-                        <Pressable
-                          key={status}
-                          onPress={() => handleAppointmentStatusPress(job.id, appointment.id, status)}
-                          style={styles.tagButton}
-                        >
-                          <Text style={styles.tagButtonText}>{status}</Text>
-                        </Pressable>
-                      ))}
-                    </View>
+                    <View key={appointment.id} style={styles.block}>
+                      <Text style={styles.sectionTitleSmall}>
+                        {appointment.scheduledDate || 'Unscheduled'} - {appointment.timeWindowLabel || 'No window'}
+                      </Text>
+                      <Text style={styles.summaryText}>{assignmentLine}</Text>
+                      <Text style={styles.summaryText}>Latest local appointment status: {appointment.status}</Text>
+                      <View style={styles.actionRow}>
+                        {fieldAppointmentStatuses.map((status) => (
+                          <Pressable
+                            key={status}
+                            onPress={() => handleAppointmentStatusPress(job.id, appointment, status)}
+                            style={styles.tagButton}
+                          >
+                            <Text style={styles.tagButtonText}>{status}</Text>
+                          </Pressable>
+                        ))}
+                      </View>
 
-                    {finishReview?.appointmentId === appointment.id ? (
-                      <View style={styles.reviewCard}>
+                      {finishReview?.appointmentId === appointment.id ? (
+                        <View style={styles.reviewCard}>
                         <Text style={styles.sectionTitleSmall}>Finish review</Text>
                         <Text style={styles.summaryText}>
                           BellField should prompt for notes, outcome, and charge activity before finishing this visit.
@@ -963,7 +979,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                         </View>
                       </View>
                     ) : null}
-                  </View>
+                    </View>
                   );
                 })}
 
@@ -1225,6 +1241,18 @@ function createEquipmentCreateDraft(): EquipmentCreateDraft {
     status: 'active',
     notes: ''
   };
+}
+
+function formatAppointmentStatusLabel(status: AppointmentStatus): string {
+  if (status === 'onTheWay') {
+    return 'on the way';
+  }
+
+  if (status === 'noAnswer') {
+    return 'no answer';
+  }
+
+  return status;
 }
 
 const styles = StyleSheet.create({

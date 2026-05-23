@@ -36,6 +36,23 @@ export function describeAppointmentAssignment(
   return 'Another technician';
 }
 
+export function formatAppointmentAssignmentLine(
+  appointment: AppointmentAssignmentLike,
+  currentEmployeeId: string
+): string {
+  const assignmentLabel = describeAppointmentAssignment(appointment, currentEmployeeId);
+
+  if (!appointment.technicianId) {
+    return assignmentLabel;
+  }
+
+  if (isAppointmentAssignedToCurrentTechnician(appointment, currentEmployeeId)) {
+    return appointment.technicianName ? `Assigned to you (${appointment.technicianName})` : 'Assigned to you';
+  }
+
+  return `Assigned to ${assignmentLabel}`;
+}
+
 /**
  * Whether the current technician is the active owner of this appointment.
  * Useful for surfacing "this is yours" vs "this belongs to a teammate" UX cues.
@@ -45,4 +62,26 @@ export function isAppointmentAssignedToCurrentTechnician(
   currentEmployeeId: string
 ): boolean {
   return appointment.technicianId === currentEmployeeId;
+}
+
+export function shouldConfirmAppointmentOwnership(
+  appointment: Pick<AppointmentAssignmentLike, 'technicianId'>,
+  currentEmployeeId: string
+): boolean {
+  return appointment.technicianId !== currentEmployeeId;
+}
+
+export function buildAppointmentOwnershipWarning(
+  appointment: AppointmentAssignmentLike,
+  currentEmployeeId: string,
+  actionLabel: string
+): string {
+  if (!appointment.technicianId) {
+    return `This appointment is currently unassigned. Continue with ${actionLabel}?`;
+  }
+
+  return `This appointment is assigned to ${describeAppointmentAssignment(
+    appointment,
+    currentEmployeeId
+  )}. Continue with ${actionLabel}?`;
 }
