@@ -279,6 +279,8 @@ After an appointment is marked Finished and the job remains Open, the system sho
 In v1:
 - this follow-up prompt/action should be optional or toggle-able
 - companies may choose how much workflow prompting they want
+- office review choices should be history-preserving
+- if office keeps the job open or schedules follow-up, BellField should acknowledge the finished-visit review so it does not remain stuck in the active review list
 
 ### Parts-needed behavior
 If a technician says parts are needed:

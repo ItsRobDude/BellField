@@ -8,6 +8,7 @@ import type {
   AppointmentStatus,
   CreateAppointmentInput,
   CreateJobInput,
+  FinishedVisitReviewDecision,
   JobRecord,
   JobStatus,
   JobTimelineEntry,
@@ -40,6 +41,9 @@ type AppointmentRow = {
   visitNotes: string | null;
   hasChargeActivity: boolean | null;
   registerFollowUpNote: string | null;
+  finishedReviewedAt: string | Date | null;
+  finishedReviewedBy: string | null;
+  finishedReviewDecision: FinishedVisitReviewDecision | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -163,6 +167,9 @@ export class JobsDataRepository {
           visit_notes as "visitNotes",
           has_charge_activity as "hasChargeActivity",
           register_follow_up_note as "registerFollowUpNote",
+          finished_reviewed_at as "finishedReviewedAt",
+          finished_reviewed_by as "finishedReviewedBy",
+          finished_review_decision as "finishedReviewDecision",
           created_at as "createdAt",
           updated_at as "updatedAt"
         from appointments
@@ -189,6 +196,9 @@ export class JobsDataRepository {
           visit_notes as "visitNotes",
           has_charge_activity as "hasChargeActivity",
           register_follow_up_note as "registerFollowUpNote",
+          finished_reviewed_at as "finishedReviewedAt",
+          finished_reviewed_by as "finishedReviewedBy",
+          finished_review_decision as "finishedReviewDecision",
           created_at as "createdAt",
           updated_at as "updatedAt"
         from appointments
@@ -349,6 +359,14 @@ export class JobsDataRepository {
       updatedAt: timelineTime
     };
 
+    await this.acknowledgeUnreviewedFinishedAppointments(
+      jobId,
+      'followUpScheduled',
+      actorName,
+      timelineTime,
+      executor
+    );
+
     await executor.query(
       `
         insert into appointments (
@@ -362,10 +380,13 @@ export class JobsDataRepository {
           visit_notes,
           has_charge_activity,
           register_follow_up_note,
+          finished_reviewed_at,
+          finished_reviewed_by,
+          finished_review_decision,
           created_at,
           updated_at
         )
-        values ($1, $2, $3, $4, $5, 'scheduled', null, null, null, null, $6, $7)
+        values ($1, $2, $3, $4, $5, 'scheduled', null, null, null, null, null, null, null, $6, $7)
       `,
       [
         appointmentRecord.id,
@@ -470,6 +491,9 @@ export class JobsDataRepository {
             visit_notes = $4,
             has_charge_activity = $5,
             register_follow_up_note = $6,
+            finished_reviewed_at = null,
+            finished_reviewed_by = null,
+            finished_review_decision = null,
             updated_at = $7
           where id = $1
         `,
@@ -514,6 +538,21 @@ export class JobsDataRepository {
     });
 
     return this.getAppointmentById(appointmentId);
+  }
+
+  async acknowledgeFinishedVisitReview(
+    jobId: string,
+    decision: FinishedVisitReviewDecision,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord | null> {
+    const timelineTime = occurredAt || new Date().toISOString();
+
+    await this.databaseService.transaction(async (queryable) => {
+      await this.acknowledgeUnreviewedFinishedAppointments(jobId, decision, actorName, timelineTime, queryable);
+    });
+
+    return this.getJobById(jobId);
   }
 
   async addJobNote(jobId: string, noteBody: string, actorName: string, occurredAt?: string): Promise<JobRecord | null> {
@@ -648,12 +687,15 @@ export class JobsDataRepository {
             time_window_label as "timeWindowLabel",
             technician_id as "technicianId",
             status,
-            finish_outcome as "finishOutcome",
-            visit_notes as "visitNotes",
-            has_charge_activity as "hasChargeActivity",
-            register_follow_up_note as "registerFollowUpNote",
-            created_at as "createdAt",
-            updated_at as "updatedAt"
+          finish_outcome as "finishOutcome",
+          visit_notes as "visitNotes",
+          has_charge_activity as "hasChargeActivity",
+          register_follow_up_note as "registerFollowUpNote",
+          finished_reviewed_at as "finishedReviewedAt",
+          finished_reviewed_by as "finishedReviewedBy",
+          finished_review_decision as "finishedReviewDecision",
+          created_at as "createdAt",
+          updated_at as "updatedAt"
           from appointments
           where job_id = any($1::text[])
           order by scheduled_date asc nulls last, time_window_label asc nulls last, created_at asc
@@ -732,6 +774,57 @@ export class JobsDataRepository {
       `,
       [jobId, nextStatus, updatedAt]
     );
+  }
+
+  private async acknowledgeUnreviewedFinishedAppointments(
+    jobId: string,
+    decision: FinishedVisitReviewDecision,
+    actorName: string,
+    timelineTime: string,
+    queryable: QueryExecutor
+  ): Promise<number> {
+    const result = await queryable.query<{ reviewedCount: number | string }>(
+      `
+        with reviewed_appointments as (
+          update appointments
+          set
+            finished_reviewed_at = $2,
+            finished_reviewed_by = $3,
+            finished_review_decision = $4,
+            updated_at = $2
+          where job_id = $1
+            and status = 'finished'
+            and finished_reviewed_at is null
+          returning id
+        )
+        select count(*) as "reviewedCount"
+        from reviewed_appointments
+      `,
+      [jobId, timelineTime, actorName, decision]
+    );
+    const reviewedCount = Number(result.rows[0]?.reviewedCount ?? 0);
+
+    if (reviewedCount === 0) {
+      return 0;
+    }
+
+    await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, timelineTime]);
+    await this.insertTimelineEntry(
+      {
+        id: randomUUID(),
+        jobId,
+        occurredAt: timelineTime,
+        actorName,
+        kind: 'finishedVisitReviewAcknowledged',
+        message:
+          decision === 'followUpScheduled'
+            ? 'Finished visit review acknowledged: follow-up appointment scheduled under this job.'
+            : 'Finished visit review acknowledged: job kept open for office follow-up.'
+      },
+      queryable
+    );
+
+    return reviewedCount;
   }
 
   private async updateJobStatusForAppointmentProgress(
@@ -876,6 +969,9 @@ export class JobsDataRepository {
       visitNotes: row.visitNotes ?? undefined,
       hasChargeActivity: row.hasChargeActivity ?? undefined,
       registerFollowUpNote: row.registerFollowUpNote ?? undefined,
+      finishedReviewedAt: row.finishedReviewedAt ? toIsoString(row.finishedReviewedAt) : undefined,
+      finishedReviewedBy: row.finishedReviewedBy ?? undefined,
+      finishedReviewDecision: row.finishedReviewDecision ?? undefined,
       createdAt: toIsoString(row.createdAt),
       updatedAt: toIsoString(row.updatedAt)
     };

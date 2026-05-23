@@ -30,6 +30,9 @@ function createAppointmentRow(overrides: Record<string, unknown> = {}) {
     visitNotes: null,
     hasChargeActivity: null,
     registerFollowUpNote: null,
+    finishedReviewedAt: null,
+    finishedReviewedBy: null,
+    finishedReviewDecision: null,
     createdAt: '2026-04-14T10:00:00.000Z',
     updatedAt: '2026-04-14T10:00:00.000Z',
     ...overrides
@@ -146,6 +149,77 @@ describe('JobsDataRepository', () => {
     );
     expect(timelineCall?.[1]?.[4]).toBe('appointmentCreated');
     expect(timelineCall?.[1]?.[5]).toBe('Appointment added for 2026-04-15.');
+  });
+
+  it('acknowledges prior finished visit review when a follow-up appointment is added', async () => {
+    const { databaseService, queryable } = createDatabaseService();
+    (queryable.query as jest.Mock).mockImplementation(async (sql: string, _params?: unknown[]) => {
+      if (sql.includes('reviewed_appointments')) {
+        return { rows: [{ reviewedCount: '1' }] };
+      }
+
+      if (sql.includes("nextval('job_number_sequence')")) {
+        return { rows: [{ nextNumber: 1004 }] };
+      }
+
+      return { rows: [] };
+    });
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.createAppointment(
+      'job-1',
+      { scheduledDate: '2026-04-16', timeWindowLabel: '8:00 AM - 10:00 AM', technicianId: 'tech-1' },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z',
+      queryable as never
+    );
+
+    const acknowledgementCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('reviewed_appointments'));
+    expect(acknowledgementCall?.[1]).toEqual([
+      'job-1',
+      '2026-04-14T11:00:00.000Z',
+      'Dispatcher',
+      'followUpScheduled'
+    ]);
+    const timelineEntries = queryable.query.mock.calls
+      .filter(([sql]) => String(sql).includes('insert into job_timeline_entries'))
+      .map(([, params]) => ({ kind: params?.[4], message: params?.[5] }));
+    expect(timelineEntries).toEqual(
+      expect.arrayContaining([
+        {
+          kind: 'finishedVisitReviewAcknowledged',
+          message: 'Finished visit review acknowledged: follow-up appointment scheduled under this job.'
+        },
+        { kind: 'appointmentCreated', message: 'Appointment added for 2026-04-16.' }
+      ])
+    );
+  });
+
+  it('acknowledges finished visit review when the office keeps a job open', async () => {
+    const { databaseService, queryable } = createDatabaseService();
+    (queryable.query as jest.Mock).mockImplementation(async (sql: string) => {
+      if (sql.includes('reviewed_appointments')) {
+        return { rows: [{ reviewedCount: '1' }] };
+      }
+
+      return { rows: [] };
+    });
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.acknowledgeFinishedVisitReview(
+      'job-1',
+      'keptOpen',
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const acknowledgementCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('reviewed_appointments'));
+    expect(acknowledgementCall?.[1]).toEqual(['job-1', '2026-04-14T11:00:00.000Z', 'Dispatcher', 'keptOpen']);
+    const timelineCall = queryable.query.mock.calls.find(
+      ([sql], index) => String(sql).includes('insert into job_timeline_entries') && index > 0
+    );
+    expect(timelineCall?.[1]?.[4]).toBe('finishedVisitReviewAcknowledged');
+    expect(timelineCall?.[1]?.[5]).toBe('Finished visit review acknowledged: job kept open for office follow-up.');
   });
 
   it('records appointment schedule, appointment status, and notes in the job timeline', async () => {

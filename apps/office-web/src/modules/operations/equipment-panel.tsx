@@ -262,39 +262,40 @@ export function EquipmentPanel({
 
       <div style={styles.wideSplitGrid}>
         <div style={styles.panel}>
-          <h3 style={styles.subheading}>Equipment list</h3>
-          <div style={styles.tableWrap}>
-            <table style={styles.table}>
-              <thead>
-                <tr>
-                  <th style={styles.tableHeadCell}>Type</th>
-                  <th style={styles.tableHeadCell}>Status</th>
-                  <th style={styles.tableHeadCell}>Model</th>
-                  <th style={styles.tableHeadCell}>Serial</th>
-                  <th style={styles.tableHeadCell}>Age</th>
-                  <th style={styles.tableHeadCell}>Group</th>
-                </tr>
-              </thead>
-              <tbody>
-                {equipment.map((record) => (
-                  <tr key={record.id}>
-                    <td style={styles.tableCell}>
-                      <button type="button" style={styles.tableRowButton} onClick={() => void onSelectEquipment(record.id)}>
-                        <strong>{record.equipmentType}</strong>
-                        <div style={styles.tinyMuted}>{record.locationName || record.inventoryLocationLabel || 'Unplaced'}</div>
-                      </button>
-                    </td>
-                    <td style={styles.tableCell}>{record.status}</td>
-                    <td style={styles.tableCell}>
-                      {record.brand} {record.model}
-                    </td>
-                    <td style={styles.tableCell}>{record.serialNumber || 'Serial pending'}</td>
-                    <td style={styles.tableCell}>{record.ageLabel || 'Unknown'}</td>
-                    <td style={styles.tableCell}>{record.systemGroup?.name || 'Ungrouped'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <h3 style={styles.subheading}>Equipment at a glance</h3>
+          <div style={styles.list}>
+            {equipment.map((record) => (
+              <button
+                key={record.id}
+                type="button"
+                style={{
+                  ...styles.cardButton,
+                  borderColor: record.id === selectedEquipmentId ? '#1c6b57' : '#e5dcc8'
+                }}
+                onClick={() => void onSelectEquipment(record.id)}
+              >
+                <div style={styles.row}>
+                  <div>
+                    <strong>{record.equipmentType}</strong>
+                    <div style={styles.tinyMuted}>
+                      {record.locationName || record.inventoryLocationLabel || 'Unplaced'}
+                    </div>
+                  </div>
+                  <span style={record.status === 'removed' ? styles.dangerBadge : styles.badge}>{record.status}</span>
+                </div>
+                <div style={styles.formRow}>
+                  <EquipmentGlanceField label="Make" value={record.brand || 'Make pending'} />
+                  <EquipmentGlanceField label="Model" value={record.model || 'Model pending'} />
+                  <EquipmentGlanceField label="Serial" value={record.serialNumber || 'Serial pending'} />
+                  <EquipmentGlanceField
+                    label="Filters"
+                    value={record.filterSizes.length > 0 ? record.filterSizes.join(', ') : 'Filters pending'}
+                  />
+                  <EquipmentGlanceField label="Installed" value={formatEquipmentInstallDate(record.installDate)} />
+                </div>
+                <span style={styles.tinyMuted}>Open details for service history, warranty notes, grouping, and replacement context.</span>
+              </button>
+            ))}
           </div>
         </div>
 
@@ -511,6 +512,30 @@ function createDefaultCreateDraft(locationId?: string): EquipmentCreateDraft {
     status: 'active',
     notes: ''
   };
+}
+
+function EquipmentGlanceField({ label, value }: { label: string; value: string }) {
+  return (
+    <span>
+      <span style={styles.tinyMuted}>{label}</span>
+      <br />
+      <strong>{value}</strong>
+    </span>
+  );
+}
+
+function formatEquipmentInstallDate(installDate: string | undefined): string {
+  if (!installDate) {
+    return 'Install date pending';
+  }
+
+  const [year, month, day] = installDate.split('-');
+
+  if (!year || !month || !day) {
+    return installDate;
+  }
+
+  return `${month}/${day}/${year}`;
 }
 
 function createDetailDraft(record: EquipmentDetail): EquipmentEditDraft {

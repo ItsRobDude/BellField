@@ -3,14 +3,17 @@ import {
   appointmentFinishOutcomes,
   appointmentStatuses,
   fieldSyncSources,
+  finishedVisitReviewDecisions,
   jobStatuses,
   type AppointmentFinishOutcome,
   type AppointmentStatus,
   type FieldSyncSource,
+  type FinishedVisitReviewDecision,
   type JobStatus
 } from '../company-data/company-data.types';
 import type {
   AddJobNoteRequestDto,
+  AcknowledgeFinishedVisitReviewRequestDto,
   CreateAppointmentRequestDto,
   CreateJobRequestDto,
   UpdateAppointmentScheduleRequestDto,
@@ -171,4 +174,13 @@ export class AddJobNoteRequestBodyDto implements AddJobNoteRequestDto {
   @IsOptional()
   @IsIn(fieldSyncSources)
   syncSource?: FieldSyncSource;
+}
+
+export class AcknowledgeFinishedVisitReviewRequestBodyDto implements AcknowledgeFinishedVisitReviewRequestDto {
+  @IsIn(finishedVisitReviewDecisions.filter((decision) => decision === 'keptOpen'))
+  decision!: Extract<FinishedVisitReviewDecision, 'keptOpen'>;
+
+  @IsOptional()
+  @IsISO8601()
+  occurredAt?: string;
 }

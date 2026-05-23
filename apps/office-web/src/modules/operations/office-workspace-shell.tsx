@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import {
+  acknowledgeOfficeFinishedVisitReview,
   addOfficeAppointment,
   createOfficeEquipment,
   deleteOfficeEquipment,
@@ -500,9 +501,25 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         ...current,
         [jobId]: { scheduledDate: '', timeWindowLabel: '', technicianId: '' }
       }));
+      setNoticeMessage('Follow-up appointment added. Finished visit review was acknowledged.');
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to add appointment.');
+    }
+  }
+
+  async function handleKeepJobOpen(jobId: string) {
+    try {
+      await acknowledgeOfficeFinishedVisitReview({
+        jobId,
+        decision: 'keptOpen',
+        sessionToken,
+        apiBaseUrl
+      });
+      setNoticeMessage('Finished visit review acknowledged. The job remains open.');
+      await refreshWorkspace();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to acknowledge finished visit review.');
     }
   }
 
@@ -612,6 +629,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onAppointmentStatusChange={handleAppointmentStatusChange}
         onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
         onAddAppointment={handleAddAppointment}
+        onKeepJobOpen={handleKeepJobOpen}
       />
     </main>
   );

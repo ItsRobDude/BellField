@@ -24,6 +24,7 @@ describe('Runtime validation', () => {
     createJob: jest.fn(),
     updateJobStatus: jest.fn(),
     addAppointment: jest.fn(),
+    acknowledgeFinishedVisitReview: jest.fn(),
     updateAppointmentSchedule: jest.fn(),
     updateAppointmentStatus: jest.fn(),
     addJobNote: jest.fn()
@@ -145,6 +146,18 @@ describe('Runtime validation', () => {
 
     expect(response.status).toBe(400);
     expect(jobsAppointmentsService.addJobNote).not.toHaveBeenCalled();
+  });
+
+  it('rejects malformed finished visit review acknowledgement payloads with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/jobs/job-1/finished-visit-review')
+      .send({
+        decision: 'followUpScheduled',
+        occurredAt: 'not-a-date'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.acknowledgeFinishedVisitReview).not.toHaveBeenCalled();
   });
 
   it('rejects malformed equipment update payloads with 400', async () => {

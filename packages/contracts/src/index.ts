@@ -458,6 +458,7 @@ export type AppointmentStatus =
   | 'cancelled';
 
 export type AppointmentFinishOutcome = 'completed' | 'followUpNeeded' | 'noAccess';
+export type FinishedVisitReviewDecision = 'keptOpen' | 'followUpScheduled';
 
 export interface SyncResult {
   status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
@@ -478,6 +479,9 @@ export interface AppointmentSummary {
   visitNotes?: string;
   hasChargeActivity?: boolean;
   registerFollowUpNote?: string;
+  finishedReviewedAt?: string;
+  finishedReviewedBy?: string;
+  finishedReviewDecision?: FinishedVisitReviewDecision;
   needsOfficeReview: boolean;
   createdAt: string;
   updatedAt: string;
@@ -575,6 +579,11 @@ export interface AddJobNoteRequest {
   occurredAt?: string;
   baseUpdatedAt?: string;
   syncSource?: FieldSyncSource;
+}
+
+export interface AcknowledgeFinishedVisitReviewRequest {
+  decision: Extract<FinishedVisitReviewDecision, 'keptOpen'>;
+  occurredAt?: string;
 }
 
 export interface JobMutationResponse extends JobSummary {

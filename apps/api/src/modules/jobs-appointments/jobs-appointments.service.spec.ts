@@ -4,6 +4,8 @@ import type { JobRecord } from '../company-data/company-data.types';
 
 function createService() {
   const referenceDataService = {
+    listCustomers: jest.fn().mockResolvedValue([]),
+    listLocations: jest.fn().mockResolvedValue([]),
     getLocationById: jest.fn().mockResolvedValue({
       id: 'location-1',
       name: 'Main Shop',
@@ -50,12 +52,14 @@ function createService() {
   };
   const jobsDataService = {
     getJobById: jest.fn(),
+    listJobs: jest.fn().mockResolvedValue([]),
     hasFutureAppointments: jest.fn().mockResolvedValue(false),
     hasCancellableAppointments: jest.fn().mockResolvedValue(false),
     countCancellableAppointments: jest.fn().mockResolvedValue(0),
     hasIncompleteAppointments: jest.fn().mockResolvedValue(false),
     updateJobStatus: jest.fn(),
     createAppointment: jest.fn(),
+    acknowledgeFinishedVisitReview: jest.fn(),
     updateAppointmentSchedule: jest.fn(),
     getAppointmentById: jest.fn(),
     updateAppointmentStatus: jest.fn(),
@@ -100,6 +104,111 @@ function createJob(status: JobRecord['status']): JobRecord {
 }
 
 describe('JobsAppointmentsService', () => {
+  it('keeps finished appointments in office review until they are acknowledged', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:view'],
+      sessionSurface: 'office-web'
+    });
+    const job = { ...createJob('inProgress'), appointmentIds: ['appointment-1'] };
+    jobsDataService.listJobs.mockResolvedValue([job]);
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'finished',
+      updatedAt: '2026-04-14T11:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+
+    const response = await service.getWorkspace('session-token');
+
+    expect(response.jobs[0]?.needsOfficeReview).toBe(true);
+    expect(response.jobs[0]?.appointments[0]?.needsOfficeReview).toBe(true);
+  });
+
+  it.each(['completed', 'closed', 'cancelled'] as const)(
+    'does not require office review for finished appointments under %s jobs',
+    async (status) => {
+      const { service, jobsDataService, identityAccessService } = createService();
+      identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+        id: 'office-1',
+        displayName: 'Dispatcher',
+        effectivePermissions: ['jobs:view'],
+        sessionSurface: 'office-web'
+      });
+      const job = { ...createJob(status), appointmentIds: ['appointment-1'] };
+      jobsDataService.listJobs.mockResolvedValue([job]);
+      jobsDataService.getAppointmentById.mockResolvedValue({
+        id: 'appointment-1',
+        jobId: 'job-1',
+        status: 'finished',
+        updatedAt: '2026-04-14T11:00:00.000Z',
+        createdAt: '2026-04-14T09:00:00.000Z'
+      });
+
+      const response = await service.getWorkspace('session-token');
+
+      expect(response.jobs[0]?.needsOfficeReview).toBe(false);
+      expect(response.jobs[0]?.appointments[0]?.needsOfficeReview).toBe(false);
+    }
+  );
+
+  it('clears review need after a finished appointment is acknowledged', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:view'],
+      sessionSurface: 'office-web'
+    });
+    const job = { ...createJob('inProgress'), appointmentIds: ['appointment-1'] };
+    jobsDataService.listJobs.mockResolvedValue([job]);
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'finished',
+      finishedReviewedAt: '2026-04-14T12:00:00.000Z',
+      finishedReviewedBy: 'Dispatcher',
+      finishedReviewDecision: 'keptOpen',
+      updatedAt: '2026-04-14T12:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+
+    const response = await service.getWorkspace('session-token');
+
+    expect(response.jobs[0]?.needsOfficeReview).toBe(false);
+    expect(response.jobs[0]?.appointments[0]).toMatchObject({
+      needsOfficeReview: false,
+      finishedReviewDecision: 'keptOpen'
+    });
+  });
+
+  it('acknowledges keep-open review decisions and returns the updated job summary', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.acknowledgeFinishedVisitReview.mockResolvedValue(createJob('inProgress'));
+
+    const response = await service.acknowledgeFinishedVisitReview('session-token', 'job-1', {
+      decision: 'keptOpen',
+      occurredAt: '2026-04-14T11:00:00.000Z'
+    });
+
+    expect(jobsDataService.acknowledgeFinishedVisitReview).toHaveBeenCalledWith(
+      'job-1',
+      'keptOpen',
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+    expect(response.id).toBe('job-1');
+  });
+
   it('rejects adding appointments to closed jobs', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({

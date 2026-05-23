@@ -3,6 +3,7 @@ import type {
   AppointmentStatus as ContractAppointmentStatus,
   EquipmentStatus as ContractEquipmentStatus,
   FieldSyncSource as ContractFieldSyncSource,
+  FinishedVisitReviewDecision as ContractFinishedVisitReviewDecision,
   JobStatus as ContractJobStatus,
   SyncResult as ContractSyncResult
 } from '@bellfield/contracts';
@@ -173,12 +174,18 @@ export const appointmentStatuses = [
 ] as const satisfies readonly AppointmentStatus[];
 
 export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
+export type FinishedVisitReviewDecision = ContractFinishedVisitReviewDecision;
 
 export const appointmentFinishOutcomes = [
   'completed',
   'followUpNeeded',
   'noAccess'
 ] as const satisfies readonly AppointmentFinishOutcome[];
+
+export const finishedVisitReviewDecisions = [
+  'keptOpen',
+  'followUpScheduled'
+] as const satisfies readonly FinishedVisitReviewDecision[];
 
 export type FieldSyncSource = ContractFieldSyncSource;
 
@@ -197,6 +204,7 @@ export type JobTimelineEntry = {
     | 'appointmentScheduleUpdated'
     | 'appointmentStatusUpdated'
     | 'appointmentFinishedReview'
+    | 'finishedVisitReviewAcknowledged'
     | 'jobNote'
     | 'syncFlag';
   message: string;
@@ -243,6 +251,9 @@ export type AppointmentRecord = {
   visitNotes?: string;
   hasChargeActivity?: boolean;
   registerFollowUpNote?: string;
+  finishedReviewedAt?: string;
+  finishedReviewedBy?: string;
+  finishedReviewDecision?: FinishedVisitReviewDecision;
   createdAt: string;
   updatedAt: string;
 };

@@ -80,8 +80,12 @@ function createJob(overrides: Partial<JobSummary> = {}): JobSummary {
 function renderJobsPanel(input: {
   jobs: JobSummary[];
   onJobStatusReviewRequested?: ReturnType<typeof vi.fn<JobStatusReviewHandler>>;
+  onAddAppointment?: ReturnType<typeof vi.fn<(jobId: string) => Promise<void>>>;
+  onKeepJobOpen?: ReturnType<typeof vi.fn<(jobId: string) => Promise<void>>>;
 }) {
   const onJobStatusReviewRequested = input.onJobStatusReviewRequested ?? vi.fn<JobStatusReviewHandler>();
+  const onAddAppointment = input.onAddAppointment ?? vi.fn(async () => undefined);
+  const onKeepJobOpen = input.onKeepJobOpen ?? vi.fn(async () => undefined);
 
   render(
     <JobsAppointmentsPanel
@@ -115,11 +119,12 @@ function renderJobsPanel(input: {
       onCancelJobStatusChange={vi.fn()}
       onAppointmentStatusChange={noopAsync}
       onSaveAppointmentSchedule={noopAsync}
-      onAddAppointment={noopAsync}
+      onAddAppointment={onAddAppointment}
+      onKeepJobOpen={onKeepJobOpen}
     />
   );
 
-  return { onJobStatusReviewRequested };
+  return { onJobStatusReviewRequested, onAddAppointment, onKeepJobOpen };
 }
 
 describe('JobsAppointmentsPanel', () => {
@@ -146,8 +151,10 @@ describe('JobsAppointmentsPanel', () => {
     });
 
     expect(screen.getByText('Finished visit review')).toBeInTheDocument();
-    expect(screen.getByText(/Finished visits do not close the job/i)).toBeInTheDocument();
+    expect(screen.getByText(/Pick how the office wants to handle this job/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Mark job completed' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Schedule follow-up' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Keep job open' })).toBeInTheDocument();
   });
 
   it('uses the existing status review handler when marking a reviewed job completed', () => {
@@ -161,6 +168,32 @@ describe('JobsAppointmentsPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Mark job completed' }));
 
     expect(onJobStatusReviewRequested).toHaveBeenCalledWith('job-1', 'scheduled', 'completed', 'No cooling');
+  });
+
+  it('uses the existing add-appointment flow when scheduling follow-up from review', () => {
+    const onAddAppointment = vi.fn(async () => undefined);
+
+    renderJobsPanel({
+      jobs: [createJob({ needsOfficeReview: true })],
+      onAddAppointment
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Schedule follow-up' }));
+
+    expect(onAddAppointment).toHaveBeenCalledWith('job-1');
+  });
+
+  it('acknowledges review without changing status when keeping the job open', () => {
+    const onKeepJobOpen = vi.fn(async () => undefined);
+
+    renderJobsPanel({
+      jobs: [createJob({ needsOfficeReview: true })],
+      onKeepJobOpen
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep job open' }));
+
+    expect(onKeepJobOpen).toHaveBeenCalledWith('job-1');
   });
 
   it('shows reopen guidance and hides add appointment for closed jobs', () => {

@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/common';
 import {
   AddJobNoteRequestBodyDto,
+  AcknowledgeFinishedVisitReviewRequestBodyDto,
   CreateAppointmentRequestBodyDto,
   CreateJobRequestBodyDto,
   UpdateAppointmentScheduleRequestBodyDto,
@@ -42,6 +43,19 @@ export class JobsAppointmentsController {
     @Body() request: CreateAppointmentRequestBodyDto
   ) {
     return this.jobsAppointmentsService.addAppointment(this.getBearerToken(authorizationHeader), jobId, request);
+  }
+
+  @Post(':jobId/finished-visit-review')
+  async acknowledgeFinishedVisitReview(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string,
+    @Body() request: AcknowledgeFinishedVisitReviewRequestBodyDto
+  ) {
+    return this.jobsAppointmentsService.acknowledgeFinishedVisitReview(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 
   @Patch('appointments/:appointmentId')

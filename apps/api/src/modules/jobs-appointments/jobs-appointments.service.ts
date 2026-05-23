@@ -13,6 +13,7 @@ import type { AuthorizedEmployee } from '../identity-access/identity-access.type
 import { getAssignedWorkWindow } from './field-work-window';
 import type {
   AddJobNoteRequestDto,
+  AcknowledgeFinishedVisitReviewRequestDto,
   AppointmentSummaryDto,
   CreateAppointmentRequestDto,
   CreateJobRequestDto,
@@ -82,7 +83,7 @@ export class JobsAppointmentsService {
     const billToCustomerId = request.billToCustomerId ?? location.customerId;
     await this.referenceDataService.getCustomerById(billToCustomerId);
     const job = await this.jobsDataService.createJob(request, actor.displayName, billToCustomerId, location.name);
-    return this.toJobSummary(job.id);
+    return this.toJobSummaryFromRecord(job);
   }
 
   async updateJobStatus(
@@ -145,6 +146,22 @@ export class JobsAppointmentsService {
 
     await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
     return this.toJobSummary(jobId);
+  }
+
+  async acknowledgeFinishedVisitReview(
+    sessionToken: string,
+    jobId: string,
+    request: AcknowledgeFinishedVisitReviewRequestDto
+  ): Promise<JobMutationResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit', ['office-web']);
+    const job = await this.jobsDataService.acknowledgeFinishedVisitReview(
+      jobId,
+      request.decision,
+      actor.displayName,
+      request.occurredAt
+    );
+
+    return this.toJobSummaryFromRecord(job);
   }
 
   async updateAppointmentSchedule(
@@ -443,7 +460,14 @@ export class JobsAppointmentsService {
       visitNotes: appointment.visitNotes,
       hasChargeActivity: appointment.hasChargeActivity,
       registerFollowUpNote: appointment.registerFollowUpNote,
-      needsOfficeReview: this.needsOfficeReviewForAppointment(appointment.status, jobStatus),
+      finishedReviewedAt: appointment.finishedReviewedAt,
+      finishedReviewedBy: appointment.finishedReviewedBy,
+      finishedReviewDecision: appointment.finishedReviewDecision,
+      needsOfficeReview: this.needsOfficeReviewForAppointment(
+        appointment.status,
+        jobStatus,
+        appointment.finishedReviewedAt
+      ),
       createdAt: appointment.createdAt,
       updatedAt: appointment.updatedAt
     };
@@ -583,9 +607,16 @@ export class JobsAppointmentsService {
 
   private needsOfficeReviewForAppointment(
     appointmentStatus: AppointmentStatus,
-    jobStatus: JobStatus | undefined
+    jobStatus: JobStatus | undefined,
+    finishedReviewedAt: string | undefined
   ): boolean {
-    return appointmentStatus === 'finished' && jobStatus !== 'completed' && jobStatus !== 'closed' && jobStatus !== 'cancelled';
+    return (
+      appointmentStatus === 'finished' &&
+      !finishedReviewedAt &&
+      jobStatus !== 'completed' &&
+      jobStatus !== 'closed' &&
+      jobStatus !== 'cancelled'
+    );
   }
 
   private isReopenTransition(currentStatus: JobStatus, nextStatus: JobStatus): boolean {

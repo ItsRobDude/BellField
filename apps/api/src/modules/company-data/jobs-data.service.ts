@@ -4,6 +4,7 @@ import type {
   AppointmentRecord,
   AppointmentStatus,
   CreateAppointmentInput,
+  FinishedVisitReviewDecision,
   CreateJobInput,
   JobRecord,
   JobStatus
@@ -59,6 +60,21 @@ export class JobsDataService {
     occurredAt?: string
   ): Promise<AppointmentRecord> {
     return this.jobsDataRepository.createAppointment(jobId, input, actorName, occurredAt);
+  }
+
+  async acknowledgeFinishedVisitReview(
+    jobId: string,
+    decision: FinishedVisitReviewDecision,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord> {
+    const job = await this.jobsDataRepository.acknowledgeFinishedVisitReview(jobId, decision, actorName, occurredAt);
+
+    if (!job) {
+      throw new NotFoundException('Job not found.');
+    }
+
+    return job;
   }
 
   async updateAppointmentSchedule(

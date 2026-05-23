@@ -1,5 +1,6 @@
 import type {
   AddJobNoteRequest,
+  AcknowledgeFinishedVisitReviewRequest,
   AppointmentFinishOutcome,
   AppointmentSummary,
   ContactSummary,
@@ -34,5 +35,6 @@ export type CreateAppointmentRequestDto = CreateAppointmentRequest;
 export type UpdateAppointmentScheduleRequestDto = UpdateAppointmentScheduleRequest;
 export type UpdateAppointmentStatusRequestDto = UpdateAppointmentStatusRequest;
 export type AddJobNoteRequestDto = AddJobNoteRequest;
+export type AcknowledgeFinishedVisitReviewRequestDto = AcknowledgeFinishedVisitReviewRequest;
 export type JobMutationResponseDto = JobMutationResponse;
 export type FieldAssignedWorkResponseDto = FieldAssignedWorkResponse;

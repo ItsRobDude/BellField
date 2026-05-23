@@ -55,6 +55,7 @@ type JobsAppointmentsPanelProps = {
   onAppointmentStatusChange: (appointmentId: string, status: AppointmentStatus) => Promise<void>;
   onSaveAppointmentSchedule: (appointmentId: string) => Promise<void>;
   onAddAppointment: (jobId: string) => Promise<void>;
+  onKeepJobOpen: (jobId: string) => Promise<void>;
 };
 
 export function JobsAppointmentsPanel({
@@ -88,7 +89,8 @@ export function JobsAppointmentsPanel({
   onCancelJobStatusChange,
   onAppointmentStatusChange,
   onSaveAppointmentSchedule,
-  onAddAppointment
+  onAddAppointment,
+  onKeepJobOpen
 }: JobsAppointmentsPanelProps) {
   const selectedLocation = jobsWorkspace.locations.find((location) => location.id === jobLocationId) ?? null;
   const orderedJobs = [...jobsWorkspace.jobs].sort((left, right) => {
@@ -181,7 +183,8 @@ export function JobsAppointmentsPanel({
               onSaveAppointmentSchedule,
               onAppointmentDraftChange,
               onAppointmentEditDraftChange,
-              onAddAppointment
+              onAddAppointment,
+              onKeepJobOpen
             })
           )}
         </div>
@@ -204,7 +207,8 @@ export function JobsAppointmentsPanel({
               onSaveAppointmentSchedule,
               onAppointmentDraftChange,
               onAppointmentEditDraftChange,
-              onAddAppointment
+              onAddAppointment,
+              onKeepJobOpen
             })
           )}
         </div>
@@ -226,7 +230,8 @@ export function JobsAppointmentsPanel({
             onSaveAppointmentSchedule,
             onAppointmentDraftChange,
             onAppointmentEditDraftChange,
-            onAddAppointment
+            onAddAppointment,
+            onKeepJobOpen
           })
         )}
       </div>
@@ -247,7 +252,8 @@ function renderJobCard({
   onSaveAppointmentSchedule,
   onAppointmentDraftChange,
   onAppointmentEditDraftChange,
-  onAddAppointment
+  onAddAppointment,
+  onKeepJobOpen
 }: {
   job: JobsWorkspaceResponse['jobs'][number];
   jobsWorkspace: JobsWorkspaceResponse;
@@ -262,6 +268,7 @@ function renderJobCard({
   onAppointmentDraftChange: JobsAppointmentsPanelProps['onAppointmentDraftChange'];
   onAppointmentEditDraftChange: JobsAppointmentsPanelProps['onAppointmentEditDraftChange'];
   onAddAppointment: JobsAppointmentsPanelProps['onAddAppointment'];
+  onKeepJobOpen: JobsAppointmentsPanelProps['onKeepJobOpen'];
 }) {
   const draft = appointmentDrafts[job.id] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
   const canAddAppointment = job.status !== 'closed' && job.status !== 'cancelled';
@@ -330,15 +337,25 @@ function renderJobCard({
         <div style={styles.subpanel}>
           <strong>Finished visit review</strong>
           <p style={styles.muted}>
-            Finished visits do not close the job. Mark the job completed when the office is ready, or add another appointment below if follow-up work still belongs here.
+            Finished visits do not close the job. Pick how the office wants to handle this job so the review stays in history without blocking the work list.
           </p>
-          <button
-            type="button"
-            onClick={() => onJobStatusReviewRequested(job.id, job.status, 'completed', job.summary)}
-            style={styles.button}
-          >
-            Mark job completed
-          </button>
+          <div style={styles.row}>
+            <button
+              type="button"
+              onClick={() => onJobStatusReviewRequested(job.id, job.status, 'completed', job.summary)}
+              style={styles.button}
+            >
+              Mark job completed
+            </button>
+            {canAddAppointment ? (
+              <button type="button" onClick={() => void onAddAppointment(job.id)} style={styles.button}>
+                Schedule follow-up
+              </button>
+            ) : null}
+            <button type="button" onClick={() => void onKeepJobOpen(job.id)} style={styles.button}>
+              Keep job open
+            </button>
+          </div>
         </div>
       ) : null}
 

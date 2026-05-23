@@ -1,4 +1,5 @@
 import type {
+  AcknowledgeFinishedVisitReviewRequest,
   AppointmentFinishOutcome,
   AppointmentStatus,
   AppointmentSummary,
@@ -29,6 +30,7 @@ import type {
   JobStatus,
   JobsWorkspaceResponse,
   JobSummary,
+  JobMutationResponse,
   LinkEquipmentReplacementRequest,
   LinkContactRequest,
   LocationDetail,
@@ -45,6 +47,7 @@ import type {
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
 export type {
+  AcknowledgeFinishedVisitReviewRequest,
   AppointmentFinishOutcome,
   AppointmentStatus,
   AppointmentSummary,
@@ -75,6 +78,7 @@ export type {
   JobStatus,
   JobsWorkspaceResponse,
   JobSummary,
+  JobMutationResponse,
   LinkContactRequest,
   LocationDetail,
   LocationMutationResponse,
@@ -302,6 +306,23 @@ export async function addOfficeAppointment(input: {
       timeWindowLabel: input.timeWindowLabel,
       technicianId: input.technicianId
     })
+  });
+}
+
+export async function acknowledgeOfficeFinishedVisitReview(
+  input: AcknowledgeFinishedVisitReviewRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    jobId: string;
+  }
+): Promise<JobMutationResponse> {
+  const { sessionToken, apiBaseUrl, jobId, ...payload } = input;
+
+  return requestJson<JobMutationResponse>(`/operations/jobs/${jobId}/finished-visit-review`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 
