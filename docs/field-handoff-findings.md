@@ -16,12 +16,13 @@ Behaviors backed by tests in `apps/field-mobile/src/modules/operations/__tests__
 - **`buildSuccessfulSyncMetadata`** — clears prior `lastSyncError`, advances `lastSnapshotVersion`, and supports an explicit `attemptedAt` distinct from `successfulAt` for the `syncNow` drain path.
 - **Refresh after office change** — when `refreshAssignedWork` pulls a new snapshot, locally queued notes/status/equipment edits still apply on top of the new server values. Pending queue order is `occurredAt`-sorted before drain.
 - **Field cancel boundary** — the screen's `fieldAppointmentStatuses` list excludes `cancelled`, matching the backend's `ForbiddenException` on technician-initiated cancel.
+- **Field trust display helpers** — work order number, full location address, structured schedule display, finished-review acknowledgement, per-appointment queue badges, and office-change refresh summaries are covered by pure helper tests.
 
 ---
 
-## Bug fixed in this lane
+## Field trust fixes landed after the audit
 
-**`technician-workspace-screen.tsx` mislabeled appointments that were not assigned to the current technician.**
+**Appointment ownership is no longer misleading.**
 
 The render was `{appointment.technicianName || employee.displayName}`. If `technicianName` was undefined — which can happen for an unassigned appointment under an assigned job, or when the office reassigned to another tech whose name didn't resolve — the screen fell back to the current employee's name, making it look like the appointment belonged to them.
 
@@ -32,23 +33,32 @@ The render was `{appointment.technicianName || employee.displayName}`. If `techn
 - `technicianId` matches the current employee but no resolved name → "You".
 - `technicianId` set but unresolved → "Another technician".
 
-The screen now reads `Assigned to you (Taylor Tech)` vs. `Assigned to Sam Tech` vs. `Assigned to Unassigned`, removing the mislabel.
+The screen now reads `Assigned to you (Taylor Tech)` vs. `Assigned to Sam Tech` vs. `Unassigned`, removing the mislabel.
 
-Covered by `field-assignment-display.test.ts` (5 cases).
+The screen also now confirms before a technician changes status or saves a finish review on an appointment assigned to someone else or currently unassigned.
+
+Covered by `field-assignment-display.test.ts`.
+
+**The field job card now carries the identifiers and office feedback a technician needs while working.**
+
+- `JobSummary.workOrderNumber` renders when present.
+- Location cards render address line, city, state, and postal code instead of only `addressLine1`.
+- Appointment schedules prefer structured `scheduledStartTime` / `scheduledEndTime`, falling back to `timeWindowLabel`.
+- Finished appointments show office acknowledgement with reviewer, decision, and review date when `finishedReviewedAt`, `finishedReviewedBy`, and `finishedReviewDecision` are present.
+- Appointment cards show whether a local appointment change is queued, conflicted, or rejected.
+- Refresh/startup compares the previous cached snapshot with the latest assigned-work response and shows a short "Office changed this work" summary for schedule, assignment, status, new appointment, or removed-from-feed changes.
+
+Covered by `field-appointment-display.test.ts`.
 
 ---
 
 ## Display gaps (Milestone 6 punch list — not fixed here)
 
-These are real gaps a technician will notice once dispatch starts driving real-world schedule changes. None of them needed a fix to make the lane safe to land, but they should be on the next field lane's plate.
+These are real gaps a technician will notice once dispatch starts driving real-world schedule changes. None of them needed a fix to make the lane safe to land, but they should be on a later field lane's plate.
 
-1. **No surface for office acknowledgement of finish review.** Backend writes `finishedReviewedAt`, `finishedReviewedBy`, and `finishedReviewDecision`. The field screen ignores all three. A technician can't see whether the office accepted their finish review or what decision was recorded.
-2. **No work-order-number display.** `JobSummary.workOrderNumber` is in the snapshot but never rendered. Crews relying on a printed WO need it.
-3. **No diff cue when refresh brings in office changes.** `refreshAssignedWork` quietly replaces state. A technician who had the screen open won't see that the office moved an appointment, reassigned a tech, or advanced a status. A small "Office changed X" callout would close the trust loop.
-4. **No per-appointment "queued change" badge.** The sync card is global. If a technician saved a status update offline, the affected appointment card doesn't visibly indicate it's still queued. Pending count is visible only in the global sync summary.
-5. **No per-appointment ownership UX cue beyond the new label.** Status buttons remain pressable on appointments not assigned to the current technician. The backend will accept those updates because the job is in the technician's window; it's a foot-gun more than a security issue, but worth a visible cue and probably a confirmation prompt.
-6. **Location address shows only `addressLine1`.** City/state/postal are in the snapshot. For mobile context (especially when the tech is driving), the full address belongs on the card.
-7. **No retry control for conflicted/rejected queue entries.** Once an item flips to `conflict` or `rejected` it stays in the queue with provenance, but the UI has no "discard" or "resolve" affordance. Today the technician has to sign out (which warns) or live with the alert tone.
+1. **No retry/discard control for conflicted/rejected queue entries.** Once an item flips to `conflict` or `rejected` it stays in the queue with provenance, but the UI has no "discard" or "resolve" affordance. Today the technician has to sign out (which warns) or live with the alert tone.
+2. **No explicit route/navigation action from the address.** The full address is visible now, but there is no tap target to hand it to device maps.
+3. **No field-side detail drawer.** The screen remains one scrollable operational card, so the new trust signals are readable but not organized into the dashboard/detail pattern described in the screen behavior spec.
 
 ---
 
@@ -89,9 +99,9 @@ These are now pinned by tests and should stay true:
 
 ## Recommended next field lane
 
-1. **Office-side change visibility.** Diff cue on refresh ("Office changed X since you opened this job") plus surfacing of `finishedReviewedDecision` once the office acknowledges.
-2. **Per-appointment ownership UX.** Lock or warn status buttons on appointments not assigned to the current technician.
-3. **Register / media queueing.** Real Milestone 6 scope, currently absent.
-4. **Auto-sync loop.** Quiet background drain so technicians don't have to remember to press Sync Now.
+1. **Queue resolution controls.** Give technicians a controlled way to discard or resolve conflicted/rejected local changes without signing out.
+2. **Register / media queueing.** Real Milestone 6 scope, currently absent.
+3. **Auto-sync loop.** Quiet background drain so technicians don't have to remember to press Sync Now.
+4. **Field dashboard/detail split.** Move the single long card toward the documented technician home/detail workflow once the data and sync trust surfaces are stable.
 
 Each item is small enough to ship as its own lane and none of them require dispatch-model decisions to be settled first.

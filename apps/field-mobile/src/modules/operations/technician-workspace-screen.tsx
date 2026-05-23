@@ -42,6 +42,14 @@ import {
   formatAppointmentAssignmentLine,
   shouldConfirmAppointmentOwnership
 } from './field-assignment-display';
+import {
+  formatAppointmentSchedule,
+  formatFieldLocationAddress,
+  formatFinishedReviewAcknowledgement,
+  formatWorkOrderLine,
+  summarizeAppointmentQueueState,
+  summarizeOfficeAppointmentChanges
+} from './field-appointment-display';
 
 type Props = {
   apiBaseUrl: string;
@@ -126,6 +134,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [equipmentCreateDrafts, setEquipmentCreateDrafts] = useState<Record<string, EquipmentCreateDraft>>({});
   const [replacementSelections, setReplacementSelections] = useState<Record<string, string>>({});
   const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
+  const [officeChangeMessages, setOfficeChangeMessages] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -173,6 +182,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
         await saveAssignedWorkSnapshot(nextAssignedWork);
         await saveSyncMetadata(nextSyncMetadata);
+        setOfficeChangeMessages(summarizeOfficeAppointmentChanges(persistedSnapshot, nextAssignedWork));
         setServerSnapshot(nextAssignedWork);
         setSyncMetadata(nextSyncMetadata);
       } catch (error) {
@@ -203,6 +213,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
       await saveAssignedWorkSnapshot(nextAssignedWork);
       await saveSyncMetadata(nextSyncMetadata);
+      setOfficeChangeMessages(summarizeOfficeAppointmentChanges(serverSnapshot, nextAssignedWork));
       setServerSnapshot(nextAssignedWork);
       setSyncMetadata(nextSyncMetadata);
     } catch (error) {
@@ -851,19 +862,35 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             </Pressable>
           </View>
 
+          {officeChangeMessages.length > 0 ? (
+            <View style={styles.noticeCard}>
+              <Text style={styles.sectionTitle}>Office changed this work</Text>
+              {officeChangeMessages.slice(0, 3).map((message) => (
+                <Text key={message} style={styles.summaryText}>
+                  {message}
+                </Text>
+              ))}
+              {officeChangeMessages.length > 3 ? (
+                <Text style={styles.summaryText}>Plus {officeChangeMessages.length - 3} more office update(s).</Text>
+              ) : null}
+            </View>
+          ) : null}
+
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           {(assignedWork?.jobs ?? []).map((job) => {
             const location = locationLookup.get(job.locationId);
             const equipment = (assignedWork?.equipment ?? []).filter((record) => record.locationId === job.locationId);
+            const workOrderLine = formatWorkOrderLine(job);
 
             return (
               <View key={job.id} style={styles.summaryCard}>
                 <Text style={styles.sectionTitle}>
                   Job {job.jobNumber}: {job.summary}
                 </Text>
+                {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
                 <Text style={styles.summaryText}>
-                  {location?.name} - {location?.addressLine1} - {job.billToCustomerName}
+                  {location?.name ?? job.locationName} - {formatFieldLocationAddress(location)} - {job.billToCustomerName}
                 </Text>
                 <Text style={styles.summaryText}>
                   Contacts: {location?.contacts.map((contact) => contact.displayName).join(', ') || 'None'}
@@ -871,13 +898,21 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
                 {job.appointments.map((appointment) => {
                   const assignmentLine = formatAppointmentAssignmentLine(appointment, employee.id);
+                  const queueSummary = summarizeAppointmentQueueState(appointment.id, pendingOperations);
+                  const finishedReviewAcknowledgement = formatFinishedReviewAcknowledgement(appointment);
                   return (
                     <View key={appointment.id} style={styles.block}>
-                      <Text style={styles.sectionTitleSmall}>
-                        {appointment.scheduledDate || 'Unscheduled'} - {appointment.timeWindowLabel || 'No window'}
-                      </Text>
+                      <Text style={styles.sectionTitleSmall}>{formatAppointmentSchedule(appointment)}</Text>
                       <Text style={styles.summaryText}>{assignmentLine}</Text>
+                      {queueSummary ? (
+                        <Text style={queueSummary.tone === 'alert' ? styles.errorText : styles.pendingText}>
+                          {queueSummary.label}
+                        </Text>
+                      ) : null}
                       <Text style={styles.summaryText}>Latest local appointment status: {appointment.status}</Text>
+                      {finishedReviewAcknowledgement ? (
+                        <Text style={styles.summaryText}>{finishedReviewAcknowledgement}</Text>
+                      ) : null}
                       <View style={styles.actionRow}>
                         {fieldAppointmentStatuses.map((status) => (
                           <Pressable
@@ -892,93 +927,93 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
                       {finishReview?.appointmentId === appointment.id ? (
                         <View style={styles.reviewCard}>
-                        <Text style={styles.sectionTitleSmall}>Finish review</Text>
-                        <Text style={styles.summaryText}>
-                          BellField should prompt for notes, outcome, and charge activity before finishing this visit.
-                        </Text>
-                        <Text style={styles.summaryText}>Outcome: {formatFinishOutcome(finishReview.finishOutcome)}</Text>
-                        <View style={styles.actionRow}>
-                          {(['completed', 'followUpNeeded', 'noAccess'] as AppointmentFinishOutcome[]).map((outcome) => (
+                          <Text style={styles.sectionTitleSmall}>Finish review</Text>
+                          <Text style={styles.summaryText}>
+                            BellField should prompt for notes, outcome, and charge activity before finishing this visit.
+                          </Text>
+                          <Text style={styles.summaryText}>Outcome: {formatFinishOutcome(finishReview.finishOutcome)}</Text>
+                          <View style={styles.actionRow}>
+                            {(['completed', 'followUpNeeded', 'noAccess'] as AppointmentFinishOutcome[]).map((outcome) => (
+                              <Pressable
+                                key={outcome}
+                                onPress={() =>
+                                  setFinishReview((current) =>
+                                    current && current.appointmentId === appointment.id
+                                      ? { ...current, finishOutcome: outcome }
+                                      : current
+                                  )
+                                }
+                                style={styles.tagButton}
+                              >
+                                <Text style={styles.tagButtonText}>{formatFinishOutcome(outcome)}</Text>
+                              </Pressable>
+                            ))}
+                          </View>
+                          <Text style={styles.summaryText}>
+                            Charge activity: {finishReview.hasChargeActivity ? 'Yes' : 'No'}
+                          </Text>
+                          <View style={styles.actionRow}>
                             <Pressable
-                              key={outcome}
                               onPress={() =>
                                 setFinishReview((current) =>
                                   current && current.appointmentId === appointment.id
-                                    ? { ...current, finishOutcome: outcome }
+                                    ? { ...current, hasChargeActivity: true }
                                     : current
                                 )
                               }
                               style={styles.tagButton}
                             >
-                              <Text style={styles.tagButtonText}>{formatFinishOutcome(outcome)}</Text>
+                              <Text style={styles.tagButtonText}>Charges added</Text>
                             </Pressable>
-                          ))}
-                        </View>
-                        <Text style={styles.summaryText}>
-                          Charge activity: {finishReview.hasChargeActivity ? 'Yes' : 'No'}
-                        </Text>
-                        <View style={styles.actionRow}>
-                          <Pressable
-                            onPress={() =>
+                            <Pressable
+                              onPress={() =>
+                                setFinishReview((current) =>
+                                  current && current.appointmentId === appointment.id
+                                    ? { ...current, hasChargeActivity: false }
+                                    : current
+                                )
+                              }
+                              style={styles.tagButton}
+                            >
+                              <Text style={styles.tagButtonText}>No charges</Text>
+                            </Pressable>
+                          </View>
+                          <TextInput
+                            value={finishReview.visitNotes}
+                            onChangeText={(value) =>
                               setFinishReview((current) =>
                                 current && current.appointmentId === appointment.id
-                                  ? { ...current, hasChargeActivity: true }
+                                  ? { ...current, visitNotes: value }
                                   : current
                               )
                             }
-                            style={styles.tagButton}
-                          >
-                            <Text style={styles.tagButtonText}>Charges added</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={() =>
+                            multiline
+                            placeholder="Visit notes"
+                            style={styles.input}
+                          />
+                          <TextInput
+                            value={finishReview.registerReminder}
+                            onChangeText={(value) =>
                               setFinishReview((current) =>
                                 current && current.appointmentId === appointment.id
-                                  ? { ...current, hasChargeActivity: false }
+                                  ? { ...current, registerReminder: value }
                                   : current
                               )
                             }
-                            style={styles.tagButton}
-                          >
-                            <Text style={styles.tagButtonText}>No charges</Text>
-                          </Pressable>
+                            multiline
+                            placeholder="Register item or follow-up reminder"
+                            style={styles.input}
+                          />
+                          <View style={styles.actionRow}>
+                            <Pressable onPress={() => commitFinishReview(false, false)} style={styles.primaryButton}>
+                              <Text style={styles.primaryButtonText}>Save finish locally</Text>
+                            </Pressable>
+                            <Pressable onPress={() => setFinishReview(null)} style={styles.secondaryButton}>
+                              <Text style={styles.secondaryButtonText}>Cancel</Text>
+                            </Pressable>
+                          </View>
                         </View>
-                        <TextInput
-                          value={finishReview.visitNotes}
-                          onChangeText={(value) =>
-                            setFinishReview((current) =>
-                              current && current.appointmentId === appointment.id
-                                ? { ...current, visitNotes: value }
-                                : current
-                            )
-                          }
-                          multiline
-                          placeholder="Visit notes"
-                          style={styles.input}
-                        />
-                        <TextInput
-                          value={finishReview.registerReminder}
-                          onChangeText={(value) =>
-                            setFinishReview((current) =>
-                              current && current.appointmentId === appointment.id
-                                ? { ...current, registerReminder: value }
-                                : current
-                            )
-                          }
-                          multiline
-                          placeholder="Register item or follow-up reminder"
-                          style={styles.input}
-                        />
-                        <View style={styles.actionRow}>
-                          <Pressable onPress={() => commitFinishReview(false, false)} style={styles.primaryButton}>
-                            <Text style={styles.primaryButtonText}>Save finish locally</Text>
-                          </Pressable>
-                          <Pressable onPress={() => setFinishReview(null)} style={styles.secondaryButton}>
-                            <Text style={styles.secondaryButtonText}>Cancel</Text>
-                          </Pressable>
-                        </View>
-                      </View>
-                    ) : null}
+                      ) : null}
                     </View>
                   );
                 })}
@@ -1271,11 +1306,13 @@ const styles = StyleSheet.create({
   title: { color: '#1f2933', fontSize: 28, fontWeight: '700' },
   subtitle: { color: '#52606d', fontSize: 15, lineHeight: 22 },
   summaryCard: { backgroundColor: '#ffffff', borderColor: '#ebdec6', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
+  noticeCard: { backgroundColor: '#eef6f7', borderColor: '#bdd9df', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
   block: { backgroundColor: '#faf7ef', borderRadius: 14, gap: 8, padding: 12 },
   reviewCard: { backgroundColor: '#f3f7ef', borderColor: '#d5e2cd', borderRadius: 14, borderWidth: 1, gap: 8, padding: 12 },
   sectionTitle: { color: '#1f2933', fontSize: 17, fontWeight: '600' },
   sectionTitleSmall: { color: '#1f2933', fontSize: 15, fontWeight: '600' },
   summaryText: { color: '#52606d', fontSize: 14, lineHeight: 20 },
+  pendingText: { color: '#8a5a00', fontSize: 14, fontWeight: '600', lineHeight: 20 },
   input: {
     backgroundColor: '#ffffff',
     borderColor: '#d9c8ad',
