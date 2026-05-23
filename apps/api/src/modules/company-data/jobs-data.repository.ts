@@ -1033,7 +1033,7 @@ export class JobsDataRepository {
           created_at as "createdAt",
           updated_at as "updatedAt"
         from media_attachments
-        where job_id = $1 and sha256 = $2
+        where job_id = $1 and sha256 = $2 and is_void = false
         limit 1
       `,
       [jobId, sha256]

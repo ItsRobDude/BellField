@@ -1,20 +1,26 @@
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './modules/app.module';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
 import { log } from './common/logger';
 import { getApiRuntimeConfig } from './common/config/runtime-config';
+import { MediaConfigService } from './modules/media/media-config.service';
 
 async function bootstrap() {
-  // rawBody: true preserves the raw request body buffer on `req.rawBody`
-  // alongside the normal parsed body. JSON parsing for every other route is
-  // unchanged. The MediaController reads `req.rawBody` only on the media
-  // blob upload path; no other route consumes it.
-  const app = await NestFactory.create(AppModule, { bufferLogs: true, rawBody: true });
+  // rawBody: true lets registered body parsers preserve the original buffer on
+  // `req.rawBody`. JSON parsing stays unchanged; the explicit raw parser below
+  // is needed for application/octet-stream media blob uploads.
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
   const runtimeConfig = getApiRuntimeConfig();
+  const mediaConfig = app.get(MediaConfigService);
 
   // Keep local app-to-api wiring simple while the persistent auth/session layer is still forming.
   app.enableCors({ origin: true });
+  app.useBodyParser('raw', {
+    type: 'application/octet-stream',
+    limit: mediaConfig.getMaxByteSize()
+  });
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalPipes(
     new ValidationPipe({

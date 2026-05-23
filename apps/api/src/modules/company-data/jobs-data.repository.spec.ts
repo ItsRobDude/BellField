@@ -681,6 +681,40 @@ describe('JobsDataRepository', () => {
     expect(timelineCall?.[1]?.[5]).toBe('Field Tech attached compressor.jpg.');
   });
 
+  it('dedupes media only against active rows', async () => {
+    const mediaRow = {
+      id: 'media-1',
+      jobId: 'job-1',
+      appointmentId: null,
+      kind: 'image',
+      contentType: 'image/jpeg',
+      byteSize: 1024,
+      sha256: 'a'.repeat(64),
+      originalFilename: 'photo.jpg',
+      caption: null,
+      capturedByEmployeeId: 'tech-1',
+      capturedByName: 'Field Tech',
+      capturedAt: '2026-04-14T11:00:00.000Z',
+      storagePath: null,
+      uploadedAt: null,
+      isVoid: false,
+      voidReason: null,
+      createdAt: '2026-04-14T11:00:00.000Z',
+      updatedAt: '2026-04-14T11:00:00.000Z'
+    };
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [mediaRow] }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.findMediaAttachmentByJobAndSha('job-1', 'a'.repeat(64));
+
+    const querySql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+    expect(querySql).toContain('job_id = $1');
+    expect(querySql).toContain('sha256 = $2');
+    expect(querySql).toContain('is_void = false');
+  });
+
   it('marks a media row as uploaded by writing storage_path and uploaded_at together', async () => {
     const mediaRow = {
       id: 'media-1',

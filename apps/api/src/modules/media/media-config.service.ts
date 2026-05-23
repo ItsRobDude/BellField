@@ -20,6 +20,7 @@ const DEFAULT_TOKEN_TTL_SECONDS = 5 * 60;
 @Injectable()
 export class MediaConfigService implements OnModuleInit {
   private readonly logger = new Logger(MediaConfigService.name);
+  private loaded = false;
   private mediaRoot = '';
   private resolvedMediaRoot = '';
   private tokenSecret = '';
@@ -27,6 +28,14 @@ export class MediaConfigService implements OnModuleInit {
   private tokenTtlSeconds = DEFAULT_TOKEN_TTL_SECONDS;
 
   onModuleInit(): void {
+    this.loadConfig();
+  }
+
+  private loadConfig(): void {
+    if (this.loaded) {
+      return;
+    }
+
     const isProduction = process.env.NODE_ENV === 'production';
 
     const configuredRoot = process.env.BELLFIELD_MEDIA_ROOT?.trim();
@@ -90,21 +99,27 @@ export class MediaConfigService implements OnModuleInit {
         this.tokenTtlSeconds = Math.floor(parsed);
       }
     }
+
+    this.loaded = true;
   }
 
   getMediaRoot(): string {
+    this.loadConfig();
     return this.resolvedMediaRoot;
   }
 
   getTokenSecret(): string {
+    this.loadConfig();
     return this.tokenSecret;
   }
 
   getMaxByteSize(): number {
+    this.loadConfig();
     return this.maxBytes;
   }
 
   getTokenTtlSeconds(): number {
+    this.loadConfig();
     return this.tokenTtlSeconds;
   }
 
@@ -121,6 +136,7 @@ export class MediaConfigService implements OnModuleInit {
    * less-trusted sources.
    */
   resolveBlobPath(jobId: string, mediaId: string, extension: string): string {
+    this.loadConfig();
     if (!jobId || jobId.includes('..') || jobId.includes('/') || jobId.includes('\\')) {
       throw new Error('Invalid jobId for media path resolution.');
     }

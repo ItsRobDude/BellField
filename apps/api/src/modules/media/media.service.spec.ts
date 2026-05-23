@@ -38,8 +38,9 @@ function createMediaService(options: { mediaRoot?: string } = {}) {
   const jobsDataService = {
     findMediaAttachmentByJobAndSha: jest.fn().mockResolvedValue(null),
     createMediaAttachment: jest.fn(),
-    getMediaAttachmentById: jest.fn(),
+    getMediaAttachmentById: jest.fn().mockResolvedValue(buildMediaRecord()),
     listMediaAttachmentsForJob: jest.fn().mockResolvedValue([]),
+    listAssignedJobsForEmployee: jest.fn().mockResolvedValue([{ id: 'job-1' }]),
     markMediaAttachmentBlobUploaded: jest.fn(),
     updateMediaAttachmentCaption: jest.fn(),
     voidMediaAttachment: jest.fn(),
@@ -205,6 +206,27 @@ describe('MediaService.createUploadIntent', () => {
     }
   });
 
+  it('rejects field upload intents outside the assigned-work scope', async () => {
+    const root = makeTempRoot();
+    try {
+      const { service, jobsDataService } = createMediaService({ mediaRoot: root });
+      jobsDataService.listAssignedJobsForEmployee.mockResolvedValueOnce([{ id: 'other-job' }]);
+
+      await expect(
+        service.createUploadIntent('session-token', 'job-1', {
+          kind: 'image',
+          contentType: 'image/jpeg',
+          byteSize: 5,
+          sha256: validSha256,
+          originalFilename: 'photo.jpg'
+        })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jobsDataService.createMediaAttachment).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('creates a new media row and mints an upload token when the (jobId, sha256) is new', async () => {
     const root = makeTempRoot();
     try {
@@ -276,6 +298,31 @@ describe('MediaService.createUploadIntent', () => {
       expect(response.uploadCompleted).toBe(false);
       expect(response.uploadToken).toBeTruthy();
       expect(jobsDataService.createMediaAttachment).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('does not reuse a voided media row when the same sha256 is uploaded again', async () => {
+    const root = makeTempRoot();
+    try {
+      const { service, jobsDataService } = createMediaService({ mediaRoot: root });
+      jobsDataService.findMediaAttachmentByJobAndSha.mockResolvedValueOnce(
+        buildMediaRecord({ id: 'media-voided', isVoid: true, voidReason: 'wrong job' })
+      );
+      jobsDataService.createMediaAttachment.mockResolvedValueOnce(buildMediaRecord({ id: 'media-new' }));
+
+      const response = await service.createUploadIntent('session-token', 'job-1', {
+        kind: 'image',
+        contentType: 'image/jpeg',
+        byteSize: 5,
+        sha256: validSha256,
+        originalFilename: 'photo.jpg'
+      });
+
+      expect(response.mediaAttachment.id).toBe('media-new');
+      expect(response.uploadCompleted).toBe(false);
+      expect(jobsDataService.createMediaAttachment).toHaveBeenCalledTimes(1);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -382,6 +429,22 @@ describe('MediaService.finalizeBlobUpload', () => {
     }
   });
 
+  it('rejects finalizing a voided media row', async () => {
+    const root = makeTempRoot();
+    try {
+      const { service, mediaToken, jobsDataService } = createMediaService({ mediaRoot: root });
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ isVoid: true }));
+      const token = mediaToken.signToken('media-1', 'upload').token;
+
+      await expect(
+        service.finalizeBlobUpload('media-1', token, Buffer.from('hello'))
+      ).rejects.toBeInstanceOf(ConflictException);
+      expect(jobsDataService.markMediaAttachmentBlobUploaded).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('writes the blob under the media root and marks the row uploaded on a valid finalize', async () => {
     const root = makeTempRoot();
     try {
@@ -422,6 +485,19 @@ describe('MediaService authorize/edit/void/list', () => {
     }
   });
 
+  it('rejects field listing outside the assigned-work scope', async () => {
+    const root = makeTempRoot();
+    try {
+      const { service, jobsDataService } = createMediaService({ mediaRoot: root });
+      jobsDataService.listAssignedJobsForEmployee.mockResolvedValueOnce([{ id: 'other-job' }]);
+
+      await expect(service.listForJob('session-token', 'job-1')).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jobsDataService.listMediaAttachmentsForJob).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   it('updateMedia rejects when no editable fields are supplied', async () => {
     const root = makeTempRoot();
     try {
@@ -444,6 +520,22 @@ describe('MediaService authorize/edit/void/list', () => {
       await service.updateMedia('session-token', 'media-1', { caption: 'New caption' });
       expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'media:edit');
       expect(jobsDataService.updateMediaAttachmentCaption).toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects field media edits outside the assigned-work scope', async () => {
+    const root = makeTempRoot();
+    try {
+      const { service, jobsDataService } = createMediaService({ mediaRoot: root });
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ jobId: 'other-job' }));
+      jobsDataService.listAssignedJobsForEmployee.mockResolvedValueOnce([{ id: 'job-1' }]);
+
+      await expect(
+        service.updateMedia('session-token', 'media-1', { caption: 'New caption' })
+      ).rejects.toBeInstanceOf(ForbiddenException);
+      expect(jobsDataService.updateMediaAttachmentCaption).not.toHaveBeenCalled();
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -479,6 +571,27 @@ describe('MediaService authorize/edit/void/list', () => {
       const { record: returned } = await service.authorizeBlobDownload('media-1', { downloadToken });
       expect(returned.id).toBe('media-1');
       expect(identityAccessService.getAuthorizedEmployee).not.toHaveBeenCalled();
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  it('rejects session downloads for field users outside the assigned-work scope', async () => {
+    const root = makeTempRoot();
+    try {
+      const { service, jobsDataService } = createMediaService({ mediaRoot: root });
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(
+        buildMediaRecord({
+          jobId: 'other-job',
+          storagePath: 'other-job/media-1.jpg',
+          uploadedAt: '2026-04-14T11:05:00.000Z'
+        })
+      );
+      jobsDataService.listAssignedJobsForEmployee.mockResolvedValueOnce([{ id: 'job-1' }]);
+
+      await expect(
+        service.authorizeBlobDownload('media-1', { sessionToken: 'session-token' })
+      ).rejects.toBeInstanceOf(ForbiddenException);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

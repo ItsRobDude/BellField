@@ -21,8 +21,8 @@ import type {
 
 // Minimal request/response shapes to avoid taking on @types/express as a
 // new dev dependency. The MediaController only needs rawBody on requests
-// and setHeader on responses. Nest wires both fields when running on the
-// Express platform with rawBody: true configured in main.ts.
+// and setHeader on responses. main.ts registers the octet-stream raw parser
+// with rawBody enabled for the media blob upload path.
 type RawBodyRequest = { rawBody?: Buffer | undefined };
 type MinimalResponse = { setHeader: (name: string, value: string) => void };
 
@@ -74,9 +74,8 @@ export class MediaController {
   }
 
   /**
-   * Raw-body byte upload. The route reads `req.rawBody` (preserved on every
-   * request by `NestFactory.create(..., { rawBody: true })` in main.ts; the
-   * normal JSON parser still runs for every other route). Auth is via the
+   * Raw-body byte upload. The route reads `req.rawBody` from the octet-stream
+   * parser registered in main.ts. Auth is via the
    * signed upload token from the upload-intent response; no session is
    * required so the field app can finalize uploads with just the minted
    * token.
