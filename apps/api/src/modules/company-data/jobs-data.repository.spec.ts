@@ -255,4 +255,108 @@ describe('JobsDataRepository', () => {
       ])
     );
   });
+
+  it.each(['scheduled', 'arrived', 'working', 'noAnswer'] as const)(
+    'writes an appointmentStatusUpdated entry when an appointment is moved to %s',
+    async (status) => {
+      const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+      const repository = new JobsDataRepository(databaseService as never);
+
+      await repository.updateAppointmentStatus('appointment-1', status, 'Field Tech', '2026-04-14T12:00:00.000Z');
+
+      const timelineEntries = queryable.query.mock.calls
+        .filter(([sql]) => String(sql).includes('insert into job_timeline_entries'))
+        .map(([, params]) => ({ kind: params?.[4], message: params?.[5] }));
+      expect(timelineEntries).toEqual(
+        expect.arrayContaining([
+          { kind: 'appointmentStatusUpdated', message: `Appointment status changed to ${status}.` }
+        ])
+      );
+      expect(timelineEntries.find((entry) => entry.kind === 'appointmentFinishedReview')).toBeUndefined();
+    }
+  );
+
+  it('writes both appointmentStatusUpdated and appointmentFinishedReview entries when finishing an appointment', async () => {
+    const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.updateAppointmentStatus(
+      'appointment-1',
+      'finished',
+      'Field Tech',
+      '2026-04-14T12:00:00.000Z',
+      { finishOutcome: 'completed', visitNotes: 'All good.', hasChargeActivity: true }
+    );
+
+    const timelineEntries = queryable.query.mock.calls
+      .filter(([sql]) => String(sql).includes('insert into job_timeline_entries'))
+      .map(([, params]) => ({ kind: params?.[4], message: params?.[5] }));
+    const kinds = timelineEntries.map((entry) => entry.kind);
+
+    expect(kinds).toEqual(expect.arrayContaining(['appointmentStatusUpdated', 'appointmentFinishedReview']));
+    expect(kinds.indexOf('appointmentStatusUpdated')).toBeLessThan(kinds.indexOf('appointmentFinishedReview'));
+  });
+
+  it.each(['noAnswer', 'finished'] as const)(
+    'guards the parent job against terminal-status flips when a %s appointment is saved',
+    async (status) => {
+      const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+      const repository = new JobsDataRepository(databaseService as never);
+
+      await repository.updateAppointmentStatus(
+        'appointment-1',
+        status,
+        'Field Tech',
+        '2026-04-14T12:00:00.000Z',
+        status === 'finished' ? { finishOutcome: 'completed', hasChargeActivity: true } : undefined
+      );
+
+      const jobStatusGuardCall = queryable.query.mock.calls.find(([sql]) => {
+        const text = String(sql);
+        return text.includes('update jobs') && text.includes('case') && text.includes("status in ('closed'");
+      });
+      expect(jobStatusGuardCall).toBeTruthy();
+      const guardSql = String(jobStatusGuardCall?.[0] ?? '');
+      expect(guardSql).toContain("status in ('closed', 'cancelled', 'waitingOnParts', 'completed')");
+      expect(jobStatusGuardCall?.[1]?.[1]).toBe('inProgress');
+    }
+  );
+
+  it('filters out cancelled jobs from a technician assigned-work query', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.listAssignedJobsForEmployee('tech-1', new Set(['2026-04-14']));
+
+    const querySql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+    expect(querySql).toContain("job.status <> 'cancelled'");
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['tech-1', ['2026-04-14']]);
+  });
+
+  it('treats cancelled, finished, and noAnswer appointments as not incomplete', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [{ hasIncompleteAppointment: false }] }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.hasIncompleteAppointments('job-1');
+
+    const querySql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+    expect(querySql).toContain("status not in ('finished', 'cancelled', 'noAnswer')");
+  });
+
+  it('ignores cancelled appointments when checking for future-scheduled work', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [{ hasFutureAppointment: false }] }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.hasFutureAppointments('job-1', '2026-04-14');
+
+    const querySql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+    expect(querySql).toContain("status <> 'cancelled'");
+    expect(querySql).toContain('scheduled_date > $2::date');
+  });
 });

@@ -425,4 +425,153 @@ describe('JobsAppointmentsService', () => {
       service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'finished' })
     ).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('requires appointmentsDispatch:edit when changing appointment status', async () => {
+    const { service, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockRejectedValue(
+      new ForbiddenException('You do not have permission to perform this action.')
+    );
+
+    await expect(
+      service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'arrived' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'appointmentsDispatch:edit');
+  });
+
+  it('lets office dispatchers with appointmentsDispatch:edit cancel an appointment', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['appointmentsDispatch:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'scheduled',
+      updatedAt: '2026-04-14T10:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
+    jobsDataService.updateAppointmentStatus.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'cancelled',
+      updatedAt: '2026-04-14T11:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+
+    await service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'cancelled' });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'appointmentsDispatch:edit');
+    expect(jobsDataService.updateAppointmentStatus).toHaveBeenCalledWith(
+      'appointment-1',
+      'cancelled',
+      'Dispatcher',
+      undefined,
+      undefined
+    );
+  });
+
+  it.each(['noAnswer', 'finished'] as const)(
+    'does not auto-close the parent job when an appointment is marked %s',
+    async (status) => {
+      const { service, jobsDataService, identityAccessService } = createService();
+      const job = createJob('inProgress');
+      identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+        id: 'office-1',
+        displayName: 'Dispatcher',
+        effectivePermissions: ['appointmentsDispatch:edit'],
+        sessionSurface: 'office-web'
+      });
+      jobsDataService.getAppointmentById.mockResolvedValue({
+        id: 'appointment-1',
+        jobId: 'job-1',
+        status: 'working',
+        updatedAt: '2026-04-14T10:00:00.000Z',
+        createdAt: '2026-04-14T09:00:00.000Z'
+      });
+      jobsDataService.getJobById.mockResolvedValue(job);
+      jobsDataService.updateAppointmentStatus.mockResolvedValue({
+        id: 'appointment-1',
+        jobId: 'job-1',
+        status,
+        updatedAt: '2026-04-14T11:00:00.000Z',
+        createdAt: '2026-04-14T09:00:00.000Z'
+      });
+
+      await service.updateAppointmentStatus('session-token', 'appointment-1', {
+        status,
+        ...(status === 'finished' ? { finishOutcome: 'completed', hasChargeActivity: true } : {})
+      });
+
+      expect(jobsDataService.updateJobStatus).not.toHaveBeenCalled();
+    }
+  );
+
+  it('keeps a job needing scheduling when its only appointment is cancelled, even if it had a date', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:view'],
+      sessionSurface: 'office-web'
+    });
+    const job = { ...createJob('scheduled'), appointmentIds: ['appointment-1'] };
+    jobsDataService.listJobs.mockResolvedValue([job]);
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'cancelled',
+      scheduledDate: '2026-04-15',
+      updatedAt: '2026-04-14T11:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+
+    const response = await service.getWorkspace('session-token');
+
+    expect(response.jobs[0]?.needsScheduling).toBe(true);
+    expect(response.jobs[0]?.appointments[0]?.status).toBe('cancelled');
+    expect(response.jobs[0]?.needsOfficeReview).toBe(false);
+  });
+
+  it('writes a sync flag note when a field replay update lands after the job was cancelled', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    const job = createJob('cancelled');
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['appointmentsDispatch:edit'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([job]);
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'working',
+      updatedAt: '2026-04-14T10:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+    jobsDataService.getJobById.mockResolvedValue(job);
+    jobsDataService.updateAppointmentStatus.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'working',
+      updatedAt: '2026-04-14T12:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+
+    await service.updateAppointmentStatus('session-token', 'appointment-1', {
+      status: 'working',
+      occurredAt: '2026-04-14T11:00:00.000Z'
+    });
+
+    expect(jobsDataService.addSyncFlag).toHaveBeenCalledWith(
+      'job-1',
+      'Field appointment update synced after the job had already been cancelled.',
+      'Field Tech',
+      expect.any(String)
+    );
+  });
 });
