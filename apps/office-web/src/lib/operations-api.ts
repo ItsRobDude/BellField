@@ -262,6 +262,8 @@ export async function createOfficeJob(input: {
   summary: string;
   workOrderNumber?: string;
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
 }): Promise<JobSummary> {
@@ -294,6 +296,8 @@ export async function addOfficeAppointment(input: {
   apiBaseUrl?: string;
   jobId: string;
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
 }): Promise<JobSummary> {
@@ -303,6 +307,8 @@ export async function addOfficeAppointment(input: {
     method: 'POST',
     body: JSON.stringify({
       scheduledDate: input.scheduledDate,
+      scheduledStartTime: input.scheduledStartTime,
+      scheduledEndTime: input.scheduledEndTime,
       timeWindowLabel: input.timeWindowLabel,
       technicianId: input.technicianId
     })
@@ -339,6 +345,8 @@ export async function updateOfficeAppointmentSchedule(
     method: 'PATCH',
     body: JSON.stringify({
       scheduledDate: input.scheduledDate,
+      scheduledStartTime: input.scheduledStartTime,
+      scheduledEndTime: input.scheduledEndTime,
       timeWindowLabel: input.timeWindowLabel,
       technicianId: input.technicianId,
       occurredAt: input.occurredAt

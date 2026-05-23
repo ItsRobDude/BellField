@@ -8,9 +8,12 @@ import {
   type DispatchAppointmentCard,
   type DispatchBoardModel
 } from './dispatch-board-data';
+import { formatAppointmentScheduleDisplay } from './appointment-schedule-format';
 
 export type DispatchScheduleDraft = {
   scheduledDate: string;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
   timeWindowLabel: string;
   technicianId: string;
 };
@@ -308,7 +311,15 @@ function DispatchDetailDrawer({
     previousServerStatusRef.current = card.status;
     setIsSaving(false);
     setIsSavingStatus(false);
-  }, [card.appointmentId, card.scheduledDate, card.timeWindowLabel, card.technicianId, card.status]);
+  }, [
+    card.appointmentId,
+    card.scheduledDate,
+    card.scheduledStartTime,
+    card.scheduledEndTime,
+    card.timeWindowLabel,
+    card.technicianId,
+    card.status
+  ]);
 
   async function handleSave() {
     if (!onSaveAppointmentSchedule || isSaving || isUnchanged) {
@@ -402,7 +413,31 @@ function DispatchDetailDrawer({
             type="date"
             aria-label="Dispatch appointment date"
             value={draft.scheduledDate}
-            onChange={(event) => setDraft((current) => ({ ...current, scheduledDate: event.target.value }))}
+            onChange={(event) =>
+              setDraft((current) => updateDraftDate(current, event.target.value))
+            }
+            style={styles.input}
+          />
+        </label>
+        <label style={editFieldLabelStyle}>
+          <span style={styles.tinyMuted}>Start time</span>
+          <input
+            type="time"
+            aria-label="Dispatch start time"
+            value={draft.scheduledStartTime}
+            onChange={(event) => setDraft((current) => ({ ...current, scheduledStartTime: event.target.value }))}
+            disabled={!draft.scheduledDate}
+            style={styles.input}
+          />
+        </label>
+        <label style={editFieldLabelStyle}>
+          <span style={styles.tinyMuted}>End time</span>
+          <input
+            type="time"
+            aria-label="Dispatch end time"
+            value={draft.scheduledEndTime}
+            onChange={(event) => setDraft((current) => ({ ...current, scheduledEndTime: event.target.value }))}
+            disabled={!draft.scheduledDate}
             style={styles.input}
           />
         </label>
@@ -472,18 +507,32 @@ function DrawerField({ label, value }: DrawerFieldProps) {
 }
 
 function formatTimeSlot(card: DispatchAppointmentCard): string {
-  if (!card.scheduledDate && !card.timeWindowLabel) {
-    return 'Unscheduled';
-  }
-
-  return [card.scheduledDate, card.timeWindowLabel].filter(Boolean).join(' - ');
+  return formatAppointmentScheduleDisplay(card);
 }
 
 function createDraftFromCard(card: DispatchAppointmentCard): DispatchScheduleDraft {
   return {
     scheduledDate: card.scheduledDate ?? '',
+    scheduledStartTime: card.scheduledStartTime ?? '',
+    scheduledEndTime: card.scheduledEndTime ?? '',
     timeWindowLabel: card.timeWindowLabel ?? '',
     technicianId: card.technicianId ?? ''
+  };
+}
+
+function updateDraftDate(draft: DispatchScheduleDraft, scheduledDate: string): DispatchScheduleDraft {
+  if (!scheduledDate) {
+    return {
+      ...draft,
+      scheduledDate: '',
+      scheduledStartTime: '',
+      scheduledEndTime: ''
+    };
+  }
+
+  return {
+    ...draft,
+    scheduledDate
   };
 }
 
@@ -494,6 +543,8 @@ function isSameScheduleDraft(card: DispatchAppointmentCard, draft: DispatchSched
 function areScheduleDraftsEqual(left: DispatchScheduleDraft, right: DispatchScheduleDraft): boolean {
   return (
     left.scheduledDate === right.scheduledDate &&
+    left.scheduledStartTime === right.scheduledStartTime &&
+    left.scheduledEndTime === right.scheduledEndTime &&
     left.timeWindowLabel === right.timeWindowLabel &&
     left.technicianId === right.technicianId
   );

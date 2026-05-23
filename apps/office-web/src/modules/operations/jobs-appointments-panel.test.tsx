@@ -82,6 +82,9 @@ function renderJobsPanel(input: {
   onJobStatusReviewRequested?: ReturnType<typeof vi.fn<JobStatusReviewHandler>>;
   onAddAppointment?: ReturnType<typeof vi.fn<(jobId: string) => Promise<void>>>;
   onKeepJobOpen?: ReturnType<typeof vi.fn<(jobId: string) => Promise<void>>>;
+  appointmentEditDrafts?: Parameters<typeof JobsAppointmentsPanel>[0]['appointmentEditDrafts'];
+  onAppointmentEditDraftChange?: Parameters<typeof JobsAppointmentsPanel>[0]['onAppointmentEditDraftChange'];
+  onSaveAppointmentSchedule?: Parameters<typeof JobsAppointmentsPanel>[0]['onSaveAppointmentSchedule'];
   focusedJobId?: string | null;
 }) {
   const onJobStatusReviewRequested = input.onJobStatusReviewRequested ?? vi.fn<JobStatusReviewHandler>();
@@ -99,9 +102,11 @@ function renderJobsPanel(input: {
       jobSummary=""
       jobTechnicianId=""
       jobDate=""
+      jobStartTime=""
+      jobEndTime=""
       jobWindow=""
       appointmentDrafts={{}}
-      appointmentEditDrafts={{}}
+      appointmentEditDrafts={input.appointmentEditDrafts ?? {}}
       onJobLocationChange={vi.fn()}
       onJobBillToCustomerChange={vi.fn()}
       onJobTypeChange={vi.fn()}
@@ -110,16 +115,18 @@ function renderJobsPanel(input: {
       onJobSummaryChange={vi.fn()}
       onJobTechnicianChange={vi.fn()}
       onJobDateChange={vi.fn()}
+      onJobStartTimeChange={vi.fn()}
+      onJobEndTimeChange={vi.fn()}
       onJobWindowChange={vi.fn()}
       onAppointmentDraftChange={vi.fn()}
-      onAppointmentEditDraftChange={vi.fn()}
+      onAppointmentEditDraftChange={input.onAppointmentEditDraftChange ?? vi.fn()}
       onCreateJob={noopAsync}
       pendingJobStatusChange={null}
       onJobStatusReviewRequested={onJobStatusReviewRequested}
       onConfirmJobStatusChange={noopAsync}
       onCancelJobStatusChange={vi.fn()}
       onAppointmentStatusChange={noopAsync}
-      onSaveAppointmentSchedule={noopAsync}
+      onSaveAppointmentSchedule={input.onSaveAppointmentSchedule ?? noopAsync}
       onAddAppointment={onAddAppointment}
       onKeepJobOpen={onKeepJobOpen}
       focusedJobId={input.focusedJobId}
@@ -242,5 +249,49 @@ describe('JobsAppointmentsPanel', () => {
     expect(focusedJob).toHaveAttribute('id', 'office-job-job-2');
     expect(focusedJob).toHaveAttribute('aria-current', 'true');
     expect(otherJob).not.toHaveAttribute('aria-current');
+  });
+
+  it('shows structured appointment times and edits them as a full schedule draft', () => {
+    const onAppointmentEditDraftChange = vi.fn();
+    const onSaveAppointmentSchedule = vi.fn(async () => undefined);
+
+    renderJobsPanel({
+      jobs: [
+        createJob({
+          appointments: [
+            {
+              id: 'appointment-1',
+              jobId: 'job-1',
+              scheduledDate: '2026-04-15',
+              scheduledStartTime: '08:00',
+              scheduledEndTime: '10:00',
+              timeWindowLabel: 'Morning',
+              status: 'scheduled',
+              needsOfficeReview: false,
+              createdAt: '2026-04-14T10:00:00.000Z',
+              updatedAt: '2026-04-14T11:00:00.000Z'
+            }
+          ]
+        })
+      ],
+      onAppointmentEditDraftChange,
+      onSaveAppointmentSchedule
+    });
+
+    expect(screen.getByText('8:00 AM - 10:00 AM - Unassigned')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Appointment start time'), {
+      target: { value: '09:00' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save appointment' }));
+
+    expect(onAppointmentEditDraftChange).toHaveBeenCalledWith('appointment-1', {
+      scheduledDate: '2026-04-15',
+      scheduledStartTime: '09:00',
+      scheduledEndTime: '10:00',
+      timeWindowLabel: 'Morning',
+      technicianId: ''
+    });
+    expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appointment-1');
   });
 });

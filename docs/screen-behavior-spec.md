@@ -299,16 +299,22 @@ This supports both quick edits and deeper review.
 ### Drawer edit behavior
 The right-side drawer should allow quick edits to things such as:
 - job summary/caller complaint
-- appointment date/time
+- appointment date
+- optional structured local start/end times
+- optional flexible time-window label
 - technician assignment
 - scheduling-related details
 
 This drawer should be convenient for fast dispatch work.
+When structured start/end times are present, appointment cards and detail surfaces should prefer those times for display while still preserving the free-form time-window label for context and legacy records.
 
 ### Dispatch view controls
 The dispatch board should support:
 - day view
 - week view
+
+V1 should keep day-view scheduling trustworthy first: the board uses scheduled date plus optional local `HH:mm` start/end times for ordering.
+Week view is the next UI layer after structured times have landed and are stable.
 
 ### Technician row behavior
 For the current day:

@@ -380,6 +380,8 @@ export class DatabaseBootstrapService implements OnModuleInit {
             id,
             job_id,
             scheduled_date,
+            scheduled_start_time,
+            scheduled_end_time,
             time_window_label,
             technician_id,
             status,
@@ -390,13 +392,15 @@ export class DatabaseBootstrapService implements OnModuleInit {
             created_at,
             updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
           on conflict (id) do nothing
         `,
         [
           appointment.id,
           appointment.jobId,
           appointment.scheduledDate ?? null,
+          appointment.scheduledStartTime ?? null,
+          appointment.scheduledEndTime ?? null,
           appointment.timeWindowLabel ?? null,
           appointment.technicianId ?? null,
           appointment.status,

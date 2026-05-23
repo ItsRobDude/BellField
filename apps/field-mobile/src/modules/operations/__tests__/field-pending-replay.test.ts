@@ -358,6 +358,120 @@ describe('applied sync result merging', () => {
     expect(remainingQueue.map((operation) => operation.id)).toEqual(['op-equipment']);
     expect(localView?.equipment[0]?.model).toBe('QueuedModel');
   });
+
+  it('returns the snapshot untouched when an applied job mutation belongs to a job not in the cache', () => {
+    const snapshot = buildSnapshot();
+    const response: JobMutationResponse = {
+      ...buildJob({ id: 'job-outside-window', jobNumber: '9999', summary: 'Other tech job' }),
+      syncResult: { status: 'applied' }
+    };
+
+    const result = mergeJobMutationIntoAssignedWork(snapshot, response);
+
+    expect(result).toBe(snapshot);
+    expect(result.jobs.find((job) => job.id === 'job-outside-window')).toBeUndefined();
+  });
+
+  it('returns the snapshot untouched when an applied equipment mutation is for equipment not in the cache', () => {
+    const snapshot = buildSnapshot();
+    const response: EquipmentMutationResponse = {
+      equipment: {
+        ...buildEquipment({ id: 'equipment-outside-window', model: 'OtherLocation' }),
+        history: []
+      },
+      syncResult: { status: 'applied' }
+    };
+
+    const result = mergeEquipmentMutationIntoAssignedWork(snapshot, response);
+
+    expect(result).toBe(snapshot);
+    expect(result.equipment.find((record) => record.id === 'equipment-outside-window')).toBeUndefined();
+  });
+
+  it('does not leak syncResult or warningMessages onto the cached job summary', () => {
+    const snapshot = buildSnapshot();
+    const response: JobMutationResponse = {
+      ...buildJob({
+        appointments: [buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })],
+        updatedAt: '2026-05-22T11:00:00.000Z'
+      }),
+      syncResult: { status: 'applied' },
+      warningMessages: ['Field appointment update synced after assignment changed while the device was offline.']
+    };
+
+    const result = mergeJobMutationIntoAssignedWork(snapshot, response);
+
+    expect(result.jobs[0]).not.toHaveProperty('syncResult');
+    expect(result.jobs[0]).not.toHaveProperty('warningMessages');
+    expect(result.jobs[0]?.appointments[0]?.status).toBe('working');
+  });
+
+  it('does not leak equipment history, replacement links, or syncResult onto the cached equipment summary', () => {
+    const snapshot = buildSnapshot();
+    const response: EquipmentMutationResponse = {
+      equipment: {
+        ...buildEquipment({ model: 'NewModel', updatedAt: '2026-05-22T11:00:00.000Z' }),
+        history: [
+          {
+            id: 'history-1',
+            actorName: 'Office',
+            occurredAt: '2026-05-22T10:50:00.000Z',
+            kind: 'edited',
+            message: 'Model corrected.'
+          }
+        ],
+        replacesEquipment: undefined,
+        replacedByEquipment: undefined
+      },
+      syncResult: { status: 'applied' }
+    };
+
+    const result = mergeEquipmentMutationIntoAssignedWork(snapshot, response);
+    const updated = result.equipment[0];
+
+    expect(updated).not.toHaveProperty('history');
+    expect(updated).not.toHaveProperty('replacesEquipment');
+    expect(updated).not.toHaveProperty('replacedByEquipment');
+    expect(updated?.model).toBe('NewModel');
+  });
+
+  it('keeps locally-queued edits visible on top of an office-driven schedule change brought in by refresh', () => {
+    const initialSnapshot = buildSnapshot();
+    const officeRefreshedSnapshot = buildSnapshot({
+      jobs: [
+        buildJob({
+          appointments: [
+            buildAppointment({
+              scheduledDate: '2026-05-23',
+              timeWindowLabel: '8-10 AM',
+              technicianId: 'employee-2',
+              technicianName: 'Sam Tech',
+              status: 'scheduled',
+              updatedAt: '2026-05-22T15:00:00.000Z'
+            })
+          ],
+          updatedAt: '2026-05-22T15:00:00.000Z'
+        })
+      ]
+    });
+
+    const queuedNote: PendingOperation = {
+      id: 'op-note',
+      kind: 'jobNote',
+      jobId: 'job-1',
+      note: 'Customer prefers afternoon return visit.',
+      occurredAt: '2026-05-22T14:00:00.000Z',
+      state: 'pending'
+    };
+
+    const localBefore = applyPendingOperations(initialSnapshot, [queuedNote], 'Taylor Tech');
+    const localAfter = applyPendingOperations(officeRefreshedSnapshot, [queuedNote], 'Taylor Tech');
+
+    expect(localBefore?.jobs[0]?.appointments[0]?.scheduledDate).toBeUndefined();
+    expect(localAfter?.jobs[0]?.appointments[0]?.scheduledDate).toBe('2026-05-23');
+    expect(localAfter?.jobs[0]?.appointments[0]?.technicianName).toBe('Sam Tech');
+    expect(localAfter?.jobs[0]?.timeline.find((entry) => entry.message === queuedNote.note)).toBeTruthy();
+  });
 });
 
 describe('findJobIdForAppointment / base lookups', () => {

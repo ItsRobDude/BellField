@@ -471,6 +471,8 @@ export interface AppointmentSummary {
   id: string;
   jobId: string;
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
   technicianName?: string;
@@ -536,6 +538,8 @@ export interface CreateJobRequest {
   summary: string;
   workOrderNumber?: string;
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
 }
@@ -551,6 +555,8 @@ export interface UpdateJobStatusResponse extends JobSummary {
 
 export interface CreateAppointmentRequest {
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
   occurredAt?: string;
@@ -558,6 +564,8 @@ export interface CreateAppointmentRequest {
 
 export interface UpdateAppointmentScheduleRequest {
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
   occurredAt?: string;

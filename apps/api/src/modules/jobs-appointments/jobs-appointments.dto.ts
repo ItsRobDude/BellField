@@ -1,4 +1,17 @@
-import { IsBoolean, IsIn, IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength,
+  Validate,
+  type ValidationArguments,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface
+} from 'class-validator';
 import {
   appointmentFinishOutcomes,
   appointmentStatuses,
@@ -22,6 +35,44 @@ import type {
 } from './jobs-appointments.types';
 
 const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
+const localTimePattern = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+type AppointmentScheduleBody = {
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+};
+
+@ValidatorConstraint({ name: 'scheduleTimesRequireDate', async: false })
+class ScheduleTimesRequireDateConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments): boolean {
+    const request = args.object as AppointmentScheduleBody;
+    const hasStructuredTime = Boolean(request.scheduledStartTime || request.scheduledEndTime);
+
+    return !hasStructuredTime || Boolean(request.scheduledDate);
+  }
+
+  defaultMessage(): string {
+    return 'scheduledDate is required when scheduledStartTime or scheduledEndTime is provided.';
+  }
+}
+
+@ValidatorConstraint({ name: 'scheduleEndAfterStart', async: false })
+class ScheduleEndAfterStartConstraint implements ValidatorConstraintInterface {
+  validate(_value: unknown, args: ValidationArguments): boolean {
+    const request = args.object as AppointmentScheduleBody;
+
+    if (!request.scheduledStartTime || !request.scheduledEndTime) {
+      return true;
+    }
+
+    return request.scheduledEndTime > request.scheduledStartTime;
+  }
+
+  defaultMessage(): string {
+    return 'scheduledEndTime must be after scheduledStartTime.';
+  }
+}
 
 export class CreateJobRequestBodyDto implements CreateJobRequestDto {
   @IsString()
@@ -63,6 +114,17 @@ export class CreateJobRequestBodyDto implements CreateJobRequestDto {
   scheduledDate?: string;
 
   @IsOptional()
+  @Matches(localTimePattern, { message: 'scheduledStartTime must be in HH:mm format.' })
+  @Validate(ScheduleTimesRequireDateConstraint)
+  scheduledStartTime?: string;
+
+  @IsOptional()
+  @Matches(localTimePattern, { message: 'scheduledEndTime must be in HH:mm format.' })
+  @Validate(ScheduleTimesRequireDateConstraint)
+  @Validate(ScheduleEndAfterStartConstraint)
+  scheduledEndTime?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(120)
   timeWindowLabel?: string;
@@ -88,6 +150,17 @@ export class CreateAppointmentRequestBodyDto implements CreateAppointmentRequest
   scheduledDate?: string;
 
   @IsOptional()
+  @Matches(localTimePattern, { message: 'scheduledStartTime must be in HH:mm format.' })
+  @Validate(ScheduleTimesRequireDateConstraint)
+  scheduledStartTime?: string;
+
+  @IsOptional()
+  @Matches(localTimePattern, { message: 'scheduledEndTime must be in HH:mm format.' })
+  @Validate(ScheduleTimesRequireDateConstraint)
+  @Validate(ScheduleEndAfterStartConstraint)
+  scheduledEndTime?: string;
+
+  @IsOptional()
   @IsString()
   @MaxLength(120)
   timeWindowLabel?: string;
@@ -106,6 +179,17 @@ export class UpdateAppointmentScheduleRequestBodyDto implements UpdateAppointmen
   @IsOptional()
   @Matches(isoDatePattern, { message: 'scheduledDate must be in YYYY-MM-DD format.' })
   scheduledDate?: string;
+
+  @IsOptional()
+  @Matches(localTimePattern, { message: 'scheduledStartTime must be in HH:mm format.' })
+  @Validate(ScheduleTimesRequireDateConstraint)
+  scheduledStartTime?: string;
+
+  @IsOptional()
+  @Matches(localTimePattern, { message: 'scheduledEndTime must be in HH:mm format.' })
+  @Validate(ScheduleTimesRequireDateConstraint)
+  @Validate(ScheduleEndAfterStartConstraint)
+  scheduledEndTime?: string;
 
   @IsOptional()
   @IsString()

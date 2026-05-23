@@ -23,6 +23,8 @@ function createAppointmentRow(overrides: Record<string, unknown> = {}) {
     id: 'appointment-1',
     jobId: 'job-1',
     scheduledDate: null,
+    scheduledStartTime: null,
+    scheduledEndTime: null,
     timeWindowLabel: null,
     technicianId: null,
     status: 'scheduled',
@@ -151,6 +153,66 @@ describe('JobsDataRepository', () => {
     expect(timelineCall?.[1]?.[5]).toBe('Appointment added for 2026-04-15.');
   });
 
+  it('persists structured appointment times when creating an appointment', async () => {
+    const { databaseService } = createDatabaseService();
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.createAppointment(
+      'job-1',
+      {
+        scheduledDate: '2026-04-15',
+        scheduledStartTime: '13:00',
+        scheduledEndTime: '15:00',
+        timeWindowLabel: '1:00 PM - 3:00 PM',
+        technicianId: 'tech-1'
+      },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const appointmentInsertCall = databaseService.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into appointments')
+    );
+    expect(String(appointmentInsertCall?.[0] ?? '')).toContain('scheduled_start_time');
+    expect(appointmentInsertCall?.[1]?.slice(2, 7)).toEqual([
+      '2026-04-15',
+      '13:00',
+      '15:00',
+      '1:00 PM - 3:00 PM',
+      'tech-1'
+    ]);
+
+    const timelineCall = databaseService.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_timeline_entries')
+    );
+    expect(timelineCall?.[1]?.[5]).toBe('Appointment added for 2026-04-15 from 13:00 to 15:00.');
+  });
+
+  it('maps structured appointment times when listing appointments for a job', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [
+          createAppointmentRow({
+            scheduledDate: '2026-04-15',
+            scheduledStartTime: '08:30:00',
+            scheduledEndTime: '10:15:00'
+          })
+        ]
+      }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const appointments = await repository.listAppointmentsForJob('job-1');
+
+    expect(appointments[0]).toMatchObject({
+      scheduledDate: '2026-04-15',
+      scheduledStartTime: '08:30',
+      scheduledEndTime: '10:15'
+    });
+    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain('scheduled_start_time as "scheduledStartTime"');
+    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain('scheduled_start_time asc nulls last');
+  });
+
   it('acknowledges prior finished visit review when a follow-up appointment is added', async () => {
     const { databaseService, queryable } = createDatabaseService();
     (queryable.query as jest.Mock).mockImplementation(async (sql: string, _params?: unknown[]) => {
@@ -228,7 +290,13 @@ describe('JobsDataRepository', () => {
 
     await repository.updateAppointmentSchedule(
       'appointment-1',
-      { scheduledDate: '2026-04-16', timeWindowLabel: '8:00 AM - 10:00 AM', technicianId: 'tech-2' },
+      {
+        scheduledDate: '2026-04-16',
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00',
+        timeWindowLabel: '8:00 AM - 10:00 AM',
+        technicianId: 'tech-2'
+      },
       'Dispatcher',
       '2026-04-14T11:00:00.000Z'
     );
@@ -248,12 +316,31 @@ describe('JobsDataRepository', () => {
         {
           kind: 'appointmentScheduleUpdated',
           message:
-            'Appointment scheduling details updated for 2026-04-16 during 8:00 AM - 10:00 AM with technician assignment updated.'
+            'Appointment scheduling details updated for 2026-04-16 from 08:00 to 10:00 during 8:00 AM - 10:00 AM with technician assignment updated.'
         },
         { kind: 'appointmentStatusUpdated', message: 'Appointment status changed to cancelled.' },
         { kind: 'jobNote', message: 'Customer asked for a morning return visit.' }
       ])
     );
+  });
+
+  it('clears structured appointment times when an appointment is moved off the schedule', async () => {
+    const { queryable, databaseService } = createDatabaseService(
+      {},
+      { scheduledDate: '2026-04-15', scheduledStartTime: '08:00:00', scheduledEndTime: '10:00:00' }
+    );
+    const repository = new JobsDataRepository(databaseService as never);
+
+    await repository.updateAppointmentSchedule(
+      'appointment-1',
+      { timeWindowLabel: 'Call before scheduling', technicianId: 'tech-2' },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const appointmentUpdateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update appointments'));
+    expect(String(appointmentUpdateCall?.[0] ?? '')).toContain('scheduled_start_time = $3');
+    expect(appointmentUpdateCall?.[1]?.slice(1, 5)).toEqual([null, null, null, 'Call before scheduling']);
   });
 
   it.each(['scheduled', 'arrived', 'working', 'noAnswer'] as const)(

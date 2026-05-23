@@ -37,6 +37,10 @@ import {
   mergeJobMutationIntoAssignedWork
 } from './field-pending-replay';
 import { buildSuccessfulSyncMetadata, summarizeSyncHealth, type SyncTone } from './field-sync-status';
+import {
+  describeAppointmentAssignment,
+  isAppointmentAssignedToCurrentTechnician
+} from './field-assignment-display';
 
 type Props = {
   apiBaseUrl: string;
@@ -846,12 +850,17 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                   Contacts: {location?.contacts.map((contact) => contact.displayName).join(', ') || 'None'}
                 </Text>
 
-                {job.appointments.map((appointment) => (
+                {job.appointments.map((appointment) => {
+                  const assignmentLabel = describeAppointmentAssignment(appointment, employee.id);
+                  const isMine = isAppointmentAssignedToCurrentTechnician(appointment, employee.id);
+                  return (
                   <View key={appointment.id} style={styles.block}>
                     <Text style={styles.sectionTitleSmall}>
                       {appointment.scheduledDate || 'Unscheduled'} - {appointment.timeWindowLabel || 'No window'}
                     </Text>
-                    <Text style={styles.summaryText}>{appointment.technicianName || employee.displayName}</Text>
+                    <Text style={styles.summaryText}>
+                      {isMine ? `Assigned to you (${assignmentLabel})` : `Assigned to ${assignmentLabel}`}
+                    </Text>
                     <Text style={styles.summaryText}>Latest local appointment status: {appointment.status}</Text>
                     <View style={styles.actionRow}>
                       {fieldAppointmentStatuses.map((status) => (
@@ -955,7 +964,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       </View>
                     ) : null}
                   </View>
-                ))}
+                  );
+                })}
 
                 <View style={styles.block}>
                   <Text style={styles.sectionTitleSmall}>Save note locally</Text>

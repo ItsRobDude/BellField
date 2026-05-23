@@ -118,6 +118,10 @@ describe('JobsAppointmentsService', () => {
       id: 'appointment-1',
       jobId: 'job-1',
       status: 'finished',
+      scheduledDate: '2026-04-15',
+      scheduledStartTime: '08:00',
+      scheduledEndTime: '10:00',
+      timeWindowLabel: 'Morning',
       updatedAt: '2026-04-14T11:00:00.000Z',
       createdAt: '2026-04-14T09:00:00.000Z'
     });
@@ -125,7 +129,11 @@ describe('JobsAppointmentsService', () => {
     const response = await service.getWorkspace('session-token');
 
     expect(response.jobs[0]?.needsOfficeReview).toBe(true);
-    expect(response.jobs[0]?.appointments[0]?.needsOfficeReview).toBe(true);
+    expect(response.jobs[0]?.appointments[0]).toMatchObject({
+      scheduledStartTime: '08:00',
+      scheduledEndTime: '10:00',
+      needsOfficeReview: true
+    });
   });
 
   it.each(['completed', 'closed', 'cancelled'] as const)(

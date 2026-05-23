@@ -136,4 +136,28 @@ describe('buildSuccessfulSyncMetadata', () => {
     expect(metadata.lastAttemptedSyncAt).toBe('2026-05-22T10:00:00.000Z');
     expect(metadata.lastSuccessfulSyncAt).toBe('2026-05-22T10:03:00.000Z');
   });
+
+  it('clears a previous lastSyncError once the refresh succeeds', () => {
+    const metadata = buildSuccessfulSyncMetadata(
+      buildMetadata({ lastSyncError: 'Network unreachable' }),
+      'v4',
+      '2026-05-22T10:04:00.000Z'
+    );
+
+    expect(metadata.lastSyncError).toBeNull();
+    expect(summarizeSyncHealth(metadata, []).tone).toBe('quiet');
+  });
+
+  it('keeps the field assignment story trustworthy: refresh after office reassigns goes quiet again', () => {
+    const stale = buildMetadata({
+      lastSyncError: 'Network unreachable',
+      lastSuccessfulSyncAt: null,
+      lastAttemptedSyncAt: null
+    });
+    expect(summarizeSyncHealth(stale, []).tone).toBe('alert');
+
+    const fresh = buildSuccessfulSyncMetadata(stale, 'v5', '2026-05-22T10:10:00.000Z');
+    expect(summarizeSyncHealth(fresh, []).tone).toBe('quiet');
+    expect(summarizeSyncHealth(fresh, []).headline).toBe('Synced');
+  });
 });

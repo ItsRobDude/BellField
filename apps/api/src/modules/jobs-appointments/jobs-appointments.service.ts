@@ -452,6 +452,8 @@ export class JobsAppointmentsService {
       id: appointment.id,
       jobId: appointment.jobId,
       scheduledDate: appointment.scheduledDate,
+      scheduledStartTime: appointment.scheduledStartTime,
+      scheduledEndTime: appointment.scheduledEndTime,
       timeWindowLabel: appointment.timeWindowLabel,
       technicianId: appointment.technicianId,
       technicianName: technician?.displayName,

@@ -233,6 +233,54 @@ describe('buildDispatchBoardModel', () => {
       'appt-thursday'
     ]);
   });
+
+  it('sorts timed appointments before untimed same-day appointments', () => {
+    const workspace = buildWorkspace([
+      buildJob({
+        id: 'job-untimed',
+        jobNumber: '1001',
+        appointments: [
+          buildAppointment({
+            id: 'appt-untimed',
+            jobId: 'job-untimed',
+            technicianId: 'tech-1',
+            scheduledDate: '2026-05-22'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-late',
+        jobNumber: '1002',
+        appointments: [
+          buildAppointment({
+            id: 'appt-late',
+            jobId: 'job-late',
+            technicianId: 'tech-1',
+            scheduledDate: '2026-05-22',
+            scheduledStartTime: '13:00'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-early',
+        jobNumber: '1003',
+        appointments: [
+          buildAppointment({
+            id: 'appt-early',
+            jobId: 'job-early',
+            technicianId: 'tech-1',
+            scheduledDate: '2026-05-22',
+            scheduledStartTime: '08:00'
+          })
+        ]
+      })
+    ]);
+
+    const model = buildDispatchBoardModel(workspace, '2026-05-22');
+    const techRow = model.technicianRows.find((row) => row.technicianId === 'tech-1');
+
+    expect(techRow?.cards.map((card) => card.appointmentId)).toEqual(['appt-early', 'appt-late', 'appt-untimed']);
+  });
 });
 
 describe('DispatchBoardPanel', () => {
@@ -349,6 +397,8 @@ describe('DispatchBoardPanel', () => {
             technicianId: 'tech-1',
             technicianName: 'Taylor Tech',
             scheduledDate: '2026-05-22',
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
             timeWindowLabel: '8-10'
           })
         ]
@@ -369,6 +419,9 @@ describe('DispatchBoardPanel', () => {
     expect(within(drawer).getByText('Job 1001')).toBeInTheDocument();
     expect(within(drawer).getByText('Taylor Tech')).toBeInTheDocument();
     expect(within(drawer).getByLabelText('Dispatch appointment date')).toHaveValue('2026-05-22');
+    expect(within(drawer).getByLabelText('Dispatch start time')).toHaveValue('08:00');
+    expect(within(drawer).getByLabelText('Dispatch end time')).toHaveValue('10:00');
+    expect(screen.getByText('2026-05-22 - 8:00 AM - 10:00 AM')).toBeInTheDocument();
 
     fireEvent.click(within(drawer).getByRole('button', { name: /Open job 1001 in the jobs panel/i }));
     expect(onOpenInJobsPanel).toHaveBeenCalledWith('job-1');
@@ -383,6 +436,8 @@ describe('DispatchBoardPanel', () => {
             technicianId: 'tech-1',
             technicianName: 'Taylor Tech',
             scheduledDate: '2026-05-22',
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
             timeWindowLabel: '8-10'
           })
         ]
@@ -444,6 +499,8 @@ describe('DispatchBoardPanel', () => {
             technicianId: 'tech-1',
             technicianName: 'Taylor Tech',
             scheduledDate: '2026-05-22',
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
             timeWindowLabel: '8-10'
           })
         ]
@@ -467,6 +524,12 @@ describe('DispatchBoardPanel', () => {
     fireEvent.change(within(drawer).getByLabelText('Dispatch appointment date'), {
       target: { value: '2026-05-23' }
     });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch start time'), {
+      target: { value: '10:00' }
+    });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch end time'), {
+      target: { value: '12:00' }
+    });
     fireEvent.change(within(drawer).getByLabelText('Dispatch time window'), {
       target: { value: '10-12' }
     });
@@ -478,6 +541,8 @@ describe('DispatchBoardPanel', () => {
     await waitFor(() => {
       expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-tech1', {
         scheduledDate: '2026-05-23',
+        scheduledStartTime: '10:00',
+        scheduledEndTime: '12:00',
         timeWindowLabel: '10-12',
         technicianId: 'tech-2'
       });
@@ -494,6 +559,8 @@ describe('DispatchBoardPanel', () => {
             technicianId: 'tech-1',
             technicianName: 'Taylor Tech',
             scheduledDate: '2026-05-22',
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
             timeWindowLabel: '8-10'
           })
         ]
@@ -519,8 +586,59 @@ describe('DispatchBoardPanel', () => {
     await waitFor(() => {
       expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-tech1', {
         scheduledDate: '2026-05-22',
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00',
         timeWindowLabel: '8-10',
         technicianId: ''
+      });
+    });
+  });
+
+  it('clears structured times when the dispatcher clears the appointment date', async () => {
+    const onSaveAppointmentSchedule = vi.fn().mockResolvedValue(undefined);
+    const workspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            id: 'appt-tech1',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech',
+            scheduledDate: '2026-05-22',
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
+            timeWindowLabel: '8-10'
+          })
+        ]
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel
+        jobsWorkspace={workspace}
+        viewDate="2026-05-22"
+        onSaveAppointmentSchedule={onSaveAppointmentSchedule}
+      />
+    );
+
+    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+
+    const drawer = screen.getByRole('complementary', { name: /Appointment detail drawer/i });
+    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment date'), {
+      target: { value: '' }
+    });
+
+    expect(within(drawer).getByLabelText('Dispatch start time')).toHaveValue('');
+    expect(within(drawer).getByLabelText('Dispatch end time')).toHaveValue('');
+
+    fireEvent.click(within(drawer).getByRole('button', { name: /Save dispatch changes/i }));
+
+    await waitFor(() => {
+      expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-tech1', {
+        scheduledDate: '',
+        scheduledStartTime: '',
+        scheduledEndTime: '',
+        timeWindowLabel: '8-10',
+        technicianId: 'tech-1'
       });
     });
   });

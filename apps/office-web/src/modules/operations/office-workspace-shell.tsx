@@ -35,6 +35,7 @@ import { CrmPanel } from './crm-panel';
 import { DispatchBoardPanel, type DispatchScheduleDraft } from './dispatch-board-panel';
 import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
 import {
+  createEmptyAppointmentDraft,
   getOfficeJobElementId,
   JobsAppointmentsPanel,
   type AppointmentDraft,
@@ -142,6 +143,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [jobSummary, setJobSummary] = useState('');
   const [jobTechnicianId, setJobTechnicianId] = useState('');
   const [jobDate, setJobDate] = useState('');
+  const [jobStartTime, setJobStartTime] = useState('');
+  const [jobEndTime, setJobEndTime] = useState('');
   const [jobWindow, setJobWindow] = useState('');
   const [appointmentDrafts, setAppointmentDrafts] = useState<Record<string, AppointmentDraft>>({});
   const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
@@ -428,6 +431,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         origin: jobOrigin,
         summary: jobSummary,
         scheduledDate: jobDate || undefined,
+        scheduledStartTime: jobDate ? jobStartTime || undefined : undefined,
+        scheduledEndTime: jobDate ? jobEndTime || undefined : undefined,
         timeWindowLabel: jobWindow || undefined,
         technicianId: jobTechnicianId || undefined
       });
@@ -435,6 +440,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       setJobCategory('General');
       setJobOrigin('Inbound phone call');
       setJobSummary('');
+      setJobDate('');
+      setJobStartTime('');
+      setJobEndTime('');
+      setJobWindow('');
+      setJobTechnicianId('');
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create job.');
@@ -514,6 +524,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         sessionToken,
         apiBaseUrl,
         scheduledDate: draft.scheduledDate || undefined,
+        scheduledStartTime: draft.scheduledDate ? draft.scheduledStartTime || undefined : undefined,
+        scheduledEndTime: draft.scheduledDate ? draft.scheduledEndTime || undefined : undefined,
         timeWindowLabel: draft.timeWindowLabel || undefined,
         technicianId: draft.technicianId || undefined
       });
@@ -560,6 +572,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         sessionToken,
         apiBaseUrl,
         scheduledDate: draft.scheduledDate || undefined,
+        scheduledStartTime: draft.scheduledDate ? draft.scheduledStartTime || undefined : undefined,
+        scheduledEndTime: draft.scheduledDate ? draft.scheduledEndTime || undefined : undefined,
         timeWindowLabel: draft.timeWindowLabel || undefined,
         technicianId: draft.technicianId || undefined
       });
@@ -589,7 +603,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   }
 
   async function handleAddAppointment(jobId: string) {
-    const draft = appointmentDrafts[jobId] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
+    const draft = appointmentDrafts[jobId] ?? createEmptyAppointmentDraft();
 
     try {
       await addOfficeAppointment({
@@ -597,12 +611,14 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         sessionToken,
         apiBaseUrl,
         scheduledDate: draft.scheduledDate || undefined,
+        scheduledStartTime: draft.scheduledDate ? draft.scheduledStartTime || undefined : undefined,
+        scheduledEndTime: draft.scheduledDate ? draft.scheduledEndTime || undefined : undefined,
         timeWindowLabel: draft.timeWindowLabel || undefined,
         technicianId: draft.technicianId || undefined
       });
       setAppointmentDrafts((current) => ({
         ...current,
-        [jobId]: { scheduledDate: '', timeWindowLabel: '', technicianId: '' }
+        [jobId]: createEmptyAppointmentDraft()
       }));
       setNoticeMessage('Follow-up appointment added. Finished visit review was acknowledged.');
       await refreshWorkspace();
@@ -630,6 +646,15 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     const nextLocation = locationLookup.get(nextLocationId);
     setJobLocationId(nextLocationId);
     setJobBillToCustomerId(nextLocation?.customerId ?? '');
+  }
+
+  function handleJobDateChange(nextDate: string) {
+    setJobDate(nextDate);
+
+    if (!nextDate) {
+      setJobStartTime('');
+      setJobEndTime('');
+    }
   }
 
   function handleOpenDispatchJob(jobId: string) {
@@ -738,6 +763,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         jobSummary={jobSummary}
         jobTechnicianId={jobTechnicianId}
         jobDate={jobDate}
+        jobStartTime={jobStartTime}
+        jobEndTime={jobEndTime}
         jobWindow={jobWindow}
         appointmentDrafts={appointmentDrafts}
         appointmentEditDrafts={appointmentEditDrafts}
@@ -748,7 +775,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onJobOriginChange={setJobOrigin}
         onJobSummaryChange={setJobSummary}
         onJobTechnicianChange={setJobTechnicianId}
-        onJobDateChange={setJobDate}
+        onJobDateChange={handleJobDateChange}
+        onJobStartTimeChange={setJobStartTime}
+        onJobEndTimeChange={setJobEndTime}
         onJobWindowChange={setJobWindow}
         onAppointmentDraftChange={(jobId, draft) =>
           setAppointmentDrafts((current) => ({ ...current, [jobId]: draft }))

@@ -65,6 +65,10 @@ describe('Runtime validation', () => {
     await app.close();
   });
 
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('rejects malformed login payloads with 400', async () => {
     const response = await request(app.getHttpServer()).post('/identity/auth/login').send({
       email: 'not-an-email',
@@ -99,6 +103,19 @@ describe('Runtime validation', () => {
     expect(jobsAppointmentsService.addAppointment).not.toHaveBeenCalled();
   });
 
+  it('rejects malformed structured appointment times with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/operations/jobs/job-1/appointments')
+      .send({
+        scheduledDate: '2026-04-14',
+        scheduledStartTime: '8am',
+        scheduledEndTime: '10:00'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.addAppointment).not.toHaveBeenCalled();
+  });
+
   it('rejects malformed appointment status payloads with 400', async () => {
     const response = await request(app.getHttpServer())
       .patch('/operations/jobs/appointments/appointment-1/status')
@@ -117,6 +134,31 @@ describe('Runtime validation', () => {
       .send({
         scheduledDate: '04/14/2026',
         technicianId: ''
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.updateAppointmentSchedule).not.toHaveBeenCalled();
+  });
+
+  it('rejects structured appointment times without a scheduled date with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/jobs/appointments/appointment-1')
+      .send({
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00'
+      });
+
+    expect(response.status).toBe(400);
+    expect(jobsAppointmentsService.updateAppointmentSchedule).not.toHaveBeenCalled();
+  });
+
+  it('rejects structured appointment end times before start times with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .patch('/operations/jobs/appointments/appointment-1')
+      .send({
+        scheduledDate: '2026-04-14',
+        scheduledStartTime: '12:00',
+        scheduledEndTime: '10:00'
       });
 
     expect(response.status).toBe(400);

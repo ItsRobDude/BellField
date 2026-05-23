@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
-import { toIsoString, toOptionalDateString } from '../../database/database-row.utils';
+import { toIsoString, toOptionalDateString, toOptionalTimeString } from '../../database/database-row.utils';
 import type {
   AppointmentFinishOutcome,
   AppointmentRecord,
@@ -34,6 +34,8 @@ type AppointmentRow = {
   id: string;
   jobId: string;
   scheduledDate: string | Date | null;
+  scheduledStartTime: string | Date | null;
+  scheduledEndTime: string | Date | null;
   timeWindowLabel: string | null;
   technicianId: string | null;
   status: AppointmentStatus;
@@ -160,6 +162,8 @@ export class JobsDataRepository {
           id,
           job_id as "jobId",
           scheduled_date as "scheduledDate",
+          scheduled_start_time as "scheduledStartTime",
+          scheduled_end_time as "scheduledEndTime",
           time_window_label as "timeWindowLabel",
           technician_id as "technicianId",
           status,
@@ -174,7 +178,7 @@ export class JobsDataRepository {
           updated_at as "updatedAt"
         from appointments
         where job_id = $1
-        order by scheduled_date asc nulls last, time_window_label asc nulls last, created_at asc
+        order by scheduled_date asc nulls last, scheduled_start_time asc nulls last, time_window_label asc nulls last, created_at asc
       `,
       [jobId]
     );
@@ -189,6 +193,8 @@ export class JobsDataRepository {
           id,
           job_id as "jobId",
           scheduled_date as "scheduledDate",
+          scheduled_start_time as "scheduledStartTime",
+          scheduled_end_time as "scheduledEndTime",
           time_window_label as "timeWindowLabel",
           technician_id as "technicianId",
           status,
@@ -214,8 +220,9 @@ export class JobsDataRepository {
   async createJob(input: CreateJobInput, actorName: string, resolvedBillToCustomerId: string, locationName: string): Promise<JobRecord> {
     const now = new Date().toISOString();
     const jobId = randomUUID();
+    const scheduledDate = input.scheduledDate?.trim();
     const hasInitialAppointment = Boolean(
-      input.scheduledDate?.trim() || input.timeWindowLabel?.trim() || input.technicianId?.trim()
+      scheduledDate || input.timeWindowLabel?.trim() || input.technicianId?.trim()
     );
     const initialStatus: JobStatus = hasInitialAppointment ? 'scheduled' : 'new';
 
@@ -352,6 +359,8 @@ export class JobsDataRepository {
       id: appointmentId,
       jobId,
       scheduledDate: input.scheduledDate?.trim() || undefined,
+      scheduledStartTime: input.scheduledDate ? input.scheduledStartTime?.trim() || undefined : undefined,
+      scheduledEndTime: input.scheduledDate ? input.scheduledEndTime?.trim() || undefined : undefined,
       timeWindowLabel: input.timeWindowLabel?.trim() || undefined,
       technicianId: input.technicianId?.trim() || undefined,
       status: 'scheduled',
@@ -373,6 +382,8 @@ export class JobsDataRepository {
           id,
           job_id,
           scheduled_date,
+          scheduled_start_time,
+          scheduled_end_time,
           time_window_label,
           technician_id,
           status,
@@ -386,12 +397,14 @@ export class JobsDataRepository {
           created_at,
           updated_at
         )
-        values ($1, $2, $3, $4, $5, 'scheduled', null, null, null, null, null, null, null, $6, $7)
+        values ($1, $2, $3, $4, $5, $6, $7, 'scheduled', null, null, null, null, null, null, null, $8, $9)
       `,
       [
         appointmentRecord.id,
         appointmentRecord.jobId,
         appointmentRecord.scheduledDate ?? null,
+        appointmentRecord.scheduledStartTime ?? null,
+        appointmentRecord.scheduledEndTime ?? null,
         appointmentRecord.timeWindowLabel ?? null,
         appointmentRecord.technicianId ?? null,
         appointmentRecord.createdAt,
@@ -408,7 +421,7 @@ export class JobsDataRepository {
         occurredAt: timelineTime,
         actorName,
         kind: 'appointmentCreated',
-        message: `Appointment added${appointmentRecord.scheduledDate ? ` for ${appointmentRecord.scheduledDate}` : ''}.`
+        message: this.buildAppointmentCreatedMessage(appointmentRecord)
       },
       executor
     );
@@ -430,6 +443,8 @@ export class JobsDataRepository {
 
     const timelineTime = occurredAt || new Date().toISOString();
     const nextScheduledDate = input.scheduledDate?.trim() || null;
+    const nextScheduledStartTime = nextScheduledDate ? input.scheduledStartTime?.trim() || null : null;
+    const nextScheduledEndTime = nextScheduledDate ? input.scheduledEndTime?.trim() || null : null;
     const nextTimeWindowLabel = input.timeWindowLabel?.trim() || null;
     const nextTechnicianId = input.technicianId?.trim() || null;
 
@@ -439,12 +454,22 @@ export class JobsDataRepository {
           update appointments
           set
             scheduled_date = $2,
-            time_window_label = $3,
-            technician_id = $4,
-            updated_at = $5
+            scheduled_start_time = $3,
+            scheduled_end_time = $4,
+            time_window_label = $5,
+            technician_id = $6,
+            updated_at = $7
           where id = $1
         `,
-        [appointmentId, nextScheduledDate, nextTimeWindowLabel, nextTechnicianId, timelineTime]
+        [
+          appointmentId,
+          nextScheduledDate,
+          nextScheduledStartTime,
+          nextScheduledEndTime,
+          nextTimeWindowLabel,
+          nextTechnicianId,
+          timelineTime
+        ]
       );
 
       await this.updateJobStatusForAppointmentMutation(appointment.jobId, timelineTime, queryable);
@@ -456,7 +481,13 @@ export class JobsDataRepository {
           occurredAt: timelineTime,
           actorName,
           kind: 'appointmentScheduleUpdated',
-          message: this.buildScheduleUpdateMessage(nextScheduledDate ?? undefined, nextTimeWindowLabel ?? undefined, nextTechnicianId ?? undefined)
+          message: this.buildScheduleUpdateMessage(
+            nextScheduledDate ?? undefined,
+            nextScheduledStartTime ?? undefined,
+            nextScheduledEndTime ?? undefined,
+            nextTimeWindowLabel ?? undefined,
+            nextTechnicianId ?? undefined
+          )
         },
         queryable
       );
@@ -684,6 +715,8 @@ export class JobsDataRepository {
             id,
             job_id as "jobId",
             scheduled_date as "scheduledDate",
+            scheduled_start_time as "scheduledStartTime",
+            scheduled_end_time as "scheduledEndTime",
             time_window_label as "timeWindowLabel",
             technician_id as "technicianId",
             status,
@@ -698,7 +731,7 @@ export class JobsDataRepository {
           updated_at as "updatedAt"
           from appointments
           where job_id = any($1::text[])
-          order by scheduled_date asc nulls last, time_window_label asc nulls last, created_at asc
+          order by scheduled_date asc nulls last, scheduled_start_time asc nulls last, time_window_label asc nulls last, created_at asc
         `,
         [jobIds]
       ),
@@ -911,6 +944,8 @@ export class JobsDataRepository {
 
   private buildScheduleUpdateMessage(
     scheduledDate?: string,
+    scheduledStartTime?: string,
+    scheduledEndTime?: string,
     timeWindowLabel?: string,
     technicianId?: string
   ): string {
@@ -918,6 +953,12 @@ export class JobsDataRepository {
 
     if (scheduledDate) {
       parts.push(`for ${scheduledDate}`);
+    }
+
+    const structuredTime = this.formatStructuredScheduleTime(scheduledStartTime, scheduledEndTime);
+
+    if (structuredTime) {
+      parts.push(`from ${structuredTime}`);
     }
 
     if (timeWindowLabel) {
@@ -929,6 +970,41 @@ export class JobsDataRepository {
     }
 
     return `${parts.join(' ')}.`;
+  }
+
+  private buildAppointmentCreatedMessage(appointment: AppointmentRecord): string {
+    const parts = ['Appointment added'];
+
+    if (appointment.scheduledDate) {
+      parts.push(`for ${appointment.scheduledDate}`);
+    }
+
+    const structuredTime = this.formatStructuredScheduleTime(
+      appointment.scheduledStartTime,
+      appointment.scheduledEndTime
+    );
+
+    if (structuredTime) {
+      parts.push(`from ${structuredTime}`);
+    }
+
+    return `${parts.join(' ')}.`;
+  }
+
+  private formatStructuredScheduleTime(scheduledStartTime?: string, scheduledEndTime?: string): string | undefined {
+    if (scheduledStartTime && scheduledEndTime) {
+      return `${scheduledStartTime} to ${scheduledEndTime}`;
+    }
+
+    if (scheduledStartTime) {
+      return `${scheduledStartTime}`;
+    }
+
+    if (scheduledEndTime) {
+      return `ending ${scheduledEndTime}`;
+    }
+
+    return undefined;
   }
 
   private buildFinishReviewMessage(finishReview?: FinishReviewInput): string {
@@ -962,6 +1038,8 @@ export class JobsDataRepository {
       id: row.id,
       jobId: row.jobId,
       scheduledDate: toOptionalDateString(row.scheduledDate),
+      scheduledStartTime: toOptionalTimeString(row.scheduledStartTime),
+      scheduledEndTime: toOptionalTimeString(row.scheduledEndTime),
       timeWindowLabel: row.timeWindowLabel ?? undefined,
       technicianId: row.technicianId ?? undefined,
       status: row.status,

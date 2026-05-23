@@ -236,6 +236,8 @@ export type CreateJobInput = {
   summary: string;
   workOrderNumber?: string;
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
 };
@@ -244,6 +246,8 @@ export type AppointmentRecord = {
   id: string;
   jobId: string;
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
   status: AppointmentStatus;
@@ -260,12 +264,16 @@ export type AppointmentRecord = {
 
 export type CreateAppointmentInput = {
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
 };
 
 export type UpdateAppointmentScheduleInput = {
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
 };

@@ -4,9 +4,12 @@ import type {
   JobStatus,
   JobsWorkspaceResponse
 } from '@/lib/operations-api';
+import { formatAppointmentScheduleTime } from './appointment-schedule-format';
 
 export type AppointmentDraft = {
   scheduledDate: string;
+  scheduledStartTime: string;
+  scheduledEndTime: string;
   timeWindowLabel: string;
   technicianId: string;
 };
@@ -23,6 +26,8 @@ type JobsAppointmentsPanelProps = {
   jobSummary: string;
   jobTechnicianId: string;
   jobDate: string;
+  jobStartTime: string;
+  jobEndTime: string;
   jobWindow: string;
   appointmentDrafts: Record<string, AppointmentDraft>;
   appointmentEditDrafts: Record<string, AppointmentEditDraft>;
@@ -34,6 +39,8 @@ type JobsAppointmentsPanelProps = {
   onJobSummaryChange: (value: string) => void;
   onJobTechnicianChange: (value: string) => void;
   onJobDateChange: (value: string) => void;
+  onJobStartTimeChange: (value: string) => void;
+  onJobEndTimeChange: (value: string) => void;
   onJobWindowChange: (value: string) => void;
   onAppointmentDraftChange: (jobId: string, draft: AppointmentDraft) => void;
   onAppointmentEditDraftChange: (appointmentId: string, draft: AppointmentEditDraft) => void;
@@ -69,6 +76,8 @@ export function JobsAppointmentsPanel({
   jobSummary,
   jobTechnicianId,
   jobDate,
+  jobStartTime,
+  jobEndTime,
   jobWindow,
   appointmentDrafts,
   appointmentEditDrafts,
@@ -80,6 +89,8 @@ export function JobsAppointmentsPanel({
   onJobSummaryChange,
   onJobTechnicianChange,
   onJobDateChange,
+  onJobStartTimeChange,
+  onJobEndTimeChange,
   onJobWindowChange,
   onAppointmentDraftChange,
   onAppointmentEditDraftChange,
@@ -151,6 +162,22 @@ export function JobsAppointmentsPanel({
         <input value={jobOrigin} onChange={(event) => onJobOriginChange(event.target.value)} placeholder="Origin" style={styles.input} />
         <input value={jobSummary} onChange={(event) => onJobSummaryChange(event.target.value)} placeholder="Caller complaint / summary" style={styles.input} />
         <input value={jobDate} onChange={(event) => onJobDateChange(event.target.value)} type="date" style={styles.input} />
+        <input
+          aria-label="Job start time"
+          value={jobStartTime}
+          onChange={(event) => onJobStartTimeChange(event.target.value)}
+          type="time"
+          disabled={!jobDate}
+          style={styles.input}
+        />
+        <input
+          aria-label="Job end time"
+          value={jobEndTime}
+          onChange={(event) => onJobEndTimeChange(event.target.value)}
+          type="time"
+          disabled={!jobDate}
+          style={styles.input}
+        />
         <input value={jobWindow} onChange={(event) => onJobWindowChange(event.target.value)} placeholder="1:00 PM - 3:00 PM" style={styles.input} />
         <select value={jobTechnicianId} onChange={(event) => onJobTechnicianChange(event.target.value)} style={styles.input}>
           <option value="">Unassigned</option>
@@ -277,7 +304,7 @@ function renderJobCard({
   onKeepJobOpen: JobsAppointmentsPanelProps['onKeepJobOpen'];
   focusedJobId?: string | null;
 }) {
-  const draft = appointmentDrafts[job.id] ?? { scheduledDate: '', timeWindowLabel: '', technicianId: '' };
+  const draft = appointmentDrafts[job.id] ?? createEmptyAppointmentDraft();
   const canAddAppointment = job.status !== 'closed' && job.status !== 'cancelled';
   const isFocused = focusedJobId === job.id;
 
@@ -376,9 +403,12 @@ function renderJobCard({
         {job.appointments.map((appointment) => {
           const editDraft = appointmentEditDrafts[appointment.id] ?? {
             scheduledDate: appointment.scheduledDate ?? '',
+            scheduledStartTime: appointment.scheduledStartTime ?? '',
+            scheduledEndTime: appointment.scheduledEndTime ?? '',
             timeWindowLabel: appointment.timeWindowLabel ?? '',
             technicianId: appointment.technicianId ?? ''
           };
+          const appointmentTimeDisplay = formatAppointmentScheduleTime(appointment) ?? 'No time set';
 
           return (
             <div key={appointment.id} style={getAppointmentPanelStyle(appointment.status, appointment.needsOfficeReview)}>
@@ -391,7 +421,7 @@ function renderJobCard({
                 </div>
               </div>
               <div style={styles.muted}>
-                {appointment.timeWindowLabel || 'No window'} - {appointment.technicianName || 'Unassigned'}
+                {appointmentTimeDisplay} - {appointment.technicianName || 'Unassigned'}
               </div>
               {appointment.finishOutcome ? (
                 <div style={styles.muted}>Finish outcome: {formatFinishOutcome(appointment.finishOutcome)}</div>
@@ -427,11 +457,36 @@ function renderJobCard({
                   value={editDraft.scheduledDate}
                   onChange={(event) =>
                     onAppointmentEditDraftChange(appointment.id, {
-                      ...editDraft,
-                      scheduledDate: event.target.value
+                      ...updateAppointmentDraftDate(editDraft, event.target.value)
                     })
                   }
                   type="date"
+                  style={styles.input}
+                />
+                <input
+                  aria-label="Appointment start time"
+                  value={editDraft.scheduledStartTime}
+                  onChange={(event) =>
+                    onAppointmentEditDraftChange(appointment.id, {
+                      ...editDraft,
+                      scheduledStartTime: event.target.value
+                    })
+                  }
+                  type="time"
+                  disabled={!editDraft.scheduledDate}
+                  style={styles.input}
+                />
+                <input
+                  aria-label="Appointment end time"
+                  value={editDraft.scheduledEndTime}
+                  onChange={(event) =>
+                    onAppointmentEditDraftChange(appointment.id, {
+                      ...editDraft,
+                      scheduledEndTime: event.target.value
+                    })
+                  }
+                  type="time"
+                  disabled={!editDraft.scheduledDate}
                   style={styles.input}
                 />
                 <input
@@ -475,8 +530,24 @@ function renderJobCard({
         <div style={styles.formRow}>
           <input
             value={draft.scheduledDate}
-            onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, scheduledDate: event.target.value })}
+            onChange={(event) => onAppointmentDraftChange(job.id, updateAppointmentDraftDate(draft, event.target.value))}
             type="date"
+            style={styles.input}
+          />
+          <input
+            aria-label="New appointment start time"
+            value={draft.scheduledStartTime}
+            onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, scheduledStartTime: event.target.value })}
+            type="time"
+            disabled={!draft.scheduledDate}
+            style={styles.input}
+          />
+          <input
+            aria-label="New appointment end time"
+            value={draft.scheduledEndTime}
+            onChange={(event) => onAppointmentDraftChange(job.id, { ...draft, scheduledEndTime: event.target.value })}
+            type="time"
+            disabled={!draft.scheduledDate}
             style={styles.input}
           />
           <input
@@ -520,6 +591,32 @@ function renderJobCard({
 
 export function getOfficeJobElementId(jobId: string): string {
   return `office-job-${jobId}`;
+}
+
+export function createEmptyAppointmentDraft(): AppointmentDraft {
+  return {
+    scheduledDate: '',
+    scheduledStartTime: '',
+    scheduledEndTime: '',
+    timeWindowLabel: '',
+    technicianId: ''
+  };
+}
+
+function updateAppointmentDraftDate(draft: AppointmentDraft, scheduledDate: string): AppointmentDraft {
+  if (!scheduledDate) {
+    return {
+      ...draft,
+      scheduledDate: '',
+      scheduledStartTime: '',
+      scheduledEndTime: ''
+    };
+  }
+
+  return {
+    ...draft,
+    scheduledDate
+  };
 }
 
 function getJobCardStyle(isFocused: boolean) {

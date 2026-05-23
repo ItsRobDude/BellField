@@ -371,6 +371,8 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
         appointments: [
           buildAppointment({
             scheduledDate: today,
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
             timeWindowLabel: '8-10',
             technicianId: 'tech-1',
             technicianName: 'Taylor Tech'
@@ -383,6 +385,8 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
         appointments: [
           buildAppointment({
             scheduledDate: today,
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
             timeWindowLabel: '8-10'
           })
         ]
@@ -411,11 +415,74 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
         sessionToken: 'session-token',
         apiBaseUrl: 'http://api.test',
         scheduledDate: today,
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00',
         timeWindowLabel: '8-10',
         technicianId: undefined
       });
     });
     expect(await screen.findByText('Dispatch schedule updated.')).toBeInTheDocument();
+  });
+
+  it('saves jobs-panel appointment schedule edits with structured times', async () => {
+    const today = getTodayDateInputValue();
+    const initialWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
+            timeWindowLabel: '8-10',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    const updatedWorkspace = buildWorkspace([
+      buildJob({
+        appointments: [
+          buildAppointment({
+            scheduledDate: today,
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '11:00',
+            timeWindowLabel: '8-10',
+            technicianId: 'tech-1',
+            technicianName: 'Taylor Tech'
+          })
+        ]
+      })
+    ]);
+    arrangeWorkspace(initialWorkspace);
+    mockedOperationsApi.getOfficeJobsWorkspace
+      .mockResolvedValueOnce(initialWorkspace)
+      .mockResolvedValueOnce(updatedWorkspace)
+      .mockResolvedValue(updatedWorkspace);
+    mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(updatedWorkspace.jobs[0]!);
+
+    renderShell();
+
+    const jobArticle = (await screen.findByText(/Job 1001: No cooling/i)).closest('article');
+    expect(jobArticle).not.toBeNull();
+
+    fireEvent.change(within(jobArticle as HTMLElement).getByLabelText('Appointment end time'), {
+      target: { value: '11:00' }
+    });
+    fireEvent.click(within(jobArticle as HTMLElement).getByRole('button', { name: 'Save appointment' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        scheduledDate: today,
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '11:00',
+        timeWindowLabel: '8-10',
+        technicianId: 'tech-1'
+      });
+    });
   });
 
   it('removes appointments from the current dispatch board after they are moved to another date', async () => {

@@ -23,6 +23,8 @@ export type DispatchAppointmentCard = {
   jobType: string;
   status: AppointmentSummary['status'];
   scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
   timeWindowLabel?: string;
   technicianId?: string;
   technicianName?: string;
@@ -93,6 +95,8 @@ export function buildDispatchBoardModel(
         jobType: job.jobType,
         status: appointment.status,
         scheduledDate: appointment.scheduledDate,
+        scheduledStartTime: appointment.scheduledStartTime,
+        scheduledEndTime: appointment.scheduledEndTime,
         timeWindowLabel: appointment.timeWindowLabel,
         technicianId: appointment.technicianId,
         technicianName: appointment.technicianName,
@@ -134,9 +138,6 @@ function isDispatchableJobStatus(status: JobSummary['status']): boolean {
 }
 
 function compareCardsForBoard(left: DispatchAppointmentCard, right: DispatchAppointmentCard): number {
-  // Sort by scheduled date first, then by job number.
-  // timeWindowLabel is free-form (e.g. "8-10", "10:00 - 12:00", "AM"), so a lexical sort would mislead.
-  // Office staff can still read the label on the card.
   const leftDate = left.scheduledDate ?? '';
   const rightDate = right.scheduledDate ?? '';
 
@@ -144,6 +145,15 @@ function compareCardsForBoard(left: DispatchAppointmentCard, right: DispatchAppo
     if (!leftDate) return 1;
     if (!rightDate) return -1;
     return leftDate.localeCompare(rightDate);
+  }
+
+  const leftStartTime = left.scheduledStartTime ?? '';
+  const rightStartTime = right.scheduledStartTime ?? '';
+
+  if (leftStartTime !== rightStartTime) {
+    if (!leftStartTime) return 1;
+    if (!rightStartTime) return -1;
+    return leftStartTime.localeCompare(rightStartTime);
   }
 
   return left.jobNumber.localeCompare(right.jobNumber);

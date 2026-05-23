@@ -68,6 +68,10 @@ A job may have multiple appointments with different:
 - technicians
 - appointment statuses
 
+V1 scheduling should store the appointment's scheduled date plus optional local start and end times in `HH:mm` format.
+The existing time-window label remains available as a flexible customer-facing/free-form label for legacy records and non-exact windows.
+BellField should not automatically parse or backfill structured times from free-form labels because labels like "morning", "first call", or "after lunch" are ambiguous.
+
 ---
 
 ## 3. Job Creation Workflow
@@ -82,7 +86,8 @@ When office staff create a job, BellField should allow them to enter:
 - summary/caller complaint
 - work order number when available
 - date
-- time frame
+- optional start/end times
+- optional time-window label
 - technician assignment
 
 ### Bill-to and work order behavior
@@ -93,9 +98,9 @@ During job creation:
 - if no work order number is provided, BellField should leave it blank and avoid showing a placeholder reference
 
 ### Automatic appointment generation
-If the office enters a date and time when creating the job:
+If the office enters a date and schedule details when creating the job:
 - BellField should automatically create the first appointment for that job
-- that appointment should appear on the dispatch board for that date/time
+- that appointment should appear on the dispatch board for that date, with structured times used for ordering when available
 
 ### Unscheduled job behavior
 If the office creates a job without a date/time:
@@ -430,6 +435,10 @@ Non-equipment materials assigned to a job:
 Appointments with technicians assigned:
 - should appear on the timeline
 
+Timeline ordering should use scheduled date first, then structured local start time when present.
+Appointments without a structured start time should sort after timed appointments on the same day.
+The free-form time-window label should remain visible as schedule context, but it should not drive timeline ordering.
+
 Appointments without technicians assigned:
 - should live in the unassigned queue
 - should not appear on the timeline by default
@@ -441,6 +450,8 @@ If an appointment is reassigned to a different technician:
 
 ### Live update behavior
 Dispatch board color/status changes should update live for office users as soon as the technician or office user saves/presses that status change.
+
+Week view should build on this structured schedule model after day-view scheduling is trustworthy.
 
 ---
 
