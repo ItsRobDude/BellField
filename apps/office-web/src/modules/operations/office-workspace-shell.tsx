@@ -7,6 +7,9 @@ import {
   createOfficeEquipment,
   deleteOfficeEquipment,
   getOfficeEquipmentDetail,
+  getOfficeMediaAttachments,
+  getOfficeMediaBlob,
+  getOfficeRegisterEntries,
   createOfficeJob,
   getOfficeEquipmentWorkspace,
   getOfficeJobsWorkspace,
@@ -15,11 +18,17 @@ import {
   updateOfficeAppointmentStatus,
   updateOfficeEquipment,
   updateOfficeJobStatus,
+  updateOfficeMediaAttachment,
+  updateOfficeRegisterEntry,
+  voidOfficeMediaAttachment,
+  voidOfficeRegisterEntry,
   type AppointmentStatus,
   type EquipmentDetail,
   type EquipmentSummary,
   type JobStatus,
-  type JobsWorkspaceResponse
+  type JobsWorkspaceResponse,
+  type MediaAttachmentSummary,
+  type RegisterEntrySummary
 } from '@/lib/operations-api';
 import {
   getCurrentOfficeSession,
@@ -39,7 +48,9 @@ import {
   getOfficeJobElementId,
   JobsAppointmentsPanel,
   type AppointmentDraft,
-  type AppointmentEditDraft
+  type AppointmentEditDraft,
+  type CapturedWorkDetails,
+  type RegisterEntryEditDraft
 } from './jobs-appointments-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -120,6 +131,74 @@ function getDateInputValue(date = new Date()): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+function createRegisterEntryDraft(entry: RegisterEntrySummary): RegisterEntryEditDraft {
+  return {
+    appointmentId: entry.appointmentId ?? '',
+    kind: entry.kind,
+    description: entry.description,
+    quantity: String(entry.quantity),
+    unitOfMeasure: entry.unitOfMeasure ?? '',
+    unitPrice: entry.unitPrice === undefined ? '' : String(entry.unitPrice),
+    totalAmount: String(entry.totalAmount),
+    partNumber: entry.partNumber ?? '',
+    inventorySourceLabel: entry.inventorySourceLabel ?? ''
+  };
+}
+
+function buildCapturedWorkDetails(
+  registerEntries: RegisterEntrySummary[],
+  mediaAttachments: MediaAttachmentSummary[],
+  previous?: CapturedWorkDetails
+): CapturedWorkDetails {
+  return {
+    isOpen: previous?.isOpen ?? true,
+    isLoading: false,
+    registerEntries,
+    mediaAttachments,
+    registerDrafts: Object.fromEntries(registerEntries.map((entry) => [entry.id, createRegisterEntryDraft(entry)])),
+    mediaCaptionDrafts: Object.fromEntries(mediaAttachments.map((media) => [media.id, media.caption ?? ''])),
+    registerVoidReasons: previous?.registerVoidReasons ?? {},
+    mediaVoidReasons: previous?.mediaVoidReasons ?? {}
+  };
+}
+
+function createLoadingCapturedWorkDetails(previous?: CapturedWorkDetails): CapturedWorkDetails {
+  return {
+    isOpen: true,
+    isLoading: true,
+    registerEntries: previous?.registerEntries ?? [],
+    mediaAttachments: previous?.mediaAttachments ?? [],
+    registerDrafts: previous?.registerDrafts ?? {},
+    mediaCaptionDrafts: previous?.mediaCaptionDrafts ?? {},
+    registerVoidReasons: previous?.registerVoidReasons ?? {},
+    mediaVoidReasons: previous?.mediaVoidReasons ?? {}
+  };
+}
+
+function parseRequiredNumber(value: string, fieldLabel: string): number {
+  if (!value.trim()) {
+    throw new Error(`${fieldLabel} is required.`);
+  }
+
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) {
+    throw new Error(`${fieldLabel} must be a valid number.`);
+  }
+  return parsed;
+}
+
+function parseOptionalNumber(value: string): number | null {
+  if (!value.trim()) {
+    return null;
+  }
+  return parseRequiredNumber(value, 'Unit price');
+}
+
+function optionalString(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
   const [roles, setRoles] = useState<RoleTemplate[]>([]);
@@ -148,6 +227,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [jobWindow, setJobWindow] = useState('');
   const [appointmentDrafts, setAppointmentDrafts] = useState<Record<string, AppointmentDraft>>({});
   const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
+  const [capturedWorkByJobId, setCapturedWorkByJobId] = useState<Record<string, CapturedWorkDetails>>({});
   const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
   const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
   const refreshInFlightRef = useRef(false);
@@ -248,6 +328,207 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
     return () => window.clearInterval(intervalId);
   }, [refreshWorkspace]);
+
+  async function loadCapturedWork(jobId: string) {
+    setCapturedWorkByJobId((current) => ({
+      ...current,
+      [jobId]: createLoadingCapturedWorkDetails(current[jobId])
+    }));
+
+    try {
+      const [registerResponse, mediaResponse] = await Promise.all([
+        getOfficeRegisterEntries({ jobId, sessionToken, apiBaseUrl }),
+        getOfficeMediaAttachments({ jobId, sessionToken, apiBaseUrl })
+      ]);
+
+      setCapturedWorkByJobId((current) => ({
+        ...current,
+        [jobId]: buildCapturedWorkDetails(registerResponse.registerEntries, mediaResponse.mediaAttachments, current[jobId])
+      }));
+    } catch (error) {
+      setCapturedWorkByJobId((current) => ({
+        ...current,
+        [jobId]: {
+          ...createLoadingCapturedWorkDetails(current[jobId]),
+          isLoading: false
+        }
+      }));
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load captured work.');
+    }
+  }
+
+  async function handleToggleCapturedWork(jobId: string) {
+    if (capturedWorkByJobId[jobId]?.isOpen) {
+      setCapturedWorkByJobId((current) => ({
+        ...current,
+        [jobId]: {
+          ...current[jobId],
+          isOpen: false
+        }
+      }));
+      return;
+    }
+
+    await loadCapturedWork(jobId);
+  }
+
+  function handleRegisterDraftChange(jobId: string, registerEntryId: string, draft: RegisterEntryEditDraft) {
+    setCapturedWorkByJobId((current) => ({
+      ...current,
+      [jobId]: {
+        ...createLoadingCapturedWorkDetails(current[jobId]),
+        isLoading: current[jobId]?.isLoading ?? false,
+        registerDrafts: {
+          ...(current[jobId]?.registerDrafts ?? {}),
+          [registerEntryId]: draft
+        }
+      }
+    }));
+  }
+
+  function handleRegisterVoidReasonChange(jobId: string, registerEntryId: string, reason: string) {
+    setCapturedWorkByJobId((current) => ({
+      ...current,
+      [jobId]: {
+        ...createLoadingCapturedWorkDetails(current[jobId]),
+        isLoading: current[jobId]?.isLoading ?? false,
+        registerVoidReasons: {
+          ...(current[jobId]?.registerVoidReasons ?? {}),
+          [registerEntryId]: reason
+        }
+      }
+    }));
+  }
+
+  function handleMediaCaptionChange(jobId: string, mediaId: string, caption: string) {
+    setCapturedWorkByJobId((current) => ({
+      ...current,
+      [jobId]: {
+        ...createLoadingCapturedWorkDetails(current[jobId]),
+        isLoading: current[jobId]?.isLoading ?? false,
+        mediaCaptionDrafts: {
+          ...(current[jobId]?.mediaCaptionDrafts ?? {}),
+          [mediaId]: caption
+        }
+      }
+    }));
+  }
+
+  function handleMediaVoidReasonChange(jobId: string, mediaId: string, reason: string) {
+    setCapturedWorkByJobId((current) => ({
+      ...current,
+      [jobId]: {
+        ...createLoadingCapturedWorkDetails(current[jobId]),
+        isLoading: current[jobId]?.isLoading ?? false,
+        mediaVoidReasons: {
+          ...(current[jobId]?.mediaVoidReasons ?? {}),
+          [mediaId]: reason
+        }
+      }
+    }));
+  }
+
+  async function handleSaveRegisterEntry(jobId: string, registerEntryId: string) {
+    const draft = capturedWorkByJobId[jobId]?.registerDrafts[registerEntryId];
+    if (!draft) {
+      return;
+    }
+
+    try {
+      setNoticeMessage(null);
+      await updateOfficeRegisterEntry({
+        registerEntryId,
+        sessionToken,
+        apiBaseUrl,
+        appointmentId: draft.appointmentId || null,
+        kind: draft.kind,
+        description: draft.description,
+        quantity: parseRequiredNumber(draft.quantity, 'Quantity'),
+        unitOfMeasure: optionalString(draft.unitOfMeasure),
+        unitPrice: parseOptionalNumber(draft.unitPrice),
+        totalAmount: parseRequiredNumber(draft.totalAmount, 'Total amount'),
+        partNumber: optionalString(draft.partNumber),
+        inventorySourceLabel: optionalString(draft.inventorySourceLabel)
+      });
+      setNoticeMessage('Register entry updated.');
+      await refreshWorkspace();
+      await loadCapturedWork(jobId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update register entry.');
+    }
+  }
+
+  async function handleVoidRegisterEntry(jobId: string, registerEntryId: string) {
+    if (!window.confirm('Void this register entry?')) {
+      return;
+    }
+
+    try {
+      setNoticeMessage(null);
+      await voidOfficeRegisterEntry({
+        registerEntryId,
+        sessionToken,
+        apiBaseUrl,
+        reason: optionalString(capturedWorkByJobId[jobId]?.registerVoidReasons[registerEntryId] ?? '')
+      });
+      setNoticeMessage('Register entry voided.');
+      await refreshWorkspace();
+      await loadCapturedWork(jobId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to void register entry.');
+    }
+  }
+
+  async function handleSaveMediaCaption(jobId: string, mediaId: string) {
+    const caption = capturedWorkByJobId[jobId]?.mediaCaptionDrafts[mediaId] ?? '';
+
+    try {
+      setNoticeMessage(null);
+      await updateOfficeMediaAttachment({
+        mediaId,
+        sessionToken,
+        apiBaseUrl,
+        caption: caption.trim() ? caption.trim() : null
+      });
+      setNoticeMessage('Media caption updated.');
+      await refreshWorkspace();
+      await loadCapturedWork(jobId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update media caption.');
+    }
+  }
+
+  async function handleVoidMediaAttachment(jobId: string, mediaId: string) {
+    if (!window.confirm('Void this media attachment?')) {
+      return;
+    }
+
+    try {
+      setNoticeMessage(null);
+      await voidOfficeMediaAttachment({
+        mediaId,
+        sessionToken,
+        apiBaseUrl,
+        reason: optionalString(capturedWorkByJobId[jobId]?.mediaVoidReasons[mediaId] ?? '')
+      });
+      setNoticeMessage('Media attachment voided.');
+      await refreshWorkspace();
+      await loadCapturedWork(jobId);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to void media attachment.');
+    }
+  }
+
+  async function handleOpenMediaAttachment(_jobId: string, mediaId: string) {
+    try {
+      const blob = await getOfficeMediaBlob({ mediaId, sessionToken, apiBaseUrl });
+      const objectUrl = URL.createObjectURL(blob);
+      window.open(objectUrl, '_blank', 'noopener,noreferrer');
+      window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to open media attachment.');
+    }
+  }
 
   async function handleEmployeeUpdate(employeeId: string, roleId: EmployeeRoleId, isActive: boolean) {
     try {
@@ -795,6 +1076,17 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         onAddAppointment={handleAddAppointment}
         onKeepJobOpen={handleKeepJobOpen}
         focusedJobId={focusedJobId}
+        capturedWorkByJobId={capturedWorkByJobId}
+        onToggleCapturedWork={handleToggleCapturedWork}
+        onRegisterDraftChange={handleRegisterDraftChange}
+        onSaveRegisterEntry={handleSaveRegisterEntry}
+        onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
+        onVoidRegisterEntry={handleVoidRegisterEntry}
+        onMediaCaptionChange={handleMediaCaptionChange}
+        onSaveMediaCaption={handleSaveMediaCaption}
+        onMediaVoidReasonChange={handleMediaVoidReasonChange}
+        onVoidMediaAttachment={handleVoidMediaAttachment}
+        onOpenMediaAttachment={handleOpenMediaAttachment}
       />
     </main>
   );

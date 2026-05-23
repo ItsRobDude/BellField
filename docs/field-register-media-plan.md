@@ -126,15 +126,15 @@ Default BellField posture is filesystem-on-the-office-server. The plan should no
 - No file in subdirectory deeper than one level. Keeps Windows filesystem behavior boring.
 
 ### Upload sequence (online)
-1. Field calls `POST /operations/jobs/{jobId}/media/upload-intents` with metadata (kind, contentType, byteSize, sha256, captured_at, caption, appointmentId?). Server returns `{ uploadId, mediaId, storagePath }` plus a short-lived signed token.
-2. Field uploads bytes via `POST /operations/media/{mediaId}/blob` (multipart) using the signed token. Server writes to `storage_path` and verifies sha256 + byteSize.
+1. Field calls `POST /operations/jobs/{jobId}/media/upload-intents` with metadata (kind, contentType, byteSize, sha256, captured_at, caption, appointmentId?). Server returns the media row plus a short-lived signed upload token unless the bytes are already present.
+2. Field uploads bytes via `POST /operations/media/{mediaId}/blob` as raw `application/octet-stream` using the signed token. Server writes to `storage_path` and verifies sha256 + byteSize.
 3. On success, server finalizes the media row (`uploaded_at` set, `storage_path` confirmed) and returns the canonical `MediaAttachmentSummary`.
 
-If the technician supplies an `(job_id, sha256)` that already exists, step 1 returns the existing media id and `uploadCompleted: true` — no blob upload needed.
+If the technician supplies an active `(job_id, sha256)` that already exists, step 1 returns the existing media id and `uploadCompleted: true` — no blob upload needed. Voided media rows are historical and do not block re-attaching the same bytes as a new active row.
 
 ### Retrieval
-- Office and field call `GET /operations/media/{mediaId}` — returns metadata and a signed blob URL.
-- `GET /operations/media/{mediaId}/blob` — streams the file with `Content-Disposition`. Auth required; permission checked per §6.
+- Office and field call `GET /operations/media/{mediaId}` — returns metadata.
+- `GET /operations/media/{mediaId}/blob` — streams the file with `Content-Disposition`. Authenticated office/session access or a signed download token is required.
 
 ### Signed token shape
 - HMAC-signed string carrying `{ mediaId, exp, scope }`. No external dependency. Signed by a server-side secret env (`BELLFIELD_MEDIA_TOKEN_SECRET`). Token expiry default 5 minutes.
@@ -305,8 +305,10 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 - `mergeJobMutationIntoAssignedWork` folds an applied register response without leaking `syncResult`/`warningMessages`.
 - The screen renders pending register entries with the same "queued/conflicted/rejected" badges already used for appointment status.
 
-### Office-web (out of scope here)
-- The office UI lane will add tests when it builds the surface. This plan does not specify those.
+### Office-web
+- Job-card captured-work surface lazy-loads register entries and media attachments.
+- Office can edit active register entries, edit media captions, void register/media rows, and open uploaded media blobs.
+- Pending media uploads render as metadata-only rows until bytes arrive.
 
 ---
 
@@ -315,8 +317,9 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 Recommended sequencing — one migration per slice:
 
 1. **`register_entries` table + `register` permission area.** Smallest first. New table, new permission key, new DTO/contract types. No changes to existing tables. Field + office endpoints created but only register CRUD is wired.
-2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Adds the table, the `BELLFIELD_MEDIA_ROOT` config, the upload-intent endpoint, the blob endpoint. No retrieval UI.
+2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Adds the table, the `BELLFIELD_MEDIA_ROOT` config, the upload-intent endpoint, the blob endpoint, and backend tests. No retrieval UI.
 3. **Field-mobile queue extension.** Add the new `PendingOperation` kinds, the screen render path, and the offline replay tests. No backend changes.
+3a. **Office-web captured-work review.** Add job-card register/media review, edit, void, and media download/open actions. No field camera capture.
 4. **Field-mobile media capture.** Wires the field to capture a photo, store the local URI, queue the intent, and finalize the blob upload on Sync Now. (This step may need a new field-mobile dep for camera access; flag it for product approval first per the no-new-deps rule.)
 
 **Hard boundaries within this plan:**
@@ -334,10 +337,10 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 
 1. **Are `labor`, `serviceItem`, `part`, `membership`, `other` the right v1 kinds?** Slice 1 uses these values only. `discount`, `fee`, and `tax` remain later additions.
 2. **Should `unit_price` and `total_amount` allow negative values?** Slice 1 keeps money fields nonnegative. Discounts/corrections need a later explicit model.
-3. **Is `register` (and `media`) a justified new `PermissionArea`, or should we reuse `jobs:edit` / `jobs:configure`?** Slice 1 adds `register`. `media` is still proposed for Slice 2.
+3. **Is `register` (and `media`) a justified new `PermissionArea`, or should we reuse `jobs:edit` / `jobs:configure`?** Slices 1-2 add dedicated `register` and `media` areas.
 4. **Should technicians be able to edit any register entry on the job, or only the ones they captured?** This plan assumes "any entry on a job they're assigned to" mirroring current note/equipment-edit behavior. Tighter is possible.
-5. **What is the max byte size for an uploaded media file?** v1 needs a configured ceiling (e.g. 50 MB) to keep filesystem and request-body limits honest. Default suggestion: 50 MB. Larger video uploads can wait for chunked-upload support post-v1.
-6. **Should a voided media row delete the blob file from disk?** Recommendation: no — voided keeps the file, true delete deletes the file. Confirm.
+5. **What is the max byte size for an uploaded media file?** Implemented default is 50 MB via `BELLFIELD_MEDIA_MAX_BYTES`. Larger video uploads can wait for chunked-upload support post-v1.
+6. **Should a voided media row delete the blob file from disk?** Implemented behavior keeps the file; true delete remains a later dangerous action.
 7. **Camera/file-picker library for slice 4.** No new dep without product approval. Recommendation: `expo-image-picker` since the field app is already Expo-based, but defer to slice 4.
 8. **Should `registerFollowUpNote` (the existing free-text reminder on the appointment) eventually be replaced by structured register entries?** Recommendation: no. They serve different purposes — `registerFollowUpNote` is a "remind office to look at X" note, structured register entries are billable line items. Confirm to keep both.
 
@@ -360,7 +363,7 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 Captured for traceability:
 
 - **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Slice 1 now provides backend register entries without removing `registerFollowUpNote`; invoice-draft reflection still waits for the invoice-draft entity.
-- **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Current code has no media surface at all. This plan resolves the gap by introducing both the metadata entity and the upload pipeline outlined in §3–§4.
+- **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Backend metadata/blob storage is now present; field-mobile camera capture and blob replay remain the open field slice.
 - No other doc/code disagreements found in this audit.
 
 ---
@@ -385,9 +388,10 @@ Recommended smallest-safe-first order, one PR per item:
 
 - [ ] Confirm open questions §13 with Rob.
 - [x] Slice 1 — `register_entries` migration + contracts + service + tests. No client changes yet.
-- [ ] Slice 2 — `media_attachments` migration + storage scaffolding + intent/blob endpoints + tests. Filesystem only, no UI.
-- [ ] Slice 3 — Field-mobile pending-operation extensions (register only). Test against the existing field harness. No media yet.
+- [x] Slice 2 — `media_attachments` migration + storage scaffolding + intent/blob endpoints + tests. Filesystem only, no UI.
+- [x] Slice 3 — Field-mobile pending-operation extensions (register only). Test against the existing field harness. No media yet.
+- [x] Slice 3a — Office-web captured-work review surface. No media capture yet.
 - [ ] Slice 4 — Field-mobile media capture. Pause for product approval on the camera library dependency before opening.
-- [ ] Slice 5 — Office-web register/media surfaces (not specced here; separate lane).
+- [ ] Slice 5 — Office-web deeper invoice/register handoff after invoice drafts exist.
 
 Each slice should run `pnpm --filter @bellfield/api test`, `pnpm check:architecture`, and the touched-app's lint + test. Migrations land with tracked up/down per `docs/database-migrations.md`.

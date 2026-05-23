@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { JobStatus, JobSummary, JobsWorkspaceResponse } from '@/lib/operations-api';
-import { JobsAppointmentsPanel } from './jobs-appointments-panel';
+import { JobsAppointmentsPanel, type CapturedWorkDetails } from './jobs-appointments-panel';
 
 const noopAsync = vi.fn(async () => undefined);
 type JobStatusReviewHandler = (
@@ -85,6 +85,8 @@ function renderJobsPanel(input: {
   appointmentEditDrafts?: Parameters<typeof JobsAppointmentsPanel>[0]['appointmentEditDrafts'];
   onAppointmentEditDraftChange?: Parameters<typeof JobsAppointmentsPanel>[0]['onAppointmentEditDraftChange'];
   onSaveAppointmentSchedule?: Parameters<typeof JobsAppointmentsPanel>[0]['onSaveAppointmentSchedule'];
+  capturedWorkByJobId?: Record<string, CapturedWorkDetails>;
+  onToggleCapturedWork?: Parameters<typeof JobsAppointmentsPanel>[0]['onToggleCapturedWork'];
   focusedJobId?: string | null;
 }) {
   const onJobStatusReviewRequested = input.onJobStatusReviewRequested ?? vi.fn<JobStatusReviewHandler>();
@@ -129,6 +131,17 @@ function renderJobsPanel(input: {
       onSaveAppointmentSchedule={input.onSaveAppointmentSchedule ?? noopAsync}
       onAddAppointment={onAddAppointment}
       onKeepJobOpen={onKeepJobOpen}
+      capturedWorkByJobId={input.capturedWorkByJobId ?? {}}
+      onToggleCapturedWork={input.onToggleCapturedWork ?? noopAsync}
+      onRegisterDraftChange={vi.fn()}
+      onSaveRegisterEntry={noopAsync}
+      onRegisterVoidReasonChange={vi.fn()}
+      onVoidRegisterEntry={noopAsync}
+      onMediaCaptionChange={vi.fn()}
+      onSaveMediaCaption={noopAsync}
+      onMediaVoidReasonChange={vi.fn()}
+      onVoidMediaAttachment={noopAsync}
+      onOpenMediaAttachment={noopAsync}
       focusedJobId={input.focusedJobId}
     />
   );

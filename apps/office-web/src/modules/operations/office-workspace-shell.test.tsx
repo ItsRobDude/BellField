@@ -1,6 +1,12 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { AppointmentSummary, JobSummary, JobsWorkspaceResponse } from '@/lib/operations-api';
+import type {
+  AppointmentSummary,
+  JobSummary,
+  JobsWorkspaceResponse,
+  MediaAttachmentSummary,
+  RegisterEntrySummary
+} from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import * as identityApi from '@/lib/identity-api';
@@ -15,11 +21,18 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeEquipmentDetail: vi.fn(),
   getOfficeEquipmentWorkspace: vi.fn(),
   getOfficeJobsWorkspace: vi.fn(),
+  getOfficeMediaAttachments: vi.fn(),
+  getOfficeMediaBlob: vi.fn(),
+  getOfficeRegisterEntries: vi.fn(),
   linkOfficeEquipmentReplacement: vi.fn(),
   updateOfficeAppointmentSchedule: vi.fn(),
   updateOfficeAppointmentStatus: vi.fn(),
   updateOfficeEquipment: vi.fn(),
-  updateOfficeJobStatus: vi.fn()
+  updateOfficeJobStatus: vi.fn(),
+  updateOfficeMediaAttachment: vi.fn(),
+  updateOfficeRegisterEntry: vi.fn(),
+  voidOfficeMediaAttachment: vi.fn(),
+  voidOfficeRegisterEntry: vi.fn()
 }));
 
 vi.mock('@/lib/identity-api', () => ({
@@ -106,6 +119,52 @@ function buildJob(overrides: Partial<JobSummary> = {}): JobSummary {
   };
 }
 
+function buildRegisterEntry(overrides: Partial<RegisterEntrySummary> = {}): RegisterEntrySummary {
+  return {
+    id: 'register-1',
+    jobId: 'job-1',
+    appointmentId: 'appointment-1',
+    kind: 'part',
+    description: 'Diagnostic capacitor',
+    quantity: 1,
+    unitOfMeasure: 'each',
+    unitPrice: 45,
+    totalAmount: 45,
+    partNumber: 'CAP-45',
+    inventorySourceLabel: 'truck',
+    capturedByEmployeeId: 'tech-1',
+    capturedByName: 'Taylor Tech',
+    capturedAt: '2026-05-22T11:00:00.000Z',
+    isVoid: false,
+    createdAt: '2026-05-22T11:00:00.000Z',
+    updatedAt: '2026-05-22T11:00:00.000Z',
+    ...overrides
+  };
+}
+
+function buildMediaAttachment(overrides: Partial<MediaAttachmentSummary> = {}): MediaAttachmentSummary {
+  return {
+    id: 'media-1',
+    jobId: 'job-1',
+    appointmentId: 'appointment-1',
+    kind: 'image',
+    contentType: 'image/jpeg',
+    byteSize: 1024,
+    sha256: 'a'.repeat(64),
+    originalFilename: 'compressor.jpg',
+    caption: 'Before cleaning',
+    capturedByEmployeeId: 'tech-1',
+    capturedByName: 'Taylor Tech',
+    capturedAt: '2026-05-22T11:05:00.000Z',
+    uploadCompleted: true,
+    uploadedAt: '2026-05-22T11:06:00.000Z',
+    isVoid: false,
+    createdAt: '2026-05-22T11:05:00.000Z',
+    updatedAt: '2026-05-22T11:06:00.000Z',
+    ...overrides
+  };
+}
+
 function buildWorkspace(jobs: JobSummary[]): JobsWorkspaceResponse {
   return {
     customers: [
@@ -151,6 +210,9 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
     equipment: [],
     suggestedEquipmentTypes: []
   });
+  mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({ registerEntries: [] });
+  mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({ mediaAttachments: [] });
+  mockedOperationsApi.getOfficeMediaBlob.mockResolvedValue(new Blob(['media-bytes']));
 }
 
 function renderShell() {
@@ -761,5 +823,151 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
     await waitFor(() => {
       expect(screen.getAllByText(/Office review/i).length).toBeGreaterThan(1);
     });
+  });
+
+  it('lazy-loads captured register entries and media for a job', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValueOnce({
+      registerEntries: [buildRegisterEntry()]
+    });
+    mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValueOnce({
+      mediaAttachments: [
+        buildMediaAttachment(),
+        buildMediaAttachment({
+          id: 'media-2',
+          originalFilename: 'pending.pdf',
+          kind: 'document',
+          contentType: 'application/pdf',
+          uploadCompleted: false,
+          uploadedAt: undefined
+        })
+      ]
+    });
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review captured work' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeRegisterEntries).toHaveBeenCalledWith({
+        jobId: 'job-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
+    });
+    expect(await screen.findByText('Diagnostic capacitor')).toBeInTheDocument();
+    expect(await screen.findByText('compressor.jpg')).toBeInTheDocument();
+    expect(await screen.findByText('pending.pdf')).toBeInTheDocument();
+    expect(screen.getByText('Pending upload')).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Open file' })[1]).toBeDisabled();
+  });
+
+  it('edits and voids captured register entries from the office job card', async () => {
+    const registerEntry = buildRegisterEntry();
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({
+      registerEntries: [registerEntry]
+    });
+    mockedOperationsApi.updateOfficeRegisterEntry.mockResolvedValue(buildJob());
+    mockedOperationsApi.voidOfficeRegisterEntry.mockResolvedValue(buildJob());
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review captured work' }));
+    await screen.findByText('Diagnostic capacitor');
+    fireEvent.change(screen.getByLabelText('Register quantity for Diagnostic capacitor'), {
+      target: { value: '2' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save register entry' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeRegisterEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          registerEntryId: 'register-1',
+          quantity: 2,
+          totalAmount: 45,
+          sessionToken: 'session-token',
+          apiBaseUrl: 'http://api.test'
+        })
+      );
+    });
+
+    fireEvent.change(screen.getByLabelText('Void reason for Diagnostic capacitor'), {
+      target: { value: 'duplicate' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Void register entry' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.voidOfficeRegisterEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          registerEntryId: 'register-1',
+          reason: 'duplicate'
+        })
+      );
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+  });
+
+  it('edits, opens, and voids media attachments from the office job card', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({
+      mediaAttachments: [buildMediaAttachment()]
+    });
+    mockedOperationsApi.updateOfficeMediaAttachment.mockResolvedValue({
+      mediaAttachment: buildMediaAttachment({ caption: 'After cleaning' })
+    });
+    mockedOperationsApi.voidOfficeMediaAttachment.mockResolvedValue({
+      mediaAttachment: buildMediaAttachment({ isVoid: true, voidReason: 'wrong file' })
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:media-1');
+    const revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review captured work' }));
+    await screen.findByText('compressor.jpg');
+    fireEvent.change(screen.getByLabelText('Media caption for compressor.jpg'), {
+      target: { value: 'After cleaning' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save caption' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeMediaAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mediaId: 'media-1',
+          caption: 'After cleaning'
+        })
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open file' }));
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeMediaBlob).toHaveBeenCalledWith({
+        mediaId: 'media-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
+    });
+    expect(createObjectUrlSpy).toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith('blob:media-1', '_blank', 'noopener,noreferrer');
+
+    fireEvent.change(screen.getByLabelText('Void reason for compressor.jpg'), {
+      target: { value: 'wrong file' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Void media' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.voidOfficeMediaAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          mediaId: 'media-1',
+          reason: 'wrong file'
+        })
+      );
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
   });
 });

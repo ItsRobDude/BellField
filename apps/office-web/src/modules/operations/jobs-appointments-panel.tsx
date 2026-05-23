@@ -2,7 +2,10 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type {
   AppointmentStatus,
   JobStatus,
-  JobsWorkspaceResponse
+  JobsWorkspaceResponse,
+  MediaAttachmentSummary,
+  RegisterEntryKind,
+  RegisterEntrySummary
 } from '@/lib/operations-api';
 import { formatAppointmentScheduleTime } from './appointment-schedule-format';
 
@@ -15,6 +18,29 @@ export type AppointmentDraft = {
 };
 
 export type AppointmentEditDraft = AppointmentDraft;
+
+export type RegisterEntryEditDraft = {
+  appointmentId: string;
+  kind: RegisterEntryKind;
+  description: string;
+  quantity: string;
+  unitOfMeasure: string;
+  unitPrice: string;
+  totalAmount: string;
+  partNumber: string;
+  inventorySourceLabel: string;
+};
+
+export type CapturedWorkDetails = {
+  isOpen: boolean;
+  isLoading: boolean;
+  registerEntries: RegisterEntrySummary[];
+  mediaAttachments: MediaAttachmentSummary[];
+  registerDrafts: Record<string, RegisterEntryEditDraft>;
+  mediaCaptionDrafts: Record<string, string>;
+  registerVoidReasons: Record<string, string>;
+  mediaVoidReasons: Record<string, string>;
+};
 
 type JobsAppointmentsPanelProps = {
   jobsWorkspace: JobsWorkspaceResponse;
@@ -63,6 +89,17 @@ type JobsAppointmentsPanelProps = {
   onSaveAppointmentSchedule: (appointmentId: string) => Promise<void>;
   onAddAppointment: (jobId: string) => Promise<void>;
   onKeepJobOpen: (jobId: string) => Promise<void>;
+  capturedWorkByJobId: Record<string, CapturedWorkDetails>;
+  onToggleCapturedWork: (jobId: string) => Promise<void>;
+  onRegisterDraftChange: (jobId: string, registerEntryId: string, draft: RegisterEntryEditDraft) => void;
+  onSaveRegisterEntry: (jobId: string, registerEntryId: string) => Promise<void>;
+  onRegisterVoidReasonChange: (jobId: string, registerEntryId: string, reason: string) => void;
+  onVoidRegisterEntry: (jobId: string, registerEntryId: string) => Promise<void>;
+  onMediaCaptionChange: (jobId: string, mediaId: string, caption: string) => void;
+  onSaveMediaCaption: (jobId: string, mediaId: string) => Promise<void>;
+  onMediaVoidReasonChange: (jobId: string, mediaId: string, reason: string) => void;
+  onVoidMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
+  onOpenMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
   focusedJobId?: string | null;
 };
 
@@ -103,6 +140,17 @@ export function JobsAppointmentsPanel({
   onSaveAppointmentSchedule,
   onAddAppointment,
   onKeepJobOpen,
+  capturedWorkByJobId,
+  onToggleCapturedWork,
+  onRegisterDraftChange,
+  onSaveRegisterEntry,
+  onRegisterVoidReasonChange,
+  onVoidRegisterEntry,
+  onMediaCaptionChange,
+  onSaveMediaCaption,
+  onMediaVoidReasonChange,
+  onVoidMediaAttachment,
+  onOpenMediaAttachment,
   focusedJobId
 }: JobsAppointmentsPanelProps) {
   const selectedLocation = jobsWorkspace.locations.find((location) => location.id === jobLocationId) ?? null;
@@ -214,6 +262,17 @@ export function JobsAppointmentsPanel({
               onAppointmentEditDraftChange,
               onAddAppointment,
               onKeepJobOpen,
+              capturedWorkByJobId,
+              onToggleCapturedWork,
+              onRegisterDraftChange,
+              onSaveRegisterEntry,
+              onRegisterVoidReasonChange,
+              onVoidRegisterEntry,
+              onMediaCaptionChange,
+              onSaveMediaCaption,
+              onMediaVoidReasonChange,
+              onVoidMediaAttachment,
+              onOpenMediaAttachment,
               focusedJobId
             })
           )}
@@ -239,6 +298,17 @@ export function JobsAppointmentsPanel({
               onAppointmentEditDraftChange,
               onAddAppointment,
               onKeepJobOpen,
+              capturedWorkByJobId,
+              onToggleCapturedWork,
+              onRegisterDraftChange,
+              onSaveRegisterEntry,
+              onRegisterVoidReasonChange,
+              onVoidRegisterEntry,
+              onMediaCaptionChange,
+              onSaveMediaCaption,
+              onMediaVoidReasonChange,
+              onVoidMediaAttachment,
+              onOpenMediaAttachment,
               focusedJobId
             })
           )}
@@ -263,6 +333,17 @@ export function JobsAppointmentsPanel({
             onAppointmentEditDraftChange,
             onAddAppointment,
             onKeepJobOpen,
+            capturedWorkByJobId,
+            onToggleCapturedWork,
+            onRegisterDraftChange,
+            onSaveRegisterEntry,
+            onRegisterVoidReasonChange,
+            onVoidRegisterEntry,
+            onMediaCaptionChange,
+            onSaveMediaCaption,
+            onMediaVoidReasonChange,
+            onVoidMediaAttachment,
+            onOpenMediaAttachment,
             focusedJobId
           })
         )}
@@ -286,6 +367,17 @@ function renderJobCard({
   onAppointmentEditDraftChange,
   onAddAppointment,
   onKeepJobOpen,
+  capturedWorkByJobId,
+  onToggleCapturedWork,
+  onRegisterDraftChange,
+  onSaveRegisterEntry,
+  onRegisterVoidReasonChange,
+  onVoidRegisterEntry,
+  onMediaCaptionChange,
+  onSaveMediaCaption,
+  onMediaVoidReasonChange,
+  onVoidMediaAttachment,
+  onOpenMediaAttachment,
   focusedJobId
 }: {
   job: JobsWorkspaceResponse['jobs'][number];
@@ -302,11 +394,23 @@ function renderJobCard({
   onAppointmentEditDraftChange: JobsAppointmentsPanelProps['onAppointmentEditDraftChange'];
   onAddAppointment: JobsAppointmentsPanelProps['onAddAppointment'];
   onKeepJobOpen: JobsAppointmentsPanelProps['onKeepJobOpen'];
+  capturedWorkByJobId: JobsAppointmentsPanelProps['capturedWorkByJobId'];
+  onToggleCapturedWork: JobsAppointmentsPanelProps['onToggleCapturedWork'];
+  onRegisterDraftChange: JobsAppointmentsPanelProps['onRegisterDraftChange'];
+  onSaveRegisterEntry: JobsAppointmentsPanelProps['onSaveRegisterEntry'];
+  onRegisterVoidReasonChange: JobsAppointmentsPanelProps['onRegisterVoidReasonChange'];
+  onVoidRegisterEntry: JobsAppointmentsPanelProps['onVoidRegisterEntry'];
+  onMediaCaptionChange: JobsAppointmentsPanelProps['onMediaCaptionChange'];
+  onSaveMediaCaption: JobsAppointmentsPanelProps['onSaveMediaCaption'];
+  onMediaVoidReasonChange: JobsAppointmentsPanelProps['onMediaVoidReasonChange'];
+  onVoidMediaAttachment: JobsAppointmentsPanelProps['onVoidMediaAttachment'];
+  onOpenMediaAttachment: JobsAppointmentsPanelProps['onOpenMediaAttachment'];
   focusedJobId?: string | null;
 }) {
   const draft = appointmentDrafts[job.id] ?? createEmptyAppointmentDraft();
   const canAddAppointment = job.status !== 'closed' && job.status !== 'cancelled';
   const isFocused = focusedJobId === job.id;
+  const capturedWork = capturedWorkByJobId[job.id];
 
   return (
     <article
@@ -578,6 +682,33 @@ function renderJobCard({
         </p>
       )}
 
+      <div style={styles.subpanel}>
+        <div style={styles.row}>
+          <div>
+            <strong>Captured work</strong>
+            <p style={styles.tinyMuted}>Register entries and media attachments from field work.</p>
+          </div>
+          <button type="button" onClick={() => void onToggleCapturedWork(job.id)} style={styles.button}>
+            {capturedWork?.isOpen ? 'Hide captured work' : 'Review captured work'}
+          </button>
+        </div>
+        {capturedWork?.isOpen
+          ? renderCapturedWork({
+              job,
+              capturedWork,
+              onRegisterDraftChange,
+              onSaveRegisterEntry,
+              onRegisterVoidReasonChange,
+              onVoidRegisterEntry,
+              onMediaCaptionChange,
+              onSaveMediaCaption,
+              onMediaVoidReasonChange,
+              onVoidMediaAttachment,
+              onOpenMediaAttachment
+            })
+          : null}
+      </div>
+
       <ul style={styles.timeline}>
         {job.timeline.map((entry) => (
           <li key={entry.id}>
@@ -586,6 +717,351 @@ function renderJobCard({
         ))}
       </ul>
     </article>
+  );
+}
+
+function renderCapturedWork({
+  job,
+  capturedWork,
+  onRegisterDraftChange,
+  onSaveRegisterEntry,
+  onRegisterVoidReasonChange,
+  onVoidRegisterEntry,
+  onMediaCaptionChange,
+  onSaveMediaCaption,
+  onMediaVoidReasonChange,
+  onVoidMediaAttachment,
+  onOpenMediaAttachment
+}: {
+  job: JobsWorkspaceResponse['jobs'][number];
+  capturedWork: CapturedWorkDetails;
+  onRegisterDraftChange: JobsAppointmentsPanelProps['onRegisterDraftChange'];
+  onSaveRegisterEntry: JobsAppointmentsPanelProps['onSaveRegisterEntry'];
+  onRegisterVoidReasonChange: JobsAppointmentsPanelProps['onRegisterVoidReasonChange'];
+  onVoidRegisterEntry: JobsAppointmentsPanelProps['onVoidRegisterEntry'];
+  onMediaCaptionChange: JobsAppointmentsPanelProps['onMediaCaptionChange'];
+  onSaveMediaCaption: JobsAppointmentsPanelProps['onSaveMediaCaption'];
+  onMediaVoidReasonChange: JobsAppointmentsPanelProps['onMediaVoidReasonChange'];
+  onVoidMediaAttachment: JobsAppointmentsPanelProps['onVoidMediaAttachment'];
+  onOpenMediaAttachment: JobsAppointmentsPanelProps['onOpenMediaAttachment'];
+}) {
+  if (capturedWork.isLoading) {
+    return <p style={styles.muted}>Loading captured work...</p>;
+  }
+
+  return (
+    <div style={styles.splitGrid}>
+      <div style={styles.list}>
+        <div style={styles.row}>
+          <strong>Register entries</strong>
+          <span style={styles.badge}>{capturedWork.registerEntries.length}</span>
+        </div>
+        {capturedWork.registerEntries.length === 0 ? (
+          <p style={styles.tinyMuted}>No register entries captured yet.</p>
+        ) : (
+          capturedWork.registerEntries.map((entry) =>
+            renderRegisterEntry({
+              job,
+              entry,
+              draft: capturedWork.registerDrafts[entry.id],
+              voidReason: capturedWork.registerVoidReasons[entry.id] ?? '',
+              onRegisterDraftChange,
+              onSaveRegisterEntry,
+              onRegisterVoidReasonChange,
+              onVoidRegisterEntry
+            })
+          )
+        )}
+      </div>
+      <div style={styles.list}>
+        <div style={styles.row}>
+          <strong>Media attachments</strong>
+          <span style={styles.badge}>{capturedWork.mediaAttachments.length}</span>
+        </div>
+        {capturedWork.mediaAttachments.length === 0 ? (
+          <p style={styles.tinyMuted}>No media attachments captured yet.</p>
+        ) : (
+          capturedWork.mediaAttachments.map((media) =>
+            renderMediaAttachment({
+              jobId: job.id,
+              media,
+              captionDraft: capturedWork.mediaCaptionDrafts[media.id] ?? '',
+              voidReason: capturedWork.mediaVoidReasons[media.id] ?? '',
+              onMediaCaptionChange,
+              onSaveMediaCaption,
+              onMediaVoidReasonChange,
+              onVoidMediaAttachment,
+              onOpenMediaAttachment
+            })
+          )
+        )}
+      </div>
+    </div>
+  );
+}
+
+function renderRegisterEntry({
+  job,
+  entry,
+  draft,
+  voidReason,
+  onRegisterDraftChange,
+  onSaveRegisterEntry,
+  onRegisterVoidReasonChange,
+  onVoidRegisterEntry
+}: {
+  job: JobsWorkspaceResponse['jobs'][number];
+  entry: RegisterEntrySummary;
+  draft: RegisterEntryEditDraft | undefined;
+  voidReason: string;
+  onRegisterDraftChange: JobsAppointmentsPanelProps['onRegisterDraftChange'];
+  onSaveRegisterEntry: JobsAppointmentsPanelProps['onSaveRegisterEntry'];
+  onRegisterVoidReasonChange: JobsAppointmentsPanelProps['onRegisterVoidReasonChange'];
+  onVoidRegisterEntry: JobsAppointmentsPanelProps['onVoidRegisterEntry'];
+}) {
+  const panelStyle = entry.isVoid ? { ...styles.subpanel, opacity: 0.68 } : styles.subpanel;
+  const activeDraft =
+    draft ??
+    {
+      appointmentId: entry.appointmentId ?? '',
+      kind: entry.kind,
+      description: entry.description,
+      quantity: String(entry.quantity),
+      unitOfMeasure: entry.unitOfMeasure ?? '',
+      unitPrice: entry.unitPrice === undefined ? '' : String(entry.unitPrice),
+      totalAmount: String(entry.totalAmount),
+      partNumber: entry.partNumber ?? '',
+      inventorySourceLabel: entry.inventorySourceLabel ?? ''
+    };
+
+  return (
+    <div key={entry.id} style={panelStyle}>
+      <div style={styles.row}>
+        <div>
+          <strong>{entry.description}</strong>
+          <p style={styles.tinyMuted}>
+            {formatRegisterKind(entry.kind)} - {formatQuantity(entry.quantity, entry.unitOfMeasure)} -{' '}
+            {formatCurrency(entry.totalAmount)}
+          </p>
+        </div>
+        <div style={styles.badgeRow}>
+          {entry.isVoid ? <span style={styles.dangerBadge}>Voided</span> : null}
+          <span style={styles.badge}>{entry.capturedByName}</span>
+        </div>
+      </div>
+      <p style={styles.tinyMuted}>
+        Captured {formatDateTime(entry.capturedAt)}
+        {entry.appointmentId ? ` - ${formatAppointmentReference(job, entry.appointmentId)}` : ''}
+      </p>
+      {entry.partNumber || entry.inventorySourceLabel ? (
+        <p style={styles.tinyMuted}>
+          {entry.partNumber ? `Part ${entry.partNumber}` : ''}
+          {entry.partNumber && entry.inventorySourceLabel ? ' - ' : ''}
+          {entry.inventorySourceLabel ?? ''}
+        </p>
+      ) : null}
+      {entry.isVoid ? (
+        <p style={styles.tinyMuted}>{entry.voidReason ? `Void reason: ${entry.voidReason}` : 'Voided without reason.'}</p>
+      ) : (
+        <>
+          <div style={styles.formRow}>
+            <select
+              aria-label={`Register kind for ${entry.description}`}
+              value={activeDraft.kind}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, {
+                  ...activeDraft,
+                  kind: event.target.value as RegisterEntryKind
+                })
+              }
+              style={styles.input}
+            >
+              <option value="labor">Labor</option>
+              <option value="serviceItem">Service item</option>
+              <option value="part">Part</option>
+              <option value="membership">Membership</option>
+              <option value="other">Other</option>
+            </select>
+            <input
+              aria-label={`Register description for ${entry.description}`}
+              value={activeDraft.description}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, description: event.target.value })
+              }
+              style={styles.input}
+            />
+            <input
+              aria-label={`Register quantity for ${entry.description}`}
+              value={activeDraft.quantity}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, quantity: event.target.value })
+              }
+              type="number"
+              step="0.01"
+              style={styles.input}
+            />
+            <input
+              aria-label={`Register unit for ${entry.description}`}
+              value={activeDraft.unitOfMeasure}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, unitOfMeasure: event.target.value })
+              }
+              placeholder="Unit"
+              style={styles.input}
+            />
+            <input
+              aria-label={`Register unit price for ${entry.description}`}
+              value={activeDraft.unitPrice}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, unitPrice: event.target.value })
+              }
+              type="number"
+              step="0.01"
+              placeholder="Unit price"
+              style={styles.input}
+            />
+            <input
+              aria-label={`Register total for ${entry.description}`}
+              value={activeDraft.totalAmount}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, totalAmount: event.target.value })
+              }
+              type="number"
+              step="0.01"
+              style={styles.input}
+            />
+            <input
+              aria-label={`Register part number for ${entry.description}`}
+              value={activeDraft.partNumber}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, partNumber: event.target.value })
+              }
+              placeholder="Part number"
+              style={styles.input}
+            />
+            <input
+              aria-label={`Register source for ${entry.description}`}
+              value={activeDraft.inventorySourceLabel}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, inventorySourceLabel: event.target.value })
+              }
+              placeholder="Source"
+              style={styles.input}
+            />
+            <select
+              aria-label={`Register appointment for ${entry.description}`}
+              value={activeDraft.appointmentId}
+              onChange={(event) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, appointmentId: event.target.value })
+              }
+              style={styles.input}
+            >
+              <option value="">No appointment link</option>
+              {job.appointments.map((appointment) => (
+                <option key={appointment.id} value={appointment.id}>
+                  {formatAppointmentReference(job, appointment.id)}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div style={styles.row}>
+            <button type="button" onClick={() => void onSaveRegisterEntry(job.id, entry.id)} style={styles.button}>
+              Save register entry
+            </button>
+            <input
+              aria-label={`Void reason for ${entry.description}`}
+              value={voidReason}
+              onChange={(event) => onRegisterVoidReasonChange(job.id, entry.id, event.target.value)}
+              placeholder="Void reason"
+              style={styles.input}
+            />
+            <button type="button" onClick={() => void onVoidRegisterEntry(job.id, entry.id)} style={styles.button}>
+              Void register entry
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function renderMediaAttachment({
+  jobId,
+  media,
+  captionDraft,
+  voidReason,
+  onMediaCaptionChange,
+  onSaveMediaCaption,
+  onMediaVoidReasonChange,
+  onVoidMediaAttachment,
+  onOpenMediaAttachment
+}: {
+  jobId: string;
+  media: MediaAttachmentSummary;
+  captionDraft: string;
+  voidReason: string;
+  onMediaCaptionChange: JobsAppointmentsPanelProps['onMediaCaptionChange'];
+  onSaveMediaCaption: JobsAppointmentsPanelProps['onSaveMediaCaption'];
+  onMediaVoidReasonChange: JobsAppointmentsPanelProps['onMediaVoidReasonChange'];
+  onVoidMediaAttachment: JobsAppointmentsPanelProps['onVoidMediaAttachment'];
+  onOpenMediaAttachment: JobsAppointmentsPanelProps['onOpenMediaAttachment'];
+}) {
+  const panelStyle = media.isVoid ? { ...styles.subpanel, opacity: 0.68 } : styles.subpanel;
+
+  return (
+    <div key={media.id} style={panelStyle}>
+      <div style={styles.row}>
+        <div>
+          <strong>{media.originalFilename}</strong>
+          <p style={styles.tinyMuted}>
+            {formatMediaKind(media.kind)} - {media.contentType} - {formatByteSize(media.byteSize)}
+          </p>
+        </div>
+        <div style={styles.badgeRow}>
+          {media.uploadCompleted ? <span style={styles.badge}>Uploaded</span> : <span style={styles.dangerBadge}>Pending upload</span>}
+          {media.isVoid ? <span style={styles.dangerBadge}>Voided</span> : null}
+        </div>
+      </div>
+      <p style={styles.tinyMuted}>
+        Captured {formatDateTime(media.capturedAt)} by {media.capturedByName}
+      </p>
+      {media.isVoid ? (
+        <p style={styles.tinyMuted}>{media.voidReason ? `Void reason: ${media.voidReason}` : 'Voided without reason.'}</p>
+      ) : (
+        <>
+          <textarea
+            aria-label={`Media caption for ${media.originalFilename}`}
+            value={captionDraft}
+            onChange={(event) => onMediaCaptionChange(jobId, media.id, event.target.value)}
+            placeholder="Caption"
+            style={styles.textarea}
+          />
+          <div style={styles.row}>
+            <button type="button" onClick={() => void onSaveMediaCaption(jobId, media.id)} style={styles.button}>
+              Save caption
+            </button>
+            <button
+              type="button"
+              disabled={!media.uploadCompleted}
+              onClick={() => void onOpenMediaAttachment(jobId, media.id)}
+              style={styles.button}
+            >
+              Open file
+            </button>
+            <input
+              aria-label={`Void reason for ${media.originalFilename}`}
+              value={voidReason}
+              onChange={(event) => onMediaVoidReasonChange(jobId, media.id, event.target.value)}
+              placeholder="Void reason"
+              style={styles.input}
+            />
+            <button type="button" onClick={() => void onVoidMediaAttachment(jobId, media.id)} style={styles.button}>
+              Void media
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -677,4 +1153,56 @@ function formatFinishOutcome(value: 'completed' | 'followUpNeeded' | 'noAccess')
   }
 
   return 'Completed';
+}
+
+function formatRegisterKind(kind: RegisterEntryKind): string {
+  if (kind === 'serviceItem') {
+    return 'Service item';
+  }
+
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function formatMediaKind(kind: MediaAttachmentSummary['kind']): string {
+  return kind.charAt(0).toUpperCase() + kind.slice(1);
+}
+
+function formatQuantity(quantity: number, unitOfMeasure?: string): string {
+  return `${quantity}${unitOfMeasure ? ` ${unitOfMeasure}` : ''}`;
+}
+
+function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
+}
+
+function formatByteSize(byteSize: number): string {
+  if (byteSize >= 1024 * 1024) {
+    return `${(byteSize / (1024 * 1024)).toFixed(1)} MB`;
+  }
+
+  if (byteSize >= 1024) {
+    return `${(byteSize / 1024).toFixed(1)} KB`;
+  }
+
+  return `${byteSize} B`;
+}
+
+function formatDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return date.toLocaleString();
+}
+
+function formatAppointmentReference(job: JobsWorkspaceResponse['jobs'][number], appointmentId: string): string {
+  const appointment = job.appointments.find((candidate) => candidate.id === appointmentId);
+  if (!appointment) {
+    return `Appointment ${appointmentId}`;
+  }
+
+  return appointment.scheduledDate
+    ? `${appointment.scheduledDate} ${appointment.technicianName ?? 'Unassigned'}`
+    : `Unscheduled ${appointment.technicianName ?? 'Unassigned'}`;
 }

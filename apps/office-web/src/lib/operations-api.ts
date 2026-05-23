@@ -36,13 +36,23 @@ import type {
   LocationDetail,
   LocationMutationResponse,
   LocationSummary,
+  MediaAttachmentResponse,
+  MediaAttachmentsResponse,
+  MediaAttachmentSummary,
   ReassignLocationOwnerRequest,
+  RegisterEntriesResponse,
+  RegisterEntryKind,
+  RegisterEntrySummary,
   UpdateAppointmentScheduleRequest,
   UpdateContactLinkRequest,
   UpdateContactRequest,
   UpdateCustomerRequest,
+  UpdateJobStatusResponse,
   UpdateLocationRequest,
-  UpdateJobStatusResponse
+  UpdateMediaAttachmentRequest,
+  UpdateRegisterEntryRequest,
+  VoidMediaAttachmentRequest,
+  VoidRegisterEntryRequest
 } from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
@@ -82,7 +92,10 @@ export type {
   LinkContactRequest,
   LocationDetail,
   LocationMutationResponse,
-  LocationSummary
+  LocationSummary,
+  MediaAttachmentSummary,
+  RegisterEntryKind,
+  RegisterEntrySummary
 };
 
 export type JobUpdateResponse = UpdateJobStatusResponse;
@@ -108,6 +121,28 @@ async function requestJson<TResponse>(
   }
 
   return (await response.json()) as TResponse;
+}
+
+async function requestBlob(
+  path: string,
+  options: RequestInit & { apiBaseUrl?: string; sessionToken?: string } = {}
+): Promise<Blob> {
+  const { apiBaseUrl, headers, sessionToken, ...requestOptions } = options;
+  const resolvedApiBaseUrl = resolveOfficeApiBaseUrl(apiBaseUrl);
+  const response = await fetch(`${resolvedApiBaseUrl}${path}`, {
+    ...requestOptions,
+    headers: {
+      ...(sessionToken ? { Authorization: `Bearer ${sessionToken}` } : {}),
+      ...headers
+    }
+  });
+
+  if (!response.ok) {
+    const errorBody = (await response.json().catch(() => null)) as { message?: string } | null;
+    throw new Error(errorBody?.message ?? 'Request failed.');
+  }
+
+  return response.blob();
 }
 
 export async function getOfficeEquipmentWorkspace(input: {
@@ -375,6 +410,107 @@ export async function updateOfficeAppointmentStatus(input: {
       hasChargeActivity: input.hasChargeActivity,
       registerFollowUpNote: input.registerFollowUpNote
     })
+  });
+}
+
+export async function getOfficeRegisterEntries(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  jobId: string;
+}): Promise<RegisterEntriesResponse> {
+  return requestJson<RegisterEntriesResponse>(`/operations/jobs/${input.jobId}/register-entries`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function updateOfficeRegisterEntry(
+  input: UpdateRegisterEntryRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    registerEntryId: string;
+  }
+): Promise<JobMutationResponse> {
+  const { sessionToken, apiBaseUrl, registerEntryId, ...payload } = input;
+
+  return requestJson<JobMutationResponse>(`/operations/jobs/register-entries/${registerEntryId}`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function voidOfficeRegisterEntry(
+  input: VoidRegisterEntryRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    registerEntryId: string;
+  }
+): Promise<JobMutationResponse> {
+  const { sessionToken, apiBaseUrl, registerEntryId, ...payload } = input;
+
+  return requestJson<JobMutationResponse>(`/operations/jobs/register-entries/${registerEntryId}/void`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getOfficeMediaAttachments(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  jobId: string;
+}): Promise<MediaAttachmentsResponse> {
+  return requestJson<MediaAttachmentsResponse>(`/operations/jobs/${input.jobId}/media`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function updateOfficeMediaAttachment(
+  input: UpdateMediaAttachmentRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    mediaId: string;
+  }
+): Promise<MediaAttachmentResponse> {
+  const { sessionToken, apiBaseUrl, mediaId, ...payload } = input;
+
+  return requestJson<MediaAttachmentResponse>(`/operations/media/${mediaId}`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function voidOfficeMediaAttachment(
+  input: VoidMediaAttachmentRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    mediaId: string;
+  }
+): Promise<MediaAttachmentResponse> {
+  const { sessionToken, apiBaseUrl, mediaId, ...payload } = input;
+
+  return requestJson<MediaAttachmentResponse>(`/operations/media/${mediaId}/void`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getOfficeMediaBlob(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  mediaId: string;
+}): Promise<Blob> {
+  return requestBlob(`/operations/media/${input.mediaId}/blob`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
   });
 }
 
