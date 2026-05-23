@@ -120,6 +120,10 @@ type JobsQueueItemRow = {
   totalCount: string | number;
 };
 
+type JobsQueuePageRow = Partial<JobsQueueItemRow> & {
+  totalCount: string | number;
+};
+
 type TimelineRow = {
   id: string;
   jobId: string;
@@ -268,7 +272,7 @@ export class JobsDataRepository {
     limit: number,
     cursor?: JobsQueueCursor
   ): Promise<JobsQueuePageRecord> {
-    const result = await this.databaseService.query<JobsQueueItemRow>(
+    const result = await this.databaseService.query<JobsQueuePageRow>(
       `
         with base_jobs as (
           select
@@ -312,22 +316,37 @@ export class JobsDataRepository {
           select *
           from base_jobs
           where ${this.getJobsQueueCondition(queueKey)}
+        ),
+        total_count as (
+          select count(*) as total_count
+          from queued_jobs
+        ),
+        page_jobs as (
+          select *
+          from queued_jobs queued_job
+          where (
+            $1::timestamptz is null
+            or queued_job.updated_at < $1::timestamptz
+            or (queued_job.updated_at = $1::timestamptz and queued_job.id > $2::text)
+          )
+          order by queued_job.updated_at desc, queued_job.id asc
+          limit $3
         )
         select
-          queued_job.id,
-          queued_job.job_number as "jobNumber",
-          queued_job.location_id as "locationId",
-          queued_job.location_name as "locationName",
-          queued_job.bill_to_customer_id as "billToCustomerId",
-          queued_job.bill_to_customer_name as "billToCustomerName",
-          queued_job.job_type as "jobType",
-          queued_job.category,
-          queued_job.origin,
-          queued_job.summary,
-          queued_job.status,
-          queued_job.work_order_number as "workOrderNumber",
-          queued_job.needs_scheduling as "needsScheduling",
-          queued_job.needs_office_review as "needsOfficeReview",
+          page_job.id,
+          page_job.job_number as "jobNumber",
+          page_job.location_id as "locationId",
+          page_job.location_name as "locationName",
+          page_job.bill_to_customer_id as "billToCustomerId",
+          page_job.bill_to_customer_name as "billToCustomerName",
+          page_job.job_type as "jobType",
+          page_job.category,
+          page_job.origin,
+          page_job.summary,
+          page_job.status,
+          page_job.work_order_number as "workOrderNumber",
+          page_job.needs_scheduling as "needsScheduling",
+          page_job.needs_office_review as "needsOfficeReview",
           next_appointment.id as "nextAppointmentId",
           next_appointment.job_id as "nextAppointmentJobId",
           next_appointment.scheduled_date as "nextAppointmentScheduledDate",
@@ -340,12 +359,13 @@ export class JobsDataRepository {
           (
             next_appointment.status = 'finished'
             and next_appointment.finished_reviewed_at is null
-            and queued_job.status not in ('completed', 'closed', 'cancelled')
+            and page_job.status not in ('completed', 'closed', 'cancelled')
           ) as "nextAppointmentNeedsOfficeReview",
-          queued_job.created_at as "createdAt",
-          queued_job.updated_at as "updatedAt",
-          (select count(*) from queued_jobs) as "totalCount"
-        from queued_jobs queued_job
+          page_job.created_at as "createdAt",
+          page_job.updated_at as "updatedAt",
+          total_count.total_count as "totalCount"
+        from total_count
+        left join page_jobs page_job on true
         left join lateral (
           select
             appointment.id,
@@ -359,25 +379,20 @@ export class JobsDataRepository {
             appointment.finished_reviewed_at,
             appointment.created_at
           from appointments appointment
-          where appointment.job_id = queued_job.id
+          where appointment.job_id = page_job.id
             and appointment.status <> 'cancelled'
           order by appointment.scheduled_date asc nulls last, appointment.scheduled_start_time asc nulls last, appointment.created_at asc
           limit 1
-        ) next_appointment on true
+        ) next_appointment on page_job.id is not null
         left join employees technician on technician.id = next_appointment.technician_id
-        where (
-          $1::timestamptz is null
-          or queued_job.updated_at < $1::timestamptz
-          or (queued_job.updated_at = $1::timestamptz and queued_job.id > $2::text)
-        )
-        order by queued_job.updated_at desc, queued_job.id asc
-        limit $3
+        order by page_job.updated_at desc nulls last, page_job.id asc nulls last
       `,
       [cursor?.updatedAt ?? null, cursor?.id ?? '', limit]
     );
+    const jobRows = result.rows.filter((row): row is JobsQueueItemRow => Boolean(row.id));
 
     return {
-      jobs: result.rows.map((row) => this.toJobsQueueItemRecord(row)),
+      jobs: jobRows.map((row) => this.toJobsQueueItemRecord(row)),
       totalCount: Number(result.rows[0]?.totalCount ?? 0)
     };
   }

@@ -94,6 +94,7 @@ describe('JobQueueService', () => {
 
     const response = await service.getJobsQueue('session-token', { limit: '1', cursors: {} });
     const openQueue = response.queues.find((queue) => queue.key === 'open');
+    const decodedCursor = JSON.parse(Buffer.from(openQueue?.nextCursor ?? '', 'base64url').toString('utf8'));
 
     expect(openQueue?.jobs).toHaveLength(1);
     expect(openQueue?.jobs[0]).toMatchObject({
@@ -105,11 +106,16 @@ describe('JobQueueService', () => {
       }
     });
     expect(openQueue?.nextCursor).toBeTruthy();
+    expect(decodedCursor).toEqual({
+      queueKey: 'open',
+      id: 'job-1',
+      updatedAt: '2026-05-23T10:00:00.000Z'
+    });
   });
 
   it('passes decoded cursors to the matching queue only', async () => {
     const { service, jobsDataService } = createService();
-    const cursorPayload = { id: 'job-10', updatedAt: '2026-05-22T09:00:00.000Z' };
+    const cursorPayload = { queueKey: 'unscheduled', id: 'job-10', updatedAt: '2026-05-22T09:00:00.000Z' };
     const cursor = Buffer.from(JSON.stringify(cursorPayload), 'utf8').toString('base64url');
 
     await service.getJobsQueue('session-token', { cursors: { unscheduled: cursor } });
@@ -129,6 +135,16 @@ describe('JobQueueService', () => {
     );
     await expect(
       service.getJobsQueue('session-token', { cursors: { review: 'not-a-cursor' } })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.getJobsQueue('session-token', {
+        cursors: {
+          review: Buffer.from(
+            JSON.stringify({ queueKey: 'open', id: 'job-1', updatedAt: '2026-05-22T09:00:00.000Z' }),
+            'utf8'
+          ).toString('base64url')
+        }
+      })
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

@@ -266,6 +266,7 @@ export type JobDetailRecord = {
 };
 
 export type JobsQueueCursor = {
+  queueKey: JobsQueueKey;
   updatedAt: string;
   id: string;
 };

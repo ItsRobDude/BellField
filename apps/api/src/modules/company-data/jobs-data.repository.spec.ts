@@ -399,6 +399,7 @@ describe('JobsDataRepository', () => {
     const repository = new JobsDataRepository(databaseService as never);
 
     const page = await repository.listJobsQueuePage('review', 21, {
+      queueKey: 'review',
       updatedAt: '2026-05-24T10:00:00.000Z',
       id: 'job-0'
     });
@@ -422,6 +423,29 @@ describe('JobsDataRepository', () => {
     expect(sql).toContain('needs_office_review = true');
     expect(sql).toContain('next_appointment');
     expect(sql).not.toContain('job_timeline_entries');
+  });
+
+  it('keeps jobs queue total count when the requested cursor has no more rows', async () => {
+    const databaseService = {
+      query: jest.fn(async () => ({
+        rows: [
+          {
+            id: null,
+            totalCount: '12'
+          }
+        ]
+      }))
+    };
+    const repository = new JobsDataRepository(databaseService as never);
+
+    const page = await repository.listJobsQueuePage('open', 21, {
+      queueKey: 'open',
+      updatedAt: '2026-05-20T10:00:00.000Z',
+      id: 'job-z'
+    });
+
+    expect(page.jobs).toEqual([]);
+    expect(page.totalCount).toBe(12);
   });
 
   it('keeps jobs queue sections distinct by priority', async () => {

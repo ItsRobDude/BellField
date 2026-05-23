@@ -31,7 +31,7 @@ export class JobQueueService {
 
     const queues = await Promise.all(
       queueKeys.map(async (queueKey) => {
-        const cursor = this.decodeCursor(query.cursors[queueKey], `${queueKey}Cursor`);
+        const cursor = this.decodeCursor(query.cursors[queueKey], `${queueKey}Cursor`, queueKey);
         const page = await this.jobsDataService.listJobsQueuePage(queueKey, limit + 1, cursor);
         const visibleJobs = page.jobs.slice(0, limit);
         const lastVisibleJob = visibleJobs[visibleJobs.length - 1];
@@ -40,7 +40,7 @@ export class JobQueueService {
           key: queueKey,
           totalCount: page.totalCount,
           jobs: visibleJobs.map((job) => this.toJobsQueueItem(job)),
-          nextCursor: page.jobs.length > limit && lastVisibleJob ? this.encodeCursor(lastVisibleJob) : undefined
+          nextCursor: page.jobs.length > limit && lastVisibleJob ? this.encodeCursor(queueKey, lastVisibleJob) : undefined
         } satisfies JobsQueueSection;
       })
     );
@@ -65,7 +65,11 @@ export class JobQueueService {
     return parsed;
   }
 
-  private decodeCursor(value: string | undefined, fieldName: string): JobsQueueCursor | undefined {
+  private decodeCursor(
+    value: string | undefined,
+    fieldName: string,
+    queueKey: JobsQueueKey
+  ): JobsQueueCursor | undefined {
     if (!value) {
       return undefined;
     }
@@ -75,6 +79,7 @@ export class JobQueueService {
       if (
         typeof decoded.id !== 'string' ||
         decoded.id.length === 0 ||
+        decoded.queueKey !== queueKey ||
         typeof decoded.updatedAt !== 'string' ||
         Number.isNaN(new Date(decoded.updatedAt).getTime())
       ) {
@@ -82,6 +87,7 @@ export class JobQueueService {
       }
 
       return {
+        queueKey,
         id: decoded.id,
         updatedAt: decoded.updatedAt
       };
@@ -90,8 +96,10 @@ export class JobQueueService {
     }
   }
 
-  private encodeCursor(job: JobsQueueItemRecord): string {
-    return Buffer.from(JSON.stringify({ id: job.id, updatedAt: job.updatedAt }), 'utf8').toString('base64url');
+  private encodeCursor(queueKey: JobsQueueKey, job: JobsQueueItemRecord): string {
+    return Buffer.from(JSON.stringify({ queueKey, id: job.id, updatedAt: job.updatedAt }), 'utf8').toString(
+      'base64url'
+    );
   }
 
   private toJobsQueueItem(job: JobsQueueItemRecord): JobsQueueItem {

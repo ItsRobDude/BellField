@@ -410,6 +410,8 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(screen.queryByRole('region', { name: 'CRM panel mock' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Equipment panel mock' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Jobs queue' })).not.toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeJobIntakeContext).not.toHaveBeenCalled();
+    expect(mockedOperationsApi.getOfficeEquipmentWorkspace).not.toHaveBeenCalled();
   });
 
   it('switches between Dispatch, Customers, Jobs, and Equipment from the rail', async () => {
@@ -425,9 +427,16 @@ describe('OfficeWorkspaceShell IA', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
     expect(await screen.findByRole('region', { name: 'Jobs queue' })).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeEquipmentWorkspace).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Equipment' }));
     expect(await screen.findByRole('region', { name: 'Equipment panel mock' })).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeEquipmentWorkspace).toHaveBeenCalledWith({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test',
+      includeInactive: false
+    });
+    expect(mockedOperationsApi.getOfficeJobIntakeContext).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Dispatch' }));
     expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
@@ -517,6 +526,10 @@ describe('OfficeWorkspaceShell IA', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
     expect(await screen.findByRole('region', { name: 'New job' })).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeJobIntakeContext).toHaveBeenCalledWith({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
 
     fireEvent.change(screen.getByLabelText('Job summary'), { target: { value: 'No heat' } });
     fireEvent.change(screen.getByLabelText('Job date'), { target: { value: today } });
