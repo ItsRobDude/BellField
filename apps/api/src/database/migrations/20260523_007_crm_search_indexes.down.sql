@@ -1,0 +1,13 @@
+drop index if exists contacts_phone_digits_prefix_idx;
+drop index if exists contacts_email_prefix_idx;
+drop index if exists contacts_display_name_prefix_idx;
+drop index if exists locations_phone_digits_prefix_idx;
+drop index if exists locations_email_prefix_idx;
+drop index if exists locations_postal_prefix_idx;
+drop index if exists locations_address_prefix_idx;
+drop index if exists locations_name_prefix_idx;
+drop index if exists locations_customer_id_idx;
+drop index if exists customers_billing_postal_prefix_idx;
+drop index if exists customers_phone_digits_prefix_idx;
+drop index if exists customers_email_prefix_idx;
+drop index if exists customers_name_prefix_idx;

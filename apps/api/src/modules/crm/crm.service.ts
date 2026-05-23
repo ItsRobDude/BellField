@@ -2,7 +2,6 @@ import { ConflictException, ForbiddenException, Injectable } from '@nestjs/commo
 import type {
   ContactMutationResponse,
   CrmSearchResponse,
-  CrmSearchResult,
   CrmWorkspaceResponse,
   CustomerMutationResponse,
   DuplicateCandidate,
@@ -21,6 +20,8 @@ import type {
   UpdateCustomerRequestDto,
   UpdateLocationRequestDto
 } from './crm.types';
+
+const crmSearchLimit = 25;
 
 @Injectable()
 export class CrmService {
@@ -60,115 +61,11 @@ export class CrmService {
       return { query, results: [] };
     }
 
-    const [customers, locations, contacts] = await Promise.all([
-      this.referenceDataService.listCustomers(true),
-      this.referenceDataService.listLocations(true),
-      this.referenceDataService.listContacts(true)
-    ]);
-
-    const activeLocationsByCustomerId = new Map<string, string[]>();
-
-    for (const location of locations) {
-      activeLocationsByCustomerId.set(location.customerId, [
-        ...(activeLocationsByCustomerId.get(location.customerId) ?? []),
-        `${location.name} ${location.addressLine1} ${location.city} ${location.state} ${location.postalCode}`
-      ]);
-    }
-
-    const results: Array<CrmSearchResult & { score: number }> = [];
-
-    for (const customer of customers) {
-      const relatedLocations = activeLocationsByCustomerId.get(customer.id) ?? [];
-      const haystack = [
-        customer.name,
-        customer.billingAddressLine1,
-        customer.billingCity,
-        customer.billingState,
-        customer.billingPostalCode,
-        customer.phone,
-        customer.email,
-        customer.fax,
-        ...customer.flags,
-        ...relatedLocations
-      ];
-      const score = scoreSearch(normalizedQuery, haystack);
-
-      if (score > 0) {
-        results.push({
-          id: customer.id,
-          kind: 'customer',
-          title: customer.name,
-          subtitle: `${customer.billingAddressLine1}, ${customer.billingCity}, ${customer.billingState} ${customer.billingPostalCode}`,
-          badges: buildCustomerBadges(customer.isActive, customer.flags),
-          phone: customer.phone,
-          addressLine1: customer.billingAddressLine1,
-          city: customer.billingCity,
-          state: customer.billingState,
-          postalCode: customer.billingPostalCode,
-          isActive: customer.isActive,
-          score
-        });
-      }
-    }
-
-    for (const location of locations) {
-      const customer = await this.referenceDataService.getCustomerById(location.customerId);
-      const haystack = [
-        location.name,
-        location.addressLine1,
-        location.city,
-        location.state,
-        location.postalCode,
-        location.phone,
-        location.email,
-        location.fax,
-        customer.name
-      ];
-      const score = scoreSearch(normalizedQuery, haystack);
-
-      if (score > 0) {
-        results.push({
-          id: location.id,
-          kind: 'location',
-          title: location.name,
-          subtitle: `${location.addressLine1}, ${location.city}, ${location.state} ${location.postalCode}`,
-          badges: location.isActive ? [] : ['Inactive'],
-          phone: location.phone,
-          addressLine1: location.addressLine1,
-          city: location.city,
-          state: location.state,
-          postalCode: location.postalCode,
-          customerId: customer.id,
-          customerName: customer.name,
-          isActive: location.isActive,
-          score
-        });
-      }
-    }
-
-    for (const contact of contacts) {
-      const haystack = [contact.displayName, contact.phone, contact.email, contact.fax, ...contact.tags];
-      const score = scoreSearch(normalizedQuery, haystack);
-
-      if (score > 0) {
-        results.push({
-          id: contact.id,
-          kind: 'contact',
-          title: contact.displayName,
-          subtitle: contact.tags.join(', ') || 'Contact',
-          badges: contact.isActive ? [] : ['Inactive'],
-          phone: contact.phone,
-          isActive: contact.isActive,
-          score
-        });
-      }
-    }
+    const results = await this.referenceDataService.searchCrm(normalizedQuery, crmSearchLimit);
 
     return {
       query,
-      results: results
-        .sort((left, right) => right.score - left.score || left.title.localeCompare(right.title))
-        .map(({ score: _score, ...result }) => result)
+      results: results.map(({ score: _score, ...result }) => result)
     };
   }
 
@@ -565,44 +462,6 @@ function normalize(value: string | undefined): string {
 
 function normalizePhone(value: string | undefined): string {
   return value?.replace(/\D/g, '') ?? '';
-}
-
-function scoreSearch(query: string, values: Array<string | undefined>): number {
-  const normalizedQuery = normalize(query);
-  const normalizedPhoneQuery = normalizePhone(query);
-
-  return values.reduce((score, value) => {
-    if (!value) {
-      return score;
-    }
-
-    const normalizedValue = normalize(value);
-    const normalizedPhoneValue = normalizePhone(value);
-
-    if (normalizedQuery && normalizedValue.includes(normalizedQuery)) {
-      return score + (normalizedValue === normalizedQuery ? 4 : 2);
-    }
-
-    if (normalizedPhoneQuery && normalizedPhoneValue.includes(normalizedPhoneQuery)) {
-      return score + (normalizedPhoneValue === normalizedPhoneQuery ? 4 : 2);
-    }
-
-    return score;
-  }, 0);
-}
-
-function buildCustomerBadges(isActive: boolean, flags: string[]): string[] {
-  const badges: string[] = [];
-
-  if (!isActive) {
-    badges.push('Inactive');
-  }
-
-  if (hasDoNotService(flags)) {
-    badges.push('DNU');
-  }
-
-  return badges;
 }
 
 function hasDoNotService(flags: string[]): boolean {

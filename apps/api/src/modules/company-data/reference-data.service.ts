@@ -10,7 +10,13 @@ import type {
   LocationDetail,
   OwnershipHistoryEntry
 } from '@bellfield/contracts';
-import type { ContactLinkRecord, ContactRecord, CustomerAccountRecord, LocationRecord } from './company-data.types';
+import type {
+  ContactLinkRecord,
+  ContactRecord,
+  CrmSearchRecord,
+  CustomerAccountRecord,
+  LocationRecord
+} from './company-data.types';
 import { ReferenceDataRepository } from './reference-data.repository';
 
 @Injectable()
@@ -27,6 +33,10 @@ export class ReferenceDataService {
 
   async listLocations(includeInactive = false): Promise<LocationRecord[]> {
     return this.referenceDataRepository.listLocations(includeInactive);
+  }
+
+  async searchCrm(query: string, limit: number): Promise<CrmSearchRecord[]> {
+    return this.referenceDataRepository.searchCrm(query, limit);
   }
 
   async getLocationById(locationId: string): Promise<LocationRecord> {

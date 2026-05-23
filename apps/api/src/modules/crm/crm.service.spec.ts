@@ -36,6 +36,22 @@ function createService() {
       }
     ]),
     listContacts: jest.fn().mockResolvedValue([]),
+    searchCrm: jest.fn().mockResolvedValue([
+      {
+        id: 'customer-1',
+        kind: 'customer',
+        title: 'Acme Heating',
+        subtitle: '100 Main Street, Seattle, WA 98101',
+        badges: [],
+        phone: '(555) 111-2222',
+        addressLine1: '100 Main Street',
+        city: 'Seattle',
+        state: 'WA',
+        postalCode: '98101',
+        isActive: true,
+        score: 100
+      }
+    ]),
     createCustomer: jest.fn().mockResolvedValue({
       id: 'customer-2',
       name: 'North End Homes',
@@ -146,11 +162,52 @@ function createService() {
 
   return {
     service: new CrmService(referenceDataService as never, identityAccessService as never),
-    referenceDataService
+    referenceDataService,
+    identityAccessService
   };
 }
 
 describe('CrmService', () => {
+  it('uses bounded SQL-backed CRM search instead of hydrating every CRM row', async () => {
+    const { service, referenceDataService, identityAccessService } = createService();
+
+    const response = await service.search('session-token', ' Acme ');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'customers:view', [
+      'office-web'
+    ]);
+    expect(referenceDataService.searchCrm).toHaveBeenCalledWith('Acme', 25);
+    expect(referenceDataService.listCustomers).not.toHaveBeenCalled();
+    expect(referenceDataService.listLocations).not.toHaveBeenCalled();
+    expect(referenceDataService.listContacts).not.toHaveBeenCalled();
+    expect(response).toEqual({
+      query: ' Acme ',
+      results: [
+        {
+          id: 'customer-1',
+          kind: 'customer',
+          title: 'Acme Heating',
+          subtitle: '100 Main Street, Seattle, WA 98101',
+          badges: [],
+          phone: '(555) 111-2222',
+          addressLine1: '100 Main Street',
+          city: 'Seattle',
+          state: 'WA',
+          postalCode: '98101',
+          isActive: true
+        }
+      ]
+    });
+  });
+
+  it('does not run CRM search for blank queries', async () => {
+    const { service, referenceDataService } = createService();
+
+    await expect(service.search('session-token', '   ')).resolves.toEqual({ query: '   ', results: [] });
+
+    expect(referenceDataService.searchCrm).not.toHaveBeenCalled();
+  });
+
   it('blocks duplicate customer creation until confirmed', async () => {
     const { service, referenceDataService } = createService();
 

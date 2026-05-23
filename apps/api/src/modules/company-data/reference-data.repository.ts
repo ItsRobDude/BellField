@@ -5,6 +5,7 @@ import { toIsoString, toOptionalDateString, toTextArray } from '../../database/d
 import type {
   ContactLinkRecord,
   ContactRecord,
+  CrmSearchRecord,
   CustomerAccountRecord,
   LocationRecord,
   OwnershipHistoryRecord
@@ -70,6 +71,23 @@ type OwnershipHistoryRow = {
   note: string | null;
 };
 
+type CrmSearchRow = {
+  id: string;
+  kind: CrmSearchRecord['kind'];
+  title: string;
+  subtitle: string;
+  badges: string[] | null;
+  phone: string | null;
+  addressLine1: string | null;
+  city: string | null;
+  state: string | null;
+  postalCode: string | null;
+  customerId: string | null;
+  customerName: string | null;
+  isActive: boolean;
+  score: string | number;
+};
+
 type CreateCustomerInput = Omit<CustomerAccountRecord, 'id'>;
 type UpdateCustomerInput = Partial<Omit<CustomerAccountRecord, 'id'>>;
 type CreateLocationInput = Omit<LocationRecord, 'id'>;
@@ -106,6 +124,194 @@ export class ReferenceDataRepository {
     );
 
     return result.rows.map((row) => this.toCustomerRecord(row));
+  }
+
+  async searchCrm(query: string, limit: number): Promise<CrmSearchRecord[]> {
+    const textQuery = query.trim().toLowerCase();
+    const textLikePrefix = escapeLikePrefix(textQuery);
+    const phonePrefix = query.replace(/\D/g, '');
+
+    if (!textQuery && !phonePrefix) {
+      return [];
+    }
+
+    const result = await this.databaseService.query<CrmSearchRow>(
+      `
+        with customer_matches as (
+          select
+            customer.id,
+            'customer' as kind,
+            customer.name as title,
+            concat(customer.billing_address_line1, ', ', customer.billing_city, ', ', customer.billing_state, ' ', customer.billing_postal_code) as subtitle,
+            (
+              case when customer.is_active then '{}'::text[] else array['Inactive']::text[] end ||
+              case
+                when exists (
+                  select 1
+                  from unnest(customer.flags) flag
+                  where lower(flag) like '%do not service%'
+                )
+                then array['DNU']::text[]
+                else '{}'::text[]
+              end
+            ) as badges,
+            customer.phone,
+            customer.billing_address_line1 as "addressLine1",
+            customer.billing_city as city,
+            customer.billing_state as state,
+            customer.billing_postal_code as "postalCode",
+            null::text as "customerId",
+            null::text as "customerName",
+            customer.is_active as "isActive",
+            (
+              case when lower(customer.name) = $1 then 100 when lower(customer.name) like $2 || '%' escape '\' then 80 else 0 end +
+              case when lower(coalesce(customer.email, '')) like $2 || '%' escape '\' then 55 else 0 end +
+              case when $3 <> '' and regexp_replace(coalesce(customer.phone, ''), '[^0-9]', '', 'g') like $3 || '%' then 60 else 0 end +
+              case when lower(customer.billing_address_line1) like $2 || '%' escape '\' then 35 else 0 end +
+              case when lower(customer.billing_city) like $2 || '%' escape '\' then 20 else 0 end +
+              case when lower(customer.billing_postal_code) like $2 || '%' escape '\' then 25 else 0 end +
+              case
+                when exists (
+                  select 1
+                  from unnest(customer.flags) flag
+                  where lower(flag) like $2 || '%' escape '\'
+                )
+                then 15
+                else 0
+              end
+            ) as score
+          from customers customer
+          where lower(customer.name) like $2 || '%' escape '\'
+             or lower(coalesce(customer.email, '')) like $2 || '%' escape '\'
+             or lower(customer.billing_address_line1) like $2 || '%' escape '\'
+             or lower(customer.billing_city) like $2 || '%' escape '\'
+             or lower(customer.billing_postal_code) like $2 || '%' escape '\'
+             or ($3 <> '' and regexp_replace(coalesce(customer.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+             or exists (
+               select 1
+               from unnest(customer.flags) flag
+               where lower(flag) like $2 || '%' escape '\'
+             )
+        ),
+        location_matches as (
+          select
+            location.id,
+            'location' as kind,
+            location.name as title,
+            concat(location.address_line1, ', ', location.city, ', ', location.state, ' ', location.postal_code) as subtitle,
+            case when location.is_active then '{}'::text[] else array['Inactive']::text[] end as badges,
+            location.phone,
+            location.address_line1 as "addressLine1",
+            location.city,
+            location.state,
+            location.postal_code as "postalCode",
+            customer.id as "customerId",
+            customer.name as "customerName",
+            location.is_active as "isActive",
+            (
+              case when lower(location.name) = $1 then 95 when lower(location.name) like $2 || '%' escape '\' then 75 else 0 end +
+              case when lower(location.address_line1) like $2 || '%' escape '\' then 60 else 0 end +
+              case when lower(location.city) like $2 || '%' escape '\' then 25 else 0 end +
+              case when lower(location.postal_code) like $2 || '%' escape '\' then 30 else 0 end +
+              case when lower(customer.name) like $2 || '%' escape '\' then 45 else 0 end +
+              case when lower(coalesce(location.email, '')) like $2 || '%' escape '\' then 35 else 0 end +
+              case when $3 <> '' and regexp_replace(coalesce(location.phone, ''), '[^0-9]', '', 'g') like $3 || '%' then 55 else 0 end +
+              case
+                when exists (
+                  select 1
+                  from location_contact_links link
+                  inner join contacts contact on contact.id = link.contact_id
+                  where link.location_id = location.id
+                    and link.is_active = true
+                    and contact.is_active = true
+                    and (
+                      lower(contact.display_name) like $2 || '%' escape '\'
+                      or lower(coalesce(contact.email, '')) like $2 || '%' escape '\'
+                      or ($3 <> '' and regexp_replace(coalesce(link.phone_override, contact.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+                    )
+                )
+                then 30
+                else 0
+              end
+            ) as score
+          from locations location
+          inner join customers customer on customer.id = location.customer_id
+          where lower(location.name) like $2 || '%' escape '\'
+             or lower(location.address_line1) like $2 || '%' escape '\'
+             or lower(location.city) like $2 || '%' escape '\'
+             or lower(location.postal_code) like $2 || '%' escape '\'
+             or lower(customer.name) like $2 || '%' escape '\'
+             or lower(coalesce(location.email, '')) like $2 || '%' escape '\'
+             or ($3 <> '' and regexp_replace(coalesce(location.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+             or exists (
+               select 1
+               from location_contact_links link
+               inner join contacts contact on contact.id = link.contact_id
+               where link.location_id = location.id
+                 and link.is_active = true
+                 and contact.is_active = true
+                 and (
+                   lower(contact.display_name) like $2 || '%' escape '\'
+                   or lower(coalesce(contact.email, '')) like $2 || '%' escape '\'
+                   or ($3 <> '' and regexp_replace(coalesce(link.phone_override, contact.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+                 )
+             )
+        ),
+        contact_matches as (
+          select
+            contact.id,
+            'contact' as kind,
+            contact.display_name as title,
+            coalesce(nullif(array_to_string(contact.tags, ', '), ''), 'Contact') as subtitle,
+            case when contact.is_active then '{}'::text[] else array['Inactive']::text[] end as badges,
+            contact.phone,
+            null::text as "addressLine1",
+            null::text as city,
+            null::text as state,
+            null::text as "postalCode",
+            null::text as "customerId",
+            null::text as "customerName",
+            contact.is_active as "isActive",
+            (
+              case when lower(contact.display_name) = $1 then 90 when lower(contact.display_name) like $2 || '%' escape '\' then 70 else 0 end +
+              case when lower(coalesce(contact.email, '')) like $2 || '%' escape '\' then 40 else 0 end +
+              case when $3 <> '' and regexp_replace(coalesce(contact.phone, ''), '[^0-9]', '', 'g') like $3 || '%' then 55 else 0 end +
+              case
+                when exists (
+                  select 1
+                  from unnest(contact.tags) tag
+                  where lower(tag) like $2 || '%' escape '\'
+                )
+                then 20
+                else 0
+              end
+            ) as score
+          from contacts contact
+          where lower(contact.display_name) like $2 || '%' escape '\'
+             or lower(coalesce(contact.email, '')) like $2 || '%' escape '\'
+             or ($3 <> '' and regexp_replace(coalesce(contact.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+             or exists (
+               select 1
+               from unnest(contact.tags) tag
+               where lower(tag) like $2 || '%' escape '\'
+             )
+        )
+        select *
+        from (
+          select * from customer_matches
+          union all
+          select * from location_matches
+          union all
+          select * from contact_matches
+        ) matches
+        where score > 0
+        order by score desc, title asc, id asc
+        limit $4
+      `,
+      [textQuery, textLikePrefix, phonePrefix, limit]
+    );
+
+    return result.rows.map((row) => this.toCrmSearchRecord(row));
   }
 
   async getCustomerById(customerId: string): Promise<CustomerAccountRecord | null> {
@@ -804,6 +1010,25 @@ export class ReferenceDataRepository {
     };
   }
 
+  private toCrmSearchRecord(row: CrmSearchRow): CrmSearchRecord {
+    return {
+      id: row.id,
+      kind: row.kind,
+      title: row.title,
+      subtitle: row.subtitle,
+      badges: toTextArray(row.badges),
+      phone: row.phone ?? undefined,
+      addressLine1: row.addressLine1 ?? undefined,
+      city: row.city ?? undefined,
+      state: row.state ?? undefined,
+      postalCode: row.postalCode ?? undefined,
+      customerId: row.customerId ?? undefined,
+      customerName: row.customerName ?? undefined,
+      isActive: row.isActive,
+      score: Number(row.score)
+    };
+  }
+
   private toContactRecord(row: ContactRow): ContactRecord {
     return {
       id: row.id,
@@ -866,4 +1091,8 @@ export class ReferenceDataRepository {
 
 function nullIfUndefined(value: string | undefined): string | null {
   return value ?? null;
+}
+
+function escapeLikePrefix(value: string): string {
+  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }

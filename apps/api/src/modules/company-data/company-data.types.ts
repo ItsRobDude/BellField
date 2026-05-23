@@ -1,6 +1,7 @@
 import type {
   AppointmentFinishOutcome as ContractAppointmentFinishOutcome,
   AppointmentStatus as ContractAppointmentStatus,
+  CrmSearchResult as ContractCrmSearchResult,
   EquipmentStatus as ContractEquipmentStatus,
   FieldSyncSource as ContractFieldSyncSource,
   FinishedVisitReviewDecision as ContractFinishedVisitReviewDecision,
@@ -212,6 +213,10 @@ export type FieldSyncSource = ContractFieldSyncSource;
 export const fieldSyncSources = ['field-save-queue'] as const satisfies readonly FieldSyncSource[];
 
 export type SyncResult = ContractSyncResult;
+
+export type CrmSearchRecord = ContractCrmSearchResult & {
+  score: number;
+};
 
 export type JobTimelineEntry = {
   id: string;
