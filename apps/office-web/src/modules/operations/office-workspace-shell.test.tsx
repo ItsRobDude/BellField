@@ -36,10 +36,7 @@ vi.mock('@/lib/operations-api', () => ({
 }));
 
 vi.mock('@/lib/identity-api', () => ({
-  getCurrentOfficeSession: vi.fn(),
-  getOfficeEmployees: vi.fn(),
-  getOfficeRoles: vi.fn(),
-  updateOfficeEmployee: vi.fn()
+  getCurrentOfficeSession: vi.fn()
 }));
 
 vi.mock('./crm-panel', () => ({
@@ -48,10 +45,6 @@ vi.mock('./crm-panel', () => ({
 
 vi.mock('./equipment-panel', () => ({
   EquipmentPanel: () => <section aria-label="Equipment panel mock">Equipment panel mock</section>
-}));
-
-vi.mock('./employee-management-panel', () => ({
-  EmployeeManagementPanel: () => <section aria-label="Employee panel mock">Employee panel mock</section>
 }));
 
 const mockedOperationsApi = vi.mocked(operationsApi);
@@ -71,6 +64,8 @@ const employee: EmployeeSummary = {
   }
 };
 
+const baseTimestamp = '2026-05-22T10:00:00.000Z';
+
 function getTodayDateInputValue(date = new Date()): string {
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -78,20 +73,19 @@ function getTodayDateInputValue(date = new Date()): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
-function getDateInputValueOffset(dayOffset: number): string {
-  const date = new Date();
-  date.setDate(date.getDate() + dayOffset);
-  return getTodayDateInputValue(date);
-}
-
 function buildAppointment(overrides: Partial<AppointmentSummary> = {}): AppointmentSummary {
   return {
     id: 'appointment-1',
     jobId: 'job-1',
+    scheduledDate: getTodayDateInputValue(),
+    scheduledStartTime: '08:00',
+    scheduledEndTime: '10:00',
+    technicianId: 'tech-1',
+    technicianName: 'Taylor Tech',
     status: 'scheduled',
     needsOfficeReview: false,
-    createdAt: '2026-05-22T10:00:00.000Z',
-    updatedAt: '2026-05-22T10:00:00.000Z',
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp,
     ...overrides
   };
 }
@@ -112,9 +106,17 @@ function buildJob(overrides: Partial<JobSummary> = {}): JobSummary {
     needsScheduling: false,
     needsOfficeReview: false,
     appointments: [buildAppointment()],
-    timeline: [],
-    createdAt: '2026-05-22T10:00:00.000Z',
-    updatedAt: '2026-05-22T10:00:00.000Z',
+    timeline: [
+      {
+        id: 'timeline-1',
+        kind: 'statusChanged',
+        actorName: 'Office User',
+        message: 'Job scheduled.',
+        occurredAt: baseTimestamp
+      }
+    ],
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp,
     ...overrides
   };
 }
@@ -134,10 +136,10 @@ function buildRegisterEntry(overrides: Partial<RegisterEntrySummary> = {}): Regi
     inventorySourceLabel: 'truck',
     capturedByEmployeeId: 'tech-1',
     capturedByName: 'Taylor Tech',
-    capturedAt: '2026-05-22T11:00:00.000Z',
+    capturedAt: baseTimestamp,
     isVoid: false,
-    createdAt: '2026-05-22T11:00:00.000Z',
-    updatedAt: '2026-05-22T11:00:00.000Z',
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp,
     ...overrides
   };
 }
@@ -155,12 +157,12 @@ function buildMediaAttachment(overrides: Partial<MediaAttachmentSummary> = {}): 
     caption: 'Before cleaning',
     capturedByEmployeeId: 'tech-1',
     capturedByName: 'Taylor Tech',
-    capturedAt: '2026-05-22T11:05:00.000Z',
+    capturedAt: baseTimestamp,
     uploadCompleted: true,
-    uploadedAt: '2026-05-22T11:06:00.000Z',
+    uploadedAt: baseTimestamp,
     isVoid: false,
-    createdAt: '2026-05-22T11:05:00.000Z',
-    updatedAt: '2026-05-22T11:06:00.000Z',
+    createdAt: baseTimestamp,
+    updatedAt: baseTimestamp,
     ...overrides
   };
 }
@@ -202,8 +204,6 @@ function buildWorkspace(jobs: JobSummary[]): JobsWorkspaceResponse {
 
 function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee });
-  mockedIdentityApi.getOfficeRoles.mockResolvedValue({ roles: [] });
-  mockedIdentityApi.getOfficeEmployees.mockResolvedValue({ employees: [] });
   mockedOperationsApi.getOfficeJobsWorkspace.mockResolvedValue(workspace);
   mockedOperationsApi.getOfficeEquipmentWorkspace.mockResolvedValue({
     locations: [],
@@ -213,6 +213,20 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({ registerEntries: [] });
   mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({ mediaAttachments: [] });
   mockedOperationsApi.getOfficeMediaBlob.mockResolvedValue(new Blob(['media-bytes']));
+  mockedOperationsApi.createOfficeJob.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.updateOfficeJobStatus.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.addOfficeAppointment.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.acknowledgeOfficeFinishedVisitReview.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.updateOfficeRegisterEntry.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.voidOfficeRegisterEntry.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.updateOfficeMediaAttachment.mockResolvedValue({
+    mediaAttachment: buildMediaAttachment()
+  });
+  mockedOperationsApi.voidOfficeMediaAttachment.mockResolvedValue({
+    mediaAttachment: buildMediaAttachment({ isVoid: true })
+  });
 }
 
 function renderShell() {
@@ -231,39 +245,159 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  delete (window.HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
   vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
-describe('OfficeWorkspaceShell dispatch integration', () => {
-  it('renders the dispatch board between equipment and jobs in the real shell composition', async () => {
+describe('OfficeWorkspaceShell IA', () => {
+  it('defaults to dispatch and does not render every workspace at once', async () => {
     arrangeWorkspace(buildWorkspace([buildJob()]));
 
     renderShell();
 
-    const equipmentPanel = await screen.findByRole('region', { name: 'Equipment panel mock' });
-    const dispatchBoard = await screen.findByRole('region', { name: /Dispatch board v1 foundation/i });
-    const jobsHeading = await screen.findByRole('heading', { name: 'Jobs and appointments' });
-
-    expect(equipmentPanel.compareDocumentPosition(dispatchBoard) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(dispatchBoard.compareDocumentPosition(jobsHeading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'CRM panel mock' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Equipment panel mock' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Jobs queue' })).not.toBeInTheDocument();
   });
 
-  it('opens a dispatch card in the jobs panel by focusing the matching job card', async () => {
-    const scrollIntoView = vi.fn();
-    Object.defineProperty(window.HTMLElement.prototype, 'scrollIntoView', {
-      configurable: true,
-      value: scrollIntoView
-    });
+  it('switches between Dispatch, Customers, Jobs, and Equipment from the rail', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Customers' }));
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Dispatch board' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
+    expect(await screen.findByRole('region', { name: 'Jobs queue' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Equipment' }));
+    expect(await screen.findByRole('region', { name: 'Equipment panel mock' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dispatch' }));
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+  });
+
+  it('opens job detail from a dispatch appointment card focused on that appointment', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Appointment end time')).toHaveValue('10:00');
+  });
+
+  it('opens job detail from the jobs queue', async () => {
     arrangeWorkspace(
       buildWorkspace([
         buildJob({
+          id: 'job-queue',
+          jobNumber: '1002',
+          summary: 'Needs scheduling',
+          status: 'new',
+          needsScheduling: true,
+          appointments: []
+        })
+      ])
+    );
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Jobs' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Job 1002/i }));
+
+    expect(await screen.findByRole('region', { name: 'Job 1002 detail' })).toBeInTheDocument();
+  });
+
+  it('creates jobs from the focused new-job form using the existing API helper', async () => {
+    const today = getTodayDateInputValue();
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    expect(await screen.findByRole('region', { name: 'New job' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Job summary'), { target: { value: 'No heat' } });
+    fireEvent.change(screen.getByLabelText('Job date'), { target: { value: today } });
+    fireEvent.change(screen.getByLabelText('Job start'), { target: { value: '09:00' } });
+    fireEvent.change(screen.getByLabelText('Job end'), { target: { value: '11:00' } });
+    fireEvent.change(screen.getByLabelText('Tech'), { target: { value: 'tech-1' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create job' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.createOfficeJob).toHaveBeenCalledWith({
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        locationId: 'location-1',
+        billToCustomerId: 'customer-1',
+        jobType: 'Service',
+        category: 'General',
+        origin: 'Inbound phone call',
+        summary: 'No heat',
+        scheduledDate: today,
+        scheduledStartTime: '09:00',
+        scheduledEndTime: '11:00',
+        timeWindowLabel: undefined,
+        technicianId: 'tech-1'
+      });
+    });
+    expect(await screen.findByText('Job created.')).toBeInTheDocument();
+  });
+
+  it('saves appointment schedule and status changes from job detail through existing API helpers', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+    const appointment = await screen.findByRole('region', { name: 'Appointment appointment-1' });
+    fireEvent.change(within(appointment).getByLabelText('Appointment end time'), {
+      target: { value: '11:00' }
+    });
+    fireEvent.change(within(appointment).getByLabelText('Status'), {
+      target: { value: 'confirmed' }
+    });
+    fireEvent.click(within(appointment).getByRole('button', { name: 'Save appointment' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        status: 'confirmed',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
+    });
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        scheduledDate: getTodayDateInputValue(),
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '11:00',
+        timeWindowLabel: undefined,
+        technicianId: 'tech-1'
+      });
+    });
+  });
+
+  it('runs finished-visit review actions from job detail', async () => {
+    arrangeWorkspace(
+      buildWorkspace([
+        buildJob({
+          status: 'inProgress',
+          needsOfficeReview: true,
           appointments: [
             buildAppointment({
-              scheduledDate: getTodayDateInputValue(),
-              technicianId: 'tech-1',
-              technicianName: 'Taylor Tech'
+              status: 'finished',
+              needsOfficeReview: true
             })
           ]
         })
@@ -273,93 +407,94 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
     renderShell();
 
     fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
-    fireEvent.click(await screen.findByRole('button', { name: /Open job 1001 in the jobs panel/i }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Complete' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
 
     await waitFor(() => {
-      const focusedJob = screen.getByText(/Job 1001: No cooling/i).closest('article');
-      expect(focusedJob).toHaveAttribute('aria-current', 'true');
-      expect(scrollIntoView).toHaveBeenCalled();
+      expect(mockedOperationsApi.updateOfficeJobStatus).toHaveBeenCalledWith({
+        jobId: 'job-1',
+        status: 'completed',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
     });
   });
 
-  it('refreshes the dispatch board from current workspace data without a schedule or status mutation', async () => {
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      }),
-      buildJob({
-        id: 'job-2',
-        jobNumber: '1002',
-        summary: 'Heat not working',
-        appointments: [
-          buildAppointment({
-            id: 'appointment-2',
-            jobId: 'job-2',
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const refreshedWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            status: 'confirmed'
-          })
-        ]
-      }),
-      buildJob({
-        id: 'job-2',
-        jobNumber: '1002',
-        summary: 'Heat not working',
-        appointments: [
-          buildAppointment({
-            id: 'appointment-2',
-            jobId: 'job-2',
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            status: 'cancelled'
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(refreshedWorkspace)
-      .mockResolvedValue(refreshedWorkspace);
+  it('lazy-loads captured work and routes register/media actions through office API helpers', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({
+      registerEntries: [buildRegisterEntry()]
+    });
+    mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({
+      mediaAttachments: [buildMediaAttachment()]
+    });
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:media-1');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
 
     renderShell();
 
-    expect(await screen.findByLabelText(/Appointment 1001 for Acme/i)).toBeInTheDocument();
-    expect(await screen.findByLabelText(/Appointment 1002 for Acme/i)).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole('button', { name: /Refresh dispatch board/i }));
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+    fireEvent.click(await screen.findByRole('button', { name: 'Captured' }));
 
     await waitFor(() => {
-      expect(mockedOperationsApi.getOfficeJobsWorkspace).toHaveBeenCalledTimes(2);
+      expect(mockedOperationsApi.getOfficeRegisterEntries).toHaveBeenCalledWith({
+        jobId: 'job-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
+    });
+    fireEvent.change(await screen.findByLabelText('Register quantity for Diagnostic capacitor'), {
+      target: { value: '2' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeRegisterEntry).toHaveBeenCalledWith(
+        expect.objectContaining({
+          registerEntryId: 'register-1',
+          quantity: 2,
+          sessionToken: 'session-token',
+          apiBaseUrl: 'http://api.test'
+        })
+      );
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Media' }));
+    fireEvent.change(await screen.findByLabelText('Media caption for compressor.jpg'), {
+      target: { value: 'After cleaning' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }));
+    fireEvent.change(screen.getByLabelText('Void reason for compressor.jpg'), {
+      target: { value: 'wrong file' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Void' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeMediaAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaId: 'media-1', caption: 'After cleaning' })
+      );
     });
     await waitFor(() => {
-      expect(screen.queryByLabelText(/Appointment 1002 for Acme/i)).not.toBeInTheDocument();
+      expect(mockedOperationsApi.getOfficeMediaBlob).toHaveBeenCalledWith({
+        mediaId: 'media-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
     });
-    expect(within(screen.getByLabelText(/Appointment 1001 for Acme/i)).getByText('Confirmed')).toBeInTheDocument();
-    expect(await screen.findByText('Dispatch board refreshed.')).toBeInTheDocument();
+    await waitFor(() => {
+      expect(mockedOperationsApi.voidOfficeMediaAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({ mediaId: 'media-1', reason: 'wrong file' })
+      );
+    });
+    expect(confirmSpy).toHaveBeenCalled();
+    expect(createObjectUrlSpy).toHaveBeenCalled();
+    expect(openSpy).toHaveBeenCalledWith('blob:media-1', '_blank', 'noopener,noreferrer');
   });
 
-  it('auto-refreshes the dispatch board while the office workspace stays open', async () => {
+  it('auto-refreshes while the office workspace stays open', async () => {
     let nextIntervalId = 1;
     const intervalHandlers = new Map<number, () => void>();
     vi.spyOn(window, 'setInterval').mockImplementation(((handler: TimerHandler) => {
@@ -379,25 +514,11 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
       }
     }) as typeof window.clearInterval);
 
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
+    const initialWorkspace = buildWorkspace([buildJob()]);
     const refreshedWorkspace = buildWorkspace([
       buildJob({
         appointments: [
           buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
             status: 'cancelled'
           })
         ]
@@ -424,550 +545,5 @@ describe('OfficeWorkspaceShell dispatch integration', () => {
     await waitFor(() => {
       expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();
     });
-  });
-
-  it('saves dispatch drawer changes through the appointment schedule API and normalizes unassigned technicians', async () => {
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            scheduledStartTime: '08:00',
-            scheduledEndTime: '10:00',
-            timeWindowLabel: '8-10',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const updatedWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            scheduledStartTime: '08:00',
-            scheduledEndTime: '10:00',
-            timeWindowLabel: '8-10'
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(updatedWorkspace)
-      .mockResolvedValue(updatedWorkspace);
-    mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(updatedWorkspace.jobs[0]!);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
-
-    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
-    fireEvent.change(within(drawer).getByLabelText('Dispatch technician'), {
-      target: { value: '' }
-    });
-    fireEvent.click(within(drawer).getByRole('button', { name: /Save dispatch changes/i }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith({
-        appointmentId: 'appointment-1',
-        sessionToken: 'session-token',
-        apiBaseUrl: 'http://api.test',
-        scheduledDate: today,
-        scheduledStartTime: '08:00',
-        scheduledEndTime: '10:00',
-        timeWindowLabel: '8-10',
-        technicianId: undefined
-      });
-    });
-    expect(await screen.findByText('Dispatch schedule updated.')).toBeInTheDocument();
-  });
-
-  it('saves jobs-panel appointment schedule edits with structured times', async () => {
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            scheduledStartTime: '08:00',
-            scheduledEndTime: '10:00',
-            timeWindowLabel: '8-10',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const updatedWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            scheduledStartTime: '08:00',
-            scheduledEndTime: '11:00',
-            timeWindowLabel: '8-10',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(updatedWorkspace)
-      .mockResolvedValue(updatedWorkspace);
-    mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(updatedWorkspace.jobs[0]!);
-
-    renderShell();
-
-    const jobArticle = (await screen.findByText(/Job 1001: No cooling/i)).closest('article');
-    expect(jobArticle).not.toBeNull();
-
-    fireEvent.change(within(jobArticle as HTMLElement).getByLabelText('Appointment end time'), {
-      target: { value: '11:00' }
-    });
-    fireEvent.click(within(jobArticle as HTMLElement).getByRole('button', { name: 'Save appointment' }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith({
-        appointmentId: 'appointment-1',
-        sessionToken: 'session-token',
-        apiBaseUrl: 'http://api.test',
-        scheduledDate: today,
-        scheduledStartTime: '08:00',
-        scheduledEndTime: '11:00',
-        timeWindowLabel: '8-10',
-        technicianId: 'tech-1'
-      });
-    });
-  });
-
-  it('removes appointments from the current dispatch board after they are moved to another date', async () => {
-    const today = getTodayDateInputValue();
-    const tomorrow = getDateInputValueOffset(1);
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            timeWindowLabel: '8-10',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const updatedWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: tomorrow,
-            timeWindowLabel: '8-10',
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(updatedWorkspace)
-      .mockResolvedValue(updatedWorkspace);
-    mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(updatedWorkspace.jobs[0]!);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
-
-    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
-    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment date'), {
-      target: { value: tomorrow }
-    });
-    fireEvent.click(within(drawer).getByRole('button', { name: /Save dispatch changes/i }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith(
-        expect.objectContaining({
-          appointmentId: 'appointment-1',
-          scheduledDate: tomorrow
-        })
-      );
-    });
-    await waitFor(() => {
-      expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();
-    });
-    expect(
-      await screen.findByText(
-        `Appointment moved to ${tomorrow}. It is no longer shown on the ${today} dispatch board.`
-      )
-    ).toBeInTheDocument();
-  });
-
-  it('resets a cleared dispatch date to today without showing unscheduled appointments', async () => {
-    const today = getTodayDateInputValue();
-    arrangeWorkspace(
-      buildWorkspace([
-        buildJob({
-          appointments: [
-            buildAppointment({
-              scheduledDate: today,
-              technicianId: 'tech-1',
-              technicianName: 'Taylor Tech'
-            })
-          ]
-        }),
-        buildJob({
-          id: 'job-2',
-          jobNumber: '1002',
-          summary: 'Heat not working',
-          needsScheduling: true,
-          appointments: [
-            buildAppointment({
-              id: 'appointment-2',
-              jobId: 'job-2',
-              technicianId: 'tech-1',
-              technicianName: 'Taylor Tech'
-            })
-          ]
-        })
-      ])
-    );
-
-    renderShell();
-
-    expect(await screen.findByLabelText(/Appointment 1001 for Acme/i)).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText('Dispatch date'), {
-      target: { value: '' }
-    });
-
-    await waitFor(() => {
-      expect(screen.getByLabelText('Dispatch date')).toHaveValue(today);
-    });
-    expect(screen.queryByLabelText(/Appointment 1002 for Acme/i)).not.toBeInTheDocument();
-  });
-
-  it('saves dispatch drawer status changes through the appointment status API', async () => {
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const updatedWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            status: 'confirmed'
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(updatedWorkspace)
-      .mockResolvedValue(updatedWorkspace);
-    mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(updatedWorkspace.jobs[0]!);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
-
-    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
-    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
-      target: { value: 'confirmed' }
-    });
-    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith({
-        appointmentId: 'appointment-1',
-        sessionToken: 'session-token',
-        apiBaseUrl: 'http://api.test',
-        status: 'confirmed'
-      });
-    });
-    expect(await screen.findByText('Dispatch status updated.')).toBeInTheDocument();
-  });
-
-  it('removes cancelled appointments from the dispatch board after status save', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const updatedWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            status: 'cancelled'
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(updatedWorkspace)
-      .mockResolvedValue(updatedWorkspace);
-    mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(updatedWorkspace.jobs[0]!);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
-
-    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
-    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
-      target: { value: 'cancelled' }
-    });
-    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith(
-        expect.objectContaining({
-          appointmentId: 'appointment-1',
-          status: 'cancelled'
-        })
-      );
-    });
-    expect(confirmSpy).toHaveBeenCalled();
-    await waitFor(() => {
-      expect(screen.queryByLabelText(/Appointment 1001 for Acme/i)).not.toBeInTheDocument();
-    });
-    expect(
-      await screen.findByText('Appointment cancelled. It is no longer shown on the dispatch board.')
-    ).toBeInTheDocument();
-  });
-
-  it('surfaces office review after a dispatch drawer status save marks an appointment finished', async () => {
-    const today = getTodayDateInputValue();
-    const initialWorkspace = buildWorkspace([
-      buildJob({
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech'
-          })
-        ]
-      })
-    ]);
-    const updatedWorkspace = buildWorkspace([
-      buildJob({
-        needsOfficeReview: true,
-        status: 'inProgress',
-        appointments: [
-          buildAppointment({
-            scheduledDate: today,
-            technicianId: 'tech-1',
-            technicianName: 'Taylor Tech',
-            status: 'finished',
-            needsOfficeReview: true
-          })
-        ]
-      })
-    ]);
-    arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsWorkspace
-      .mockResolvedValueOnce(initialWorkspace)
-      .mockResolvedValueOnce(updatedWorkspace)
-      .mockResolvedValue(updatedWorkspace);
-    mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(updatedWorkspace.jobs[0]!);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
-
-    const drawer = await screen.findByRole('complementary', { name: /Appointment detail drawer/i });
-    fireEvent.change(within(drawer).getByLabelText('Dispatch appointment status'), {
-      target: { value: 'finished' }
-    });
-    fireEvent.click(within(drawer).getByRole('button', { name: /Save status/i }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith(
-        expect.objectContaining({
-          appointmentId: 'appointment-1',
-          status: 'finished'
-        })
-      );
-    });
-    expect(await screen.findByText('Appointment marked finished. Office review may be needed.')).toBeInTheDocument();
-    await waitFor(() => {
-      expect(screen.getAllByText(/Office review/i).length).toBeGreaterThan(1);
-    });
-  });
-
-  it('lazy-loads captured register entries and media for a job', async () => {
-    arrangeWorkspace(buildWorkspace([buildJob()]));
-    mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValueOnce({
-      registerEntries: [buildRegisterEntry()]
-    });
-    mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValueOnce({
-      mediaAttachments: [
-        buildMediaAttachment(),
-        buildMediaAttachment({
-          id: 'media-2',
-          originalFilename: 'pending.pdf',
-          kind: 'document',
-          contentType: 'application/pdf',
-          uploadCompleted: false,
-          uploadedAt: undefined
-        })
-      ]
-    });
-
-    renderShell();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Review captured work' }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.getOfficeRegisterEntries).toHaveBeenCalledWith({
-        jobId: 'job-1',
-        sessionToken: 'session-token',
-        apiBaseUrl: 'http://api.test'
-      });
-    });
-    expect(await screen.findByText('Diagnostic capacitor')).toBeInTheDocument();
-    expect(await screen.findByText('compressor.jpg')).toBeInTheDocument();
-    expect(await screen.findByText('pending.pdf')).toBeInTheDocument();
-    expect(screen.getByText('Pending upload')).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'Open file' })[1]).toBeDisabled();
-  });
-
-  it('edits and voids captured register entries from the office job card', async () => {
-    const registerEntry = buildRegisterEntry();
-    arrangeWorkspace(buildWorkspace([buildJob()]));
-    mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({
-      registerEntries: [registerEntry]
-    });
-    mockedOperationsApi.updateOfficeRegisterEntry.mockResolvedValue(buildJob());
-    mockedOperationsApi.voidOfficeRegisterEntry.mockResolvedValue(buildJob());
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Review captured work' }));
-    await screen.findByText('Diagnostic capacitor');
-    fireEvent.change(screen.getByLabelText('Register quantity for Diagnostic capacitor'), {
-      target: { value: '2' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save register entry' }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeRegisterEntry).toHaveBeenCalledWith(
-        expect.objectContaining({
-          registerEntryId: 'register-1',
-          quantity: 2,
-          totalAmount: 45,
-          sessionToken: 'session-token',
-          apiBaseUrl: 'http://api.test'
-        })
-      );
-    });
-
-    fireEvent.change(screen.getByLabelText('Void reason for Diagnostic capacitor'), {
-      target: { value: 'duplicate' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Void register entry' }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.voidOfficeRegisterEntry).toHaveBeenCalledWith(
-        expect.objectContaining({
-          registerEntryId: 'register-1',
-          reason: 'duplicate'
-        })
-      );
-    });
-    expect(confirmSpy).toHaveBeenCalled();
-  });
-
-  it('edits, opens, and voids media attachments from the office job card', async () => {
-    arrangeWorkspace(buildWorkspace([buildJob()]));
-    mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({
-      mediaAttachments: [buildMediaAttachment()]
-    });
-    mockedOperationsApi.updateOfficeMediaAttachment.mockResolvedValue({
-      mediaAttachment: buildMediaAttachment({ caption: 'After cleaning' })
-    });
-    mockedOperationsApi.voidOfficeMediaAttachment.mockResolvedValue({
-      mediaAttachment: buildMediaAttachment({ isVoid: true, voidReason: 'wrong file' })
-    });
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
-    const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:media-1');
-    const revokeObjectUrlSpy = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
-
-    renderShell();
-
-    fireEvent.click(await screen.findByRole('button', { name: 'Review captured work' }));
-    await screen.findByText('compressor.jpg');
-    fireEvent.change(screen.getByLabelText('Media caption for compressor.jpg'), {
-      target: { value: 'After cleaning' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Save caption' }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.updateOfficeMediaAttachment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mediaId: 'media-1',
-          caption: 'After cleaning'
-        })
-      );
-    });
-
-    fireEvent.click(screen.getByRole('button', { name: 'Open file' }));
-    await waitFor(() => {
-      expect(mockedOperationsApi.getOfficeMediaBlob).toHaveBeenCalledWith({
-        mediaId: 'media-1',
-        sessionToken: 'session-token',
-        apiBaseUrl: 'http://api.test'
-      });
-    });
-    expect(createObjectUrlSpy).toHaveBeenCalled();
-    expect(openSpy).toHaveBeenCalledWith('blob:media-1', '_blank', 'noopener,noreferrer');
-
-    fireEvent.change(screen.getByLabelText('Void reason for compressor.jpg'), {
-      target: { value: 'wrong file' }
-    });
-    fireEvent.click(screen.getByRole('button', { name: 'Void media' }));
-
-    await waitFor(() => {
-      expect(mockedOperationsApi.voidOfficeMediaAttachment).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mediaId: 'media-1',
-          reason: 'wrong file'
-        })
-      );
-    });
-    expect(confirmSpy).toHaveBeenCalled();
-    expect(revokeObjectUrlSpy).not.toHaveBeenCalled();
   });
 });

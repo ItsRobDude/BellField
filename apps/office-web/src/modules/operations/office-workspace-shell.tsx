@@ -32,30 +32,27 @@ import {
 } from '@/lib/operations-api';
 import {
   getCurrentOfficeSession,
-  getOfficeEmployees,
-  getOfficeRoles,
-  updateOfficeEmployee,
-  type EmployeeRoleId,
-  type EmployeeSummary,
-  type RoleTemplate
+  type EmployeeSummary
 } from '@/lib/identity-api';
-import { EmployeeManagementPanel } from './employee-management-panel';
 import { CrmPanel } from './crm-panel';
-import { DispatchBoardPanel, type DispatchScheduleDraft } from './dispatch-board-panel';
+import { DispatchBoardPanel } from './dispatch-board-panel';
 import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
+import { JobDetailPanel } from './job-detail-panel';
+import { JobIntakePanel } from './job-intake-panel';
 import {
   createEmptyAppointmentDraft,
-  getOfficeJobElementId,
-  JobsAppointmentsPanel,
   type AppointmentDraft,
   type AppointmentEditDraft,
   type CapturedWorkDetails,
+  type JobDetailTab,
+  type PendingJobStatusChange,
   type RegisterEntryEditDraft
-} from './jobs-appointments-panel';
+} from './job-work-types';
+import { JobsQueuePanel } from './jobs-queue-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
-const plannedOfficeAreas = ['Accounts', 'Locations', 'Jobs', 'Dispatch', 'Invoices', 'Reports'];
 const dispatchAutoRefreshIntervalMs = 60_000;
+type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'equipment' | 'jobDetail';
 
 type Props = {
   apiBaseUrl: string;
@@ -64,20 +61,6 @@ type Props = {
   onSignOut: () => void;
 };
 
-type PendingJobStatusChange = {
-  jobId: string;
-  currentStatus: JobStatus;
-  nextStatus: JobStatus;
-  jobSummary: string;
-  reviewMessage: string;
-  cancellableAppointmentCount: number;
-  isSubmitting: boolean;
-};
-
-function canViewEmployees(employee: EmployeeSummary | null): boolean {
-  return employee?.effectivePermissions.includes('employeesPermissions:view') ?? false;
-}
-
 function getJobStatusReviewMessage(
   currentStatus: JobStatus,
   nextStatus: JobStatus,
@@ -85,34 +68,18 @@ function getJobStatusReviewMessage(
   cancellableAppointmentCount = 0
 ): string {
   if (currentStatus === nextStatus) {
-    return `Job "${jobSummary}" is already ${nextStatus}.`;
-  }
-
-  if (nextStatus === 'completed') {
-    return `Marking "${jobSummary}" completed means the work looks done operationally, but office closeout can still happen later.`;
-  }
-
-  if (nextStatus === 'closed') {
-    return `Closing "${jobSummary}" is the administrative closeout step. BellField will still warn if future appointments remain.`;
+    return `Already ${formatJobStatusLabel(nextStatus)}.`;
   }
 
   if (nextStatus === 'cancelled') {
     if (cancellableAppointmentCount === 0) {
-      return `Cancelling "${jobSummary}" will not cancel any appointments because none are active. Is that okay?`;
+      return `Cancel "${jobSummary}"?`;
     }
 
-    return `Cancelling "${jobSummary}" will also cancel ${formatAppointmentCount(cancellableAppointmentCount)} under it. Is that okay?`;
+    return `Cancel "${jobSummary}" and ${formatAppointmentCount(cancellableAppointmentCount)}?`;
   }
 
-  if (nextStatus === 'waitingOnParts') {
-    return `Setting "${jobSummary}" to waiting on parts keeps the job visible without pretending it is fully scheduled or complete.`;
-  }
-
-  if (nextStatus === 'inProgress') {
-    return `Moving "${jobSummary}" to in progress should reflect active work underway, not final closeout.`;
-  }
-
-  return `Moving "${jobSummary}" back into an active status keeps its history intact while the office continues work or schedules follow-up appointments.`;
+  return `Change status to ${formatJobStatusLabel(nextStatus)}?`;
 }
 
 function countCancellableAppointmentsForJob(workspace: JobsWorkspaceResponse | null, jobId: string): number {
@@ -122,6 +89,20 @@ function countCancellableAppointmentsForJob(workspace: JobsWorkspaceResponse | n
 
 function formatAppointmentCount(count: number): string {
   return `${count} ${count === 1 ? 'appointment' : 'appointments'}`;
+}
+
+function formatJobStatusLabel(status: JobStatus): string {
+  const labels: Record<JobStatus, string> = {
+    new: 'New',
+    scheduled: 'Scheduled',
+    inProgress: 'In progress',
+    waitingOnParts: 'Waiting on parts',
+    completed: 'Completed',
+    closed: 'Closed',
+    cancelled: 'Cancelled'
+  };
+
+  return labels[status];
 }
 
 function getDateInputValue(date = new Date()): string {
@@ -201,8 +182,6 @@ function optionalString(value: string): string | undefined {
 
 export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
-  const [roles, setRoles] = useState<RoleTemplate[]>([]);
-  const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
   const [jobsWorkspace, setJobsWorkspace] = useState<JobsWorkspaceResponse | null>(null);
   const [equipment, setEquipment] = useState<EquipmentSummary[]>([]);
   const [suggestedEquipmentTypes, setSuggestedEquipmentTypes] = useState<string[]>([]);
@@ -229,7 +208,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
   const [capturedWorkByJobId, setCapturedWorkByJobId] = useState<Record<string, CapturedWorkDetails>>({});
   const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
-  const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
+  const [activeOfficeView, setActiveOfficeView] = useState<OfficeView>('dispatch');
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [focusedAppointmentId, setFocusedAppointmentId] = useState<string | null>(null);
+  const [jobDetailInitialTab, setJobDetailInitialTab] = useState<JobDetailTab>('overview');
+  const [isJobIntakeOpen, setIsJobIntakeOpen] = useState(false);
   const refreshInFlightRef = useRef(false);
   const jobLocationIdRef = useRef(jobLocationId);
   const selectedEquipmentIdRef = useRef(selectedEquipmentId);
@@ -267,7 +250,6 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
     try {
       const currentSession = await getCurrentOfficeSession({ sessionToken, apiBaseUrl });
-      const roleResponse = await getOfficeRoles({ sessionToken, apiBaseUrl });
       const nextJobsWorkspace = await getOfficeJobsWorkspace({ sessionToken, apiBaseUrl });
       const nextEquipmentWorkspace = await getOfficeEquipmentWorkspace({
         sessionToken,
@@ -276,7 +258,6 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       });
 
       setEmployee(currentSession.employee);
-      setRoles(roleResponse.roles);
       setJobsWorkspace(nextJobsWorkspace);
       setEquipment(nextEquipmentWorkspace.equipment);
       setSuggestedEquipmentTypes(nextEquipmentWorkspace.suggestedEquipmentTypes);
@@ -284,13 +265,6 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       if (!jobLocationIdRef.current && nextJobsWorkspace.locations[0]) {
         setJobLocationId(nextJobsWorkspace.locations[0].id);
         setJobBillToCustomerId(nextJobsWorkspace.locations[0].customerId);
-      }
-
-      if (canViewEmployees(currentSession.employee)) {
-        const employeeResponse = await getOfficeEmployees({ sessionToken, apiBaseUrl });
-        setEmployees(employeeResponse.employees);
-      } else {
-        setEmployees([]);
       }
 
       const nextSelectedEquipmentId =
@@ -355,21 +329,6 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       }));
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load captured work.');
     }
-  }
-
-  async function handleToggleCapturedWork(jobId: string) {
-    if (capturedWorkByJobId[jobId]?.isOpen) {
-      setCapturedWorkByJobId((current) => ({
-        ...current,
-        [jobId]: {
-          ...current[jobId],
-          isOpen: false
-        }
-      }));
-      return;
-    }
-
-    await loadCapturedWork(jobId);
   }
 
   function handleRegisterDraftChange(jobId: string, registerEntryId: string, draft: RegisterEntryEditDraft) {
@@ -527,15 +486,6 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to open media attachment.');
-    }
-  }
-
-  async function handleEmployeeUpdate(employeeId: string, roleId: EmployeeRoleId, isActive: boolean) {
-    try {
-      await updateOfficeEmployee({ employeeId, roleId, isActive, sessionToken, apiBaseUrl });
-      await refreshWorkspace();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to update employee.');
     }
   }
 
@@ -726,6 +676,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       setJobEndTime('');
       setJobWindow('');
       setJobTechnicianId('');
+      setIsJobIntakeOpen(false);
+      setNoticeMessage('Job created.');
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create job.');
@@ -785,8 +737,21 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
   async function handleAppointmentStatusChange(appointmentId: string, status: AppointmentStatus) {
     try {
+      setNoticeMessage(null);
       await updateOfficeAppointmentStatus({ appointmentId, status, sessionToken, apiBaseUrl });
       await refreshWorkspace();
+
+      if (status === 'cancelled') {
+        setNoticeMessage('Appointment cancelled.');
+        return;
+      }
+
+      if (status === 'finished') {
+        setNoticeMessage('Appointment finished.');
+        return;
+      }
+
+      setNoticeMessage('Appointment status updated.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update appointment status.');
     }
@@ -800,6 +765,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
 
     try {
+      setNoticeMessage(null);
       await updateOfficeAppointmentSchedule({
         appointmentId,
         sessionToken,
@@ -816,70 +782,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         return nextDrafts;
       });
       await refreshWorkspace();
+      setNoticeMessage('Appointment updated.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update appointment scheduling.');
-    }
-  }
-
-  async function handleDispatchStatusChange(appointmentId: string, status: AppointmentStatus) {
-    try {
-      setNoticeMessage(null);
-      await updateOfficeAppointmentStatus({ appointmentId, status, sessionToken, apiBaseUrl });
-      await refreshWorkspace();
-
-      if (status === 'cancelled') {
-        setNoticeMessage('Appointment cancelled. It is no longer shown on the dispatch board.');
-        return;
-      }
-
-      if (status === 'finished') {
-        setNoticeMessage('Appointment marked finished. Office review may be needed.');
-        return;
-      }
-
-      setNoticeMessage('Dispatch status updated.');
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to update dispatch status.');
-    }
-  }
-
-  async function handleSaveDispatchSchedule(appointmentId: string, draft: DispatchScheduleDraft) {
-    const previousDispatchDate = dispatchViewDate;
-
-    try {
-      setNoticeMessage(null);
-      await updateOfficeAppointmentSchedule({
-        appointmentId,
-        sessionToken,
-        apiBaseUrl,
-        scheduledDate: draft.scheduledDate || undefined,
-        scheduledStartTime: draft.scheduledDate ? draft.scheduledStartTime || undefined : undefined,
-        scheduledEndTime: draft.scheduledDate ? draft.scheduledEndTime || undefined : undefined,
-        timeWindowLabel: draft.timeWindowLabel || undefined,
-        technicianId: draft.technicianId || undefined
-      });
-      setAppointmentEditDrafts((current) => {
-        const nextDrafts = { ...current };
-        delete nextDrafts[appointmentId];
-        return nextDrafts;
-      });
-      await refreshWorkspace();
-
-      if (draft.scheduledDate && draft.scheduledDate !== previousDispatchDate) {
-        setNoticeMessage(
-          `Appointment moved to ${draft.scheduledDate}. It is no longer shown on the ${previousDispatchDate} dispatch board.`
-        );
-        return;
-      }
-
-      if (!draft.scheduledDate) {
-        setNoticeMessage(`Appointment moved off the ${previousDispatchDate} dispatch board as unscheduled work.`);
-        return;
-      }
-
-      setNoticeMessage('Dispatch schedule updated.');
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to update dispatch scheduling.');
     }
   }
 
@@ -901,7 +806,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         ...current,
         [jobId]: createEmptyAppointmentDraft()
       }));
-      setNoticeMessage('Follow-up appointment added. Finished visit review was acknowledged.');
+      setNoticeMessage('Follow-up added.');
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to add appointment.');
@@ -916,7 +821,7 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         sessionToken,
         apiBaseUrl
       });
-      setNoticeMessage('Finished visit review acknowledged. The job remains open.');
+      setNoticeMessage('Review acknowledged.');
       await refreshWorkspace();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to acknowledge finished visit review.');
@@ -938,12 +843,12 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
-  function handleOpenDispatchJob(jobId: string) {
-    setFocusedJobId(jobId);
-    document.getElementById(getOfficeJobElementId(jobId))?.scrollIntoView?.({
-      behavior: 'smooth',
-      block: 'start'
-    });
+  function handleOpenJobDetail(jobId: string, appointmentId?: string, initialTab: JobDetailTab = 'overview') {
+    setSelectedJobId(jobId);
+    setFocusedAppointmentId(appointmentId ?? null);
+    setJobDetailInitialTab(appointmentId ? 'appointments' : initialTab);
+    setIsJobIntakeOpen(false);
+    setActiveOfficeView('jobDetail');
   }
 
   function handleDispatchViewDateChange(nextDate: string) {
@@ -971,124 +876,170 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     );
   }
 
+  const selectedJob = selectedJobId ? jobsWorkspace.jobs.find((job) => job.id === selectedJobId) ?? null : null;
+
   return (
     <main style={styles.page}>
-      <section style={styles.card}>
-        <div style={styles.row}>
-          <div>
-            <div style={styles.kicker}>BellField Office</div>
-            <h1 style={styles.title}>{employee.displayName}</h1>
-            <p style={styles.muted}>
-              This shell now exercises employee access, equipment records, and job/appointment foundations from one
-              API-backed workspace.
-            </p>
-          </div>
-          <div style={styles.row}>
-            <button type="button" onClick={() => void refreshWorkspace()} style={styles.button}>
-              {isRefreshing ? 'Refreshing...' : 'Refresh'}
-            </button>
-            <button type="button" onClick={onSignOut} style={styles.button}>
-              Sign out
-            </button>
-          </div>
+      <div style={styles.shell}>
+        <aside style={styles.rail} aria-label="Office navigation">
+          <div style={styles.railBrand}>BellField</div>
+          <NavButton label="Dispatch" active={activeOfficeView === 'dispatch'} onClick={() => setActiveOfficeView('dispatch')} />
+          <NavButton label="Customers" active={activeOfficeView === 'customers'} onClick={() => setActiveOfficeView('customers')} />
+          <NavButton label="Jobs" active={activeOfficeView === 'jobs'} onClick={() => setActiveOfficeView('jobs')} />
+          <NavButton label="Equipment" active={activeOfficeView === 'equipment'} onClick={() => setActiveOfficeView('equipment')} />
+        </aside>
+
+        <div style={styles.workArea}>
+          <section style={styles.topBar}>
+            <div>
+              <strong>{employee.displayName}</strong>
+              <p style={styles.tinyMuted}>{employee.email}</p>
+            </div>
+            <div style={styles.row}>
+              <button type="button" onClick={() => setIsJobIntakeOpen(true)} style={styles.primaryButton}>
+                New job
+              </button>
+              <button type="button" onClick={() => void refreshWorkspace()} style={styles.button}>
+                {isRefreshing ? 'Refreshing...' : 'Refresh'}
+              </button>
+              <button type="button" onClick={onSignOut} style={styles.button}>
+                Sign out
+              </button>
+            </div>
+          </section>
+
+          {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+          {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+
+          {isJobIntakeOpen ? (
+            <JobIntakePanel
+              jobsWorkspace={jobsWorkspace}
+              jobLocationId={jobLocationId}
+              jobBillToCustomerId={jobBillToCustomerId}
+              jobType={jobType}
+              jobCategory={jobCategory}
+              jobOrigin={jobOrigin}
+              jobSummary={jobSummary}
+              jobTechnicianId={jobTechnicianId}
+              jobDate={jobDate}
+              jobStartTime={jobStartTime}
+              jobEndTime={jobEndTime}
+              jobWindow={jobWindow}
+              onJobLocationChange={handleJobLocationChange}
+              onJobBillToCustomerChange={setJobBillToCustomerId}
+              onJobTypeChange={setJobType}
+              onJobCategoryChange={setJobCategory}
+              onJobOriginChange={setJobOrigin}
+              onJobSummaryChange={setJobSummary}
+              onJobTechnicianChange={setJobTechnicianId}
+              onJobDateChange={handleJobDateChange}
+              onJobStartTimeChange={setJobStartTime}
+              onJobEndTimeChange={setJobEndTime}
+              onJobWindowChange={setJobWindow}
+              onCreateJob={handleCreateJob}
+              onClose={() => setIsJobIntakeOpen(false)}
+            />
+          ) : null}
+
+          {activeOfficeView === 'dispatch' ? (
+            <DispatchBoardPanel
+              jobsWorkspace={jobsWorkspace}
+              viewDate={dispatchViewDate}
+              onViewDateChange={handleDispatchViewDateChange}
+              onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
+              isRefreshing={isRefreshing}
+              lastRefreshedAt={lastJobsWorkspaceRefreshedAt}
+              onRefresh={handleDispatchRefresh}
+            />
+          ) : null}
+
+          {activeOfficeView === 'customers' ? (
+            <CrmPanel apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} onErrorMessage={setErrorMessage} />
+          ) : null}
+
+          {activeOfficeView === 'jobs' ? (
+            <JobsQueuePanel
+              jobsWorkspace={jobsWorkspace}
+              onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
+              onNewJob={() => setIsJobIntakeOpen(true)}
+            />
+          ) : null}
+
+          {activeOfficeView === 'equipment' ? (
+            <EquipmentPanel
+              locations={jobsWorkspace.locations}
+              equipment={equipment}
+              suggestedEquipmentTypes={suggestedEquipmentTypes}
+              selectedEquipmentId={selectedEquipmentId}
+              selectedEquipmentDetail={selectedEquipmentDetail}
+              showInactiveEquipment={showInactiveEquipment}
+              canReplaceRemove={canReplaceRemoveEquipment}
+              canDelete={canDeleteEquipment}
+              onSelectEquipment={handleEquipmentSelect}
+              onShowInactiveChange={setShowInactiveEquipment}
+              onCreateEquipment={handleCreateEquipment}
+              onRecordUpdate={handleEquipmentUpdate}
+              onLinkReplacement={handleLinkReplacement}
+              onDeleteEquipment={handleDeleteEquipment}
+            />
+          ) : null}
+
+          {activeOfficeView === 'jobDetail' && selectedJob ? (
+            <JobDetailPanel
+              key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
+              jobsWorkspace={jobsWorkspace}
+              job={selectedJob}
+              initialTab={jobDetailInitialTab}
+              focusedAppointmentId={focusedAppointmentId}
+              pendingJobStatusChange={pendingJobStatusChange}
+              appointmentDrafts={appointmentDrafts}
+              appointmentEditDrafts={appointmentEditDrafts}
+              capturedWork={capturedWorkByJobId[selectedJob.id]}
+              onBack={() => setActiveOfficeView('dispatch')}
+              onLoadCapturedWork={loadCapturedWork}
+              onJobStatusReviewRequested={handleJobStatusReviewRequested}
+              onConfirmJobStatusChange={confirmJobStatusChange}
+              onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
+              onAppointmentStatusChange={handleAppointmentStatusChange}
+              onAppointmentDraftChange={(jobId, draft) =>
+                setAppointmentDrafts((current) => ({ ...current, [jobId]: draft }))
+              }
+              onAppointmentEditDraftChange={(appointmentId, draft) =>
+                setAppointmentEditDrafts((current) => ({ ...current, [appointmentId]: draft }))
+              }
+              onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
+              onAddAppointment={handleAddAppointment}
+              onKeepJobOpen={handleKeepJobOpen}
+              onRegisterDraftChange={handleRegisterDraftChange}
+              onSaveRegisterEntry={handleSaveRegisterEntry}
+              onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
+              onVoidRegisterEntry={handleVoidRegisterEntry}
+              onMediaCaptionChange={handleMediaCaptionChange}
+              onSaveMediaCaption={handleSaveMediaCaption}
+              onMediaVoidReasonChange={handleMediaVoidReasonChange}
+              onVoidMediaAttachment={handleVoidMediaAttachment}
+              onOpenMediaAttachment={handleOpenMediaAttachment}
+            />
+          ) : null}
+
+          {activeOfficeView === 'jobDetail' && !selectedJob ? (
+            <JobsQueuePanel
+              jobsWorkspace={jobsWorkspace}
+              onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
+              onNewJob={() => setIsJobIntakeOpen(true)}
+            />
+          ) : null}
         </div>
-        <p style={styles.muted}>
-          {employee.email} - permissions {employee.effectivePermissions.length} - planned areas: {plannedOfficeAreas.join(', ')}
-        </p>
-        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-        {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
-      </section>
-
-      {canViewEmployees(employee) ? (
-        <EmployeeManagementPanel employees={employees} roles={roles} onEmployeeUpdate={handleEmployeeUpdate} />
-      ) : null}
-
-      <CrmPanel apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} onErrorMessage={setErrorMessage} />
-
-      <EquipmentPanel
-        locations={jobsWorkspace.locations}
-        equipment={equipment}
-        suggestedEquipmentTypes={suggestedEquipmentTypes}
-        selectedEquipmentId={selectedEquipmentId}
-        selectedEquipmentDetail={selectedEquipmentDetail}
-        showInactiveEquipment={showInactiveEquipment}
-        canReplaceRemove={canReplaceRemoveEquipment}
-        canDelete={canDeleteEquipment}
-        onSelectEquipment={handleEquipmentSelect}
-        onShowInactiveChange={setShowInactiveEquipment}
-        onCreateEquipment={handleCreateEquipment}
-        onRecordUpdate={handleEquipmentUpdate}
-        onLinkReplacement={handleLinkReplacement}
-        onDeleteEquipment={handleDeleteEquipment}
-      />
-
-      <DispatchBoardPanel
-        jobsWorkspace={jobsWorkspace}
-        viewDate={dispatchViewDate}
-        onViewDateChange={handleDispatchViewDateChange}
-        onOpenInJobsPanel={handleOpenDispatchJob}
-        onSaveAppointmentSchedule={handleSaveDispatchSchedule}
-        onUpdateAppointmentStatus={handleDispatchStatusChange}
-        isRefreshing={isRefreshing}
-        lastRefreshedAt={lastJobsWorkspaceRefreshedAt}
-        onRefresh={handleDispatchRefresh}
-      />
-
-      <JobsAppointmentsPanel
-        jobsWorkspace={jobsWorkspace}
-        jobLocationId={jobLocationId}
-        jobBillToCustomerId={jobBillToCustomerId}
-        jobType={jobType}
-        jobCategory={jobCategory}
-        jobOrigin={jobOrigin}
-        jobSummary={jobSummary}
-        jobTechnicianId={jobTechnicianId}
-        jobDate={jobDate}
-        jobStartTime={jobStartTime}
-        jobEndTime={jobEndTime}
-        jobWindow={jobWindow}
-        appointmentDrafts={appointmentDrafts}
-        appointmentEditDrafts={appointmentEditDrafts}
-        onJobLocationChange={handleJobLocationChange}
-        onJobBillToCustomerChange={setJobBillToCustomerId}
-        onJobTypeChange={setJobType}
-        onJobCategoryChange={setJobCategory}
-        onJobOriginChange={setJobOrigin}
-        onJobSummaryChange={setJobSummary}
-        onJobTechnicianChange={setJobTechnicianId}
-        onJobDateChange={handleJobDateChange}
-        onJobStartTimeChange={setJobStartTime}
-        onJobEndTimeChange={setJobEndTime}
-        onJobWindowChange={setJobWindow}
-        onAppointmentDraftChange={(jobId, draft) =>
-          setAppointmentDrafts((current) => ({ ...current, [jobId]: draft }))
-        }
-        onAppointmentEditDraftChange={(appointmentId, draft) =>
-          setAppointmentEditDrafts((current) => ({ ...current, [appointmentId]: draft }))
-        }
-        onCreateJob={handleCreateJob}
-        pendingJobStatusChange={pendingJobStatusChange}
-        onJobStatusReviewRequested={handleJobStatusReviewRequested}
-        onConfirmJobStatusChange={confirmJobStatusChange}
-        onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
-        onAppointmentStatusChange={handleAppointmentStatusChange}
-        onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
-        onAddAppointment={handleAddAppointment}
-        onKeepJobOpen={handleKeepJobOpen}
-        focusedJobId={focusedJobId}
-        capturedWorkByJobId={capturedWorkByJobId}
-        onToggleCapturedWork={handleToggleCapturedWork}
-        onRegisterDraftChange={handleRegisterDraftChange}
-        onSaveRegisterEntry={handleSaveRegisterEntry}
-        onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
-        onVoidRegisterEntry={handleVoidRegisterEntry}
-        onMediaCaptionChange={handleMediaCaptionChange}
-        onSaveMediaCaption={handleSaveMediaCaption}
-        onMediaVoidReasonChange={handleMediaVoidReasonChange}
-        onVoidMediaAttachment={handleVoidMediaAttachment}
-        onOpenMediaAttachment={handleOpenMediaAttachment}
-      />
+      </div>
     </main>
+  );
+}
+
+function NavButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button type="button" style={active ? styles.activeRailButton : styles.railButton} onClick={onClick}>
+      {label}
+    </button>
   );
 }
 

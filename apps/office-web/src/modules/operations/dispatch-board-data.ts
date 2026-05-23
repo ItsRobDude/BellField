@@ -7,7 +7,7 @@ import type {
 } from '@bellfield/contracts';
 
 /**
- * Dispatch board v1 foundation data model.
+ * Dispatch board data model.
  *
  * Built entirely from JobsWorkspaceResponse to avoid duplicating job/appointment
  * business logic on the client. The dispatch board reads the same backend truth
