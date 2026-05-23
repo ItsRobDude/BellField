@@ -78,6 +78,115 @@ describe('ReferenceDataRepository', () => {
     expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['acme_%', 'acme\\_\\%', '', 10]);
   });
 
+  it('finds customer duplicate candidates with a targeted SQL lookup', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [
+          {
+            id: 'customer-1',
+            name: 'Acme Heating',
+            accountType: 'company',
+            isActive: true,
+            billingAddressLine1: '100 Main Street',
+            billingCity: 'Seattle',
+            billingState: 'WA',
+            billingPostalCode: '98101',
+            phone: '(555) 111-2222',
+            email: 'office@acme.local',
+            fax: null,
+            flags: ['Do not service']
+          }
+        ]
+      }))
+    };
+    const repository = new ReferenceDataRepository(databaseService as never);
+
+    const candidates = await repository.findCustomerDuplicateCandidates({
+      normalizedName: 'acmeheating',
+      normalizedPhone: '5551112222',
+      normalizedAddress: '100mainstreetseattlewa98101',
+      excludedCustomerId: 'customer-2',
+      limit: 25
+    });
+    const sql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+
+    expect(databaseService.query).toHaveBeenCalledTimes(1);
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual([
+      'acmeheating',
+      '5551112222',
+      '100mainstreetseattlewa98101',
+      'customer-2',
+      25
+    ]);
+    expect(sql).toContain('regexp_replace(lower(name)');
+    expect(sql).toContain('regexp_replace(coalesce(phone');
+    expect(sql).toContain('regexp_replace(');
+    expect(sql).not.toContain('select * from customers');
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        id: 'customer-1',
+        name: 'Acme Heating',
+        flags: ['Do not service']
+      })
+    ]);
+  });
+
+  it('finds location duplicate candidates with customer warning context in one query', async () => {
+    const databaseService = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [
+          {
+            id: 'location-1',
+            name: 'Acme Shop',
+            customerId: 'customer-1',
+            addressLine1: '100 Main Street',
+            city: 'Seattle',
+            state: 'WA',
+            postalCode: '98101',
+            phone: '(555) 111-2222',
+            email: null,
+            fax: null,
+            isActive: true,
+            alternateBillToCustomerIds: [],
+            customerName: 'Acme Heating',
+            customerFlags: ['Do not service']
+          }
+        ]
+      }))
+    };
+    const repository = new ReferenceDataRepository(databaseService as never);
+
+    const candidates = await repository.findLocationDuplicateCandidates({
+      normalizedName: 'acmeshop',
+      normalizedPhone: '5551112222',
+      normalizedAddress: '100mainstreetseattlewa98101',
+      excludedLocationId: 'location-2',
+      limit: 25
+    });
+    const sql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
+
+    expect(databaseService.query).toHaveBeenCalledTimes(1);
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual([
+      'acmeshop',
+      '5551112222',
+      '100mainstreetseattlewa98101',
+      'location-2',
+      25
+    ]);
+    expect(sql).toContain('inner join customers customer');
+    expect(sql).toContain('regexp_replace(lower(location.name)');
+    expect(sql).toContain('regexp_replace(coalesce(location.phone');
+    expect(sql).not.toContain('select * from locations');
+    expect(candidates).toEqual([
+      expect.objectContaining({
+        id: 'location-1',
+        name: 'Acme Shop',
+        customerName: 'Acme Heating',
+        customerFlags: ['Do not service']
+      })
+    ]);
+  });
+
   it('returns the existing customer contact link id when a duplicate link is upserted', async () => {
     const databaseService = {
       query: jest.fn(async (sql: string) => {

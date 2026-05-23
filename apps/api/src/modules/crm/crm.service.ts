@@ -22,6 +22,7 @@ import type {
 } from './crm.types';
 
 const crmSearchLimit = 25;
+const duplicateCandidateLimit = 25;
 
 @Injectable()
 export class CrmService {
@@ -323,15 +324,20 @@ export class CrmService {
     },
     excludedCustomerId?: string
   ): Promise<DuplicateCandidate[]> {
-    const customers = await this.referenceDataService.listCustomers(true);
     const normalizedName = normalize(request.name);
     const normalizedPhone = normalizePhone(request.phone);
     const normalizedAddress = normalize(
       `${request.billingAddressLine1 ?? ''} ${request.billingCity ?? ''} ${request.billingState ?? ''} ${request.billingPostalCode ?? ''}`
     );
+    const customers = await this.referenceDataService.findCustomerDuplicateCandidates({
+      normalizedName,
+      normalizedPhone,
+      normalizedAddress,
+      excludedCustomerId,
+      limit: duplicateCandidateLimit
+    });
 
     return customers
-      .filter((customer) => customer.id !== excludedCustomerId)
       .flatMap((customer) => {
         const matchReasons: string[] = [];
 
@@ -378,52 +384,52 @@ export class CrmService {
     },
     excludedLocationId?: string
   ): Promise<DuplicateCandidate[]> {
-    const locations = await this.referenceDataService.listLocations(true);
     const normalizedName = normalize(request.name);
     const normalizedPhone = normalizePhone(request.phone);
     const normalizedAddress = normalize(
       `${request.addressLine1 ?? ''} ${request.city ?? ''} ${request.state ?? ''} ${request.postalCode ?? ''}`
     );
+    const locations = await this.referenceDataService.findLocationDuplicateCandidates({
+      normalizedName,
+      normalizedPhone,
+      normalizedAddress,
+      excludedLocationId,
+      limit: duplicateCandidateLimit
+    });
 
-    const candidates = await Promise.all(
-      locations
-        .filter((location) => location.id !== excludedLocationId)
-        .map(async (location) => {
-          const matchReasons: string[] = [];
+    const candidates = locations.map((location) => {
+      const matchReasons: string[] = [];
 
-          if (normalizedName && normalize(location.name) === normalizedName) {
-            matchReasons.push('Same location name');
-          }
+      if (normalizedName && normalize(location.name) === normalizedName) {
+        matchReasons.push('Same location name');
+      }
 
-          if (normalizedPhone && normalizePhone(location.phone) === normalizedPhone) {
-            matchReasons.push('Same phone number');
-          }
+      if (normalizedPhone && normalizePhone(location.phone) === normalizedPhone) {
+        matchReasons.push('Same phone number');
+      }
 
-          const locationAddress = normalize(
-            `${location.addressLine1} ${location.city} ${location.state} ${location.postalCode}`
-          );
+      const locationAddress = normalize(
+        `${location.addressLine1} ${location.city} ${location.state} ${location.postalCode}`
+      );
 
-          if (normalizedAddress && locationAddress === normalizedAddress) {
-            matchReasons.push('Same service address');
-          }
+      if (normalizedAddress && locationAddress === normalizedAddress) {
+        matchReasons.push('Same service address');
+      }
 
-          if (matchReasons.length === 0) {
-            return null;
-          }
+      if (matchReasons.length === 0) {
+        return null;
+      }
 
-          const customer = await this.referenceDataService.getCustomerById(location.customerId);
-
-          return {
-            id: location.id,
-            kind: 'location' as const,
-            title: location.name,
-            subtitle: `${location.addressLine1}, ${location.city}, ${location.state} ${location.postalCode} (${customer.name})`,
-            matchReasons,
-            isActive: location.isActive,
-            hasDoNotServiceFlag: hasDoNotService(customer.flags)
-          } satisfies DuplicateCandidate;
-        })
-    );
+      return {
+        id: location.id,
+        kind: 'location' as const,
+        title: location.name,
+        subtitle: `${location.addressLine1}, ${location.city}, ${location.state} ${location.postalCode} (${location.customerName})`,
+        matchReasons,
+        isActive: location.isActive,
+        hasDoNotServiceFlag: hasDoNotService(location.customerFlags)
+      } satisfies DuplicateCandidate;
+    });
 
     return candidates.filter(
       (candidate): candidate is Exclude<(typeof candidates)[number], null> => candidate !== null

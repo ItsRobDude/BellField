@@ -6,7 +6,10 @@ import type {
   ContactLinkRecord,
   ContactRecord,
   CrmSearchRecord,
+  CustomerDuplicateLookupInput,
   CustomerAccountRecord,
+  LocationDuplicateCandidateRecord,
+  LocationDuplicateLookupInput,
   LocationRecord,
   OwnershipHistoryRecord
 } from './company-data.types';
@@ -49,6 +52,11 @@ type LocationRow = {
   fax: string | null;
   isActive: boolean;
   alternateBillToCustomerIds: string[] | null;
+};
+
+type LocationDuplicateCandidateRow = LocationRow & {
+  customerName: string;
+  customerFlags: string[] | null;
 };
 
 type ContactLinkRow = {
@@ -312,6 +320,115 @@ export class ReferenceDataRepository {
     );
 
     return result.rows.map((row) => this.toCrmSearchRecord(row));
+  }
+
+  async findCustomerDuplicateCandidates(input: CustomerDuplicateLookupInput): Promise<CustomerAccountRecord[]> {
+    if (!input.normalizedName && !input.normalizedPhone && !input.normalizedAddress) {
+      return [];
+    }
+
+    const result = await this.databaseService.query<CustomerRow>(
+      `
+        select
+          id,
+          name,
+          account_type as "accountType",
+          is_active as "isActive",
+          billing_address_line1 as "billingAddressLine1",
+          billing_city as "billingCity",
+          billing_state as "billingState",
+          billing_postal_code as "billingPostalCode",
+          phone,
+          email,
+          fax,
+          flags
+        from customers
+        where ($4::text is null or id <> $4)
+          and (
+            ($1::text <> '' and regexp_replace(lower(name), '[^a-z0-9]', '', 'g') = $1)
+            or ($2::text <> '' and regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') = $2)
+            or (
+              $3::text <> ''
+              and regexp_replace(
+                lower(concat_ws(' ', billing_address_line1, billing_city, billing_state, billing_postal_code)),
+                '[^a-z0-9]',
+                '',
+                'g'
+              ) = $3
+            )
+          )
+        order by is_active desc, name asc, id asc
+        limit $5
+      `,
+      [
+        input.normalizedName,
+        input.normalizedPhone,
+        input.normalizedAddress,
+        input.excludedCustomerId ?? null,
+        input.limit
+      ]
+    );
+
+    return result.rows.map((row) => this.toCustomerRecord(row));
+  }
+
+  async findLocationDuplicateCandidates(
+    input: LocationDuplicateLookupInput
+  ): Promise<LocationDuplicateCandidateRecord[]> {
+    if (!input.normalizedName && !input.normalizedPhone && !input.normalizedAddress) {
+      return [];
+    }
+
+    const result = await this.databaseService.query<LocationDuplicateCandidateRow>(
+      `
+        select
+          location.id,
+          location.name,
+          location.customer_id as "customerId",
+          location.address_line1 as "addressLine1",
+          location.city,
+          location.state,
+          location.postal_code as "postalCode",
+          location.phone,
+          location.email,
+          location.fax,
+          location.is_active as "isActive",
+          location.alternate_bill_to_customer_ids as "alternateBillToCustomerIds",
+          customer.name as "customerName",
+          customer.flags as "customerFlags"
+        from locations location
+        inner join customers customer on customer.id = location.customer_id
+        where ($4::text is null or location.id <> $4)
+          and (
+            ($1::text <> '' and regexp_replace(lower(location.name), '[^a-z0-9]', '', 'g') = $1)
+            or ($2::text <> '' and regexp_replace(coalesce(location.phone, ''), '[^0-9]', '', 'g') = $2)
+            or (
+              $3::text <> ''
+              and regexp_replace(
+                lower(concat_ws(' ', location.address_line1, location.city, location.state, location.postal_code)),
+                '[^a-z0-9]',
+                '',
+                'g'
+              ) = $3
+            )
+          )
+        order by location.is_active desc, location.name asc, location.id asc
+        limit $5
+      `,
+      [
+        input.normalizedName,
+        input.normalizedPhone,
+        input.normalizedAddress,
+        input.excludedLocationId ?? null,
+        input.limit
+      ]
+    );
+
+    return result.rows.map((row) => ({
+      ...this.toLocationRecord(row),
+      customerName: row.customerName,
+      customerFlags: toTextArray(row.customerFlags)
+    }));
   }
 
   async getCustomerById(customerId: string): Promise<CustomerAccountRecord | null> {

@@ -52,6 +52,8 @@ function createService() {
         score: 100
       }
     ]),
+    findCustomerDuplicateCandidates: jest.fn().mockResolvedValue([]),
+    findLocationDuplicateCandidates: jest.fn().mockResolvedValue([]),
     createCustomer: jest.fn().mockResolvedValue({
       id: 'customer-2',
       name: 'North End Homes',
@@ -210,6 +212,22 @@ describe('CrmService', () => {
 
   it('blocks duplicate customer creation until confirmed', async () => {
     const { service, referenceDataService } = createService();
+    referenceDataService.findCustomerDuplicateCandidates.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        name: 'Acme Heating',
+        accountType: 'company',
+        billingAddressLine1: '100 Main Street',
+        billingCity: 'Seattle',
+        billingState: 'WA',
+        billingPostalCode: '98101',
+        phone: '(555) 111-2222',
+        email: 'office@acme.local',
+        fax: undefined,
+        isActive: true,
+        flags: []
+      }
+    ]);
 
     await expect(
       service.createCustomer('session-token', {
@@ -223,7 +241,60 @@ describe('CrmService', () => {
       })
     ).rejects.toBeInstanceOf(ConflictException);
 
+    expect(referenceDataService.findCustomerDuplicateCandidates).toHaveBeenCalledWith({
+      normalizedName: 'acmeheating',
+      normalizedPhone: '5551112222',
+      normalizedAddress: '100mainstreetseattlewa98101',
+      excludedCustomerId: undefined,
+      limit: 25
+    });
+    expect(referenceDataService.listCustomers).not.toHaveBeenCalled();
     expect(referenceDataService.createCustomer).not.toHaveBeenCalled();
+  });
+
+  it('blocks duplicate location creation through targeted candidate lookup', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.findLocationDuplicateCandidates.mockResolvedValueOnce([
+      {
+        id: 'location-1',
+        name: 'Acme Shop',
+        customerId: 'customer-1',
+        customerName: 'Acme Heating',
+        customerFlags: ['Do not service'],
+        addressLine1: '100 Main Street',
+        city: 'Seattle',
+        state: 'WA',
+        postalCode: '98101',
+        phone: '(555) 111-2222',
+        email: 'dispatch@acme.local',
+        fax: undefined,
+        isActive: true,
+        alternateBillToCustomerIds: []
+      }
+    ]);
+
+    await expect(
+      service.createLocation('session-token', {
+        customerId: 'customer-1',
+        name: 'Acme Shop',
+        addressLine1: '100 Main Street',
+        city: 'Seattle',
+        state: 'WA',
+        postalCode: '98101',
+        phone: '(555) 111-2222'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(referenceDataService.findLocationDuplicateCandidates).toHaveBeenCalledWith({
+      normalizedName: 'acmeshop',
+      normalizedPhone: '5551112222',
+      normalizedAddress: '100mainstreetseattlewa98101',
+      excludedLocationId: undefined,
+      limit: 25
+    });
+    expect(referenceDataService.listLocations).not.toHaveBeenCalled();
+    expect(referenceDataService.getCustomerById).toHaveBeenCalledTimes(1);
+    expect(referenceDataService.createLocation).not.toHaveBeenCalled();
   });
 
   it('allows customer creation without a contact method', async () => {

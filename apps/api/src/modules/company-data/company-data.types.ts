@@ -218,6 +218,27 @@ export type CrmSearchRecord = ContractCrmSearchResult & {
   score: number;
 };
 
+export type CustomerDuplicateLookupInput = {
+  normalizedName: string;
+  normalizedPhone: string;
+  normalizedAddress: string;
+  excludedCustomerId?: string;
+  limit: number;
+};
+
+export type LocationDuplicateLookupInput = {
+  normalizedName: string;
+  normalizedPhone: string;
+  normalizedAddress: string;
+  excludedLocationId?: string;
+  limit: number;
+};
+
+export type LocationDuplicateCandidateRecord = LocationRecord & {
+  customerName: string;
+  customerFlags: string[];
+};
+
 export type JobTimelineEntry = {
   id: string;
   occurredAt: string;

@@ -14,7 +14,10 @@ import type {
   ContactLinkRecord,
   ContactRecord,
   CrmSearchRecord,
+  CustomerDuplicateLookupInput,
   CustomerAccountRecord,
+  LocationDuplicateCandidateRecord,
+  LocationDuplicateLookupInput,
   LocationRecord
 } from './company-data.types';
 import { ReferenceDataRepository } from './reference-data.repository';
@@ -37,6 +40,16 @@ export class ReferenceDataService {
 
   async searchCrm(query: string, limit: number): Promise<CrmSearchRecord[]> {
     return this.referenceDataRepository.searchCrm(query, limit);
+  }
+
+  async findCustomerDuplicateCandidates(input: CustomerDuplicateLookupInput): Promise<CustomerAccountRecord[]> {
+    return this.referenceDataRepository.findCustomerDuplicateCandidates(input);
+  }
+
+  async findLocationDuplicateCandidates(
+    input: LocationDuplicateLookupInput
+  ): Promise<LocationDuplicateCandidateRecord[]> {
+    return this.referenceDataRepository.findLocationDuplicateCandidates(input);
   }
 
   async getLocationById(locationId: string): Promise<LocationRecord> {
