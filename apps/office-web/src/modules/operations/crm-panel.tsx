@@ -797,7 +797,7 @@ export function CrmPanel({
           <label style={styles.fieldLabel}>
             <span>Search</span>
             <input
-              aria-label="Customer search"
+              aria-label="Customer, location, or contact search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search by name, address, phone"

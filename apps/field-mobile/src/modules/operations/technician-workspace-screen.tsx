@@ -2548,6 +2548,16 @@ export function TechnicianWorkspaceScreen({
                                   </Pressable>
                                 </View>
                               ) : null}
+                              {canReplaceRemoveEquipment && replacementOptions.length === 0 ? (
+                                <View style={styles.block}>
+                                  <Text style={styles.sectionTitleSmall}>Link replacement</Text>
+                                  <Text style={styles.summaryText}>
+                                    No eligible replacement equipment is at this location yet.
+                                    Create the replacement equipment for this location, then link it
+                                    here.
+                                  </Text>
+                                </View>
+                              ) : null}
                             </>
                           );
                         })()}

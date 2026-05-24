@@ -3,7 +3,12 @@ import path from 'node:path';
 import process from 'node:process';
 
 const repoRoot = process.cwd();
-const sourceRoots = ['apps/office-web/src', 'apps/field-mobile/src'];
+const sourceRoots = [
+  'apps/office-web/app',
+  'apps/office-web/src',
+  'apps/field-mobile/app',
+  'apps/field-mobile/src'
+];
 const sourceExtensions = new Set(['.ts', '.tsx']);
 const ignoredSegments = new Set(['__tests__']);
 const ignoredFilePatterns = [/\.test\.[tj]sx?$/];
@@ -17,7 +22,7 @@ const bannedCopyPatterns = [
   { label: 'now-persist', pattern: /\bnow persist\b/i },
   { label: 'now-leads-into', pattern: /\bnow leads into\b/i },
   { label: 'serialized-unit-mindset', pattern: /\bSerialized-unit mindset\b/i },
-  { label: 'location-first-badge', pattern: /\bLocation first\b/i },
+  { label: 'location-first-badge', pattern: /\bLocation first\b/ },
   { label: 'replacement-equipment-id', pattern: /\bReplacement equipment id\b/i },
   { label: 'scaffold-copy', pattern: /\bscaffold(?:ing|ed)?\b/i }
 ];

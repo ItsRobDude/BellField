@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 export const metadata: Metadata = {
   title: 'BellField Office',
-  description: 'BellField office app shell'
+  description: 'BellField office dispatch, jobs, and customer management.'
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

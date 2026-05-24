@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   resolveInitialLoginCredentials,
   shouldShowDemoLoginAccounts,
@@ -8,6 +8,11 @@ import {
 const demoAccounts: DemoLoginAccount[] = [
   { label: 'Technician', email: 'tech@bellfield.local', password: 'bellfield-tech' }
 ];
+
+afterEach(() => {
+  vi.resetModules();
+  vi.unstubAllEnvs();
+});
 
 describe('field demo login helpers', () => {
   it('hides demo shortcuts and starts blank in production', () => {
@@ -24,5 +29,14 @@ describe('field demo login helpers', () => {
       email: 'tech@bellfield.local',
       password: 'bellfield-tech'
     });
+  });
+
+  it('does not expose field demo account shortcuts when loaded in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.resetModules();
+
+    const { getFieldDemoLoginAccounts } = await import('../demo-login');
+
+    expect(getFieldDemoLoginAccounts()).toEqual([]);
   });
 });

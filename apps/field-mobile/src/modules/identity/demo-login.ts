@@ -9,10 +9,27 @@ export type LoginCredentials = {
   password: string;
 };
 
+const fieldDemoLoginAccounts: DemoLoginAccount[] =
+  process.env.NODE_ENV === 'production'
+    ? []
+    : [
+        { label: 'Technician', email: 'tech@bellfield.local', password: 'bellfield-tech' },
+        {
+          label: 'Dispatcher',
+          email: 'dispatcher@bellfield.local',
+          password: 'bellfield-dispatch'
+        },
+        { label: 'Owner', email: 'owner@bellfield.local', password: 'bellfield-owner' }
+      ];
+
 export function shouldShowDemoLoginAccounts(
   nodeEnv: string | undefined = process.env.NODE_ENV
 ): boolean {
   return nodeEnv !== 'production';
+}
+
+export function getFieldDemoLoginAccounts(): readonly DemoLoginAccount[] {
+  return fieldDemoLoginAccounts;
 }
 
 export function resolveInitialLoginCredentials(

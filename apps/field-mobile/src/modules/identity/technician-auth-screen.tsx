@@ -15,23 +15,12 @@ import { getInitialFieldApiBaseUrl } from '@/lib/api-base-url';
 import { loginToFieldApi, type EmployeeSummary } from '@/lib/identity-api';
 import { TechnicianWorkspaceScreen } from '@/modules/operations/technician-workspace-screen';
 import {
+  getFieldDemoLoginAccounts,
   resolveInitialLoginCredentials,
-  shouldShowDemoLoginAccounts,
-  type DemoLoginAccount
+  shouldShowDemoLoginAccounts
 } from './demo-login';
 
-const demoAccounts: DemoLoginAccount[] =
-  process.env.NODE_ENV === 'production'
-    ? []
-    : [
-        { label: 'Technician', email: 'tech@bellfield.local', password: 'bellfield-tech' },
-        {
-          label: 'Dispatcher',
-          email: 'dispatcher@bellfield.local',
-          password: 'bellfield-dispatch'
-        },
-        { label: 'Owner', email: 'owner@bellfield.local', password: 'bellfield-owner' }
-      ];
+const demoAccounts = getFieldDemoLoginAccounts();
 
 export function TechnicianAuthScreen() {
   const showDemoAccounts = shouldShowDemoLoginAccounts() && demoAccounts.length > 0;

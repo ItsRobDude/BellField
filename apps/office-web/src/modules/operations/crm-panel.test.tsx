@@ -156,7 +156,7 @@ describe('CrmPanel', () => {
     expect(
       await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Customer search')).toBeInTheDocument();
+    expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New customer' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New location' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create customer' })).not.toBeInTheDocument();
@@ -186,20 +186,22 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    fireEvent.change(await screen.findByLabelText('Customer search'), {
+    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
       target: { value: 'Acme' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
 
     expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Customer search')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Customer, location, or contact search')
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(
       await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Customer search')).toBeInTheDocument();
+    expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
   });
 
   it('switches from search to a focused customer form and back', async () => {
@@ -212,7 +214,9 @@ describe('CrmPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
 
     expect(await screen.findByRole('heading', { name: 'Create customer' })).toBeInTheDocument();
-    expect(screen.queryByLabelText('Customer search')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Customer, location, or contact search')
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
@@ -228,7 +232,9 @@ describe('CrmPanel', () => {
     renderCrmPanel(fetchMock);
 
     await openNewLocationForm();
-    expect(screen.queryByLabelText('Customer search')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText('Customer, location, or contact search')
+    ).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
@@ -322,7 +328,7 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    fireEvent.change(await screen.findByLabelText('Customer search'), {
+    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
       target: { value: 'Acme' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
@@ -491,7 +497,7 @@ describe('CrmPanel', () => {
     renderCrmPanel(fetchMock);
 
     await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-    fireEvent.change(screen.getByLabelText('Customer search'), {
+    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
       target: { value: 'Main Shop' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
