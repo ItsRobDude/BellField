@@ -3,7 +3,6 @@ import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Switch,
@@ -11,6 +10,7 @@ import {
   TextInput,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { getInitialFieldApiBaseUrl } from '@/lib/api-base-url';
 import { loginToFieldApi, type EmployeeSummary } from '@/lib/identity-api';
 import { TechnicianWorkspaceScreen } from '@/modules/operations/technician-workspace-screen';

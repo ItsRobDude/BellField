@@ -13,7 +13,8 @@
     "migration:up": "node ./scripts/migrations/up.mjs",
     "migration:down": "node ./scripts/migrations/down.mjs",
     "migration:up:psql": "node ./scripts/migrations/up.mjs --driver=psql",
-    "migration:down:psql": "node ./scripts/migrations/down.mjs --driver=psql"
+    "migration:down:psql": "node ./scripts/migrations/down.mjs --driver=psql",
+    "field-smoke:data": "node ./scripts/prepare-field-smoke-data.mjs"
   },
   "dependencies": {
     "@bellfield/contracts": "workspace:*",

@@ -82,6 +82,7 @@ pnpm dev:office-web
 pnpm dev:field-mobile
 pnpm dev:api
 pnpm dev:worker
+pnpm dev:field-smoke-data
 ```
 
 `pnpm dev:postgres` starts a local PostgreSQL server from a user-space PostgreSQL install.
@@ -108,6 +109,8 @@ User-facing copy guardrails catch internal scaffold/milestone wording before it 
 ```powershell
 pnpm check:ui-copy
 ```
+
+Field-mobile local smoke steps are documented in [docs/field-mobile-smoke.md](./docs/field-mobile-smoke.md).
 
 API migration commands:
 

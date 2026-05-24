@@ -218,6 +218,16 @@ Read when: continuing field media or register-to-invoice work.
 
 Does not own: current endpoint inventory; use `api-endpoints.md` for that.
 
+### [field-mobile-smoke.md](./field-mobile-smoke.md)
+
+Audience: contributors validating the Expo field app against a local API and local seeded database.
+
+Purpose: repeatable field-mobile smoke setup, assigned-work data prep, Android/Expo launch notes, manual checklist, and screenshot locations.
+
+Read when: running Milestone 6 field sign-in, home/detail, register, equipment, media, or Sync Now smoke checks.
+
+Does not own: field product behavior; use `offline-sync.md` and `screen-behavior-spec.md` for that.
+
 ## Legacy and Planning Context
 
 ### [product-shape-plan.md](./product-shape-plan.md)
