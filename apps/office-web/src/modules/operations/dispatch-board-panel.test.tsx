@@ -11,6 +11,7 @@ import { DispatchBoardPanel } from './dispatch-board-panel';
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.useRealTimers();
 });
 
 function buildDispatchAppointment(overrides: Partial<DispatchAppointmentSummary> = {}): DispatchAppointmentSummary {
@@ -177,7 +178,7 @@ describe('DispatchBoardPanel', () => {
     expect(taylorRegion.compareDocumentPosition(samRegion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
-  it('surfaces a controlled dispatch date input', () => {
+  it('opens a calendar picker and commits the selected dispatch date', () => {
     const onViewDateChange = vi.fn();
 
     render(
@@ -188,12 +189,16 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    fireEvent.change(screen.getByLabelText('Dispatch date'), { target: { value: '2026-05-23' } });
+    fireEvent.click(screen.getByLabelText('Dispatch date'));
+    expect(screen.getByRole('dialog', { name: 'Dispatch calendar' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'May 23, 2026' }));
 
     expect(onViewDateChange).toHaveBeenCalledWith('2026-05-23');
+    expect(screen.queryByRole('dialog', { name: 'Dispatch calendar' })).not.toBeInTheDocument();
   });
 
-  it('commits date edits from input events as well as change events', () => {
+  it('moves the dispatch day with previous and next controls', () => {
     const onViewDateChange = vi.fn();
 
     render(
@@ -204,12 +209,16 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    fireEvent.input(screen.getByLabelText('Dispatch date'), { target: { value: '2026-04-13' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Previous dispatch day' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Next dispatch day' }));
 
-    expect(onViewDateChange).toHaveBeenCalledWith('2026-04-13');
+    expect(onViewDateChange).toHaveBeenNthCalledWith(1, '2026-05-21');
+    expect(onViewDateChange).toHaveBeenNthCalledWith(2, '2026-05-22');
   });
 
-  it('allows an empty in-progress date edit and resets to today only on blur', () => {
+  it('jumps back to today from the dispatch toolbar', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 4, 23, 9, 0, 0));
     const onViewDateChange = vi.fn();
 
     render(
@@ -220,18 +229,10 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    const dateInput = screen.getByLabelText('Dispatch date') as HTMLInputElement;
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
 
-    fireEvent.change(dateInput, { target: { value: '' } });
-
-    expect(dateInput).toHaveValue('');
-    expect(onViewDateChange).not.toHaveBeenCalled();
-
-    fireEvent.blur(dateInput);
-
-    expect(onViewDateChange).toHaveBeenCalledTimes(1);
-    expect(onViewDateChange.mock.calls[0]?.[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(dateInput).toHaveValue(onViewDateChange.mock.calls[0]?.[0]);
+    expect(onViewDateChange).toHaveBeenCalledWith('2026-05-23');
+    vi.useRealTimers();
   });
 
   it('calls refresh and reflects refresh state', async () => {

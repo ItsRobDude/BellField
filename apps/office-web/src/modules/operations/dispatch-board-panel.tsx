@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState, type CSSProperties } from 'react';
+import { useMemo, type CSSProperties } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -8,6 +8,7 @@ import {
   type DispatchAppointmentCard,
   type DispatchBoardModel
 } from './dispatch-board-data';
+import { DispatchDatePicker, getDateInputValue } from './dispatch-date-picker';
 import { formatAppointmentScheduleDisplay } from './appointment-schedule-format';
 import { appointmentStatusLabels } from './job-work-types';
 
@@ -52,35 +53,12 @@ export function DispatchBoardPanel({
   onRefresh
 }: DispatchBoardPanelProps) {
   const effectiveViewDate = viewDate || getDateInputValue();
-  const [draftViewDate, setDraftViewDate] = useState(effectiveViewDate);
   const model = useMemo<DispatchBoardModel>(
     () => buildDispatchBoardModel(dispatchBoard),
     [dispatchBoard]
   );
   const totalCardCount = model.cardLookup.size;
   const unassignedCount = model.unassignedQueue.length;
-
-  useEffect(() => {
-    setDraftViewDate(effectiveViewDate);
-  }, [effectiveViewDate]);
-
-  function handleViewDateChange(nextDate: string) {
-    setDraftViewDate(nextDate);
-
-    if (nextDate) {
-      onViewDateChange?.(nextDate);
-    }
-  }
-
-  function handleViewDateBlur() {
-    if (draftViewDate) {
-      return;
-    }
-
-    const today = getDateInputValue();
-    setDraftViewDate(today);
-    onViewDateChange?.(today);
-  }
 
   return (
     <section style={styles.workspacePanel} aria-label="Dispatch board">
@@ -95,18 +73,7 @@ export function DispatchBoardPanel({
       </div>
 
       <div style={dispatchToolbarStyle}>
-        <label style={dateInputLabelStyle}>
-          <span style={styles.fieldText}>Date</span>
-          <input
-            type="date"
-            aria-label="Dispatch date"
-            value={draftViewDate}
-            onBlur={handleViewDateBlur}
-            onChange={(event) => handleViewDateChange(event.target.value)}
-            onInput={(event) => handleViewDateChange(event.currentTarget.value)}
-            style={styles.input}
-          />
-        </label>
+        <DispatchDatePicker value={effectiveViewDate} onChange={onViewDateChange} />
         <div style={refreshControlStyle}>
           {onRefresh ? (
             <button type="button" onClick={() => void onRefresh()} disabled={isRefreshing} style={styles.button}>
@@ -280,13 +247,6 @@ function formatLastRefreshedAt(value?: string | null): string {
   return `Refreshed ${refreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
-function getDateInputValue(date = new Date()): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
 const dispatchToolbarStyle: CSSProperties = {
   alignItems: 'end',
   display: 'flex',
@@ -294,12 +254,6 @@ const dispatchToolbarStyle: CSSProperties = {
   gap: '0.75rem',
   justifyContent: 'space-between',
   marginTop: '1rem'
-};
-
-const dateInputLabelStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.35rem',
-  maxWidth: '16rem'
 };
 
 const refreshControlStyle: CSSProperties = {
