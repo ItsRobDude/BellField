@@ -3,6 +3,7 @@ import type { AppointmentSummary, EquipmentSummary, JobSummary } from '@bellfiel
 import type { PendingOperation } from '../field-sync-types';
 import {
   buildFieldMediaCaptionDraftKey,
+  buildReplacementEquipmentOptions,
   countJobRegisterEntries,
   fieldDetailTabs,
   getPendingOperationsForJob,
@@ -182,5 +183,41 @@ describe('field workspace layout helpers', () => {
     });
 
     expect(countJobRegisterEntries(job)).toBe(1);
+  });
+
+  it('builds replacement equipment choices without exposing raw IDs as labels', () => {
+    const sourceEquipment = buildEquipment({
+      id: 'equipment-old',
+      equipmentType: 'Furnace',
+      locationId: 'location-1',
+      model: 'OldModel',
+      serialNumber: 'OLD-1'
+    });
+    const options = buildReplacementEquipmentOptions(sourceEquipment, [
+      sourceEquipment,
+      buildEquipment({
+        id: 'equipment-new',
+        brand: 'Trane',
+        equipmentLocationDescription: 'Attic platform',
+        equipmentType: 'Furnace',
+        locationId: 'location-1',
+        model: 'S9X1',
+        serialNumber: 'NEW-1'
+      }),
+      buildEquipment({
+        id: 'equipment-other-location',
+        locationId: 'location-2',
+        model: 'OtherLocation'
+      })
+    ]);
+
+    expect(options).toEqual([
+      {
+        detail: 'Serial: NEW-1 - Location: Attic platform',
+        id: 'equipment-new',
+        label: 'Furnace: Trane S9X1'
+      }
+    ]);
+    expect(options[0]?.label).not.toContain('equipment-new');
   });
 });

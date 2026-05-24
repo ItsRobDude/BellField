@@ -103,6 +103,12 @@ Architecture guardrails are documented in [docs/architecture-guardrails.md](./do
 pnpm check:architecture
 ```
 
+User-facing copy guardrails catch internal scaffold/milestone wording before it reaches the office or field UI:
+
+```powershell
+pnpm check:ui-copy
+```
+
 API migration commands:
 
 ```powershell

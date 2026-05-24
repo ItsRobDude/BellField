@@ -33,6 +33,7 @@
     "start:worker": "pnpm --filter @bellfield/worker start",
     "build": "pnpm -r --if-present build",
     "check:architecture": "node tools/check-architecture.mjs",
+    "check:ui-copy": "node tools/check-ui-copy.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",

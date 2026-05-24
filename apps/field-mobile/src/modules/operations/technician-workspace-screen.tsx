@@ -92,6 +92,7 @@ import { replayFieldMediaUploadOperation } from './field-media-replay';
 import { uploadFieldMediaBlob } from './field-media-upload';
 import {
   buildFieldMediaCaptionDraftKey,
+  buildReplacementEquipmentOptions,
   countJobRegisterEntries,
   fieldDetailTabs,
   getPendingOperationsForJob,
@@ -2378,12 +2379,11 @@ export function TechnicianWorkspaceScreen({
                         {(() => {
                           const equipmentDraft =
                             equipmentDrafts[record.id] ?? createEquipmentDraft(record);
-                          const replacementOptions = equipment.filter(
-                            (candidate) =>
-                              candidate.id !== record.id &&
-                              candidate.locationId === record.locationId &&
-                              candidate.inventoryLocationLabel === record.inventoryLocationLabel
+                          const replacementOptions = buildReplacementEquipmentOptions(
+                            record,
+                            equipment
                           );
+                          const selectedReplacementId = replacementSelections[record.id] ?? '';
 
                           return (
                             <>
@@ -2487,20 +2487,60 @@ export function TechnicianWorkspaceScreen({
                               {canReplaceRemoveEquipment && replacementOptions.length > 0 ? (
                                 <View style={styles.block}>
                                   <Text style={styles.sectionTitleSmall}>Link replacement</Text>
-                                  <TextInput
-                                    value={replacementSelections[record.id] ?? ''}
-                                    onChangeText={(value) =>
-                                      setReplacementSelections((current) => ({
-                                        ...current,
-                                        [record.id]: value
-                                      }))
-                                    }
-                                    placeholder={`Replacement equipment id (${replacementOptions[0]?.id ?? 'select from office list'})`}
-                                    style={styles.input}
-                                  />
+                                  <Text style={styles.summaryText}>
+                                    Choose the equipment that replaced this unit.
+                                  </Text>
+                                  <View style={styles.replacementOptionList}>
+                                    {replacementOptions.map((option) => {
+                                      const isSelected = selectedReplacementId === option.id;
+
+                                      return (
+                                        <Pressable
+                                          key={option.id}
+                                          onPress={() =>
+                                            setReplacementSelections((current) => ({
+                                              ...current,
+                                              [record.id]: option.id
+                                            }))
+                                          }
+                                          style={[
+                                            styles.replacementOptionButton,
+                                            isSelected
+                                              ? styles.replacementOptionButtonSelected
+                                              : null
+                                          ]}
+                                        >
+                                          <Text
+                                            style={[
+                                              styles.replacementOptionLabel,
+                                              isSelected
+                                                ? styles.replacementOptionLabelSelected
+                                                : null
+                                            ]}
+                                          >
+                                            {option.label}
+                                          </Text>
+                                          <Text
+                                            style={[
+                                              styles.summaryText,
+                                              isSelected
+                                                ? styles.replacementOptionDetailSelected
+                                                : null
+                                            ]}
+                                          >
+                                            {option.detail}
+                                          </Text>
+                                        </Pressable>
+                                      );
+                                    })}
+                                  </View>
                                   <Pressable
                                     onPress={() => void linkReplacement(record.id)}
-                                    style={styles.secondaryButton}
+                                    disabled={!selectedReplacementId}
+                                    style={[
+                                      styles.secondaryButton,
+                                      !selectedReplacementId ? styles.disabledButton : null
+                                    ]}
                                   >
                                     <Text style={styles.secondaryButtonText}>
                                       Link replacement now
@@ -2940,6 +2980,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12
   },
   secondaryButtonText: { color: '#1f2933', fontSize: 14, fontWeight: '600' },
+  disabledButton: { opacity: 0.45 },
   dangerButton: {
     alignItems: 'center',
     borderColor: '#d79b92',
@@ -2956,5 +2997,21 @@ const styles = StyleSheet.create({
     paddingVertical: 8
   },
   tagButtonText: { color: '#33523d', fontSize: 13, fontWeight: '600' },
+  replacementOptionList: { gap: 8 },
+  replacementOptionButton: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d9c8ad',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 4,
+    padding: 12
+  },
+  replacementOptionButtonSelected: {
+    backgroundColor: '#1c6b57',
+    borderColor: '#1c6b57'
+  },
+  replacementOptionLabel: { color: '#1f2933', fontSize: 14, fontWeight: '700' },
+  replacementOptionLabelSelected: { color: '#ffffff' },
+  replacementOptionDetailSelected: { color: '#e8f3ed' },
   errorText: { color: '#b42318', fontSize: 14 }
 });

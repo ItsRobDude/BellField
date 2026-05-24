@@ -34,6 +34,9 @@ jobs:
       - name: Architecture guardrails
         run: pnpm check:architecture
 
+      - name: UI copy guardrails
+        run: pnpm check:ui-copy
+
       - name: Lint
         run: pnpm lint
 

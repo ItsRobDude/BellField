@@ -13,6 +13,12 @@ export type FieldDetailTab = (typeof fieldDetailTabs)[number]['id'];
 export type FieldJob = FieldAssignedWorkResponse['jobs'][number];
 export type FieldEquipmentRecord = FieldAssignedWorkResponse['equipment'][number];
 
+export type FieldReplacementEquipmentOption = {
+  detail: string;
+  id: string;
+  label: string;
+};
+
 export type JobQueueBadge = {
   count: number;
   label: string;
@@ -104,4 +110,40 @@ export function summarizeJobQueueBadge(
 
 export function countJobRegisterEntries(job: FieldJob): number {
   return (job.registerEntries ?? []).filter((entry) => !entry.isVoid).length;
+}
+
+export function buildReplacementEquipmentOptions(
+  record: FieldEquipmentRecord,
+  equipment: FieldEquipmentRecord[]
+): FieldReplacementEquipmentOption[] {
+  return equipment
+    .filter(
+      (candidate) =>
+        candidate.id !== record.id &&
+        candidate.locationId === record.locationId &&
+        candidate.inventoryLocationLabel === record.inventoryLocationLabel
+    )
+    .map((candidate) => ({
+      detail: formatReplacementEquipmentDetail(candidate),
+      id: candidate.id,
+      label: formatReplacementEquipmentLabel(candidate)
+    }))
+    .sort((left, right) => left.label.localeCompare(right.label));
+}
+
+function formatReplacementEquipmentLabel(record: FieldEquipmentRecord): string {
+  const brandModel = [record.brand, record.model].filter(Boolean).join(' ');
+  return [record.equipmentType, brandModel].filter(Boolean).join(': ');
+}
+
+function formatReplacementEquipmentDetail(record: FieldEquipmentRecord): string {
+  const detailParts = [
+    record.serialNumber ? `Serial: ${record.serialNumber}` : 'No serial recorded',
+    record.equipmentLocationDescription
+      ? `Location: ${record.equipmentLocationDescription}`
+      : undefined,
+    record.status !== 'active' ? `Status: ${record.status}` : undefined
+  ].filter((entry): entry is string => Boolean(entry));
+
+  return detailParts.join(' - ');
 }
