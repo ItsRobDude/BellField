@@ -3,6 +3,32 @@
 import type { JobIntakeContextResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
+const jobTypeOptions = ['Service', 'Maintenance', 'Install', 'Estimate', 'Callback'];
+const jobCategoryOptions = [
+  'General',
+  'Residential',
+  'Commercial',
+  'Warranty',
+  'Maintenance Agreement'
+];
+const jobOriginOptions = [
+  'Inbound phone call',
+  'Outbound phone call',
+  'Email',
+  'Web request',
+  'Walk-in',
+  'PM contract reminder'
+];
+const arrivalWindowOptions = [
+  '',
+  '8:00 AM - 10:00 AM',
+  '10:00 AM - 12:00 PM',
+  '12:00 PM - 2:00 PM',
+  '1:00 PM - 3:00 PM',
+  '2:00 PM - 4:00 PM',
+  '3:00 PM - 5:00 PM'
+];
+
 type JobIntakePanelProps = {
   intakeContext: JobIntakeContextResponse;
   jobLocationId: string;
@@ -106,46 +132,113 @@ export function JobIntakePanel({
             })}
           </select>
         </label>
-        <TextField label="Type" value={jobType} onChange={onJobTypeChange} />
-        <TextField label="Category" value={jobCategory} onChange={onJobCategoryChange} />
-        <TextField label="Origin" value={jobOrigin} onChange={onJobOriginChange} />
-        <TextField label="Summary" value={jobSummary} onChange={onJobSummaryChange} />
-        <TextField label="Date" type="date" value={jobDate} onChange={onJobDateChange} />
-        <TextField
-          label="Start"
-          type="time"
-          value={jobStartTime}
-          disabled={!jobDate}
-          onChange={onJobStartTimeChange}
+        <SelectField
+          label="Type"
+          value={jobType}
+          options={jobTypeOptions}
+          onChange={onJobTypeChange}
         />
-        <TextField
-          label="End"
-          type="time"
-          value={jobEndTime}
-          disabled={!jobDate}
-          onChange={onJobEndTimeChange}
+        <SelectField
+          label="Category"
+          value={jobCategory}
+          options={jobCategoryOptions}
+          onChange={onJobCategoryChange}
         />
-        <TextField label="Window" value={jobWindow} onChange={onJobWindowChange} />
-        <label style={styles.fieldLabel}>
-          <span>Tech</span>
-          <select
-            value={jobTechnicianId}
-            onChange={(event) => onJobTechnicianChange(event.target.value)}
-            style={styles.input}
-          >
-            <option value="">Unassigned</option>
-            {intakeContext.technicians.map((technician) => (
-              <option key={technician.id} value={technician.id}>
-                {technician.displayName}
-              </option>
-            ))}
-          </select>
+        <SelectField
+          label="Origin"
+          value={jobOrigin}
+          options={jobOriginOptions}
+          onChange={onJobOriginChange}
+        />
+        <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
+          <span>Problem summary</span>
+          <textarea
+            aria-label="Job problem summary"
+            value={jobSummary}
+            onChange={(event) => onJobSummaryChange(event.target.value)}
+            style={styles.textarea}
+          />
         </label>
+      </div>
+
+      <div style={styles.formSection}>
+        <h2 style={styles.sectionHeading}>Appointment scheduling</h2>
+        <div style={styles.formGridCompact}>
+          <TextField label="Dispatch date" type="date" value={jobDate} onChange={onJobDateChange} />
+          <SelectField
+            label="Customer arrival window"
+            value={jobWindow}
+            options={arrivalWindowOptions}
+            optionLabels={{ '': 'No arrival window' }}
+            onChange={onJobWindowChange}
+          />
+          <TextField
+            label="Scheduled start"
+            type="time"
+            value={jobStartTime}
+            disabled={!jobDate}
+            onChange={onJobStartTimeChange}
+          />
+          <TextField
+            label="Scheduled end"
+            type="time"
+            value={jobEndTime}
+            disabled={!jobDate}
+            onChange={onJobEndTimeChange}
+          />
+          <label style={styles.fieldLabel}>
+            <span>Technician</span>
+            <select
+              value={jobTechnicianId}
+              onChange={(event) => onJobTechnicianChange(event.target.value)}
+              style={styles.input}
+            >
+              <option value="">Unassigned</option>
+              {intakeContext.technicians.map((technician) => (
+                <option key={technician.id} value={technician.id}>
+                  {technician.displayName}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
       <button type="button" style={styles.primaryButton} onClick={() => void onCreateJob()}>
         Create job
       </button>
     </section>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  optionLabels = {},
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: string[];
+  optionLabels?: Record<string, string>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label style={styles.fieldLabel}>
+      <span>{label}</span>
+      <select
+        aria-label={`Job ${label.toLowerCase()}`}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        style={styles.input}
+      >
+        {options.map((option) => (
+          <option key={option || 'blank'} value={option}>
+            {optionLabels[option] ?? option}
+          </option>
+        ))}
+      </select>
+    </label>
   );
 }
 

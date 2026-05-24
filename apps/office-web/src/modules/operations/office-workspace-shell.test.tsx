@@ -523,6 +523,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
   it('creates jobs from the focused new-job form using the existing API helper', async () => {
     const today = getTodayDateInputValue();
+    const problemSummary = 'No heat\nCustomer reports the furnace stopped overnight.';
     arrangeWorkspace(buildWorkspace([buildJob()]));
 
     renderShell();
@@ -534,11 +535,19 @@ describe('OfficeWorkspaceShell IA', () => {
       apiBaseUrl: 'http://api.test'
     });
 
-    fireEvent.change(screen.getByLabelText('Job summary'), { target: { value: 'No heat' } });
-    fireEvent.change(screen.getByLabelText('Job date'), { target: { value: today } });
-    fireEvent.change(screen.getByLabelText('Job start'), { target: { value: '09:00' } });
-    fireEvent.change(screen.getByLabelText('Job end'), { target: { value: '11:00' } });
-    fireEvent.change(screen.getByLabelText('Tech'), { target: { value: 'tech-1' } });
+    fireEvent.change(screen.getByLabelText('Job type'), { target: { value: 'Maintenance' } });
+    fireEvent.change(screen.getByLabelText('Job category'), { target: { value: 'Warranty' } });
+    fireEvent.change(screen.getByLabelText('Job origin'), { target: { value: 'Email' } });
+    fireEvent.change(screen.getByLabelText('Job problem summary'), {
+      target: { value: problemSummary }
+    });
+    fireEvent.change(screen.getByLabelText('Job dispatch date'), { target: { value: today } });
+    fireEvent.change(screen.getByLabelText('Job scheduled start'), { target: { value: '09:00' } });
+    fireEvent.change(screen.getByLabelText('Job scheduled end'), { target: { value: '11:00' } });
+    fireEvent.change(screen.getByLabelText('Job customer arrival window'), {
+      target: { value: '10:00 AM - 12:00 PM' }
+    });
+    fireEvent.change(screen.getByLabelText('Technician'), { target: { value: 'tech-1' } });
     fireEvent.click(screen.getByRole('button', { name: 'Create job' }));
 
     await waitFor(() => {
@@ -547,18 +556,39 @@ describe('OfficeWorkspaceShell IA', () => {
         apiBaseUrl: 'http://api.test',
         locationId: 'location-1',
         billToCustomerId: 'customer-1',
-        jobType: 'Service',
-        category: 'General',
-        origin: 'Inbound phone call',
-        summary: 'No heat',
+        jobType: 'Maintenance',
+        category: 'Warranty',
+        origin: 'Email',
+        summary: problemSummary,
         scheduledDate: today,
         scheduledStartTime: '09:00',
         scheduledEndTime: '11:00',
-        timeWindowLabel: undefined,
+        timeWindowLabel: '10:00 AM - 12:00 PM',
         technicianId: 'tech-1'
       });
     });
     expect(await screen.findByText('Job created.')).toBeInTheDocument();
+  });
+
+  it('keeps blank customer arrival window out of the create-job payload', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    fireEvent.change(await screen.findByLabelText('Job problem summary'), {
+      target: { value: 'Replace filter' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create job' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.createOfficeJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summary: 'Replace filter',
+          timeWindowLabel: undefined
+        })
+      );
+    });
   });
 
   it('saves appointment schedule and status changes from job detail through existing API helpers', async () => {

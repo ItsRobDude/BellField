@@ -108,6 +108,15 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     gap: '0.65rem',
     gridTemplateColumns: 'repeat(auto-fit, minmax(11rem, 1fr))'
   },
+  formGridFullWidth: {
+    gridColumn: '1 / -1'
+  },
+  formSection: {
+    borderTop: '1px solid #dfe6df',
+    display: 'grid',
+    gap: '0.75rem',
+    paddingTop: '0.85rem'
+  },
   detailGrid: {
     display: 'grid',
     gap: '1rem',
@@ -157,17 +166,21 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     background: '#ffffff',
     border: '1px solid #cfd8d2',
     borderRadius: 8,
+    boxSizing: 'border-box',
     fontSize: '0.95rem',
     minWidth: 0,
+    overflow: 'hidden',
     padding: '0.65rem 0.75rem',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
     width: '100%'
   },
   textarea: {
     background: '#ffffff',
     border: '1px solid #cfd8d2',
     borderRadius: 8,
+    boxSizing: 'border-box',
     fontSize: '0.95rem',
-    marginBottom: '1rem',
     minHeight: '5rem',
     padding: '0.75rem 0.9rem',
     resize: 'vertical',
@@ -241,6 +254,7 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   title: { fontSize: '2rem', margin: '0 0 0.25rem' },
   compactTitle: { fontSize: '1.35rem', margin: 0 },
   heading: { fontSize: '1.15rem', margin: 0 },
+  sectionHeading: { fontSize: '0.95rem', fontWeight: 800, margin: 0 },
   subheading: { fontSize: '1rem', margin: 0 },
   kicker: {
     color: '#176b5b',
