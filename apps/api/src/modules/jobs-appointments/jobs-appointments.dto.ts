@@ -182,7 +182,9 @@ export class CreateAppointmentRequestBodyDto implements CreateAppointmentRequest
   occurredAt?: string;
 }
 
-export class UpdateAppointmentScheduleRequestBodyDto implements UpdateAppointmentScheduleRequestDto {
+export class UpdateAppointmentScheduleRequestBodyDto
+  implements UpdateAppointmentScheduleRequestDto
+{
   @IsOptional()
   @Matches(isoDatePattern, { message: 'scheduledDate must be in YYYY-MM-DD format.' })
   scheduledDate?: string;
@@ -400,7 +402,9 @@ export class VoidRegisterEntryRequestBodyDto implements VoidRegisterEntryRequest
   syncSource?: FieldSyncSource;
 }
 
-export class AcknowledgeFinishedVisitReviewRequestBodyDto implements AcknowledgeFinishedVisitReviewRequestDto {
+export class AcknowledgeFinishedVisitReviewRequestBodyDto
+  implements AcknowledgeFinishedVisitReviewRequestDto
+{
   @IsIn(finishedVisitReviewDecisions.filter((decision) => decision === 'keptOpen'))
   decision!: Extract<FinishedVisitReviewDecision, 'keptOpen'>;
 

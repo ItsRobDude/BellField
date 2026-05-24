@@ -2,7 +2,15 @@ export type LogLevel = 'info' | 'warn' | 'error';
 
 export type LogContext = Record<string, unknown>;
 
-const SENSITIVE_FIELD_TOKENS = ['password', 'secret', 'token', 'key', 'authorization', 'cookie', 'payload'];
+const SENSITIVE_FIELD_TOKENS = [
+  'password',
+  'secret',
+  'token',
+  'key',
+  'authorization',
+  'cookie',
+  'payload'
+];
 
 function isSensitiveField(name: string): boolean {
   const normalized = name.toLowerCase();

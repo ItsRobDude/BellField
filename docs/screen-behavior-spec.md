@@ -11,6 +11,7 @@ This is a product behavior document, not a coding document.
 ## 1. Overall UI Philosophy
 
 BellField should feel:
+
 - modern
 - clean
 - organized
@@ -20,6 +21,7 @@ BellField should feel:
 The product should avoid feeling like cluttered enterprise software while still keeping important information easy to reach.
 
 Core design principles:
+
 - fewer screens with smarter tabs, drawers, and grouped sections
 - full-page versions should still exist for views that become too cluttered in a drawer
 - avoid excessive pop-up modals
@@ -30,6 +32,7 @@ Core design principles:
 BellField should generally aim for a visual organization style in the same family as ServiceTitan or FieldOps for operational depth, while keeping a cleaner, easier-to-learn small-shop identity closer to the best parts of Housecall Pro or Jobber.
 
 Important UI posture:
+
 - BellField should not copy large-suite clutter just because enterprise products have it
 - common actions should feel obvious and low-friction
 - advanced depth should be layered behind drawers, tabs, filters, and workbenches instead of crowding the default view
@@ -39,17 +42,21 @@ Important UI posture:
 ## 2. Office App Global Behavior
 
 ### Default landing screen
+
 For the current operations-focused office app, BellField should land on **Dispatch** by default.
 
 A broader business dashboard can come later, but the daily work surface should not block dispatchers behind a marketing-style or summary-only landing page.
 
 ### Global search behavior
+
 BellField should not force a search bar onto every screen.
 
 Search may appear where appropriate, but it should not always be pinned across the entire office app.
 
 ### Searchable items
+
 When search is available, it should support searching by:
+
 - customer
 - location
 - job number
@@ -59,6 +66,7 @@ When search is available, it should support searching by:
 - contact phone number
 
 Important rule:
+
 - global search should **not** rely on equipment model as a primary default search target
 
 ---
@@ -66,12 +74,15 @@ Important rule:
 ## 3. Dashboard Screen
 
 ### Purpose
+
 The dashboard should be primarily a **summary page**, not the main place for deep editing.
 
 It should help users quickly understand what matters today and jump into work.
 
 ### Key dashboard content
+
 The dashboard should prioritize these items:
+
 - today’s appointments
 - unassigned jobs
 - open estimates
@@ -79,7 +90,9 @@ The dashboard should prioritize these items:
 - alerts/warnings
 
 ### General dashboard style
+
 The dashboard should feel clean and high-level, with:
+
 - summary cards
 - trend/overview cards
 - quick actions where useful
@@ -93,19 +106,24 @@ It should not turn into a giant control panel that tries to surface every possib
 ## 4. Customer / Account Screen
 
 ### Purpose
+
 The customer/account screen is the main home for the customer relationship.
 
 It should allow staff to understand:
+
 - who the customer is
 - what locations belong to them
 - who their contacts are
 - what financial and service history exists under that account
 
 ### Default tab behavior
+
 A customer/account page should open to **Overview** by default.
 
 ### Core account tabs
+
 The account screen should include these tabs:
+
 - Overview
 - Locations
 - Contacts
@@ -117,14 +135,18 @@ The account screen should include these tabs:
 - History
 
 ### Account overview expectations
+
 The overview should make it easy to see:
+
 - account name/type
 - current flags such as Do Not Service
 - primary billing info
 - quick counts or summaries of locations, open jobs, estimates, and invoices
 
 ### Account working expectations
+
 Milestone 2 account screens should make these actions straightforward:
+
 - create or edit the customer record
 - mark the account inactive
 - review active locations
@@ -137,19 +159,24 @@ Milestone 2 account screens should make these actions straightforward:
 ## 5. Location Screen
 
 ### Purpose
+
 The location screen is one of the most important screens in BellField.
 
 It should act as the operational home for the physical service address.
 
 ### Default tab behavior
+
 The location page should default to:
+
 - Overview
 - with service history and equipment easy to reach through the tab structure
 
 The layout should make the most important location information immediately visible while still keeping detailed sections organized in tabs or grouped navigation.
 
 ### Core location tabs
+
 The location screen should include:
+
 - Overview
 - Contacts
 - Equipment
@@ -159,7 +186,9 @@ The location screen should include:
 - History / Activity
 
 ### Location overview expectations
+
 Without clicking around too much, the location overview should show:
+
 - current owner/customer
 - address
 - main contact information
@@ -172,6 +201,7 @@ Without clicking around too much, the location overview should show:
 The goal is that staff can understand the location quickly without digging through multiple screens.
 
 ### Location reassignment visibility
+
 If a location changes ownership, the location screen should make the current owner obvious while still leaving the earlier ownership story readable through history/activity.
 
 The normal screen behavior should not make reassignment feel like the location was deleted and recreated.
@@ -181,31 +211,40 @@ The normal screen behavior should not make reassignment feel like the location w
 ## 6. Equipment Tab Behavior
 
 ### Default equipment view
+
 The equipment tab should default to a **table/list view with click-to-open detail drawer**.
 
 This is the preferred office behavior because it keeps the equipment list dense and practical.
 
 ### Detail open behavior
+
 When staff click a piece of equipment:
+
 - BellField should open a **side drawer** by default
 
 That side drawer should allow users to review and edit equipment details without losing their place in the equipment list.
 
 ### Alternative views
+
 BellField should allow the company or user to change equipment presentation later if they prefer a different style, such as:
+
 - a more traditional scrolling list
 - alternate view preferences
 
 ### Inactive equipment behavior
+
 Inactive or removed equipment should be hidden by default.
 
 BellField should provide a clear toggle such as:
+
 - “Show inactive equipment”
 
 This keeps the active list clean while still making older equipment accessible when needed.
 
 ### Equipment drawer expectations
+
 The equipment detail drawer should be able to show and edit, at minimum:
+
 - equipment type
 - brand
 - model
@@ -217,6 +256,7 @@ The equipment detail drawer should be able to show and edit, at minimum:
 - notes
 
 The drawer should also make it easy to understand whether the equipment is:
+
 - pending install
 - active
 - inactive
@@ -226,12 +266,15 @@ The drawer should also make it easy to understand whether the equipment is:
 ## 7. Job Screen
 
 ### Purpose
+
 The job screen is the main operational record for active and historical work.
 
 It should gather everything important about the job into one organized screen.
 
 ### Job header expectations
+
 At the top of the job page, without much scrolling, BellField should show:
+
 - job number
 - job status
 - location
@@ -243,7 +286,9 @@ At the top of the job page, without much scrolling, BellField should show:
 - quick actions
 
 ### Core job tabs
+
 The job screen should include:
+
 - Overview
 - Appointments
 - Notes / Activity
@@ -254,9 +299,11 @@ The job screen should include:
 - Purchasing / Materials later as needed
 
 ### Job timeline behavior
+
 The job should use **one mixed timeline** by default.
 
 That timeline should combine items such as:
+
 - notes
 - status history
 - technician activity
@@ -266,17 +313,22 @@ That timeline should combine items such as:
 The timeline should support filters so users can narrow it down when needed.
 
 ### Invoice-note behavior in history
+
 Changes to invoice summary-type information should still appear in the main job history in readable form.
 
 Example style:
+
 - “John Smith edited the invoice notes.”
 
 ### Unscheduled and follow-up appointment behavior
+
 If a job has no appointments yet:
+
 - the office should still be able to find it from normal job views
 - the job should read clearly as unscheduled rather than looking incomplete or broken
 
 If an open job needs another visit:
+
 - adding the next appointment should feel like a normal action from the Appointments area or a nearby quick action
 - the user should not need to leave the job context and pretend they are creating unrelated new work
 
@@ -285,13 +337,16 @@ If an open job needs another visit:
 ## 8. Dispatch Board
 
 ### Purpose
+
 The dispatch board should be one of the main operating screens for office users.
 
 It should feel like a true scheduling workspace, not just a static calendar.
 It should feel operationally serious, but its quick actions should still be learnable by a smaller office without heavy training.
 
 ### Default interaction behavior
+
 When a user clicks an appointment card on the dispatch board:
+
 - BellField should open the focused job detail surface for that job
 
 The current v1 implementation uses an in-app job detail view rather than a right-side drawer.
@@ -300,7 +355,9 @@ This keeps appointment review, register entries, media, and timeline history in 
 Future versions may add a compact drawer for very quick dispatch edits, but the drawer should not become a second hidden job screen.
 
 ### Dispatch edit behavior
+
 The dispatch board and focused job detail surface should allow edits to things such as:
+
 - job summary/caller complaint
 - appointment date
 - optional structured local start/end times
@@ -312,7 +369,9 @@ These controls should be convenient for fast dispatch work.
 When structured start/end times are present, appointment cards and detail surfaces should prefer those times for display while still preserving the free-form time-window label for context and legacy records.
 
 ### Dispatch view controls
+
 The dispatch board should support:
+
 - day view
 - date navigation for previous day, today, next day, and a compact week strip
 - week view later
@@ -321,14 +380,19 @@ V1 should keep day-view scheduling trustworthy first: the board uses scheduled d
 Week view is the next UI layer after structured times have landed and are stable.
 
 ### Technician row behavior
+
 For the current day:
+
 - technicians with no appointments should still show on the dispatch board until the day ends
 
 For past dates:
+
 - technicians who had no scheduled work that day should not appear on the board for that date
 
 ### Unassigned behavior
+
 Appointments with no technician assigned:
+
 - should live in the unassigned area by default
 - should not show on the main technician timeline unless the dispatch board is configured to show an unassigned column
 
@@ -337,15 +401,19 @@ Appointments with no technician assigned:
 ## 9. Estimate Screens
 
 ### Creation behavior
+
 Estimates should usually be created **from inside the job workflow**.
 
 However:
+
 - estimate building itself should use its own dedicated estimate-builder screen
 
 This gives users proper room to work without making the job page overly cluttered.
 
 ### Estimate visibility
+
 Estimates should still be visible from:
+
 - the job screen
 - the location screen
 
@@ -354,13 +422,16 @@ Estimates should still be visible from:
 ## 10. Invoice Screens
 
 ### Office workflow behavior
+
 Invoices should be workable in two ways:
+
 - from inside the job screen for context
 - from a dedicated invoice screen/workbench for serious editing, review, and posting
 
 This dual approach gives staff both context and workspace.
 
 ### Invoice history behavior
+
 Invoice-related changes should still appear in the main job history with filters available.
 
 The invoice screen itself does not need to become the main place for all activity history, because the job already acts as the shared operational timeline.
@@ -370,18 +441,22 @@ The invoice screen itself does not need to become the main place for all activit
 ## 11. Field App Home Screen
 
 ### Default opening screen
+
 When a technician opens the field app, BellField should land on the technician’s own **home screen/dashboard**.
 
 This should not just be a raw job list.
 
 ### Technician home/dashboard content
+
 The technician home screen may include:
+
 - today’s appointments
 - quick status of assigned work
 - useful stats
 - positive gamified feedback where helpful
 
 Example ideas:
+
 - “No callbacks this month — great job!”
 - average completion time
 - similar morale/engagement metrics
@@ -394,9 +469,11 @@ It should feel lighter and more approachable than a full office console squeezed
 ## 12. Field Job Screen
 
 ### Field layout style
+
 The field job experience should avoid one giant doom-scroll page.
 
 Instead, BellField should favor:
+
 - tiles
 - tabs
 - simple section navigation
@@ -405,7 +482,9 @@ This keeps the experience easier for older technicians and reduces the feeling o
 Common field actions should stay available within a few taps without forcing technicians through too many nested screens.
 
 ### Core field job sections
+
 The field job screen should include sections such as:
+
 - Job Info
 - Contact / Address
 - Equipment
@@ -416,9 +495,11 @@ The field job screen should include sections such as:
 - Invoice Preview
 
 ### Finish flow
+
 When a technician taps **Finish**, BellField should guide them through a short finish flow.
 
 That flow should include:
+
 - notes prompt
 - register prompt
 - media reminder where appropriate
@@ -431,6 +512,7 @@ This should feel short and practical, not like a long wizard.
 ## 13. Locked Actions and Permission Display
 
 If a user can see a feature but does not have permission to edit it:
+
 - BellField should usually show the action as visible but locked/greyed out
 
 This helps users understand what exists in the system without always removing context.
@@ -444,6 +526,7 @@ In other cases, if visibility would create confusion or is not useful to the use
 BellField should avoid heavy modal usage where possible.
 
 Preferred interaction order:
+
 1. inline sections and tables
 2. side drawers
 3. full-page versions when the content becomes too complex
@@ -457,6 +540,7 @@ The system should not rely on excessive pop-up windows for normal work.
 BellField should favor fewer screens with smarter tabs and drawers.
 
 However:
+
 - most important screens should still have full-page versions available when the drawer or compact view becomes too cramped or inconvenient
 
 This lets the app stay efficient without trapping users in tiny views.
@@ -466,6 +550,7 @@ This lets the app stay efficient without trapping users in tiny views.
 ## 16. Future UI Flexibility
 
 BellField should be designed so future versions may allow users or companies to customize parts of the UI, such as:
+
 - drag-and-drop organization
 - tab order
 - preferred view style
@@ -478,6 +563,7 @@ This does not need to be fully built in version 1, but the screen design should 
 ## 17. Visual Vibe Guidance
 
 BellField should aim for a visual vibe that feels:
+
 - polished
 - modern
 - bright but professional
@@ -493,6 +579,7 @@ The product should feel like modern business software with a friendly, organized
 ## 18. Summary
 
 BellField screen behavior should follow these defaults:
+
 - dashboard first for office users
 - dashboard/home first for technicians
 - no always-present search bar on every screen

@@ -62,7 +62,9 @@ export function applyPendingOperations(
         jobs: nextSnapshot.jobs.map((job) => ({
           ...job,
           appointments: job.appointments.map((appointment) =>
-            appointment.id === operation.appointmentId ? { ...appointment, status: operation.status } : appointment
+            appointment.id === operation.appointmentId
+              ? { ...appointment, status: operation.status }
+              : appointment
           )
         }))
       };
@@ -74,7 +76,9 @@ export function applyPendingOperations(
         jobs: nextSnapshot.jobs.map((job) => ({
           ...job,
           needsOfficeReview:
-            job.id === findJobIdForAppointment(nextSnapshot, operation.appointmentId) ? true : job.needsOfficeReview,
+            job.id === findJobIdForAppointment(nextSnapshot, operation.appointmentId)
+              ? true
+              : job.needsOfficeReview,
           appointments: job.appointments.map((appointment) =>
             appointment.id === operation.appointmentId
               ? {
@@ -159,7 +163,9 @@ export function applyPendingOperations(
             ? {
                 ...job,
                 registerEntries: (job.registerEntries ?? []).map((entry) =>
-                  entry.id === operation.registerEntryId ? applyRegisterEntryEdit(entry, operation) : entry
+                  entry.id === operation.registerEntryId
+                    ? applyRegisterEntryEdit(entry, operation)
+                    : entry
                 ),
                 timeline: [
                   ...job.timeline,
@@ -272,7 +278,9 @@ export function mergeEquipmentMutationIntoAssignedWork(
 
   return {
     ...snapshot,
-    equipment: snapshot.equipment.map((record) => (record.id === equipmentSummary.id ? equipmentSummary : record))
+    equipment: snapshot.equipment.map((record) =>
+      record.id === equipmentSummary.id ? equipmentSummary : record
+    )
   };
 }
 
@@ -280,18 +288,24 @@ export function findJobIdForAppointment(
   snapshot: FieldAssignedWorkResponse,
   appointmentId: string
 ): string | undefined {
-  return snapshot.jobs.find((job) => job.appointments.some((appointment) => appointment.id === appointmentId))?.id;
+  return snapshot.jobs.find((job) =>
+    job.appointments.some((appointment) => appointment.id === appointmentId)
+  )?.id;
 }
 
 export function findAppointmentBaseUpdatedAt(
   snapshot: AssignedWorkSnapshot | null,
   appointmentId: string
 ): string | undefined {
-  return snapshot?.jobs.flatMap((job) => job.appointments).find((appointment) => appointment.id === appointmentId)
-    ?.updatedAt;
+  return snapshot?.jobs
+    .flatMap((job) => job.appointments)
+    .find((appointment) => appointment.id === appointmentId)?.updatedAt;
 }
 
-export function findJobBaseUpdatedAt(snapshot: AssignedWorkSnapshot | null, jobId: string): string | undefined {
+export function findJobBaseUpdatedAt(
+  snapshot: AssignedWorkSnapshot | null,
+  jobId: string
+): string | undefined {
   return snapshot?.jobs.find((job) => job.id === jobId)?.updatedAt;
 }
 
@@ -396,14 +410,22 @@ function applyRegisterEntryEdit(
 ): RegisterEntrySummary {
   return {
     ...entry,
-    appointmentId: operation.appointmentId !== undefined ? operation.appointmentId ?? undefined : entry.appointmentId,
+    appointmentId:
+      operation.appointmentId !== undefined
+        ? (operation.appointmentId ?? undefined)
+        : entry.appointmentId,
     kind: operation.registerEntryKind ?? entry.kind,
     description: operation.description ?? entry.description,
     quantity: operation.quantity ?? entry.quantity,
-    unitOfMeasure: operation.unitOfMeasure !== undefined ? operation.unitOfMeasure || undefined : entry.unitOfMeasure,
-    unitPrice: operation.unitPrice !== undefined ? operation.unitPrice ?? undefined : entry.unitPrice,
+    unitOfMeasure:
+      operation.unitOfMeasure !== undefined
+        ? operation.unitOfMeasure || undefined
+        : entry.unitOfMeasure,
+    unitPrice:
+      operation.unitPrice !== undefined ? (operation.unitPrice ?? undefined) : entry.unitPrice,
     totalAmount: operation.totalAmount ?? entry.totalAmount,
-    partNumber: operation.partNumber !== undefined ? operation.partNumber || undefined : entry.partNumber,
+    partNumber:
+      operation.partNumber !== undefined ? operation.partNumber || undefined : entry.partNumber,
     inventorySourceLabel:
       operation.inventorySourceLabel !== undefined
         ? operation.inventorySourceLabel || undefined

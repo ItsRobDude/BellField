@@ -2,7 +2,10 @@ import { DatabaseBootstrapService } from './database-bootstrap.service';
 
 type CapturedQuery = { sql: string; params: unknown[] | undefined };
 
-function captureBootstrapQueries(): { service: DatabaseBootstrapService; captured: CapturedQuery[] } {
+function captureBootstrapQueries(): {
+  service: DatabaseBootstrapService;
+  captured: CapturedQuery[];
+} {
   const captured: CapturedQuery[] = [];
   const databaseService = {
     query: jest.fn(async (sql: string, params?: unknown[]) => {

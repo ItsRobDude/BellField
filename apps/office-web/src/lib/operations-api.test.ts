@@ -32,8 +32,16 @@ describe('operations-api captured work helpers', () => {
       .mockResolvedValueOnce(mockJsonResponse({ mediaAttachment: { id: 'media-1' } }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await getOfficeRegisterEntries({ jobId: 'job-1', sessionToken: 'session-token', apiBaseUrl: 'http://api.test' });
-    await getOfficeMediaAttachments({ jobId: 'job-1', sessionToken: 'session-token', apiBaseUrl: 'http://api.test' });
+    await getOfficeRegisterEntries({
+      jobId: 'job-1',
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
+    await getOfficeMediaAttachments({
+      jobId: 'job-1',
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
     await updateOfficeRegisterEntry({
       registerEntryId: 'register-1',
       sessionToken: 'session-token',
@@ -99,10 +107,16 @@ describe('operations-api captured work helpers', () => {
   });
 
   it('downloads media blobs without forcing a JSON content type', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(new Response(new Blob(['media-bytes']), { status: 200 }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(new Blob(['media-bytes']), { status: 200 }));
     vi.stubGlobal('fetch', fetchMock);
 
-    await getOfficeMediaBlob({ mediaId: 'media-1', sessionToken: 'session-token', apiBaseUrl: 'http://api.test' });
+    await getOfficeMediaBlob({
+      mediaId: 'media-1',
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
 
     expect(fetchMock).toHaveBeenCalledWith(
       'http://api.test/operations/media/media-1/blob',

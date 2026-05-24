@@ -37,7 +37,10 @@ describe('summarizeSyncHealth', () => {
   });
 
   it('flips to attention when queued work exists but nothing is failing', () => {
-    const summary = summarizeSyncHealth(buildMetadata(), [buildOperation(), buildOperation({ id: 'op-2' })]);
+    const summary = summarizeSyncHealth(buildMetadata(), [
+      buildOperation(),
+      buildOperation({ id: 'op-2' })
+    ]);
 
     expect(summary.tone).toBe('attention');
     expect(summary.headline).toBe('2 changes waiting to sync');
@@ -50,10 +53,9 @@ describe('summarizeSyncHealth', () => {
   });
 
   it('alerts loudly when sync just failed and surfaces the error detail', () => {
-    const summary = summarizeSyncHealth(
-      buildMetadata({ lastSyncError: 'Network unreachable' }),
-      [buildOperation()]
-    );
+    const summary = summarizeSyncHealth(buildMetadata({ lastSyncError: 'Network unreachable' }), [
+      buildOperation()
+    ]);
 
     expect(summary.tone).toBe('alert');
     expect(summary.headline).toContain('Sync failed');

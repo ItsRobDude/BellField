@@ -133,7 +133,9 @@ function buildEquipment(overrides: Partial<EquipmentSummary> = {}): EquipmentSum
   };
 }
 
-function buildSnapshot(overrides: Partial<FieldAssignedWorkResponse> = {}): FieldAssignedWorkResponse {
+function buildSnapshot(
+  overrides: Partial<FieldAssignedWorkResponse> = {}
+): FieldAssignedWorkResponse {
   return {
     jobs: [buildJob()],
     locations: [buildLocation()],
@@ -410,8 +412,12 @@ describe('applied sync result merging', () => {
     const response: JobMutationResponse = {
       ...buildJob({
         summary: 'No cooling - compressor running',
-        appointments: [buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })],
-        registerEntries: [buildRegisterEntry({ description: 'Diagnostic labor', kind: 'labor', totalAmount: 95 })],
+        appointments: [
+          buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })
+        ],
+        registerEntries: [
+          buildRegisterEntry({ description: 'Diagnostic labor', kind: 'labor', totalAmount: 95 })
+        ],
         timeline: [
           {
             id: 'timeline-1',
@@ -529,18 +535,24 @@ describe('applied sync result merging', () => {
     const result = mergeEquipmentMutationIntoAssignedWork(snapshot, response);
 
     expect(result).toBe(snapshot);
-    expect(result.equipment.find((record) => record.id === 'equipment-outside-window')).toBeUndefined();
+    expect(
+      result.equipment.find((record) => record.id === 'equipment-outside-window')
+    ).toBeUndefined();
   });
 
   it('does not leak syncResult or warningMessages onto the cached job summary', () => {
     const snapshot = buildSnapshot();
     const response: JobMutationResponse = {
       ...buildJob({
-        appointments: [buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })],
+        appointments: [
+          buildAppointment({ status: 'working', updatedAt: '2026-05-22T11:00:00.000Z' })
+        ],
         updatedAt: '2026-05-22T11:00:00.000Z'
       }),
       syncResult: { status: 'applied' },
-      warningMessages: ['Field appointment update synced after assignment changed while the device was offline.']
+      warningMessages: [
+        'Field appointment update synced after assignment changed while the device was offline.'
+      ]
     };
 
     const result = mergeJobMutationIntoAssignedWork(snapshot, response);
@@ -614,7 +626,9 @@ describe('applied sync result merging', () => {
     expect(localBefore?.jobs[0]?.appointments[0]?.scheduledDate).toBeUndefined();
     expect(localAfter?.jobs[0]?.appointments[0]?.scheduledDate).toBe('2026-05-23');
     expect(localAfter?.jobs[0]?.appointments[0]?.technicianName).toBe('Sam Tech');
-    expect(localAfter?.jobs[0]?.timeline.find((entry) => entry.message === queuedNote.note)).toBeTruthy();
+    expect(
+      localAfter?.jobs[0]?.timeline.find((entry) => entry.message === queuedNote.note)
+    ).toBeTruthy();
   });
 });
 
@@ -627,7 +641,11 @@ describe('findJobIdForAppointment / base lookups', () => {
 
   it('returns the snapshot updatedAt timestamps for known records', () => {
     const snapshot = buildSnapshot({
-      jobs: [buildJob({ registerEntries: [buildRegisterEntry({ updatedAt: '2026-05-22T12:00:00.000Z' })] })]
+      jobs: [
+        buildJob({
+          registerEntries: [buildRegisterEntry({ updatedAt: '2026-05-22T12:00:00.000Z' })]
+        })
+      ]
     });
 
     expect(findAppointmentBaseUpdatedAt(snapshot, 'appt-1')).toBe(baseTimestamp);
@@ -712,10 +730,14 @@ describe('formatPendingOperation', () => {
     };
 
     expect(formatPendingOperation(pending)).toContain('pending sync');
-    expect(formatPendingOperation(conflict)).toContain('conflict: Office already advanced this appointment.');
+    expect(formatPendingOperation(conflict)).toContain(
+      'conflict: Office already advanced this appointment.'
+    );
     expect(formatPendingOperation(rejected)).toContain('rejected: Permission denied.');
     expect(formatPendingOperation(registerCreate)).toContain('Register entry queued: Contactor');
-    expect(formatPendingOperation(registerVoid)).toContain('conflict: Office already changed this line.');
+    expect(formatPendingOperation(registerVoid)).toContain(
+      'conflict: Office already changed this line.'
+    );
     expect(formatPendingOperation(mediaUpload)).toContain('Media upload queued: media-1.jpg');
   });
 });

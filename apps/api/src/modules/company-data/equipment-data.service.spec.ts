@@ -57,7 +57,9 @@ describe('EquipmentDataService', () => {
       updatedAt: '2026-04-14T11:00:00.000Z'
     });
 
-    equipmentDataRepository.getEquipmentById.mockResolvedValueOnce(previousEquipment).mockResolvedValueOnce(nextEquipment);
+    equipmentDataRepository.getEquipmentById
+      .mockResolvedValueOnce(previousEquipment)
+      .mockResolvedValueOnce(nextEquipment);
     equipmentDataRepository.updateEquipment.mockResolvedValue(nextEquipment);
 
     await service.updateEquipment('equipment-1', { status: 'active' }, 'Dispatcher');
@@ -75,17 +77,26 @@ describe('EquipmentDataService', () => {
 
   it('records placement changes with readable location or inventory wording', async () => {
     const { service, equipmentDataRepository } = createService();
-    const previousEquipment = createEquipmentRecord({ locationId: 'location-1', inventoryLocationLabel: undefined });
+    const previousEquipment = createEquipmentRecord({
+      locationId: 'location-1',
+      inventoryLocationLabel: undefined
+    });
     const nextEquipment = createEquipmentRecord({
       locationId: undefined,
       inventoryLocationLabel: 'Warehouse A',
       updatedAt: '2026-04-14T11:00:00.000Z'
     });
 
-    equipmentDataRepository.getEquipmentById.mockResolvedValueOnce(previousEquipment).mockResolvedValueOnce(nextEquipment);
+    equipmentDataRepository.getEquipmentById
+      .mockResolvedValueOnce(previousEquipment)
+      .mockResolvedValueOnce(nextEquipment);
     equipmentDataRepository.updateEquipment.mockResolvedValue(nextEquipment);
 
-    await service.updateEquipment('equipment-1', { inventoryLocationLabel: 'Warehouse A' }, 'Dispatcher');
+    await service.updateEquipment(
+      'equipment-1',
+      { inventoryLocationLabel: 'Warehouse A' },
+      'Dispatcher'
+    );
 
     expect(equipmentDataRepository.addEquipmentHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -105,11 +116,17 @@ describe('EquipmentDataService', () => {
       updatedAt: '2026-04-14T11:00:00.000Z'
     });
 
-    equipmentDataRepository.getEquipmentById.mockResolvedValueOnce(previousEquipment).mockResolvedValueOnce(nextEquipment);
+    equipmentDataRepository.getEquipmentById
+      .mockResolvedValueOnce(previousEquipment)
+      .mockResolvedValueOnce(nextEquipment);
     equipmentDataRepository.getEquipmentGroupById.mockResolvedValue(systemGroup);
     equipmentDataRepository.updateEquipment.mockResolvedValue(nextEquipment);
 
-    await service.updateEquipment('equipment-1', { systemGroupName: systemGroup.name }, 'Dispatcher');
+    await service.updateEquipment(
+      'equipment-1',
+      { systemGroupName: systemGroup.name },
+      'Dispatcher'
+    );
 
     expect(equipmentDataRepository.addEquipmentHistoryEntry).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -129,7 +146,9 @@ describe('EquipmentDataService', () => {
       updatedAt: '2026-04-14T11:00:00.000Z'
     });
 
-    equipmentDataRepository.getEquipmentById.mockResolvedValueOnce(previousEquipment).mockResolvedValueOnce(nextEquipment);
+    equipmentDataRepository.getEquipmentById
+      .mockResolvedValueOnce(previousEquipment)
+      .mockResolvedValueOnce(nextEquipment);
     equipmentDataRepository.getEquipmentGroupById.mockResolvedValueOnce(systemGroup);
     equipmentDataRepository.updateEquipment.mockResolvedValue(nextEquipment);
 

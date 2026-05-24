@@ -1,4 +1,9 @@
-import { ForbiddenException, Injectable, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+  UnauthorizedException
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { defaultRoleTemplates } from './default-role-templates';
 import { IdentityAccessRepository } from './identity-access.repository';
@@ -105,7 +110,9 @@ export class IdentityAccessService {
     employeeId: string,
     update: UpdateEmployeeRequestDto
   ): Promise<EmployeeSummary> {
-    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', ['office-web']);
+    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
+      'office-web'
+    ]);
 
     const existingEmployee = await this.identityAccessRepository.findEmployeeById(employeeId);
 
@@ -123,11 +130,15 @@ export class IdentityAccessService {
     }
 
     if (update.grantedPermissions) {
-      existingEmployee.permissionOverrides.grantedPermissions = this.uniquePermissionKeys(update.grantedPermissions);
+      existingEmployee.permissionOverrides.grantedPermissions = this.uniquePermissionKeys(
+        update.grantedPermissions
+      );
     }
 
     if (update.revokedPermissions) {
-      existingEmployee.permissionOverrides.revokedPermissions = this.uniquePermissionKeys(update.revokedPermissions);
+      existingEmployee.permissionOverrides.revokedPermissions = this.uniquePermissionKeys(
+        update.revokedPermissions
+      );
     }
 
     await this.identityAccessRepository.saveEmployee(existingEmployee);

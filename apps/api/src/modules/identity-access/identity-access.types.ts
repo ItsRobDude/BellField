@@ -24,7 +24,16 @@ export const employeeRoleIds = [
 
 export type PermissionAction = ContractPermissionAction;
 
-export const permissionActions = ['view', 'create', 'edit', 'delete', 'approve', 'post', 'export', 'configure'] as const satisfies readonly PermissionAction[];
+export const permissionActions = [
+  'view',
+  'create',
+  'edit',
+  'delete',
+  'approve',
+  'post',
+  'export',
+  'configure'
+] as const satisfies readonly PermissionAction[];
 
 export type PermissionArea = ContractPermissionArea;
 
@@ -56,7 +65,10 @@ export const permissionKeys = permissionAreas.flatMap((area) =>
 
 export type LoginSurface = 'office-web' | 'field-mobile';
 
-export const loginSurfaces = ['office-web', 'field-mobile'] as const satisfies readonly LoginSurface[];
+export const loginSurfaces = [
+  'office-web',
+  'field-mobile'
+] as const satisfies readonly LoginSurface[];
 
 export type RoleTemplate = ContractRoleTemplate;
 

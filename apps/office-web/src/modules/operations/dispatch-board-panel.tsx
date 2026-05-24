@@ -68,7 +68,9 @@ export function DispatchBoardPanel({
           <p style={styles.muted}>{totalCardCount} appointments</p>
         </div>
         <div style={styles.badgeRow}>
-          <span style={unassignedCount > 0 ? styles.dangerBadge : styles.badge}>{unassignedCount} unassigned</span>
+          <span style={unassignedCount > 0 ? styles.dangerBadge : styles.badge}>
+            {unassignedCount} unassigned
+          </span>
         </div>
       </div>
 
@@ -76,7 +78,12 @@ export function DispatchBoardPanel({
         <DispatchDatePicker value={effectiveViewDate} onChange={onViewDateChange} />
         <div style={refreshControlStyle}>
           {onRefresh ? (
-            <button type="button" onClick={() => void onRefresh()} disabled={isRefreshing} style={styles.button}>
+            <button
+              type="button"
+              onClick={() => void onRefresh()}
+              disabled={isRefreshing}
+              style={styles.button}
+            >
               {isRefreshing ? 'Refreshing...' : 'Refresh'}
             </button>
           ) : null}
@@ -91,7 +98,10 @@ export function DispatchBoardPanel({
         <div style={timelineLaneViewportStyle}>
           <div style={timelineHeaderStyle}>
             {timelineTickLabels.map((tick) => (
-              <span key={tick.label} style={{ ...timelineTickStyle, gridColumn: `${tick.column} / span 4` }}>
+              <span
+                key={tick.label}
+                style={{ ...timelineTickStyle, gridColumn: `${tick.column} / span 4` }}
+              >
                 {tick.label}
               </span>
             ))}
@@ -130,7 +140,13 @@ type DispatchTimelineRowProps = {
   onOpenJobDetail?: DispatchBoardPanelProps['onOpenJobDetail'];
 };
 
-function DispatchTimelineRow({ label, ariaLabel, cards, badgeStyle, onOpenJobDetail }: DispatchTimelineRowProps) {
+function DispatchTimelineRow({
+  label,
+  ariaLabel,
+  cards,
+  badgeStyle,
+  onOpenJobDetail
+}: DispatchTimelineRowProps) {
   return (
     <section style={timelineRowStyle} aria-label={ariaLabel}>
       <div style={timelineRowLabelStyle}>
@@ -176,7 +192,9 @@ function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchC
       <span style={styles.tinyMuted}>
         {card.customerName} - {card.locationName}
       </span>
-      {card.equipmentCount > 0 ? <span style={styles.tinyMuted}>{formatEquipmentGlance(card)}</span> : null}
+      {card.equipmentCount > 0 ? (
+        <span style={styles.tinyMuted}>{formatEquipmentGlance(card)}</span>
+      ) : null}
       <div style={styles.badgeRow}>
         <span style={styles.badge}>{appointmentStatusLabels[card.status]}</span>
         {card.needsOfficeReview ? <span style={styles.dangerBadge}>Review</span> : null}
@@ -186,13 +204,18 @@ function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchC
 }
 
 function formatEquipmentGlance(card: DispatchAppointmentCard): string {
-  const labels = card.equipment.map((equipment) => `${equipment.equipmentType} ${equipment.brand} ${equipment.model}`.trim());
+  const labels = card.equipment.map((equipment) =>
+    `${equipment.equipmentType} ${equipment.brand} ${equipment.model}`.trim()
+  );
   const hiddenCount = card.equipmentCount - card.equipment.length;
 
   return hiddenCount > 0 ? `${labels.join(', ')} +${hiddenCount}` : labels.join(', ');
 }
 
-function getTimelineCardPlacementStyle(card: DispatchAppointmentCard, index: number): CSSProperties {
+function getTimelineCardPlacementStyle(
+  card: DispatchAppointmentCard,
+  index: number
+): CSSProperties {
   const startMinutes = parseTimeToMinutes(card.scheduledStartTime);
   const endMinutes = parseTimeToMinutes(card.scheduledEndTime);
 
@@ -203,9 +226,14 @@ function getTimelineCardPlacementStyle(card: DispatchAppointmentCard, index: num
     };
   }
 
-  const clampedStart = Math.max(timelineStartMinutes, Math.min(startMinutes, timelineEndMinutes - timelineSlotMinutes));
+  const clampedStart = Math.max(
+    timelineStartMinutes,
+    Math.min(startMinutes, timelineEndMinutes - timelineSlotMinutes)
+  );
   const clampedEnd =
-    endMinutes === null ? clampedStart + 90 : Math.max(clampedStart + timelineSlotMinutes, Math.min(endMinutes, timelineEndMinutes));
+    endMinutes === null
+      ? clampedStart + 90
+      : Math.max(clampedStart + timelineSlotMinutes, Math.min(endMinutes, timelineEndMinutes));
   const startSlot = Math.floor((clampedStart - timelineStartMinutes) / timelineSlotMinutes) + 1;
   const durationSlots = Math.max(4, Math.ceil((clampedEnd - clampedStart) / timelineSlotMinutes));
 

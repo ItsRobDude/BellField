@@ -51,10 +51,11 @@ describe('field queue resolution helpers', () => {
   });
 
   it('replays only pending operations and preserves chronological order', () => {
-    expect(getReplayablePendingOperations([pending, conflict, olderPending, rejected]).map((operation) => operation.id)).toEqual([
-      'op-older',
-      'op-pending'
-    ]);
+    expect(
+      getReplayablePendingOperations([pending, conflict, olderPending, rejected]).map(
+        (operation) => operation.id
+      )
+    ).toEqual(['op-older', 'op-pending']);
   });
 
   it('marks a conflicted or rejected operation for explicit retry', () => {
@@ -68,9 +69,10 @@ describe('field queue resolution helpers', () => {
   });
 
   it('discards one local operation without touching the rest of the queue', () => {
-    expect(discardPendingOperation([pending, conflict, rejected], conflict.id).map((operation) => operation.id)).toEqual([
-      'op-pending',
-      'op-rejected'
-    ]);
+    expect(
+      discardPendingOperation([pending, conflict, rejected], conflict.id).map(
+        (operation) => operation.id
+      )
+    ).toEqual(['op-pending', 'op-rejected']);
   });
 });

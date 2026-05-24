@@ -1,7 +1,11 @@
 import tsParser from '@typescript-eslint/parser';
 import tsPlugin from '@typescript-eslint/eslint-plugin';
 
-export function createTypeScriptConfig({ files = ['src/**/*.ts'], tsconfigRootDir, rules = {} } = {}) {
+export function createTypeScriptConfig({
+  files = ['src/**/*.ts'],
+  tsconfigRootDir,
+  rules = {}
+} = {}) {
   return {
     files,
     languageOptions: {

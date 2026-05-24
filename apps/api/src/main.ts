@@ -11,7 +11,10 @@ async function bootstrap() {
   // rawBody: true lets registered body parsers preserve the original buffer on
   // `req.rawBody`. JSON parsing stays unchanged; the explicit raw parser below
   // is needed for application/octet-stream media blob uploads.
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bufferLogs: true, rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bufferLogs: true,
+    rawBody: true
+  });
   const runtimeConfig = getApiRuntimeConfig();
   const mediaConfig = app.get(MediaConfigService);
 

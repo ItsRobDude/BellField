@@ -1,6 +1,23 @@
 import { Type } from 'class-transformer';
-import { IsArray, IsBoolean, IsEmail, IsIn, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
-import { employeeRoleIds, loginSurfaces, permissionKeys, type EmployeeRoleId, type LoginRequestDto, type PermissionKey, type UpdateEmployeeRequestDto } from './identity-access.types';
+import {
+  IsArray,
+  IsBoolean,
+  IsEmail,
+  IsIn,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength
+} from 'class-validator';
+import {
+  employeeRoleIds,
+  loginSurfaces,
+  permissionKeys,
+  type EmployeeRoleId,
+  type LoginRequestDto,
+  type PermissionKey,
+  type UpdateEmployeeRequestDto
+} from './identity-access.types';
 
 export class LoginRequestBodyDto implements LoginRequestDto {
   @IsEmail()

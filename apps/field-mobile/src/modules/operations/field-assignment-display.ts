@@ -47,7 +47,9 @@ export function formatAppointmentAssignmentLine(
   }
 
   if (isAppointmentAssignedToCurrentTechnician(appointment, currentEmployeeId)) {
-    return appointment.technicianName ? `Assigned to you (${appointment.technicianName})` : 'Assigned to you';
+    return appointment.technicianName
+      ? `Assigned to you (${appointment.technicianName})`
+      : 'Assigned to you';
   }
 
   return `Assigned to ${assignmentLabel}`;

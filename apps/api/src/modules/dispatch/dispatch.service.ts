@@ -1,5 +1,8 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { DispatchAppointmentRecord, EquipmentRecord } from '../company-data/company-data.types';
+import type {
+  DispatchAppointmentRecord,
+  EquipmentRecord
+} from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -25,9 +28,16 @@ export class DispatchService {
     startDate: string | undefined,
     endDate: string | undefined
   ): Promise<DispatchBoardResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'appointmentsDispatch:view',
+      ['office-web']
+    );
     const dateRange = this.parseDateRange(startDate, endDate);
-    const appointments = await this.jobsDataService.listDispatchAppointments(dateRange.startDate, dateRange.endDate);
+    const appointments = await this.jobsDataService.listDispatchAppointments(
+      dateRange.startDate,
+      dateRange.endDate
+    );
     const locationIds = [...new Set(appointments.map((appointment) => appointment.locationId))];
     const [technicians, equipment] = await Promise.all([
       this.identityAccessService.getActiveEmployees(),
@@ -46,7 +56,10 @@ export class DispatchService {
           roleId: employee.roleId
         })),
       appointments: appointments.map((appointment) =>
-        this.toDispatchAppointmentSummary(appointment, equipmentByLocation.get(appointment.locationId) ?? [])
+        this.toDispatchAppointmentSummary(
+          appointment,
+          equipmentByLocation.get(appointment.locationId) ?? []
+        )
       )
     };
   }
@@ -63,7 +76,9 @@ export class DispatchService {
     }
 
     if (parsedEnd.epochDay - parsedStart.epochDay + 1 > maxDispatchRangeDays) {
-      throw new BadRequestException(`Dispatch date range cannot exceed ${maxDispatchRangeDays} days.`);
+      throw new BadRequestException(
+        `Dispatch date range cannot exceed ${maxDispatchRangeDays} days.`
+      );
     }
 
     return {
@@ -72,7 +87,10 @@ export class DispatchService {
     };
   }
 
-  private parseDate(value: string | undefined, fieldName: string): { value: string; epochDay: number } {
+  private parseDate(
+    value: string | undefined,
+    fieldName: string
+  ): { value: string; epochDay: number } {
     if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
       throw new BadRequestException(`${fieldName} must be a YYYY-MM-DD date.`);
     }
@@ -121,7 +139,9 @@ export class DispatchService {
   ): DispatchAppointmentSummaryDto {
     return {
       ...appointment,
-      equipment: locationEquipment.slice(0, equipmentGlanceLimit).map((equipment) => this.toEquipmentGlance(equipment)),
+      equipment: locationEquipment
+        .slice(0, equipmentGlanceLimit)
+        .map((equipment) => this.toEquipmentGlance(equipment)),
       equipmentCount: locationEquipment.length
     };
   }

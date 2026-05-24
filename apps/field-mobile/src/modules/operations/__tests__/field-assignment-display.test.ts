@@ -24,7 +24,9 @@ describe('describeAppointmentAssignment', () => {
   });
 
   it('says "You" when the unresolved technician id is the current employee', () => {
-    expect(describeAppointmentAssignment({ technicianId: currentEmployeeId }, currentEmployeeId)).toBe('You');
+    expect(
+      describeAppointmentAssignment({ technicianId: currentEmployeeId }, currentEmployeeId)
+    ).toBe('You');
   });
 
   it('says "Another technician" when assigned to someone else but the name could not resolve', () => {
@@ -36,17 +38,24 @@ describe('describeAppointmentAssignment', () => {
 
 describe('isAppointmentAssignedToCurrentTechnician', () => {
   it('matches by technician id', () => {
-    expect(isAppointmentAssignedToCurrentTechnician({ technicianId: currentEmployeeId }, currentEmployeeId)).toBe(true);
-    expect(isAppointmentAssignedToCurrentTechnician({ technicianId: 'employee-2' }, currentEmployeeId)).toBe(false);
+    expect(
+      isAppointmentAssignedToCurrentTechnician(
+        { technicianId: currentEmployeeId },
+        currentEmployeeId
+      )
+    ).toBe(true);
+    expect(
+      isAppointmentAssignedToCurrentTechnician({ technicianId: 'employee-2' }, currentEmployeeId)
+    ).toBe(false);
     expect(isAppointmentAssignedToCurrentTechnician({}, currentEmployeeId)).toBe(false);
   });
 });
 
 describe('formatAppointmentAssignmentLine', () => {
   it('avoids duplicate you-copy when the current technician name is unresolved', () => {
-    expect(formatAppointmentAssignmentLine({ technicianId: currentEmployeeId }, currentEmployeeId)).toBe(
-      'Assigned to you'
-    );
+    expect(
+      formatAppointmentAssignmentLine({ technicianId: currentEmployeeId }, currentEmployeeId)
+    ).toBe('Assigned to you');
   });
 
   it('shows the resolved current technician name when available', () => {
@@ -66,8 +75,12 @@ describe('formatAppointmentAssignmentLine', () => {
 describe('appointment ownership confirmations', () => {
   it('requires confirmation for unassigned or other-technician appointments', () => {
     expect(shouldConfirmAppointmentOwnership({}, currentEmployeeId)).toBe(true);
-    expect(shouldConfirmAppointmentOwnership({ technicianId: 'employee-2' }, currentEmployeeId)).toBe(true);
-    expect(shouldConfirmAppointmentOwnership({ technicianId: currentEmployeeId }, currentEmployeeId)).toBe(false);
+    expect(
+      shouldConfirmAppointmentOwnership({ technicianId: 'employee-2' }, currentEmployeeId)
+    ).toBe(true);
+    expect(
+      shouldConfirmAppointmentOwnership({ technicianId: currentEmployeeId }, currentEmployeeId)
+    ).toBe(false);
   });
 
   it('builds a clear warning for non-owned appointment changes', () => {

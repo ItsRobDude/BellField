@@ -1,7 +1,11 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
-import { toIsoString, toOptionalDateString, toOptionalTimeString } from '../../database/database-row.utils';
+import {
+  toIsoString,
+  toOptionalDateString,
+  toOptionalTimeString
+} from '../../database/database-row.utils';
 import type {
   AppointmentFinishOutcome,
   AppointmentRecord,
@@ -210,7 +214,10 @@ export class JobsDataRepository {
     return this.hydrateJobs(jobsResult.rows);
   }
 
-  async listDispatchAppointments(startDate: string, endDate: string): Promise<DispatchAppointmentRecord[]> {
+  async listDispatchAppointments(
+    startDate: string,
+    endDate: string
+  ): Promise<DispatchAppointmentRecord[]> {
     const result = await this.databaseService.query<DispatchAppointmentRow>(
       `
         select
@@ -634,7 +641,12 @@ export class JobsDataRepository {
     return result.rows[0] ? this.toAppointmentRecord(result.rows[0]) : null;
   }
 
-  async createJob(input: CreateJobInput, actorName: string, resolvedBillToCustomerId: string, locationName: string): Promise<JobRecord> {
+  async createJob(
+    input: CreateJobInput,
+    actorName: string,
+    resolvedBillToCustomerId: string,
+    locationName: string
+  ): Promise<JobRecord> {
     const now = new Date().toISOString();
     const jobId = randomUUID();
     const scheduledDate = input.scheduledDate?.trim();
@@ -709,7 +721,12 @@ export class JobsDataRepository {
     return job;
   }
 
-  async updateJobStatus(jobId: string, status: JobStatus, actorName: string, occurredAt?: string): Promise<JobRecord | null> {
+  async updateJobStatus(
+    jobId: string,
+    status: JobStatus,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord | null> {
     const timelineTime = occurredAt || new Date().toISOString();
 
     await this.databaseService.transaction(async (queryable) => {
@@ -776,8 +793,12 @@ export class JobsDataRepository {
       id: appointmentId,
       jobId,
       scheduledDate: input.scheduledDate?.trim() || undefined,
-      scheduledStartTime: input.scheduledDate ? input.scheduledStartTime?.trim() || undefined : undefined,
-      scheduledEndTime: input.scheduledDate ? input.scheduledEndTime?.trim() || undefined : undefined,
+      scheduledStartTime: input.scheduledDate
+        ? input.scheduledStartTime?.trim() || undefined
+        : undefined,
+      scheduledEndTime: input.scheduledDate
+        ? input.scheduledEndTime?.trim() || undefined
+        : undefined,
       timeWindowLabel: input.timeWindowLabel?.trim() || undefined,
       technicianId: input.technicianId?.trim() || undefined,
       status: 'scheduled',
@@ -860,7 +881,9 @@ export class JobsDataRepository {
 
     const timelineTime = occurredAt || new Date().toISOString();
     const nextScheduledDate = input.scheduledDate?.trim() || null;
-    const nextScheduledStartTime = nextScheduledDate ? input.scheduledStartTime?.trim() || null : null;
+    const nextScheduledStartTime = nextScheduledDate
+      ? input.scheduledStartTime?.trim() || null
+      : null;
     const nextScheduledEndTime = nextScheduledDate ? input.scheduledEndTime?.trim() || null : null;
     const nextTimeWindowLabel = input.timeWindowLabel?.trim() || null;
     const nextTechnicianId = input.technicianId?.trim() || null;
@@ -948,15 +971,20 @@ export class JobsDataRepository {
         [
           appointmentId,
           status,
-          isFinishedStatus ? finishReview?.finishOutcome ?? null : null,
+          isFinishedStatus ? (finishReview?.finishOutcome ?? null) : null,
           isFinishedStatus ? finishReview?.visitNotes?.trim() || null : null,
-          isFinishedStatus ? finishReview?.hasChargeActivity ?? null : null,
+          isFinishedStatus ? (finishReview?.hasChargeActivity ?? null) : null,
           isFinishedStatus ? finishReview?.registerFollowUpNote?.trim() || null : null,
           timelineTime
         ]
       );
 
-      await this.updateJobStatusForAppointmentProgress(appointment.jobId, status, timelineTime, queryable);
+      await this.updateJobStatusForAppointmentProgress(
+        appointment.jobId,
+        status,
+        timelineTime,
+        queryable
+      );
 
       await this.insertTimelineEntry(
         {
@@ -997,13 +1025,24 @@ export class JobsDataRepository {
     const timelineTime = occurredAt || new Date().toISOString();
 
     await this.databaseService.transaction(async (queryable) => {
-      await this.acknowledgeUnreviewedFinishedAppointments(jobId, decision, actorName, timelineTime, queryable);
+      await this.acknowledgeUnreviewedFinishedAppointments(
+        jobId,
+        decision,
+        actorName,
+        timelineTime,
+        queryable
+      );
     });
 
     return this.getJobById(jobId);
   }
 
-  async addJobNote(jobId: string, noteBody: string, actorName: string, occurredAt?: string): Promise<JobRecord | null> {
+  async addJobNote(
+    jobId: string,
+    noteBody: string,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord | null> {
     const timelineTime = occurredAt || new Date().toISOString();
 
     await this.databaseService.transaction(async (queryable) => {
@@ -1024,7 +1063,12 @@ export class JobsDataRepository {
     return this.getJobById(jobId);
   }
 
-  async addSyncFlag(jobId: string, message: string, actorName: string, occurredAt?: string): Promise<JobRecord | null> {
+  async addSyncFlag(
+    jobId: string,
+    message: string,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord | null> {
     const timelineTime = occurredAt || new Date().toISOString();
 
     await this.databaseService.transaction(async (queryable) => {
@@ -1045,7 +1089,10 @@ export class JobsDataRepository {
     return this.getJobById(jobId);
   }
 
-  async listRegisterEntriesForJob(jobId: string, includeVoided = false): Promise<RegisterEntryRecord[]> {
+  async listRegisterEntriesForJob(
+    jobId: string,
+    includeVoided = false
+  ): Promise<RegisterEntryRecord[]> {
     const result = await this.databaseService.query<RegisterEntryRow>(
       `
         select
@@ -1203,14 +1250,24 @@ export class JobsDataRepository {
     const nextEntry: RegisterEntryRecord = {
       ...existingEntry,
       appointmentId:
-        input.appointmentId !== undefined ? input.appointmentId?.trim() || undefined : existingEntry.appointmentId,
+        input.appointmentId !== undefined
+          ? input.appointmentId?.trim() || undefined
+          : existingEntry.appointmentId,
       kind: input.kind ?? existingEntry.kind,
-      description: input.description !== undefined ? input.description.trim() : existingEntry.description,
+      description:
+        input.description !== undefined ? input.description.trim() : existingEntry.description,
       quantity: input.quantity ?? existingEntry.quantity,
-      unitOfMeasure: input.unitOfMeasure !== undefined ? input.unitOfMeasure.trim() || undefined : existingEntry.unitOfMeasure,
-      unitPrice: input.unitPrice !== undefined ? input.unitPrice ?? undefined : existingEntry.unitPrice,
+      unitOfMeasure:
+        input.unitOfMeasure !== undefined
+          ? input.unitOfMeasure.trim() || undefined
+          : existingEntry.unitOfMeasure,
+      unitPrice:
+        input.unitPrice !== undefined ? (input.unitPrice ?? undefined) : existingEntry.unitPrice,
       totalAmount: input.totalAmount ?? existingEntry.totalAmount,
-      partNumber: input.partNumber !== undefined ? input.partNumber.trim() || undefined : existingEntry.partNumber,
+      partNumber:
+        input.partNumber !== undefined
+          ? input.partNumber.trim() || undefined
+          : existingEntry.partNumber,
       inventorySourceLabel:
         input.inventorySourceLabel !== undefined
           ? input.inventorySourceLabel.trim() || undefined
@@ -1250,7 +1307,10 @@ export class JobsDataRepository {
         ]
       );
 
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [existingEntry.jobId, timelineTime]);
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [
+        existingEntry.jobId,
+        timelineTime
+      ]);
       await this.insertTimelineEntry(
         {
           id: randomUUID(),
@@ -1295,7 +1355,10 @@ export class JobsDataRepository {
         [registerEntryId, trimmedReason, timelineTime]
       );
 
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [existingEntry.jobId, timelineTime]);
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [
+        existingEntry.jobId,
+        timelineTime
+      ]);
       await this.insertTimelineEntry(
         {
           id: randomUUID(),
@@ -1312,7 +1375,10 @@ export class JobsDataRepository {
     return this.getRegisterEntryById(registerEntryId);
   }
 
-  async listMediaAttachmentsForJob(jobId: string, includeVoided = false): Promise<MediaAttachmentRecord[]> {
+  async listMediaAttachmentsForJob(
+    jobId: string,
+    includeVoided = false
+  ): Promise<MediaAttachmentRecord[]> {
     const result = await this.databaseService.query<MediaAttachmentRow>(
       `
         select
@@ -1377,7 +1443,10 @@ export class JobsDataRepository {
     return result.rows[0] ? this.toMediaAttachmentRecord(result.rows[0]) : null;
   }
 
-  async findMediaAttachmentByJobAndSha(jobId: string, sha256: string): Promise<MediaAttachmentRecord | null> {
+  async findMediaAttachmentByJobAndSha(
+    jobId: string,
+    sha256: string
+  ): Promise<MediaAttachmentRecord | null> {
     const result = await this.databaseService.query<MediaAttachmentRow>(
       `
         select
@@ -1530,7 +1599,10 @@ export class JobsDataRepository {
         [mediaId, trimmedCaption, timelineTime]
       );
 
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [existing.jobId, timelineTime]);
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [
+        existing.jobId,
+        timelineTime
+      ]);
       await this.insertTimelineEntry(
         {
           id: randomUUID(),
@@ -1575,7 +1647,10 @@ export class JobsDataRepository {
         [mediaId, trimmedReason, timelineTime]
       );
 
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [existing.jobId, timelineTime]);
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [
+        existing.jobId,
+        timelineTime
+      ]);
       await this.insertTimelineEntry(
         {
           id: randomUUID(),
@@ -1592,7 +1667,10 @@ export class JobsDataRepository {
     return this.getMediaAttachmentById(mediaId);
   }
 
-  async listAssignedJobsForEmployee(employeeId: string, allowedDates: Set<string>): Promise<JobRecord[]> {
+  async listAssignedJobsForEmployee(
+    employeeId: string,
+    allowedDates: Set<string>
+  ): Promise<JobRecord[]> {
     const allowedDateValues = [...allowedDates];
 
     if (allowedDateValues.length === 0) {
@@ -1721,12 +1799,18 @@ export class JobsDataRepository {
 
     for (const appointmentRow of appointmentsResult.rows) {
       const appointment = this.toAppointmentRecord(appointmentRow);
-      appointmentsByJobId.set(appointment.jobId, [...(appointmentsByJobId.get(appointment.jobId) ?? []), appointment]);
+      appointmentsByJobId.set(appointment.jobId, [
+        ...(appointmentsByJobId.get(appointment.jobId) ?? []),
+        appointment
+      ]);
     }
 
     for (const timelineRow of timelineResult.rows) {
       const entry = this.toTimelineEntry(timelineRow);
-      timelineByJobId.set(timelineRow.jobId, [...(timelineByJobId.get(timelineRow.jobId) ?? []), entry]);
+      timelineByJobId.set(timelineRow.jobId, [
+        ...(timelineByJobId.get(timelineRow.jobId) ?? []),
+        entry
+      ]);
     }
 
     return jobRows.map((jobRow) => {
@@ -1832,7 +1916,11 @@ export class JobsDataRepository {
   ): Promise<void> {
     let nextStatus: JobStatus | null = null;
 
-    if (appointmentStatus === 'scheduled' || appointmentStatus === 'confirmed' || appointmentStatus === 'dispatched') {
+    if (
+      appointmentStatus === 'scheduled' ||
+      appointmentStatus === 'confirmed' ||
+      appointmentStatus === 'dispatched'
+    ) {
       nextStatus = 'scheduled';
     }
 
@@ -1866,7 +1954,10 @@ export class JobsDataRepository {
     );
   }
 
-  private async getDerivedJobStatus(jobId: string, queryable: QueryExecutor): Promise<JobStatus | null> {
+  private async getDerivedJobStatus(
+    jobId: string,
+    queryable: QueryExecutor
+  ): Promise<JobStatus | null> {
     const result = await queryable.query<{
       hasScheduledAppointment: boolean;
       hasActiveProgressAppointment: boolean;
@@ -1955,7 +2046,10 @@ export class JobsDataRepository {
     return `${parts.join(' ')}.`;
   }
 
-  private formatStructuredScheduleTime(scheduledStartTime?: string, scheduledEndTime?: string): string | undefined {
+  private formatStructuredScheduleTime(
+    scheduledStartTime?: string,
+    scheduledEndTime?: string
+  ): string | undefined {
     if (scheduledStartTime && scheduledEndTime) {
       return `${scheduledStartTime} to ${scheduledEndTime}`;
     }
@@ -1972,8 +2066,12 @@ export class JobsDataRepository {
   }
 
   private buildFinishReviewMessage(finishReview?: FinishReviewInput): string {
-    const outcome = finishReview?.finishOutcome ? `Outcome: ${finishReview.finishOutcome}.` : 'Finish review saved.';
-    const notesPart = finishReview?.visitNotes?.trim() ? ' Visit notes captured.' : ' No visit notes captured.';
+    const outcome = finishReview?.finishOutcome
+      ? `Outcome: ${finishReview.finishOutcome}.`
+      : 'Finish review saved.';
+    const notesPart = finishReview?.visitNotes?.trim()
+      ? ' Visit notes captured.'
+      : ' No visit notes captured.';
     const chargePart =
       finishReview?.hasChargeActivity === undefined
         ? ''

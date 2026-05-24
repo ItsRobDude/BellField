@@ -18,8 +18,13 @@ export function formatAppointmentScheduleDisplay(
   return [schedule.scheduledDate, timeDisplay].filter(Boolean).join(' - ');
 }
 
-export function formatAppointmentScheduleTime(schedule: AppointmentScheduleDisplay): string | undefined {
-  return formatStructuredTimeRange(schedule.scheduledStartTime, schedule.scheduledEndTime) ?? schedule.timeWindowLabel;
+export function formatAppointmentScheduleTime(
+  schedule: AppointmentScheduleDisplay
+): string | undefined {
+  return (
+    formatStructuredTimeRange(schedule.scheduledStartTime, schedule.scheduledEndTime) ??
+    schedule.timeWindowLabel
+  );
 }
 
 function formatStructuredTimeRange(startTime?: string, endTime?: string): string | undefined {

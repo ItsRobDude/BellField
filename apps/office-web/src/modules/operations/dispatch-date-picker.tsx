@@ -46,7 +46,9 @@ export function DispatchDatePicker({ value, onChange }: DispatchDatePickerProps)
   }
 
   function handleMonthOffset(offset: number) {
-    setVisibleMonthDate((current) => new Date(current.getFullYear(), current.getMonth() + offset, 1));
+    setVisibleMonthDate(
+      (current) => new Date(current.getFullYear(), current.getMonth() + offset, 1)
+    );
   }
 
   function handleMonthSelect(monthIndex: number) {
@@ -92,7 +94,12 @@ export function DispatchDatePicker({ value, onChange }: DispatchDatePickerProps)
           <span>{formatDispatchDate(draftValue)}</span>
         </button>
         {isCalendarOpen ? (
-          <div id="dispatch-calendar-popover" role="dialog" aria-label="Dispatch calendar" style={calendarPopoverStyle}>
+          <div
+            id="dispatch-calendar-popover"
+            role="dialog"
+            aria-label="Dispatch calendar"
+            style={calendarPopoverStyle}
+          >
             <div style={monthRailStyle} aria-label="Months">
               <strong style={monthRailYearStyle}>{visibleMonthDate.getFullYear()}</strong>
               {monthShortLabels.map((label, monthIndex) => (
@@ -100,7 +107,11 @@ export function DispatchDatePicker({ value, onChange }: DispatchDatePickerProps)
                   key={label}
                   type="button"
                   onClick={() => handleMonthSelect(monthIndex)}
-                  style={monthIndex === visibleMonthDate.getMonth() ? activeMonthButtonStyle : monthButtonStyle}
+                  style={
+                    monthIndex === visibleMonthDate.getMonth()
+                      ? activeMonthButtonStyle
+                      : monthButtonStyle
+                  }
                 >
                   {label}
                 </button>
@@ -108,11 +119,21 @@ export function DispatchDatePicker({ value, onChange }: DispatchDatePickerProps)
             </div>
             <div style={calendarPanelStyle}>
               <div style={calendarHeaderStyle}>
-                <button type="button" aria-label="Previous month" onClick={() => handleMonthOffset(-1)} style={calendarNavButtonStyle}>
+                <button
+                  type="button"
+                  aria-label="Previous month"
+                  onClick={() => handleMonthOffset(-1)}
+                  style={calendarNavButtonStyle}
+                >
                   {'<'}
                 </button>
                 <strong>{formatMonthYear(visibleMonthDate)}</strong>
-                <button type="button" aria-label="Next month" onClick={() => handleMonthOffset(1)} style={calendarNavButtonStyle}>
+                <button
+                  type="button"
+                  aria-label="Next month"
+                  onClick={() => handleMonthOffset(1)}
+                  style={calendarNavButtonStyle}
+                >
                   {'>'}
                 </button>
                 <button type="button" onClick={handleTodayClick} style={calendarTodayButtonStyle}>
@@ -151,10 +172,20 @@ export function DispatchDatePicker({ value, onChange }: DispatchDatePickerProps)
           </div>
         ) : null}
       </div>
-      <button type="button" aria-label="Previous dispatch day" onClick={() => handleDayOffset(-1)} style={iconButtonStyle}>
+      <button
+        type="button"
+        aria-label="Previous dispatch day"
+        onClick={() => handleDayOffset(-1)}
+        style={iconButtonStyle}
+      >
         {'<'}
       </button>
-      <button type="button" aria-label="Next dispatch day" onClick={() => handleDayOffset(1)} style={iconButtonStyle}>
+      <button
+        type="button"
+        aria-label="Next dispatch day"
+        onClick={() => handleDayOffset(1)}
+        style={iconButtonStyle}
+      >
         {'>'}
       </button>
     </div>
@@ -236,7 +267,20 @@ function formatFullDate(date: Date): string {
 }
 
 const weekDayLabels = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
-const monthShortLabels = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthShortLabels = [
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec'
+];
 
 const dateToolbarStyle: CSSProperties = {
   alignItems: 'center',

@@ -175,9 +175,11 @@ describe('CrmService', () => {
 
     const response = await service.search('session-token', ' Acme ');
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'customers:view', [
-      'office-web'
-    ]);
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'customers:view',
+      ['office-web']
+    );
     expect(referenceDataService.searchCrm).toHaveBeenCalledWith('Acme', 25);
     expect(referenceDataService.listCustomers).not.toHaveBeenCalled();
     expect(referenceDataService.listLocations).not.toHaveBeenCalled();
@@ -205,7 +207,10 @@ describe('CrmService', () => {
   it('does not run CRM search for blank queries', async () => {
     const { service, referenceDataService } = createService();
 
-    await expect(service.search('session-token', '   ')).resolves.toEqual({ query: '   ', results: [] });
+    await expect(service.search('session-token', '   ')).resolves.toEqual({
+      query: '   ',
+      results: []
+    });
 
     expect(referenceDataService.searchCrm).not.toHaveBeenCalled();
   });
@@ -301,13 +306,13 @@ describe('CrmService', () => {
     const { service, referenceDataService } = createService();
 
     await service.createCustomer('session-token', {
-        name: 'North End Homes',
-        accountType: 'landlord',
-        billingAddressLine1: '12 Cedar Lane',
-        billingCity: 'Everett',
-        billingState: 'WA',
-        billingPostalCode: '98201'
-      });
+      name: 'North End Homes',
+      accountType: 'landlord',
+      billingAddressLine1: '12 Cedar Lane',
+      billingCity: 'Everett',
+      billingState: 'WA',
+      billingPostalCode: '98201'
+    });
 
     expect(referenceDataService.createCustomer).toHaveBeenCalledWith(
       expect.objectContaining({

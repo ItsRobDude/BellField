@@ -1,4 +1,9 @@
-import { BadRequestException, ConflictException, ForbiddenException, PayloadTooLargeException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  PayloadTooLargeException
+} from '@nestjs/common';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import * as path from 'node:path';
@@ -55,7 +60,15 @@ function createMediaService(options: { mediaRoot?: string } = {}) {
     mediaToken
   );
 
-  return { service, mediaConfig, mediaStorage, mediaToken, identityAccessService, jobsDataService, mediaRoot };
+  return {
+    service,
+    mediaConfig,
+    mediaStorage,
+    mediaToken,
+    identityAccessService,
+    jobsDataService,
+    mediaRoot
+  };
 }
 
 function buildMediaRecord(overrides: Partial<MediaAttachmentRecord> = {}): MediaAttachmentRecord {
@@ -107,7 +120,10 @@ describe('MediaService.createUploadIntent', () => {
           originalFilename: 'photo.jpg'
         })
       ).rejects.toBeInstanceOf(ForbiddenException);
-      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'media:create');
+      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+        'session-token',
+        'media:create'
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -310,7 +326,9 @@ describe('MediaService.createUploadIntent', () => {
       jobsDataService.findMediaAttachmentByJobAndSha.mockResolvedValueOnce(
         buildMediaRecord({ id: 'media-voided', isVoid: true, voidReason: 'wrong job' })
       );
-      jobsDataService.createMediaAttachment.mockResolvedValueOnce(buildMediaRecord({ id: 'media-new' }));
+      jobsDataService.createMediaAttachment.mockResolvedValueOnce(
+        buildMediaRecord({ id: 'media-new' })
+      );
 
       const response = await service.createUploadIntent('session-token', 'job-1', {
         kind: 'image',
@@ -384,7 +402,9 @@ describe('MediaService.finalizeBlobUpload', () => {
     const root = makeTempRoot();
     try {
       const { service, mediaToken, jobsDataService } = createMediaService({ mediaRoot: root });
-      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ byteSize: 99 }));
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(
+        buildMediaRecord({ byteSize: 99 })
+      );
       const token = mediaToken.signToken('media-1', 'upload').token;
 
       await expect(
@@ -417,7 +437,9 @@ describe('MediaService.finalizeBlobUpload', () => {
     process.env.BELLFIELD_MEDIA_MAX_BYTES = '4';
     try {
       const { service, mediaToken, jobsDataService } = createMediaService({ mediaRoot: root });
-      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ byteSize: 5 }));
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(
+        buildMediaRecord({ byteSize: 5 })
+      );
       const token = mediaToken.signToken('media-1', 'upload').token;
 
       await expect(
@@ -433,7 +455,9 @@ describe('MediaService.finalizeBlobUpload', () => {
     const root = makeTempRoot();
     try {
       const { service, mediaToken, jobsDataService } = createMediaService({ mediaRoot: root });
-      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ isVoid: true }));
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(
+        buildMediaRecord({ isVoid: true })
+      );
       const token = mediaToken.signToken('media-1', 'upload').token;
 
       await expect(
@@ -449,7 +473,9 @@ describe('MediaService.finalizeBlobUpload', () => {
     const root = makeTempRoot();
     try {
       const { service, mediaToken, jobsDataService } = createMediaService({ mediaRoot: root });
-      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ byteSize: 5 }));
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(
+        buildMediaRecord({ byteSize: 5 })
+      );
       const uploaded = buildMediaRecord({
         byteSize: 5,
         storagePath: 'job-1/media-1.jpg',
@@ -479,7 +505,10 @@ describe('MediaService authorize/edit/void/list', () => {
     try {
       const { service, identityAccessService } = createMediaService({ mediaRoot: root });
       await service.listForJob('session-token', 'job-1');
-      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'media:view');
+      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+        'session-token',
+        'media:view'
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -491,7 +520,9 @@ describe('MediaService authorize/edit/void/list', () => {
       const { service, jobsDataService } = createMediaService({ mediaRoot: root });
       jobsDataService.listAssignedJobsForEmployee.mockResolvedValueOnce([{ id: 'other-job' }]);
 
-      await expect(service.listForJob('session-token', 'job-1')).rejects.toBeInstanceOf(ForbiddenException);
+      await expect(service.listForJob('session-token', 'job-1')).rejects.toBeInstanceOf(
+        ForbiddenException
+      );
       expect(jobsDataService.listMediaAttachmentsForJob).not.toHaveBeenCalled();
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -502,9 +533,9 @@ describe('MediaService authorize/edit/void/list', () => {
     const root = makeTempRoot();
     try {
       const { service } = createMediaService({ mediaRoot: root });
-      await expect(service.updateMedia('session-token', 'media-1', {} as never)).rejects.toBeInstanceOf(
-        BadRequestException
-      );
+      await expect(
+        service.updateMedia('session-token', 'media-1', {} as never)
+      ).rejects.toBeInstanceOf(BadRequestException);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
@@ -513,12 +544,17 @@ describe('MediaService authorize/edit/void/list', () => {
   it('updateMedia routes the caption through media:edit permission', async () => {
     const root = makeTempRoot();
     try {
-      const { service, identityAccessService, jobsDataService } = createMediaService({ mediaRoot: root });
+      const { service, identityAccessService, jobsDataService } = createMediaService({
+        mediaRoot: root
+      });
       jobsDataService.updateMediaAttachmentCaption.mockResolvedValueOnce(
         buildMediaRecord({ caption: 'New caption' })
       );
       await service.updateMedia('session-token', 'media-1', { caption: 'New caption' });
-      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'media:edit');
+      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+        'session-token',
+        'media:edit'
+      );
       expect(jobsDataService.updateMediaAttachmentCaption).toHaveBeenCalled();
     } finally {
       rmSync(root, { recursive: true, force: true });
@@ -529,7 +565,9 @@ describe('MediaService authorize/edit/void/list', () => {
     const root = makeTempRoot();
     try {
       const { service, jobsDataService } = createMediaService({ mediaRoot: root });
-      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(buildMediaRecord({ jobId: 'other-job' }));
+      jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(
+        buildMediaRecord({ jobId: 'other-job' })
+      );
       jobsDataService.listAssignedJobsForEmployee.mockResolvedValueOnce([{ id: 'job-1' }]);
 
       await expect(
@@ -544,11 +582,18 @@ describe('MediaService authorize/edit/void/list', () => {
   it('voidMedia routes through media:edit and forwards the reason', async () => {
     const root = makeTempRoot();
     try {
-      const { service, identityAccessService, jobsDataService } = createMediaService({ mediaRoot: root });
-      jobsDataService.voidMediaAttachment.mockResolvedValueOnce(buildMediaRecord({ isVoid: true, voidReason: 'wrong photo' }));
+      const { service, identityAccessService, jobsDataService } = createMediaService({
+        mediaRoot: root
+      });
+      jobsDataService.voidMediaAttachment.mockResolvedValueOnce(
+        buildMediaRecord({ isVoid: true, voidReason: 'wrong photo' })
+      );
 
       await service.voidMedia('session-token', 'media-1', { reason: 'wrong photo' });
-      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'media:edit');
+      expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+        'session-token',
+        'media:edit'
+      );
       const voidCall = jobsDataService.voidMediaAttachment.mock.calls[0];
       expect(voidCall?.[0]).toBe('media-1');
       expect(voidCall?.[1]).toBe('wrong photo');
@@ -560,7 +605,9 @@ describe('MediaService authorize/edit/void/list', () => {
   it('authorizeBlobDownload accepts a valid signed download token even when no session is supplied', async () => {
     const root = makeTempRoot();
     try {
-      const { service, mediaToken, jobsDataService, identityAccessService } = createMediaService({ mediaRoot: root });
+      const { service, mediaToken, jobsDataService, identityAccessService } = createMediaService({
+        mediaRoot: root
+      });
       const record = buildMediaRecord({
         storagePath: 'job-1/media-1.jpg',
         uploadedAt: '2026-04-14T11:05:00.000Z'
@@ -568,7 +615,9 @@ describe('MediaService authorize/edit/void/list', () => {
       jobsDataService.getMediaAttachmentById.mockResolvedValueOnce(record);
       const downloadToken = mediaToken.signToken('media-1', 'download').token;
 
-      const { record: returned } = await service.authorizeBlobDownload('media-1', { downloadToken });
+      const { record: returned } = await service.authorizeBlobDownload('media-1', {
+        downloadToken
+      });
       expect(returned.id).toBe('media-1');
       expect(identityAccessService.getAuthorizedEmployee).not.toHaveBeenCalled();
     } finally {
@@ -601,10 +650,12 @@ describe('MediaService authorize/edit/void/list', () => {
     const root = makeTempRoot();
     try {
       const { service, identityAccessService } = createMediaService({ mediaRoot: root });
-      identityAccessService.getAuthorizedEmployee.mockRejectedValueOnce(new ForbiddenException('nope'));
-      await expect(service.authorizeBlobDownload('media-1', { sessionToken: 'bad' })).rejects.toBeInstanceOf(
-        ForbiddenException
+      identityAccessService.getAuthorizedEmployee.mockRejectedValueOnce(
+        new ForbiddenException('nope')
       );
+      await expect(
+        service.authorizeBlobDownload('media-1', { sessionToken: 'bad' })
+      ).rejects.toBeInstanceOf(ForbiddenException);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

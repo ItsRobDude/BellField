@@ -76,7 +76,12 @@ export type LocationRecord = {
 
 export type EquipmentStatus = ContractEquipmentStatus;
 
-export const equipmentStatuses = ['active', 'inactive', 'pendingInstall', 'removed'] as const satisfies readonly EquipmentStatus[];
+export const equipmentStatuses = [
+  'active',
+  'inactive',
+  'pendingInstall',
+  'removed'
+] as const satisfies readonly EquipmentStatus[];
 
 export type EquipmentGroupRecord = {
   id: string;
@@ -440,7 +445,9 @@ export type CreateRegisterEntryInput = {
   inventorySourceLabel?: string;
 };
 
-export type UpdateRegisterEntryInput = Partial<Omit<CreateRegisterEntryInput, 'appointmentId' | 'unitPrice'>> & {
+export type UpdateRegisterEntryInput = Partial<
+  Omit<CreateRegisterEntryInput, 'appointmentId' | 'unitPrice'>
+> & {
   appointmentId?: string | null;
   unitPrice?: number | null;
 };

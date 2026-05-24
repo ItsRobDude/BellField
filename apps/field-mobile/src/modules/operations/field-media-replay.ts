@@ -10,7 +10,11 @@ export type FieldMediaReplayResult =
 
 export type FieldMediaReplayDependencies = {
   createUploadIntent: (operation: MediaUploadOperation) => Promise<CreateMediaUploadIntentResponse>;
-  uploadBlob: (input: { mediaId: string; uploadToken: string; localUri: string }) => Promise<unknown>;
+  uploadBlob: (input: {
+    mediaId: string;
+    uploadToken: string;
+    localUri: string;
+  }) => Promise<unknown>;
 };
 
 export async function replayFieldMediaUploadOperation(

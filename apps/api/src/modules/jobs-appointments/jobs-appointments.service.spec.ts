@@ -134,7 +134,8 @@ function createRegisterEntry(overrides: Record<string, unknown> = {}) {
 
 describe('JobsAppointmentsService', () => {
   it('returns compact job intake context without listing jobs', async () => {
-    const { service, referenceDataService, jobsDataService, identityAccessService } = createService();
+    const { service, referenceDataService, jobsDataService, identityAccessService } =
+      createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
       id: 'office-1',
       displayName: 'Dispatcher',
@@ -180,9 +181,11 @@ describe('JobsAppointmentsService', () => {
 
     const response = await service.getIntakeContext('session-token');
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'jobs:view', [
-      'office-web'
-    ]);
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'jobs:view',
+      ['office-web']
+    );
     expect(jobsDataService.listJobs).not.toHaveBeenCalled();
     expect(referenceDataService.getLocationDetail).not.toHaveBeenCalled();
     expect(response).toEqual({
@@ -333,7 +336,9 @@ describe('JobsAppointmentsService', () => {
     });
     jobsDataService.getJobById.mockResolvedValue(createJob('closed'));
 
-    await expect(service.addAppointment('session-token', 'job-1', {})).rejects.toBeInstanceOf(ConflictException);
+    await expect(service.addAppointment('session-token', 'job-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
   });
 
   it('requires configure permission before reopening completed jobs', async () => {
@@ -355,28 +360,31 @@ describe('JobsAppointmentsService', () => {
     [0, 'Cancelling this job will not cancel any appointments because none are active.'],
     [1, 'Cancelling this job will also cancel 1 appointment under it.'],
     [3, 'Cancelling this job will also cancel 3 appointments under it.']
-  ])('warns with the cancellable appointment count when cancelling a job', async (count, warning) => {
-    const { service, jobsDataService, identityAccessService } = createService();
-    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
-      id: 'office-1',
-      displayName: 'Dispatcher',
-      effectivePermissions: ['jobs:edit'],
-      sessionSurface: 'office-web'
-    });
-    jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
-    jobsDataService.countCancellableAppointments.mockResolvedValue(count);
-    jobsDataService.updateJobStatus.mockResolvedValue(createJob('cancelled'));
+  ])(
+    'warns with the cancellable appointment count when cancelling a job',
+    async (count, warning) => {
+      const { service, jobsDataService, identityAccessService } = createService();
+      identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+        id: 'office-1',
+        displayName: 'Dispatcher',
+        effectivePermissions: ['jobs:edit'],
+        sessionSurface: 'office-web'
+      });
+      jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
+      jobsDataService.countCancellableAppointments.mockResolvedValue(count);
+      jobsDataService.updateJobStatus.mockResolvedValue(createJob('cancelled'));
 
-    const response = await service.updateJobStatus('session-token', 'job-1', {
-      status: 'cancelled',
-      occurredAt: '2026-04-14T11:00:00.000Z'
-    });
+      const response = await service.updateJobStatus('session-token', 'job-1', {
+        status: 'cancelled',
+        occurredAt: '2026-04-14T11:00:00.000Z'
+      });
 
-    expect(response.warningMessages).toContain(warning);
-    expect(response.warningMessages?.join(' ')).not.toMatch(/future/i);
-    expect(jobsDataService.hasFutureAppointments).not.toHaveBeenCalled();
-    expect(jobsDataService.countCancellableAppointments).toHaveBeenCalledWith('job-1');
-  });
+      expect(response.warningMessages).toContain(warning);
+      expect(response.warningMessages?.join(' ')).not.toMatch(/future/i);
+      expect(jobsDataService.hasFutureAppointments).not.toHaveBeenCalled();
+      expect(jobsDataService.countCancellableAppointments).toHaveBeenCalledWith('job-1');
+    }
+  );
 
   it('warns clearly before closing a job that still has future appointments', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
@@ -549,7 +557,10 @@ describe('JobsAppointmentsService', () => {
     await expect(
       service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'arrived' })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'appointmentsDispatch:edit');
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'appointmentsDispatch:edit'
+    );
   });
 
   it('lets office dispatchers with appointmentsDispatch:edit cancel an appointment', async () => {
@@ -576,9 +587,14 @@ describe('JobsAppointmentsService', () => {
       createdAt: '2026-04-14T09:00:00.000Z'
     });
 
-    await service.updateAppointmentStatus('session-token', 'appointment-1', { status: 'cancelled' });
+    await service.updateAppointmentStatus('session-token', 'appointment-1', {
+      status: 'cancelled'
+    });
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'appointmentsDispatch:edit');
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'appointmentsDispatch:edit'
+    );
     expect(jobsDataService.updateAppointmentStatus).toHaveBeenCalledWith(
       'appointment-1',
       'cancelled',
@@ -765,7 +781,10 @@ describe('JobsAppointmentsService', () => {
       syncSource: 'field-save-queue'
     });
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'register:create');
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'register:create'
+    );
     expect(jobsDataService.createRegisterEntry).toHaveBeenCalledWith(
       'job-1',
       expect.objectContaining({ description: 'Contactor' }),
@@ -799,7 +818,8 @@ describe('JobsAppointmentsService', () => {
     expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
     expect(response.syncResult).toEqual({
       status: 'rejected',
-      message: 'This field change is outside the current assigned-work scope and could not be validated as an offline replay.'
+      message:
+        'This field change is outside the current assigned-work scope and could not be validated as an offline replay.'
     });
   });
 
@@ -917,13 +937,19 @@ describe('JobsAppointmentsService', () => {
       occurredAt: '2026-04-14T12:00:00.000Z'
     });
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'register:edit');
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'register:edit'
+    );
     expect(jobsDataService.voidRegisterEntry).toHaveBeenCalledWith(
       'register-1',
       'Duplicate line.',
       'Dispatcher',
       '2026-04-14T12:00:00.000Z'
     );
-    expect(response.registerEntries?.[0]).toMatchObject({ isVoid: true, voidReason: 'Duplicate line.' });
+    expect(response.registerEntries?.[0]).toMatchObject({
+      isVoid: true,
+      voidReason: 'Duplicate line.'
+    });
   });
 });

@@ -19,7 +19,10 @@ export type JobQueueBadge = {
   tone: 'quiet' | 'attention' | 'alert';
 };
 
-export function buildFieldMediaCaptionDraftKey(input: { jobId: string; appointmentId?: string }): string {
+export function buildFieldMediaCaptionDraftKey(input: {
+  jobId: string;
+  appointmentId?: string;
+}): string {
   return input.appointmentId ? `appointment:${input.appointmentId}` : `job:${input.jobId}`;
 }
 

@@ -22,7 +22,11 @@ import type { MediaSignedTokenScope } from '@bellfield/contracts';
 export class MediaTokenService {
   constructor(private readonly mediaConfig: MediaConfigService) {}
 
-  signToken(mediaId: string, scope: MediaSignedTokenScope, now: Date = new Date()): { token: string; expiresAt: string } {
+  signToken(
+    mediaId: string,
+    scope: MediaSignedTokenScope,
+    now: Date = new Date()
+  ): { token: string; expiresAt: string } {
     const expiresAtMs = now.getTime() + this.mediaConfig.getTokenTtlSeconds() * 1000;
     const payload = { mediaId, scope, exp: expiresAtMs };
     const payloadEncoded = encodeBase64Url(Buffer.from(JSON.stringify(payload), 'utf8'));
@@ -93,7 +97,10 @@ function encodeBase64Url(buffer: Buffer): string {
 }
 
 function decodeBase64Url(encoded: string): Buffer {
-  const padded = encoded.replace(/-/g, '+').replace(/_/g, '/').padEnd(Math.ceil(encoded.length / 4) * 4, '=');
+  const padded = encoded
+    .replace(/-/g, '+')
+    .replace(/_/g, '/')
+    .padEnd(Math.ceil(encoded.length / 4) * 4, '=');
   return Buffer.from(padded, 'base64');
 }
 

@@ -44,7 +44,11 @@ export class MediaController {
     @Param('jobId') jobId: string,
     @Body() request: CreateMediaUploadIntentRequestBodyDto
   ) {
-    return this.mediaService.createUploadIntent(this.getBearerToken(authorizationHeader), jobId, request);
+    return this.mediaService.createUploadIntent(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 
   @Get('media/:mediaId')
@@ -61,7 +65,11 @@ export class MediaController {
     @Param('mediaId') mediaId: string,
     @Body() request: UpdateMediaAttachmentRequestBodyDto
   ) {
-    return this.mediaService.updateMedia(this.getBearerToken(authorizationHeader), mediaId, request);
+    return this.mediaService.updateMedia(
+      this.getBearerToken(authorizationHeader),
+      mediaId,
+      request
+    );
   }
 
   @Post('media/:mediaId/void')

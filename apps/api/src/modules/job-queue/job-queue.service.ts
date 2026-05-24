@@ -1,9 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type {
-  JobsQueueItem,
-  JobsQueueKey,
-  JobsQueueSection
-} from '@bellfield/contracts';
+import type { JobsQueueItem, JobsQueueKey, JobsQueueSection } from '@bellfield/contracts';
 import type { JobsQueueCursor, JobsQueueItemRecord } from '../company-data/company-data.types';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -25,8 +21,13 @@ export class JobQueueService {
     private readonly identityAccessService: IdentityAccessService
   ) {}
 
-  async getJobsQueue(sessionToken: string, query: JobsQueueRequestQuery): Promise<JobsQueueResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+  async getJobsQueue(
+    sessionToken: string,
+    query: JobsQueueRequestQuery
+  ): Promise<JobsQueueResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', [
+      'office-web'
+    ]);
     const limit = this.parseLimit(query.limit);
 
     const queues = await Promise.all(
@@ -40,7 +41,10 @@ export class JobQueueService {
           key: queueKey,
           totalCount: page.totalCount,
           jobs: visibleJobs.map((job) => this.toJobsQueueItem(job)),
-          nextCursor: page.jobs.length > limit && lastVisibleJob ? this.encodeCursor(queueKey, lastVisibleJob) : undefined
+          nextCursor:
+            page.jobs.length > limit && lastVisibleJob
+              ? this.encodeCursor(queueKey, lastVisibleJob)
+              : undefined
         } satisfies JobsQueueSection;
       })
     );
@@ -75,7 +79,9 @@ export class JobQueueService {
     }
 
     try {
-      const decoded = JSON.parse(Buffer.from(value, 'base64url').toString('utf8')) as Partial<JobsQueueCursor>;
+      const decoded = JSON.parse(
+        Buffer.from(value, 'base64url').toString('utf8')
+      ) as Partial<JobsQueueCursor>;
       if (
         typeof decoded.id !== 'string' ||
         decoded.id.length === 0 ||
@@ -97,9 +103,10 @@ export class JobQueueService {
   }
 
   private encodeCursor(queueKey: JobsQueueKey, job: JobsQueueItemRecord): string {
-    return Buffer.from(JSON.stringify({ queueKey, id: job.id, updatedAt: job.updatedAt }), 'utf8').toString(
-      'base64url'
-    );
+    return Buffer.from(
+      JSON.stringify({ queueKey, id: job.id, updatedAt: job.updatedAt }),
+      'utf8'
+    ).toString('base64url');
   }
 
   private toJobsQueueItem(job: JobsQueueItemRecord): JobsQueueItem {

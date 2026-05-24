@@ -9,7 +9,11 @@ function sanitizeContext(context: WorkerLogContext | undefined): WorkerLogContex
     Object.entries(context).map(([key, value]) => {
       const normalized = key.toLowerCase();
 
-      if (normalized.includes('payload') || normalized.includes('token') || normalized.includes('secret')) {
+      if (
+        normalized.includes('payload') ||
+        normalized.includes('token') ||
+        normalized.includes('secret')
+      ) {
         return [key, '[REDACTED]'];
       }
 
@@ -22,7 +26,11 @@ function sanitizeContext(context: WorkerLogContext | undefined): WorkerLogContex
   );
 }
 
-export function workerLog(level: 'info' | 'error', message: string, context?: WorkerLogContext): void {
+export function workerLog(
+  level: 'info' | 'error',
+  message: string,
+  context?: WorkerLogContext
+): void {
   const entry = JSON.stringify({
     timestamp: new Date().toISOString(),
     service: 'worker',

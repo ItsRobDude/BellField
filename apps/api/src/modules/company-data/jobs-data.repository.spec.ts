@@ -70,7 +70,9 @@ function createDatabaseService(
   appointmentRowOverrides?: Record<string, unknown>
 ) {
   let insertedJobId = 'job-1';
-  const appointmentRow = appointmentRowOverrides ? createAppointmentRow(appointmentRowOverrides) : null;
+  const appointmentRow = appointmentRowOverrides
+    ? createAppointmentRow(appointmentRowOverrides)
+    : null;
   const queryable = {
     query: jest.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes("nextval('job_number_sequence')")) {
@@ -96,7 +98,9 @@ function createDatabaseService(
 
       return { rows: [] };
     }),
-    transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+    transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+      callback(queryable)
+    )
   };
 
   return { databaseService, queryable };
@@ -122,7 +126,9 @@ describe('JobsDataRepository', () => {
       'Main Shop'
     );
 
-    const insertCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('insert into jobs'));
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into jobs')
+    );
     expect(insertCall?.[1]?.[9]).toBeNull();
     expect(job.workOrderNumber).toBeUndefined();
   });
@@ -131,9 +137,16 @@ describe('JobsDataRepository', () => {
     const { databaseService, queryable } = createDatabaseService({ status: 'cancelled' });
     const repository = new JobsDataRepository(databaseService as never);
 
-    await repository.updateJobStatus('job-1', 'cancelled', 'Dispatcher', '2026-04-14T11:00:00.000Z');
+    await repository.updateJobStatus(
+      'job-1',
+      'cancelled',
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
 
-    const appointmentUpdateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update appointments'));
+    const appointmentUpdateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update appointments')
+    );
     const appointmentUpdateSql = String(appointmentUpdateCall?.[0] ?? '');
     expect(appointmentUpdateSql).toContain("status <> 'cancelled'");
     expect(appointmentUpdateSql).not.toContain('scheduled_date');
@@ -147,7 +160,9 @@ describe('JobsDataRepository', () => {
 
   it('counts only non-cancelled appointments for cancellation warnings', async () => {
     const databaseService = {
-      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [{ appointmentCount: '2' }] }))
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [{ appointmentCount: '2' }]
+      }))
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -233,8 +248,12 @@ describe('JobsDataRepository', () => {
       scheduledStartTime: '08:30',
       scheduledEndTime: '10:15'
     });
-    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain('scheduled_start_time as "scheduledStartTime"');
-    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain('scheduled_start_time asc nulls last');
+    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain(
+      'scheduled_start_time as "scheduledStartTime"'
+    );
+    expect(String(databaseService.query.mock.calls[0]?.[0] ?? '')).toContain(
+      'scheduled_start_time asc nulls last'
+    );
   });
 
   it('lists dispatch appointments from the date window without hydrating timelines', async () => {
@@ -418,7 +437,11 @@ describe('JobsDataRepository', () => {
         needsOfficeReview: true
       }
     });
-    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['2026-05-24T10:00:00.000Z', 'job-0', 21]);
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual([
+      '2026-05-24T10:00:00.000Z',
+      'job-0',
+      21
+    ]);
     expect(sql).toContain("job.status in ('new', 'scheduled', 'inProgress', 'waitingOnParts')");
     expect(sql).toContain('needs_office_review = true');
     expect(sql).toContain('next_appointment');
@@ -458,7 +481,9 @@ describe('JobsDataRepository', () => {
     await repository.listJobsQueuePage('unscheduled', 20);
     await repository.listJobsQueuePage('open', 20);
 
-    const [waitingSql, unscheduledSql, openSql] = databaseService.query.mock.calls.map(([sql]) => String(sql));
+    const [waitingSql, unscheduledSql, openSql] = databaseService.query.mock.calls.map(([sql]) =>
+      String(sql)
+    );
     expect(waitingSql).toContain("needs_office_review = false and status = 'waitingOnParts'");
     expect(unscheduledSql).toContain(
       "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = true"
@@ -485,13 +510,19 @@ describe('JobsDataRepository', () => {
 
     await repository.createAppointment(
       'job-1',
-      { scheduledDate: '2026-04-16', timeWindowLabel: '8:00 AM - 10:00 AM', technicianId: 'tech-1' },
+      {
+        scheduledDate: '2026-04-16',
+        timeWindowLabel: '8:00 AM - 10:00 AM',
+        technicianId: 'tech-1'
+      },
       'Dispatcher',
       '2026-04-14T11:00:00.000Z',
       queryable as never
     );
 
-    const acknowledgementCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('reviewed_appointments'));
+    const acknowledgementCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('reviewed_appointments')
+    );
     expect(acknowledgementCall?.[1]).toEqual([
       'job-1',
       '2026-04-14T11:00:00.000Z',
@@ -505,7 +536,8 @@ describe('JobsDataRepository', () => {
       expect.arrayContaining([
         {
           kind: 'finishedVisitReviewAcknowledged',
-          message: 'Finished visit review acknowledged: follow-up appointment scheduled under this job.'
+          message:
+            'Finished visit review acknowledged: follow-up appointment scheduled under this job.'
         },
         { kind: 'appointmentCreated', message: 'Appointment added for 2026-04-16.' }
       ])
@@ -530,17 +562,29 @@ describe('JobsDataRepository', () => {
       '2026-04-14T11:00:00.000Z'
     );
 
-    const acknowledgementCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('reviewed_appointments'));
-    expect(acknowledgementCall?.[1]).toEqual(['job-1', '2026-04-14T11:00:00.000Z', 'Dispatcher', 'keptOpen']);
+    const acknowledgementCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('reviewed_appointments')
+    );
+    expect(acknowledgementCall?.[1]).toEqual([
+      'job-1',
+      '2026-04-14T11:00:00.000Z',
+      'Dispatcher',
+      'keptOpen'
+    ]);
     const timelineCall = queryable.query.mock.calls.find(
       ([sql], index) => String(sql).includes('insert into job_timeline_entries') && index > 0
     );
     expect(timelineCall?.[1]?.[4]).toBe('finishedVisitReviewAcknowledged');
-    expect(timelineCall?.[1]?.[5]).toBe('Finished visit review acknowledged: job kept open for office follow-up.');
+    expect(timelineCall?.[1]?.[5]).toBe(
+      'Finished visit review acknowledged: job kept open for office follow-up.'
+    );
   });
 
   it('records appointment schedule, appointment status, and notes in the job timeline', async () => {
-    const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+    const { queryable, databaseService } = createDatabaseService(
+      {},
+      { scheduledDate: '2026-04-15' }
+    );
     const repository = new JobsDataRepository(databaseService as never);
 
     await repository.updateAppointmentSchedule(
@@ -561,7 +605,11 @@ describe('JobsDataRepository', () => {
       'Dispatcher',
       '2026-04-14T11:30:00.000Z'
     );
-    await repository.addJobNote('job-1', 'Customer asked for a morning return visit.', 'Dispatcher');
+    await repository.addJobNote(
+      'job-1',
+      'Customer asked for a morning return visit.',
+      'Dispatcher'
+    );
 
     const timelineEntries = queryable.query.mock.calls
       .filter(([sql]) => String(sql).includes('insert into job_timeline_entries'))
@@ -593,18 +641,33 @@ describe('JobsDataRepository', () => {
       '2026-04-14T11:00:00.000Z'
     );
 
-    const appointmentUpdateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update appointments'));
+    const appointmentUpdateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update appointments')
+    );
     expect(String(appointmentUpdateCall?.[0] ?? '')).toContain('scheduled_start_time = $3');
-    expect(appointmentUpdateCall?.[1]?.slice(1, 5)).toEqual([null, null, null, 'Call before scheduling']);
+    expect(appointmentUpdateCall?.[1]?.slice(1, 5)).toEqual([
+      null,
+      null,
+      null,
+      'Call before scheduling'
+    ]);
   });
 
   it.each(['scheduled', 'arrived', 'working', 'noAnswer'] as const)(
     'writes an appointmentStatusUpdated entry when an appointment is moved to %s',
     async (status) => {
-      const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+      const { queryable, databaseService } = createDatabaseService(
+        {},
+        { scheduledDate: '2026-04-15' }
+      );
       const repository = new JobsDataRepository(databaseService as never);
 
-      await repository.updateAppointmentStatus('appointment-1', status, 'Field Tech', '2026-04-14T12:00:00.000Z');
+      await repository.updateAppointmentStatus(
+        'appointment-1',
+        status,
+        'Field Tech',
+        '2026-04-14T12:00:00.000Z'
+      );
 
       const timelineEntries = queryable.query.mock.calls
         .filter(([sql]) => String(sql).includes('insert into job_timeline_entries'))
@@ -614,12 +677,17 @@ describe('JobsDataRepository', () => {
           { kind: 'appointmentStatusUpdated', message: `Appointment status changed to ${status}.` }
         ])
       );
-      expect(timelineEntries.find((entry) => entry.kind === 'appointmentFinishedReview')).toBeUndefined();
+      expect(
+        timelineEntries.find((entry) => entry.kind === 'appointmentFinishedReview')
+      ).toBeUndefined();
     }
   );
 
   it('writes both appointmentStatusUpdated and appointmentFinishedReview entries when finishing an appointment', async () => {
-    const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+    const { queryable, databaseService } = createDatabaseService(
+      {},
+      { scheduledDate: '2026-04-15' }
+    );
     const repository = new JobsDataRepository(databaseService as never);
 
     await repository.updateAppointmentStatus(
@@ -635,14 +703,21 @@ describe('JobsDataRepository', () => {
       .map(([, params]) => ({ kind: params?.[4], message: params?.[5] }));
     const kinds = timelineEntries.map((entry) => entry.kind);
 
-    expect(kinds).toEqual(expect.arrayContaining(['appointmentStatusUpdated', 'appointmentFinishedReview']));
-    expect(kinds.indexOf('appointmentStatusUpdated')).toBeLessThan(kinds.indexOf('appointmentFinishedReview'));
+    expect(kinds).toEqual(
+      expect.arrayContaining(['appointmentStatusUpdated', 'appointmentFinishedReview'])
+    );
+    expect(kinds.indexOf('appointmentStatusUpdated')).toBeLessThan(
+      kinds.indexOf('appointmentFinishedReview')
+    );
   });
 
   it.each(['noAnswer', 'finished'] as const)(
     'guards the parent job against terminal-status flips when a %s appointment is saved',
     async (status) => {
-      const { queryable, databaseService } = createDatabaseService({}, { scheduledDate: '2026-04-15' });
+      const { queryable, databaseService } = createDatabaseService(
+        {},
+        { scheduledDate: '2026-04-15' }
+      );
       const repository = new JobsDataRepository(databaseService as never);
 
       await repository.updateAppointmentStatus(
@@ -655,11 +730,17 @@ describe('JobsDataRepository', () => {
 
       const jobStatusGuardCall = queryable.query.mock.calls.find(([sql]) => {
         const text = String(sql);
-        return text.includes('update jobs') && text.includes('case') && text.includes("status in ('closed'");
+        return (
+          text.includes('update jobs') &&
+          text.includes('case') &&
+          text.includes("status in ('closed'")
+        );
       });
       expect(jobStatusGuardCall).toBeTruthy();
       const guardSql = String(jobStatusGuardCall?.[0] ?? '');
-      expect(guardSql).toContain("status in ('closed', 'cancelled', 'waitingOnParts', 'completed')");
+      expect(guardSql).toContain(
+        "status in ('closed', 'cancelled', 'waitingOnParts', 'completed')"
+      );
       expect(jobStatusGuardCall?.[1]?.[1]).toBe('inProgress');
     }
   );
@@ -679,7 +760,9 @@ describe('JobsDataRepository', () => {
 
   it('treats cancelled, finished, and noAnswer appointments as not incomplete', async () => {
     const databaseService = {
-      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [{ hasIncompleteAppointment: false }] }))
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [{ hasIncompleteAppointment: false }]
+      }))
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -691,7 +774,9 @@ describe('JobsDataRepository', () => {
 
   it('ignores cancelled appointments when checking for future-scheduled work', async () => {
     const databaseService = {
-      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [{ hasFutureAppointment: false }] }))
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({
+        rows: [{ hasFutureAppointment: false }]
+      }))
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -736,7 +821,9 @@ describe('JobsDataRepository', () => {
 
         return { rows: [] };
       }),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -757,7 +844,9 @@ describe('JobsDataRepository', () => {
       '2026-04-14T11:00:00.000Z'
     );
 
-    const insertCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('insert into register_entries'));
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into register_entries')
+    );
     expect(insertCall?.[1]?.[4]).toBe('Contactor');
     expect(insertCall?.[1]?.[11]).toBe('tech-1');
 
@@ -780,7 +869,9 @@ describe('JobsDataRepository', () => {
 
         return { rows: [] };
       }),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -795,7 +886,9 @@ describe('JobsDataRepository', () => {
       '2026-04-14T12:00:00.000Z'
     );
 
-    const updateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update register_entries'));
+    const updateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update register_entries')
+    );
     expect(updateCall?.[1]?.[1]).toBeNull();
     expect(updateCall?.[1]?.[3]).toBe('Updated contactor');
     expect(updateCall?.[1]?.[6]).toBeNull();
@@ -819,7 +912,9 @@ describe('JobsDataRepository', () => {
 
         return { rows: [] };
       }),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -830,7 +925,9 @@ describe('JobsDataRepository', () => {
       '2026-04-14T12:00:00.000Z'
     );
 
-    const updateCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('update register_entries'));
+    const updateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update register_entries')
+    );
     expect(String(updateCall?.[0] ?? '')).toContain('is_void = true');
     expect(updateCall?.[1]).toEqual(['register-1', 'Duplicate line.', '2026-04-14T12:00:00.000Z']);
 
@@ -838,7 +935,9 @@ describe('JobsDataRepository', () => {
       String(sql).includes('insert into job_timeline_entries')
     );
     expect(timelineCall?.[1]?.[4]).toBe('registerEntryVoided');
-    expect(timelineCall?.[1]?.[5]).toBe('Register entry voided: Contactor. Reason: Duplicate line.');
+    expect(timelineCall?.[1]?.[5]).toBe(
+      'Register entry voided: Contactor. Reason: Duplicate line.'
+    );
   });
 
   it('persists a new media attachment row with the mediaAttached timeline entry', async () => {
@@ -878,7 +977,9 @@ describe('JobsDataRepository', () => {
         }
         return { rows: [] };
       }),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
     };
     const repository = new JobsDataRepository(databaseService as never);
 
@@ -899,7 +1000,9 @@ describe('JobsDataRepository', () => {
       '2026-04-14T11:00:00.000Z'
     );
 
-    const insertCall = queryable.query.mock.calls.find(([sql]) => String(sql).includes('insert into media_attachments'));
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into media_attachments')
+    );
     expect(insertCall).toBeTruthy();
     // Confirm storage_path / uploaded_at start null and is_void starts false.
     const insertSql = String(insertCall?.[0] ?? '');
@@ -977,7 +1080,11 @@ describe('JobsDataRepository', () => {
     };
     const repository = new JobsDataRepository(databaseService as never);
 
-    await repository.markMediaAttachmentBlobUploaded('media-1', 'job-1/media-1.jpg', '2026-04-14T11:05:00.000Z');
+    await repository.markMediaAttachmentBlobUploaded(
+      'media-1',
+      'job-1/media-1.jpg',
+      '2026-04-14T11:05:00.000Z'
+    );
 
     const updateCall = databaseService.query.mock.calls.find(([sql]) =>
       String(sql).includes('update media_attachments')
@@ -1022,11 +1129,18 @@ describe('JobsDataRepository', () => {
     };
     const databaseService = {
       query: jest.fn(async (sql: string, params?: unknown[]) => queryable.query(sql, params)),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
     };
     const repository = new JobsDataRepository(databaseService as never);
 
-    await repository.voidMediaAttachment('media-1', 'Wrong job', 'Dispatcher', '2026-04-14T12:00:00.000Z');
+    await repository.voidMediaAttachment(
+      'media-1',
+      'Wrong job',
+      'Dispatcher',
+      '2026-04-14T12:00:00.000Z'
+    );
 
     const updateCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('update media_attachments')
@@ -1075,11 +1189,18 @@ describe('JobsDataRepository', () => {
     };
     const databaseService = {
       query: jest.fn(async (sql: string, params?: unknown[]) => queryable.query(sql, params)),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => callback(queryable))
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
     };
     const repository = new JobsDataRepository(databaseService as never);
 
-    await repository.updateMediaAttachmentCaption('media-1', { caption: 'New caption' }, 'Dispatcher', '2026-04-14T12:00:00.000Z');
+    await repository.updateMediaAttachmentCaption(
+      'media-1',
+      { caption: 'New caption' },
+      'Dispatcher',
+      '2026-04-14T12:00:00.000Z'
+    );
 
     const updateCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('update media_attachments')

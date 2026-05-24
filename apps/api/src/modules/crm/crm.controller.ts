@@ -22,7 +22,10 @@ export class CrmController {
   }
 
   @Get('search')
-  async search(@Headers('authorization') authorizationHeader: string | undefined, @Query('q') query = '') {
+  async search(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Query('q') query = ''
+  ) {
     return this.crmService.search(this.getBearerToken(authorizationHeader), query);
   }
 
@@ -48,7 +51,11 @@ export class CrmController {
     @Param('customerId') customerId: string,
     @Body() request: UpdateCustomerRequestBodyDto
   ) {
-    return this.crmService.updateCustomer(this.getBearerToken(authorizationHeader), customerId, request);
+    return this.crmService.updateCustomer(
+      this.getBearerToken(authorizationHeader),
+      customerId,
+      request
+    );
   }
 
   @Get('locations/:locationId')
@@ -73,7 +80,11 @@ export class CrmController {
     @Param('locationId') locationId: string,
     @Body() request: UpdateLocationRequestBodyDto
   ) {
-    return this.crmService.updateLocation(this.getBearerToken(authorizationHeader), locationId, request);
+    return this.crmService.updateLocation(
+      this.getBearerToken(authorizationHeader),
+      locationId,
+      request
+    );
   }
 
   @Post('locations/:locationId/reassign-owner')
@@ -82,7 +93,11 @@ export class CrmController {
     @Param('locationId') locationId: string,
     @Body() request: ReassignLocationOwnerRequestBodyDto
   ) {
-    return this.crmService.reassignLocationOwner(this.getBearerToken(authorizationHeader), locationId, request);
+    return this.crmService.reassignLocationOwner(
+      this.getBearerToken(authorizationHeader),
+      locationId,
+      request
+    );
   }
 
   @Get('contacts/:contactId')
@@ -107,7 +122,11 @@ export class CrmController {
     @Param('contactId') contactId: string,
     @Body() request: UpdateContactRequestBodyDto
   ) {
-    return this.crmService.updateContact(this.getBearerToken(authorizationHeader), contactId, request);
+    return this.crmService.updateContact(
+      this.getBearerToken(authorizationHeader),
+      contactId,
+      request
+    );
   }
 
   @Post('contact-links')
@@ -124,7 +143,11 @@ export class CrmController {
     @Param('linkId') linkId: string,
     @Body() request: UpdateContactLinkRequestBodyDto
   ) {
-    return this.crmService.updateContactLink(this.getBearerToken(authorizationHeader), linkId, request);
+    return this.crmService.updateContactLink(
+      this.getBearerToken(authorizationHeader),
+      linkId,
+      request
+    );
   }
 
   private getBearerToken(authorizationHeader: string | undefined): string {

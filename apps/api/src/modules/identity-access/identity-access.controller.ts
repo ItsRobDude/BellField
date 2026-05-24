@@ -14,21 +14,27 @@ export class IdentityAccessController {
   @Get('auth/me')
   async getCurrentEmployee(@Headers('authorization') authorizationHeader?: string) {
     return {
-      employee: await this.identityAccessService.getCurrentEmployee(this.getBearerToken(authorizationHeader))
+      employee: await this.identityAccessService.getCurrentEmployee(
+        this.getBearerToken(authorizationHeader)
+      )
     };
   }
 
   @Get('roles')
   async getRoles(@Headers('authorization') authorizationHeader?: string) {
     return {
-      roles: await this.identityAccessService.getRoleTemplatesForOffice(this.getBearerToken(authorizationHeader))
+      roles: await this.identityAccessService.getRoleTemplatesForOffice(
+        this.getBearerToken(authorizationHeader)
+      )
     };
   }
 
   @Get('employees')
   async getEmployees(@Headers('authorization') authorizationHeader?: string) {
     return {
-      employees: await this.identityAccessService.getEmployees(this.getBearerToken(authorizationHeader))
+      employees: await this.identityAccessService.getEmployees(
+        this.getBearerToken(authorizationHeader)
+      )
     };
   }
 

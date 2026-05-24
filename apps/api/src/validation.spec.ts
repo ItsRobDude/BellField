@@ -41,7 +41,12 @@ describe('Runtime validation', () => {
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({
-      controllers: [IdentityAccessController, JobsAppointmentsController, EquipmentController, CrmController],
+      controllers: [
+        IdentityAccessController,
+        JobsAppointmentsController,
+        EquipmentController,
+        CrmController
+      ],
       providers: [
         { provide: IdentityAccessService, useValue: identityAccessService },
         { provide: JobsAppointmentsService, useValue: jobsAppointmentsService },
@@ -179,12 +184,10 @@ describe('Runtime validation', () => {
   });
 
   it('rejects malformed job note payloads with 400', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/operations/jobs/job-1/notes')
-      .send({
-        note: '',
-        occurredAt: 'not-a-date'
-      });
+    const response = await request(app.getHttpServer()).post('/operations/jobs/job-1/notes').send({
+      note: '',
+      occurredAt: 'not-a-date'
+    });
 
     expect(response.status).toBe(400);
     expect(jobsAppointmentsService.addJobNote).not.toHaveBeenCalled();
@@ -215,16 +218,14 @@ describe('Runtime validation', () => {
   });
 
   it('rejects malformed equipment create payloads with 400', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/operations/equipment')
-      .send({
-        equipmentType: '',
-        brand: 'Carrier',
-        model: 'ABC',
-        serialNumber: 123,
-        filterSizes: '16x25x1',
-        status: 'active'
-      });
+    const response = await request(app.getHttpServer()).post('/operations/equipment').send({
+      equipmentType: '',
+      brand: 'Carrier',
+      model: 'ABC',
+      serialNumber: 123,
+      filterSizes: '16x25x1',
+      status: 'active'
+    });
 
     expect(response.status).toBe(400);
     expect(equipmentService.createEquipment).not.toHaveBeenCalled();
@@ -242,16 +243,14 @@ describe('Runtime validation', () => {
   });
 
   it('rejects malformed CRM customer payloads with 400', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/operations/crm/customers')
-      .send({
-        name: '',
-        accountType: 'company',
-        billingAddressLine1: '100 Main St',
-        billingCity: 'Seattle',
-        billingState: 'WA',
-        billingPostalCode: '98101'
-      });
+    const response = await request(app.getHttpServer()).post('/operations/crm/customers').send({
+      name: '',
+      accountType: 'company',
+      billingAddressLine1: '100 Main St',
+      billingCity: 'Seattle',
+      billingState: 'WA',
+      billingPostalCode: '98101'
+    });
 
     expect(response.status).toBe(400);
     expect(crmService.createCustomer).not.toHaveBeenCalled();

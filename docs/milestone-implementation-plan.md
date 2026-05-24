@@ -7,6 +7,7 @@ Its purpose is to turn BellField's product vision, workflow rules, deployment ru
 This is the build-order source of truth.
 
 It should answer:
+
 - what gets built first
 - what gets delayed on purpose
 - what "done" means for each major phase
@@ -21,6 +22,7 @@ This document is intentionally biased toward quality, maintainability, and real-
 BellField should be built in a controlled sequence.
 
 Important rules:
+
 - do not try to build the whole product at once
 - do not jump into advanced features before the operational core is trustworthy
 - do not build cloud-first assumptions into a self-hosted-first product
@@ -29,6 +31,7 @@ Important rules:
 - do not let mobile and office drift into separate systems
 
 BellField should aim to become:
+
 1. usable
 2. trustworthy
 3. maintainable
@@ -37,6 +40,7 @@ BellField should aim to become:
 That order matters.
 
 ### Product benchmark posture
+
 BellField should take cues from strong existing products without inheriting their full sprawl.
 
 - take ServiceTitan-like depth seriously in dispatch, permissions, billing controls, and operational history
@@ -49,6 +53,7 @@ BellField should take cues from strong existing products without inheriting thei
 ## 2. What Is Already Defined Before Coding
 
 Before serious feature coding begins, BellField now has the following source-of-truth documents:
+
 - `README.md`
 - `docs/deployment-model.md`
 - `docs/product-rules.md`
@@ -90,6 +95,7 @@ This plan deliberately puts the operational backbone first.
 Each milestone should produce a trustworthy capability layer, not just a demo.
 
 Moving to the next milestone should mean:
+
 - the current layer is believable enough that later work does not need to keep rewriting it
 - the milestone's main user-facing workflows exist in a stable enough shape to build on
 - BellField is still avoiding later-stage breadth that would dilute the active milestone
@@ -99,6 +105,7 @@ Moving to the next milestone should mean:
 ## 4. What Should Not Be Built Early
 
 The following should be postponed until later unless there is a very strong reason:
+
 - customer portal
 - customer self-booking
 - advanced text/email automation
@@ -114,6 +121,7 @@ The following should be postponed until later unless there is a very strong reas
 BellField should first become excellent at serving one self-hosted company well.
 
 Important interpretation rule:
+
 - work that repairs a weak earlier foundation is allowed
 - work that quietly starts a later milestone under the label of "prep" is not
 - if a change adds real new user-facing workflow from a later milestone, it should usually wait until that milestone is active
@@ -124,9 +132,11 @@ Important interpretation rule:
 ## 5. Milestone 0 - Project Foundation
 
 ### Goal
+
 Prepare the repo and codebase so future work stays clean.
 
 ### Scope
+
 - establish monorepo/app structure
 - establish TypeScript-first stack foundations
 - set up formatting/linting/basic checks
@@ -137,12 +147,15 @@ Prepare the repo and codebase so future work stays clean.
 - establish basic CI expectations later if not immediately
 
 ### Not yet
+
 This milestone is not about real business workflows, real persistence-backed operations, or production-ready office/field behavior.
 
 It is about making BellField safe to build.
 
 ### Definition of done
+
 Milestone 0 is done when:
+
 - the repo has the approved basic structure
 - formatting/linting/basic checks run consistently
 - no one needs to guess where new code should go
@@ -155,9 +168,11 @@ Milestone 0 is done when:
 ## 6. Milestone 1 - App Shells, Authentication, and Employee Basics
 
 ### Goal
+
 Create a usable skeleton for office and field access.
 
 ### Scope
+
 - office app login screen
 - field app login screen
 - basic dashboard/home shells
@@ -169,12 +184,15 @@ Create a usable skeleton for office and field access.
 - device identity/revocation foundations
 
 ### Not yet
+
 This milestone is not yet about real CRM records, customer/location management, equipment history, job intake, dispatching, or deep field execution.
 
 It is about identity, access, and knowing which employee is using BellField.
 
 ### Definition of done
+
 Milestone 1 is done when:
+
 - office users can log in and land on dashboard
 - technicians can log in and land on field home/dashboard
 - owner/admin can manage employees at a basic level
@@ -188,9 +206,11 @@ Milestone 1 is done when:
 ## 7. Milestone 2 - Customers, Locations, and Contacts
 
 ### Goal
+
 Build the real-world CRM backbone.
 
 ### Scope
+
 - customer account creation/editing
 - inactive status and flags such as Do Not Service
 - location creation under customer accounts
@@ -203,12 +223,15 @@ Build the real-world CRM backbone.
 - location history visibility foundations
 
 ### Not yet
+
 This milestone is not yet about deep equipment context, asset-level service history, job intake, appointment timelines, or dispatch workflow.
 
 It is about representing accounts, locations, contacts, and ownership/contact changes correctly.
 
 ### Definition of done
+
 Milestone 2 is done when:
+
 - users can create customers and locations cleanly
 - locations can exist before equipment is added
 - locations can be reassigned to a new owner/customer without losing location history
@@ -222,9 +245,11 @@ Milestone 2 is done when:
 ## 8. Milestone 3 - Equipment and Location Service Context
 
 ### Goal
+
 Make locations operationally useful for equipment-heavy service work, with HVAC as an important reference case.
 
 ### Scope
+
 - equipment tab on location screen
 - separate equipment records per physical component
 - partial equipment entry support
@@ -236,12 +261,15 @@ Make locations operationally useful for equipment-heavy service work, with HVAC 
 - serialized equipment handling foundations
 
 ### Not yet
+
 This milestone is not yet about jobs, appointment scheduling, dispatch workflow, or broad inventory/PO behavior.
 
 It is about making locations operationally meaningful for service work by giving equipment its own trustworthy context.
 
 ### Definition of done
+
 Milestone 3 is done when:
+
 - equipment can be added, edited, archived, and viewed in history
 - inactive equipment is hidden by default but toggle-able visible
 - separate components remain separate records
@@ -255,9 +283,11 @@ Milestone 3 is done when:
 ## 9. Milestone 4 - Jobs and Appointments Core
 
 ### Goal
+
 Create the operational work record and visit scheduling foundation.
 
 ### Scope
+
 - job creation
 - job types/categories/origin
 - work order number field
@@ -271,12 +301,15 @@ Create the operational work record and visit scheduling foundation.
 - manual close/cancel/reopen logic foundations
 
 ### Not yet
+
 This milestone is not yet about a timeline dispatch board, route planning, full field offline execution, or draft/posting financial workflow.
 
 It is about creating the parent work record, the child appointment model, and the warning-driven status/history behavior that later workflows depend on.
 
 ### Definition of done
+
 Milestone 4 is done when:
+
 - office can create jobs reliably
 - jobs can exist with or without appointments
 - appointments can be created and linked correctly
@@ -290,9 +323,11 @@ Milestone 4 is done when:
 ## 10. Milestone 5 - Dispatch Board v1
 
 ### Goal
+
 Make BellField useful for daily scheduling and dispatch work.
 
 ### Scope
+
 - timeline-based dispatch board
 - technician rows
 - unassigned queue
@@ -306,12 +341,15 @@ Make BellField useful for daily scheduling and dispatch work.
 - optional unassigned column behavior
 
 ### Not yet
+
 This milestone is not yet about full technician execution, durable offline queueing, register entries, media queueing, or estimate building in the field.
 
 It is about giving office staff a usable day-of-work scheduling surface on top of the jobs/appointments core.
 
 ### Definition of done
+
 Milestone 5 is done when:
+
 - appointments show correctly on the timeline
 - unassigned appointments stay in the queue by default
 - dispatcher can reassign/reschedule from the board
@@ -325,9 +363,11 @@ Milestone 5 is done when:
 ## 11. Milestone 6 - Field App v1 and Offline Work
 
 ### Goal
+
 Make the field app practically usable, even with weak signal.
 
 ### Scope
+
 - technician home/dashboard
 - assigned jobs for today/tomorrow default sync window
 - local cached job/location/equipment data for assigned jobs
@@ -344,12 +384,15 @@ Make the field app practically usable, even with weak signal.
 - lost/revoked device behavior foundations
 
 ### Not yet
+
 This milestone is not yet about invoice posting, broad financial workflows, or advanced dispatch optimization.
 
 It is about giving technicians a trustworthy field workflow that still works when signal is weak.
 
 ### Definition of done
+
 Milestone 6 is done when:
+
 - field users can work assigned jobs without perfect connectivity
 - local edits save cleanly
 - synced changes show up back in office appropriately
@@ -363,9 +406,11 @@ Milestone 6 is done when:
 ## 12. Milestone 7 - Estimates and Invoice Draft Workflow
 
 ### Goal
+
 Support quoting and early financial drafting without full accounting finalization yet.
 
 ### Scope
+
 - estimate creation from jobs
 - estimate builder screen
 - estimate statuses
@@ -377,12 +422,15 @@ Support quoting and early financial drafting without full accounting finalizatio
 - editable invoice draft behavior
 
 ### Not yet
+
 This milestone is not yet about posted accounting finalization, locked invoices, or full bookkeeping controls.
 
 It is about quoting and draft-billing behavior that can support field and office workflows before final accounting completion.
 
 ### Definition of done
+
 Milestone 7 is done when:
+
 - estimates can be created and managed from jobs
 - approved/declined estimate states work
 - office can review quoted work from both job and location views
@@ -394,9 +442,11 @@ Milestone 7 is done when:
 ## 13. Milestone 8 - Invoice Posting and Bookkeeping Workflow
 
 ### Goal
+
 Make the money side trustworthy.
 
 ### Scope
+
 - invoice review screens/workbench behavior
 - invoice posting flow
 - posted invoice lock behavior
@@ -406,12 +456,15 @@ Make the money side trustworthy.
 - invoice-related activity showing in job history
 
 ### Not yet
+
 This milestone is not yet about inventory/PO/job-costing depth.
 
 It is about turning draft financial workflow into trustworthy accounting handoff behavior.
 
 ### Definition of done
+
 Milestone 8 is done when:
+
 - office/bookkeeping can review and post invoices
 - posted invoices lock correctly
 - job history reflects relevant invoice events
@@ -423,9 +476,11 @@ Milestone 8 is done when:
 ## 14. Milestone 9 - Inventory, PO, and Job Costing
 
 ### Goal
+
 Support material flow and job-cost visibility.
 
 ### Scope
+
 - inventory locations
 - truck inventory
 - PO creation
@@ -440,12 +495,15 @@ Support material flow and job-cost visibility.
 - finalized job cost on completion
 
 ### Not yet
+
 This milestone is not yet about broader reporting/admin polish or pilot rollout work.
 
 It is about material flow, equipment-vs-parts behavior, and cost visibility becoming operationally real.
 
 ### Definition of done
+
 Milestone 9 is done when:
+
 - inventory locations and truck locations work cleanly
 - POs always end at one destination
 - equipment and non-equipment items behave differently in the correct ways
@@ -457,9 +515,11 @@ Milestone 9 is done when:
 ## 15. Milestone 10 - Reporting, History Hardening, and Admin Polish
 
 ### Goal
+
 Strengthen trust, visibility, and administration.
 
 ### Scope
+
 - better history filtering
 - better reporting for jobs/invoices/inventory
 - profitability reports where allowed
@@ -470,12 +530,15 @@ Strengthen trust, visibility, and administration.
 - delete confirmation hardening
 
 ### Not yet
+
 This milestone is not yet about deployment validation or broader beta stabilization.
 
 It is about making BellField easier to audit, manage, support, and trust in day-to-day office use.
 
 ### Definition of done
+
 Milestone 10 is done when:
+
 - owners/admins can understand who changed what
 - reports are useful for real office decisions
 - inactive/history views do not clutter active work
@@ -487,9 +550,11 @@ Milestone 10 is done when:
 ## 16. Milestone 11 - Self-Hosted Pilot Deployment
 
 ### Goal
+
 Run BellField like a real small-shop system, not just a dev project.
 
 ### Scope
+
 - self-hosted setup instructions
 - Windows server-PC-friendly deployment path
 - supported install profile and explicit unsupported setup boundary
@@ -502,12 +567,15 @@ Run BellField like a real small-shop system, not just a dev project.
 - pilot company/company-like testing workflow
 
 ### Not yet
+
 This milestone is not yet about general beta polish or broad production hardening beyond the pilot environment.
 
 It is about proving BellField can run in the self-hosted environment it was designed for.
 
 ### Definition of done
+
 Milestone 11 is done when:
+
 - a small self-hosted deployment can run BellField reliably
 - office desktops can connect correctly
 - field devices can work and sync back correctly
@@ -521,9 +589,11 @@ Milestone 11 is done when:
 ## 17. Milestone 12 - Stabilization and Beta Readiness
 
 ### Goal
+
 Reduce risk before broader real-world usage.
 
 ### Scope
+
 - bug fixing
 - performance tuning
 - cleanup/refactors that improve clarity without changing product meaning
@@ -533,12 +603,15 @@ Reduce risk before broader real-world usage.
 - polish on the most-used screens
 
 ### Not yet
+
 This milestone is not about broad new feature expansion.
 
 It is about reducing fragility, confusion, and support risk before wider real-world usage.
 
 ### Definition of done
+
 Milestone 12 is done when:
+
 - the product is stable enough for serious pilot/beta use
 - major workflows are no longer fragile
 - the codebase is still understandable
@@ -549,9 +622,11 @@ Milestone 12 is done when:
 ## 18. Rules for Working Between Milestones
 
 ### Allowed overlap
+
 Some planning, UI refinement, and technical prep may overlap across milestones.
 
 However:
+
 - a later milestone's core logic should not be merged in a way that destabilizes earlier unfinished milestones
 - BellField should not skip foundational milestones just because a later feature feels exciting
 - narrow foundation repair is allowed when an earlier assumption proves weak
@@ -560,10 +635,13 @@ However:
 - if overlap creates a real new workflow that a user can depend on, it should usually be treated as that later milestone starting
 
 ### Practical rule
+
 A milestone should be considered "active" until its definition of done is met.
 
 ### Another practical rule
+
 If a milestone reveals a bad assumption in an earlier layer:
+
 - fix the foundation first
 - do not pile more features on top of known bad structure
 - once the weak layer is repaired, return to the active milestone instead of widening the roadmap opportunistically
@@ -576,6 +654,7 @@ If a milestone reveals a bad assumption in an earlier layer:
 A milestone should not be called done just because a demo technically works once.
 
 A milestone is done when:
+
 - the main workflow works reliably
 - the UI behavior matches product docs closely enough
 - permissions are respected
@@ -615,13 +694,13 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 
 ### Shipped foundation
 
-| Milestone | Current repo state | Remaining pressure |
-| --- | --- | --- |
-| 2 - CRM backbone | Customer, location, contact, ownership history, shared contact links, duplicate warnings, and SQL-backed CRM search exist. | Large-dataset polish should continue with SQL-backed duplicate checks and typeahead-style intake instead of loading every customer/location into forms. |
-| 3 - Equipment context | Equipment records, active/inactive status, history, grouping/replacement links, install date, filters, and office equipment detail surfaces exist. | Field and office location-context ergonomics can improve, but the entity shape is usable. |
-| 4 - Jobs and appointments | Jobs may exist with or without appointments. Appointments belong to jobs. Status updates, finished-visit review acknowledgement, add-appointment follow-up, register entries, media metadata, and unified timeline events exist. | Snapshot behavior for historical job customer/location display context is still a future hardening item before invoices/posting become serious. |
-| 5 - Dispatch board v1 | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, job detail opened from appointment cards, date picker, Today, previous/next, and refresh controls. | Manual browser smoke checks remain the main dispatch closeout item. Compact week strip is polish, not a blocker; week view remains later. |
-| 6 - Field app/offline | Field assigned-work caching, notes/status/equipment/register/media queueing, job/appointment media attribution, media size guardrails, media rejected-state handling, conflict/rejected preservation, Sync Now, in-screen background sync, and a home/detail field layout exist. | Manual mobile smoke, media upload device smoke, remaining transient sync hardening, and revoked-device wipe are still open Milestone 6 work. |
+| Milestone                 | Current repo state                                                                                                                                                                                                                                                               | Remaining pressure                                                                                                                                      |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2 - CRM backbone          | Customer, location, contact, ownership history, shared contact links, duplicate warnings, and SQL-backed CRM search exist.                                                                                                                                                       | Large-dataset polish should continue with SQL-backed duplicate checks and typeahead-style intake instead of loading every customer/location into forms. |
+| 3 - Equipment context     | Equipment records, active/inactive status, history, grouping/replacement links, install date, filters, and office equipment detail surfaces exist.                                                                                                                               | Field and office location-context ergonomics can improve, but the entity shape is usable.                                                               |
+| 4 - Jobs and appointments | Jobs may exist with or without appointments. Appointments belong to jobs. Status updates, finished-visit review acknowledgement, add-appointment follow-up, register entries, media metadata, and unified timeline events exist.                                                 | Snapshot behavior for historical job customer/location display context is still a future hardening item before invoices/posting become serious.         |
+| 5 - Dispatch board v1     | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, job detail opened from appointment cards, date picker, Today, previous/next, and refresh controls.                                  | Manual browser smoke checks remain the main dispatch closeout item. Compact week strip is polish, not a blocker; week view remains later.               |
+| 6 - Field app/offline     | Field assigned-work caching, notes/status/equipment/register/media queueing, job/appointment media attribution, media size guardrails, media rejected-state handling, conflict/rejected preservation, Sync Now, in-screen background sync, and a home/detail field layout exist. | Manual mobile smoke, media upload device smoke, remaining transient sync hardening, and revoked-device wipe are still open Milestone 6 work.            |
 
 ### Current next implementation order
 

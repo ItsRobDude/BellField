@@ -109,7 +109,7 @@ export const seededLocations: LocationRecord[] = [
     email: 'casey.parker@example.local',
     fax: undefined,
     isActive: true,
-    alternateBillToCustomerIds: ['customer-landlord-1'],
+    alternateBillToCustomerIds: ['customer-landlord-1']
   },
   {
     id: 'location-redwood-unit-12',
@@ -123,7 +123,7 @@ export const seededLocations: LocationRecord[] = [
     email: 'leasing@redwoodpm.local',
     fax: undefined,
     isActive: true,
-    alternateBillToCustomerIds: ['customer-landlord-1'],
+    alternateBillToCustomerIds: ['customer-landlord-1']
   },
   {
     id: 'location-sunrise-dental',
@@ -137,7 +137,7 @@ export const seededLocations: LocationRecord[] = [
     email: 'ops@sunrisedental.local',
     fax: undefined,
     isActive: true,
-    alternateBillToCustomerIds: [],
+    alternateBillToCustomerIds: []
   }
 ];
 

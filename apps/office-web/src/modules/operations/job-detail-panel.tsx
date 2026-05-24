@@ -48,12 +48,20 @@ type JobDetailPanelProps = {
   onConfirmJobStatusChange: () => Promise<void>;
   onCancelJobStatusChange: () => void;
   onAppointmentStatusChange: (appointmentId: string, status: AppointmentStatus) => Promise<void>;
-  onAppointmentDraftChange: (jobId: string, draft: AppointmentDraft) => void;
-  onAppointmentEditDraftChange: (appointmentId: string, draft: AppointmentEditDraft) => void;
+  onAppointmentDraftChange: (jobId: string, patch: Partial<AppointmentDraft>) => void;
+  onAppointmentEditDraftChange: (
+    appointmentId: string,
+    baseDraft: AppointmentEditDraft,
+    patch: Partial<AppointmentEditDraft>
+  ) => void;
   onSaveAppointmentSchedule: (appointmentId: string) => Promise<void>;
   onAddAppointment: (jobId: string) => Promise<void>;
   onKeepJobOpen: (jobId: string) => Promise<void>;
-  onRegisterDraftChange: (jobId: string, registerEntryId: string, draft: RegisterEntryEditDraft) => void;
+  onRegisterDraftChange: (
+    jobId: string,
+    registerEntryId: string,
+    draft: RegisterEntryEditDraft
+  ) => void;
   onSaveRegisterEntry: (jobId: string, registerEntryId: string) => Promise<void>;
   onRegisterVoidReasonChange: (jobId: string, registerEntryId: string, reason: string) => void;
   onVoidRegisterEntry: (jobId: string, registerEntryId: string) => Promise<void>;
@@ -133,15 +141,24 @@ export function JobDetailPanel({
   onOpenMediaAttachment
 }: JobDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<JobDetailTab>(initialTab);
-  const jobPendingStatusChange = pendingJobStatusChange?.jobId === job.id ? pendingJobStatusChange : null;
+  const jobPendingStatusChange =
+    pendingJobStatusChange?.jobId === job.id ? pendingJobStatusChange : null;
   useEffect(() => {
-    if ((activeTab === 'captured' || activeTab === 'media') && !capturedWork?.isLoading && !capturedWork) {
+    if (
+      (activeTab === 'captured' || activeTab === 'media') &&
+      !capturedWork?.isLoading &&
+      !capturedWork
+    ) {
       void onLoadCapturedWork(job.id);
     }
   }, [activeTab, capturedWork, job.id, onLoadCapturedWork]);
 
   return (
-    <section id={getOfficeJobElementId(job.id)} aria-label={`Job ${job.jobNumber} detail`} style={styles.workspacePanel}>
+    <section
+      id={getOfficeJobElementId(job.id)}
+      aria-label={`Job ${job.jobNumber} detail`}
+      style={styles.workspacePanel}
+    >
       <div style={styles.detailHeader}>
         <button type="button" style={styles.button} onClick={onBack}>
           Back
@@ -191,7 +208,11 @@ export function JobDetailPanel({
       {jobPendingStatusChange ? (
         <div style={styles.inlineActionBar}>
           <span>{jobPendingStatusChange.reviewMessage}</span>
-          <button type="button" style={styles.primaryButton} onClick={() => void onConfirmJobStatusChange()}>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={() => void onConfirmJobStatusChange()}
+          >
             Confirm
           </button>
           <button type="button" style={styles.button} onClick={onCancelJobStatusChange}>
@@ -262,7 +283,9 @@ function renderOverview({
           <DetailField label="Type" value={job.jobType} />
           <DetailField label="Category" value={job.category} />
           <DetailField label="Origin" value={job.origin} />
-          {job.workOrderNumber ? <DetailField label="Work order" value={job.workOrderNumber} /> : null}
+          {job.workOrderNumber ? (
+            <DetailField label="Work order" value={job.workOrderNumber} />
+          ) : null}
         </div>
       </section>
       <section style={styles.panel}>
@@ -271,7 +294,12 @@ function renderOverview({
           <select
             value={job.status}
             onChange={(event) =>
-              onJobStatusReviewRequested(job.id, job.status, event.target.value as JobStatus, job.summary)
+              onJobStatusReviewRequested(
+                job.id,
+                job.status,
+                event.target.value as JobStatus,
+                job.summary
+              )
             }
             style={styles.input}
           >
@@ -317,7 +345,8 @@ function renderAppointments({
     <div style={styles.list}>
       {job.appointments.length === 0 ? <p style={styles.muted}>No appointments.</p> : null}
       {job.appointments.map((appointment) => {
-        const editDraft = appointmentEditDrafts[appointment.id] ?? createAppointmentDraft(appointment);
+        const editDraft =
+          appointmentEditDrafts[appointment.id] ?? createAppointmentDraft(appointment);
         const isFocused = focusedAppointmentId === appointment.id;
 
         return (
@@ -330,18 +359,25 @@ function renderAppointments({
               <div>
                 <strong>{appointment.scheduledDate ?? 'Unscheduled'}</strong>
                 <p style={styles.tinyMuted}>
-                  {formatAppointmentScheduleTime(appointment)} - {appointment.technicianName ?? 'Unassigned'}
+                  {formatAppointmentScheduleTime(appointment)} -{' '}
+                  {appointment.technicianName ?? 'Unassigned'}
                 </p>
               </div>
               <div style={styles.badgeRow}>
                 <span style={styles.badge}>{appointmentStatusLabels[appointment.status]}</span>
-                {appointment.needsOfficeReview ? <span style={styles.dangerBadge}>Review</span> : null}
+                {appointment.needsOfficeReview ? (
+                  <span style={styles.dangerBadge}>Review</span>
+                ) : null}
               </div>
             </div>
             {appointment.finishOutcome ? (
-              <p style={styles.tinyMuted}>Outcome: {formatFinishOutcome(appointment.finishOutcome)}</p>
+              <p style={styles.tinyMuted}>
+                Outcome: {formatFinishOutcome(appointment.finishOutcome)}
+              </p>
             ) : null}
-            {appointment.visitNotes ? <p style={styles.tinyMuted}>Notes: {appointment.visitNotes}</p> : null}
+            {appointment.visitNotes ? (
+              <p style={styles.tinyMuted}>Notes: {appointment.visitNotes}</p>
+            ) : null}
             {appointment.registerFollowUpNote ? (
               <p style={styles.tinyMuted}>Follow-up: {appointment.registerFollowUpNote}</p>
             ) : null}
@@ -370,10 +406,14 @@ function renderAppointments({
                 draft={editDraft}
                 technicians={technicians}
                 prefix="Appointment"
-                onChange={(nextDraft) => onAppointmentEditDraftChange(appointment.id, nextDraft)}
+                onChange={(patch) => onAppointmentEditDraftChange(appointment.id, editDraft, patch)}
               />
             </div>
-            <button type="button" style={styles.button} onClick={() => void onSaveAppointmentSchedule(appointment.id)}>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => void onSaveAppointmentSchedule(appointment.id)}
+            >
               Save appointment
             </button>
           </section>
@@ -386,10 +426,14 @@ function renderAppointments({
               draft={draft}
               technicians={technicians}
               prefix="New appointment"
-              onChange={(nextDraft) => onAppointmentDraftChange(job.id, nextDraft)}
+              onChange={(patch) => onAppointmentDraftChange(job.id, patch)}
             />
           </div>
-          <button type="button" style={styles.primaryButton} onClick={() => void onAddAppointment(job.id)}>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={() => void onAddAppointment(job.id)}
+          >
             Add appointment
           </button>
         </section>
@@ -409,7 +453,7 @@ function ScheduleDraftFields({
   draft: AppointmentDraft;
   technicians: JobsWorkspaceResponse['technicians'];
   prefix: string;
-  onChange: (draft: AppointmentDraft) => void;
+  onChange: (patch: Partial<AppointmentDraft>) => void;
 }) {
   return (
     <>
@@ -421,10 +465,8 @@ function ScheduleDraftFields({
           value={draft.scheduledDate}
           onChange={(event) =>
             onChange({
-              ...draft,
               scheduledDate: event.target.value,
-              scheduledStartTime: event.target.value ? draft.scheduledStartTime : '',
-              scheduledEndTime: event.target.value ? draft.scheduledEndTime : ''
+              ...(event.target.value ? {} : { scheduledStartTime: '', scheduledEndTime: '' })
             })
           }
           style={styles.input}
@@ -434,10 +476,14 @@ function ScheduleDraftFields({
         <span>Start</span>
         <input
           aria-label={`${prefix} start time`}
-          type="time"
+          type="text"
+          placeholder="HH:MM"
+          pattern="[0-2][0-9]:[0-5][0-9]"
+          title="Use 24-hour HH:MM, for example 13:45."
+          autoComplete="off"
           value={draft.scheduledStartTime}
           disabled={!draft.scheduledDate}
-          onChange={(event) => onChange({ ...draft, scheduledStartTime: event.target.value })}
+          onChange={(event) => onChange({ scheduledStartTime: event.target.value })}
           style={styles.input}
         />
       </label>
@@ -445,10 +491,14 @@ function ScheduleDraftFields({
         <span>End</span>
         <input
           aria-label={`${prefix} end time`}
-          type="time"
+          type="text"
+          placeholder="HH:MM"
+          pattern="[0-2][0-9]:[0-5][0-9]"
+          title="Use 24-hour HH:MM, for example 15:45."
+          autoComplete="off"
           value={draft.scheduledEndTime}
           disabled={!draft.scheduledDate}
-          onChange={(event) => onChange({ ...draft, scheduledEndTime: event.target.value })}
+          onChange={(event) => onChange({ scheduledEndTime: event.target.value })}
           style={styles.input}
         />
       </label>
@@ -457,7 +507,7 @@ function ScheduleDraftFields({
         <input
           aria-label={`${prefix} time window`}
           value={draft.timeWindowLabel}
-          onChange={(event) => onChange({ ...draft, timeWindowLabel: event.target.value })}
+          onChange={(event) => onChange({ timeWindowLabel: event.target.value })}
           style={styles.input}
         />
       </label>
@@ -466,7 +516,7 @@ function ScheduleDraftFields({
         <select
           aria-label={`${prefix} technician`}
           value={draft.technicianId}
-          onChange={(event) => onChange({ ...draft, technicianId: event.target.value })}
+          onChange={(event) => onChange({ technicianId: event.target.value })}
           style={styles.input}
         >
           <option value="">Unassigned</option>
@@ -541,18 +591,17 @@ function renderRegisterEntry({
   onRegisterVoidReasonChange: JobDetailPanelProps['onRegisterVoidReasonChange'];
   onVoidRegisterEntry: JobDetailPanelProps['onVoidRegisterEntry'];
 }) {
-  const activeDraft =
-    draft ?? {
-      appointmentId: entry.appointmentId ?? '',
-      kind: entry.kind,
-      description: entry.description,
-      quantity: String(entry.quantity),
-      unitOfMeasure: entry.unitOfMeasure ?? '',
-      unitPrice: entry.unitPrice === undefined ? '' : String(entry.unitPrice),
-      totalAmount: String(entry.totalAmount),
-      partNumber: entry.partNumber ?? '',
-      inventorySourceLabel: entry.inventorySourceLabel ?? ''
-    };
+  const activeDraft = draft ?? {
+    appointmentId: entry.appointmentId ?? '',
+    kind: entry.kind,
+    description: entry.description,
+    quantity: String(entry.quantity),
+    unitOfMeasure: entry.unitOfMeasure ?? '',
+    unitPrice: entry.unitPrice === undefined ? '' : String(entry.unitPrice),
+    totalAmount: String(entry.totalAmount),
+    partNumber: entry.partNumber ?? '',
+    inventorySourceLabel: entry.inventorySourceLabel ?? ''
+  };
 
   return (
     <section key={entry.id} style={entry.isVoid ? styles.mutedPanel : styles.panel}>
@@ -560,8 +609,8 @@ function renderRegisterEntry({
         <div>
           <strong>{entry.description}</strong>
           <p style={styles.tinyMuted}>
-            {registerKindLabels[entry.kind]} - {formatQuantity(entry.quantity, entry.unitOfMeasure)} -{' '}
-            {formatCurrency(entry.totalAmount)}
+            {registerKindLabels[entry.kind]} - {formatQuantity(entry.quantity, entry.unitOfMeasure)}{' '}
+            - {formatCurrency(entry.totalAmount)}
           </p>
         </div>
         <div style={styles.badgeRow}>
@@ -574,7 +623,9 @@ function renderRegisterEntry({
         {entry.appointmentId ? ` - ${formatAppointmentReference(job, entry.appointmentId)}` : ''}
       </p>
       {entry.isVoid ? (
-        <p style={styles.tinyMuted}>{entry.voidReason ? `Void reason: ${entry.voidReason}` : 'Voided.'}</p>
+        <p style={styles.tinyMuted}>
+          {entry.voidReason ? `Void reason: ${entry.voidReason}` : 'Voided.'}
+        </p>
       ) : (
         <>
           <div style={styles.formGridCompact}>
@@ -602,47 +653,62 @@ function renderRegisterEntry({
               label="Description"
               ariaLabel={`Register description for ${entry.description}`}
               value={activeDraft.description}
-              onChange={(value) => onRegisterDraftChange(job.id, entry.id, { ...activeDraft, description: value })}
+              onChange={(value) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, description: value })
+              }
             />
             <TextField
               label="Qty"
               ariaLabel={`Register quantity for ${entry.description}`}
               value={activeDraft.quantity}
               type="number"
-              onChange={(value) => onRegisterDraftChange(job.id, entry.id, { ...activeDraft, quantity: value })}
+              onChange={(value) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, quantity: value })
+              }
             />
             <TextField
               label="Unit"
               ariaLabel={`Register unit for ${entry.description}`}
               value={activeDraft.unitOfMeasure}
-              onChange={(value) => onRegisterDraftChange(job.id, entry.id, { ...activeDraft, unitOfMeasure: value })}
+              onChange={(value) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, unitOfMeasure: value })
+              }
             />
             <TextField
               label="Unit price"
               ariaLabel={`Register unit price for ${entry.description}`}
               value={activeDraft.unitPrice}
               type="number"
-              onChange={(value) => onRegisterDraftChange(job.id, entry.id, { ...activeDraft, unitPrice: value })}
+              onChange={(value) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, unitPrice: value })
+              }
             />
             <TextField
               label="Total"
               ariaLabel={`Register total for ${entry.description}`}
               value={activeDraft.totalAmount}
               type="number"
-              onChange={(value) => onRegisterDraftChange(job.id, entry.id, { ...activeDraft, totalAmount: value })}
+              onChange={(value) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, totalAmount: value })
+              }
             />
             <TextField
               label="Part"
               ariaLabel={`Register part number for ${entry.description}`}
               value={activeDraft.partNumber}
-              onChange={(value) => onRegisterDraftChange(job.id, entry.id, { ...activeDraft, partNumber: value })}
+              onChange={(value) =>
+                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, partNumber: value })
+              }
             />
             <TextField
               label="Source"
               ariaLabel={`Register source for ${entry.description}`}
               value={activeDraft.inventorySourceLabel}
               onChange={(value) =>
-                onRegisterDraftChange(job.id, entry.id, { ...activeDraft, inventorySourceLabel: value })
+                onRegisterDraftChange(job.id, entry.id, {
+                  ...activeDraft,
+                  inventorySourceLabel: value
+                })
               }
             />
             <label style={fieldLabelStyle}>
@@ -651,7 +717,10 @@ function renderRegisterEntry({
                 aria-label={`Register appointment for ${entry.description}`}
                 value={activeDraft.appointmentId}
                 onChange={(event) =>
-                  onRegisterDraftChange(job.id, entry.id, { ...activeDraft, appointmentId: event.target.value })
+                  onRegisterDraftChange(job.id, entry.id, {
+                    ...activeDraft,
+                    appointmentId: event.target.value
+                  })
                 }
                 style={styles.input}
               >
@@ -665,7 +734,11 @@ function renderRegisterEntry({
             </label>
           </div>
           <div style={styles.inlineActionBar}>
-            <button type="button" style={styles.button} onClick={() => void onSaveRegisterEntry(job.id, entry.id)}>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => void onSaveRegisterEntry(job.id, entry.id)}
+            >
               Save
             </button>
             <input
@@ -675,7 +748,11 @@ function renderRegisterEntry({
               placeholder="Void reason"
               style={styles.input}
             />
-            <button type="button" style={styles.dangerButton} onClick={() => void onVoidRegisterEntry(job.id, entry.id)}>
+            <button
+              type="button"
+              style={styles.dangerButton}
+              onClick={() => void onVoidRegisterEntry(job.id, entry.id)}
+            >
               Void
             </button>
           </div>
@@ -757,7 +834,9 @@ function renderMediaAttachment({
           <strong>{media.originalFilename}</strong>
           <p style={styles.tinyMuted}>
             {formatMediaKind(media.kind)} - {formatByteSize(media.byteSize)}
-            {media.appointmentId ? ` - ${formatAppointmentReference(job, media.appointmentId)}` : ''}
+            {media.appointmentId
+              ? ` - ${formatAppointmentReference(job, media.appointmentId)}`
+              : ''}
           </p>
         </div>
         <div style={styles.badgeRow}>
@@ -771,7 +850,9 @@ function renderMediaAttachment({
         {formatDateTime(media.capturedAt)} - {media.capturedByName}
       </p>
       {media.isVoid ? (
-        <p style={styles.tinyMuted}>{media.voidReason ? `Void reason: ${media.voidReason}` : 'Voided.'}</p>
+        <p style={styles.tinyMuted}>
+          {media.voidReason ? `Void reason: ${media.voidReason}` : 'Voided.'}
+        </p>
       ) : (
         <>
           <textarea
@@ -782,7 +863,11 @@ function renderMediaAttachment({
             style={styles.textarea}
           />
           <div style={styles.inlineActionBar}>
-            <button type="button" style={styles.button} onClick={() => void onSaveMediaCaption(job.id, media.id)}>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => void onSaveMediaCaption(job.id, media.id)}
+            >
               Save
             </button>
             <button
@@ -800,7 +885,11 @@ function renderMediaAttachment({
               placeholder="Void reason"
               style={styles.input}
             />
-            <button type="button" style={styles.dangerButton} onClick={() => void onVoidMediaAttachment(job.id, media.id)}>
+            <button
+              type="button"
+              style={styles.dangerButton}
+              onClick={() => void onVoidMediaAttachment(job.id, media.id)}
+            >
               Void
             </button>
           </div>

@@ -31,7 +31,12 @@ export class MediaStorageService {
     return this.mediaConfig.resolveBlobPath(jobId, mediaId, this.extensionFor(contentType));
   }
 
-  async writeBlob(jobId: string, mediaId: string, contentType: string, bytes: Buffer): Promise<string> {
+  async writeBlob(
+    jobId: string,
+    mediaId: string,
+    contentType: string,
+    bytes: Buffer
+  ): Promise<string> {
     const absolutePath = this.resolveBlobPath(jobId, mediaId, contentType);
     await mkdir(path.dirname(absolutePath), { recursive: true });
     await writeFile(absolutePath, bytes);

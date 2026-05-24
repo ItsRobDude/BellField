@@ -88,7 +88,9 @@ export class MediaConfigService implements OnModuleInit {
       if (Number.isFinite(parsed) && parsed > 0) {
         this.maxBytes = Math.floor(parsed);
       } else {
-        this.logger.warn(`Ignoring invalid BELLFIELD_MEDIA_MAX_BYTES=${configuredMaxBytes}; using ${DEFAULT_MAX_BYTES}.`);
+        this.logger.warn(
+          `Ignoring invalid BELLFIELD_MEDIA_MAX_BYTES=${configuredMaxBytes}; using ${DEFAULT_MAX_BYTES}.`
+        );
       }
     }
 

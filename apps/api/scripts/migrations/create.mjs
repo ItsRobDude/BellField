@@ -22,10 +22,14 @@ if (!safeName) {
 
 const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
 const existingSequences = readdirSync(migrationsDir)
-  .map((fileName) => fileName.match(new RegExp(`^${dateStamp}_(\\d{3})_.*\\.(?:up|down)\\.sql$`))?.[1])
+  .map(
+    (fileName) => fileName.match(new RegExp(`^${dateStamp}_(\\d{3})_.*\\.(?:up|down)\\.sql$`))?.[1]
+  )
   .filter(Boolean)
   .map((sequence) => Number(sequence));
-const nextSequence = String((existingSequences.length > 0 ? Math.max(...existingSequences) : 0) + 1).padStart(3, '0');
+const nextSequence = String(
+  (existingSequences.length > 0 ? Math.max(...existingSequences) : 0) + 1
+).padStart(3, '0');
 const base = `${dateStamp}_${nextSequence}_${safeName}`;
 const upPath = path.join(migrationsDir, `${base}.up.sql`);
 const downPath = path.join(migrationsDir, `${base}.down.sql`);

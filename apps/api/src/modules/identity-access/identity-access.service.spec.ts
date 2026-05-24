@@ -58,8 +58,8 @@ describe('IdentityAccessService', () => {
 
     const service = new IdentityAccessService(repository as unknown as IdentityAccessRepository);
 
-    await expect(service.getAuthorizedEmployee('session-token', undefined, ['office-web'])).rejects.toBeInstanceOf(
-      ForbiddenException
-    );
+    await expect(
+      service.getAuthorizedEmployee('session-token', undefined, ['office-web'])
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });

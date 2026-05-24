@@ -42,7 +42,9 @@ export class ReferenceDataService {
     return this.referenceDataRepository.searchCrm(query, limit);
   }
 
-  async findCustomerDuplicateCandidates(input: CustomerDuplicateLookupInput): Promise<CustomerAccountRecord[]> {
+  async findCustomerDuplicateCandidates(
+    input: CustomerDuplicateLookupInput
+  ): Promise<CustomerAccountRecord[]> {
     return this.referenceDataRepository.findCustomerDuplicateCandidates(input);
   }
 
@@ -137,7 +139,9 @@ export class ReferenceDataService {
         )
       ),
       alternateBillToCustomerIds: [...location.alternateBillToCustomerIds],
-      ownershipHistory: await Promise.all(ownershipHistory.map((entry) => this.toOwnershipHistoryEntry(entry)))
+      ownershipHistory: await Promise.all(
+        ownershipHistory.map((entry) => this.toOwnershipHistoryEntry(entry))
+      )
     };
   }
 
@@ -161,7 +165,10 @@ export class ReferenceDataService {
     return this.getCustomerDetail(createdCustomer.id);
   }
 
-  async updateCustomer(customerId: string, customer: Partial<Omit<CustomerAccountRecord, 'id'>>): Promise<CustomerDetail> {
+  async updateCustomer(
+    customerId: string,
+    customer: Partial<Omit<CustomerAccountRecord, 'id'>>
+  ): Promise<CustomerDetail> {
     const updatedCustomer = await this.referenceDataRepository.updateCustomer(customerId, customer);
 
     if (!updatedCustomer) {
@@ -181,7 +188,10 @@ export class ReferenceDataService {
     return this.getLocationDetail(createdLocation.id);
   }
 
-  async updateLocation(locationId: string, location: Partial<Omit<LocationRecord, 'id' | 'customerId'>>): Promise<LocationDetail> {
+  async updateLocation(
+    locationId: string,
+    location: Partial<Omit<LocationRecord, 'id' | 'customerId'>>
+  ): Promise<LocationDetail> {
     const updatedLocation = await this.referenceDataRepository.updateLocation(locationId, location);
 
     if (!updatedLocation) {
@@ -191,8 +201,16 @@ export class ReferenceDataService {
     return this.getLocationDetail(updatedLocation.id);
   }
 
-  async reassignLocationOwner(locationId: string, customerId: string, note?: string): Promise<LocationDetail> {
-    const updatedLocation = await this.referenceDataRepository.reassignLocationOwner(locationId, customerId, note);
+  async reassignLocationOwner(
+    locationId: string,
+    customerId: string,
+    note?: string
+  ): Promise<LocationDetail> {
+    const updatedLocation = await this.referenceDataRepository.reassignLocationOwner(
+      locationId,
+      customerId,
+      note
+    );
 
     if (!updatedLocation) {
       throw new NotFoundException('Location not found.');
@@ -206,7 +224,10 @@ export class ReferenceDataService {
     return this.getContactDetail(createdContact.id);
   }
 
-  async updateContact(contactId: string, contact: Partial<Omit<ContactRecord, 'id'>>): Promise<ContactDetail> {
+  async updateContact(
+    contactId: string,
+    contact: Partial<Omit<ContactRecord, 'id'>>
+  ): Promise<ContactDetail> {
     const updatedContact = await this.referenceDataRepository.updateContact(contactId, contact);
 
     if (!updatedContact) {
@@ -223,7 +244,12 @@ export class ReferenceDataService {
     };
   }
 
-  async updateContactLink(linkId: string, update: Partial<Omit<ContactLinkRecord, 'id' | 'contactId' | 'linkedRecordId' | 'linkedRecordKind'>>): Promise<ContactMutationResponse> {
+  async updateContactLink(
+    linkId: string,
+    update: Partial<
+      Omit<ContactLinkRecord, 'id' | 'contactId' | 'linkedRecordId' | 'linkedRecordKind'>
+    >
+  ): Promise<ContactMutationResponse> {
     const updatedLink = await this.referenceDataRepository.updateContactLink(linkId, update);
 
     if (!updatedLink) {
@@ -254,7 +280,10 @@ export class ReferenceDataService {
     };
   }
 
-  private async toContactLinkSummary(link: ContactLinkRecord, linkedRecord: LinkedRecordSummary): Promise<ContactLink> {
+  private async toContactLinkSummary(
+    link: ContactLinkRecord,
+    linkedRecord: LinkedRecordSummary
+  ): Promise<ContactLink> {
     const contact = await this.getContactById(link.contactId);
 
     return {

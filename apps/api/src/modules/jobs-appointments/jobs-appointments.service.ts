@@ -1,9 +1,5 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
-import type {
-  AppointmentFinishOutcome,
-  AppointmentStatus,
-  JobStatus
-} from '@bellfield/contracts';
+import type { AppointmentFinishOutcome, AppointmentStatus, JobStatus } from '@bellfield/contracts';
 import type { JobRecord } from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
@@ -53,7 +49,11 @@ export class JobsAppointmentsService {
   ) {}
 
   async getWorkspace(sessionToken: string): Promise<JobsWorkspaceResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'jobs:view',
+      ['office-web']
+    );
     const includeRegisterEntries = this.canViewRegisterEntries(actor);
 
     const [customers, locations, technicians, jobs] = await Promise.all([
@@ -78,18 +78,24 @@ export class JobsAppointmentsService {
         isActive: customer.isActive,
         flags: [...customer.flags]
       })),
-      locations: await Promise.all(locations.map((location) => this.toLocationSummary(location.id))),
+      locations: await Promise.all(
+        locations.map((location) => this.toLocationSummary(location.id))
+      ),
       technicians: await Promise.all(
         technicians
           .filter((employee) => employee.roleId === 'technician')
           .map((employee) => this.toTechnicianOption(employee.id))
       ),
-      jobs: await Promise.all(jobs.map((job) => this.toJobSummaryFromRecord(job, { includeRegisterEntries })))
+      jobs: await Promise.all(
+        jobs.map((job) => this.toJobSummaryFromRecord(job, { includeRegisterEntries }))
+      )
     };
   }
 
   async getIntakeContext(sessionToken: string): Promise<JobIntakeContextResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', [
+      'office-web'
+    ]);
 
     const [customers, locations, technicians] = await Promise.all([
       this.referenceDataService.listCustomers(false),
@@ -127,12 +133,23 @@ export class JobsAppointmentsService {
   }
 
   async createJob(sessionToken: string, request: CreateJobRequestDto): Promise<JobSummaryDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:create', ['office-web']);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'jobs:create',
+      ['office-web']
+    );
     const location = await this.referenceDataService.getLocationById(request.locationId);
     const billToCustomerId = request.billToCustomerId ?? location.customerId;
     await this.referenceDataService.getCustomerById(billToCustomerId);
-    const job = await this.jobsDataService.createJob(request, actor.displayName, billToCustomerId, location.name);
-    return this.toJobSummaryFromRecord(job, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
+    const job = await this.jobsDataService.createJob(
+      request,
+      actor.displayName,
+      billToCustomerId,
+      location.name
+    );
+    return this.toJobSummaryFromRecord(job, {
+      includeRegisterEntries: this.canViewRegisterEntries(actor)
+    });
   }
 
   async updateJobStatus(
@@ -140,22 +157,35 @@ export class JobsAppointmentsService {
     jobId: string,
     request: UpdateJobStatusRequestDto
   ): Promise<UpdateJobStatusResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, undefined, ['office-web']);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, undefined, [
+      'office-web'
+    ]);
     const jobBeforeUpdate = await this.jobsDataService.getJobById(jobId);
     this.ensureOfficeJobLifecyclePermission(actor, jobBeforeUpdate.status, request.status);
     const referenceDate = (request.occurredAt ?? new Date().toISOString()).slice(0, 10);
     const warningMessages: string[] = [];
 
-    if (request.status === 'completed' && (await this.jobsDataService.hasIncompleteAppointments(jobId))) {
-      warningMessages.push('This job still has appointments that are not finished, no-answer, or cancelled.');
+    if (
+      request.status === 'completed' &&
+      (await this.jobsDataService.hasIncompleteAppointments(jobId))
+    ) {
+      warningMessages.push(
+        'This job still has appointments that are not finished, no-answer, or cancelled.'
+      );
     }
 
-    if (request.status === 'closed' && (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))) {
-      warningMessages.push('This job still has future appointments scheduled. Confirm before closing it out.');
+    if (
+      request.status === 'closed' &&
+      (await this.jobsDataService.hasFutureAppointments(jobId, referenceDate))
+    ) {
+      warningMessages.push(
+        'This job still has future appointments scheduled. Confirm before closing it out.'
+      );
     }
 
     if (request.status === 'cancelled') {
-      const cancellableAppointmentCount = await this.jobsDataService.countCancellableAppointments(jobId);
+      const cancellableAppointmentCount =
+        await this.jobsDataService.countCancellableAppointments(jobId);
       warningMessages.push(
         cancellableAppointmentCount > 0
           ? `Cancelling this job will also cancel ${formatAppointmentCount(cancellableAppointmentCount)} under it.`
@@ -169,10 +199,17 @@ export class JobsAppointmentsService {
       );
     }
 
-    const job = await this.jobsDataService.updateJobStatus(jobId, request.status, actor.displayName, request.occurredAt);
+    const job = await this.jobsDataService.updateJobStatus(
+      jobId,
+      request.status,
+      actor.displayName,
+      request.occurredAt
+    );
 
     return {
-      ...(await this.toJobSummary(job.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+      ...(await this.toJobSummary(job.id, {
+        includeRegisterEntries: this.canViewRegisterEntries(actor)
+      })),
       ...(warningMessages.length > 0 ? { warningMessages } : {})
     };
   }
@@ -190,10 +227,17 @@ export class JobsAppointmentsService {
     const job = await this.jobsDataService.getJobById(jobId);
 
     if (job.status === 'closed' || job.status === 'cancelled') {
-      throw new ConflictException('Appointments cannot be added to closed or cancelled jobs. Reopen the job first if work should continue.');
+      throw new ConflictException(
+        'Appointments cannot be added to closed or cancelled jobs. Reopen the job first if work should continue.'
+      );
     }
 
-    await this.jobsDataService.createAppointment(jobId, request, actor.displayName, request.occurredAt);
+    await this.jobsDataService.createAppointment(
+      jobId,
+      request,
+      actor.displayName,
+      request.occurredAt
+    );
     return this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
   }
 
@@ -202,7 +246,11 @@ export class JobsAppointmentsService {
     jobId: string,
     request: AcknowledgeFinishedVisitReviewRequestDto
   ): Promise<JobMutationResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit', ['office-web']);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'jobs:edit',
+      ['office-web']
+    );
     const job = await this.jobsDataService.acknowledgeFinishedVisitReview(
       jobId,
       request.decision,
@@ -210,7 +258,9 @@ export class JobsAppointmentsService {
       request.occurredAt
     );
 
-    return this.toJobSummaryFromRecord(job, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
+    return this.toJobSummaryFromRecord(job, {
+      includeRegisterEntries: this.canViewRegisterEntries(actor)
+    });
   }
 
   async updateAppointmentSchedule(
@@ -230,7 +280,9 @@ export class JobsAppointmentsService {
       actor.displayName,
       request.occurredAt
     );
-    return this.toJobSummary(appointment.jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) });
+    return this.toJobSummary(appointment.jobId, {
+      includeRegisterEntries: this.canViewRegisterEntries(actor)
+    });
   }
 
   async updateAppointmentStatus(
@@ -238,7 +290,10 @@ export class JobsAppointmentsService {
     appointmentId: string,
     request: UpdateAppointmentStatusRequestDto
   ): Promise<JobMutationResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'appointmentsDispatch:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'appointmentsDispatch:edit'
+    );
     const currentAppointment = await this.jobsDataService.getAppointmentById(appointmentId);
     const currentJob = await this.jobsDataService.getJobById(currentAppointment.jobId);
     this.validateAppointmentStatusChange(actor, request);
@@ -250,7 +305,9 @@ export class JobsAppointmentsService {
 
     if (accessCheck.status === 'rejected') {
       return {
-        ...(await this.toJobSummary(currentJob.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+        ...(await this.toJobSummary(currentJob.id, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
         syncResult: {
           status: 'rejected',
           message: accessCheck.message
@@ -311,7 +368,9 @@ export class JobsAppointmentsService {
     }
 
     return {
-      ...(await this.toJobSummary(appointment.jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+      ...(await this.toJobSummary(appointment.jobId, {
+        includeRegisterEntries: this.canViewRegisterEntries(actor)
+      })),
       ...(warningMessages.length > 0 ? { warningMessages } : {}),
       ...(request.baseUpdatedAt
         ? {
@@ -323,7 +382,11 @@ export class JobsAppointmentsService {
     };
   }
 
-  async addJobNote(sessionToken: string, jobId: string, request: AddJobNoteRequestDto): Promise<JobMutationResponseDto> {
+  async addJobNote(
+    sessionToken: string,
+    jobId: string,
+    request: AddJobNoteRequestDto
+  ): Promise<JobMutationResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken);
     this.ensureJobNotePermission(actor);
     const currentJob = await this.jobsDataService.getJobById(jobId);
@@ -335,7 +398,9 @@ export class JobsAppointmentsService {
 
     if (accessCheck.status === 'rejected') {
       return {
-        ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+        ...(await this.toJobSummary(jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
         syncResult: {
           status: 'rejected',
           message: accessCheck.message
@@ -343,7 +408,12 @@ export class JobsAppointmentsService {
       };
     }
 
-    await this.jobsDataService.addJobNote(jobId, request.note, actor.displayName, request.occurredAt);
+    await this.jobsDataService.addJobNote(
+      jobId,
+      request.note,
+      actor.displayName,
+      request.occurredAt
+    );
 
     if (request.occurredAt) {
       await this.jobsDataService.addSyncFlag(
@@ -359,7 +429,9 @@ export class JobsAppointmentsService {
     }
 
     return {
-      ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+      ...(await this.toJobSummary(jobId, {
+        includeRegisterEntries: this.canViewRegisterEntries(actor)
+      })),
       ...(request.occurredAt
         ? {
             syncResult: {
@@ -375,14 +447,20 @@ export class JobsAppointmentsService {
     jobId: string,
     includeVoided = false
   ): Promise<RegisterEntriesResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:view');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'register:view'
+    );
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {});
 
     if (accessCheck.status === 'rejected') {
       throw new ForbiddenException(accessCheck.message);
     }
 
-    const registerEntries = await this.jobsDataService.listRegisterEntriesForJob(jobId, includeVoided);
+    const registerEntries = await this.jobsDataService.listRegisterEntriesForJob(
+      jobId,
+      includeVoided
+    );
     return {
       registerEntries: registerEntries.map((entry) => this.toRegisterEntrySummary(entry))
     };
@@ -393,7 +471,10 @@ export class JobsAppointmentsService {
     jobId: string,
     request: CreateRegisterEntryRequestDto
   ): Promise<JobMutationResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:create');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'register:create'
+    );
     this.validateRegisterEntryCreate(request);
     const currentJob = await this.jobsDataService.getJobById(jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
@@ -405,7 +486,9 @@ export class JobsAppointmentsService {
 
     if (accessCheck.status === 'rejected') {
       return {
-        ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+        ...(await this.toJobSummary(jobId, {
+          includeRegisterEntries: this.canViewRegisterEntries(actor)
+        })),
         syncResult: {
           status: 'rejected',
           message: accessCheck.message
@@ -435,7 +518,9 @@ export class JobsAppointmentsService {
     }
 
     return {
-      ...(await this.toJobSummary(jobId, { includeRegisterEntries: this.canViewRegisterEntries(actor) })),
+      ...(await this.toJobSummary(jobId, {
+        includeRegisterEntries: this.canViewRegisterEntries(actor)
+      })),
       ...(request.syncSource === 'field-save-queue'
         ? {
             syncResult: {
@@ -451,11 +536,17 @@ export class JobsAppointmentsService {
     registerEntryId: string,
     request: UpdateRegisterEntryRequestDto
   ): Promise<JobMutationResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'register:edit'
+    );
     this.validateRegisterEntryUpdate(request);
     const currentEntry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
     const currentJob = await this.jobsDataService.getJobById(currentEntry.jobId);
-    await this.ensureRegisterEntryAppointmentBelongsToJob(currentEntry.jobId, request.appointmentId);
+    await this.ensureRegisterEntryAppointmentBelongsToJob(
+      currentEntry.jobId,
+      request.appointmentId
+    );
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, currentEntry.jobId, {
       occurredAt: request.occurredAt,
       baseUpdatedAt: request.baseUpdatedAt,
@@ -493,7 +584,12 @@ export class JobsAppointmentsService {
       };
     }
 
-    await this.jobsDataService.updateRegisterEntry(registerEntryId, request, actor.displayName, request.occurredAt);
+    await this.jobsDataService.updateRegisterEntry(
+      registerEntryId,
+      request,
+      actor.displayName,
+      request.occurredAt
+    );
 
     if (request.syncSource === 'field-save-queue') {
       await this.jobsDataService.addSyncFlag(
@@ -527,7 +623,10 @@ export class JobsAppointmentsService {
     registerEntryId: string,
     request: VoidRegisterEntryRequestDto
   ): Promise<JobMutationResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'register:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'register:edit'
+    );
     const currentEntry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
     const currentJob = await this.jobsDataService.getJobById(currentEntry.jobId);
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, currentEntry.jobId, {
@@ -615,19 +714,31 @@ export class JobsAppointmentsService {
 
     return {
       jobs: await Promise.all(
-        jobs.map((job) => this.toJobSummary(job.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) }))
+        jobs.map((job) =>
+          this.toJobSummary(job.id, { includeRegisterEntries: this.canViewRegisterEntries(actor) })
+        )
       ),
-      locations: await Promise.all(locationIds.map((locationId) => this.toLocationSummary(locationId))),
+      locations: await Promise.all(
+        locationIds.map((locationId) => this.toLocationSummary(locationId))
+      ),
       customers: await Promise.all(
         [
           ...new Set(
-            await Promise.all(locationIds.map(async (locationId) => (await this.referenceDataService.getLocationById(locationId)).customerId))
+            await Promise.all(
+              locationIds.map(
+                async (locationId) =>
+                  (await this.referenceDataService.getLocationById(locationId)).customerId
+              )
+            )
           )
         ].map((customerId) => this.toCustomerSummary(customerId))
       ),
       equipment: await Promise.all(
         equipment
-          .filter((equipmentRecord) => equipmentRecord.locationId && locationIds.includes(equipmentRecord.locationId))
+          .filter(
+            (equipmentRecord) =>
+              equipmentRecord.locationId && locationIds.includes(equipmentRecord.locationId)
+          )
           .map(async (equipmentRecord) => {
             const equipmentGroup = equipmentRecord.systemGroupId
               ? await this.equipmentDataService.getEquipmentGroupById(equipmentRecord.systemGroupId)
@@ -651,7 +762,9 @@ export class JobsAppointmentsService {
               status: equipmentRecord.status,
               ageYears: age.ageYears,
               ageLabel: age.ageLabel,
-              systemGroup: equipmentGroup ? { id: equipmentGroup.id, name: equipmentGroup.name } : undefined,
+              systemGroup: equipmentGroup
+                ? { id: equipmentGroup.id, name: equipmentGroup.name }
+                : undefined,
               replacesEquipmentId: equipmentRecord.replacesEquipmentId,
               replacedByEquipmentId: equipmentRecord.replacedByEquipmentId,
               notes: equipmentRecord.notes,
@@ -776,16 +889,24 @@ export class JobsAppointmentsService {
     };
   }
 
-  private async toJobSummary(jobId: string, options: JobSummaryOptions = {}): Promise<JobSummaryDto> {
+  private async toJobSummary(
+    jobId: string,
+    options: JobSummaryOptions = {}
+  ): Promise<JobSummaryDto> {
     const job = await this.jobsDataService.getJobById(jobId);
     return this.toJobSummaryFromRecord(job, options);
   }
 
-  private async toJobSummaryFromRecord(job: JobRecord, options: JobSummaryOptions = {}): Promise<JobSummaryDto> {
+  private async toJobSummaryFromRecord(
+    job: JobRecord,
+    options: JobSummaryOptions = {}
+  ): Promise<JobSummaryDto> {
     const location = await this.referenceDataService.getLocationById(job.locationId);
     const billToCustomer = await this.referenceDataService.getCustomerById(job.billToCustomerId);
     const appointments = await Promise.all(
-      job.appointmentIds.map((appointmentId) => this.toAppointmentSummary(appointmentId, job.status))
+      job.appointmentIds.map((appointmentId) =>
+        this.toAppointmentSummary(appointmentId, job.status)
+      )
     );
     const registerEntries = options.includeRegisterEntries
       ? await this.jobsDataService.listRegisterEntriesForJob(job.id)
@@ -848,7 +969,8 @@ export class JobsAppointmentsService {
 
   private ensureJobNotePermission(actor: AuthorizedEmployee): void {
     const permissions = new Set(actor.effectivePermissions);
-    const requiredPermission = actor.sessionSurface === 'field-mobile' ? 'appointmentsDispatch:edit' : 'jobs:edit';
+    const requiredPermission =
+      actor.sessionSurface === 'field-mobile' ? 'appointmentsDispatch:edit' : 'jobs:edit';
 
     if (!permissions.has(requiredPermission)) {
       throw new ForbiddenException('You do not have permission to add job notes.');
@@ -871,9 +993,18 @@ export class JobsAppointmentsService {
   }
 
   private validateRegisterEntryCreate(request: CreateRegisterEntryRequestDto): void {
-    this.validatePositiveNumber(request.quantity, 'Register entry quantity must be greater than zero.');
-    this.validateNonNegativeNumber(request.unitPrice, 'Register entry unit price cannot be negative.');
-    this.validateNonNegativeNumber(request.totalAmount, 'Register entry total amount cannot be negative.');
+    this.validatePositiveNumber(
+      request.quantity,
+      'Register entry quantity must be greater than zero.'
+    );
+    this.validateNonNegativeNumber(
+      request.unitPrice,
+      'Register entry unit price cannot be negative.'
+    );
+    this.validateNonNegativeNumber(
+      request.totalAmount,
+      'Register entry total amount cannot be negative.'
+    );
   }
 
   private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {
@@ -889,12 +1020,23 @@ export class JobsAppointmentsService {
       request.inventorySourceLabel !== undefined;
 
     if (!hasEditableField) {
-      throw new ConflictException('Register entry update must include at least one editable field.');
+      throw new ConflictException(
+        'Register entry update must include at least one editable field.'
+      );
     }
 
-    this.validatePositiveNumber(request.quantity, 'Register entry quantity must be greater than zero.');
-    this.validateNonNegativeNumber(request.unitPrice, 'Register entry unit price cannot be negative.');
-    this.validateNonNegativeNumber(request.totalAmount, 'Register entry total amount cannot be negative.');
+    this.validatePositiveNumber(
+      request.quantity,
+      'Register entry quantity must be greater than zero.'
+    );
+    this.validateNonNegativeNumber(
+      request.unitPrice,
+      'Register entry unit price cannot be negative.'
+    );
+    this.validateNonNegativeNumber(
+      request.totalAmount,
+      'Register entry total amount cannot be negative.'
+    );
   }
 
   private validatePositiveNumber(value: number | undefined, message: string): void {
@@ -924,7 +1066,9 @@ export class JobsAppointmentsService {
       request.registerFollowUpNote !== undefined;
 
     if (request.status !== 'finished' && hasFinishReviewFields) {
-      throw new ConflictException('Finish review details may only be saved when the appointment is marked finished.');
+      throw new ConflictException(
+        'Finish review details may only be saved when the appointment is marked finished.'
+      );
     }
 
     if (actor.sessionSurface === 'field-mobile' && request.status === 'finished') {
@@ -947,11 +1091,15 @@ export class JobsAppointmentsService {
     const visitNotes = request.visitNotes?.trim() ?? '';
 
     if (!visitNotes) {
-      warnings.push('Finishing without visit notes is allowed, but BellField should prompt before continuing.');
+      warnings.push(
+        'Finishing without visit notes is allowed, but BellField should prompt before continuing.'
+      );
     }
 
     if (!visitNotes && request.hasChargeActivity === false) {
-      warnings.push('This finish review has no visit notes and no charge activity. Confirm before leaving the visit as finished.');
+      warnings.push(
+        'This finish review has no visit notes and no charge activity. Confirm before leaving the visit as finished.'
+      );
     }
 
     return warnings;
@@ -972,7 +1120,8 @@ export class JobsAppointmentsService {
       request.finishOutcome !== currentAppointment.finishOutcome ||
       (request.visitNotes ?? '').trim() !== (currentAppointment.visitNotes ?? '') ||
       request.hasChargeActivity !== currentAppointment.hasChargeActivity ||
-      (request.registerFollowUpNote ?? '').trim() !== (currentAppointment.registerFollowUpNote ?? '')
+      (request.registerFollowUpNote ?? '').trim() !==
+        (currentAppointment.registerFollowUpNote ?? '')
     );
   }
 
@@ -1004,7 +1153,10 @@ export class JobsAppointmentsService {
     }
 
     const { allowedDates } = getAssignedWorkWindow();
-    const assignedJobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
+    const assignedJobs = await this.jobsDataService.listAssignedJobsForEmployee(
+      actor.id,
+      allowedDates
+    );
     const assignedJobIds = new Set(assignedJobs.map((job) => job.id));
 
     if (assignedJobIds.has(jobId)) {
@@ -1017,7 +1169,8 @@ export class JobsAppointmentsService {
 
     return {
       status: 'rejected',
-      message: 'This field change is outside the current assigned-work scope and could not be validated as an offline replay.'
+      message:
+        'This field change is outside the current assigned-work scope and could not be validated as an offline replay.'
     };
   }
 

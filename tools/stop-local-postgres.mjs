@@ -6,7 +6,8 @@ import { spawnSync } from 'node:child_process';
 const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
 const defaultBinDir = path.join(localAppData, 'Programs', 'PostgreSQL', '16.14', 'pgsql', 'bin');
 const postgresBinDir = process.env.POSTGRES_BIN || defaultBinDir;
-const dataDir = process.env.BELLFIELD_POSTGRES_DATA || path.join(localAppData, 'BellField', 'postgres-data');
+const dataDir =
+  process.env.BELLFIELD_POSTGRES_DATA || path.join(localAppData, 'BellField', 'postgres-data');
 const pgCtlPath = path.join(postgresBinDir, process.platform === 'win32' ? 'pg_ctl.exe' : 'pg_ctl');
 
 if (!existsSync(pgCtlPath) || !existsSync(path.join(dataDir, 'PG_VERSION'))) {

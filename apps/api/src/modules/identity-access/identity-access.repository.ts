@@ -124,7 +124,13 @@ export class IdentityAccessRepository {
         insert into sessions (token, employee_id, surface, device_label, issued_at)
         values ($1, $2, $3, $4, $5)
       `,
-      [session.token, session.employeeId, session.surface, session.deviceLabel ?? null, session.issuedAt]
+      [
+        session.token,
+        session.employeeId,
+        session.surface,
+        session.deviceLabel ?? null,
+        session.issuedAt
+      ]
     );
   }
 
@@ -160,8 +166,12 @@ export class IdentityAccessRepository {
       isActive: row.isActive,
       password: row.password,
       permissionOverrides: {
-        grantedPermissions: toTextArray(row.grantedPermissions) as EmployeeRecord['permissionOverrides']['grantedPermissions'],
-        revokedPermissions: toTextArray(row.revokedPermissions) as EmployeeRecord['permissionOverrides']['revokedPermissions']
+        grantedPermissions: toTextArray(
+          row.grantedPermissions
+        ) as EmployeeRecord['permissionOverrides']['grantedPermissions'],
+        revokedPermissions: toTextArray(
+          row.revokedPermissions
+        ) as EmployeeRecord['permissionOverrides']['revokedPermissions']
       }
     };
   }

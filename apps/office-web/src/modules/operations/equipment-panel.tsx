@@ -74,7 +74,9 @@ export function EquipmentPanel({
   onLinkReplacement,
   onDeleteEquipment
 }: EquipmentPanelProps) {
-  const [createDraft, setCreateDraft] = useState<EquipmentCreateDraft>(() => createDefaultCreateDraft(locations[0]?.id));
+  const [createDraft, setCreateDraft] = useState<EquipmentCreateDraft>(() =>
+    createDefaultCreateDraft(locations[0]?.id)
+  );
   const [detailDraft, setDetailDraft] = useState<EquipmentEditDraft | null>(null);
   const [replacementEquipmentId, setReplacementEquipmentId] = useState('');
 
@@ -141,7 +143,9 @@ export function EquipmentPanel({
           {createDraft.placementKind === 'location' ? (
             <select
               value={createDraft.locationId}
-              onChange={(event) => setCreateDraft((current) => ({ ...current, locationId: event.target.value }))}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, locationId: event.target.value }))
+              }
               style={styles.input}
             >
               {locations.map((location) => (
@@ -154,7 +158,10 @@ export function EquipmentPanel({
             <input
               value={createDraft.inventoryLocationLabel}
               onChange={(event) =>
-                setCreateDraft((current) => ({ ...current, inventoryLocationLabel: event.target.value }))
+                setCreateDraft((current) => ({
+                  ...current,
+                  inventoryLocationLabel: event.target.value
+                }))
               }
               placeholder="Inventory placement label"
               style={styles.input}
@@ -163,45 +170,60 @@ export function EquipmentPanel({
           <input
             list="equipment-type-suggestions"
             value={createDraft.equipmentType}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, equipmentType: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, equipmentType: event.target.value }))
+            }
             placeholder="Equipment type"
             style={styles.input}
           />
           <input
             value={createDraft.brand}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, brand: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, brand: event.target.value }))
+            }
             placeholder="Brand"
             style={styles.input}
           />
           <input
             value={createDraft.model}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, model: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, model: event.target.value }))
+            }
             placeholder="Model"
             style={styles.input}
           />
           <input
             value={createDraft.serialNumber}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, serialNumber: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, serialNumber: event.target.value }))
+            }
             placeholder="Serial number"
             style={styles.input}
           />
           <input
             value={createDraft.filterSizes}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, filterSizes: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, filterSizes: event.target.value }))
+            }
             placeholder="Filter sizes (comma separated)"
             style={styles.input}
           />
           <input
             value={createDraft.equipmentLocationDescription}
             onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, equipmentLocationDescription: event.target.value }))
+              setCreateDraft((current) => ({
+                ...current,
+                equipmentLocationDescription: event.target.value
+              }))
             }
             placeholder="Equipment location"
             style={styles.input}
           />
           <input
             value={createDraft.installDate}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, installDate: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, installDate: event.target.value }))
+            }
             type="date"
             style={styles.input}
           />
@@ -215,19 +237,28 @@ export function EquipmentPanel({
           />
           <input
             value={createDraft.warrantyEndDate}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, warrantyEndDate: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, warrantyEndDate: event.target.value }))
+            }
             type="date"
             style={styles.input}
           />
           <input
             value={createDraft.systemGroupName}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, systemGroupName: event.target.value }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, systemGroupName: event.target.value }))
+            }
             placeholder="System group name"
             style={styles.input}
           />
           <select
             value={createDraft.status}
-            onChange={(event) => setCreateDraft((current) => ({ ...current, status: event.target.value as EquipmentStatus }))}
+            onChange={(event) =>
+              setCreateDraft((current) => ({
+                ...current,
+                status: event.target.value as EquipmentStatus
+              }))
+            }
             style={styles.input}
           >
             <option value="active">Active</option>
@@ -246,11 +277,17 @@ export function EquipmentPanel({
         />
         <textarea
           value={createDraft.notes}
-          onChange={(event) => setCreateDraft((current) => ({ ...current, notes: event.target.value }))}
+          onChange={(event) =>
+            setCreateDraft((current) => ({ ...current, notes: event.target.value }))
+          }
           placeholder="Equipment notes"
           style={styles.textarea}
         />
-        <button type="button" onClick={() => void onCreateEquipment(createDraft)} style={styles.primaryButton}>
+        <button
+          type="button"
+          onClick={() => void onCreateEquipment(createDraft)}
+          style={styles.primaryButton}
+        >
           Add equipment
         </button>
         <datalist id="equipment-type-suggestions">
@@ -281,19 +318,34 @@ export function EquipmentPanel({
                       {record.locationName || record.inventoryLocationLabel || 'Unplaced'}
                     </div>
                   </div>
-                  <span style={record.status === 'removed' ? styles.dangerBadge : styles.badge}>{record.status}</span>
+                  <span style={record.status === 'removed' ? styles.dangerBadge : styles.badge}>
+                    {record.status}
+                  </span>
                 </div>
                 <div style={styles.formRow}>
                   <EquipmentGlanceField label="Make" value={record.brand || 'Make pending'} />
                   <EquipmentGlanceField label="Model" value={record.model || 'Model pending'} />
-                  <EquipmentGlanceField label="Serial" value={record.serialNumber || 'Serial pending'} />
+                  <EquipmentGlanceField
+                    label="Serial"
+                    value={record.serialNumber || 'Serial pending'}
+                  />
                   <EquipmentGlanceField
                     label="Filters"
-                    value={record.filterSizes.length > 0 ? record.filterSizes.join(', ') : 'Filters pending'}
+                    value={
+                      record.filterSizes.length > 0
+                        ? record.filterSizes.join(', ')
+                        : 'Filters pending'
+                    }
                   />
-                  <EquipmentGlanceField label="Installed" value={formatEquipmentInstallDate(record.installDate)} />
+                  <EquipmentGlanceField
+                    label="Installed"
+                    value={formatEquipmentInstallDate(record.installDate)}
+                  />
                 </div>
-                <span style={styles.tinyMuted}>Open details for service history, warranty notes, grouping, and replacement context.</span>
+                <span style={styles.tinyMuted}>
+                  Open details for service history, warranty notes, grouping, and replacement
+                  context.
+                </span>
               </button>
             ))}
           </div>
@@ -305,14 +357,23 @@ export function EquipmentPanel({
               <div style={styles.row}>
                 <div>
                   <h3 style={styles.subheading}>
-                    {selectedEquipmentDetail.equipmentType}: {selectedEquipmentDetail.brand} {selectedEquipmentDetail.model}
+                    {selectedEquipmentDetail.equipmentType}: {selectedEquipmentDetail.brand}{' '}
+                    {selectedEquipmentDetail.model}
                   </h3>
                   <p style={styles.tinyMuted}>
-                    {selectedEquipmentDetail.locationName || selectedEquipmentDetail.inventoryLocationLabel || 'No placement'}
+                    {selectedEquipmentDetail.locationName ||
+                      selectedEquipmentDetail.inventoryLocationLabel ||
+                      'No placement'}
                   </p>
                 </div>
                 <div style={styles.badgeRow}>
-                  <span style={selectedEquipmentDetail.status === 'removed' ? styles.dangerBadge : styles.badge}>
+                  <span
+                    style={
+                      selectedEquipmentDetail.status === 'removed'
+                        ? styles.dangerBadge
+                        : styles.badge
+                    }
+                  >
                     {selectedEquipmentDetail.status}
                   </span>
                   {selectedEquipmentId ? <span style={styles.badge}>Selected</span> : null}
@@ -323,52 +384,82 @@ export function EquipmentPanel({
                 <input
                   list="equipment-type-suggestions"
                   value={detailDraft.equipmentType}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, equipmentType: event.target.value } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, equipmentType: event.target.value } : current
+                    )
+                  }
                   placeholder="Equipment type"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.brand}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, brand: event.target.value } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, brand: event.target.value } : current
+                    )
+                  }
                   placeholder="Brand"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.model}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, model: event.target.value } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, model: event.target.value } : current
+                    )
+                  }
                   placeholder="Model"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.serialNumber}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, serialNumber: event.target.value } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, serialNumber: event.target.value } : current
+                    )
+                  }
                   placeholder="Serial number"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.filterSizes}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, filterSizes: event.target.value } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, filterSizes: event.target.value } : current
+                    )
+                  }
                   placeholder="Filter sizes (comma separated)"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.equipmentLocationDescription}
                   onChange={(event) =>
-                    setDetailDraft((current) => current ? { ...current, equipmentLocationDescription: event.target.value } : current)
+                    setDetailDraft((current) =>
+                      current
+                        ? { ...current, equipmentLocationDescription: event.target.value }
+                        : current
+                    )
                   }
                   placeholder="Equipment location"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.installDate}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, installDate: event.target.value } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, installDate: event.target.value } : current
+                    )
+                  }
                   type="date"
                   style={styles.input}
                 />
                 <input
                   value={detailDraft.warrantyStartDate}
                   onChange={(event) =>
-                    setDetailDraft((current) => current ? { ...current, warrantyStartDate: event.target.value } : current)
+                    setDetailDraft((current) =>
+                      current ? { ...current, warrantyStartDate: event.target.value } : current
+                    )
                   }
                   type="date"
                   style={styles.input}
@@ -376,7 +467,9 @@ export function EquipmentPanel({
                 <input
                   value={detailDraft.warrantyEndDate}
                   onChange={(event) =>
-                    setDetailDraft((current) => current ? { ...current, warrantyEndDate: event.target.value } : current)
+                    setDetailDraft((current) =>
+                      current ? { ...current, warrantyEndDate: event.target.value } : current
+                    )
                   }
                   type="date"
                   style={styles.input}
@@ -384,14 +477,22 @@ export function EquipmentPanel({
                 <input
                   value={detailDraft.systemGroupName}
                   onChange={(event) =>
-                    setDetailDraft((current) => current ? { ...current, systemGroupName: event.target.value } : current)
+                    setDetailDraft((current) =>
+                      current ? { ...current, systemGroupName: event.target.value } : current
+                    )
                   }
                   placeholder="System group"
                   style={styles.input}
                 />
                 <select
                   value={detailDraft.status}
-                  onChange={(event) => setDetailDraft((current) => current ? { ...current, status: event.target.value as EquipmentStatus } : current)}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current
+                        ? { ...current, status: event.target.value as EquipmentStatus }
+                        : current
+                    )
+                  }
                   style={styles.input}
                 >
                   <option value="active">Active</option>
@@ -404,7 +505,9 @@ export function EquipmentPanel({
               <input
                 value={detailDraft.warrantyProviderNote}
                 onChange={(event) =>
-                  setDetailDraft((current) => current ? { ...current, warrantyProviderNote: event.target.value } : current)
+                  setDetailDraft((current) =>
+                    current ? { ...current, warrantyProviderNote: event.target.value } : current
+                  )
                 }
                 placeholder="Warranty provider or note"
                 style={styles.input}
@@ -412,33 +515,47 @@ export function EquipmentPanel({
 
               <textarea
                 value={detailDraft.notes}
-                onChange={(event) => setDetailDraft((current) => current ? { ...current, notes: event.target.value } : current)}
+                onChange={(event) =>
+                  setDetailDraft((current) =>
+                    current ? { ...current, notes: event.target.value } : current
+                  )
+                }
                 placeholder="Equipment notes"
                 style={styles.textarea}
               />
 
               <div style={styles.badgeRow}>
-                {selectedEquipmentDetail.ageLabel ? <span style={styles.badge}>Age: {selectedEquipmentDetail.ageLabel}</span> : null}
+                {selectedEquipmentDetail.ageLabel ? (
+                  <span style={styles.badge}>Age: {selectedEquipmentDetail.ageLabel}</span>
+                ) : null}
                 {selectedEquipmentDetail.replacesEquipment ? (
-                  <span style={styles.badge}>Replaces: {selectedEquipmentDetail.replacesEquipment.brand} {selectedEquipmentDetail.replacesEquipment.model}</span>
+                  <span style={styles.badge}>
+                    Replaces: {selectedEquipmentDetail.replacesEquipment.brand}{' '}
+                    {selectedEquipmentDetail.replacesEquipment.model}
+                  </span>
                 ) : null}
                 {selectedEquipmentDetail.replacedByEquipment ? (
-                  <span style={styles.badge}>Replaced by: {selectedEquipmentDetail.replacedByEquipment.brand} {selectedEquipmentDetail.replacedByEquipment.model}</span>
+                  <span style={styles.badge}>
+                    Replaced by: {selectedEquipmentDetail.replacedByEquipment.brand}{' '}
+                    {selectedEquipmentDetail.replacedByEquipment.model}
+                  </span>
                 ) : null}
               </div>
 
               <div style={styles.row}>
                 <button
                   type="button"
-                  onClick={() =>
-                    void onRecordUpdate(selectedEquipmentDetail.id, detailDraft)
-                  }
+                  onClick={() => void onRecordUpdate(selectedEquipmentDetail.id, detailDraft)}
                   style={styles.primaryButton}
                 >
                   Save equipment changes
                 </button>
                 {canDelete ? (
-                  <button type="button" onClick={() => void onDeleteEquipment(selectedEquipmentDetail.id)} style={styles.button}>
+                  <button
+                    type="button"
+                    onClick={() => void onDeleteEquipment(selectedEquipmentDetail.id)}
+                    style={styles.button}
+                  >
                     Delete equipment
                   </button>
                 ) : null}
@@ -455,13 +572,17 @@ export function EquipmentPanel({
                     <option value="">Select replacement equipment</option>
                     {replacementOptions.map((record) => (
                       <option key={record.id} value={record.id}>
-                        {record.equipmentType} - {record.brand} {record.model} {record.serialNumber ? `(${record.serialNumber})` : ''}
+                        {record.equipmentType} - {record.brand} {record.model}{' '}
+                        {record.serialNumber ? `(${record.serialNumber})` : ''}
                       </option>
                     ))}
                   </select>
                   <button
                     type="button"
-                    onClick={() => replacementEquipmentId && void onLinkReplacement(selectedEquipmentDetail.id, replacementEquipmentId)}
+                    onClick={() =>
+                      replacementEquipmentId &&
+                      void onLinkReplacement(selectedEquipmentDetail.id, replacementEquipmentId)
+                    }
                     style={styles.button}
                   >
                     Link replacement and mark old unit removed
@@ -475,7 +596,9 @@ export function EquipmentPanel({
                   {selectedEquipmentDetail.history.map((entry) => (
                     <li key={entry.id}>
                       <strong>{entry.actorName}</strong> - {entry.message}
-                      <div style={styles.tinyMuted}>{new Date(entry.occurredAt).toLocaleString()}</div>
+                      <div style={styles.tinyMuted}>
+                        {new Date(entry.occurredAt).toLocaleString()}
+                      </div>
                     </li>
                   ))}
                 </ol>
@@ -484,7 +607,10 @@ export function EquipmentPanel({
           ) : (
             <>
               <h3 style={styles.subheading}>Equipment detail</h3>
-              <p style={styles.muted}>Select a unit from the list to review warranty, grouping, replacement links, and history.</p>
+              <p style={styles.muted}>
+                Select a unit from the list to review warranty, grouping, replacement links, and
+                history.
+              </p>
             </>
           )}
         </aside>

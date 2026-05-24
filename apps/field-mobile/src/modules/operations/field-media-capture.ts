@@ -24,7 +24,9 @@ export async function pickFieldMedia(source: FieldMediaSource): Promise<StagedFi
   return stagePickedFieldMediaAsset(result.assets[0]);
 }
 
-export async function stagePickedFieldMediaAsset(asset: PickedFieldMediaAsset): Promise<StagedFieldMedia> {
+export async function stagePickedFieldMediaAsset(
+  asset: PickedFieldMediaAsset
+): Promise<StagedFieldMedia> {
   const baseDirectory = FileSystem.documentDirectory;
 
   if (!baseDirectory) {
@@ -36,7 +38,11 @@ export async function stagePickedFieldMediaAsset(asset: PickedFieldMediaAsset): 
   const localMediaId = `media-${Crypto.randomUUID()}`;
   const capturedAt = new Date().toISOString();
   const normalizedAsset = normalizePickedFieldMediaAsset(asset, localMediaId, capturedAt);
-  const localUri = buildLocalMediaUri(baseDirectory, localMediaId, normalizedAsset.originalFilename);
+  const localUri = buildLocalMediaUri(
+    baseDirectory,
+    localMediaId,
+    normalizedAsset.originalFilename
+  );
   const mediaDirectory = `${baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`}bellfield-media/`;
 
   try {
@@ -74,7 +80,7 @@ export async function deleteStagedFieldMedia(localUri: string): Promise<void> {
 
 function ensureFieldMediaSizeIsAllowed(byteSize: number | undefined): void {
   if (byteSize !== undefined && byteSize > fieldMediaMaxBytes) {
-    throw new Error('Selected media is larger than BellField\'s 50 MB field upload limit.');
+    throw new Error("Selected media is larger than BellField's 50 MB field upload limit.");
   }
 }
 

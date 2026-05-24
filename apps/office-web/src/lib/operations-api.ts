@@ -262,16 +262,23 @@ export async function updateOfficeEquipment(input: {
 }
 
 export async function linkOfficeEquipmentReplacement(
-  input: LinkEquipmentReplacementRequest & { equipmentId: string; sessionToken: string; apiBaseUrl?: string }
+  input: LinkEquipmentReplacementRequest & {
+    equipmentId: string;
+    sessionToken: string;
+    apiBaseUrl?: string;
+  }
 ): Promise<EquipmentMutationResponse> {
   const { equipmentId, sessionToken, apiBaseUrl, ...payload } = input;
 
-  return requestJson<EquipmentMutationResponse>(`/operations/equipment/${equipmentId}/replacement-link`, {
-    apiBaseUrl,
-    sessionToken,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  return requestJson<EquipmentMutationResponse>(
+    `/operations/equipment/${equipmentId}/replacement-link`,
+    {
+      apiBaseUrl,
+      sessionToken,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 export async function deleteOfficeEquipment(input: {
@@ -538,12 +545,15 @@ export async function voidOfficeRegisterEntry(
 ): Promise<JobMutationResponse> {
   const { sessionToken, apiBaseUrl, registerEntryId, ...payload } = input;
 
-  return requestJson<JobMutationResponse>(`/operations/jobs/register-entries/${registerEntryId}/void`, {
-    apiBaseUrl,
-    sessionToken,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  return requestJson<JobMutationResponse>(
+    `/operations/jobs/register-entries/${registerEntryId}/void`,
+    {
+      apiBaseUrl,
+      sessionToken,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 export async function getOfficeMediaAttachments(input: {
@@ -617,10 +627,13 @@ export async function searchOfficeCrm(input: {
   apiBaseUrl?: string;
   query: string;
 }): Promise<CrmSearchResponse> {
-  return requestJson<CrmSearchResponse>(`/operations/crm/search?q=${encodeURIComponent(input.query)}`, {
-    apiBaseUrl: input.apiBaseUrl,
-    sessionToken: input.sessionToken
-  });
+  return requestJson<CrmSearchResponse>(
+    `/operations/crm/search?q=${encodeURIComponent(input.query)}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
 }
 
 export async function getOfficeCustomerDetail(input: {
@@ -698,16 +711,23 @@ export async function updateOfficeLocation(
 }
 
 export async function reassignOfficeLocationOwner(
-  input: ReassignLocationOwnerRequest & { locationId: string; sessionToken: string; apiBaseUrl?: string }
+  input: ReassignLocationOwnerRequest & {
+    locationId: string;
+    sessionToken: string;
+    apiBaseUrl?: string;
+  }
 ): Promise<LocationMutationResponse> {
   const { locationId, sessionToken, apiBaseUrl, ...payload } = input;
 
-  return requestJson<LocationMutationResponse>(`/operations/crm/locations/${locationId}/reassign-owner`, {
-    apiBaseUrl,
-    sessionToken,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  return requestJson<LocationMutationResponse>(
+    `/operations/crm/locations/${locationId}/reassign-owner`,
+    {
+      apiBaseUrl,
+      sessionToken,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 export async function getOfficeContactDetail(input: {

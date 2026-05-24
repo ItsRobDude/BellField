@@ -19,7 +19,9 @@ const baseOperation: MediaUploadOperation = {
   state: 'pending'
 };
 
-function buildUploadIntentResponse(overrides: Partial<CreateMediaUploadIntentResponse> = {}): CreateMediaUploadIntentResponse {
+function buildUploadIntentResponse(
+  overrides: Partial<CreateMediaUploadIntentResponse> = {}
+): CreateMediaUploadIntentResponse {
   return {
     mediaAttachment: {
       id: 'media-server-1',
@@ -50,7 +52,9 @@ describe('replayFieldMediaUploadOperation', () => {
     const createUploadIntent = vi.fn().mockResolvedValue(buildUploadIntentResponse());
     const uploadBlob = vi.fn().mockResolvedValue(undefined);
 
-    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })
+    ).resolves.toEqual({
       status: 'applied'
     });
 
@@ -72,7 +76,9 @@ describe('replayFieldMediaUploadOperation', () => {
     );
     const uploadBlob = vi.fn();
 
-    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })
+    ).resolves.toEqual({
       status: 'applied'
     });
 
@@ -86,10 +92,12 @@ describe('replayFieldMediaUploadOperation', () => {
       .mockRejectedValueOnce(new Error('Server unavailable.'))
       .mockResolvedValueOnce(undefined);
 
-    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).rejects.toThrow(
-      'Server unavailable.'
-    );
-    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })
+    ).rejects.toThrow('Server unavailable.');
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })
+    ).resolves.toEqual({
       status: 'applied'
     });
 
@@ -114,7 +122,9 @@ describe('replayFieldMediaUploadOperation', () => {
   it('returns rejected for deterministic upload-intent validation failures', async () => {
     const createUploadIntent = vi
       .fn()
-      .mockRejectedValue(new FieldApiError('Media exceeds the configured maximum of 50000000 bytes.', 413));
+      .mockRejectedValue(
+        new FieldApiError('Media exceeds the configured maximum of 50000000 bytes.', 413)
+      );
 
     await expect(
       replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob: vi.fn() })
@@ -125,7 +135,9 @@ describe('replayFieldMediaUploadOperation', () => {
   });
 
   it('keeps network/server upload-intent failures retryable', async () => {
-    const createUploadIntent = vi.fn().mockRejectedValue(new FieldApiError('Server unavailable.', 500));
+    const createUploadIntent = vi
+      .fn()
+      .mockRejectedValue(new FieldApiError('Server unavailable.', 500));
 
     await expect(
       replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob: vi.fn() })
@@ -134,9 +146,13 @@ describe('replayFieldMediaUploadOperation', () => {
 
   it('returns rejected for deterministic blob upload failures', async () => {
     const createUploadIntent = vi.fn().mockResolvedValue(buildUploadIntentResponse());
-    const uploadBlob = vi.fn().mockRejectedValue(new FieldMediaUploadError('Uploaded byte size does not match.', 400));
+    const uploadBlob = vi
+      .fn()
+      .mockRejectedValue(new FieldMediaUploadError('Uploaded byte size does not match.', 400));
 
-    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })
+    ).resolves.toEqual({
       status: 'rejected',
       message: 'Uploaded byte size does not match.'
     });
@@ -144,10 +160,14 @@ describe('replayFieldMediaUploadOperation', () => {
 
   it('keeps expired-token blob failures retryable so the next replay can request a fresh token', async () => {
     const createUploadIntent = vi.fn().mockResolvedValue(buildUploadIntentResponse());
-    const uploadBlob = vi.fn().mockRejectedValue(new FieldMediaUploadError('Media upload token is invalid or expired.', 403));
+    const uploadBlob = vi
+      .fn()
+      .mockRejectedValue(
+        new FieldMediaUploadError('Media upload token is invalid or expired.', 403)
+      );
 
-    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).rejects.toThrow(
-      'Media upload token is invalid or expired.'
-    );
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })
+    ).rejects.toThrow('Media upload token is invalid or expired.');
   });
 });

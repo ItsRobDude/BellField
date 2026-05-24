@@ -71,18 +71,28 @@ function jsonResponse(body: unknown, status = 200): Response {
 function renderCrmPanel(fetchMock: ReturnType<typeof vi.fn>) {
   vi.stubGlobal('fetch', fetchMock);
 
-  render(<CrmPanel apiBaseUrl="http://api.test" sessionToken="session-token" onErrorMessage={vi.fn()} />);
+  render(
+    <CrmPanel apiBaseUrl="http://api.test" sessionToken="session-token" onErrorMessage={vi.fn()} />
+  );
 }
 
 function fillRequiredLocationFields(input: { phone?: string; fax?: string }) {
-  fireEvent.change(screen.getByPlaceholderText('Location name'), { target: { value: 'Main Shop' } });
-  fireEvent.change(screen.getByPlaceholderText('Service address'), { target: { value: '123 Main' } });
+  fireEvent.change(screen.getByPlaceholderText('Location name'), {
+    target: { value: 'Main Shop' }
+  });
+  fireEvent.change(screen.getByPlaceholderText('Service address'), {
+    target: { value: '123 Main' }
+  });
   fireEvent.change(screen.getAllByPlaceholderText('City')[1], { target: { value: 'Blaine' } });
   fireEvent.change(screen.getAllByPlaceholderText('State')[1], { target: { value: 'WA' } });
-  fireEvent.change(screen.getAllByPlaceholderText('Postal code')[1], { target: { value: '98230' } });
+  fireEvent.change(screen.getAllByPlaceholderText('Postal code')[1], {
+    target: { value: '98230' }
+  });
 
   if (input.phone) {
-    fireEvent.change(screen.getAllByPlaceholderText('Phone')[1], { target: { value: input.phone } });
+    fireEvent.change(screen.getAllByPlaceholderText('Phone')[1], {
+      target: { value: input.phone }
+    });
   }
 
   if (input.fax) {
@@ -92,7 +102,9 @@ function fillRequiredLocationFields(input: { phone?: string; fax?: string }) {
 
 describe('CrmPanel', () => {
   it('requires confirmation for fax-only locations before creating', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _options?: RequestInit) => jsonResponse(workspace));
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _options?: RequestInit) =>
+      jsonResponse(workspace)
+    );
     renderCrmPanel(fetchMock);
 
     await screen.findByRole('heading', { name: 'Create location' });
@@ -101,10 +113,14 @@ describe('CrmPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Create location' }));
 
     expect(screen.getByText('Location has no phone or email')).toBeInTheDocument();
-    expect(screen.getByText('Fax will be saved, but phone and email are still missing.')).toBeInTheDocument();
-    expect(fetchMock.mock.calls.some(([, options]) => (options as RequestInit | undefined)?.method === 'POST')).toBe(
-      false
-    );
+    expect(
+      screen.getByText('Fax will be saved, but phone and email are still missing.')
+    ).toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([, options]) => (options as RequestInit | undefined)?.method === 'POST'
+      )
+    ).toBe(false);
   });
 
   it('lets staff cancel or confirm duplicate location creation', async () => {
@@ -117,7 +133,10 @@ describe('CrmPanel', () => {
       }
 
       if (url.pathname === '/operations/crm/search') {
-        return jsonResponse({ query: url.searchParams.get('q') ?? '', results: [duplicateLocation] });
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [duplicateLocation]
+        });
       }
 
       if (url.pathname === '/operations/crm/locations' && options?.method === 'POST') {
@@ -135,7 +154,9 @@ describe('CrmPanel', () => {
     expect(await screen.findByText('Possible duplicate location')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
-    await waitFor(() => expect(screen.queryByText('Possible duplicate location')).not.toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.queryByText('Possible duplicate location')).not.toBeInTheDocument()
+    );
 
     fireEvent.click(screen.getByRole('button', { name: 'Create location' }));
     expect(await screen.findByText('Possible duplicate location')).toBeInTheDocument();
@@ -144,7 +165,10 @@ describe('CrmPanel', () => {
     await waitFor(() => {
       const createCall = fetchMock.mock.calls.find(([input, options]) => {
         const url = new URL(String(input));
-        return url.pathname === '/operations/crm/locations' && (options as RequestInit | undefined)?.method === 'POST';
+        return (
+          url.pathname === '/operations/crm/locations' &&
+          (options as RequestInit | undefined)?.method === 'POST'
+        );
       });
       expect(createCall).toBeDefined();
       expect(JSON.parse(String((createCall?.[1] as RequestInit).body))).toMatchObject({

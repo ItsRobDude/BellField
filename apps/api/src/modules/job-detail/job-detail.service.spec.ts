@@ -3,7 +3,9 @@ import { JobDetailService } from './job-detail.service';
 
 const timestamp = '2026-05-23T10:00:00.000Z';
 
-function createService(permissionOverrides: string[] = ['jobs:view', 'register:view', 'media:view']) {
+function createService(
+  permissionOverrides: string[] = ['jobs:view', 'register:view', 'media:view']
+) {
   const referenceDataService = {
     getLocationDetail: jest.fn().mockResolvedValue({
       id: 'location-1',
@@ -157,13 +159,16 @@ function createService(permissionOverrides: string[] = ['jobs:view', 'register:v
 
 describe('JobDetailService', () => {
   it('requires office job view permission and returns a bounded job detail payload', async () => {
-    const { service, jobsDataService, equipmentDataService, identityAccessService } = createService();
+    const { service, jobsDataService, equipmentDataService, identityAccessService } =
+      createService();
 
     const response = await service.getJobDetail('session-token', 'job-1');
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'jobs:view', [
-      'office-web'
-    ]);
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'jobs:view',
+      ['office-web']
+    );
     expect(jobsDataService.getJobDetailById).toHaveBeenCalledWith('job-1', 50);
     expect(jobsDataService.listRegisterEntriesForJob).toHaveBeenCalledWith('job-1', true);
     expect(jobsDataService.listMediaAttachmentsForJob).toHaveBeenCalledWith('job-1', true);
@@ -205,8 +210,14 @@ describe('JobDetailService', () => {
   it('rejects malformed timeline limits', async () => {
     const { service } = createService();
 
-    await expect(service.getJobDetail('session-token', 'job-1', 'abc')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.getJobDetail('session-token', 'job-1', '0')).rejects.toBeInstanceOf(BadRequestException);
-    await expect(service.getJobDetail('session-token', 'job-1', '201')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.getJobDetail('session-token', 'job-1', 'abc')).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    await expect(service.getJobDetail('session-token', 'job-1', '0')).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    await expect(service.getJobDetail('session-token', 'job-1', '201')).rejects.toBeInstanceOf(
+      BadRequestException
+    );
   });
 });

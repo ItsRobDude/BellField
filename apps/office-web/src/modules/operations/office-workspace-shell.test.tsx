@@ -151,7 +151,9 @@ function buildRegisterEntry(overrides: Partial<RegisterEntrySummary> = {}): Regi
   };
 }
 
-function buildMediaAttachment(overrides: Partial<MediaAttachmentSummary> = {}): MediaAttachmentSummary {
+function buildMediaAttachment(
+  overrides: Partial<MediaAttachmentSummary> = {}
+): MediaAttachmentSummary {
   return {
     id: 'media-1',
     jobId: 'job-1',
@@ -332,13 +334,14 @@ function buildJobIntakeContext(workspace: JobsWorkspaceResponse): JobIntakeConte
 function buildJobDetail(
   job: JobSummary,
   registerEntries: RegisterEntrySummary[] = [],
-  mediaAttachments: MediaAttachmentSummary[] = []
+  mediaAttachments: MediaAttachmentSummary[] = [],
+  technicians: JobsWorkspaceResponse['technicians'] = buildWorkspace([job]).technicians
 ): JobDetailResponse {
   return {
     job,
     location: buildWorkspace([job]).locations[0],
     billToCustomer: buildWorkspace([job]).customers[0],
-    technicians: buildWorkspace([job]).technicians,
+    technicians,
     equipment: [],
     registerEntries,
     mediaAttachments,
@@ -353,8 +356,9 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedOperationsApi.getOfficeJobsQueue.mockResolvedValue(buildJobsQueue(workspace));
   mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
   mockedOperationsApi.getOfficeJobDetail.mockImplementation(async ({ jobId }) => {
-    const job = workspace.jobs.find((candidate) => candidate.id === jobId) ?? workspace.jobs[0] ?? buildJob();
-    return buildJobDetail(job);
+    const job =
+      workspace.jobs.find((candidate) => candidate.id === jobId) ?? workspace.jobs[0] ?? buildJob();
+    return buildJobDetail(job, [], [], workspace.technicians);
   });
   mockedOperationsApi.getOfficeEquipmentWorkspace.mockResolvedValue({
     locations: [],
@@ -365,11 +369,17 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({ mediaAttachments: [] });
   mockedOperationsApi.getOfficeMediaBlob.mockResolvedValue(new Blob(['media-bytes']));
   mockedOperationsApi.createOfficeJob.mockResolvedValue(workspace.jobs[0] ?? buildJob());
-  mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(workspace.jobs[0] ?? buildJob());
-  mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(
+    workspace.jobs[0] ?? buildJob()
+  );
+  mockedOperationsApi.updateOfficeAppointmentStatus.mockResolvedValue(
+    workspace.jobs[0] ?? buildJob()
+  );
   mockedOperationsApi.updateOfficeJobStatus.mockResolvedValue(workspace.jobs[0] ?? buildJob());
   mockedOperationsApi.addOfficeAppointment.mockResolvedValue(workspace.jobs[0] ?? buildJob());
-  mockedOperationsApi.acknowledgeOfficeFinishedVisitReview.mockResolvedValue(workspace.jobs[0] ?? buildJob());
+  mockedOperationsApi.acknowledgeOfficeFinishedVisitReview.mockResolvedValue(
+    workspace.jobs[0] ?? buildJob()
+  );
   mockedOperationsApi.updateOfficeRegisterEntry.mockResolvedValue(workspace.jobs[0] ?? buildJob());
   mockedOperationsApi.voidOfficeRegisterEntry.mockResolvedValue(workspace.jobs[0] ?? buildJob());
   mockedOperationsApi.updateOfficeMediaAttachment.mockResolvedValue({
@@ -500,12 +510,18 @@ describe('OfficeWorkspaceShell IA', () => {
     const nextQueue = buildJobsQueue(buildWorkspace([secondJob]));
 
     arrangeWorkspace(initialWorkspace);
-    mockedOperationsApi.getOfficeJobsQueue.mockResolvedValueOnce(initialQueue).mockResolvedValueOnce(nextQueue);
+    mockedOperationsApi.getOfficeJobsQueue
+      .mockResolvedValueOnce(initialQueue)
+      .mockResolvedValueOnce(nextQueue);
 
     renderShell();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Jobs' }));
-    fireEvent.click(await within(screen.getByRole('region', { name: 'Open jobs' })).findByRole('button', { name: 'Load more' }));
+    fireEvent.click(
+      await within(screen.getByRole('region', { name: 'Open jobs' })).findByRole('button', {
+        name: 'Load more'
+      })
+    );
 
     await waitFor(() => {
       expect(mockedOperationsApi.getOfficeJobsQueue).toHaveBeenLastCalledWith({
@@ -559,14 +575,29 @@ describe('OfficeWorkspaceShell IA', () => {
   });
 
   it('saves appointment schedule and status changes from job detail through existing API helpers', async () => {
-    arrangeWorkspace(buildWorkspace([buildJob()]));
+    const scheduledDate = '2026-06-02';
+    const workspace = buildWorkspace([buildJob()]);
+    workspace.technicians.push({ id: 'tech-2', displayName: 'Jamie Tech', roleId: 'technician' });
+    arrangeWorkspace(workspace);
 
     renderShell();
 
     fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
     const appointment = await screen.findByRole('region', { name: 'Appointment appointment-1' });
+    fireEvent.change(within(appointment).getByLabelText('Appointment date'), {
+      target: { value: scheduledDate }
+    });
+    fireEvent.change(within(appointment).getByLabelText('Appointment start time'), {
+      target: { value: '09:30' }
+    });
     fireEvent.change(within(appointment).getByLabelText('Appointment end time'), {
-      target: { value: '11:00' }
+      target: { value: '11:15' }
+    });
+    fireEvent.change(within(appointment).getByLabelText('Appointment time window'), {
+      target: { value: '9:30 AM - 11:15 AM' }
+    });
+    fireEvent.change(within(appointment).getByLabelText('Appointment technician'), {
+      target: { value: 'tech-2' }
     });
     fireEvent.change(within(appointment).getByLabelText('Status'), {
       target: { value: 'confirmed' }
@@ -586,11 +617,11 @@ describe('OfficeWorkspaceShell IA', () => {
         appointmentId: 'appointment-1',
         sessionToken: 'session-token',
         apiBaseUrl: 'http://api.test',
-        scheduledDate: getTodayDateInputValue(),
-        scheduledStartTime: '08:00',
-        scheduledEndTime: '11:00',
-        timeWindowLabel: undefined,
-        technicianId: 'tech-1'
+        scheduledDate,
+        scheduledStartTime: '09:30',
+        scheduledEndTime: '11:15',
+        timeWindowLabel: '9:30 AM - 11:15 AM',
+        technicianId: 'tech-2'
       });
     });
   });
@@ -632,7 +663,9 @@ describe('OfficeWorkspaceShell IA', () => {
     const registerEntry = buildRegisterEntry();
     const mediaAttachment = buildMediaAttachment();
     arrangeWorkspace(buildWorkspace([job]));
-    mockedOperationsApi.getOfficeJobDetail.mockResolvedValue(buildJobDetail(job, [registerEntry], [mediaAttachment]));
+    mockedOperationsApi.getOfficeJobDetail.mockResolvedValue(
+      buildJobDetail(job, [registerEntry], [mediaAttachment])
+    );
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:media-1');

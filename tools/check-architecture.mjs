@@ -30,7 +30,9 @@ for (const filePath of listSourceFiles(sourceRoots)) {
 if (failures.length > 0) {
   console.error('Architecture check failed:');
   for (const failure of failures) {
-    console.error(`- ${failure.rule}: ${failure.file}${failure.line ? `:${failure.line}` : ''} - ${failure.message}`);
+    console.error(
+      `- ${failure.rule}: ${failure.file}${failure.line ? `:${failure.line}` : ''} - ${failure.message}`
+    );
   }
   process.exit(1);
 }
@@ -94,12 +96,25 @@ function checkImportBoundaries(filePath, relativePath, content) {
       const targetApp = getTargetApp(importRef.specifier, targetPath);
 
       if (targetApp && targetApp !== sourceApp) {
-        addFailure('no-cross-app-imports', relativePath, importRef.line, `app code must not import ${targetApp}`);
+        addFailure(
+          'no-cross-app-imports',
+          relativePath,
+          importRef.line,
+          `app code must not import ${targetApp}`
+        );
       }
     }
 
-    if (relativePath.startsWith('packages/') && importTouchesApps(importRef.specifier, targetPath)) {
-      addFailure('shared-packages-do-not-import-apps', relativePath, importRef.line, 'shared packages must not import app or API internals');
+    if (
+      relativePath.startsWith('packages/') &&
+      importTouchesApps(importRef.specifier, targetPath)
+    ) {
+      addFailure(
+        'shared-packages-do-not-import-apps',
+        relativePath,
+        importRef.line,
+        'shared packages must not import app or API internals'
+      );
     }
 
     if (
@@ -119,7 +134,8 @@ function checkImportBoundaries(filePath, relativePath, content) {
 
 function parseImportRefs(content) {
   const refs = [];
-  const importPattern = /^\s*(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"];?/gm;
+  const importPattern =
+    /^\s*(?:import|export)\s+(?:type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"];?/gm;
   let match;
 
   while ((match = importPattern.exec(content)) !== null) {

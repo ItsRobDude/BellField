@@ -42,7 +42,11 @@ export function normalizePickedFieldMediaAsset(
   };
 }
 
-export function buildLocalMediaUri(baseDirectory: string, localMediaId: string, originalFilename: string): string {
+export function buildLocalMediaUri(
+  baseDirectory: string,
+  localMediaId: string,
+  originalFilename: string
+): string {
   const normalizedBase = baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`;
   const extension = getFileExtension(originalFilename);
   return `${normalizedBase}bellfield-media/${localMediaId}${extension}`;
@@ -100,7 +104,11 @@ export function base64ToBytes(value: string): Uint8Array {
       return index;
     });
 
-    const combined = ((values[0] ?? 0) << 18) | ((values[1] ?? 0) << 12) | ((values[2] ?? 0) << 6) | (values[3] ?? 0);
+    const combined =
+      ((values[0] ?? 0) << 18) |
+      ((values[1] ?? 0) << 12) |
+      ((values[2] ?? 0) << 6) |
+      (values[3] ?? 0);
 
     if (outputIndex < outputLength) {
       bytes[outputIndex++] = (combined >> 16) & 255;
@@ -144,7 +152,11 @@ export function normalizeContentType(
   return assetType === 'video' ? 'video/mp4' : 'image/jpeg';
 }
 
-function buildFallbackFilename(localMediaId: string, mediaKind: MediaAttachmentKind, contentType: string): string {
+function buildFallbackFilename(
+  localMediaId: string,
+  mediaKind: MediaAttachmentKind,
+  contentType: string
+): string {
   const extension = contentTypeToExtension(contentType) ?? (mediaKind === 'video' ? 'mp4' : 'jpg');
   return `${localMediaId}.${extension}`;
 }

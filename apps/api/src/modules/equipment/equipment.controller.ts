@@ -15,7 +15,10 @@ export class EquipmentController {
     @Headers('authorization') authorizationHeader?: string,
     @Query('includeInactive') includeInactive?: string
   ) {
-    return this.equipmentService.getWorkspace(this.getBearerToken(authorizationHeader), includeInactive === 'true');
+    return this.equipmentService.getWorkspace(
+      this.getBearerToken(authorizationHeader),
+      includeInactive === 'true'
+    );
   }
 
   @Post()
@@ -27,8 +30,14 @@ export class EquipmentController {
   }
 
   @Get(':equipmentId')
-  getEquipmentDetail(@Headers('authorization') authorizationHeader: string | undefined, @Param('equipmentId') equipmentId: string) {
-    return this.equipmentService.getEquipmentDetail(this.getBearerToken(authorizationHeader), equipmentId);
+  getEquipmentDetail(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('equipmentId') equipmentId: string
+  ) {
+    return this.equipmentService.getEquipmentDetail(
+      this.getBearerToken(authorizationHeader),
+      equipmentId
+    );
   }
 
   @Patch(':equipmentId')
@@ -37,7 +46,11 @@ export class EquipmentController {
     @Param('equipmentId') equipmentId: string,
     @Body() request: UpdateEquipmentFieldRequestBodyDto
   ) {
-    return this.equipmentService.updateEquipment(this.getBearerToken(authorizationHeader), equipmentId, request);
+    return this.equipmentService.updateEquipment(
+      this.getBearerToken(authorizationHeader),
+      equipmentId,
+      request
+    );
   }
 
   @Post(':equipmentId/replacement-link')
@@ -46,7 +59,11 @@ export class EquipmentController {
     @Param('equipmentId') equipmentId: string,
     @Body() request: LinkEquipmentReplacementRequestBodyDto
   ) {
-    return this.equipmentService.linkEquipmentReplacement(this.getBearerToken(authorizationHeader), equipmentId, request);
+    return this.equipmentService.linkEquipmentReplacement(
+      this.getBearerToken(authorizationHeader),
+      equipmentId,
+      request
+    );
   }
 
   @Delete(':equipmentId')

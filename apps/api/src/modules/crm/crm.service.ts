@@ -32,7 +32,9 @@ export class CrmService {
   ) {}
 
   async getWorkspace(sessionToken: string): Promise<CrmWorkspaceResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', [
+      'office-web'
+    ]);
     const [customers, contacts, locations] = await Promise.all([
       this.referenceDataService.listCustomers(false),
       this.referenceDataService.listContacts(false),
@@ -55,7 +57,9 @@ export class CrmService {
   }
 
   async search(sessionToken: string, query: string): Promise<CrmSearchResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', [
+      'office-web'
+    ]);
     const normalizedQuery = query.trim();
 
     if (!normalizedQuery) {
@@ -71,24 +75,39 @@ export class CrmService {
   }
 
   async getCustomerDetail(sessionToken: string, customerId: string) {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', [
+      'office-web'
+    ]);
     return this.referenceDataService.getCustomerDetail(customerId);
   }
 
   async getLocationDetail(sessionToken: string, locationId: string) {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:view', [
+      'office-web'
+    ]);
     return this.referenceDataService.getLocationDetail(locationId);
   }
 
   async getContactDetail(sessionToken: string, contactId: string) {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:view', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:view', [
+      'office-web'
+    ]);
     return this.referenceDataService.getContactDetail(contactId);
   }
 
-  async createCustomer(sessionToken: string, request: CreateCustomerRequestDto): Promise<CustomerMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:create', ['office-web']);
+  async createCustomer(
+    sessionToken: string,
+    request: CreateCustomerRequestDto
+  ): Promise<CustomerMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:create', [
+      'office-web'
+    ]);
     const duplicateWarnings = await this.findCustomerDuplicates(request);
-    this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'customer account');
+    this.ensureDuplicateConfirmation(
+      duplicateWarnings,
+      request.confirmDuplicate,
+      'customer account'
+    );
 
     const customer = await this.referenceDataService.createCustomer({
       name: request.name.trim(),
@@ -115,10 +134,19 @@ export class CrmService {
     customerId: string,
     request: UpdateCustomerRequestDto
   ): Promise<CustomerMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:edit', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:edit', [
+      'office-web'
+    ]);
     const current = await this.referenceDataService.getCustomerById(customerId);
-    const duplicateWarnings = await this.findCustomerDuplicates({ ...current, ...request }, customerId);
-    this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'customer account');
+    const duplicateWarnings = await this.findCustomerDuplicates(
+      { ...current, ...request },
+      customerId
+    );
+    this.ensureDuplicateConfirmation(
+      duplicateWarnings,
+      request.confirmDuplicate,
+      'customer account'
+    );
 
     const customer = await this.referenceDataService.updateCustomer(customerId, {
       name: request.name?.trim(),
@@ -140,12 +168,25 @@ export class CrmService {
     };
   }
 
-  async createLocation(sessionToken: string, request: CreateLocationRequestDto): Promise<LocationMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:create', ['office-web']);
-    ensureLocationContactConfirmation(request.phone, request.email, request.confirmMissingContactInfo);
+  async createLocation(
+    sessionToken: string,
+    request: CreateLocationRequestDto
+  ): Promise<LocationMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:create', [
+      'office-web'
+    ]);
+    ensureLocationContactConfirmation(
+      request.phone,
+      request.email,
+      request.confirmMissingContactInfo
+    );
     await this.referenceDataService.getCustomerById(request.customerId);
     if (request.alternateBillToCustomerIds?.length) {
-      await Promise.all(request.alternateBillToCustomerIds.map((customerId) => this.referenceDataService.getCustomerById(customerId)));
+      await Promise.all(
+        request.alternateBillToCustomerIds.map((customerId) =>
+          this.referenceDataService.getCustomerById(customerId)
+        )
+      );
     }
     const duplicateWarnings = await this.findLocationDuplicates(request);
     this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'location');
@@ -175,7 +216,9 @@ export class CrmService {
     locationId: string,
     request: UpdateLocationRequestDto
   ): Promise<LocationMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', [
+      'office-web'
+    ]);
     const current = await this.referenceDataService.getLocationById(locationId);
     ensureLocationContactConfirmation(
       request.phone ?? current.phone,
@@ -183,9 +226,16 @@ export class CrmService {
       request.confirmMissingContactInfo
     );
     if (request.alternateBillToCustomerIds?.length) {
-      await Promise.all(request.alternateBillToCustomerIds.map((customerId) => this.referenceDataService.getCustomerById(customerId)));
+      await Promise.all(
+        request.alternateBillToCustomerIds.map((customerId) =>
+          this.referenceDataService.getCustomerById(customerId)
+        )
+      );
     }
-    const duplicateWarnings = await this.findLocationDuplicates({ ...current, ...request }, locationId);
+    const duplicateWarnings = await this.findLocationDuplicates(
+      { ...current, ...request },
+      locationId
+    );
     this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'location');
 
     const location = await this.referenceDataService.updateLocation(locationId, {
@@ -212,14 +262,25 @@ export class CrmService {
     locationId: string,
     request: ReassignLocationOwnerRequestDto
   ): Promise<LocationMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', [
+      'office-web'
+    ]);
     await this.referenceDataService.getCustomerById(request.customerId);
-    const location = await this.referenceDataService.reassignLocationOwner(locationId, request.customerId, request.note?.trim());
+    const location = await this.referenceDataService.reassignLocationOwner(
+      locationId,
+      request.customerId,
+      request.note?.trim()
+    );
     return { location };
   }
 
-  async createContact(sessionToken: string, request: CreateContactRequestDto): Promise<ContactMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:create', ['office-web']);
+  async createContact(
+    sessionToken: string,
+    request: CreateContactRequestDto
+  ): Promise<ContactMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:create', [
+      'office-web'
+    ]);
     const contact = await this.referenceDataService.createContact({
       displayName: request.displayName.trim(),
       phone: trimOptional(request.phone),
@@ -237,7 +298,9 @@ export class CrmService {
     contactId: string,
     request: UpdateContactRequestDto
   ): Promise<ContactMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', [
+      'office-web'
+    ]);
 
     if (request.scope === 'global') {
       await this.referenceDataService.getContactById(contactId);
@@ -252,7 +315,9 @@ export class CrmService {
     }
 
     if (request.displayName) {
-      throw new ConflictException('Local-only contact edits may change phone, email, fax, or tags, but not the shared display name.');
+      throw new ConflictException(
+        'Local-only contact edits may change phone, email, fax, or tags, but not the shared display name.'
+      );
     }
 
     if (!request.linkId) {
@@ -267,8 +332,13 @@ export class CrmService {
     });
   }
 
-  async linkContact(sessionToken: string, request: LinkContactRequestDto): Promise<ContactMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', ['office-web']);
+  async linkContact(
+    sessionToken: string,
+    request: LinkContactRequestDto
+  ): Promise<ContactMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', [
+      'office-web'
+    ]);
     await this.referenceDataService.getContactById(request.contactId);
 
     if (!request.customerId && !request.locationId) {
@@ -305,7 +375,9 @@ export class CrmService {
     linkId: string,
     request: UpdateContactLinkRequestDto
   ): Promise<ContactMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', ['office-web']);
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', [
+      'office-web'
+    ]);
     return this.referenceDataService.updateContactLink(linkId, {
       tags: request.tags?.map((tag) => tag.trim()).filter(Boolean),
       endDate: request.endDate,
@@ -337,31 +409,31 @@ export class CrmService {
       limit: duplicateCandidateLimit
     });
 
-    return customers
-      .flatMap((customer) => {
-        const matchReasons: string[] = [];
+    return customers.flatMap((customer) => {
+      const matchReasons: string[] = [];
 
-        if (normalizedName && normalize(customer.name) === normalizedName) {
-          matchReasons.push('Same customer name');
-        }
+      if (normalizedName && normalize(customer.name) === normalizedName) {
+        matchReasons.push('Same customer name');
+      }
 
-        if (normalizedPhone && normalizePhone(customer.phone) === normalizedPhone) {
-          matchReasons.push('Same phone number');
-        }
+      if (normalizedPhone && normalizePhone(customer.phone) === normalizedPhone) {
+        matchReasons.push('Same phone number');
+      }
 
-        const customerAddress = normalize(
-          `${customer.billingAddressLine1} ${customer.billingCity} ${customer.billingState} ${customer.billingPostalCode}`
-        );
+      const customerAddress = normalize(
+        `${customer.billingAddressLine1} ${customer.billingCity} ${customer.billingState} ${customer.billingPostalCode}`
+      );
 
-        if (normalizedAddress && customerAddress === normalizedAddress) {
-          matchReasons.push('Same billing address');
-        }
+      if (normalizedAddress && customerAddress === normalizedAddress) {
+        matchReasons.push('Same billing address');
+      }
 
-        if (matchReasons.length === 0) {
-          return [];
-        }
+      if (matchReasons.length === 0) {
+        return [];
+      }
 
-        return [{
+      return [
+        {
           id: customer.id,
           kind: 'customer' as const,
           title: customer.name,
@@ -369,8 +441,9 @@ export class CrmService {
           matchReasons,
           isActive: customer.isActive,
           hasDoNotServiceFlag: hasDoNotService(customer.flags)
-        } satisfies DuplicateCandidate];
-      });
+        } satisfies DuplicateCandidate
+      ];
+    });
   }
 
   private async findLocationDuplicates(
@@ -442,7 +515,9 @@ export class CrmService {
     label: string
   ): void {
     if (duplicateWarnings.length > 0 && !confirmDuplicate) {
-      throw new ConflictException(`Possible duplicate ${label} found. Review the matches and confirm before continuing.`);
+      throw new ConflictException(
+        `Possible duplicate ${label} found. Review the matches and confirm before continuing.`
+      );
     }
   }
 }
@@ -453,7 +528,9 @@ function ensureLocationContactConfirmation(
   confirmMissingContactInfo: boolean | undefined
 ): void {
   if (!trimOptional(phone) && !trimOptional(email) && !confirmMissingContactInfo) {
-    throw new ConflictException('Locations without phone or email need office confirmation before saving.');
+    throw new ConflictException(
+      'Locations without phone or email need office confirmation before saving.'
+    );
   }
 }
 
@@ -474,8 +551,15 @@ function hasDoNotService(flags: string[]): boolean {
   return flags.some((flag) => flag.toLowerCase().includes('do not service'));
 }
 
-function toSupportedAccountType(accountType: string): 'residential' | 'company' | 'propertyManager' | 'landlord' {
-  if (accountType === 'residential' || accountType === 'company' || accountType === 'propertyManager' || accountType === 'landlord') {
+function toSupportedAccountType(
+  accountType: string
+): 'residential' | 'company' | 'propertyManager' | 'landlord' {
+  if (
+    accountType === 'residential' ||
+    accountType === 'company' ||
+    accountType === 'propertyManager' ||
+    accountType === 'landlord'
+  ) {
     return accountType;
   }
 

@@ -1,5 +1,10 @@
 import { openDatabaseAsync, type SQLiteDatabase } from 'expo-sqlite';
-import type { AssignedWorkSnapshot, PendingOperation, PendingOperationState, SyncMetadata } from './field-sync-types';
+import type {
+  AssignedWorkSnapshot,
+  PendingOperation,
+  PendingOperationState,
+  SyncMetadata
+} from './field-sync-types';
 
 const databaseName = 'bellfield-field.db';
 
@@ -37,7 +42,11 @@ function getEntityKey(operation: PendingOperation): string {
 }
 
 function shouldReplaceExistingOperation(operation: PendingOperation): boolean {
-  return operation.kind !== 'jobNote' && operation.kind !== 'registerEntryCreate' && operation.kind !== 'mediaUpload';
+  return (
+    operation.kind !== 'jobNote' &&
+    operation.kind !== 'registerEntryCreate' &&
+    operation.kind !== 'mediaUpload'
+  );
 }
 
 async function getDatabase(): Promise<SQLiteDatabase> {
@@ -118,7 +127,9 @@ export async function loadPendingOperations(): Promise<PendingOperation[]> {
     payload_json: string;
     state: PendingOperationState;
     last_result_message: string | null;
-  }>('select payload_json, state, last_result_message from pending_operations order by created_at asc');
+  }>(
+    'select payload_json, state, last_result_message from pending_operations order by created_at asc'
+  );
 
   return rows.map((row): PendingOperation => {
     const storedOperation = JSON.parse(row.payload_json) as PendingOperation;
@@ -138,7 +149,7 @@ export async function queuePendingOperation(operation: PendingOperation): Promis
 
   if (shouldReplaceExistingOperation(operation)) {
     await database.runAsync('delete from pending_operations where entity_key = $entityKey', {
-      $entityKey: entityKey,
+      $entityKey: entityKey
     });
   }
 

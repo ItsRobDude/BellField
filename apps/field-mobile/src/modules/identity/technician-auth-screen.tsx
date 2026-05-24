@@ -1,6 +1,16 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
-import { ActivityIndicator, Pressable, SafeAreaView, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  TextInput,
+  View
+} from 'react-native';
 import { getInitialFieldApiBaseUrl } from '@/lib/api-base-url';
 import { loginToFieldApi, type EmployeeSummary } from '@/lib/identity-api';
 import { TechnicianWorkspaceScreen } from '@/modules/operations/technician-workspace-screen';
@@ -64,8 +74,8 @@ export function TechnicianAuthScreen() {
           <Text style={styles.kicker}>Milestone foundation</Text>
           <Text style={styles.title}>BellField Field Sign In</Text>
           <Text style={styles.subtitle}>
-            This field shell signs in, loads assigned work, and then lets the technician save updates locally before
-            syncing them back to the server.
+            This field shell signs in, loads assigned work, and then lets the technician save
+            updates locally before syncing them back to the server.
           </Text>
 
           <View style={styles.formGroup}>
@@ -78,13 +88,19 @@ export function TechnicianAuthScreen() {
               style={styles.input}
             />
             <Text style={styles.helperText}>
-              Local development may use `http://localhost:3001`. Production devices should point at the office server.
+              Local development may use `http://localhost:3001`. Production devices should point at
+              the office server.
             </Text>
           </View>
 
           <View style={styles.formGroup}>
             <Text style={styles.label}>Email</Text>
-            <TextInput value={email} onChangeText={setEmail} autoCapitalize="none" style={styles.input} />
+            <TextInput
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              style={styles.input}
+            />
           </View>
 
           <View style={styles.formGroup}>
@@ -103,7 +119,11 @@ export function TechnicianAuthScreen() {
           </View>
 
           <Pressable onPress={handleLogin} style={styles.primaryButton}>
-            {isSubmitting ? <ActivityIndicator color="#ffffff" /> : <Text style={styles.primaryButtonText}>Sign in</Text>}
+            {isSubmitting ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.primaryButtonText}>Sign in</Text>
+            )}
           </Pressable>
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
@@ -135,21 +155,53 @@ export function TechnicianAuthScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#f2efe6' },
   scrollContent: { flexGrow: 1, justifyContent: 'center', padding: 20 },
-  card: { backgroundColor: '#fffdf8', borderColor: '#e4d6bc', borderRadius: 24, borderWidth: 1, gap: 16, padding: 20 },
-  kicker: { color: '#936327', fontSize: 12, fontWeight: '700', letterSpacing: 1.2, textTransform: 'uppercase' },
+  card: {
+    backgroundColor: '#fffdf8',
+    borderColor: '#e4d6bc',
+    borderRadius: 24,
+    borderWidth: 1,
+    gap: 16,
+    padding: 20
+  },
+  kicker: {
+    color: '#936327',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 1.2,
+    textTransform: 'uppercase'
+  },
   title: { color: '#1f2933', fontSize: 28, fontWeight: '700' },
   subtitle: { color: '#52606d', fontSize: 15, lineHeight: 22 },
   formGroup: { gap: 8 },
   label: { color: '#1f2933', fontSize: 14, fontWeight: '600' },
   helperText: { color: '#52606d', fontSize: 13, lineHeight: 18 },
-  input: { backgroundColor: '#ffffff', borderColor: '#d9c8ad', borderRadius: 14, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 12 },
+  input: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d9c8ad',
+    borderRadius: 14,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 12
+  },
   switchRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   switchLabel: { color: '#52606d', fontSize: 14 },
-  primaryButton: { alignItems: 'center', backgroundColor: '#1c6b57', borderRadius: 999, paddingVertical: 14 },
+  primaryButton: {
+    alignItems: 'center',
+    backgroundColor: '#1c6b57',
+    borderRadius: 999,
+    paddingVertical: 14
+  },
   primaryButtonText: { color: '#ffffff', fontSize: 16, fontWeight: '700' },
   errorText: { color: '#b42318', fontSize: 14 },
   demoCard: { borderTopColor: '#efe4d1', borderTopWidth: 1, gap: 10, paddingTop: 16 },
   sectionTitle: { color: '#1f2933', fontSize: 17, fontWeight: '600' },
-  demoButton: { backgroundColor: '#faf4e7', borderColor: '#e6d6ba', borderRadius: 12, borderWidth: 1, paddingHorizontal: 12, paddingVertical: 12 },
+  demoButton: {
+    backgroundColor: '#faf4e7',
+    borderColor: '#e6d6ba',
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12
+  },
   demoButtonText: { color: '#1f2933', fontSize: 14 }
 });

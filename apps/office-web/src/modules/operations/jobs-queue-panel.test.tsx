@@ -39,11 +39,21 @@ function buildQueueItem(overrides: Partial<QueueItem> = {}): QueueItem {
   };
 }
 
-function buildJobsQueue(overrides: Partial<Record<JobsQueueKey, QueueItem[]>> = {}): JobsQueueResponse {
+function buildJobsQueue(
+  overrides: Partial<Record<JobsQueueKey, QueueItem[]>> = {}
+): JobsQueueResponse {
   const sections: JobsQueueResponse['queues'] = [
     { key: 'review', totalCount: overrides.review?.length ?? 0, jobs: overrides.review ?? [] },
-    { key: 'waitingOnParts', totalCount: overrides.waitingOnParts?.length ?? 0, jobs: overrides.waitingOnParts ?? [] },
-    { key: 'unscheduled', totalCount: overrides.unscheduled?.length ?? 0, jobs: overrides.unscheduled ?? [] },
+    {
+      key: 'waitingOnParts',
+      totalCount: overrides.waitingOnParts?.length ?? 0,
+      jobs: overrides.waitingOnParts ?? []
+    },
+    {
+      key: 'unscheduled',
+      totalCount: overrides.unscheduled?.length ?? 0,
+      jobs: overrides.unscheduled ?? []
+    },
     { key: 'open', totalCount: overrides.open?.length ?? 0, jobs: overrides.open ?? [] }
   ];
 
@@ -56,9 +66,21 @@ function buildJobsQueue(overrides: Partial<Record<JobsQueueKey, QueueItem[]>> = 
 describe('JobsQueuePanel', () => {
   it('renders server-provided review, waiting, unscheduled, and open queues', () => {
     const jobsQueue = buildJobsQueue({
-      review: [buildQueueItem({ id: 'job-review', jobNumber: '1001', summary: 'Review this', needsOfficeReview: true })],
+      review: [
+        buildQueueItem({
+          id: 'job-review',
+          jobNumber: '1001',
+          summary: 'Review this',
+          needsOfficeReview: true
+        })
+      ],
       waitingOnParts: [
-        buildQueueItem({ id: 'job-waiting', jobNumber: '1002', summary: 'Waiting for part', status: 'waitingOnParts' })
+        buildQueueItem({
+          id: 'job-waiting',
+          jobNumber: '1002',
+          summary: 'Waiting for part',
+          status: 'waitingOnParts'
+        })
       ],
       unscheduled: [
         buildQueueItem({
@@ -75,10 +97,18 @@ describe('JobsQueuePanel', () => {
 
     render(<JobsQueuePanel jobsQueue={jobsQueue} onOpenJobDetail={vi.fn()} onNewJob={vi.fn()} />);
 
-    expect(within(screen.getByRole('region', { name: 'Review jobs' })).getByText('Review this')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Waiting jobs' })).getByText('Waiting for part')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Unscheduled jobs' })).getByText('Needs date')).toBeInTheDocument();
-    expect(within(screen.getByRole('region', { name: 'Open jobs' })).getByText('Regular work')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Review jobs' })).getByText('Review this')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Waiting jobs' })).getByText('Waiting for part')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Unscheduled jobs' })).getByText('Needs date')
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('region', { name: 'Open jobs' })).getByText('Regular work')
+    ).toBeInTheDocument();
     expect(screen.getByText('4 active')).toBeInTheDocument();
   });
 
@@ -102,7 +132,9 @@ describe('JobsQueuePanel', () => {
       ]
     });
 
-    render(<JobsQueuePanel jobsQueue={jobsQueue} onOpenJobDetail={onOpenJobDetail} onNewJob={onNewJob} />);
+    render(
+      <JobsQueuePanel jobsQueue={jobsQueue} onOpenJobDetail={onOpenJobDetail} onNewJob={onNewJob} />
+    );
 
     fireEvent.click(screen.getByRole('button', { name: /Job 1001/i }));
     fireEvent.click(screen.getByRole('button', { name: 'New job' }));
@@ -129,7 +161,11 @@ describe('JobsQueuePanel', () => {
       />
     );
 
-    fireEvent.click(within(screen.getByRole('region', { name: 'Open jobs' })).getByRole('button', { name: 'Load more' }));
+    fireEvent.click(
+      within(screen.getByRole('region', { name: 'Open jobs' })).getByRole('button', {
+        name: 'Load more'
+      })
+    );
 
     expect(onLoadMoreQueue).toHaveBeenCalledWith('open', 'cursor-1');
   });

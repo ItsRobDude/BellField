@@ -36,6 +36,7 @@ When coding BellField, contributors should follow this order of truth:
 4. code
 
 Important rule:
+
 - the code should reflect the product documents
 - product behavior should not be silently reinvented inside the code
 
@@ -48,12 +49,15 @@ If code and docs disagree, the disagreement should be fixed deliberately, not ig
 BellField should prefer one main language stack wherever practical.
 
 ### Default stack
+
 - Office app: TypeScript
 - Field app: TypeScript
 - Backend/API: TypeScript
 
 ### Product stack direction
+
 BellField should remain aligned with the current intended stack direction:
+
 - office app as a web application
 - field app as a mobile application
 - backend as the single source of business logic
@@ -61,6 +65,7 @@ BellField should remain aligned with the current intended stack direction:
 BellField should avoid splitting the product across many unrelated languages unless there is a very strong reason.
 
 Reason:
+
 - easier hiring
 - easier maintenance
 - easier shared validation/contracts
@@ -72,12 +77,14 @@ Reason:
 ## 4. Architecture Boundaries
 
 BellField should enforce strong separation between:
+
 - office app
 - field app
 - backend
 - database/storage
 
 ### Non-negotiable rules
+
 - office app and field app never talk directly to each other
 - clients never talk directly to the database
 - business logic belongs in backend/shared domain logic, not duplicated randomly across clients
@@ -85,6 +92,7 @@ BellField should enforce strong separation between:
 - do not create spaghetti coupling between modules
 
 ### Preferred architecture behavior
+
 - clients send requests to the backend
 - backend owns business rules
 - backend writes to the database
@@ -95,6 +103,7 @@ BellField should enforce strong separation between:
 ## 5. Keep the Code Boring
 
 BellField code should prefer:
+
 - simple control flow
 - predictable structure
 - small understandable functions
@@ -102,6 +111,7 @@ BellField code should prefer:
 - explicit behavior
 
 BellField code should avoid:
+
 - clever abstractions too early
 - magic hidden behavior
 - one-off special cases buried in random places
@@ -117,13 +127,16 @@ If a simpler, more obvious design is available, BellField should usually choose 
 BellField should use clear, boring, descriptive names.
 
 ### Preferred naming style
+
 Use names like:
+
 - `customerAccount`
 - `locationHistory`
 - `jobStatus`
 - `invoicePostingService`
 
 Avoid names that are:
+
 - cute
 - vague
 - overly shortened
@@ -131,6 +144,7 @@ Avoid names that are:
 - clever for the sake of cleverness
 
 ### File and symbol naming rule
+
 A developer should be able to guess what a file/class/function does from its name without opening it.
 
 If a name needs explanation, it is probably not a good BellField name.
@@ -142,7 +156,9 @@ If a name needs explanation, it is probably not a good BellField name.
 BellField should use comments carefully.
 
 ### Comment rules
+
 Comments should explain:
+
 - why something exists
 - why a business rule matters
 - why a non-obvious implementation choice was made
@@ -151,12 +167,15 @@ Comments should explain:
 Comments should not waste space explaining obvious code line by line.
 
 ### Avoid
+
 - noisy comment blocks that repeat the code
 - stale comments that stop matching reality
 - filler comments that add no value
 
 ### Required-style comment examples
+
 Good comments are especially important around:
+
 - history preservation
 - invoice locking/posting
 - sync/conflict behavior
@@ -171,19 +190,23 @@ Good comments are especially important around:
 BellField should be strict about adding libraries and packages.
 
 ### Rules for adding a dependency
+
 A new dependency should only be added if it clearly provides real value such as:
+
 - saving significant implementation effort
 - improving reliability
 - handling a difficult/solved problem better than in-house code
 - reducing long-term maintenance burden
 
 ### BellField should avoid
+
 - flashy libraries added for convenience only
 - heavy dependencies for tiny problems
 - duplicate libraries that solve the same job
 - packages that pull BellField toward unnecessary complexity
 
 ### Default preference
+
 Prefer fewer dependencies and fewer moving parts.
 
 Every added package is a long-term maintenance decision.
@@ -195,9 +218,11 @@ Every added package is a long-term maintenance decision.
 BellField should automatically enforce formatting and basic code rules.
 
 ### Principle
+
 Developers should not waste time arguing about code style manually.
 
 ### BellField should enforce
+
 - consistent formatting
 - consistent linting
 - consistent import/order rules
@@ -206,6 +231,7 @@ Developers should not waste time arguing about code style manually.
 This should happen automatically as part of the development process.
 
 Human review should focus on:
+
 - product correctness
 - architecture
 - security/privacy
@@ -220,12 +246,14 @@ not on whitespace arguments.
 Every BellField file should have a clear reason to exist.
 
 ### Rules
+
 - each file should have a focused purpose
 - each module should own its own business area
 - do not mix unrelated responsibilities in one file or one service
 - avoid giant “god files” and “god services”
 
 ### Preferred organization behavior
+
 BellField code should group work by business domain/module, not by random technical convenience alone.
 
 That means the codebase should stay understandable from the product point of view.
@@ -237,12 +265,15 @@ That means the codebase should stay understandable from the product point of vie
 BellField should not copy the same business rule into multiple places.
 
 ### Rules
+
 - if office app and field app need the same business rule, that rule should live in shared/backend logic where practical
 - do not duplicate validation/business behavior in three places unless there is a clear reason
 - UI-specific behavior can stay client-side, but business truth should not drift
 
 ### Examples
+
 Important shared business rules include:
+
 - invoice posting behavior
 - permission checks
 - job/appointment state rules
@@ -256,15 +287,19 @@ Important shared business rules include:
 BellField database changes must always be tracked.
 
 ### Non-negotiable rule
+
 Every database change must go through a proper tracked migration/change file.
 
 ### Never acceptable
+
 - manually changing the database and hoping everyone remembers
 - “quick local fixes” with no migration
 - schema drift between environments
 
 ### Migration expectations
+
 Migrations should be:
+
 - readable
 - reversible where practical
 - reviewed carefully
@@ -277,6 +312,7 @@ Any migration touching jobs, invoices, payments, snapshots, or history must be t
 ## 13. Data Protection Standards
 
 BellField must treat the following as high-risk data areas:
+
 - customer data
 - contact data
 - service history
@@ -288,6 +324,7 @@ BellField must treat the following as high-risk data areas:
 - logs
 
 ### Rules
+
 - do not casually expose sensitive data in logs
 - do not rewrite historical meaning accidentally
 - do not allow convenience shortcuts that weaken accounting/history integrity
@@ -302,6 +339,7 @@ BellField should always assume customer trust is hard to earn and easy to lose.
 BellField should keep good logs for troubleshooting and bug fixing.
 
 ### BellField should log
+
 - technical errors
 - important workflow actions
 - significant state changes
@@ -309,11 +347,13 @@ BellField should keep good logs for troubleshooting and bug fixing.
 - permission-sensitive actions where appropriate
 
 ### BellField should avoid logging by default
+
 - unnecessary customer/private business content
 - raw sensitive data dumps
 - logs so noisy that real issues become invisible
 
 ### Logging principle
+
 Logs should be useful enough to help solve problems without turning into a privacy mess.
 
 ---
@@ -323,15 +363,19 @@ Logs should be useful enough to help solve problems without turning into a priva
 BellField should handle errors in a human-friendly way.
 
 ### User-facing behavior
+
 Users should see:
+
 - clear readable error messages
 - practical next-step guidance when possible
 - warnings that make sense in normal office/field language
 
 ### Technical behavior
+
 Technical details should go to logs, not directly to ordinary users.
 
 ### BellField should avoid
+
 - raw crash text shown to office staff or technicians
 - vague “something went wrong” messages with no guidance
 - silent failures with no trace
@@ -341,11 +385,13 @@ Technical details should go to logs, not directly to ordinary users.
 ## 16. Settings and Configuration Rules
 
 BellField must separate:
+
 - company/business settings
 - server/environment configuration
 - secrets/credentials
 
 ### Rules
+
 - company-specific behavior belongs in BellField settings
 - environment/server secrets stay outside normal app data/settings
 - never hardcode customer-specific settings into the codebase
@@ -360,6 +406,7 @@ BellField must remain deployable to different companies without editing core cod
 BellField should never leave confusing half-built features exposed casually.
 
 ### Rules
+
 - unfinished features should be hidden or cleanly disabled
 - do not leave dead-end buttons active just because code exists behind them
 - if a feature is incomplete, BellField should clearly communicate that through controlled feature visibility
@@ -373,13 +420,16 @@ The product should feel intentional, even when work is still in progress.
 BellField should treat testing as important from the start, but should focus energy where it matters most first.
 
 ### BellField testing philosophy
+
 - core features should be tested early
 - history/accounting/privacy/sync behavior deserves extra testing priority
 - not every tiny feature needs maximum test depth on day one
 - important business-critical flows should not rely on “we clicked it once and it seemed fine”
 
 ### Highest-priority test areas
+
 BellField should prioritize tests around:
+
 - job and appointment workflow rules
 - invoice draft vs posted behavior
 - permissions/overrides
@@ -389,6 +439,7 @@ BellField should prioritize tests around:
 - equipment/location ownership rules
 
 ### Practical standard
+
 Testing should be strong enough to protect BellField’s core business truth without blocking progress on every minor polish detail.
 
 ---
@@ -398,7 +449,9 @@ Testing should be strong enough to protect BellField’s core business truth wit
 BellField should never accept AI-generated code just because it appears to work.
 
 ### Non-negotiable rule
+
 AI-generated code must still follow:
+
 - BellField product documents
 - BellField module boundaries
 - BellField naming standards
@@ -408,7 +461,9 @@ AI-generated code must still follow:
 - BellField privacy/logging rules
 
 ### AI code review rule
+
 All AI-generated code should be reviewed for:
+
 - correctness
 - maintainability
 - duplication
@@ -425,6 +480,7 @@ AI should help BellField move faster, but BellField’s standards should control
 BellField reviews should focus on substance, not style nitpicks already handled automatically.
 
 ### Reviewers should check
+
 - does this match the product documents?
 - does this create spaghetti coupling?
 - does this protect history and accounting data?
@@ -435,7 +491,9 @@ BellField reviews should focus on substance, not style nitpicks already handled 
 - does it create hidden behavior?
 
 ### Docs/code drift checklist
+
 For any change that touches product behavior, workflow rules, shared contracts, permissions, or persistence, reviewers should confirm:
+
 - relevant product/workflow/modeling docs were checked
 - docs were updated when behavior changed
 - shared contract types changed when API request/response shape changed
@@ -443,6 +501,7 @@ For any change that touches product behavior, workflow rules, shared contracts, 
 - validation included the narrow relevant checks plus `pnpm check:architecture` when boundaries or shared contracts changed
 
 ### BellField review principle
+
 A change should not be approved just because it passes technically if it makes the codebase harder to understand later.
 
 ---
@@ -452,6 +511,7 @@ A change should not be approved just because it passes technically if it makes t
 BellField should be careful with sensitive operations.
 
 ### Rules
+
 - permission checks should live in trusted backend/shared logic, not just client UI
 - never assume hidden buttons equal real security
 - destructive or sensitive actions should be guarded and logged appropriately
@@ -466,6 +526,7 @@ BellField should treat permissions as real business/security rules, not decorati
 BellField should prefer safe change over reckless refactors.
 
 ### Rules
+
 - new features should not casually break existing workflows
 - if a workflow changes, history and data meaning must be preserved
 - changes touching old records should be treated very carefully
@@ -480,9 +541,11 @@ BellField should be a system companies can trust with years of records, not just
 BellField is not a personal playground.
 
 ### Principle
+
 Contributors should not shape the codebase around their own favorite style if it weakens consistency.
 
 This means:
+
 - do not invent a new pattern every week
 - do not mix styles wildly between modules
 - do not make future developers guess which “flavor” of BellField they are reading

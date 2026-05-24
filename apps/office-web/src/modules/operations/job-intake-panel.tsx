@@ -58,7 +58,8 @@ export function JobIntakePanel({
   onCreateJob,
   onClose
 }: JobIntakePanelProps) {
-  const selectedLocation = intakeContext.locations.find((location) => location.id === jobLocationId) ?? null;
+  const selectedLocation =
+    intakeContext.locations.find((location) => location.id === jobLocationId) ?? null;
   const billToCustomerIds = selectedLocation
     ? [selectedLocation.customerId, ...selectedLocation.alternateBillToCustomerIds]
     : [];
@@ -74,7 +75,11 @@ export function JobIntakePanel({
       <div style={styles.formGridCompact}>
         <label style={styles.fieldLabel}>
           <span>Location</span>
-          <select value={jobLocationId} onChange={(event) => onJobLocationChange(event.target.value)} style={styles.input}>
+          <select
+            value={jobLocationId}
+            onChange={(event) => onJobLocationChange(event.target.value)}
+            style={styles.input}
+          >
             {intakeContext.locations.map((location) => (
               <option key={location.id} value={location.id}>
                 {location.name}
@@ -90,7 +95,9 @@ export function JobIntakePanel({
             style={styles.input}
           >
             {billToCustomerIds.map((customerId) => {
-              const customer = intakeContext.customers.find((candidate) => candidate.id === customerId);
+              const customer = intakeContext.customers.find(
+                (candidate) => candidate.id === customerId
+              );
               return customer ? (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
@@ -111,7 +118,13 @@ export function JobIntakePanel({
           disabled={!jobDate}
           onChange={onJobStartTimeChange}
         />
-        <TextField label="End" type="time" value={jobEndTime} disabled={!jobDate} onChange={onJobEndTimeChange} />
+        <TextField
+          label="End"
+          type="time"
+          value={jobEndTime}
+          disabled={!jobDate}
+          onChange={onJobEndTimeChange}
+        />
         <TextField label="Window" value={jobWindow} onChange={onJobWindowChange} />
         <label style={styles.fieldLabel}>
           <span>Tech</span>

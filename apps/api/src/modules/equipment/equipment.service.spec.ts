@@ -59,13 +59,20 @@ function createService() {
   };
   const equipmentDataService = {
     getEquipmentById: jest.fn().mockResolvedValue(createEquipmentRecord()),
-    updateEquipment: jest.fn().mockResolvedValue(createEquipmentRecord({ status: 'inactive', updatedAt: '2026-04-14T12:00:00.000Z' })),
+    updateEquipment: jest
+      .fn()
+      .mockResolvedValue(
+        createEquipmentRecord({ status: 'inactive', updatedAt: '2026-04-14T12:00:00.000Z' })
+      ),
     listEquipment: jest.fn().mockResolvedValue([]),
     getEquipmentHistory: jest.fn().mockResolvedValue([]),
     getEquipmentGroupById: jest.fn().mockResolvedValue(null),
     listEquipmentByIds: jest.fn().mockResolvedValue([]),
     linkReplacement: jest.fn().mockResolvedValue({
-      oldEquipment: createEquipmentRecord({ status: 'removed', replacedByEquipmentId: 'equipment-2' }),
+      oldEquipment: createEquipmentRecord({
+        status: 'removed',
+        replacedByEquipmentId: 'equipment-2'
+      }),
       replacementEquipment: createEquipmentRecord({
         id: 'equipment-2',
         model: 'XYZ',

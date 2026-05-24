@@ -96,7 +96,9 @@ function buildRegisterEntry(overrides: Partial<RegisterEntrySummary> = {}): Regi
   };
 }
 
-function buildMediaAttachment(overrides: Partial<MediaAttachmentSummary> = {}): MediaAttachmentSummary {
+function buildMediaAttachment(
+  overrides: Partial<MediaAttachmentSummary> = {}
+): MediaAttachmentSummary {
   return {
     id: 'media-1',
     jobId: 'job-1',
@@ -144,19 +146,23 @@ function buildCapturedWork(
         }
       ])
     ),
-    mediaCaptionDrafts: Object.fromEntries(mediaAttachments.map((media) => [media.id, media.caption ?? ''])),
+    mediaCaptionDrafts: Object.fromEntries(
+      mediaAttachments.map((media) => [media.id, media.caption ?? ''])
+    ),
     registerVoidReasons: {},
     mediaVoidReasons: {}
   };
 }
 
-function renderDetail(input: {
-  job?: JobSummary;
-  initialTab?: 'overview' | 'appointments' | 'captured' | 'media' | 'timeline';
-  focusedAppointmentId?: string | null;
-  capturedWork?: CapturedWorkDetails;
-  handlers?: Partial<Parameters<typeof JobDetailPanel>[0]>;
-} = {}) {
+function renderDetail(
+  input: {
+    job?: JobSummary;
+    initialTab?: 'overview' | 'appointments' | 'captured' | 'media' | 'timeline';
+    focusedAppointmentId?: string | null;
+    capturedWork?: CapturedWorkDetails;
+    handlers?: Partial<Parameters<typeof JobDetailPanel>[0]>;
+  } = {}
+) {
   const job = input.job ?? buildJob();
   const props: Parameters<typeof JobDetailPanel>[0] = {
     technicians: buildWorkspace(job).technicians,
@@ -205,7 +211,9 @@ describe('JobDetailPanel', () => {
     expect(screen.getByRole('button', { name: 'Captured' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Media' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Timeline' })).toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Jobs and appointments' })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'Jobs and appointments' })
+    ).not.toBeInTheDocument();
   });
 
   it('edits appointment schedule and status from the appointments tab', () => {
@@ -224,16 +232,37 @@ describe('JobDetailPanel', () => {
     });
 
     const appointment = screen.getByRole('region', { name: 'Appointment appt-1' });
-    fireEvent.change(within(appointment).getByLabelText('Appointment end time'), { target: { value: '11:00' } });
-    fireEvent.change(within(appointment).getByLabelText('Status'), { target: { value: 'confirmed' } });
+    const startTimeInput = within(appointment).getByLabelText('Appointment start time');
+    const endTimeInput = within(appointment).getByLabelText('Appointment end time');
+    expect(startTimeInput).toHaveAttribute('type', 'text');
+    expect(startTimeInput).toHaveAttribute('placeholder', 'HH:MM');
+    expect(endTimeInput).toHaveAttribute('type', 'text');
+    expect(endTimeInput).toHaveAttribute('placeholder', 'HH:MM');
+    fireEvent.change(startTimeInput, { target: { value: '09:00' } });
+    fireEvent.change(endTimeInput, { target: { value: '11:00' } });
+    fireEvent.change(within(appointment).getByLabelText('Appointment time window'), {
+      target: { value: '9:00 AM - 11:00 AM' }
+    });
+    fireEvent.change(within(appointment).getByLabelText('Status'), {
+      target: { value: 'confirmed' }
+    });
     fireEvent.click(within(appointment).getByRole('button', { name: 'Save appointment' }));
 
-    expect(onAppointmentEditDraftChange).toHaveBeenCalledWith('appt-1', {
+    const baseDraft = {
       scheduledDate: '2026-05-22',
       scheduledStartTime: '08:00',
-      scheduledEndTime: '11:00',
+      scheduledEndTime: '10:00',
       timeWindowLabel: '',
       technicianId: 'tech-1'
+    };
+    expect(onAppointmentEditDraftChange).toHaveBeenNthCalledWith(1, 'appt-1', baseDraft, {
+      scheduledStartTime: '09:00'
+    });
+    expect(onAppointmentEditDraftChange).toHaveBeenNthCalledWith(2, 'appt-1', baseDraft, {
+      scheduledEndTime: '11:00'
+    });
+    expect(onAppointmentEditDraftChange).toHaveBeenNthCalledWith(3, 'appt-1', baseDraft, {
+      timeWindowLabel: '9:00 AM - 11:00 AM'
     });
     expect(onAppointmentStatusChange).toHaveBeenCalledWith('appt-1', 'confirmed');
     expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-1');
@@ -278,7 +307,12 @@ describe('JobDetailPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Follow-up' }));
     fireEvent.click(screen.getByRole('button', { name: 'Keep open' }));
 
-    expect(onJobStatusReviewRequested).toHaveBeenCalledWith('job-1', 'scheduled', 'completed', 'No cooling');
+    expect(onJobStatusReviewRequested).toHaveBeenCalledWith(
+      'job-1',
+      'scheduled',
+      'completed',
+      'No cooling'
+    );
     expect(onAddAppointment).toHaveBeenCalledWith('job-1');
     expect(onKeepJobOpen).toHaveBeenCalledWith('job-1');
   });
@@ -386,7 +420,9 @@ describe('JobDetailPanel', () => {
   });
 });
 
-function renderProps(overrides: Partial<Parameters<typeof JobDetailPanel>[0]> = {}): Parameters<typeof JobDetailPanel>[0] {
+function renderProps(
+  overrides: Partial<Parameters<typeof JobDetailPanel>[0]> = {}
+): Parameters<typeof JobDetailPanel>[0] {
   const job = overrides.job ?? buildJob();
   return {
     technicians: buildWorkspace(job).technicians,

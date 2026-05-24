@@ -64,8 +64,8 @@ export function OfficeAuthShell() {
         <div style={styles.kicker}>Milestone foundation</div>
         <h1 style={styles.title}>BellField Office Sign In</h1>
         <p style={styles.muted}>
-          This office shell now leads into employee, equipment, and jobs/appointments foundations using the same API
-          session.
+          This office shell now leads into employee, equipment, and jobs/appointments foundations
+          using the same API session.
         </p>
         <form onSubmit={handleLogin} style={styles.form}>
           <label style={styles.fieldLabel}>
@@ -78,10 +78,20 @@ export function OfficeAuthShell() {
             />
           </label>
           <p style={styles.helperText}>
-            Local development may use `http://localhost:3001`. Production browsers should point at the office server.
+            Local development may use `http://localhost:3001`. Production browsers should point at
+            the office server.
           </p>
-          <input value={email} onChange={(event) => setEmail(event.target.value)} style={styles.input} />
-          <input value={password} onChange={(event) => setPassword(event.target.value)} type="password" style={styles.input} />
+          <input
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            style={styles.input}
+          />
+          <input
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            type="password"
+            style={styles.input}
+          />
           <button type="submit" disabled={isSubmitting} style={styles.button}>
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
@@ -108,17 +118,68 @@ export function OfficeAuthShell() {
 }
 
 const styles: Record<string, CSSProperties> = {
-  page: { minHeight: '100vh', background: '#f4f1e8', color: '#1f2933', display: 'grid', fontFamily: 'Arial, sans-serif', placeItems: 'center', padding: '2rem' },
-  card: { background: '#fffdf7', border: '1px solid #e5dcc8', borderRadius: 24, maxWidth: '34rem', padding: '2rem', width: '100%' },
-  fieldLabel: { color: '#1f2933', display: 'grid', fontSize: '0.95rem', fontWeight: 600, gap: '0.5rem' },
+  page: {
+    minHeight: '100vh',
+    background: '#f4f1e8',
+    color: '#1f2933',
+    display: 'grid',
+    fontFamily: 'Arial, sans-serif',
+    placeItems: 'center',
+    padding: '2rem'
+  },
+  card: {
+    background: '#fffdf7',
+    border: '1px solid #e5dcc8',
+    borderRadius: 24,
+    maxWidth: '34rem',
+    padding: '2rem',
+    width: '100%'
+  },
+  fieldLabel: {
+    color: '#1f2933',
+    display: 'grid',
+    fontSize: '0.95rem',
+    fontWeight: 600,
+    gap: '0.5rem'
+  },
   form: { display: 'grid', gap: '0.75rem', marginTop: '1rem' },
   helperText: { color: '#52606d', fontSize: '0.9rem', margin: '-0.25rem 0 0' },
-  input: { background: '#ffffff', border: '1px solid #d9c8ad', borderRadius: 14, fontSize: '1rem', padding: '0.85rem 1rem' },
-  button: { background: '#1c6b57', border: 'none', borderRadius: 999, color: '#ffffff', cursor: 'pointer', fontSize: '1rem', fontWeight: 700, padding: '0.9rem 1.25rem' },
+  input: {
+    background: '#ffffff',
+    border: '1px solid #d9c8ad',
+    borderRadius: 14,
+    fontSize: '1rem',
+    padding: '0.85rem 1rem'
+  },
+  button: {
+    background: '#1c6b57',
+    border: 'none',
+    borderRadius: 999,
+    color: '#ffffff',
+    cursor: 'pointer',
+    fontSize: '1rem',
+    fontWeight: 700,
+    padding: '0.9rem 1.25rem'
+  },
   demoList: { display: 'grid', gap: '0.5rem', marginTop: '1rem' },
-  demoButton: { background: '#faf5e8', border: '1px solid #e6d6ba', borderRadius: 12, cursor: 'pointer', fontSize: '0.95rem', padding: '0.75rem 0.9rem', textAlign: 'left' },
+  demoButton: {
+    background: '#faf5e8',
+    border: '1px solid #e6d6ba',
+    borderRadius: 12,
+    cursor: 'pointer',
+    fontSize: '0.95rem',
+    padding: '0.75rem 0.9rem',
+    textAlign: 'left'
+  },
   title: { fontSize: '2.2rem', lineHeight: 1.1, margin: '0 0 0.75rem' },
-  kicker: { color: '#9a6b2f', fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.14em', marginBottom: '0.75rem', textTransform: 'uppercase' },
+  kicker: {
+    color: '#9a6b2f',
+    fontSize: '0.8rem',
+    fontWeight: 700,
+    letterSpacing: '0.14em',
+    marginBottom: '0.75rem',
+    textTransform: 'uppercase'
+  },
   muted: { color: '#52606d', margin: 0 },
   error: { color: '#b42318', marginTop: '0.75rem' }
 };

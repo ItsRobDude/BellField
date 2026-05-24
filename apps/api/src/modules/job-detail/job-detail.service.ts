@@ -39,7 +39,11 @@ export class JobDetailService {
     jobId: string,
     timelineLimitQuery?: string
   ): Promise<JobDetailResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:view', ['office-web']);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'jobs:view',
+      ['office-web']
+    );
     const timelineLimit = this.parseTimelineLimit(timelineLimitQuery);
     const detail = await this.jobsDataService.getJobDetailById(jobId, timelineLimit);
     const job = detail.job;
@@ -72,7 +76,9 @@ export class JobDetailService {
       )
     ].filter((technicianId) => !employeeById.has(technicianId));
     const missingTechnicians = await Promise.all(
-      missingTechnicianIds.map((technicianId) => this.identityAccessService.getEmployeeSummaryById(technicianId))
+      missingTechnicianIds.map((technicianId) =>
+        this.identityAccessService.getEmployeeSummaryById(technicianId)
+      )
     );
 
     for (const technician of missingTechnicians) {
@@ -82,13 +88,24 @@ export class JobDetailService {
     }
 
     return {
-      job: this.toJobSummary(job, detail.appointments, registerEntries, employeeById, location.name, billToCustomer.name),
+      job: this.toJobSummary(
+        job,
+        detail.appointments,
+        registerEntries,
+        employeeById,
+        location.name,
+        billToCustomer.name
+      ),
       location: this.toLocationSummary(location),
       billToCustomer: this.toCustomerSummary(billToCustomer),
       technicians: technicianOptions,
-      equipment: equipment.map((record) => this.toEquipmentSummary(record, location.name, location.customerName)),
+      equipment: equipment.map((record) =>
+        this.toEquipmentSummary(record, location.name, location.customerName)
+      ),
       registerEntries: registerEntries.map((entry) => this.toRegisterEntrySummary(entry)),
-      mediaAttachments: mediaAttachments.map((attachment) => this.toMediaAttachmentSummary(attachment)),
+      mediaAttachments: mediaAttachments.map((attachment) =>
+        this.toMediaAttachmentSummary(attachment)
+      ),
       timelineLimit: detail.timelineLimit,
       timelineHasMore: detail.timelineHasMore
     };
@@ -120,7 +137,11 @@ export class JobDetailService {
     billToCustomerName: string
   ): JobDetailResponseDto['job'] {
     const appointmentSummaries = appointments.map((appointment) =>
-      this.toAppointmentSummary(appointment, job.status, employeeById.get(appointment.technicianId ?? ''))
+      this.toAppointmentSummary(
+        appointment,
+        job.status,
+        employeeById.get(appointment.technicianId ?? '')
+      )
     );
 
     return {

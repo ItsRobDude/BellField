@@ -45,7 +45,9 @@ export function formatAppointmentSchedule(appointment: FieldAppointment): string
   return `${dateLabel} - ${appointment.timeWindowLabel || 'No window'}`;
 }
 
-export function formatFinishedReviewAcknowledgement(appointment: FieldAppointment): string | undefined {
+export function formatFinishedReviewAcknowledgement(
+  appointment: FieldAppointment
+): string | undefined {
   if (!appointment.finishedReviewedAt || !appointment.finishedReviewDecision) {
     return undefined;
   }
@@ -70,7 +72,11 @@ export function summarizeAppointmentQueueState(
     return undefined;
   }
 
-  if (appointmentOperations.some((operation) => operation.state === 'conflict' || operation.state === 'rejected')) {
+  if (
+    appointmentOperations.some(
+      (operation) => operation.state === 'conflict' || operation.state === 'rejected'
+    )
+  ) {
     return {
       label: 'Appointment change needs review before it can sync.',
       tone: 'alert'
@@ -108,20 +114,28 @@ export function summarizeOfficeAppointmentChanges(
       const jobLabel = `Job ${job.jobNumber}`;
 
       if (!previous) {
-        changes.push(`${jobLabel} has a new appointment: ${formatAppointmentSchedule(appointment)}.`);
+        changes.push(
+          `${jobLabel} has a new appointment: ${formatAppointmentSchedule(appointment)}.`
+        );
         continue;
       }
 
       if (hasScheduleChanged(previous.appointment, appointment)) {
-        changes.push(`${jobLabel} appointment schedule changed to ${formatAppointmentSchedule(appointment)}.`);
+        changes.push(
+          `${jobLabel} appointment schedule changed to ${formatAppointmentSchedule(appointment)}.`
+        );
       }
 
       if (previous.appointment.technicianId !== appointment.technicianId) {
-        changes.push(`${jobLabel} appointment assignment changed to ${appointment.technicianName ?? 'Unassigned'}.`);
+        changes.push(
+          `${jobLabel} appointment assignment changed to ${appointment.technicianName ?? 'Unassigned'}.`
+        );
       }
 
       if (previous.appointment.status !== appointment.status) {
-        changes.push(`${jobLabel} appointment status changed to ${formatStatusLabel(appointment.status)}.`);
+        changes.push(
+          `${jobLabel} appointment status changed to ${formatStatusLabel(appointment.status)}.`
+        );
       }
     }
   }

@@ -21,4 +21,3 @@ When this check fails, prefer the boring fix:
 - expose behavior through a public module service instead of importing another module's repository
 - keep shared packages pure and app-agnostic
 - update this document only when the intended boundary changes deliberately
-

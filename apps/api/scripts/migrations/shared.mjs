@@ -24,10 +24,13 @@ export function requireDatabaseUrl(databaseUrl = process.env.DATABASE_URL) {
 
 export function getMigrationDriver() {
   const driverArgument = process.argv.find((argument) => argument.startsWith('--driver='));
-  const requestedDriver = driverArgument?.split('=')[1] ?? process.env.BELLFIELD_MIGRATION_DRIVER ?? 'node';
+  const requestedDriver =
+    driverArgument?.split('=')[1] ?? process.env.BELLFIELD_MIGRATION_DRIVER ?? 'node';
 
   if (requestedDriver !== 'node' && requestedDriver !== 'psql') {
-    console.error(`Error: unsupported migration driver "${requestedDriver}". Use "node" or "psql".`);
+    console.error(
+      `Error: unsupported migration driver "${requestedDriver}". Use "node" or "psql".`
+    );
     process.exit(1);
   }
 
@@ -76,7 +79,9 @@ async function listAppliedMigrationFilenamesNode(databaseUrl) {
 
 async function getLastAppliedMigrationFilenameNode(databaseUrl) {
   return withClient(databaseUrl, async (client) => {
-    const result = await client.query('SELECT filename FROM schema_migrations ORDER BY id DESC LIMIT 1;');
+    const result = await client.query(
+      'SELECT filename FROM schema_migrations ORDER BY id DESC LIMIT 1;'
+    );
     return result.rows[0]?.filename ?? '';
   });
 }
@@ -189,7 +194,12 @@ export async function getLastAppliedMigrationFilename(databaseUrl, driver = getM
   return getLastAppliedMigrationFilenameNode(databaseUrl);
 }
 
-export async function applyMigrationFile(databaseUrl, filename, filePath, driver = getMigrationDriver()) {
+export async function applyMigrationFile(
+  databaseUrl,
+  filename,
+  filePath,
+  driver = getMigrationDriver()
+) {
   if (driver === 'psql') {
     applyMigrationFilePsql(databaseUrl, filename, filePath);
     return;
@@ -198,7 +208,12 @@ export async function applyMigrationFile(databaseUrl, filename, filePath, driver
   await applyMigrationFileNode(databaseUrl, filename, filePath);
 }
 
-export async function rollbackMigrationFile(databaseUrl, filename, filePath, driver = getMigrationDriver()) {
+export async function rollbackMigrationFile(
+  databaseUrl,
+  filename,
+  filePath,
+  driver = getMigrationDriver()
+) {
   if (driver === 'psql') {
     rollbackMigrationFilePsql(databaseUrl, filename, filePath);
     return;

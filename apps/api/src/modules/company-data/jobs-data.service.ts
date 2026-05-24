@@ -31,7 +31,10 @@ export class JobsDataService {
     return this.jobsDataRepository.listJobs();
   }
 
-  async listDispatchAppointments(startDate: string, endDate: string): Promise<DispatchAppointmentRecord[]> {
+  async listDispatchAppointments(
+    startDate: string,
+    endDate: string
+  ): Promise<DispatchAppointmentRecord[]> {
     return this.jobsDataRepository.listDispatchAppointments(startDate, endDate);
   }
 
@@ -73,10 +76,20 @@ export class JobsDataService {
     resolvedBillToCustomerId: string,
     locationName: string
   ): Promise<JobRecord> {
-    return this.jobsDataRepository.createJob(input, actorName, resolvedBillToCustomerId, locationName);
+    return this.jobsDataRepository.createJob(
+      input,
+      actorName,
+      resolvedBillToCustomerId,
+      locationName
+    );
   }
 
-  async updateJobStatus(jobId: string, status: JobStatus, actorName: string, occurredAt?: string): Promise<JobRecord> {
+  async updateJobStatus(
+    jobId: string,
+    status: JobStatus,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord> {
     const job = await this.jobsDataRepository.updateJobStatus(jobId, status, actorName, occurredAt);
 
     if (!job) {
@@ -101,7 +114,12 @@ export class JobsDataService {
     actorName: string,
     occurredAt?: string
   ): Promise<JobRecord> {
-    const job = await this.jobsDataRepository.acknowledgeFinishedVisitReview(jobId, decision, actorName, occurredAt);
+    const job = await this.jobsDataRepository.acknowledgeFinishedVisitReview(
+      jobId,
+      decision,
+      actorName,
+      occurredAt
+    );
 
     if (!job) {
       throw new NotFoundException('Job not found.');
@@ -157,7 +175,12 @@ export class JobsDataService {
     return appointment;
   }
 
-  async addJobNote(jobId: string, noteBody: string, actorName: string, occurredAt?: string): Promise<JobRecord> {
+  async addJobNote(
+    jobId: string,
+    noteBody: string,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord> {
     const job = await this.jobsDataRepository.addJobNote(jobId, noteBody, actorName, occurredAt);
 
     if (!job) {
@@ -167,7 +190,12 @@ export class JobsDataService {
     return job;
   }
 
-  async addSyncFlag(jobId: string, message: string, actorName: string, occurredAt?: string): Promise<JobRecord> {
+  async addSyncFlag(
+    jobId: string,
+    message: string,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<JobRecord> {
     const job = await this.jobsDataRepository.addSyncFlag(jobId, message, actorName, occurredAt);
 
     if (!job) {
@@ -177,7 +205,10 @@ export class JobsDataService {
     return job;
   }
 
-  async listRegisterEntriesForJob(jobId: string, includeVoided = false): Promise<RegisterEntryRecord[]> {
+  async listRegisterEntriesForJob(
+    jobId: string,
+    includeVoided = false
+  ): Promise<RegisterEntryRecord[]> {
     await this.ensureJobExists(jobId);
     return this.jobsDataRepository.listRegisterEntriesForJob(jobId, includeVoided);
   }
@@ -252,7 +283,10 @@ export class JobsDataService {
     return appointment;
   }
 
-  async listAssignedJobsForEmployee(employeeId: string, allowedDates: Set<string>): Promise<JobRecord[]> {
+  async listAssignedJobsForEmployee(
+    employeeId: string,
+    allowedDates: Set<string>
+  ): Promise<JobRecord[]> {
     return this.jobsDataRepository.listAssignedJobsForEmployee(employeeId, allowedDates);
   }
 
@@ -272,7 +306,10 @@ export class JobsDataService {
     return this.jobsDataRepository.hasIncompleteAppointments(jobId);
   }
 
-  async listMediaAttachmentsForJob(jobId: string, includeVoided = false): Promise<MediaAttachmentRecord[]> {
+  async listMediaAttachmentsForJob(
+    jobId: string,
+    includeVoided = false
+  ): Promise<MediaAttachmentRecord[]> {
     await this.ensureJobExists(jobId);
     return this.jobsDataRepository.listMediaAttachmentsForJob(jobId, includeVoided);
   }
@@ -287,7 +324,10 @@ export class JobsDataService {
     return media;
   }
 
-  async findMediaAttachmentByJobAndSha(jobId: string, sha256: string): Promise<MediaAttachmentRecord | null> {
+  async findMediaAttachmentByJobAndSha(
+    jobId: string,
+    sha256: string
+  ): Promise<MediaAttachmentRecord | null> {
     return this.jobsDataRepository.findMediaAttachmentByJobAndSha(jobId, sha256);
   }
 
@@ -305,7 +345,11 @@ export class JobsDataService {
     storagePath: string,
     uploadedAt: string
   ): Promise<MediaAttachmentRecord> {
-    const media = await this.jobsDataRepository.markMediaAttachmentBlobUploaded(mediaId, storagePath, uploadedAt);
+    const media = await this.jobsDataRepository.markMediaAttachmentBlobUploaded(
+      mediaId,
+      storagePath,
+      uploadedAt
+    );
 
     if (!media) {
       throw new NotFoundException('Media attachment not found.');
@@ -320,7 +364,12 @@ export class JobsDataService {
     actorName: string,
     occurredAt?: string
   ): Promise<MediaAttachmentRecord> {
-    const media = await this.jobsDataRepository.updateMediaAttachmentCaption(mediaId, input, actorName, occurredAt);
+    const media = await this.jobsDataRepository.updateMediaAttachmentCaption(
+      mediaId,
+      input,
+      actorName,
+      occurredAt
+    );
 
     if (!media) {
       throw new NotFoundException('Media attachment not found.');
@@ -335,7 +384,12 @@ export class JobsDataService {
     actorName: string,
     occurredAt?: string
   ): Promise<MediaAttachmentRecord> {
-    const media = await this.jobsDataRepository.voidMediaAttachment(mediaId, reason, actorName, occurredAt);
+    const media = await this.jobsDataRepository.voidMediaAttachment(
+      mediaId,
+      reason,
+      actorName,
+      occurredAt
+    );
 
     if (!media) {
       throw new NotFoundException('Media attachment not found.');

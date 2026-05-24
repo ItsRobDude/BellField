@@ -11,7 +11,11 @@ export class JobDetailController {
     @Param('jobId') jobId: string,
     @Query('timelineLimit') timelineLimit?: string
   ) {
-    return this.jobDetailService.getJobDetail(this.getBearerToken(authorizationHeader), jobId, timelineLimit);
+    return this.jobDetailService.getJobDetail(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      timelineLimit
+    );
   }
 
   private getBearerToken(authorizationHeader: string | undefined): string {

@@ -16,7 +16,12 @@ describe('field media file helpers', () => {
   it('normalizes picked image and video assets without weakening the media contract', () => {
     expect(
       normalizePickedFieldMediaAsset(
-        { uri: 'file:///photo.jpg', fileName: 'bad:name.jpg', mimeType: 'IMAGE/JPEG', type: 'image' },
+        {
+          uri: 'file:///photo.jpg',
+          fileName: 'bad:name.jpg',
+          mimeType: 'IMAGE/JPEG',
+          type: 'image'
+        },
         'media-1',
         capturedAt
       )

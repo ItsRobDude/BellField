@@ -136,7 +136,10 @@ type SyncOutcome =
   | { kind: 'conflict'; operationId: string; message: string }
   | { kind: 'rejected'; operationId: string; message: string };
 
-function processSyncOutcomes(queue: PendingOperation[], outcomes: SyncOutcome[]): PendingOperation[] {
+function processSyncOutcomes(
+  queue: PendingOperation[],
+  outcomes: SyncOutcome[]
+): PendingOperation[] {
   let nextQueue = [...queue];
 
   for (const outcome of outcomes) {
@@ -172,8 +175,16 @@ describe('field sync scenario harness', () => {
     const queue = buildQueue();
     const outcomes: SyncOutcome[] = [
       { kind: 'applied', operationId: 'op-note' },
-      { kind: 'conflict', operationId: 'op-status', message: 'Office advanced the appointment first.' },
-      { kind: 'rejected', operationId: 'op-equipment', message: 'Equipment is locked from edits in this window.' }
+      {
+        kind: 'conflict',
+        operationId: 'op-status',
+        message: 'Office advanced the appointment first.'
+      },
+      {
+        kind: 'rejected',
+        operationId: 'op-equipment',
+        message: 'Equipment is locked from edits in this window.'
+      }
     ];
 
     const nextQueue = processSyncOutcomes(queue, outcomes);
@@ -197,8 +208,16 @@ describe('field sync scenario harness', () => {
     const queue = buildQueue();
     const outcomes: SyncOutcome[] = [
       { kind: 'applied', operationId: 'op-note' },
-      { kind: 'conflict', operationId: 'op-status', message: 'Office advanced the appointment first.' },
-      { kind: 'rejected', operationId: 'op-equipment', message: 'Equipment is locked from edits in this window.' }
+      {
+        kind: 'conflict',
+        operationId: 'op-status',
+        message: 'Office advanced the appointment first.'
+      },
+      {
+        kind: 'rejected',
+        operationId: 'op-equipment',
+        message: 'Equipment is locked from edits in this window.'
+      }
     ];
 
     const nextQueue = processSyncOutcomes(queue, outcomes);

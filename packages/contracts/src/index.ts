@@ -16,7 +16,15 @@ export type EmployeeRoleId =
   | 'bookKeeping'
   | 'technician';
 
-export type PermissionAction = 'view' | 'create' | 'edit' | 'delete' | 'approve' | 'post' | 'export' | 'configure';
+export type PermissionAction =
+  | 'view'
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'approve'
+  | 'post'
+  | 'export'
+  | 'configure';
 
 export type PermissionArea =
   | 'customers'
@@ -265,7 +273,9 @@ export interface CreateLocationRequest {
   confirmMissingContactInfo?: boolean;
 }
 
-export type UpdateLocationRequest = Partial<Omit<CreateLocationRequest, 'customerId' | 'confirmDuplicate' | 'confirmMissingContactInfo'>> & {
+export type UpdateLocationRequest = Partial<
+  Omit<CreateLocationRequest, 'customerId' | 'confirmDuplicate' | 'confirmMissingContactInfo'>
+> & {
   isActive?: boolean;
   confirmDuplicate?: boolean;
   confirmMissingContactInfo?: boolean;

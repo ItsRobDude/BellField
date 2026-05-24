@@ -1,5 +1,20 @@
-import { IsArray, IsBoolean, IsIn, IsISO8601, IsOptional, IsString, Matches, MaxLength, MinLength } from 'class-validator';
-import { equipmentStatuses, fieldSyncSources, type EquipmentStatus, type FieldSyncSource } from '../company-data/company-data.types';
+import {
+  IsArray,
+  IsBoolean,
+  IsIn,
+  IsISO8601,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+  MinLength
+} from 'class-validator';
+import {
+  equipmentStatuses,
+  fieldSyncSources,
+  type EquipmentStatus,
+  type FieldSyncSource
+} from '../company-data/company-data.types';
 import type {
   CreateEquipmentRequestDto,
   LinkEquipmentReplacementRequestDto,

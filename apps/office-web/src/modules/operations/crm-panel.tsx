@@ -93,10 +93,16 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
   const [existingContactId, setExistingContactId] = useState('');
   const [reassignCustomerId, setReassignCustomerId] = useState('');
   const [reassignNote, setReassignNote] = useState('');
-  const [customerDuplicateWarnings, setCustomerDuplicateWarnings] = useState<DuplicateCandidate[]>([]);
-  const [locationDuplicateWarnings, setLocationDuplicateWarnings] = useState<DuplicateCandidate[]>([]);
-  const [createLocationMissingContactConfirmation, setCreateLocationMissingContactConfirmation] = useState(false);
-  const [saveLocationMissingContactConfirmation, setSaveLocationMissingContactConfirmation] = useState(false);
+  const [customerDuplicateWarnings, setCustomerDuplicateWarnings] = useState<DuplicateCandidate[]>(
+    []
+  );
+  const [locationDuplicateWarnings, setLocationDuplicateWarnings] = useState<DuplicateCandidate[]>(
+    []
+  );
+  const [createLocationMissingContactConfirmation, setCreateLocationMissingContactConfirmation] =
+    useState(false);
+  const [saveLocationMissingContactConfirmation, setSaveLocationMissingContactConfirmation] =
+    useState(false);
   const [crmNoticeMessage, setCrmNoticeMessage] = useState<string | null>(null);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
 
@@ -156,14 +162,22 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
 
     try {
       if (result.kind === 'customer') {
-        const customer = await getOfficeCustomerDetail({ sessionToken, apiBaseUrl, customerId: result.id });
+        const customer = await getOfficeCustomerDetail({
+          sessionToken,
+          apiBaseUrl,
+          customerId: result.id
+        });
         setSelectedCustomer(customer);
         setSelectedLocation(null);
         setSelectedContact(null);
         setReassignCustomerId('');
         hydrateCustomerForm(customer);
       } else if (result.kind === 'location') {
-        const location = await getOfficeLocationDetail({ sessionToken, apiBaseUrl, locationId: result.id });
+        const location = await getOfficeLocationDetail({
+          sessionToken,
+          apiBaseUrl,
+          locationId: result.id
+        });
         setSelectedCustomer(null);
         setSelectedLocation(location);
         setSelectedContact(null);
@@ -171,7 +185,11 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         hydrateLocationForm(location);
         hydrateLinkDrafts(location.contacts);
       } else {
-        const contact = await getOfficeContactDetail({ sessionToken, apiBaseUrl, contactId: result.id });
+        const contact = await getOfficeContactDetail({
+          sessionToken,
+          apiBaseUrl,
+          contactId: result.id
+        });
         setSelectedCustomer(null);
         setSelectedLocation(null);
         setSelectedContact(contact);
@@ -255,12 +273,17 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
     }
   }
 
-  async function handleCreateLocation(options: { confirmDuplicate?: boolean; confirmMissingContactInfo?: boolean } = {}) {
+  async function handleCreateLocation(
+    options: { confirmDuplicate?: boolean; confirmMissingContactInfo?: boolean } = {}
+  ) {
     onErrorMessage(null);
     const confirmMissingContactInfo =
       options.confirmMissingContactInfo || createLocationMissingContactConfirmation;
 
-    if (!confirmMissingContactInfo && locationNeedsPhoneEmailConfirmation(locationForm.phone, locationForm.email)) {
+    if (
+      !confirmMissingContactInfo &&
+      locationNeedsPhoneEmailConfirmation(locationForm.phone, locationForm.email)
+    ) {
       setCreateLocationMissingContactConfirmation(true);
       return;
     }
@@ -367,7 +390,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
       setReassignNote('');
       await refreshWorkspace();
     } catch (error) {
-      onErrorMessage(error instanceof Error ? error.message : 'Unable to reassign location ownership.');
+      onErrorMessage(
+        error instanceof Error ? error.message : 'Unable to reassign location ownership.'
+      );
     }
   }
 
@@ -438,7 +463,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
     }
 
     const targetContacts = selectedCustomer?.contacts ?? selectedLocation?.contacts ?? [];
-    const isAlreadyLinked = targetContacts.some((contact) => contact.contactId === existingContactId);
+    const isAlreadyLinked = targetContacts.some(
+      (contact) => contact.contactId === existingContactId
+    );
 
     try {
       setCrmNoticeMessage(null);
@@ -520,21 +547,33 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
 
   async function reloadSelectedRecord() {
     if (selectedCustomer) {
-      const customer = await getOfficeCustomerDetail({ sessionToken, apiBaseUrl, customerId: selectedCustomer.id });
+      const customer = await getOfficeCustomerDetail({
+        sessionToken,
+        apiBaseUrl,
+        customerId: selectedCustomer.id
+      });
       setSelectedCustomer(customer);
       hydrateLinkDrafts(customer.contacts);
       return;
     }
 
     if (selectedLocation) {
-      const location = await getOfficeLocationDetail({ sessionToken, apiBaseUrl, locationId: selectedLocation.id });
+      const location = await getOfficeLocationDetail({
+        sessionToken,
+        apiBaseUrl,
+        locationId: selectedLocation.id
+      });
       setSelectedLocation(location);
       hydrateLinkDrafts(location.contacts);
       return;
     }
 
     if (selectedContact) {
-      const contact = await getOfficeContactDetail({ sessionToken, apiBaseUrl, contactId: selectedContact.id });
+      const contact = await getOfficeContactDetail({
+        sessionToken,
+        apiBaseUrl,
+        contactId: selectedContact.id
+      });
       setSelectedContact(contact);
     }
   }
@@ -597,8 +636,8 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         <div>
           <h2 style={styles.heading}>CRM backbone</h2>
           <p style={styles.muted}>
-            Customer, location, and contact records now live in a real office workflow instead of only showing up
-            through jobs and equipment.
+            Customer, location, and contact records now live in a real office workflow instead of
+            only showing up through jobs and equipment.
           </p>
         </div>
         <button type="button" onClick={() => void refreshWorkspace()} style={styles.button}>
@@ -624,7 +663,12 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
           </div>
           <div style={styles.list}>
             {searchResults.map((result) => (
-              <button key={`${result.kind}-${result.id}`} type="button" onClick={() => void selectResult(result)} style={styles.cardButton}>
+              <button
+                key={`${result.kind}-${result.id}`}
+                type="button"
+                onClick={() => void selectResult(result)}
+                style={styles.cardButton}
+              >
                 <strong>
                   {result.title} {result.badges.includes('DNU') ? '(DNU)' : ''}
                 </strong>
@@ -648,21 +692,98 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         <div style={styles.panel}>
           <h3 style={styles.subheading}>Create customer</h3>
           <div style={styles.formRow}>
-            <input value={customerForm.name} onChange={(event) => { setCustomerForm((current) => ({ ...current, name: event.target.value })); setCustomerDuplicateWarnings([]); }} placeholder="Customer name" style={styles.input} />
-            <select value={customerForm.accountType} onChange={(event) => setCustomerForm((current) => ({ ...current, accountType: event.target.value }))} style={styles.input}>
+            <input
+              value={customerForm.name}
+              onChange={(event) => {
+                setCustomerForm((current) => ({ ...current, name: event.target.value }));
+                setCustomerDuplicateWarnings([]);
+              }}
+              placeholder="Customer name"
+              style={styles.input}
+            />
+            <select
+              value={customerForm.accountType}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, accountType: event.target.value }))
+              }
+              style={styles.input}
+            >
               <option value="residential">Residential</option>
               <option value="company">Company</option>
               <option value="propertyManager">Property manager</option>
               <option value="landlord">Landlord</option>
             </select>
-            <input value={customerForm.billingAddressLine1} onChange={(event) => { setCustomerForm((current) => ({ ...current, billingAddressLine1: event.target.value })); setCustomerDuplicateWarnings([]); }} placeholder="Billing address" style={styles.input} />
-            <input value={customerForm.billingCity} onChange={(event) => setCustomerForm((current) => ({ ...current, billingCity: event.target.value }))} placeholder="City" style={styles.input} />
-            <input value={customerForm.billingState} onChange={(event) => setCustomerForm((current) => ({ ...current, billingState: event.target.value }))} placeholder="State" style={styles.input} />
-            <input value={customerForm.billingPostalCode} onChange={(event) => setCustomerForm((current) => ({ ...current, billingPostalCode: event.target.value }))} placeholder="Postal code" style={styles.input} />
-            <input value={customerForm.phone} onChange={(event) => setCustomerForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" style={styles.input} />
-            <input value={customerForm.email} onChange={(event) => setCustomerForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email" style={styles.input} />
-            <input value={customerForm.fax} onChange={(event) => setCustomerForm((current) => ({ ...current, fax: event.target.value }))} placeholder="Fax" style={styles.input} />
-            <input value={customerForm.flags} onChange={(event) => setCustomerForm((current) => ({ ...current, flags: event.target.value }))} placeholder="Flags (comma separated)" style={styles.input} />
+            <input
+              value={customerForm.billingAddressLine1}
+              onChange={(event) => {
+                setCustomerForm((current) => ({
+                  ...current,
+                  billingAddressLine1: event.target.value
+                }));
+                setCustomerDuplicateWarnings([]);
+              }}
+              placeholder="Billing address"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.billingCity}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, billingCity: event.target.value }))
+              }
+              placeholder="City"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.billingState}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, billingState: event.target.value }))
+              }
+              placeholder="State"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.billingPostalCode}
+              onChange={(event) =>
+                setCustomerForm((current) => ({
+                  ...current,
+                  billingPostalCode: event.target.value
+                }))
+              }
+              placeholder="Postal code"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.phone}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, phone: event.target.value }))
+              }
+              placeholder="Phone"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.email}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, email: event.target.value }))
+              }
+              placeholder="Email"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.fax}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, fax: event.target.value }))
+              }
+              placeholder="Fax"
+              style={styles.input}
+            />
+            <input
+              value={customerForm.flags}
+              onChange={(event) =>
+                setCustomerForm((current) => ({ ...current, flags: event.target.value }))
+              }
+              placeholder="Flags (comma separated)"
+              style={styles.input}
+            />
           </div>
           {customerDuplicateWarnings.length > 0 ? (
             <div style={styles.subpanel}>
@@ -673,16 +794,28 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 </div>
               ))}
               <div style={styles.row}>
-                <button type="button" onClick={() => void handleCreateCustomer(true)} style={styles.primaryButton}>
+                <button
+                  type="button"
+                  onClick={() => void handleCreateCustomer(true)}
+                  style={styles.primaryButton}
+                >
                   Create anyway
                 </button>
-                <button type="button" onClick={() => setCustomerDuplicateWarnings([])} style={styles.button}>
+                <button
+                  type="button"
+                  onClick={() => setCustomerDuplicateWarnings([])}
+                  style={styles.button}
+                >
                   Keep editing
                 </button>
               </div>
             </div>
           ) : null}
-          <button type="button" onClick={() => void handleCreateCustomer()} style={styles.primaryButton}>
+          <button
+            type="button"
+            onClick={() => void handleCreateCustomer()}
+            style={styles.primaryButton}
+          >
             Create customer
           </button>
         </div>
@@ -692,21 +825,85 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         <div style={styles.panel}>
           <h3 style={styles.subheading}>Create location</h3>
           <div style={styles.formRow}>
-            <select value={locationForm.customerId} onChange={(event) => setLocationForm((current) => ({ ...current, customerId: event.target.value }))} style={styles.input}>
+            <select
+              value={locationForm.customerId}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, customerId: event.target.value }))
+              }
+              style={styles.input}
+            >
               {activeCustomerOptions.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
                 </option>
               ))}
             </select>
-            <input value={locationForm.name} onChange={(event) => { setLocationForm((current) => ({ ...current, name: event.target.value })); setLocationDuplicateWarnings([]); }} placeholder="Location name" style={styles.input} />
-            <input value={locationForm.addressLine1} onChange={(event) => { setLocationForm((current) => ({ ...current, addressLine1: event.target.value })); setLocationDuplicateWarnings([]); }} placeholder="Service address" style={styles.input} />
-            <input value={locationForm.city} onChange={(event) => setLocationForm((current) => ({ ...current, city: event.target.value }))} placeholder="City" style={styles.input} />
-            <input value={locationForm.state} onChange={(event) => setLocationForm((current) => ({ ...current, state: event.target.value }))} placeholder="State" style={styles.input} />
-            <input value={locationForm.postalCode} onChange={(event) => setLocationForm((current) => ({ ...current, postalCode: event.target.value }))} placeholder="Postal code" style={styles.input} />
-            <input value={locationForm.phone} onChange={(event) => setLocationForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" style={styles.input} />
-            <input value={locationForm.email} onChange={(event) => setLocationForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email" style={styles.input} />
-            <input value={locationForm.fax} onChange={(event) => setLocationForm((current) => ({ ...current, fax: event.target.value }))} placeholder="Fax" style={styles.input} />
+            <input
+              value={locationForm.name}
+              onChange={(event) => {
+                setLocationForm((current) => ({ ...current, name: event.target.value }));
+                setLocationDuplicateWarnings([]);
+              }}
+              placeholder="Location name"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.addressLine1}
+              onChange={(event) => {
+                setLocationForm((current) => ({ ...current, addressLine1: event.target.value }));
+                setLocationDuplicateWarnings([]);
+              }}
+              placeholder="Service address"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.city}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, city: event.target.value }))
+              }
+              placeholder="City"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.state}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, state: event.target.value }))
+              }
+              placeholder="State"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.postalCode}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, postalCode: event.target.value }))
+              }
+              placeholder="Postal code"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.phone}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, phone: event.target.value }))
+              }
+              placeholder="Phone"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.email}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, email: event.target.value }))
+              }
+              placeholder="Email"
+              style={styles.input}
+            />
+            <input
+              value={locationForm.fax}
+              onChange={(event) =>
+                setLocationForm((current) => ({ ...current, fax: event.target.value }))
+              }
+              placeholder="Fax"
+              style={styles.input}
+            />
           </div>
           <label style={styles.inlineLabel}>
             <span>Alternate bill-to customers</span>
@@ -716,7 +913,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
               onChange={(event) =>
                 setLocationForm((current) => ({
                   ...current,
-                  alternateBillToCustomerIds: Array.from(event.target.selectedOptions).map((option) => option.value)
+                  alternateBillToCustomerIds: Array.from(event.target.selectedOptions).map(
+                    (option) => option.value
+                  )
                 }))
               }
               style={styles.input}
@@ -744,7 +943,11 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 >
                   Create anyway
                 </button>
-                <button type="button" onClick={() => setLocationDuplicateWarnings([])} style={styles.button}>
+                <button
+                  type="button"
+                  onClick={() => setLocationDuplicateWarnings([])}
+                  style={styles.button}
+                >
                   Keep editing
                 </button>
               </div>
@@ -755,7 +958,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
               <strong>Location has no phone or email</strong>
               <div style={styles.tinyMuted}>This location has no phone or email. Is that okay?</div>
               {locationForm.fax.trim() ? (
-                <div style={styles.tinyMuted}>Fax will be saved, but phone and email are still missing.</div>
+                <div style={styles.tinyMuted}>
+                  Fax will be saved, but phone and email are still missing.
+                </div>
               ) : null}
               <div style={styles.row}>
                 <button
@@ -775,7 +980,11 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
               </div>
             </div>
           ) : null}
-          <button type="button" onClick={() => void handleCreateLocation()} style={styles.primaryButton}>
+          <button
+            type="button"
+            onClick={() => void handleCreateLocation()}
+            style={styles.primaryButton}
+          >
             Create location
           </button>
         </div>
@@ -783,19 +992,58 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
         <div style={styles.panel}>
           <h3 style={styles.subheading}>Create shared contact</h3>
           <div style={styles.formRow}>
-            <input value={contactForm.displayName} onChange={(event) => setContactForm((current) => ({ ...current, displayName: event.target.value }))} placeholder="Display name" style={styles.input} />
-            <input value={contactForm.phone} onChange={(event) => setContactForm((current) => ({ ...current, phone: event.target.value }))} placeholder="Phone" style={styles.input} />
-            <input value={contactForm.email} onChange={(event) => setContactForm((current) => ({ ...current, email: event.target.value }))} placeholder="Email" style={styles.input} />
-            <input value={contactForm.fax} onChange={(event) => setContactForm((current) => ({ ...current, fax: event.target.value }))} placeholder="Fax" style={styles.input} />
-            <input value={contactForm.tags} onChange={(event) => setContactForm((current) => ({ ...current, tags: event.target.value }))} placeholder="Tags (comma separated)" style={styles.input} />
+            <input
+              value={contactForm.displayName}
+              onChange={(event) =>
+                setContactForm((current) => ({ ...current, displayName: event.target.value }))
+              }
+              placeholder="Display name"
+              style={styles.input}
+            />
+            <input
+              value={contactForm.phone}
+              onChange={(event) =>
+                setContactForm((current) => ({ ...current, phone: event.target.value }))
+              }
+              placeholder="Phone"
+              style={styles.input}
+            />
+            <input
+              value={contactForm.email}
+              onChange={(event) =>
+                setContactForm((current) => ({ ...current, email: event.target.value }))
+              }
+              placeholder="Email"
+              style={styles.input}
+            />
+            <input
+              value={contactForm.fax}
+              onChange={(event) =>
+                setContactForm((current) => ({ ...current, fax: event.target.value }))
+              }
+              placeholder="Fax"
+              style={styles.input}
+            />
+            <input
+              value={contactForm.tags}
+              onChange={(event) =>
+                setContactForm((current) => ({ ...current, tags: event.target.value }))
+              }
+              placeholder="Tags (comma separated)"
+              style={styles.input}
+            />
           </div>
-          <button type="button" onClick={() => void handleCreateContactAndMaybeLink()} style={styles.primaryButton}>
+          <button
+            type="button"
+            onClick={() => void handleCreateContactAndMaybeLink()}
+            style={styles.primaryButton}
+          >
             {selectedCustomer || selectedLocation ? 'Create and link contact' : 'Create contact'}
           </button>
         </div>
       </div>
 
-      {(selectedCustomer || selectedLocation || selectedContact) ? (
+      {selectedCustomer || selectedLocation || selectedContact ? (
         <div style={styles.panel}>
           <h3 style={styles.subheading}>Selected detail</h3>
           {selectedCustomer ? (
@@ -805,34 +1053,130 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                   <strong>{selectedCustomer.name}</strong>
                   <div style={styles.badgeRow}>
                     {!selectedCustomer.isActive ? <span style={styles.badge}>Inactive</span> : null}
-                    {selectedCustomer.flags.some((flag) => flag.toLowerCase().includes('do not service')) ? (
+                    {selectedCustomer.flags.some((flag) =>
+                      flag.toLowerCase().includes('do not service')
+                    ) ? (
                       <span style={styles.dangerBadge}>DNU</span>
                     ) : null}
                   </div>
                 </div>
-                <button type="button" onClick={() => void handleSaveCustomer()} style={styles.primaryButton}>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveCustomer()}
+                  style={styles.primaryButton}
+                >
                   Save customer
                 </button>
               </div>
               <div style={styles.formRow}>
-                <input value={selectedCustomer.name} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, name: event.target.value } : current)} style={styles.input} />
-                <select value={selectedCustomer.accountType} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, accountType: event.target.value } : current)} style={styles.input}>
+                <input
+                  value={selectedCustomer.name}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, name: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <select
+                  value={selectedCustomer.accountType}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, accountType: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                >
                   <option value="residential">Residential</option>
                   <option value="company">Company</option>
                   <option value="propertyManager">Property manager</option>
                   <option value="landlord">Landlord</option>
                 </select>
-                <input value={selectedCustomer.billingAddressLine1} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, billingAddressLine1: event.target.value } : current)} style={styles.input} />
-                <input value={selectedCustomer.billingCity} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, billingCity: event.target.value } : current)} style={styles.input} />
-                <input value={selectedCustomer.billingState} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, billingState: event.target.value } : current)} style={styles.input} />
-                <input value={selectedCustomer.billingPostalCode} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, billingPostalCode: event.target.value } : current)} style={styles.input} />
-                <input value={selectedCustomer.phone ?? ''} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, phone: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedCustomer.email ?? ''} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, email: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedCustomer.fax ?? ''} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, fax: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedCustomer.flags.join(', ')} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, flags: splitCommaValues(event.target.value) } : current)} style={styles.input} />
+                <input
+                  value={selectedCustomer.billingAddressLine1}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, billingAddressLine1: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.billingCity}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, billingCity: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.billingState}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, billingState: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.billingPostalCode}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, billingPostalCode: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.phone ?? ''}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, phone: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.email ?? ''}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, email: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.fax ?? ''}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, fax: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedCustomer.flags.join(', ')}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current
+                        ? { ...current, flags: splitCommaValues(event.target.value) }
+                        : current
+                    )
+                  }
+                  style={styles.input}
+                />
               </div>
               <label style={styles.inlineLabel}>
-                <input type="checkbox" checked={selectedCustomer.isActive} onChange={(event) => setSelectedCustomer((current) => current ? { ...current, isActive: event.target.checked } : current)} />
+                <input
+                  type="checkbox"
+                  checked={selectedCustomer.isActive}
+                  onChange={(event) =>
+                    setSelectedCustomer((current) =>
+                      current ? { ...current, isActive: event.target.checked } : current
+                    )
+                  }
+                />
                 Customer is active
               </label>
               <RecordContactsSection
@@ -846,7 +1190,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 onLinkExisting={() => void handleLinkExistingContact()}
                 onSaveLink={(link) => void handleSaveContactLink(link)}
                 onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
-                onArchiveLink={(linkId, isActive) => void handleArchiveContactLink(linkId, isActive)}
+                onArchiveLink={(linkId, isActive) =>
+                  void handleArchiveContactLink(linkId, isActive)
+                }
               />
             </div>
           ) : null}
@@ -857,32 +1203,109 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 <div>
                   <strong>{selectedLocation.name}</strong>
                   <div style={styles.tinyMuted}>
-                    {selectedLocation.customerName} - {selectedLocation.addressLine1}, {selectedLocation.city}
+                    {selectedLocation.customerName} - {selectedLocation.addressLine1},{' '}
+                    {selectedLocation.city}
                   </div>
                 </div>
-                <button type="button" onClick={() => void handleSaveLocation()} style={styles.primaryButton}>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveLocation()}
+                  style={styles.primaryButton}
+                >
                   Save location
                 </button>
               </div>
               <div style={styles.formRow}>
-                <input value={selectedLocation.name} onChange={(event) => setSelectedLocation((current) => current ? { ...current, name: event.target.value } : current)} style={styles.input} />
-                <input value={selectedLocation.addressLine1} onChange={(event) => setSelectedLocation((current) => current ? { ...current, addressLine1: event.target.value } : current)} style={styles.input} />
-                <input value={selectedLocation.city} onChange={(event) => setSelectedLocation((current) => current ? { ...current, city: event.target.value } : current)} style={styles.input} />
-                <input value={selectedLocation.state} onChange={(event) => setSelectedLocation((current) => current ? { ...current, state: event.target.value } : current)} style={styles.input} />
-                <input value={selectedLocation.postalCode} onChange={(event) => setSelectedLocation((current) => current ? { ...current, postalCode: event.target.value } : current)} style={styles.input} />
-                <input value={selectedLocation.phone ?? ''} onChange={(event) => setSelectedLocation((current) => current ? { ...current, phone: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedLocation.email ?? ''} onChange={(event) => setSelectedLocation((current) => current ? { ...current, email: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedLocation.fax ?? ''} onChange={(event) => setSelectedLocation((current) => current ? { ...current, fax: event.target.value || undefined } : current)} style={styles.input} />
+                <input
+                  value={selectedLocation.name}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, name: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.addressLine1}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, addressLine1: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.city}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, city: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.state}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, state: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.postalCode}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, postalCode: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.phone ?? ''}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, phone: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.email ?? ''}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, email: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedLocation.fax ?? ''}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, fax: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
               </div>
               {saveLocationMissingContactConfirmation ? (
                 <div style={styles.subpanel}>
                   <strong>Location has no phone or email</strong>
-                  <div style={styles.tinyMuted}>This location has no phone or email. Is that okay?</div>
+                  <div style={styles.tinyMuted}>
+                    This location has no phone or email. Is that okay?
+                  </div>
                   {selectedLocation.fax?.trim() ? (
-                    <div style={styles.tinyMuted}>Fax will be saved, but phone and email are still missing.</div>
+                    <div style={styles.tinyMuted}>
+                      Fax will be saved, but phone and email are still missing.
+                    </div>
                   ) : null}
                   <div style={styles.row}>
-                    <button type="button" onClick={() => void handleSaveLocation()} style={styles.primaryButton}>
+                    <button
+                      type="button"
+                      onClick={() => void handleSaveLocation()}
+                      style={styles.primaryButton}
+                    >
                       Save without phone or email
                     </button>
                     <button
@@ -896,7 +1319,15 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 </div>
               ) : null}
               <label style={styles.inlineLabel}>
-                <input type="checkbox" checked={selectedLocation.isActive} onChange={(event) => setSelectedLocation((current) => current ? { ...current, isActive: event.target.checked } : current)} />
+                <input
+                  type="checkbox"
+                  checked={selectedLocation.isActive}
+                  onChange={(event) =>
+                    setSelectedLocation((current) =>
+                      current ? { ...current, isActive: event.target.checked } : current
+                    )
+                  }
+                />
                 Location is active
               </label>
               <label style={styles.inlineLabel}>
@@ -909,7 +1340,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                       current
                         ? {
                             ...current,
-                            alternateBillToCustomerIds: Array.from(event.target.selectedOptions).map((option) => option.value)
+                            alternateBillToCustomerIds: Array.from(
+                              event.target.selectedOptions
+                            ).map((option) => option.value)
                           }
                         : current
                     )
@@ -926,15 +1359,28 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
               <div style={styles.subpanel}>
                 <strong>Reassign owner</strong>
                 <div style={styles.formRow}>
-                  <select value={reassignCustomerId} onChange={(event) => setReassignCustomerId(event.target.value)} style={styles.input}>
+                  <select
+                    value={reassignCustomerId}
+                    onChange={(event) => setReassignCustomerId(event.target.value)}
+                    style={styles.input}
+                  >
                     {activeCustomerOptions.map((customer) => (
                       <option key={customer.id} value={customer.id}>
                         {customer.name}
                       </option>
                     ))}
                   </select>
-                  <input value={reassignNote} onChange={(event) => setReassignNote(event.target.value)} placeholder="Reason or note" style={styles.input} />
-                  <button type="button" onClick={() => void handleReassignLocation()} style={styles.button}>
+                  <input
+                    value={reassignNote}
+                    onChange={(event) => setReassignNote(event.target.value)}
+                    placeholder="Reason or note"
+                    style={styles.input}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleReassignLocation()}
+                    style={styles.button}
+                  >
                     Reassign owner
                   </button>
                 </div>
@@ -960,7 +1406,9 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                 onLinkExisting={() => void handleLinkExistingContact()}
                 onSaveLink={(link) => void handleSaveContactLink(link)}
                 onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
-                onArchiveLink={(linkId, isActive) => void handleArchiveContactLink(linkId, isActive)}
+                onArchiveLink={(linkId, isActive) =>
+                  void handleArchiveContactLink(linkId, isActive)
+                }
               />
             </div>
           ) : null}
@@ -972,22 +1420,67 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                   <strong>{selectedContact.displayName}</strong>
                   {!selectedContact.isActive ? <span style={styles.badge}>Inactive</span> : null}
                 </div>
-                <button type="button" onClick={() => void handleSaveSharedContact()} style={styles.primaryButton}>
+                <button
+                  type="button"
+                  onClick={() => void handleSaveSharedContact()}
+                  style={styles.primaryButton}
+                >
                   Save shared contact
                 </button>
               </div>
               <div style={styles.formRow}>
-                <input value={selectedContact.displayName} onChange={(event) => setSelectedContact((current) => current ? { ...current, displayName: event.target.value } : current)} style={styles.input} />
-                <input value={selectedContact.phone ?? ''} onChange={(event) => setSelectedContact((current) => current ? { ...current, phone: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedContact.email ?? ''} onChange={(event) => setSelectedContact((current) => current ? { ...current, email: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedContact.fax ?? ''} onChange={(event) => setSelectedContact((current) => current ? { ...current, fax: event.target.value || undefined } : current)} style={styles.input} />
-                <input value={selectedContact.tags.join(', ')} onChange={(event) => setSelectedContact((current) => current ? { ...current, tags: splitCommaValues(event.target.value) } : current)} style={styles.input} />
+                <input
+                  value={selectedContact.displayName}
+                  onChange={(event) =>
+                    setSelectedContact((current) =>
+                      current ? { ...current, displayName: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedContact.phone ?? ''}
+                  onChange={(event) =>
+                    setSelectedContact((current) =>
+                      current ? { ...current, phone: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedContact.email ?? ''}
+                  onChange={(event) =>
+                    setSelectedContact((current) =>
+                      current ? { ...current, email: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedContact.fax ?? ''}
+                  onChange={(event) =>
+                    setSelectedContact((current) =>
+                      current ? { ...current, fax: event.target.value || undefined } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+                <input
+                  value={selectedContact.tags.join(', ')}
+                  onChange={(event) =>
+                    setSelectedContact((current) =>
+                      current ? { ...current, tags: splitCommaValues(event.target.value) } : current
+                    )
+                  }
+                  style={styles.input}
+                />
               </div>
               <div style={styles.subpanel}>
                 <strong>Linked records</strong>
                 {selectedContact.linkedRecords.map((link) => (
                   <div key={link.id} style={styles.tinyMuted}>
-                    {link.linkedRecord.kind}: {link.linkedRecord.name} - {link.linkedRecord.subtitle}
+                    {link.linkedRecord.kind}: {link.linkedRecord.name} -{' '}
+                    {link.linkedRecord.subtitle}
                     {link.endDate ? ` (end-dated ${link.endDate})` : ''}
                     {!link.isActive ? ' (inactive)' : ''}
                   </div>
@@ -1032,7 +1525,11 @@ function RecordContactsSection({
     <div style={styles.subpanel}>
       <strong>{title}</strong>
       <div style={styles.formRow}>
-        <select value={existingContactId} onChange={(event) => setExistingContactId(event.target.value)} style={styles.input}>
+        <select
+          value={existingContactId}
+          onChange={(event) => setExistingContactId(event.target.value)}
+          style={styles.input}
+        >
           {activeContactOptions.map((contact) => (
             <option key={contact.id} value={contact.id}>
               {contact.displayName}
@@ -1058,7 +1555,11 @@ function RecordContactsSection({
               <div>
                 <strong>{contact.displayName}</strong>
                 <div style={styles.tinyMuted}>
-                  {contact.endDate ? `End-dated ${contact.endDate}` : contact.isActive ? 'Active link' : 'Inactive link'}
+                  {contact.endDate
+                    ? `End-dated ${contact.endDate}`
+                    : contact.isActive
+                      ? 'Active link'
+                      : 'Inactive link'}
                 </div>
               </div>
               <select
@@ -1131,7 +1632,11 @@ function RecordContactsSection({
               <button type="button" onClick={() => onEndDateLink(contact.id)} style={styles.button}>
                 End-date today
               </button>
-              <button type="button" onClick={() => onArchiveLink(contact.id, !contact.isActive)} style={styles.button}>
+              <button
+                type="button"
+                onClick={() => onArchiveLink(contact.id, !contact.isActive)}
+                style={styles.button}
+              >
                 {contact.isActive ? 'Archive link' : 'Reactivate link'}
               </button>
             </div>
@@ -1182,7 +1687,10 @@ function createEmptyContactForm(): ContactFormState {
   };
 }
 
-function locationNeedsPhoneEmailConfirmation(phone: string | undefined, email: string | undefined): boolean {
+function locationNeedsPhoneEmailConfirmation(
+  phone: string | undefined,
+  email: string | undefined
+): boolean {
   return !phone?.trim() && !email?.trim();
 }
 

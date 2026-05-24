@@ -11,7 +11,11 @@ export class DispatchController {
     @Query('startDate') startDate?: string,
     @Query('endDate') endDate?: string
   ) {
-    return this.dispatchService.getDispatchBoard(this.getBearerToken(authorizationHeader), startDate, endDate);
+    return this.dispatchService.getDispatchBoard(
+      this.getBearerToken(authorizationHeader),
+      startDate,
+      endDate
+    );
   }
 
   private getBearerToken(authorizationHeader: string | undefined): string {

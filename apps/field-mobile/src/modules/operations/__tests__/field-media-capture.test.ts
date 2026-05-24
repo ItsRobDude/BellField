@@ -88,14 +88,19 @@ describe('pickFieldMedia', () => {
     expect(result?.localUri).toBe(
       'file:///app/Documents/bellfield-media/media-11111111-2222-4333-8444-555555555555.jpg'
     );
-    expect(fileSystemMock.makeDirectoryAsync).toHaveBeenCalledWith('file:///app/Documents/bellfield-media/', {
-      intermediates: true
-    });
+    expect(fileSystemMock.makeDirectoryAsync).toHaveBeenCalledWith(
+      'file:///app/Documents/bellfield-media/',
+      {
+        intermediates: true
+      }
+    );
     expect(fileSystemMock.copyAsync).toHaveBeenCalledWith({
       from: 'file:///camera/photo.jpg',
       to: result?.localUri
     });
-    expect(fileSystemMock.readAsStringAsync).toHaveBeenCalledWith(result?.localUri, { encoding: 'base64' });
+    expect(fileSystemMock.readAsStringAsync).toHaveBeenCalledWith(result?.localUri, {
+      encoding: 'base64'
+    });
     expect(cryptoMock.digest).toHaveBeenCalledWith('SHA-256', new Uint8Array([1, 2, 3, 4, 5]));
   });
 
@@ -159,8 +164,11 @@ describe('pickFieldMedia', () => {
   it('exposes idempotent staged-file cleanup for successful uploads', async () => {
     await deleteStagedFieldMedia('file:///app/Documents/bellfield-media/media-1.jpg');
 
-    expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith('file:///app/Documents/bellfield-media/media-1.jpg', {
-      idempotent: true
-    });
+    expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith(
+      'file:///app/Documents/bellfield-media/media-1.jpg',
+      {
+        idempotent: true
+      }
+    );
   });
 });

@@ -36,11 +36,17 @@ export class EquipmentDataService {
     return this.equipmentDataRepository.listEquipment(includeInactive);
   }
 
-  async listEquipmentByLocation(locationId: string, includeInactive: boolean): Promise<EquipmentRecord[]> {
+  async listEquipmentByLocation(
+    locationId: string,
+    includeInactive: boolean
+  ): Promise<EquipmentRecord[]> {
     return this.equipmentDataRepository.listEquipmentByLocation(locationId, includeInactive);
   }
 
-  async listEquipmentByLocations(locationIds: string[], includeInactive: boolean): Promise<EquipmentRecord[]> {
+  async listEquipmentByLocations(
+    locationIds: string[],
+    includeInactive: boolean
+  ): Promise<EquipmentRecord[]> {
     return this.equipmentDataRepository.listEquipmentByLocations(locationIds, includeInactive);
   }
 
@@ -85,7 +91,11 @@ export class EquipmentDataService {
       : null;
 
     const updatedEquipmentId = await this.databaseService.transaction(async (queryable) => {
-      const updatedEquipment = await this.equipmentDataRepository.updateEquipment(equipmentId, update, queryable);
+      const updatedEquipment = await this.equipmentDataRepository.updateEquipment(
+        equipmentId,
+        update,
+        queryable
+      );
 
       if (!updatedEquipment) {
         throw new NotFoundException('Equipment record not found.');
@@ -94,7 +104,13 @@ export class EquipmentDataService {
       const nextGroup = updatedEquipment.systemGroupId
         ? await this.equipmentDataRepository.getEquipmentGroupById(updatedEquipment.systemGroupId)
         : null;
-      const historyEntries = this.buildUpdateHistoryEntries(existingEquipment, updatedEquipment, actorName, existingGroup, nextGroup);
+      const historyEntries = this.buildUpdateHistoryEntries(
+        existingEquipment,
+        updatedEquipment,
+        actorName,
+        existingGroup,
+        nextGroup
+      );
 
       for (const entry of historyEntries) {
         await this.equipmentDataRepository.addEquipmentHistoryEntry(entry, queryable);
@@ -115,8 +131,16 @@ export class EquipmentDataService {
     const replacementEquipment = await this.getEquipmentById(replacementEquipmentId);
 
     await this.databaseService.transaction(async (queryable) => {
-      await this.equipmentDataRepository.updateEquipment(oldEquipment.id, { status: 'removed' }, queryable);
-      await this.equipmentDataRepository.linkReplacement(replacementEquipment.id, oldEquipment.id, queryable);
+      await this.equipmentDataRepository.updateEquipment(
+        oldEquipment.id,
+        { status: 'removed' },
+        queryable
+      );
+      await this.equipmentDataRepository.linkReplacement(
+        replacementEquipment.id,
+        oldEquipment.id,
+        queryable
+      );
 
       await this.equipmentDataRepository.addEquipmentHistoryEntry(
         {
@@ -256,7 +280,10 @@ export class EquipmentDataService {
   }
 }
 
-function collectEditedFields(previousEquipment: EquipmentRecord, nextEquipment: EquipmentRecord): string[] {
+function collectEditedFields(
+  previousEquipment: EquipmentRecord,
+  nextEquipment: EquipmentRecord
+): string[] {
   const changedFields: string[] = [];
 
   if (previousEquipment.equipmentType !== nextEquipment.equipmentType) {
@@ -279,7 +306,9 @@ function collectEditedFields(previousEquipment: EquipmentRecord, nextEquipment: 
     changedFields.push('filter sizes');
   }
 
-  if (previousEquipment.equipmentLocationDescription !== nextEquipment.equipmentLocationDescription) {
+  if (
+    previousEquipment.equipmentLocationDescription !== nextEquipment.equipmentLocationDescription
+  ) {
     changedFields.push('equipment location');
   }
 
@@ -311,7 +340,9 @@ function formatPlacementLabel(equipment: EquipmentRecord): string {
     return 'the service location';
   }
 
-  return equipment.inventoryLocationLabel ? `inventory location "${equipment.inventoryLocationLabel}"` : 'inventory';
+  return equipment.inventoryLocationLabel
+    ? `inventory location "${equipment.inventoryLocationLabel}"`
+    : 'inventory';
 }
 
 function formatEquipmentStatus(status: EquipmentRecord['status']): string {

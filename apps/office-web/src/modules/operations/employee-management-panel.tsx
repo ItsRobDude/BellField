@@ -4,7 +4,11 @@ import type { EmployeeRoleId, EmployeeSummary, RoleTemplate } from '@/lib/identi
 type EmployeeManagementPanelProps = {
   employees: EmployeeSummary[];
   roles: RoleTemplate[];
-  onEmployeeUpdate: (employeeId: string, roleId: EmployeeRoleId, isActive: boolean) => Promise<void>;
+  onEmployeeUpdate: (
+    employeeId: string,
+    roleId: EmployeeRoleId,
+    isActive: boolean
+  ) => Promise<void>;
 };
 
 export function EmployeeManagementPanel({
@@ -42,7 +46,11 @@ export function EmployeeManagementPanel({
                 type="checkbox"
                 checked={managedEmployee.isActive}
                 onChange={(event) =>
-                  void onEmployeeUpdate(managedEmployee.id, managedEmployee.roleId, event.target.checked)
+                  void onEmployeeUpdate(
+                    managedEmployee.id,
+                    managedEmployee.roleId,
+                    event.target.checked
+                  )
                 }
               />
               Active

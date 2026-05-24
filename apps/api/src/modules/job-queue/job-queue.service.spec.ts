@@ -60,9 +60,11 @@ describe('JobQueueService', () => {
 
     const response = await service.getJobsQueue('session-token', { limit: '10', cursors: {} });
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('session-token', 'jobs:view', [
-      'office-web'
-    ]);
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'jobs:view',
+      ['office-web']
+    );
     expect(jobsDataService.listJobsQueuePage).toHaveBeenCalledTimes(4);
     expect(jobsDataService.listJobsQueuePage.mock.calls.map(([queueKey]) => queueKey)).toEqual([
       'review',
@@ -87,14 +89,19 @@ describe('JobQueueService', () => {
     jobsDataService.listJobsQueuePage.mockImplementation(async (queueKey: string) => ({
       jobs:
         queueKey === 'open'
-          ? [buildQueueJob('job-1', '2026-05-23T10:00:00.000Z'), buildQueueJob('job-2', '2026-05-22T10:00:00.000Z')]
+          ? [
+              buildQueueJob('job-1', '2026-05-23T10:00:00.000Z'),
+              buildQueueJob('job-2', '2026-05-22T10:00:00.000Z')
+            ]
           : [],
       totalCount: queueKey === 'open' ? 2 : 0
     }));
 
     const response = await service.getJobsQueue('session-token', { limit: '1', cursors: {} });
     const openQueue = response.queues.find((queue) => queue.key === 'open');
-    const decodedCursor = JSON.parse(Buffer.from(openQueue?.nextCursor ?? '', 'base64url').toString('utf8'));
+    const decodedCursor = JSON.parse(
+      Buffer.from(openQueue?.nextCursor ?? '', 'base64url').toString('utf8')
+    );
 
     expect(openQueue?.jobs).toHaveLength(1);
     expect(openQueue?.jobs[0]).toMatchObject({
@@ -115,24 +122,32 @@ describe('JobQueueService', () => {
 
   it('passes decoded cursors to the matching queue only', async () => {
     const { service, jobsDataService } = createService();
-    const cursorPayload = { queueKey: 'unscheduled', id: 'job-10', updatedAt: '2026-05-22T09:00:00.000Z' };
+    const cursorPayload = {
+      queueKey: 'unscheduled',
+      id: 'job-10',
+      updatedAt: '2026-05-22T09:00:00.000Z'
+    };
     const cursor = Buffer.from(JSON.stringify(cursorPayload), 'utf8').toString('base64url');
 
     await service.getJobsQueue('session-token', { cursors: { unscheduled: cursor } });
 
-    expect(jobsDataService.listJobsQueuePage.mock.calls[2]).toEqual(['unscheduled', 21, cursorPayload]);
+    expect(jobsDataService.listJobsQueuePage.mock.calls[2]).toEqual([
+      'unscheduled',
+      21,
+      cursorPayload
+    ]);
     expect(jobsDataService.listJobsQueuePage.mock.calls[0]?.[2]).toBeUndefined();
   });
 
   it('rejects malformed limits and cursors', async () => {
     const { service } = createService();
 
-    await expect(service.getJobsQueue('session-token', { limit: '0', cursors: {} })).rejects.toBeInstanceOf(
-      BadRequestException
-    );
-    await expect(service.getJobsQueue('session-token', { limit: '51', cursors: {} })).rejects.toBeInstanceOf(
-      BadRequestException
-    );
+    await expect(
+      service.getJobsQueue('session-token', { limit: '0', cursors: {} })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.getJobsQueue('session-token', { limit: '51', cursors: {} })
+    ).rejects.toBeInstanceOf(BadRequestException);
     await expect(
       service.getJobsQueue('session-token', { cursors: { review: 'not-a-cursor' } })
     ).rejects.toBeInstanceOf(BadRequestException);
@@ -140,7 +155,11 @@ describe('JobQueueService', () => {
       service.getJobsQueue('session-token', {
         cursors: {
           review: Buffer.from(
-            JSON.stringify({ queueKey: 'open', id: 'job-1', updatedAt: '2026-05-22T09:00:00.000Z' }),
+            JSON.stringify({
+              queueKey: 'open',
+              id: 'job-1',
+              updatedAt: '2026-05-22T09:00:00.000Z'
+            }),
             'utf8'
           ).toString('base64url')
         }

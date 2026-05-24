@@ -38,13 +38,14 @@ import {
   type MediaAttachmentSummary,
   type RegisterEntrySummary
 } from '@/lib/operations-api';
-import {
-  getCurrentOfficeSession,
-  type EmployeeSummary
-} from '@/lib/identity-api';
+import { getCurrentOfficeSession, type EmployeeSummary } from '@/lib/identity-api';
 import { CrmPanel } from './crm-panel';
 import { DispatchBoardPanel } from './dispatch-board-panel';
-import { EquipmentPanel, type EquipmentCreateDraft, type EquipmentEditDraft } from './equipment-panel';
+import {
+  EquipmentPanel,
+  type EquipmentCreateDraft,
+  type EquipmentEditDraft
+} from './equipment-panel';
 import { JobDetailPanel } from './job-detail-panel';
 import { JobIntakePanel } from './job-intake-panel';
 import {
@@ -140,8 +141,12 @@ function buildCapturedWorkDetails(
     isLoading: false,
     registerEntries,
     mediaAttachments,
-    registerDrafts: Object.fromEntries(registerEntries.map((entry) => [entry.id, createRegisterEntryDraft(entry)])),
-    mediaCaptionDrafts: Object.fromEntries(mediaAttachments.map((media) => [media.id, media.caption ?? ''])),
+    registerDrafts: Object.fromEntries(
+      registerEntries.map((entry) => [entry.id, createRegisterEntryDraft(entry)])
+    ),
+    mediaCaptionDrafts: Object.fromEntries(
+      mediaAttachments.map((media) => [media.id, media.caption ?? ''])
+    ),
     registerVoidReasons: previous?.registerVoidReasons ?? {},
     mediaVoidReasons: previous?.mediaVoidReasons ?? {}
   };
@@ -209,17 +214,26 @@ function mergeJobsQueueSection(
   };
 }
 
-export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken, onSignOut }: Props) {
+export function OfficeWorkspaceShell({
+  apiBaseUrl,
+  initialEmployee,
+  sessionToken,
+  onSignOut
+}: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
   const [jobIntakeContext, setJobIntakeContext] = useState<JobIntakeContextResponse | null>(null);
   const [jobsQueue, setJobsQueue] = useState<JobsQueueResponse | null>(null);
   const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
   const [jobDetailsById, setJobDetailsById] = useState<Record<string, JobDetailResponse>>({});
-  const [equipmentLocations, setEquipmentLocations] = useState<EquipmentWorkspaceResponse['locations']>([]);
+  const [equipmentLocations, setEquipmentLocations] = useState<
+    EquipmentWorkspaceResponse['locations']
+  >([]);
   const [equipment, setEquipment] = useState<EquipmentSummary[]>([]);
   const [suggestedEquipmentTypes, setSuggestedEquipmentTypes] = useState<string[]>([]);
   const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | undefined>();
-  const [selectedEquipmentDetail, setSelectedEquipmentDetail] = useState<EquipmentDetail | null>(null);
+  const [selectedEquipmentDetail, setSelectedEquipmentDetail] = useState<EquipmentDetail | null>(
+    null
+  );
   const [hasLoadedEquipmentWorkspace, setHasLoadedEquipmentWorkspace] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -230,7 +244,8 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [isEquipmentRefreshing, setIsEquipmentRefreshing] = useState(false);
   const [isJobDetailLoading, setIsJobDetailLoading] = useState(false);
   const [lastDispatchRefreshedAt, setLastDispatchRefreshedAt] = useState<string | null>(null);
-  const [pendingJobStatusChange, setPendingJobStatusChange] = useState<PendingJobStatusChange | null>(null);
+  const [pendingJobStatusChange, setPendingJobStatusChange] =
+    useState<PendingJobStatusChange | null>(null);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
   const [jobLocationId, setJobLocationId] = useState('');
   const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
@@ -244,8 +259,12 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   const [jobEndTime, setJobEndTime] = useState('');
   const [jobWindow, setJobWindow] = useState('');
   const [appointmentDrafts, setAppointmentDrafts] = useState<Record<string, AppointmentDraft>>({});
-  const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<Record<string, AppointmentEditDraft>>({});
-  const [capturedWorkByJobId, setCapturedWorkByJobId] = useState<Record<string, CapturedWorkDetails>>({});
+  const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<
+    Record<string, AppointmentEditDraft>
+  >({});
+  const [capturedWorkByJobId, setCapturedWorkByJobId] = useState<
+    Record<string, CapturedWorkDetails>
+  >({});
   const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
   const [activeOfficeView, setActiveOfficeView] = useState<OfficeView>('dispatch');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -276,11 +295,18 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     selectedEquipmentIdRef.current = selectedEquipmentId;
   }, [selectedEquipmentId]);
 
-  const loadEquipmentDetail = useCallback(async (equipmentId: string) => {
-    const equipmentDetail = await getOfficeEquipmentDetail({ equipmentId, sessionToken, apiBaseUrl });
-    setSelectedEquipmentId(equipmentId);
-    setSelectedEquipmentDetail(equipmentDetail);
-  }, [apiBaseUrl, sessionToken]);
+  const loadEquipmentDetail = useCallback(
+    async (equipmentId: string) => {
+      const equipmentDetail = await getOfficeEquipmentDetail({
+        equipmentId,
+        sessionToken,
+        apiBaseUrl
+      });
+      setSelectedEquipmentId(equipmentId);
+      setSelectedEquipmentDetail(equipmentDetail);
+    },
+    [apiBaseUrl, sessionToken]
+  );
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -302,7 +328,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       setLastDispatchRefreshedAt(new Date().toISOString());
       return true;
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the dispatch board.');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to refresh the dispatch board.'
+      );
       return false;
     } finally {
       dispatchRefreshInFlightRef.current = false;
@@ -336,37 +364,40 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }, [apiBaseUrl, sessionToken]);
 
-  const loadJobIntakeContext = useCallback(async (force = false): Promise<JobIntakeContextResponse | null> => {
-    if (!force && jobIntakeContext) {
-      return jobIntakeContext;
-    }
-
-    if (jobIntakeLoadInFlightRef.current) {
-      return jobIntakeContext;
-    }
-
-    jobIntakeLoadInFlightRef.current = true;
-    setIsJobIntakeLoading(true);
-    setErrorMessage(null);
-
-    try {
-      const nextJobIntakeContext = await getOfficeJobIntakeContext({ sessionToken, apiBaseUrl });
-      setJobIntakeContext(nextJobIntakeContext);
-
-      if (!jobLocationIdRef.current && nextJobIntakeContext.locations[0]) {
-        setJobLocationId(nextJobIntakeContext.locations[0].id);
-        setJobBillToCustomerId(nextJobIntakeContext.locations[0].customerId);
+  const loadJobIntakeContext = useCallback(
+    async (force = false): Promise<JobIntakeContextResponse | null> => {
+      if (!force && jobIntakeContext) {
+        return jobIntakeContext;
       }
 
-      return nextJobIntakeContext;
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load job intake.');
-      return null;
-    } finally {
-      jobIntakeLoadInFlightRef.current = false;
-      setIsJobIntakeLoading(false);
-    }
-  }, [apiBaseUrl, jobIntakeContext, sessionToken]);
+      if (jobIntakeLoadInFlightRef.current) {
+        return jobIntakeContext;
+      }
+
+      jobIntakeLoadInFlightRef.current = true;
+      setIsJobIntakeLoading(true);
+      setErrorMessage(null);
+
+      try {
+        const nextJobIntakeContext = await getOfficeJobIntakeContext({ sessionToken, apiBaseUrl });
+        setJobIntakeContext(nextJobIntakeContext);
+
+        if (!jobLocationIdRef.current && nextJobIntakeContext.locations[0]) {
+          setJobLocationId(nextJobIntakeContext.locations[0].id);
+          setJobBillToCustomerId(nextJobIntakeContext.locations[0].customerId);
+        }
+
+        return nextJobIntakeContext;
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to load job intake.');
+        return null;
+      } finally {
+        jobIntakeLoadInFlightRef.current = false;
+        setIsJobIntakeLoading(false);
+      }
+    },
+    [apiBaseUrl, jobIntakeContext, sessionToken]
+  );
 
   const refreshEquipmentWorkspace = useCallback(async (): Promise<boolean> => {
     if (equipmentRefreshInFlightRef.current) {
@@ -391,7 +422,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
       const nextSelectedEquipmentId =
         selectedEquipmentIdRef.current &&
-        nextEquipmentWorkspace.equipment.some((record) => record.id === selectedEquipmentIdRef.current)
+        nextEquipmentWorkspace.equipment.some(
+          (record) => record.id === selectedEquipmentIdRef.current
+        )
           ? selectedEquipmentIdRef.current
           : nextEquipmentWorkspace.equipment[0]?.id;
 
@@ -427,7 +460,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       setEmployee(currentSession.employee);
       return true;
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh the office workspace.');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to refresh the office workspace.'
+      );
       return false;
     } finally {
       refreshInFlightRef.current = false;
@@ -464,28 +499,35 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     refreshWorkspace
   ]);
 
-  const loadJobDetail = useCallback(async (jobId: string): Promise<JobDetailResponse | null> => {
-    setIsJobDetailLoading(true);
-    setErrorMessage(null);
+  const loadJobDetail = useCallback(
+    async (jobId: string): Promise<JobDetailResponse | null> => {
+      setIsJobDetailLoading(true);
+      setErrorMessage(null);
 
-    try {
-      const detail = await getOfficeJobDetail({ jobId, sessionToken, apiBaseUrl });
-      setJobDetailsById((current) => ({
-        ...current,
-        [jobId]: detail
-      }));
-      setCapturedWorkByJobId((current) => ({
-        ...current,
-        [jobId]: buildCapturedWorkDetails(detail.registerEntries, detail.mediaAttachments, current[jobId])
-      }));
-      return detail;
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load job detail.');
-      return null;
-    } finally {
-      setIsJobDetailLoading(false);
-    }
-  }, [apiBaseUrl, sessionToken]);
+      try {
+        const detail = await getOfficeJobDetail({ jobId, sessionToken, apiBaseUrl });
+        setJobDetailsById((current) => ({
+          ...current,
+          [jobId]: detail
+        }));
+        setCapturedWorkByJobId((current) => ({
+          ...current,
+          [jobId]: buildCapturedWorkDetails(
+            detail.registerEntries,
+            detail.mediaAttachments,
+            current[jobId]
+          )
+        }));
+        return detail;
+      } catch (error) {
+        setErrorMessage(error instanceof Error ? error.message : 'Unable to load job detail.');
+        return null;
+      } finally {
+        setIsJobDetailLoading(false);
+      }
+    },
+    [apiBaseUrl, sessionToken]
+  );
 
   useEffect(() => {
     void refreshWorkspace();
@@ -521,7 +563,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         limit: jobsQueuePageLimit,
         cursors: { [queueKey]: cursor }
       });
-      setJobsQueue((current) => (current ? mergeJobsQueueSection(current, nextPage, queueKey) : nextPage));
+      setJobsQueue((current) =>
+        current ? mergeJobsQueueSection(current, nextPage, queueKey) : nextPage
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load more jobs.');
     }
@@ -541,7 +585,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
       setCapturedWorkByJobId((current) => ({
         ...current,
-        [jobId]: buildCapturedWorkDetails(registerResponse.registerEntries, mediaResponse.mediaAttachments, current[jobId])
+        [jobId]: buildCapturedWorkDetails(
+          registerResponse.registerEntries,
+          mediaResponse.mediaAttachments,
+          current[jobId]
+        )
       }));
     } catch (error) {
       setCapturedWorkByJobId((current) => ({
@@ -555,7 +603,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
-  function handleRegisterDraftChange(jobId: string, registerEntryId: string, draft: RegisterEntryEditDraft) {
+  function handleRegisterDraftChange(
+    jobId: string,
+    registerEntryId: string,
+    draft: RegisterEntryEditDraft
+  ) {
     setCapturedWorkByJobId((current) => ({
       ...current,
       [jobId]: {
@@ -652,7 +704,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         registerEntryId,
         sessionToken,
         apiBaseUrl,
-        reason: optionalString(capturedWorkByJobId[jobId]?.registerVoidReasons[registerEntryId] ?? '')
+        reason: optionalString(
+          capturedWorkByJobId[jobId]?.registerVoidReasons[registerEntryId] ?? ''
+        )
       });
       setNoticeMessage('Register entry voided.');
       await refreshAllWorkspace();
@@ -719,7 +773,10 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         sessionToken,
         apiBaseUrl,
         locationId: draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
-        inventoryLocationLabel: draft.placementKind === 'inventory' ? draft.inventoryLocationLabel || undefined : undefined,
+        inventoryLocationLabel:
+          draft.placementKind === 'inventory'
+            ? draft.inventoryLocationLabel || undefined
+            : undefined,
         equipmentType: draft.equipmentType,
         brand: draft.brand,
         model: draft.model,
@@ -744,8 +801,12 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         await createOfficeEquipment({
           sessionToken,
           apiBaseUrl,
-          locationId: draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
-          inventoryLocationLabel: draft.placementKind === 'inventory' ? draft.inventoryLocationLabel || undefined : undefined,
+          locationId:
+            draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
+          inventoryLocationLabel:
+            draft.placementKind === 'inventory'
+              ? draft.inventoryLocationLabel || undefined
+              : undefined,
           equipmentType: draft.equipmentType,
           brand: draft.brand,
           model: draft.model,
@@ -850,7 +911,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       await loadEquipmentDetail(equipmentId);
       await refreshAllWorkspace();
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to link replacement equipment.');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to link replacement equipment.'
+      );
     }
   }
 
@@ -929,7 +992,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
     const cancellableAppointmentCount =
       nextStatus === 'cancelled'
-        ? jobDetailsById[jobId]?.job.appointments.filter((appointment) => appointment.status !== 'cancelled').length ?? 0
+        ? (jobDetailsById[jobId]?.job.appointments.filter(
+            (appointment) => appointment.status !== 'cancelled'
+          ).length ?? 0)
         : 0;
 
     setPendingJobStatusChange({
@@ -937,7 +1002,12 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       currentStatus,
       nextStatus,
       jobSummary,
-      reviewMessage: getJobStatusReviewMessage(currentStatus, nextStatus, jobSummary, cancellableAppointmentCount),
+      reviewMessage: getJobStatusReviewMessage(
+        currentStatus,
+        nextStatus,
+        jobSummary,
+        cancellableAppointmentCount
+      ),
       cancellableAppointmentCount,
       isSubmitting: false
     });
@@ -969,7 +1039,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
 
     const updatedJobId = pendingJobStatusChange.jobId;
-    setPendingJobStatusChange((current) => (current ? { ...current, isSubmitting: true } : current));
+    setPendingJobStatusChange((current) =>
+      current ? { ...current, isSubmitting: true } : current
+    );
     setNoticeMessage(null);
 
     try {
@@ -987,7 +1059,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       await refreshOpenJobDetail(updatedJobId);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to update job status.');
-      setPendingJobStatusChange((current) => (current ? { ...current, isSubmitting: false } : current));
+      setPendingJobStatusChange((current) =>
+        current ? { ...current, isSubmitting: false } : current
+      );
     }
   }
 
@@ -1012,7 +1086,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
       setNoticeMessage('Appointment status updated.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to update appointment status.');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to update appointment status.'
+      );
     }
   }
 
@@ -1046,7 +1122,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       await refreshOpenJobDetail(jobId);
       setNoticeMessage('Appointment updated.');
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to update appointment scheduling.');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to update appointment scheduling.'
+      );
     }
   }
 
@@ -1088,7 +1166,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       await refreshAllWorkspace();
       await refreshOpenJobDetail(jobId);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to acknowledge finished visit review.');
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to acknowledge finished visit review.'
+      );
     }
   }
 
@@ -1107,7 +1187,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
     }
   }
 
-  function handleOpenJobDetail(jobId: string, appointmentId?: string, initialTab: JobDetailTab = 'overview') {
+  function handleOpenJobDetail(
+    jobId: string,
+    appointmentId?: string,
+    initialTab: JobDetailTab = 'overview'
+  ) {
     setSelectedJobId(jobId);
     setFocusedAppointmentId(appointmentId ?? null);
     setJobDetailInitialTab(appointmentId ? 'appointments' : initialTab);
@@ -1134,14 +1218,16 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
         <section style={styles.card}>
           <div style={styles.kicker}>BellField Office</div>
           <h1 style={styles.title}>{employee.displayName}</h1>
-          <p style={styles.muted}>{isDispatchRefreshing ? 'Loading dispatch...' : 'Dispatch is not ready yet.'}</p>
+          <p style={styles.muted}>
+            {isDispatchRefreshing ? 'Loading dispatch...' : 'Dispatch is not ready yet.'}
+          </p>
           {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
         </section>
       </main>
     );
   }
 
-  const selectedJobDetail = selectedJobId ? jobDetailsById[selectedJobId] ?? null : null;
+  const selectedJobDetail = selectedJobId ? (jobDetailsById[selectedJobId] ?? null) : null;
   const selectedJob = selectedJobDetail?.job ?? null;
 
   return (
@@ -1149,10 +1235,26 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
       <div style={styles.shell}>
         <aside style={styles.rail} aria-label="Office navigation">
           <div style={styles.railBrand}>BellField</div>
-          <NavButton label="Dispatch" active={activeOfficeView === 'dispatch'} onClick={() => setActiveOfficeView('dispatch')} />
-          <NavButton label="Customers" active={activeOfficeView === 'customers'} onClick={() => setActiveOfficeView('customers')} />
-          <NavButton label="Jobs" active={activeOfficeView === 'jobs'} onClick={() => setActiveOfficeView('jobs')} />
-          <NavButton label="Equipment" active={activeOfficeView === 'equipment'} onClick={() => setActiveOfficeView('equipment')} />
+          <NavButton
+            label="Dispatch"
+            active={activeOfficeView === 'dispatch'}
+            onClick={() => setActiveOfficeView('dispatch')}
+          />
+          <NavButton
+            label="Customers"
+            active={activeOfficeView === 'customers'}
+            onClick={() => setActiveOfficeView('customers')}
+          />
+          <NavButton
+            label="Jobs"
+            active={activeOfficeView === 'jobs'}
+            onClick={() => setActiveOfficeView('jobs')}
+          />
+          <NavButton
+            label="Equipment"
+            active={activeOfficeView === 'equipment'}
+            onClick={() => setActiveOfficeView('equipment')}
+          />
         </aside>
 
         <div style={styles.workArea}>
@@ -1170,8 +1272,16 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
               >
                 {isJobIntakeLoading ? 'Loading...' : 'New job'}
               </button>
-              <button type="button" onClick={() => void refreshAllWorkspace()} style={styles.button}>
-                {isRefreshing || isDispatchRefreshing || isJobsQueueRefreshing || isJobIntakeLoading || isEquipmentRefreshing
+              <button
+                type="button"
+                onClick={() => void refreshAllWorkspace()}
+                style={styles.button}
+              >
+                {isRefreshing ||
+                isDispatchRefreshing ||
+                isJobsQueueRefreshing ||
+                isJobIntakeLoading ||
+                isEquipmentRefreshing
                   ? 'Refreshing...'
                   : 'Refresh'}
               </button>
@@ -1227,7 +1337,11 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
           ) : null}
 
           {activeOfficeView === 'customers' ? (
-            <CrmPanel apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} onErrorMessage={setErrorMessage} />
+            <CrmPanel
+              apiBaseUrl={apiBaseUrl}
+              sessionToken={sessionToken}
+              onErrorMessage={setErrorMessage}
+            />
           ) : null}
 
           {activeOfficeView === 'jobs' && jobsQueue ? (
@@ -1266,7 +1380,9 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
 
           {activeOfficeView === 'equipment' && !hasLoadedEquipmentWorkspace ? (
             <section style={styles.workspacePanel} aria-label="Equipment panel">
-              <p style={styles.muted}>{isEquipmentRefreshing ? 'Loading equipment...' : 'Equipment is not ready yet.'}</p>
+              <p style={styles.muted}>
+                {isEquipmentRefreshing ? 'Loading equipment...' : 'Equipment is not ready yet.'}
+              </p>
             </section>
           ) : null}
 
@@ -1289,11 +1405,17 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
               onConfirmJobStatusChange={confirmJobStatusChange}
               onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
               onAppointmentStatusChange={handleAppointmentStatusChange}
-              onAppointmentDraftChange={(jobId, draft) =>
-                setAppointmentDrafts((current) => ({ ...current, [jobId]: draft }))
+              onAppointmentDraftChange={(jobId, patch) =>
+                setAppointmentDrafts((current) => ({
+                  ...current,
+                  [jobId]: { ...(current[jobId] ?? createEmptyAppointmentDraft()), ...patch }
+                }))
               }
-              onAppointmentEditDraftChange={(appointmentId, draft) =>
-                setAppointmentEditDrafts((current) => ({ ...current, [appointmentId]: draft }))
+              onAppointmentEditDraftChange={(appointmentId, baseDraft, patch) =>
+                setAppointmentEditDrafts((current) => ({
+                  ...current,
+                  [appointmentId]: { ...(current[appointmentId] ?? baseDraft), ...patch }
+                }))
               }
               onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
               onAddAppointment={handleAddAppointment}
@@ -1336,9 +1458,21 @@ export function OfficeWorkspaceShell({ apiBaseUrl, initialEmployee, sessionToken
   );
 }
 
-function NavButton({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function NavButton({
+  label,
+  active,
+  onClick
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
   return (
-    <button type="button" style={active ? styles.activeRailButton : styles.railButton} onClick={onClick}>
+    <button
+      type="button"
+      style={active ? styles.activeRailButton : styles.railButton}
+      onClick={onClick}
+    >
       {label}
     </button>
   );

@@ -14,7 +14,9 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function buildDispatchAppointment(overrides: Partial<DispatchAppointmentSummary> = {}): DispatchAppointmentSummary {
+function buildDispatchAppointment(
+  overrides: Partial<DispatchAppointmentSummary> = {}
+): DispatchAppointmentSummary {
   return {
     appointmentId: 'appt-1',
     jobId: 'job-1',
@@ -86,8 +88,12 @@ describe('buildDispatchBoardModel', () => {
 
     expect(model.technicianRows).toHaveLength(2);
     expect(model.technicianRows[0]?.technicianId).toBe('tech-1');
-    expect(model.technicianRows[0]?.cards.map((card) => card.appointmentId)).toEqual(['appt-tech1']);
-    expect(model.technicianRows[1]?.cards.map((card) => card.appointmentId)).toEqual(['appt-tech2']);
+    expect(model.technicianRows[0]?.cards.map((card) => card.appointmentId)).toEqual([
+      'appt-tech1'
+    ]);
+    expect(model.technicianRows[1]?.cards.map((card) => card.appointmentId)).toEqual([
+      'appt-tech2'
+    ]);
     expect(model.unassignedQueue.map((card) => card.appointmentId)).toEqual(['appt-unassigned']);
     expect(model.cardLookup.size).toBe(3);
   });
@@ -139,7 +145,11 @@ describe('buildDispatchBoardModel', () => {
     const model = buildDispatchBoardModel(dispatchBoard);
     const techRow = model.technicianRows.find((row) => row.technicianId === 'tech-1');
 
-    expect(techRow?.cards.map((card) => card.appointmentId)).toEqual(['appt-early', 'appt-late', 'appt-untimed']);
+    expect(techRow?.cards.map((card) => card.appointmentId)).toEqual([
+      'appt-early',
+      'appt-late',
+      'appt-untimed'
+    ]);
   });
 });
 
@@ -174,8 +184,12 @@ describe('DispatchBoardPanel', () => {
 
     expect(within(unassignedRegion).getByText(/Job 1002/)).toBeInTheDocument();
     expect(within(taylorRegion).getByText(/Job 1001/)).toBeInTheDocument();
-    expect(unassignedRegion.compareDocumentPosition(taylorRegion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(taylorRegion.compareDocumentPosition(samRegion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      unassignedRegion.compareDocumentPosition(taylorRegion) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(
+      taylorRegion.compareDocumentPosition(samRegion) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
   });
 
   it('opens a calendar picker and commits the selected dispatch date', () => {
@@ -275,7 +289,9 @@ describe('DispatchBoardPanel', () => {
 
     render(
       <DispatchBoardPanel
-        dispatchBoard={buildDispatchBoard([buildDispatchAppointment({ appointmentId: 'appt-tech1' })])}
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
         viewDate="2026-05-22"
         onOpenJobDetail={onOpenJobDetail}
       />

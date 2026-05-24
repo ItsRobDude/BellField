@@ -32,7 +32,10 @@ export class JobsAppointmentsController {
     @Headers('authorization') authorizationHeader: string | undefined,
     @Body() request: CreateJobRequestBodyDto
   ) {
-    return this.jobsAppointmentsService.createJob(this.getBearerToken(authorizationHeader), request);
+    return this.jobsAppointmentsService.createJob(
+      this.getBearerToken(authorizationHeader),
+      request
+    );
   }
 
   @Patch(':jobId/status')
@@ -41,7 +44,11 @@ export class JobsAppointmentsController {
     @Param('jobId') jobId: string,
     @Body() request: UpdateJobStatusRequestBodyDto
   ) {
-    return this.jobsAppointmentsService.updateJobStatus(this.getBearerToken(authorizationHeader), jobId, request);
+    return this.jobsAppointmentsService.updateJobStatus(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 
   @Post(':jobId/appointments')
@@ -50,7 +57,11 @@ export class JobsAppointmentsController {
     @Param('jobId') jobId: string,
     @Body() request: CreateAppointmentRequestBodyDto
   ) {
-    return this.jobsAppointmentsService.addAppointment(this.getBearerToken(authorizationHeader), jobId, request);
+    return this.jobsAppointmentsService.addAppointment(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 
   @Post(':jobId/finished-visit-review')
@@ -85,7 +96,11 @@ export class JobsAppointmentsController {
     @Param('jobId') jobId: string,
     @Body() request: AddJobNoteRequestBodyDto
   ) {
-    return this.jobsAppointmentsService.addJobNote(this.getBearerToken(authorizationHeader), jobId, request);
+    return this.jobsAppointmentsService.addJobNote(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 
   @Get(':jobId/register-entries')
@@ -93,7 +108,11 @@ export class JobsAppointmentsController {
     @Headers('authorization') authorizationHeader: string | undefined,
     @Param('jobId') jobId: string
   ) {
-    return this.jobsAppointmentsService.listRegisterEntries(this.getBearerToken(authorizationHeader), jobId, true);
+    return this.jobsAppointmentsService.listRegisterEntries(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      true
+    );
   }
 
   @Post(':jobId/register-entries')
@@ -102,7 +121,11 @@ export class JobsAppointmentsController {
     @Param('jobId') jobId: string,
     @Body() request: CreateRegisterEntryRequestBodyDto
   ) {
-    return this.jobsAppointmentsService.createRegisterEntry(this.getBearerToken(authorizationHeader), jobId, request);
+    return this.jobsAppointmentsService.createRegisterEntry(
+      this.getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 
   @Patch('register-entries/:registerEntryId')

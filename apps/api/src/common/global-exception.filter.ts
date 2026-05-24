@@ -26,7 +26,8 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     const response = context.getResponse<HttpResponse>();
     const request = context.getRequest<HttpRequest>();
 
-    const statusCode = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const statusCode =
+      exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
     const errorResponse = this.buildErrorResponse(exception, statusCode, request.url);
 
     log('error', 'API request failed.', {
@@ -35,14 +36,19 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       statusCode,
       requestId: request.headers['x-request-id'],
       errorName: exception instanceof Error ? exception.name : 'UnknownError',
-      errorMessage: exception instanceof Error ? exception.message : 'Unhandled non-error exception',
+      errorMessage:
+        exception instanceof Error ? exception.message : 'Unhandled non-error exception',
       stack: exception instanceof Error ? exception.stack : undefined
     });
 
     response.status(statusCode).json(errorResponse);
   }
 
-  private buildErrorResponse(exception: unknown, statusCode: number, path: string): ErrorResponseBody {
+  private buildErrorResponse(
+    exception: unknown,
+    statusCode: number,
+    path: string
+  ): ErrorResponseBody {
     if (exception instanceof HttpException) {
       const response = exception.getResponse();
       const defaultMessage = exception.message;

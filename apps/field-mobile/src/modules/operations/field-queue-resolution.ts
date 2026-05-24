@@ -4,7 +4,9 @@ export function shouldOfferQueueResolution(operation: PendingOperation): boolean
   return operation.state === 'conflict' || operation.state === 'rejected';
 }
 
-export function getReplayablePendingOperations(pendingOperations: PendingOperation[]): PendingOperation[] {
+export function getReplayablePendingOperations(
+  pendingOperations: PendingOperation[]
+): PendingOperation[] {
   return pendingOperations
     .filter((operation) => operation.state === 'pending')
     .sort((left, right) => left.occurredAt.localeCompare(right.occurredAt));
@@ -15,7 +17,9 @@ export function markPendingOperationForRetry(
   operationId: string
 ): PendingOperation[] {
   return pendingOperations.map((operation) =>
-    operation.id === operationId ? { ...operation, state: 'pending', lastResultMessage: undefined } : operation
+    operation.id === operationId
+      ? { ...operation, state: 'pending', lastResultMessage: undefined }
+      : operation
   );
 }
 

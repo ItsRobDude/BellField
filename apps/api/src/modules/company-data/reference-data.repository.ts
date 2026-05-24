@@ -103,7 +103,9 @@ type UpdateLocationInput = Partial<Omit<LocationRecord, 'id' | 'customerId'>>;
 type CreateContactInput = Omit<ContactRecord, 'id' | 'isActive'> & { isActive?: boolean };
 type UpdateContactInput = Partial<Omit<ContactRecord, 'id'>>;
 type CreateContactLinkInput = Omit<ContactLinkRecord, 'id'>;
-type UpdateContactLinkInput = Partial<Omit<ContactLinkRecord, 'id' | 'contactId' | 'linkedRecordId' | 'linkedRecordKind'>>;
+type UpdateContactLinkInput = Partial<
+  Omit<ContactLinkRecord, 'id' | 'contactId' | 'linkedRecordId' | 'linkedRecordKind'>
+>;
 
 @Injectable()
 export class ReferenceDataRepository {
@@ -322,7 +324,9 @@ export class ReferenceDataRepository {
     return result.rows.map((row) => this.toCrmSearchRecord(row));
   }
 
-  async findCustomerDuplicateCandidates(input: CustomerDuplicateLookupInput): Promise<CustomerAccountRecord[]> {
+  async findCustomerDuplicateCandidates(
+    input: CustomerDuplicateLookupInput
+  ): Promise<CustomerAccountRecord[]> {
     if (!input.normalizedName && !input.normalizedPhone && !input.normalizedAddress) {
       return [];
     }
@@ -496,7 +500,10 @@ export class ReferenceDataRepository {
     return (await this.getCustomerById(id)) as CustomerAccountRecord;
   }
 
-  async updateCustomer(customerId: string, input: UpdateCustomerInput): Promise<CustomerAccountRecord | null> {
+  async updateCustomer(
+    customerId: string,
+    input: UpdateCustomerInput
+  ): Promise<CustomerAccountRecord | null> {
     const current = await this.getCustomerById(customerId);
 
     if (!current) {
@@ -661,7 +668,10 @@ export class ReferenceDataRepository {
     return result.rows.map((row) => this.toLocationRecord(row));
   }
 
-  async listLocationsForCustomer(customerId: string, includeInactive = true): Promise<LocationRecord[]> {
+  async listLocationsForCustomer(
+    customerId: string,
+    includeInactive = true
+  ): Promise<LocationRecord[]> {
     const result = await this.databaseService.query<LocationRow>(
       `
         select
@@ -753,7 +763,10 @@ export class ReferenceDataRepository {
     return (await this.getLocationById(id)) as LocationRecord;
   }
 
-  async updateLocation(locationId: string, input: UpdateLocationInput): Promise<LocationRecord | null> {
+  async updateLocation(
+    locationId: string,
+    input: UpdateLocationInput
+  ): Promise<LocationRecord | null> {
     const current = await this.getLocationById(locationId);
 
     if (!current) {
@@ -795,7 +808,10 @@ export class ReferenceDataRepository {
     return this.getLocationById(locationId);
   }
 
-  async listCustomerContactLinks(customerId: string, includeInactive = true): Promise<ContactLinkRecord[]> {
+  async listCustomerContactLinks(
+    customerId: string,
+    includeInactive = true
+  ): Promise<ContactLinkRecord[]> {
     const result = await this.databaseService.query<ContactLinkRow>(
       `
         select
@@ -818,7 +834,10 @@ export class ReferenceDataRepository {
     return result.rows.map((row) => this.toContactLinkRecord(row, customerId, 'customer'));
   }
 
-  async listLocationContactLinks(locationId: string, includeInactive = true): Promise<ContactLinkRecord[]> {
+  async listLocationContactLinks(
+    locationId: string,
+    includeInactive = true
+  ): Promise<ContactLinkRecord[]> {
     const result = await this.databaseService.query<ContactLinkRow>(
       `
         select
@@ -841,7 +860,10 @@ export class ReferenceDataRepository {
     return result.rows.map((row) => this.toContactLinkRecord(row, locationId, 'location'));
   }
 
-  async listContactLinksForContact(contactId: string, includeInactive = true): Promise<ContactLinkRecord[]> {
+  async listContactLinksForContact(
+    contactId: string,
+    includeInactive = true
+  ): Promise<ContactLinkRecord[]> {
     const [customerLinks, locationLinks] = await Promise.all([
       this.databaseService.query<ContactLinkRow & { linkedRecordId: string }>(
         `
@@ -884,13 +906,19 @@ export class ReferenceDataRepository {
     ]);
 
     return [
-      ...customerLinks.rows.map((row) => this.toContactLinkRecord(row, row.linkedRecordId, 'customer')),
-      ...locationLinks.rows.map((row) => this.toContactLinkRecord(row, row.linkedRecordId, 'location'))
+      ...customerLinks.rows.map((row) =>
+        this.toContactLinkRecord(row, row.linkedRecordId, 'customer')
+      ),
+      ...locationLinks.rows.map((row) =>
+        this.toContactLinkRecord(row, row.linkedRecordId, 'location')
+      )
     ];
   }
 
   async getContactLinkById(linkId: string): Promise<ContactLinkRecord | null> {
-    const customerResult = await this.databaseService.query<ContactLinkRow & { linkedRecordId: string }>(
+    const customerResult = await this.databaseService.query<
+      ContactLinkRow & { linkedRecordId: string }
+    >(
       `
         select
           id,
@@ -910,10 +938,16 @@ export class ReferenceDataRepository {
     );
 
     if (customerResult.rows[0]) {
-      return this.toContactLinkRecord(customerResult.rows[0], customerResult.rows[0].linkedRecordId, 'customer');
+      return this.toContactLinkRecord(
+        customerResult.rows[0],
+        customerResult.rows[0].linkedRecordId,
+        'customer'
+      );
     }
 
-    const locationResult = await this.databaseService.query<ContactLinkRow & { linkedRecordId: string }>(
+    const locationResult = await this.databaseService.query<
+      ContactLinkRow & { linkedRecordId: string }
+    >(
       `
         select
           id,
@@ -933,13 +967,18 @@ export class ReferenceDataRepository {
     );
 
     return locationResult.rows[0]
-      ? this.toContactLinkRecord(locationResult.rows[0], locationResult.rows[0].linkedRecordId, 'location')
+      ? this.toContactLinkRecord(
+          locationResult.rows[0],
+          locationResult.rows[0].linkedRecordId,
+          'location'
+        )
       : null;
   }
 
   async createContactLink(input: CreateContactLinkInput): Promise<ContactLinkRecord> {
     const id = randomUUID();
-    const tableName = input.linkedRecordKind === 'customer' ? 'customer_contact_links' : 'location_contact_links';
+    const tableName =
+      input.linkedRecordKind === 'customer' ? 'customer_contact_links' : 'location_contact_links';
     const idColumn = input.linkedRecordKind === 'customer' ? 'customer_id' : 'location_id';
 
     const result = await this.databaseService.query<{ id: string }>(
@@ -993,14 +1032,18 @@ export class ReferenceDataRepository {
     return existingLink;
   }
 
-  async updateContactLink(linkId: string, input: UpdateContactLinkInput): Promise<ContactLinkRecord | null> {
+  async updateContactLink(
+    linkId: string,
+    input: UpdateContactLinkInput
+  ): Promise<ContactLinkRecord | null> {
     const current = await this.getContactLinkById(linkId);
 
     if (!current) {
       return null;
     }
 
-    const tableName = current.linkedRecordKind === 'customer' ? 'customer_contact_links' : 'location_contact_links';
+    const tableName =
+      current.linkedRecordKind === 'customer' ? 'customer_contact_links' : 'location_contact_links';
 
     await this.databaseService.query(
       `
@@ -1049,21 +1092,34 @@ export class ReferenceDataRepository {
     return result.rows.map((row) => this.toOwnershipHistoryRecord(row));
   }
 
-  async addOwnershipHistoryEntry(input: Omit<OwnershipHistoryRecord, 'id'>): Promise<OwnershipHistoryRecord> {
+  async addOwnershipHistoryEntry(
+    input: Omit<OwnershipHistoryRecord, 'id'>
+  ): Promise<OwnershipHistoryRecord> {
     const id = randomUUID();
     await this.databaseService.query(
       `
         insert into location_ownership_history (id, location_id, customer_id, started_at, ended_at, note)
         values ($1, $2, $3, $4, $5, $6)
       `,
-      [id, input.locationId, input.customerId, input.startedAt, input.endedAt ?? null, input.note ?? null]
+      [
+        id,
+        input.locationId,
+        input.customerId,
+        input.startedAt,
+        input.endedAt ?? null,
+        input.note ?? null
+      ]
     );
 
     const [entry] = await this.listOwnershipHistory(input.locationId);
     return entry;
   }
 
-  async reassignLocationOwner(locationId: string, customerId: string, note?: string): Promise<LocationRecord | null> {
+  async reassignLocationOwner(
+    locationId: string,
+    customerId: string,
+    note?: string
+  ): Promise<LocationRecord | null> {
     const currentLocation = await this.getLocationById(locationId);
 
     if (!currentLocation) {

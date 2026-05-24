@@ -44,9 +44,7 @@ export type DispatchBoardModel = {
   cardLookup: Map<string, DispatchAppointmentCard>;
 };
 
-export function buildDispatchBoardModel(
-  dispatchBoard: DispatchBoardResponse
-): DispatchBoardModel {
+export function buildDispatchBoardModel(dispatchBoard: DispatchBoardResponse): DispatchBoardModel {
   const sortedCards = dispatchBoard.appointments
     .filter(isDispatchableAppointment)
     .map(toDispatchAppointmentCard)
@@ -64,14 +62,17 @@ export function buildDispatchBoardModel(
   const cardLookup = new Map(sortedCards.map((card) => [card.appointmentId, card]));
 
   return {
-    viewDate: dispatchBoard.startDate === dispatchBoard.endDate ? dispatchBoard.startDate : undefined,
+    viewDate:
+      dispatchBoard.startDate === dispatchBoard.endDate ? dispatchBoard.startDate : undefined,
     technicianRows,
     unassignedQueue,
     cardLookup
   };
 }
 
-function toDispatchAppointmentCard(appointment: DispatchBoardResponse['appointments'][number]): DispatchAppointmentCard {
+function toDispatchAppointmentCard(
+  appointment: DispatchBoardResponse['appointments'][number]
+): DispatchAppointmentCard {
   return {
     appointmentId: appointment.appointmentId,
     jobId: appointment.jobId,
@@ -99,11 +100,20 @@ function toDispatchAppointmentCard(appointment: DispatchBoardResponse['appointme
   };
 }
 
-function isDispatchableAppointment(appointment: DispatchBoardResponse['appointments'][number]): boolean {
-  return appointment.status !== 'cancelled' && appointment.jobStatus !== 'cancelled' && appointment.jobStatus !== 'closed';
+function isDispatchableAppointment(
+  appointment: DispatchBoardResponse['appointments'][number]
+): boolean {
+  return (
+    appointment.status !== 'cancelled' &&
+    appointment.jobStatus !== 'cancelled' &&
+    appointment.jobStatus !== 'closed'
+  );
 }
 
-function compareCardsForBoard(left: DispatchAppointmentCard, right: DispatchAppointmentCard): number {
+function compareCardsForBoard(
+  left: DispatchAppointmentCard,
+  right: DispatchAppointmentCard
+): number {
   const leftDate = left.scheduledDate ?? '';
   const rightDate = right.scheduledDate ?? '';
 

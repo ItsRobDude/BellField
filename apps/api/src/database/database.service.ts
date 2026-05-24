@@ -3,7 +3,10 @@ import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { getApiRuntimeConfig } from '../common/config/runtime-config';
 
 export type QueryExecutor = {
-  query<T extends QueryResultRow = QueryResultRow>(text: string, values?: unknown[]): Promise<QueryResult<T>>;
+  query<T extends QueryResultRow = QueryResultRow>(
+    text: string,
+    values?: unknown[]
+  ): Promise<QueryResult<T>>;
 };
 
 @Injectable()

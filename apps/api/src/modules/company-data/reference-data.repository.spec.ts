@@ -64,7 +64,12 @@ describe('ReferenceDataRepository', () => {
 
     await repository.searchCrm('(555) 111', 10);
 
-    expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['(555) 111', '(555) 111', '555111', 10]);
+    expect(databaseService.query.mock.calls[0]?.[1]).toEqual([
+      '(555) 111',
+      '(555) 111',
+      '555111',
+      10
+    ]);
   });
 
   it('escapes SQL wildcard characters in CRM search prefixes', async () => {

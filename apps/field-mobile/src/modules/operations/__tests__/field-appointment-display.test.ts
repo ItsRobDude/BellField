@@ -40,7 +40,9 @@ const baseLocation: FieldAssignedWorkResponse['locations'][number] = {
 };
 
 function makeSnapshot(
-  appointmentOverrides: Partial<FieldAssignedWorkResponse['jobs'][number]['appointments'][number]> = {}
+  appointmentOverrides: Partial<
+    FieldAssignedWorkResponse['jobs'][number]['appointments'][number]
+  > = {}
 ): FieldAssignedWorkResponse {
   const appointment = { ...baseAppointment, ...appointmentOverrides };
 
@@ -104,7 +106,9 @@ describe('field appointment display helpers', () => {
         finishedReviewedBy: 'Dispatcher Dana',
         finishedReviewDecision: 'followUpScheduled'
       })
-    ).toBe('Office review acknowledged by Dispatcher Dana: Office scheduled follow-up (2026-05-22)');
+    ).toBe(
+      'Office review acknowledged by Dispatcher Dana: Office scheduled follow-up (2026-05-22)'
+    );
     expect(formatFinishedReviewAcknowledgement(baseAppointment)).toBeUndefined();
   });
 
@@ -163,8 +167,8 @@ describe('field appointment display helpers', () => {
   });
 
   it('reports appointments that disappear from the assigned-work snapshot', () => {
-    expect(summarizeOfficeAppointmentChanges(makeSnapshot(), { ...makeSnapshot(), jobs: [] })).toEqual([
-      'Job 1001 appointment no longer appears in your assigned work.'
-    ]);
+    expect(
+      summarizeOfficeAppointmentChanges(makeSnapshot(), { ...makeSnapshot(), jobs: [] })
+    ).toEqual(['Job 1001 appointment no longer appears in your assigned work.']);
   });
 });

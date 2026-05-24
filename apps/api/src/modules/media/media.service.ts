@@ -52,14 +52,20 @@ export class MediaService {
   ) {}
 
   async listForJob(sessionToken: string, jobId: string): Promise<MediaAttachmentsResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'media:view');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'media:view'
+    );
     await this.ensureFieldJobAccess(actor, jobId);
     const records = await this.jobsDataService.listMediaAttachmentsForJob(jobId, true);
     return { mediaAttachments: records.map((record) => this.toSummary(record)) };
   }
 
   async getById(sessionToken: string, mediaId: string): Promise<MediaAttachmentResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'media:view');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'media:view'
+    );
     const record = await this.jobsDataService.getMediaAttachmentById(mediaId);
     await this.ensureFieldJobAccess(actor, record.jobId);
     return { mediaAttachment: this.toSummary(record) };
@@ -70,13 +76,19 @@ export class MediaService {
     jobId: string,
     request: CreateMediaUploadIntentRequestDto
   ): Promise<CreateMediaUploadIntentResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'media:create');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'media:create'
+    );
     this.validateIntent(request);
     await this.ensureFieldJobAccess(actor, jobId);
     await this.ensureAppointmentBelongsToJob(jobId, request.appointmentId);
 
     const normalizedSha256 = request.sha256.toLowerCase();
-    const existing = await this.jobsDataService.findMediaAttachmentByJobAndSha(jobId, normalizedSha256);
+    const existing = await this.jobsDataService.findMediaAttachmentByJobAndSha(
+      jobId,
+      normalizedSha256
+    );
     if (existing && !existing.isVoid) {
       // Dedup. If the bytes are already on disk we just hand back the existing
       // metadata. If not, the caller can re-upload to finalize the same row.
@@ -158,9 +170,18 @@ export class MediaService {
       throw new BadRequestException('Uploaded media sha256 does not match the media intent.');
     }
 
-    const storagePath = await this.mediaStorage.writeBlob(record.jobId, record.id, record.contentType, bytes);
+    const storagePath = await this.mediaStorage.writeBlob(
+      record.jobId,
+      record.id,
+      record.contentType,
+      bytes
+    );
     const uploadedAt = new Date().toISOString();
-    const finalized = await this.jobsDataService.markMediaAttachmentBlobUploaded(record.id, storagePath, uploadedAt);
+    const finalized = await this.jobsDataService.markMediaAttachmentBlobUploaded(
+      record.id,
+      storagePath,
+      uploadedAt
+    );
 
     return { mediaAttachment: this.toSummary(finalized) };
   }
@@ -170,7 +191,10 @@ export class MediaService {
     mediaId: string,
     request: UpdateMediaAttachmentRequestDto
   ): Promise<MediaAttachmentResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'media:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'media:edit'
+    );
     if (request.caption === undefined) {
       throw new BadRequestException('No editable fields supplied.');
     }
@@ -192,13 +216,20 @@ export class MediaService {
     mediaId: string,
     request: VoidMediaAttachmentRequestDto
   ): Promise<MediaAttachmentResponseDto> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'media:edit');
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'media:edit'
+    );
     if (request.reason !== undefined && request.reason.length > 500) {
       throw new BadRequestException('Void reason must be at most 500 characters.');
     }
     const currentRecord = await this.jobsDataService.getMediaAttachmentById(mediaId);
     await this.ensureFieldJobAccess(actor, currentRecord.jobId);
-    const record = await this.jobsDataService.voidMediaAttachment(mediaId, request.reason, actor.displayName);
+    const record = await this.jobsDataService.voidMediaAttachment(
+      mediaId,
+      request.reason,
+      actor.displayName
+    );
     return { mediaAttachment: this.toSummary(record) };
   }
 
@@ -224,14 +255,19 @@ export class MediaService {
 
     if (!authorizedByToken && options.sessionToken) {
       try {
-        actor = await this.identityAccessService.getAuthorizedEmployee(options.sessionToken, 'media:view');
+        actor = await this.identityAccessService.getAuthorizedEmployee(
+          options.sessionToken,
+          'media:view'
+        );
       } catch {
         // fall through; we throw below if no path granted access
       }
     }
 
     if (!authorizedByToken && !actor) {
-      throw new ForbiddenException('Media download requires a valid session or signed download token.');
+      throw new ForbiddenException(
+        'Media download requires a valid session or signed download token.'
+      );
     }
 
     const record = await this.jobsDataService.getMediaAttachmentById(mediaId);
@@ -282,7 +318,10 @@ export class MediaService {
         `Media exceeds the configured maximum of ${this.mediaConfig.getMaxByteSize()} bytes.`
       );
     }
-    if (typeof request.sha256 !== 'string' || !SHA256_HEX_PATTERN.test(request.sha256.toLowerCase())) {
+    if (
+      typeof request.sha256 !== 'string' ||
+      !SHA256_HEX_PATTERN.test(request.sha256.toLowerCase())
+    ) {
       throw new BadRequestException('sha256 must be a 64-character hex string.');
     }
     if (
@@ -297,7 +336,10 @@ export class MediaService {
     }
   }
 
-  private async ensureAppointmentBelongsToJob(jobId: string, appointmentId: string | undefined): Promise<void> {
+  private async ensureAppointmentBelongsToJob(
+    jobId: string,
+    appointmentId: string | undefined
+  ): Promise<void> {
     if (!appointmentId) {
       return;
     }
@@ -313,7 +355,10 @@ export class MediaService {
     }
 
     const { allowedDates } = getAssignedWorkWindow();
-    const assignedJobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
+    const assignedJobs = await this.jobsDataService.listAssignedJobsForEmployee(
+      actor.id,
+      allowedDates
+    );
     if (!assignedJobs.some((job) => job.id === jobId)) {
       throw new ForbiddenException(FIELD_MEDIA_SCOPE_MESSAGE);
     }

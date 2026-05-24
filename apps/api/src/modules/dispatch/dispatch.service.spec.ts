@@ -35,7 +35,8 @@ function createService() {
 
 describe('DispatchService', () => {
   it('requires office dispatch view permission and returns compact dated appointments', async () => {
-    const { service, jobsDataService, equipmentDataService, identityAccessService } = createService();
+    const { service, jobsDataService, equipmentDataService, identityAccessService } =
+      createService();
     jobsDataService.listDispatchAppointments.mockResolvedValueOnce([
       {
         appointmentId: 'appointment-1',
@@ -85,9 +86,17 @@ describe('DispatchService', () => {
       'appointmentsDispatch:view',
       ['office-web']
     );
-    expect(jobsDataService.listDispatchAppointments).toHaveBeenCalledWith('2026-05-23', '2026-05-23');
-    expect(equipmentDataService.listEquipmentByLocations).toHaveBeenCalledWith(['location-1'], false);
-    expect(response.technicians).toEqual([{ id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' }]);
+    expect(jobsDataService.listDispatchAppointments).toHaveBeenCalledWith(
+      '2026-05-23',
+      '2026-05-23'
+    );
+    expect(equipmentDataService.listEquipmentByLocations).toHaveBeenCalledWith(
+      ['location-1'],
+      false
+    );
+    expect(response.technicians).toEqual([
+      { id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' }
+    ]);
     expect(response.appointments[0]).toMatchObject({
       appointmentId: 'appointment-1',
       jobNumber: '1001',
@@ -110,15 +119,15 @@ describe('DispatchService', () => {
   it('rejects malformed and over-broad date windows', async () => {
     const { service } = createService();
 
-    await expect(service.getDispatchBoard('session-token', '2026-02-31', '2026-03-01')).rejects.toBeInstanceOf(
-      BadRequestException
-    );
-    await expect(service.getDispatchBoard('session-token', '2026-05-23', '2026-05-22')).rejects.toBeInstanceOf(
-      BadRequestException
-    );
-    await expect(service.getDispatchBoard('session-token', '2026-05-01', '2026-06-01')).rejects.toBeInstanceOf(
-      BadRequestException
-    );
+    await expect(
+      service.getDispatchBoard('session-token', '2026-02-31', '2026-03-01')
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.getDispatchBoard('session-token', '2026-05-23', '2026-05-22')
+    ).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      service.getDispatchBoard('session-token', '2026-05-01', '2026-06-01')
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('caps equipment glance rows while preserving equipment count', async () => {

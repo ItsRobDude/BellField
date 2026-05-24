@@ -22,9 +22,15 @@ export function summarizeSyncHealth(
   metadata: SyncMetadata,
   pendingOperations: PendingOperation[]
 ): SyncHealthSummary {
-  const pendingCount = pendingOperations.filter((operation) => operation.state === 'pending').length;
-  const conflictCount = pendingOperations.filter((operation) => operation.state === 'conflict').length;
-  const rejectedCount = pendingOperations.filter((operation) => operation.state === 'rejected').length;
+  const pendingCount = pendingOperations.filter(
+    (operation) => operation.state === 'pending'
+  ).length;
+  const conflictCount = pendingOperations.filter(
+    (operation) => operation.state === 'conflict'
+  ).length;
+  const rejectedCount = pendingOperations.filter(
+    (operation) => operation.state === 'rejected'
+  ).length;
   const hasLastSyncError = Boolean(metadata.lastSyncError);
 
   if (hasLastSyncError) {
@@ -65,7 +71,8 @@ export function summarizeSyncHealth(
     return {
       tone: 'alert',
       headline: 'Not synced yet on this device',
-      detail: 'BellField needs at least one successful sync before field work is protected on the server.',
+      detail:
+        'BellField needs at least one successful sync before field work is protected on the server.',
       pendingCount,
       conflictCount,
       rejectedCount,

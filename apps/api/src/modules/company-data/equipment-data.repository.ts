@@ -93,7 +93,10 @@ export class EquipmentDataRepository {
     return result.rows.map((row) => this.toEquipmentRecord(row));
   }
 
-  async listEquipmentByLocation(locationId: string, includeInactive: boolean): Promise<EquipmentRecord[]> {
+  async listEquipmentByLocation(
+    locationId: string,
+    includeInactive: boolean
+  ): Promise<EquipmentRecord[]> {
     const result = await this.databaseService.query<EquipmentRow>(
       `
         select
@@ -131,7 +134,10 @@ export class EquipmentDataRepository {
     return result.rows.map((row) => this.toEquipmentRecord(row));
   }
 
-  async listEquipmentByLocations(locationIds: string[], includeInactive: boolean): Promise<EquipmentRecord[]> {
+  async listEquipmentByLocations(
+    locationIds: string[],
+    includeInactive: boolean
+  ): Promise<EquipmentRecord[]> {
     if (locationIds.length === 0) {
       return [];
     }
@@ -225,7 +231,10 @@ export class EquipmentDataRepository {
     return result.rows[0] ? this.toEquipmentRecord(result.rows[0]) : null;
   }
 
-  async createEquipment(input: CreateEquipmentInput, queryable?: QueryExecutor): Promise<EquipmentRecord> {
+  async createEquipment(
+    input: CreateEquipmentInput,
+    queryable?: QueryExecutor
+  ): Promise<EquipmentRecord> {
     const executor = queryable ?? this.databaseService;
     const now = new Date().toISOString();
     const systemGroupId =
@@ -277,13 +286,17 @@ export class EquipmentDataRepository {
       return null;
     }
 
-    const nextLocationId = update.locationId !== undefined ? update.locationId || undefined : existingEquipment.locationId;
+    const nextLocationId =
+      update.locationId !== undefined
+        ? update.locationId || undefined
+        : existingEquipment.locationId;
     const nextInventoryLocationLabel =
       update.inventoryLocationLabel !== undefined
         ? update.inventoryLocationLabel?.trim() || undefined
         : existingEquipment.inventoryLocationLabel;
     const placementChanged =
-      nextLocationId !== existingEquipment.locationId || nextInventoryLocationLabel !== existingEquipment.inventoryLocationLabel;
+      nextLocationId !== existingEquipment.locationId ||
+      nextInventoryLocationLabel !== existingEquipment.inventoryLocationLabel;
 
     existingEquipment.locationId = nextLocationId;
     existingEquipment.inventoryLocationLabel = nextInventoryLocationLabel;
@@ -309,7 +322,8 @@ export class EquipmentDataRepository {
     }
 
     if (update.equipmentLocationDescription !== undefined) {
-      existingEquipment.equipmentLocationDescription = update.equipmentLocationDescription?.trim() || undefined;
+      existingEquipment.equipmentLocationDescription =
+        update.equipmentLocationDescription?.trim() || undefined;
     }
 
     if (update.installDate !== undefined) {
@@ -408,7 +422,10 @@ export class EquipmentDataRepository {
     }));
   }
 
-  async addEquipmentHistoryEntry(entry: EquipmentHistoryRecord, queryable?: QueryExecutor): Promise<void> {
+  async addEquipmentHistoryEntry(
+    entry: EquipmentHistoryRecord,
+    queryable?: QueryExecutor
+  ): Promise<void> {
     const executor = queryable ?? this.databaseService;
     await executor.query(
       `
@@ -439,7 +456,11 @@ export class EquipmentDataRepository {
     return result.rows[0] ? this.toEquipmentGroupRecord(result.rows[0]) : null;
   }
 
-  private async saveEquipment(record: EquipmentRecord, isInsert: boolean, queryable: QueryExecutor): Promise<void> {
+  private async saveEquipment(
+    record: EquipmentRecord,
+    isInsert: boolean,
+    queryable: QueryExecutor
+  ): Promise<void> {
     if (isInsert) {
       await queryable.query(
         `

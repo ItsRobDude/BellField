@@ -21,7 +21,12 @@ const queueLabels: Record<JobsQueueKey, string> = {
   open: 'Open'
 };
 
-export function JobsQueuePanel({ jobsQueue, onOpenJobDetail, onNewJob, onLoadMoreQueue }: JobsQueuePanelProps) {
+export function JobsQueuePanel({
+  jobsQueue,
+  onOpenJobDetail,
+  onNewJob,
+  onLoadMoreQueue
+}: JobsQueuePanelProps) {
   const totalCount = jobsQueue.queues.reduce((sum, section) => sum + section.totalCount, 0);
 
   return (
@@ -80,7 +85,9 @@ function QueueColumn({
             >
               <div style={styles.row}>
                 <strong>Job {job.jobNumber}</strong>
-                <span style={job.needsOfficeReview ? styles.dangerBadge : styles.badge}>{job.status}</span>
+                <span style={job.needsOfficeReview ? styles.dangerBadge : styles.badge}>
+                  {job.status}
+                </span>
               </div>
               <span>{job.summary}</span>
               <span style={styles.tinyMuted}>
@@ -89,7 +96,11 @@ function QueueColumn({
             </button>
           ))}
           {section.nextCursor && onLoadMoreQueue ? (
-            <button type="button" style={styles.button} onClick={() => onLoadMoreQueue(section.key, section.nextCursor!)}>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => onLoadMoreQueue(section.key, section.nextCursor!)}
+            >
               Load more
             </button>
           ) : null}
@@ -100,5 +111,7 @@ function QueueColumn({
 }
 
 function nextAppointmentLabel(job: JobsQueueItem): string {
-  return job.nextAppointment ? formatAppointmentScheduleDisplay(job.nextAppointment) : 'No appointment';
+  return job.nextAppointment
+    ? formatAppointmentScheduleDisplay(job.nextAppointment)
+    : 'No appointment';
 }

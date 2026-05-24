@@ -167,7 +167,7 @@ export class DatabaseBootstrapService implements OnModuleInit {
           location.email ?? null,
           location.fax ?? null,
           location.isActive,
-          location.alternateBillToCustomerIds,
+          location.alternateBillToCustomerIds
         ]
       );
     }

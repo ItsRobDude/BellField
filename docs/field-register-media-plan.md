@@ -15,6 +15,7 @@ Audience: contributors working on the remaining field-media and invoice/register
 Audit refreshed after the register/media backend, field register queue, and office captured-work review slices landed.
 
 ### Register entries
+
 - `register_entries` exists through tracked migrations.
 - Shared contracts export register entry request/response shapes.
 - API endpoints exist for list/create/edit/void.
@@ -24,6 +25,7 @@ Audit refreshed after the register/media backend, field register queue, and offi
 - Invoice-draft reflection is not implemented yet because the invoice draft entity belongs to Milestone 7.
 
 ### Media
+
 - `media_attachments` exists through tracked migrations.
 - Shared contracts export media upload intent, metadata, update, and void shapes.
 - API endpoints exist for media metadata, upload intents, raw `application/octet-stream` blob upload, signed-token download, caption edit, and void.
@@ -31,17 +33,20 @@ Audit refreshed after the register/media backend, field register queue, and offi
 - Field-mobile image/video capture or pick, app-owned local staging, SHA-256 queue metadata, upload-intent replay, and blob finalization are implemented with Expo ImagePicker, FileSystem, and Crypto.
 
 ### Migrations
+
 - Register/media migrations have shipped:
   - `20260523_003_register_entries`
   - `20260523_004_media_attachments`
   - `20260523_005_media_active_dedupe`
 
 ### Permissions
+
 - Dedicated `register` and `media` permission areas have shipped.
 - Technicians currently receive `register:view/create/edit` and `media:view/create/edit`.
 - True delete remains separate from voiding and is not exposed as an ordinary field action.
 
 ### Remaining doc/code gaps
+
 - `docs/offline-sync.md` still describes media attachment queueing as a v1 behavior. The backend is ready, but field-side capture/blob replay is still open.
 - `docs/data-modeling-rules.md` now summarizes implemented register/media entity behavior; keep detailed endpoint shape in `docs/api-endpoints.md`.
 
@@ -53,38 +58,42 @@ Audit refreshed after the register/media backend, field register queue, and offi
 
 ### Entity: `register_entries`
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | uuid | primary key |
-| `job_id` | uuid (FK → `jobs.id`) | required. Register entries live at the job level so they survive appointment lifecycle changes. |
-| `appointment_id` | uuid (FK → `appointments.id`) | optional. Records which visit captured the entry, for history and future invoice attribution. |
-| `kind` | enum: `labor`, `serviceItem`, `part`, `membership`, `other` | matches `docs/data-modeling-rules.md` §11. |
-| `description` | text | required, ≤500 chars. Human-readable label ("Replace contactor"). |
-| `quantity` | numeric(10, 2) | required. Default `1`. |
-| `unit_of_measure` | text | optional. e.g. `hr`, `each`, `ft`. |
-| `unit_price` | numeric(12, 2) | optional. null for time-only entries when pricing is set elsewhere. |
-| `total_amount` | numeric(12, 2) | required, stored (not just derived). Snapshot integrity: the value as captured. |
-| `part_number` | text | optional. |
-| `inventory_source_label` | text | optional. e.g. `truck`, `warehouse`. Avoids a hard FK to inventory in v1. |
-| `captured_by_employee_id` | uuid | required. Who entered the line. |
-| `captured_by_name` | text | required. Snapshotted at capture time so historical lines stay readable after employee renames. |
-| `captured_at` | timestamptz | required. |
-| `is_void` | boolean | default `false`. Soft-archive flag (see §10 below). |
-| `void_reason` | text | optional. Set when `is_void = true`. |
-| `created_at` | timestamptz | required. |
-| `updated_at` | timestamptz | required. |
+| Field                     | Type                                                        | Notes                                                                                           |
+| ------------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `id`                      | uuid                                                        | primary key                                                                                     |
+| `job_id`                  | uuid (FK → `jobs.id`)                                       | required. Register entries live at the job level so they survive appointment lifecycle changes. |
+| `appointment_id`          | uuid (FK → `appointments.id`)                               | optional. Records which visit captured the entry, for history and future invoice attribution.   |
+| `kind`                    | enum: `labor`, `serviceItem`, `part`, `membership`, `other` | matches `docs/data-modeling-rules.md` §11.                                                      |
+| `description`             | text                                                        | required, ≤500 chars. Human-readable label ("Replace contactor").                               |
+| `quantity`                | numeric(10, 2)                                              | required. Default `1`.                                                                          |
+| `unit_of_measure`         | text                                                        | optional. e.g. `hr`, `each`, `ft`.                                                              |
+| `unit_price`              | numeric(12, 2)                                              | optional. null for time-only entries when pricing is set elsewhere.                             |
+| `total_amount`            | numeric(12, 2)                                              | required, stored (not just derived). Snapshot integrity: the value as captured.                 |
+| `part_number`             | text                                                        | optional.                                                                                       |
+| `inventory_source_label`  | text                                                        | optional. e.g. `truck`, `warehouse`. Avoids a hard FK to inventory in v1.                       |
+| `captured_by_employee_id` | uuid                                                        | required. Who entered the line.                                                                 |
+| `captured_by_name`        | text                                                        | required. Snapshotted at capture time so historical lines stay readable after employee renames. |
+| `captured_at`             | timestamptz                                                 | required.                                                                                       |
+| `is_void`                 | boolean                                                     | default `false`. Soft-archive flag (see §10 below).                                             |
+| `void_reason`             | text                                                        | optional. Set when `is_void = true`.                                                            |
+| `created_at`              | timestamptz                                                 | required.                                                                                       |
+| `updated_at`              | timestamptz                                                 | required.                                                                                       |
 
 Indexes:
+
 - `(job_id, captured_at)` — fast read for "all register lines on a job."
 - `(appointment_id)` partial where `appointment_id is not null` — read for "what was captured on this visit."
 
 Notes on shape:
+
 - **No FK to invoice draft yet.** When the invoice-draft entity exists (M7), the draft will read register lines via job-id. The register table does not need to know about invoice posting.
 - **No status field.** Sync state (pending/conflict/rejected) belongs to the pending operation queue, not the entity. Once a row exists, it just exists.
 - **`total_amount` is stored.** Computed in the caller from `quantity × unit_price` when both are set, stored for snapshot integrity so later unit-price drift on a catalog doesn't rewrite historical job costs.
 
 ### Companion timeline entry
+
 Register additions/voids should write into `job_timeline_entries` using new `kind` values:
+
 - `registerEntryAdded`
 - `registerEntryEdited`
 - `registerEntryVoided`
@@ -99,32 +108,34 @@ These satisfy the §13 "unified history" rule in data-modeling-rules.
 
 ### Entity: `media_attachments`
 
-| Field | Type | Notes |
-| --- | --- | --- |
-| `id` | uuid | primary key |
-| `job_id` | uuid (FK → `jobs.id`) | required. Anchored to the job. |
-| `appointment_id` | uuid (FK → `appointments.id`) | optional. Indicates which visit captured the file. |
-| `kind` | enum: `image`, `video`, `document` | broad bucket only. Specific MIME lives in `content_type`. |
-| `original_filename` | text | required. Preserves what the device called it. |
-| `content_type` | text | required. e.g. `image/jpeg`. |
-| `byte_size` | bigint | required. |
-| `sha256` | char(64) | required. Used for dedupe + integrity verification on upload completion. |
-| `storage_path` | text | nullable until blob upload finishes. Relative to `BELLFIELD_MEDIA_ROOT`. See §4 below. |
-| `uploaded_by_employee_id` | uuid | required. |
-| `uploaded_by_name` | text | required. Snapshotted. |
-| `captured_at` | timestamptz | required. Device-reported capture timestamp. May be null for non-camera files; treat null as same as `uploaded_at`. |
-| `uploaded_at` | timestamptz | nullable until the blob upload finishes. Server-side receipt time. |
-| `caption` | text | optional, ≤500 chars. |
-| `is_void` | boolean | default `false`. |
-| `created_at` | timestamptz | required. |
-| `updated_at` | timestamptz | required. |
+| Field                     | Type                               | Notes                                                                                                               |
+| ------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`                      | uuid                               | primary key                                                                                                         |
+| `job_id`                  | uuid (FK → `jobs.id`)              | required. Anchored to the job.                                                                                      |
+| `appointment_id`          | uuid (FK → `appointments.id`)      | optional. Indicates which visit captured the file.                                                                  |
+| `kind`                    | enum: `image`, `video`, `document` | broad bucket only. Specific MIME lives in `content_type`.                                                           |
+| `original_filename`       | text                               | required. Preserves what the device called it.                                                                      |
+| `content_type`            | text                               | required. e.g. `image/jpeg`.                                                                                        |
+| `byte_size`               | bigint                             | required.                                                                                                           |
+| `sha256`                  | char(64)                           | required. Used for dedupe + integrity verification on upload completion.                                            |
+| `storage_path`            | text                               | nullable until blob upload finishes. Relative to `BELLFIELD_MEDIA_ROOT`. See §4 below.                              |
+| `uploaded_by_employee_id` | uuid                               | required.                                                                                                           |
+| `uploaded_by_name`        | text                               | required. Snapshotted.                                                                                              |
+| `captured_at`             | timestamptz                        | required. Device-reported capture timestamp. May be null for non-camera files; treat null as same as `uploaded_at`. |
+| `uploaded_at`             | timestamptz                        | nullable until the blob upload finishes. Server-side receipt time.                                                  |
+| `caption`                 | text                               | optional, ≤500 chars.                                                                                               |
+| `is_void`                 | boolean                            | default `false`.                                                                                                    |
+| `created_at`              | timestamptz                        | required.                                                                                                           |
+| `updated_at`              | timestamptz                        | required.                                                                                                           |
 
 Indexes:
+
 - `(job_id, captured_at)` — primary read path.
 - `(appointment_id)` partial where not null.
 - unique `(job_id, sha256)` to dedupe accidental re-uploads from offline replays.
 
 Notes on shape:
+
 - **No "thumbnail" entity in v1.** Thumbnail generation is a worker task that can land later; the field app can render the device-local file until upload completes, and the office UI can lazy-decode the original for v1.
 - **No public URL stored.** Retrieval is permission-checked via a server endpoint (see §4).
 - **`sha256` deduplicates offline-replay collisions.** If a technician retries an upload, the server can recognize the same bytes and respond with the existing media id instead of double-storing.
@@ -136,12 +147,14 @@ Notes on shape:
 Default BellField posture is filesystem-on-the-office-server. The plan should not require cloud blob storage to function.
 
 ### Storage layout
+
 - Configured root: `BELLFIELD_MEDIA_ROOT` env var. Production must set it. Dev/test may fall back to an OS temp directory.
 - Path scheme: `<root>/<job-id>/<media-id><ext>` where `<ext>` is derived from `content_type`. Predictable, easy to inspect, easy to back up.
 - File mode: write-once. Edits create new media rows; old rows void.
 - No file in subdirectory deeper than one level. Keeps Windows filesystem behavior boring.
 
 ### Upload sequence (online)
+
 1. Field calls `POST /operations/jobs/{jobId}/media/upload-intents` with metadata (kind, contentType, byteSize, sha256, captured_at, caption, appointmentId?). Server returns the media row plus a short-lived signed upload token unless the bytes are already present.
 2. Field uploads bytes via `POST /operations/media/{mediaId}/blob` as raw `application/octet-stream` using the signed token. Server writes to `storage_path` and verifies sha256 + byteSize.
 3. On success, server finalizes the media row (`uploaded_at` set, `storage_path` confirmed) and returns the canonical `MediaAttachmentSummary`.
@@ -149,13 +162,16 @@ Default BellField posture is filesystem-on-the-office-server. The plan should no
 If the technician supplies an active `(job_id, sha256)` that already exists, step 1 returns the existing media id and `uploadCompleted: true` — no blob upload needed. Voided media rows are historical and do not block re-attaching the same bytes as a new active row.
 
 ### Retrieval
+
 - Office and field call `GET /operations/media/{mediaId}` — returns metadata.
 - `GET /operations/media/{mediaId}/blob` — streams the file with `Content-Disposition`. Authenticated office/session access or a signed download token is required.
 
 ### Signed token shape
+
 - HMAC-signed string carrying `{ mediaId, exp, scope }`. No external dependency. Signed by a server-side secret env (`BELLFIELD_MEDIA_TOKEN_SECRET`). Token expiry default 5 minutes.
 
 ### Future note (not now)
+
 If BellField later offers a managed/cloud deployment, the storage adapter can be pluggable: replace filesystem reads/writes with an S3-style blob client. The DB rows above don't change; only the `storage_path` interpretation does. **Do not** build the adapter abstraction in v1. The filesystem path is enough.
 
 ---
@@ -167,6 +183,7 @@ The raw blob upload endpoint uses the signed upload token and does not require a
 Permission checks per §6.
 
 ### Register
+
 - `POST /operations/jobs/{jobId}/register-entries` — create. Request body:
   ```ts
   {
@@ -189,6 +206,7 @@ Permission checks per §6.
 - `POST /operations/jobs/register-entries/{registerEntryId}/void` — void with optional reason. Returns updated job summary.
 
 ### Media
+
 - `POST /operations/jobs/{jobId}/media/upload-intents` — see §4.
 - `POST /operations/media/{mediaId}/blob` — see §4.
 - `PATCH /operations/media/{mediaId}` — caption edits.
@@ -197,7 +215,9 @@ Permission checks per §6.
 - `GET /operations/media/{mediaId}/blob` — stream bytes (signed token required).
 
 ### What flows back to the field
+
 The field assigned-work response currently includes:
+
 - `registerEntries?: RegisterEntrySummary[]` per job when the actor can view register entries
 
 Field media capture/blob replay is now queued from field-mobile using the existing media endpoints. Field captures can be job-level or appointment-level, use the documented 50 MB client-side guard before hashing, mark deterministic media failures as rejected for queue resolution, and delete staged local files after successful sync. Media attachments are still not part of the field assigned-work snapshot.
@@ -226,6 +246,7 @@ Office endpoints reuse the same backend module; only the surface check differs.
 ## 7. Offline-queue behavior — v1 vs online-only
 
 ### Offline-queueable in v1
+
 - Register entry creation, edits, and voids. Land in the existing `PendingOperation` queue with new `kind` values:
   - `registerEntryCreate`
   - `registerEntryEdit`
@@ -233,11 +254,13 @@ Office endpoints reuse the same backend module; only the surface check differs.
 - Media upload operations. Field-mobile stores the app-owned local file URI, original filename, MIME type, byte size, SHA-256, optional caption, and capture timestamp in the pending operation queue. Replay creates/reuses the upload intent, then finalizes the raw blob upload.
 
 ### Online-only in v1
+
 - The actual media **byte upload**. Even when offline-queued, the blob upload step is deferred. The intent reserves a media row server-side with `uploaded_at = null` and `storage_path = null`; the blob upload is what finalizes it. While the intent is reserved but not finalized, the office view can show "Pending upload from {tech}" via metadata only.
 - Bulk media operations (no API in v1).
 - Posting register entries onto an invoice draft (M7 territory).
 
 ### Replay provenance
+
 - All field writes carry `occurredAt`, `baseUpdatedAt` (against the parent job's `updatedAt`), and `syncSource: 'field-save-queue'` to match the existing field-mobile pattern.
 - Conflict on a register entry create when the parent job is `cancelled` should follow the same "Field appointment update synced after the job had already been cancelled" sync-flag pattern that already exists.
 
@@ -246,7 +269,9 @@ Office endpoints reuse the same backend module; only the surface check differs.
 ## 8. Permissions
 
 ### Current areas
+
 `PermissionArea` in `packages/contracts/src/index.ts` now includes:
+
 - `register` — for register entry CRUD.
 - `media` — for media attachment CRUD.
 
@@ -263,11 +288,13 @@ Current default role permissions:
 **Technicians explicitly do not get `delete`.** Void via `is_void` is allowed; true delete remains a stronger permission path. Matches the §14 archive-vs-delete preference in data-modeling-rules.
 
 ### Historical fallback that was rejected
+
 - Register → `jobs:edit` (create/edit), `jobs:configure` (delete).
 - Media → `jobs:edit`, `jobs:configure`.
 - This would have been more conservative on the contract but less clear in permission audits. The shipped design uses dedicated `register` and `media` areas.
 
 ### Authorization gates in service code
+
 - `RegisterEntryService.createEntry` — `getAuthorizedEmployee(sessionToken, 'register:create')` then permission-aware surface checks (field-mobile or office-web).
 - `MediaService.createUploadIntent` — `getAuthorizedEmployee(sessionToken, 'media:create')`.
 - Reads — `register:view` / `media:view`.
@@ -280,6 +307,7 @@ Current default role permissions:
 ## 9. History and timeline notes
 
 New `JobTimelineEntry.kind` values to support unified history:
+
 - `registerEntryAdded`
 - `registerEntryEdited`
 - `registerEntryVoided`
@@ -288,6 +316,7 @@ New `JobTimelineEntry.kind` values to support unified history:
 - `mediaVoided`
 
 Messages should be human-readable and snapshot the actor and any voided reason. Examples:
+
 - `Taylor Tech added a Part register entry: "Capacitor 45/5 µF" ($28.50).`
 - `Office voided register entry "Diagnostic" (Reason: duplicate).`
 - `Taylor Tech attached photo IMG_1043.jpg captured at 2026-05-22T14:12:00Z.`
@@ -308,6 +337,7 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 ## 11. Test plan
 
 ### Repo / service spec (backend, can land per slice)
+
 - Register entry CRUD writes the expected timeline kinds.
 - Voiding a register entry leaves the row in place with `is_void = true` and writes `registerEntryVoided`.
 - Cancelled jobs reject new register entries unless the field replay provenance branch already exists for the job (mirror current sync-flag pattern).
@@ -316,16 +346,19 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 - Media blob endpoint enforces signed-token expiry.
 
 ### Contract spec
+
 - `RegisterEntrySummary` and `MediaAttachmentSummary` shapes are exported and not re-declared in client API helpers (matches existing architecture check rule).
 - `PermissionArea` includes `register` and `media`.
 
 ### Field-mobile (pure helpers)
+
 - Pending operation types extended with `registerEntryCreate`, `registerEntryEdit`, `registerEntryVoid`, `mediaUpload`.
 - `applyPendingOperations` overlays register entries on the cached snapshot in `occurredAt` order and adds local timeline markers for queued media.
 - `mergeJobMutationIntoAssignedWork` folds an applied register response without leaking `syncResult`/`warningMessages`.
 - The screen renders pending register entries and job/appointment media queue state with the same "queued/conflicted/rejected" badges already used for appointment status.
 
 ### Office-web
+
 - Job-card captured-work surface lazy-loads register entries and media attachments.
 - Office can edit active register entries, edit media captions, void register/media rows, and open uploaded media blobs.
 - Pending media uploads render as metadata-only rows until bytes arrive.
@@ -339,10 +372,11 @@ Historical sequencing — most of these slices have shipped:
 1. **`register_entries` table + `register` permission area.** Shipped.
 2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Shipped.
 3. **Field-mobile queue extension.** Register queueing shipped; field media queueing now has the baseline image/video operation.
-3a. **Office-web captured-work review.** Shipped in job detail.
+   3a. **Office-web captured-work review.** Shipped in job detail.
 4. **Field-mobile media capture.** Shipped baseline. Wires the field to capture/pick image or video media, copy it into app-owned storage, apply a 50 MB client guard, compute SHA-256, queue the upload operation with optional appointment context, create/reuse the upload intent, finalize the raw blob upload on Sync Now, reject deterministic media failures for queue resolution, and clean up the staged local file after successful sync.
 
 **Hard boundaries within this plan:**
+
 - No changes to the `appointments` table for register/media.
 - No change to `AppointmentSummary.registerFollowUpNote`. It stays as a complementary text reminder.
 - No invoice-draft entity. The register table is shaped so M7 can read it without schema changes.

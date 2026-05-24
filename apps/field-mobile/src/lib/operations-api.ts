@@ -93,21 +93,24 @@ export async function updateFieldAppointmentStatus(input: {
   occurredAt?: string;
   baseUpdatedAt?: string;
 }) {
-  return requestJson<JobMutationResponse>(`/operations/jobs/appointments/${input.appointmentId}/status`, {
-    sessionToken: input.sessionToken,
-    apiBaseUrl: input.apiBaseUrl,
-    method: 'PATCH',
-    body: JSON.stringify({
-      status: input.status,
-      finishOutcome: input.finishOutcome,
-      visitNotes: input.visitNotes,
-      hasChargeActivity: input.hasChargeActivity,
-      registerFollowUpNote: input.registerFollowUpNote,
-      occurredAt: input.occurredAt,
-      baseUpdatedAt: input.baseUpdatedAt,
-      syncSource: 'field-save-queue'
-    })
-  });
+  return requestJson<JobMutationResponse>(
+    `/operations/jobs/appointments/${input.appointmentId}/status`,
+    {
+      sessionToken: input.sessionToken,
+      apiBaseUrl: input.apiBaseUrl,
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: input.status,
+        finishOutcome: input.finishOutcome,
+        visitNotes: input.visitNotes,
+        hasChargeActivity: input.hasChargeActivity,
+        registerFollowUpNote: input.registerFollowUpNote,
+        occurredAt: input.occurredAt,
+        baseUpdatedAt: input.baseUpdatedAt,
+        syncSource: 'field-save-queue'
+      })
+    }
+  );
 }
 
 export async function addFieldJobNote(input: {
@@ -190,15 +193,18 @@ export async function voidFieldRegisterEntry(input: {
 }) {
   const { sessionToken, apiBaseUrl, registerEntryId, ...payload } = input;
 
-  return requestJson<JobMutationResponse>(`/operations/jobs/register-entries/${registerEntryId}/void`, {
-    sessionToken,
-    apiBaseUrl,
-    method: 'POST',
-    body: JSON.stringify({
-      ...payload,
-      syncSource: 'field-save-queue'
-    })
-  });
+  return requestJson<JobMutationResponse>(
+    `/operations/jobs/register-entries/${registerEntryId}/void`,
+    {
+      sessionToken,
+      apiBaseUrl,
+      method: 'POST',
+      body: JSON.stringify({
+        ...payload,
+        syncSource: 'field-save-queue'
+      })
+    }
+  );
 }
 
 export async function getFieldMediaAttachments(input: {
@@ -221,12 +227,15 @@ export async function createFieldMediaUploadIntent(
 ): Promise<CreateMediaUploadIntentResponse> {
   const { sessionToken, apiBaseUrl, jobId, ...payload } = input;
 
-  return requestJson<CreateMediaUploadIntentResponse>(`/operations/jobs/${jobId}/media/upload-intents`, {
-    sessionToken,
-    apiBaseUrl,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  return requestJson<CreateMediaUploadIntentResponse>(
+    `/operations/jobs/${jobId}/media/upload-intents`,
+    {
+      sessionToken,
+      apiBaseUrl,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 export async function updateFieldMediaAttachment(input: {
@@ -323,10 +332,13 @@ export async function linkFieldEquipmentReplacement(
 ) {
   const { equipmentId, sessionToken, apiBaseUrl, ...payload } = input;
 
-  return requestJson<EquipmentMutationResponse>(`/operations/equipment/${equipmentId}/replacement-link`, {
-    sessionToken,
-    apiBaseUrl,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
+  return requestJson<EquipmentMutationResponse>(
+    `/operations/equipment/${equipmentId}/replacement-link`,
+    {
+      sessionToken,
+      apiBaseUrl,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 }
