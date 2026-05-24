@@ -1,6 +1,6 @@
 'use client';
 
-import type { JobIntakeContextResponse } from '@/lib/operations-api';
+import type { CrmSearchResult, JobIntakeContextResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const jobTypeOptions = ['Service', 'Maintenance', 'Install', 'Estimate', 'Callback'];
@@ -29,9 +29,41 @@ const arrivalWindowOptions = [
   '3:00 PM - 5:00 PM'
 ];
 
+export type JobIntakeSelectedLocation = {
+  id: string;
+  name: string;
+  customerId: string;
+  customerName: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+};
+
+export type JobIntakeBillToOption = {
+  id: string;
+  name: string;
+};
+
+export type JobIntakeCustomerLocationOption = {
+  id: string;
+  name: string;
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+};
+
 type JobIntakePanelProps = {
   intakeContext: JobIntakeContextResponse;
-  jobLocationId: string;
+  locationSearchQuery: string;
+  locationSearchResults: CrmSearchResult[];
+  isLocationSearchLoading: boolean;
+  selectedLocation: JobIntakeSelectedLocation | null;
+  customerLocationOptions: JobIntakeCustomerLocationOption[];
+  customerLocationMessage: string | null;
+  billToOptions: JobIntakeBillToOption[];
+  billToWarning: string | null;
   jobBillToCustomerId: string;
   jobType: string;
   jobCategory: string;
@@ -42,7 +74,10 @@ type JobIntakePanelProps = {
   jobStartTime: string;
   jobEndTime: string;
   jobWindow: string;
-  onJobLocationChange: (locationId: string) => void;
+  onLocationSearchQueryChange: (query: string) => void;
+  onSelectLocationSearchResult: (result: CrmSearchResult) => void;
+  onSelectCustomerLocation: (locationId: string) => void;
+  onClearSelectedLocation: () => void;
   onJobBillToCustomerChange: (customerId: string) => void;
   onJobTypeChange: (value: string) => void;
   onJobCategoryChange: (value: string) => void;
@@ -59,7 +94,14 @@ type JobIntakePanelProps = {
 
 export function JobIntakePanel({
   intakeContext,
-  jobLocationId,
+  locationSearchQuery,
+  locationSearchResults,
+  isLocationSearchLoading,
+  selectedLocation,
+  customerLocationOptions,
+  customerLocationMessage,
+  billToOptions,
+  billToWarning,
   jobBillToCustomerId,
   jobType,
   jobCategory,
@@ -70,7 +112,10 @@ export function JobIntakePanel({
   jobStartTime,
   jobEndTime,
   jobWindow,
-  onJobLocationChange,
+  onLocationSearchQueryChange,
+  onSelectLocationSearchResult,
+  onSelectCustomerLocation,
+  onClearSelectedLocation,
   onJobBillToCustomerChange,
   onJobTypeChange,
   onJobCategoryChange,
@@ -84,11 +129,12 @@ export function JobIntakePanel({
   onCreateJob,
   onClose
 }: JobIntakePanelProps) {
-  const selectedLocation =
-    intakeContext.locations.find((location) => location.id === jobLocationId) ?? null;
-  const billToCustomerIds = selectedLocation
-    ? [selectedLocation.customerId, ...selectedLocation.alternateBillToCustomerIds]
-    : [];
+  const visibleLocationSearchResults = locationSearchResults.filter(
+    (result) => result.kind === 'location' || result.kind === 'customer'
+  );
+  const createJobButtonStyle = selectedLocation
+    ? styles.primaryButton
+    : { ...styles.primaryButton, cursor: 'not-allowed', opacity: 0.55 };
 
   return (
     <section aria-label="New job" style={styles.workspacePanel}>
@@ -99,39 +145,97 @@ export function JobIntakePanel({
         </button>
       </div>
       <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          <span>Location</span>
-          <select
-            value={jobLocationId}
-            onChange={(event) => onJobLocationChange(event.target.value)}
-            style={styles.input}
-          >
-            {intakeContext.locations.map((location) => (
-              <option key={location.id} value={location.id}>
-                {location.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={styles.fieldLabel}>
-          <span>Bill to</span>
-          <select
-            value={jobBillToCustomerId}
-            onChange={(event) => onJobBillToCustomerChange(event.target.value)}
-            style={styles.input}
-          >
-            {billToCustomerIds.map((customerId) => {
-              const customer = intakeContext.customers.find(
-                (candidate) => candidate.id === customerId
-              );
-              return customer ? (
+        <div style={{ ...styles.formGridFullWidth, display: 'grid', gap: '0.65rem' }}>
+          {selectedLocation ? (
+            <div aria-label="Selected job location" role="group" style={styles.subpanel}>
+              <div style={styles.row}>
+                <div>
+                  <strong>{selectedLocation.name}</strong>
+                  <p style={styles.tinyMuted}>
+                    {selectedLocation.customerName} - {formatAddress(selectedLocation)}
+                  </p>
+                </div>
+                <button type="button" style={styles.button} onClick={onClearSelectedLocation}>
+                  Change
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <label style={styles.fieldLabel}>
+                <span>Location</span>
+                <input
+                  aria-label="Job location search"
+                  value={locationSearchQuery}
+                  onChange={(event) => onLocationSearchQueryChange(event.target.value)}
+                  placeholder="Search location or customer"
+                  style={styles.input}
+                />
+              </label>
+              {isLocationSearchLoading ? <p style={styles.tinyMuted}>Searching...</p> : null}
+              {visibleLocationSearchResults.length > 0 ? (
+                <div
+                  aria-label="Job location search results"
+                  role="group"
+                  style={styles.listCompact}
+                >
+                  {visibleLocationSearchResults.map((result) => (
+                    <button
+                      key={`${result.kind}:${result.id}`}
+                      type="button"
+                      style={styles.cardButton}
+                      onClick={() => onSelectLocationSearchResult(result)}
+                    >
+                      <span style={styles.fieldText}>
+                        {result.kind === 'location' ? 'Location' : 'Customer'}
+                      </span>
+                      <strong>{result.title}</strong>
+                      <span style={styles.tinyMuted}>{result.subtitle}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {customerLocationOptions.length > 0 ? (
+                <div aria-label="Customer locations" role="group" style={styles.subpanel}>
+                  <p style={styles.sectionHeading}>Select a location for this customer</p>
+                  <div style={styles.listCompact}>
+                    {customerLocationOptions.map((location) => (
+                      <button
+                        key={location.id}
+                        type="button"
+                        style={styles.cardButton}
+                        onClick={() => onSelectCustomerLocation(location.id)}
+                      >
+                        <strong>{location.name}</strong>
+                        <span style={styles.tinyMuted}>{formatAddress(location)}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+              {customerLocationMessage ? (
+                <p style={styles.tinyMuted}>{customerLocationMessage}</p>
+              ) : null}
+            </>
+          )}
+        </div>
+        {selectedLocation ? (
+          <label style={styles.fieldLabel}>
+            <span>Bill to</span>
+            <select
+              value={jobBillToCustomerId}
+              onChange={(event) => onJobBillToCustomerChange(event.target.value)}
+              style={styles.input}
+            >
+              {billToOptions.map((customer) => (
                 <option key={customer.id} value={customer.id}>
                   {customer.name}
                 </option>
-              ) : null;
-            })}
-          </select>
-        </label>
+              ))}
+            </select>
+            {billToWarning ? <span style={styles.tinyMuted}>{billToWarning}</span> : null}
+          </label>
+        ) : null}
         <SelectField
           label="Type"
           value={jobType}
@@ -203,11 +307,27 @@ export function JobIntakePanel({
           </label>
         </div>
       </div>
-      <button type="button" style={styles.primaryButton} onClick={() => void onCreateJob()}>
+      <button
+        type="button"
+        style={createJobButtonStyle}
+        disabled={!selectedLocation}
+        onClick={() => void onCreateJob()}
+      >
         Create job
       </button>
     </section>
   );
+}
+
+function formatAddress(location: {
+  addressLine1: string;
+  city: string;
+  state: string;
+  postalCode: string;
+}): string {
+  return [location.addressLine1, location.city, location.state, location.postalCode]
+    .filter(Boolean)
+    .join(', ');
 }
 
 function SelectField({

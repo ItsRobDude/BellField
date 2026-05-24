@@ -2,12 +2,15 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentSummary,
+  CrmSearchResult,
+  CustomerDetail,
   DispatchBoardResponse,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobSummary,
   JobsQueueResponse,
   JobsWorkspaceResponse,
+  LocationDetail,
   MediaAttachmentSummary,
   RegisterEntrySummary
 } from '@/lib/operations-api';
@@ -25,13 +28,16 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeEquipmentDetail: vi.fn(),
   getOfficeEquipmentWorkspace: vi.fn(),
   getOfficeDispatchBoard: vi.fn(),
+  getOfficeCustomerDetail: vi.fn(),
   getOfficeJobDetail: vi.fn(),
   getOfficeJobIntakeContext: vi.fn(),
   getOfficeJobsQueue: vi.fn(),
+  getOfficeLocationDetail: vi.fn(),
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
   getOfficeRegisterEntries: vi.fn(),
   linkOfficeEquipmentReplacement: vi.fn(),
+  searchOfficeCrm: vi.fn(),
   updateOfficeAppointmentSchedule: vi.fn(),
   updateOfficeAppointmentStatus: vi.fn(),
   updateOfficeEquipment: vi.fn(),
@@ -207,6 +213,103 @@ function buildWorkspace(jobs: JobSummary[]): JobsWorkspaceResponse {
   };
 }
 
+function buildLocationDetail(
+  workspace: JobsWorkspaceResponse,
+  locationId = 'location-1',
+  overrides: Partial<LocationDetail> = {}
+): LocationDetail {
+  const location = workspace.locations.find((candidate) => candidate.id === locationId);
+  const resolvedLocation = location ?? workspace.locations[0];
+
+  if (!resolvedLocation) {
+    throw new Error('Test workspace needs at least one location.');
+  }
+
+  return {
+    ...resolvedLocation,
+    ownershipHistory: [],
+    ...overrides
+  };
+}
+
+function buildCustomerDetail(
+  workspace: JobsWorkspaceResponse,
+  customerId = 'customer-1',
+  overrides: Partial<CustomerDetail> = {}
+): CustomerDetail {
+  const customer = workspace.customers.find((candidate) => candidate.id === customerId);
+  const resolvedCustomer = customer ?? workspace.customers[0];
+
+  if (!resolvedCustomer) {
+    throw new Error('Test workspace needs at least one customer.');
+  }
+
+  return {
+    ...resolvedCustomer,
+    contacts: [],
+    locations: workspace.locations
+      .filter((location) => location.customerId === resolvedCustomer.id)
+      .map((location) => ({
+        id: location.id,
+        name: location.name,
+        addressLine1: location.addressLine1,
+        city: location.city,
+        state: location.state,
+        postalCode: location.postalCode,
+        isActive: location.isActive
+      })),
+    ...overrides
+  };
+}
+
+function buildLocationSearchResult(
+  workspace: JobsWorkspaceResponse,
+  locationId = 'location-1'
+): CrmSearchResult {
+  const location = workspace.locations.find((candidate) => candidate.id === locationId);
+  const resolvedLocation = location ?? workspace.locations[0];
+
+  if (!resolvedLocation) {
+    throw new Error('Test workspace needs at least one location.');
+  }
+
+  return {
+    id: resolvedLocation.id,
+    kind: 'location',
+    title: resolvedLocation.name,
+    subtitle: `${resolvedLocation.addressLine1}, ${resolvedLocation.city}, ${resolvedLocation.state} ${resolvedLocation.postalCode}`,
+    badges: [],
+    addressLine1: resolvedLocation.addressLine1,
+    city: resolvedLocation.city,
+    state: resolvedLocation.state,
+    postalCode: resolvedLocation.postalCode,
+    customerId: resolvedLocation.customerId,
+    customerName: resolvedLocation.customerName,
+    isActive: resolvedLocation.isActive
+  };
+}
+
+function buildCustomerSearchResult(
+  workspace: JobsWorkspaceResponse,
+  customerId = 'customer-1'
+): CrmSearchResult {
+  const customer = workspace.customers.find((candidate) => candidate.id === customerId);
+  const resolvedCustomer = customer ?? workspace.customers[0];
+
+  if (!resolvedCustomer) {
+    throw new Error('Test workspace needs at least one customer.');
+  }
+
+  return {
+    id: resolvedCustomer.id,
+    kind: 'customer',
+    title: resolvedCustomer.name,
+    subtitle: resolvedCustomer.billingAddressLine1,
+    badges: [],
+    isActive: resolvedCustomer.isActive
+  };
+}
+
 function buildDispatchBoard(workspace: JobsWorkspaceResponse): DispatchBoardResponse {
   return {
     startDate: getTodayDateInputValue(),
@@ -310,19 +413,6 @@ function buildJobsQueue(workspace: JobsWorkspaceResponse): JobsQueueResponse {
 
 function buildJobIntakeContext(workspace: JobsWorkspaceResponse): JobIntakeContextResponse {
   return {
-    customers: workspace.customers,
-    locations: workspace.locations.map((location) => ({
-      id: location.id,
-      name: location.name,
-      customerId: location.customerId,
-      customerName: location.customerName,
-      addressLine1: location.addressLine1,
-      city: location.city,
-      state: location.state,
-      postalCode: location.postalCode,
-      isActive: location.isActive,
-      alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
-    })),
     technicians: workspace.technicians
   };
 }
@@ -351,6 +441,16 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedOperationsApi.getOfficeJobIntakeContext.mockResolvedValue(buildJobIntakeContext(workspace));
   mockedOperationsApi.getOfficeJobsQueue.mockResolvedValue(buildJobsQueue(workspace));
   mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
+  mockedOperationsApi.searchOfficeCrm.mockResolvedValue({
+    query: 'main',
+    results: [buildLocationSearchResult(workspace)]
+  });
+  mockedOperationsApi.getOfficeLocationDetail.mockImplementation(async ({ locationId }) =>
+    buildLocationDetail(workspace, locationId)
+  );
+  mockedOperationsApi.getOfficeCustomerDetail.mockImplementation(async ({ customerId }) =>
+    buildCustomerDetail(workspace, customerId)
+  );
   mockedOperationsApi.getOfficeJobDetail.mockImplementation(async ({ jobId }) => {
     const job =
       workspace.jobs.find((candidate) => candidate.id === jobId) ?? workspace.jobs[0] ?? buildJob();
@@ -395,6 +495,30 @@ function renderShell() {
       onSignOut={vi.fn()}
     />
   );
+}
+
+async function selectJobIntakeLocationBySearch(query = 'Main') {
+  fireEvent.change(await screen.findByLabelText('Job location search'), {
+    target: { value: query }
+  });
+
+  await waitFor(() => {
+    expect(mockedOperationsApi.searchOfficeCrm).toHaveBeenCalledWith({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test',
+      query
+    });
+  });
+
+  fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+
+  await waitFor(() => {
+    expect(mockedOperationsApi.getOfficeLocationDetail).toHaveBeenCalledWith({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test',
+      locationId: 'location-1'
+    });
+  });
 }
 
 beforeEach(() => {
@@ -534,6 +658,13 @@ describe('OfficeWorkspaceShell IA', () => {
       sessionToken: 'session-token',
       apiBaseUrl: 'http://api.test'
     });
+    expect(screen.getByRole('button', { name: 'Create job' })).toBeDisabled();
+    expect(screen.queryByLabelText('Bill to')).not.toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeLocationDetail).not.toHaveBeenCalled();
+
+    await selectJobIntakeLocationBySearch('Main');
+    expect(await screen.findByText('Acme - 123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(screen.getByLabelText('Bill to')).toHaveValue('customer-1');
 
     fireEvent.change(screen.getByLabelText('Job type'), { target: { value: 'Maintenance' } });
     fireEvent.change(screen.getByLabelText('Job category'), { target: { value: 'Warranty' } });
@@ -576,6 +707,7 @@ describe('OfficeWorkspaceShell IA', () => {
     renderShell();
 
     fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    await selectJobIntakeLocationBySearch('Main');
     fireEvent.change(await screen.findByLabelText('Job problem summary'), {
       target: { value: 'Replace filter' }
     });
@@ -589,6 +721,85 @@ describe('OfficeWorkspaceShell IA', () => {
         })
       );
     });
+  });
+
+  it('lets dispatch select a customer search result before choosing one of that customer’s active locations', async () => {
+    const workspace = buildWorkspace([buildJob()]);
+    arrangeWorkspace(workspace);
+    mockedOperationsApi.searchOfficeCrm.mockResolvedValue({
+      query: 'Acme',
+      results: [buildCustomerSearchResult(workspace)]
+    });
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    fireEvent.change(await screen.findByLabelText('Job location search'), {
+      target: { value: 'Acme' }
+    });
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.searchOfficeCrm).toHaveBeenCalledWith({
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        query: 'Acme'
+      });
+    });
+
+    const searchResults = await screen.findByLabelText('Job location search results');
+    fireEvent.click(within(searchResults).getByRole('button', { name: /Acme/ }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeCustomerDetail).toHaveBeenCalledWith({
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        customerId: 'customer-1'
+      });
+    });
+
+    const customerLocations = await screen.findByLabelText('Customer locations');
+    fireEvent.click(within(customerLocations).getByRole('button', { name: /Main Shop/ }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.getOfficeLocationDetail).toHaveBeenCalledWith({
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        locationId: 'location-1'
+      });
+    });
+    expect(await screen.findByText('Acme - 123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create job' })).not.toBeDisabled();
+  });
+
+  it('shows alternate bill-to customers after the selected location loads them', async () => {
+    const workspace = buildWorkspace([buildJob()]);
+    workspace.customers.push({
+      id: 'customer-2',
+      name: 'Morgan Property Management',
+      accountType: 'company',
+      billingAddressLine1: '500 Billing Way',
+      billingCity: 'Blaine',
+      billingState: 'WA',
+      billingPostalCode: '98230',
+      isActive: true,
+      flags: []
+    });
+    const location = workspace.locations[0];
+
+    if (!location) {
+      throw new Error('Test workspace needs a location.');
+    }
+
+    location.alternateBillToCustomerIds = ['customer-2'];
+    arrangeWorkspace(workspace);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    await selectJobIntakeLocationBySearch('Main');
+
+    expect(screen.getByLabelText('Bill to')).toHaveValue('customer-1');
+    expect(screen.getByRole('option', { name: 'Morgan Property Management' })).toBeInTheDocument();
   });
 
   it('saves appointment schedule and status changes from job detail through existing API helpers', async () => {

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   acknowledgeOfficeFinishedVisitReview,
   addOfficeAppointment,
@@ -10,8 +10,11 @@ import {
   getOfficeRegisterEntries,
   getOfficeJobDetail,
   createOfficeJob,
+  getOfficeCustomerDetail,
   getOfficeJobIntakeContext,
   getOfficeJobsQueue,
+  getOfficeLocationDetail,
+  searchOfficeCrm,
   updateOfficeAppointmentSchedule,
   updateOfficeAppointmentStatus,
   updateOfficeJobStatus,
@@ -20,12 +23,15 @@ import {
   voidOfficeMediaAttachment,
   voidOfficeRegisterEntry,
   type AppointmentStatus,
+  type CrmSearchResult,
+  type CustomerDetail,
   type DispatchBoardResponse,
   type JobDetailResponse,
   type JobIntakeContextResponse,
   type JobStatus,
   type JobsQueueKey,
   type JobsQueueResponse,
+  type LocationDetail,
   type MediaAttachmentSummary,
   type RegisterEntrySummary
 } from '@/lib/operations-api';
@@ -33,7 +39,12 @@ import { getCurrentOfficeSession, type EmployeeSummary } from '@/lib/identity-ap
 import { CrmPanel } from './crm-panel';
 import { DispatchBoardPanel } from './dispatch-board-panel';
 import { JobDetailPanel } from './job-detail-panel';
-import { JobIntakePanel } from './job-intake-panel';
+import {
+  JobIntakePanel,
+  type JobIntakeBillToOption,
+  type JobIntakeCustomerLocationOption,
+  type JobIntakeSelectedLocation
+} from './job-intake-panel';
 import {
   createEmptyAppointmentDraft,
   type AppointmentDraft,
@@ -48,6 +59,7 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
+const jobIntakeSearchDebounceMs = 250;
 type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'jobDetail';
 
 type Props = {
@@ -56,6 +68,47 @@ type Props = {
   sessionToken: string;
   onSignOut: () => void;
 };
+
+function toJobIntakeSelectedLocation(location: LocationDetail): JobIntakeSelectedLocation {
+  return {
+    id: location.id,
+    name: location.name,
+    customerId: location.customerId,
+    customerName: location.customerName,
+    addressLine1: location.addressLine1,
+    city: location.city,
+    state: location.state,
+    postalCode: location.postalCode
+  };
+}
+
+function toActiveCustomerLocationOptions(
+  customer: CustomerDetail
+): JobIntakeCustomerLocationOption[] {
+  return customer.locations
+    .filter((location) => location.isActive)
+    .map((location) => ({
+      id: location.id,
+      name: location.name,
+      addressLine1: location.addressLine1,
+      city: location.city,
+      state: location.state,
+      postalCode: location.postalCode
+    }));
+}
+
+function dedupeBillToOptions(options: JobIntakeBillToOption[]): JobIntakeBillToOption[] {
+  const seen = new Set<string>();
+
+  return options.filter((option) => {
+    if (seen.has(option.id)) {
+      return false;
+    }
+
+    seen.add(option.id);
+    return true;
+  });
+}
 
 function getJobStatusReviewMessage(
   currentStatus: JobStatus,
@@ -222,6 +275,18 @@ export function OfficeWorkspaceShell({
   const [pendingJobStatusChange, setPendingJobStatusChange] =
     useState<PendingJobStatusChange | null>(null);
   const [jobLocationId, setJobLocationId] = useState('');
+  const [selectedJobLocation, setSelectedJobLocation] = useState<JobIntakeSelectedLocation | null>(
+    null
+  );
+  const [jobLocationSearchQuery, setJobLocationSearchQuery] = useState('');
+  const [jobLocationSearchResults, setJobLocationSearchResults] = useState<CrmSearchResult[]>([]);
+  const [isJobLocationSearchLoading, setIsJobLocationSearchLoading] = useState(false);
+  const [customerLocationOptions, setCustomerLocationOptions] = useState<
+    JobIntakeCustomerLocationOption[]
+  >([]);
+  const [customerLocationMessage, setCustomerLocationMessage] = useState<string | null>(null);
+  const [jobBillToOptions, setJobBillToOptions] = useState<JobIntakeBillToOption[]>([]);
+  const [jobBillToWarning, setJobBillToWarning] = useState<string | null>(null);
   const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
   const [jobType, setJobType] = useState('Service');
   const [jobCategory, setJobCategory] = useState('General');
@@ -249,19 +314,10 @@ export function OfficeWorkspaceShell({
   const dispatchRefreshInFlightRef = useRef(false);
   const jobsQueueRefreshInFlightRef = useRef(false);
   const jobIntakeLoadInFlightRef = useRef(false);
-  const jobLocationIdRef = useRef(jobLocationId);
-
-  const locationLookup = useMemo(
-    () => new Map((jobIntakeContext?.locations ?? []).map((location) => [location.id, location])),
-    [jobIntakeContext]
-  );
+  const jobLocationSearchRequestRef = useRef(0);
 
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
   const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
-
-  useEffect(() => {
-    jobLocationIdRef.current = jobLocationId;
-  }, [jobLocationId]);
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -337,11 +393,6 @@ export function OfficeWorkspaceShell({
         const nextJobIntakeContext = await getOfficeJobIntakeContext({ sessionToken, apiBaseUrl });
         setJobIntakeContext(nextJobIntakeContext);
 
-        if (!jobLocationIdRef.current && nextJobIntakeContext.locations[0]) {
-          setJobLocationId(nextJobIntakeContext.locations[0].id);
-          setJobBillToCustomerId(nextJobIntakeContext.locations[0].customerId);
-        }
-
         return nextJobIntakeContext;
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : 'Unable to load job intake.');
@@ -353,6 +404,54 @@ export function OfficeWorkspaceShell({
     },
     [apiBaseUrl, jobIntakeContext, sessionToken]
   );
+
+  useEffect(() => {
+    const requestId = jobLocationSearchRequestRef.current + 1;
+    jobLocationSearchRequestRef.current = requestId;
+    const trimmedQuery = jobLocationSearchQuery.trim();
+
+    if (!isJobIntakeOpen || selectedJobLocation || trimmedQuery.length < 2) {
+      setJobLocationSearchResults([]);
+      setIsJobLocationSearchLoading(false);
+      return;
+    }
+
+    setIsJobLocationSearchLoading(true);
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await searchOfficeCrm({
+            sessionToken,
+            apiBaseUrl,
+            query: trimmedQuery
+          });
+
+          if (jobLocationSearchRequestRef.current !== requestId) {
+            return;
+          }
+
+          setJobLocationSearchResults(
+            response.results.filter(
+              (result) => result.kind === 'location' || result.kind === 'customer'
+            )
+          );
+        } catch (error) {
+          if (jobLocationSearchRequestRef.current !== requestId) {
+            return;
+          }
+
+          setJobLocationSearchResults([]);
+          setErrorMessage(error instanceof Error ? error.message : 'Unable to search CRM.');
+        } finally {
+          if (jobLocationSearchRequestRef.current === requestId) {
+            setIsJobLocationSearchLoading(false);
+          }
+        }
+      })();
+    }, jobIntakeSearchDebounceMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [apiBaseUrl, isJobIntakeOpen, jobLocationSearchQuery, selectedJobLocation, sessionToken]);
 
   const refreshWorkspace = useCallback(async (): Promise<boolean> => {
     if (refreshInFlightRef.current) {
@@ -663,7 +762,104 @@ export function OfficeWorkspaceShell({
     }
   }
 
+  function clearJobIntakeLocationSelection() {
+    setJobLocationId('');
+    setSelectedJobLocation(null);
+    setJobBillToCustomerId('');
+    setJobBillToOptions([]);
+    setJobBillToWarning(null);
+    setJobLocationSearchQuery('');
+    setJobLocationSearchResults([]);
+    setIsJobLocationSearchLoading(false);
+    setCustomerLocationOptions([]);
+    setCustomerLocationMessage(null);
+  }
+
+  async function handleLoadJobIntakeLocation(locationId: string) {
+    try {
+      setErrorMessage(null);
+      const location = await getOfficeLocationDetail({ sessionToken, apiBaseUrl, locationId });
+      const ownerBillToOption = {
+        id: location.customerId,
+        name: location.customerName
+      };
+      const alternateIds = location.alternateBillToCustomerIds.filter(
+        (customerId) => customerId !== location.customerId
+      );
+      const alternateResults = await Promise.allSettled(
+        alternateIds.map((customerId) =>
+          getOfficeCustomerDetail({ sessionToken, apiBaseUrl, customerId })
+        )
+      );
+      const alternateBillToOptions = alternateResults
+        .filter(
+          (result): result is PromiseFulfilledResult<CustomerDetail> =>
+            result.status === 'fulfilled'
+        )
+        .map((result) => ({
+          id: result.value.id,
+          name: result.value.name
+        }));
+      const failedAlternateCount = alternateResults.filter(
+        (result) => result.status === 'rejected'
+      ).length;
+
+      setSelectedJobLocation(toJobIntakeSelectedLocation(location));
+      setJobLocationId(location.id);
+      setJobBillToOptions(dedupeBillToOptions([ownerBillToOption, ...alternateBillToOptions]));
+      setJobBillToCustomerId(ownerBillToOption.id);
+      setJobBillToWarning(
+        failedAlternateCount > 0
+          ? 'Some alternate bill-to customers could not be loaded. The location owner remains available.'
+          : null
+      );
+      setJobLocationSearchQuery('');
+      setJobLocationSearchResults([]);
+      setIsJobLocationSearchLoading(false);
+      setCustomerLocationOptions([]);
+      setCustomerLocationMessage(null);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load location detail.');
+    }
+  }
+
+  async function handleSelectJobIntakeSearchResult(result: CrmSearchResult) {
+    if (result.kind === 'location') {
+      await handleLoadJobIntakeLocation(result.id);
+      return;
+    }
+
+    if (result.kind !== 'customer') {
+      return;
+    }
+
+    try {
+      setErrorMessage(null);
+      clearJobIntakeLocationSelection();
+      const customer = await getOfficeCustomerDetail({
+        sessionToken,
+        apiBaseUrl,
+        customerId: result.id
+      });
+      const activeLocations = toActiveCustomerLocationOptions(customer);
+
+      setCustomerLocationOptions(activeLocations);
+      setCustomerLocationMessage(
+        activeLocations.length === 0
+          ? `No active locations found for ${customer.name}. Open Customers to create a location before creating the job.`
+          : null
+      );
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load customer detail.');
+    }
+  }
+
   async function handleCreateJob() {
+    if (!jobLocationId) {
+      setErrorMessage('Select a location before creating a job.');
+      return;
+    }
+
     try {
       await createOfficeJob({
         sessionToken,
@@ -689,6 +885,7 @@ export function OfficeWorkspaceShell({
       setJobEndTime('');
       setJobWindow('');
       setJobTechnicianId('');
+      clearJobIntakeLocationSelection();
       setIsJobIntakeOpen(false);
       setNoticeMessage('Job created.');
       await refreshAllWorkspace();
@@ -898,12 +1095,6 @@ export function OfficeWorkspaceShell({
     }
   }
 
-  function handleJobLocationChange(nextLocationId: string) {
-    const nextLocation = locationLookup.get(nextLocationId);
-    setJobLocationId(nextLocationId);
-    setJobBillToCustomerId(nextLocation?.customerId ?? '');
-  }
-
   function handleJobDateChange(nextDate: string) {
     setJobDate(nextDate);
 
@@ -1014,7 +1205,14 @@ export function OfficeWorkspaceShell({
           {isJobIntakeOpen && jobIntakeContext ? (
             <JobIntakePanel
               intakeContext={jobIntakeContext}
-              jobLocationId={jobLocationId}
+              locationSearchQuery={jobLocationSearchQuery}
+              locationSearchResults={jobLocationSearchResults}
+              isLocationSearchLoading={isJobLocationSearchLoading}
+              selectedLocation={selectedJobLocation}
+              customerLocationOptions={customerLocationOptions}
+              customerLocationMessage={customerLocationMessage}
+              billToOptions={jobBillToOptions}
+              billToWarning={jobBillToWarning}
               jobBillToCustomerId={jobBillToCustomerId}
               jobType={jobType}
               jobCategory={jobCategory}
@@ -1025,7 +1223,14 @@ export function OfficeWorkspaceShell({
               jobStartTime={jobStartTime}
               jobEndTime={jobEndTime}
               jobWindow={jobWindow}
-              onJobLocationChange={handleJobLocationChange}
+              onLocationSearchQueryChange={setJobLocationSearchQuery}
+              onSelectLocationSearchResult={(result) =>
+                void handleSelectJobIntakeSearchResult(result)
+              }
+              onSelectCustomerLocation={(locationId) =>
+                void handleLoadJobIntakeLocation(locationId)
+              }
+              onClearSelectedLocation={clearJobIntakeLocationSelection}
               onJobBillToCustomerChange={setJobBillToCustomerId}
               onJobTypeChange={setJobType}
               onJobCategoryChange={setJobCategory}

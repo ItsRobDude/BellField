@@ -97,31 +97,9 @@ export class JobsAppointmentsService {
       'office-web'
     ]);
 
-    const [customers, locations, technicians] = await Promise.all([
-      this.referenceDataService.listCustomers(false),
-      this.referenceDataService.listLocations(false),
-      this.identityAccessService.getActiveEmployees()
-    ]);
-    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+    const technicians = await this.identityAccessService.getActiveEmployees();
 
     return {
-      customers: customers.map((customer) => this.toCustomerSummaryFromRecord(customer)),
-      locations: locations.map((location) => {
-        const customer = customerById.get(location.customerId);
-
-        return {
-          id: location.id,
-          name: location.name,
-          customerId: location.customerId,
-          customerName: customer?.name ?? 'Unknown customer',
-          addressLine1: location.addressLine1,
-          city: location.city,
-          state: location.state,
-          postalCode: location.postalCode,
-          isActive: location.isActive,
-          alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
-        };
-      }),
       technicians: technicians
         .filter((employee) => employee.roleId === 'technician')
         .map((employee) => ({

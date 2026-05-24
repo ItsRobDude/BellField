@@ -142,38 +142,6 @@ describe('JobsAppointmentsService', () => {
       effectivePermissions: ['jobs:view'],
       sessionSurface: 'office-web'
     });
-    referenceDataService.listCustomers.mockResolvedValue([
-      {
-        id: 'customer-1',
-        name: 'Acme',
-        accountType: 'company',
-        billingAddressLine1: '123 Main',
-        billingCity: 'Blaine',
-        billingState: 'WA',
-        billingPostalCode: '98230',
-        phone: undefined,
-        email: undefined,
-        fax: undefined,
-        isActive: true,
-        flags: []
-      }
-    ]);
-    referenceDataService.listLocations.mockResolvedValue([
-      {
-        id: 'location-1',
-        name: 'Main Shop',
-        customerId: 'customer-1',
-        addressLine1: '123 Main',
-        city: 'Blaine',
-        state: 'WA',
-        postalCode: '98230',
-        phone: undefined,
-        email: undefined,
-        fax: undefined,
-        isActive: true,
-        alternateBillToCustomerIds: ['customer-2']
-      }
-    ]);
     identityAccessService.getActiveEmployees.mockResolvedValue([
       { id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' },
       { id: 'office-1', displayName: 'Dispatcher', roleId: 'dispatcher' }
@@ -188,27 +156,9 @@ describe('JobsAppointmentsService', () => {
     );
     expect(jobsDataService.listJobs).not.toHaveBeenCalled();
     expect(referenceDataService.getLocationDetail).not.toHaveBeenCalled();
+    expect(referenceDataService.listCustomers).not.toHaveBeenCalled();
+    expect(referenceDataService.listLocations).not.toHaveBeenCalled();
     expect(response).toEqual({
-      customers: [
-        expect.objectContaining({
-          id: 'customer-1',
-          name: 'Acme'
-        })
-      ],
-      locations: [
-        {
-          id: 'location-1',
-          name: 'Main Shop',
-          customerId: 'customer-1',
-          customerName: 'Acme',
-          addressLine1: '123 Main',
-          city: 'Blaine',
-          state: 'WA',
-          postalCode: '98230',
-          isActive: true,
-          alternateBillToCustomerIds: ['customer-2']
-        }
-      ],
       technicians: [{ id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' }]
     });
   });
