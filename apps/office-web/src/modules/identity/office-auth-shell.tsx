@@ -61,12 +61,9 @@ export function OfficeAuthShell() {
   return (
     <main style={styles.page}>
       <section style={styles.card}>
-        <div style={styles.kicker}>Milestone foundation</div>
-        <h1 style={styles.title}>BellField Office Sign In</h1>
-        <p style={styles.muted}>
-          This office shell now leads into employee, customer/location, and jobs/appointments
-          foundations using the same API session.
-        </p>
+        <div style={styles.kicker}>BellField Office</div>
+        <h1 style={styles.title}>Sign in</h1>
+        <p style={styles.muted}>Use your office account to manage dispatch, jobs, and customers.</p>
         <form onSubmit={handleLogin} style={styles.form}>
           <label style={styles.fieldLabel}>
             <span>Server URL</span>
@@ -77,10 +74,7 @@ export function OfficeAuthShell() {
               style={styles.input}
             />
           </label>
-          <p style={styles.helperText}>
-            Local development may use `http://localhost:3001`. Production browsers should point at
-            the office server.
-          </p>
+          <p style={styles.helperText}>Enter the BellField API address for this office server.</p>
           <input
             value={email}
             onChange={(event) => setEmail(event.target.value)}

@@ -147,10 +147,6 @@ export function EquipmentPanel({
           <h3 style={styles.subheading}>
             {locationScope ? 'Add equipment for this location' : 'Add equipment'}
           </h3>
-          <div style={styles.badgeRow}>
-            <span style={styles.badge}>Serialized-unit mindset</span>
-            <span style={styles.badge}>Location first</span>
-          </div>
         </div>
         <div style={styles.formRow}>
           {locationScope ? (

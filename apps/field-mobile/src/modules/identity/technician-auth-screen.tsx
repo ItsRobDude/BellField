@@ -71,11 +71,10 @@ export function TechnicianAuthScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
-          <Text style={styles.kicker}>Milestone foundation</Text>
-          <Text style={styles.title}>BellField Field Sign In</Text>
+          <Text style={styles.kicker}>BellField Field</Text>
+          <Text style={styles.title}>Sign in</Text>
           <Text style={styles.subtitle}>
-            This field shell signs in, loads assigned work, and then lets the technician save
-            updates locally before syncing them back to the server.
+            Use your field account to view assigned work and sync completed updates.
           </Text>
 
           <View style={styles.formGroup}>
@@ -88,8 +87,7 @@ export function TechnicianAuthScreen() {
               style={styles.input}
             />
             <Text style={styles.helperText}>
-              Local development may use `http://localhost:3001`. Production devices should point at
-              the office server.
+              Enter the BellField API address for this office server.
             </Text>
           </View>
 

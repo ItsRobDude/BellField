@@ -177,7 +177,11 @@ export function CrmPanel({
             return;
           }
 
-          onErrorMessage(error instanceof Error ? error.message : 'Unable to search CRM records.');
+          onErrorMessage(
+            error instanceof Error
+              ? error.message
+              : 'Unable to search customers, locations, and contacts.'
+          );
           setSearchResults([]);
         } finally {
           if (searchRequestIdRef.current === requestId) {
@@ -206,7 +210,7 @@ export function CrmPanel({
         setExistingContactId(nextWorkspace.contacts[0].id);
       }
     } catch (error) {
-      onErrorMessage(error instanceof Error ? error.message : 'Unable to load CRM workspace.');
+      onErrorMessage(error instanceof Error ? error.message : 'Unable to load customer records.');
     } finally {
       setIsRefreshing(false);
     }
@@ -244,8 +248,7 @@ export function CrmPanel({
   }
 
   function openNewContactForm() {
-    const nextReturnMode =
-      mode === 'customerDetail' || mode === 'locationDetail' ? mode : 'search';
+    const nextReturnMode = mode === 'customerDetail' || mode === 'locationDetail' ? mode : 'search';
 
     if (nextReturnMode === 'search') {
       clearSelectedRecords();
@@ -578,7 +581,7 @@ export function CrmPanel({
       await reloadSelectedRecord();
       await refreshWorkspace();
     } catch (error) {
-      onErrorMessage(error instanceof Error ? error.message : 'Unable to save shared contact.');
+      onErrorMessage(error instanceof Error ? error.message : 'Unable to save contact.');
     }
   }
 
@@ -755,19 +758,21 @@ export function CrmPanel({
 
   const activeCustomerOptions = workspace?.customers ?? [];
   const activeContactOptions = workspace?.contacts ?? [];
+  const selectedDetailHeading = selectedCustomer
+    ? 'Customer'
+    : selectedLocation
+      ? 'Location'
+      : 'Contact';
 
   return (
     <section style={styles.card}>
       <div style={styles.row}>
         <div>
-          <h2 style={styles.heading}>CRM backbone</h2>
-          <p style={styles.muted}>
-            Customer, location, and contact records now live in a real office workflow instead of
-            only showing up through jobs and equipment.
-          </p>
+          <h2 style={styles.heading}>Customers</h2>
+          <p style={styles.muted}>Search, review, and maintain customer records.</p>
         </div>
         <button type="button" onClick={() => void refreshWorkspace()} style={styles.button}>
-          {isRefreshing ? 'Refreshing...' : 'Refresh CRM'}
+          {isRefreshing ? 'Refreshing...' : 'Refresh customers'}
         </button>
       </div>
 
@@ -776,7 +781,7 @@ export function CrmPanel({
       {mode === 'search' ? (
         <div style={styles.panel}>
           <div style={styles.row}>
-            <h3 style={styles.subheading}>Find CRM records</h3>
+            <h3 style={styles.subheading}>Find customers, locations, and contacts</h3>
             <div style={styles.inlineActionBar}>
               <button type="button" onClick={openNewCustomerForm} style={styles.primaryButton}>
                 New customer
@@ -792,7 +797,7 @@ export function CrmPanel({
           <label style={styles.fieldLabel}>
             <span>Search</span>
             <input
-              aria-label="CRM search"
+              aria-label="Customer search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search by name, address, phone"
@@ -1147,7 +1152,7 @@ export function CrmPanel({
       {mode === 'newContact' ? (
         <div style={styles.panel}>
           <div style={styles.row}>
-            <h3 style={styles.subheading}>Create shared contact</h3>
+            <h3 style={styles.subheading}>New contact</h3>
             <button type="button" onClick={returnFromContactForm} style={styles.button}>
               Back
             </button>
@@ -1208,7 +1213,7 @@ export function CrmPanel({
       (selectedCustomer || selectedLocation || selectedContact) ? (
         <div style={styles.panel}>
           <div style={styles.row}>
-            <h3 style={styles.subheading}>Selected detail</h3>
+            <h3 style={styles.subheading}>{selectedDetailHeading}</h3>
             <div style={styles.inlineActionBar}>
               {selectedCustomer || selectedLocation ? (
                 <button type="button" onClick={openNewContactForm} style={styles.button}>
@@ -1641,7 +1646,7 @@ export function CrmPanel({
                   onClick={() => void handleSaveSharedContact()}
                   style={styles.primaryButton}
                 >
-                  Save shared contact
+                  Save contact
                 </button>
               </div>
               <div style={styles.formRow}>

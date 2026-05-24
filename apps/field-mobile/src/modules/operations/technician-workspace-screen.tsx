@@ -1656,8 +1656,7 @@ export function TechnicianWorkspaceScreen({
           <Text style={styles.kicker}>BellField Field</Text>
           <Text style={styles.title}>{employee.displayName}</Text>
           <Text style={styles.subtitle}>
-            Assigned work, the pending sync queue, and sync health now persist on-device. Office
-            still only sees field changes after save and successful sync.
+            Review assigned work, save updates on this device, and sync them back to the office.
           </Text>
 
           <View
