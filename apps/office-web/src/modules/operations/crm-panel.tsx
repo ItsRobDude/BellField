@@ -28,12 +28,15 @@ import {
   updateOfficeCustomer,
   updateOfficeLocation
 } from '@/lib/operations-api';
+import { LocationEquipmentSection } from './location-equipment-section';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type Props = {
   apiBaseUrl: string;
   sessionToken: string;
   onErrorMessage: (message: string | null) => void;
+  canReplaceRemoveEquipment?: boolean;
+  canDeleteEquipment?: boolean;
 };
 
 type CustomerFormState = {
@@ -78,7 +81,22 @@ type ContactLinkDraft = {
   scope: ContactUpdateScope;
 };
 
-export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
+type LocationDetailTab = 'overview' | 'equipment' | 'contacts' | 'history';
+
+const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'equipment', label: 'Equipment' },
+  { key: 'contacts', label: 'Contacts' },
+  { key: 'history', label: 'History' }
+];
+
+export function CrmPanel({
+  apiBaseUrl,
+  sessionToken,
+  onErrorMessage,
+  canReplaceRemoveEquipment = false,
+  canDeleteEquipment = false
+}: Props) {
   const [workspace, setWorkspace] = useState<CrmWorkspaceResponse | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<CrmSearchResult[]>([]);
@@ -105,6 +123,7 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
     useState(false);
   const [crmNoticeMessage, setCrmNoticeMessage] = useState<string | null>(null);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
+  const [selectedLocationTab, setSelectedLocationTab] = useState<LocationDetailTab>('overview');
 
   useEffect(() => {
     void refreshWorkspace();
@@ -604,6 +623,7 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
 
   function hydrateLocationForm(location: LocationDetail) {
     setSelectedLocation(location);
+    setSelectedLocationTab('overview');
   }
 
   function hydrateContactForm(contact: ContactDetail) {
@@ -1215,201 +1235,243 @@ export function CrmPanel({ apiBaseUrl, sessionToken, onErrorMessage }: Props) {
                   Save location
                 </button>
               </div>
-              <div style={styles.formRow}>
-                <input
-                  value={selectedLocation.name}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, name: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.addressLine1}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, addressLine1: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.city}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, city: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.state}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, state: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.postalCode}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, postalCode: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.phone ?? ''}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, phone: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.email ?? ''}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, email: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedLocation.fax ?? ''}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, fax: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-              </div>
-              {saveLocationMissingContactConfirmation ? (
-                <div style={styles.subpanel}>
-                  <strong>Location has no phone or email</strong>
-                  <div style={styles.tinyMuted}>
-                    This location has no phone or email. Is that okay?
-                  </div>
-                  {selectedLocation.fax?.trim() ? (
-                    <div style={styles.tinyMuted}>
-                      Fax will be saved, but phone and email are still missing.
-                    </div>
-                  ) : null}
-                  <div style={styles.row}>
-                    <button
-                      type="button"
-                      onClick={() => void handleSaveLocation()}
-                      style={styles.primaryButton}
-                    >
-                      Save without phone or email
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSaveLocationMissingContactConfirmation(false)}
-                      style={styles.button}
-                    >
-                      Keep editing
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              <label style={styles.inlineLabel}>
-                <input
-                  type="checkbox"
-                  checked={selectedLocation.isActive}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current ? { ...current, isActive: event.target.checked } : current
-                    )
-                  }
-                />
-                Location is active
-              </label>
-              <label style={styles.inlineLabel}>
-                <span>Alternate bill-to customers</span>
-                <select
-                  multiple
-                  value={selectedLocation.alternateBillToCustomerIds}
-                  onChange={(event) =>
-                    setSelectedLocation((current) =>
-                      current
-                        ? {
-                            ...current,
-                            alternateBillToCustomerIds: Array.from(
-                              event.target.selectedOptions
-                            ).map((option) => option.value)
-                          }
-                        : current
-                    )
-                  }
-                  style={styles.input}
-                >
-                  {activeCustomerOptions.map((customer) => (
-                    <option key={customer.id} value={customer.id}>
-                      {customer.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <div style={styles.subpanel}>
-                <strong>Reassign owner</strong>
-                <div style={styles.formRow}>
-                  <select
-                    value={reassignCustomerId}
-                    onChange={(event) => setReassignCustomerId(event.target.value)}
-                    style={styles.input}
-                  >
-                    {activeCustomerOptions.map((customer) => (
-                      <option key={customer.id} value={customer.id}>
-                        {customer.name}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    value={reassignNote}
-                    onChange={(event) => setReassignNote(event.target.value)}
-                    placeholder="Reason or note"
-                    style={styles.input}
-                  />
+              <div style={styles.tabList} role="tablist" aria-label="Location sections">
+                {locationDetailTabs.map((tab) => (
                   <button
+                    key={tab.key}
                     type="button"
-                    onClick={() => void handleReassignLocation()}
-                    style={styles.button}
+                    role="tab"
+                    aria-selected={selectedLocationTab === tab.key}
+                    onClick={() => setSelectedLocationTab(tab.key)}
+                    style={
+                      selectedLocationTab === tab.key ? styles.activeTabButton : styles.tabButton
+                    }
                   >
-                    Reassign owner
+                    {tab.label}
                   </button>
-                </div>
-              </div>
-              <div style={styles.subpanel}>
-                <strong>Ownership history</strong>
-                {selectedLocation.ownershipHistory.map((entry) => (
-                  <div key={entry.id} style={styles.tinyMuted}>
-                    {entry.customerName}: {entry.startedAt.slice(0, 10)}
-                    {entry.endedAt ? ` to ${entry.endedAt.slice(0, 10)}` : ' to present'}
-                    {entry.note ? ` - ${entry.note}` : ''}
-                  </div>
                 ))}
               </div>
-              <RecordContactsSection
-                title="Location contacts"
-                contacts={selectedLocation.contacts}
-                activeContactOptions={activeContactOptions}
-                existingContactId={existingContactId}
-                setExistingContactId={setExistingContactId}
-                linkDrafts={linkDrafts}
-                setLinkDrafts={setLinkDrafts}
-                onLinkExisting={() => void handleLinkExistingContact()}
-                onSaveLink={(link) => void handleSaveContactLink(link)}
-                onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
-                onArchiveLink={(linkId, isActive) =>
-                  void handleArchiveContactLink(linkId, isActive)
-                }
-              />
+              {selectedLocationTab === 'overview' ? (
+                <>
+                  <div style={styles.formRow}>
+                    <input
+                      value={selectedLocation.name}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, name: event.target.value } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.addressLine1}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, addressLine1: event.target.value } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.city}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, city: event.target.value } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.state}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, state: event.target.value } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.postalCode}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, postalCode: event.target.value } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.phone ?? ''}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, phone: event.target.value || undefined } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.email ?? ''}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, email: event.target.value || undefined } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                    <input
+                      value={selectedLocation.fax ?? ''}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, fax: event.target.value || undefined } : current
+                        )
+                      }
+                      style={styles.input}
+                    />
+                  </div>
+                  {saveLocationMissingContactConfirmation ? (
+                    <div style={styles.subpanel}>
+                      <strong>Location has no phone or email</strong>
+                      <div style={styles.tinyMuted}>
+                        This location has no phone or email. Is that okay?
+                      </div>
+                      {selectedLocation.fax?.trim() ? (
+                        <div style={styles.tinyMuted}>
+                          Fax will be saved, but phone and email are still missing.
+                        </div>
+                      ) : null}
+                      <div style={styles.row}>
+                        <button
+                          type="button"
+                          onClick={() => void handleSaveLocation()}
+                          style={styles.primaryButton}
+                        >
+                          Save without phone or email
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setSaveLocationMissingContactConfirmation(false)}
+                          style={styles.button}
+                        >
+                          Keep editing
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
+                  <label style={styles.inlineLabel}>
+                    <input
+                      type="checkbox"
+                      checked={selectedLocation.isActive}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current ? { ...current, isActive: event.target.checked } : current
+                        )
+                      }
+                    />
+                    Location is active
+                  </label>
+                  <label style={styles.inlineLabel}>
+                    <span>Alternate bill-to customers</span>
+                    <select
+                      multiple
+                      value={selectedLocation.alternateBillToCustomerIds}
+                      onChange={(event) =>
+                        setSelectedLocation((current) =>
+                          current
+                            ? {
+                                ...current,
+                                alternateBillToCustomerIds: Array.from(
+                                  event.target.selectedOptions
+                                ).map((option) => option.value)
+                              }
+                            : current
+                        )
+                      }
+                      style={styles.input}
+                    >
+                      {activeCustomerOptions.map((customer) => (
+                        <option key={customer.id} value={customer.id}>
+                          {customer.name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div style={styles.subpanel}>
+                    <strong>Reassign owner</strong>
+                    <div style={styles.formRow}>
+                      <select
+                        value={reassignCustomerId}
+                        onChange={(event) => setReassignCustomerId(event.target.value)}
+                        style={styles.input}
+                      >
+                        {activeCustomerOptions.map((customer) => (
+                          <option key={customer.id} value={customer.id}>
+                            {customer.name}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        value={reassignNote}
+                        onChange={(event) => setReassignNote(event.target.value)}
+                        placeholder="Reason or note"
+                        style={styles.input}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => void handleReassignLocation()}
+                        style={styles.button}
+                      >
+                        Reassign owner
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : null}
+
+              {selectedLocationTab === 'equipment' ? (
+                <LocationEquipmentSection
+                  key={selectedLocation.id}
+                  apiBaseUrl={apiBaseUrl}
+                  sessionToken={sessionToken}
+                  location={{ id: selectedLocation.id, name: selectedLocation.name }}
+                  canReplaceRemove={canReplaceRemoveEquipment}
+                  canDelete={canDeleteEquipment}
+                  onErrorMessage={onErrorMessage}
+                />
+              ) : null}
+
+              {selectedLocationTab === 'contacts' ? (
+                <RecordContactsSection
+                  title="Location contacts"
+                  contacts={selectedLocation.contacts}
+                  activeContactOptions={activeContactOptions}
+                  existingContactId={existingContactId}
+                  setExistingContactId={setExistingContactId}
+                  linkDrafts={linkDrafts}
+                  setLinkDrafts={setLinkDrafts}
+                  onLinkExisting={() => void handleLinkExistingContact()}
+                  onSaveLink={(link) => void handleSaveContactLink(link)}
+                  onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
+                  onArchiveLink={(linkId, isActive) =>
+                    void handleArchiveContactLink(linkId, isActive)
+                  }
+                />
+              ) : null}
+
+              {selectedLocationTab === 'history' ? (
+                <div style={styles.subpanel}>
+                  <strong>Ownership history</strong>
+                  {selectedLocation.ownershipHistory.length > 0 ? (
+                    selectedLocation.ownershipHistory.map((entry) => (
+                      <div key={entry.id} style={styles.tinyMuted}>
+                        {entry.customerName}: {entry.startedAt.slice(0, 10)}
+                        {entry.endedAt ? ` to ${entry.endedAt.slice(0, 10)}` : ' to present'}
+                        {entry.note ? ` - ${entry.note}` : ''}
+                      </div>
+                    ))
+                  ) : (
+                    <p style={styles.muted}>No ownership history yet.</p>
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
 

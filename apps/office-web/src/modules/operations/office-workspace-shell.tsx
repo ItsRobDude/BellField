@@ -4,22 +4,16 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   acknowledgeOfficeFinishedVisitReview,
   addOfficeAppointment,
-  createOfficeEquipment,
-  deleteOfficeEquipment,
   getOfficeDispatchBoard,
-  getOfficeEquipmentDetail,
   getOfficeMediaAttachments,
   getOfficeMediaBlob,
   getOfficeRegisterEntries,
   getOfficeJobDetail,
   createOfficeJob,
-  getOfficeEquipmentWorkspace,
   getOfficeJobIntakeContext,
   getOfficeJobsQueue,
-  linkOfficeEquipmentReplacement,
   updateOfficeAppointmentSchedule,
   updateOfficeAppointmentStatus,
-  updateOfficeEquipment,
   updateOfficeJobStatus,
   updateOfficeMediaAttachment,
   updateOfficeRegisterEntry,
@@ -27,9 +21,6 @@ import {
   voidOfficeRegisterEntry,
   type AppointmentStatus,
   type DispatchBoardResponse,
-  type EquipmentDetail,
-  type EquipmentSummary,
-  type EquipmentWorkspaceResponse,
   type JobDetailResponse,
   type JobIntakeContextResponse,
   type JobStatus,
@@ -41,11 +32,6 @@ import {
 import { getCurrentOfficeSession, type EmployeeSummary } from '@/lib/identity-api';
 import { CrmPanel } from './crm-panel';
 import { DispatchBoardPanel } from './dispatch-board-panel';
-import {
-  EquipmentPanel,
-  type EquipmentCreateDraft,
-  type EquipmentEditDraft
-} from './equipment-panel';
 import { JobDetailPanel } from './job-detail-panel';
 import { JobIntakePanel } from './job-intake-panel';
 import {
@@ -62,7 +48,7 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
-type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'equipment' | 'jobDetail';
+type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'jobDetail';
 
 type Props = {
   apiBaseUrl: string;
@@ -225,28 +211,16 @@ export function OfficeWorkspaceShell({
   const [jobsQueue, setJobsQueue] = useState<JobsQueueResponse | null>(null);
   const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
   const [jobDetailsById, setJobDetailsById] = useState<Record<string, JobDetailResponse>>({});
-  const [equipmentLocations, setEquipmentLocations] = useState<
-    EquipmentWorkspaceResponse['locations']
-  >([]);
-  const [equipment, setEquipment] = useState<EquipmentSummary[]>([]);
-  const [suggestedEquipmentTypes, setSuggestedEquipmentTypes] = useState<string[]>([]);
-  const [selectedEquipmentId, setSelectedEquipmentId] = useState<string | undefined>();
-  const [selectedEquipmentDetail, setSelectedEquipmentDetail] = useState<EquipmentDetail | null>(
-    null
-  );
-  const [hasLoadedEquipmentWorkspace, setHasLoadedEquipmentWorkspace] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDispatchRefreshing, setIsDispatchRefreshing] = useState(false);
   const [isJobsQueueRefreshing, setIsJobsQueueRefreshing] = useState(false);
   const [isJobIntakeLoading, setIsJobIntakeLoading] = useState(false);
-  const [isEquipmentRefreshing, setIsEquipmentRefreshing] = useState(false);
   const [isJobDetailLoading, setIsJobDetailLoading] = useState(false);
   const [lastDispatchRefreshedAt, setLastDispatchRefreshedAt] = useState<string | null>(null);
   const [pendingJobStatusChange, setPendingJobStatusChange] =
     useState<PendingJobStatusChange | null>(null);
-  const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
   const [jobLocationId, setJobLocationId] = useState('');
   const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
   const [jobType, setJobType] = useState('Service');
@@ -275,9 +249,7 @@ export function OfficeWorkspaceShell({
   const dispatchRefreshInFlightRef = useRef(false);
   const jobsQueueRefreshInFlightRef = useRef(false);
   const jobIntakeLoadInFlightRef = useRef(false);
-  const equipmentRefreshInFlightRef = useRef(false);
   const jobLocationIdRef = useRef(jobLocationId);
-  const selectedEquipmentIdRef = useRef(selectedEquipmentId);
 
   const locationLookup = useMemo(
     () => new Map((jobIntakeContext?.locations ?? []).map((location) => [location.id, location])),
@@ -290,23 +262,6 @@ export function OfficeWorkspaceShell({
   useEffect(() => {
     jobLocationIdRef.current = jobLocationId;
   }, [jobLocationId]);
-
-  useEffect(() => {
-    selectedEquipmentIdRef.current = selectedEquipmentId;
-  }, [selectedEquipmentId]);
-
-  const loadEquipmentDetail = useCallback(
-    async (equipmentId: string) => {
-      const equipmentDetail = await getOfficeEquipmentDetail({
-        equipmentId,
-        sessionToken,
-        apiBaseUrl
-      });
-      setSelectedEquipmentId(equipmentId);
-      setSelectedEquipmentDetail(equipmentDetail);
-    },
-    [apiBaseUrl, sessionToken]
-  );
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -399,52 +354,6 @@ export function OfficeWorkspaceShell({
     [apiBaseUrl, jobIntakeContext, sessionToken]
   );
 
-  const refreshEquipmentWorkspace = useCallback(async (): Promise<boolean> => {
-    if (equipmentRefreshInFlightRef.current) {
-      return false;
-    }
-
-    equipmentRefreshInFlightRef.current = true;
-    setIsEquipmentRefreshing(true);
-    setErrorMessage(null);
-
-    try {
-      const nextEquipmentWorkspace = await getOfficeEquipmentWorkspace({
-        sessionToken,
-        apiBaseUrl,
-        includeInactive: showInactiveEquipment
-      });
-
-      setEquipmentLocations(nextEquipmentWorkspace.locations);
-      setEquipment(nextEquipmentWorkspace.equipment);
-      setSuggestedEquipmentTypes(nextEquipmentWorkspace.suggestedEquipmentTypes);
-      setHasLoadedEquipmentWorkspace(true);
-
-      const nextSelectedEquipmentId =
-        selectedEquipmentIdRef.current &&
-        nextEquipmentWorkspace.equipment.some(
-          (record) => record.id === selectedEquipmentIdRef.current
-        )
-          ? selectedEquipmentIdRef.current
-          : nextEquipmentWorkspace.equipment[0]?.id;
-
-      if (nextSelectedEquipmentId) {
-        await loadEquipmentDetail(nextSelectedEquipmentId);
-      } else {
-        setSelectedEquipmentId(undefined);
-        setSelectedEquipmentDetail(null);
-      }
-
-      return true;
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh equipment.');
-      return false;
-    } finally {
-      equipmentRefreshInFlightRef.current = false;
-      setIsEquipmentRefreshing(false);
-    }
-  }, [apiBaseUrl, loadEquipmentDetail, sessionToken, showInactiveEquipment]);
-
   const refreshWorkspace = useCallback(async (): Promise<boolean> => {
     if (refreshInFlightRef.current) {
       return false;
@@ -481,20 +390,13 @@ export function OfficeWorkspaceShell({
       refreshes.push(loadJobIntakeContext(true).then(Boolean));
     }
 
-    if (hasLoadedEquipmentWorkspace || activeOfficeView === 'equipment') {
-      refreshes.push(refreshEquipmentWorkspace());
-    }
-
     const results = await Promise.all(refreshes);
     return results.some(Boolean);
   }, [
-    activeOfficeView,
-    hasLoadedEquipmentWorkspace,
     isJobIntakeOpen,
     jobIntakeContext,
     loadJobIntakeContext,
     refreshDispatchBoard,
-    refreshEquipmentWorkspace,
     refreshJobsQueue,
     refreshWorkspace
   ]);
@@ -540,12 +442,6 @@ export function OfficeWorkspaceShell({
   useEffect(() => {
     void refreshJobsQueue();
   }, [refreshJobsQueue]);
-
-  useEffect(() => {
-    if (activeOfficeView === 'equipment') {
-      void refreshEquipmentWorkspace();
-    }
-  }, [activeOfficeView, refreshEquipmentWorkspace]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -764,176 +660,6 @@ export function OfficeWorkspaceShell({
       window.setTimeout(() => URL.revokeObjectURL(objectUrl), 60_000);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to open media attachment.');
-    }
-  }
-
-  async function handleCreateEquipment(draft: EquipmentCreateDraft) {
-    try {
-      await createOfficeEquipment({
-        sessionToken,
-        apiBaseUrl,
-        locationId: draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
-        inventoryLocationLabel:
-          draft.placementKind === 'inventory'
-            ? draft.inventoryLocationLabel || undefined
-            : undefined,
-        equipmentType: draft.equipmentType,
-        brand: draft.brand,
-        model: draft.model,
-        serialNumber: draft.serialNumber,
-        filterSizes: splitFilterSizes(draft.filterSizes),
-        equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
-        installDate: draft.installDate || undefined,
-        warrantyStartDate: draft.warrantyStartDate || undefined,
-        warrantyEndDate: draft.warrantyEndDate || undefined,
-        warrantyProviderNote: draft.warrantyProviderNote || undefined,
-        systemGroupName: draft.systemGroupName || undefined,
-        notes: draft.notes || undefined,
-        status: draft.status
-      });
-      await refreshAllWorkspace();
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Serial number is strongly recommended') &&
-        window.confirm('Serial number is blank. Create this equipment record anyway?')
-      ) {
-        await createOfficeEquipment({
-          sessionToken,
-          apiBaseUrl,
-          locationId:
-            draft.placementKind === 'location' ? draft.locationId || undefined : undefined,
-          inventoryLocationLabel:
-            draft.placementKind === 'inventory'
-              ? draft.inventoryLocationLabel || undefined
-              : undefined,
-          equipmentType: draft.equipmentType,
-          brand: draft.brand,
-          model: draft.model,
-          serialNumber: draft.serialNumber,
-          filterSizes: splitFilterSizes(draft.filterSizes),
-          equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
-          installDate: draft.installDate || undefined,
-          warrantyStartDate: draft.warrantyStartDate || undefined,
-          warrantyEndDate: draft.warrantyEndDate || undefined,
-          warrantyProviderNote: draft.warrantyProviderNote || undefined,
-          systemGroupName: draft.systemGroupName || undefined,
-          notes: draft.notes || undefined,
-          status: draft.status,
-          confirmMissingSerial: true
-        });
-        await refreshAllWorkspace();
-        return;
-      }
-
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to add equipment.');
-    }
-  }
-
-  async function handleEquipmentUpdate(recordId: string, draft: EquipmentEditDraft) {
-    try {
-      await updateOfficeEquipment({
-        equipmentId: recordId,
-        sessionToken,
-        apiBaseUrl,
-        locationId: draft.locationId,
-        inventoryLocationLabel: draft.inventoryLocationLabel,
-        equipmentType: draft.equipmentType,
-        brand: draft.brand,
-        model: draft.model,
-        serialNumber: draft.serialNumber,
-        filterSizes: splitFilterSizes(draft.filterSizes),
-        equipmentLocationDescription: draft.equipmentLocationDescription,
-        installDate: draft.installDate,
-        warrantyStartDate: draft.warrantyStartDate || undefined,
-        warrantyEndDate: draft.warrantyEndDate || undefined,
-        warrantyProviderNote: draft.warrantyProviderNote || undefined,
-        systemGroupName: draft.systemGroupName || undefined,
-        clearSystemGroup: draft.systemGroupName.trim().length === 0,
-        status: draft.status,
-        notes: draft.notes
-      });
-      await loadEquipmentDetail(recordId);
-      await refreshAllWorkspace();
-    } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Serial number is strongly recommended') &&
-        window.confirm('Serial number is blank. Save this equipment change anyway?')
-      ) {
-        await updateOfficeEquipment({
-          equipmentId: recordId,
-          sessionToken,
-          apiBaseUrl,
-          locationId: draft.locationId,
-          inventoryLocationLabel: draft.inventoryLocationLabel,
-          equipmentType: draft.equipmentType,
-          brand: draft.brand,
-          model: draft.model,
-          serialNumber: draft.serialNumber,
-          filterSizes: splitFilterSizes(draft.filterSizes),
-          equipmentLocationDescription: draft.equipmentLocationDescription,
-          installDate: draft.installDate,
-          warrantyStartDate: draft.warrantyStartDate || undefined,
-          warrantyEndDate: draft.warrantyEndDate || undefined,
-          warrantyProviderNote: draft.warrantyProviderNote || undefined,
-          systemGroupName: draft.systemGroupName || undefined,
-          clearSystemGroup: draft.systemGroupName.trim().length === 0,
-          status: draft.status,
-          notes: draft.notes,
-          confirmMissingSerial: true
-        });
-        await loadEquipmentDetail(recordId);
-        await refreshAllWorkspace();
-        return;
-      }
-
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to update equipment.');
-    }
-  }
-
-  async function handleEquipmentSelect(equipmentId: string) {
-    try {
-      await loadEquipmentDetail(equipmentId);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load equipment detail.');
-    }
-  }
-
-  async function handleLinkReplacement(equipmentId: string, replacementEquipmentId: string) {
-    try {
-      await linkOfficeEquipmentReplacement({
-        equipmentId,
-        replacementEquipmentId,
-        sessionToken,
-        apiBaseUrl
-      });
-      await loadEquipmentDetail(equipmentId);
-      await refreshAllWorkspace();
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to link replacement equipment.'
-      );
-    }
-  }
-
-  async function handleDeleteEquipment(equipmentId: string) {
-    if (!window.confirm('Delete this equipment record permanently?')) {
-      return;
-    }
-
-    try {
-      await deleteOfficeEquipment({
-        equipmentId,
-        sessionToken,
-        apiBaseUrl,
-        confirmDelete: true
-      });
-      setSelectedEquipmentId(undefined);
-      setSelectedEquipmentDetail(null);
-      await refreshAllWorkspace();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to delete equipment.');
     }
   }
 
@@ -1250,11 +976,6 @@ export function OfficeWorkspaceShell({
             active={activeOfficeView === 'jobs'}
             onClick={() => setActiveOfficeView('jobs')}
           />
-          <NavButton
-            label="Equipment"
-            active={activeOfficeView === 'equipment'}
-            onClick={() => setActiveOfficeView('equipment')}
-          />
         </aside>
 
         <div style={styles.workArea}>
@@ -1277,11 +998,7 @@ export function OfficeWorkspaceShell({
                 onClick={() => void refreshAllWorkspace()}
                 style={styles.button}
               >
-                {isRefreshing ||
-                isDispatchRefreshing ||
-                isJobsQueueRefreshing ||
-                isJobIntakeLoading ||
-                isEquipmentRefreshing
+                {isRefreshing || isDispatchRefreshing || isJobsQueueRefreshing || isJobIntakeLoading
                   ? 'Refreshing...'
                   : 'Refresh'}
               </button>
@@ -1341,6 +1058,8 @@ export function OfficeWorkspaceShell({
               apiBaseUrl={apiBaseUrl}
               sessionToken={sessionToken}
               onErrorMessage={setErrorMessage}
+              canReplaceRemoveEquipment={canReplaceRemoveEquipment}
+              canDeleteEquipment={canDeleteEquipment}
             />
           ) : null}
 
@@ -1356,33 +1075,6 @@ export function OfficeWorkspaceShell({
           {activeOfficeView === 'jobs' && !jobsQueue ? (
             <section style={styles.workspacePanel} aria-label="Jobs queue">
               <p style={styles.muted}>Loading jobs...</p>
-            </section>
-          ) : null}
-
-          {activeOfficeView === 'equipment' && hasLoadedEquipmentWorkspace ? (
-            <EquipmentPanel
-              locations={equipmentLocations}
-              equipment={equipment}
-              suggestedEquipmentTypes={suggestedEquipmentTypes}
-              selectedEquipmentId={selectedEquipmentId}
-              selectedEquipmentDetail={selectedEquipmentDetail}
-              showInactiveEquipment={showInactiveEquipment}
-              canReplaceRemove={canReplaceRemoveEquipment}
-              canDelete={canDeleteEquipment}
-              onSelectEquipment={handleEquipmentSelect}
-              onShowInactiveChange={setShowInactiveEquipment}
-              onCreateEquipment={handleCreateEquipment}
-              onRecordUpdate={handleEquipmentUpdate}
-              onLinkReplacement={handleLinkReplacement}
-              onDeleteEquipment={handleDeleteEquipment}
-            />
-          ) : null}
-
-          {activeOfficeView === 'equipment' && !hasLoadedEquipmentWorkspace ? (
-            <section style={styles.workspacePanel} aria-label="Equipment panel">
-              <p style={styles.muted}>
-                {isEquipmentRefreshing ? 'Loading equipment...' : 'Equipment is not ready yet.'}
-              </p>
             </section>
           ) : null}
 
@@ -1476,11 +1168,4 @@ function NavButton({
       {label}
     </button>
   );
-}
-
-function splitFilterSizes(filterSizes: string): string[] {
-  return filterSizes
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
 }

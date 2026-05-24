@@ -45,6 +45,10 @@ type EquipmentPanelProps = {
   locations: Array<{ id: string; name: string }>;
   equipment: EquipmentSummary[];
   suggestedEquipmentTypes: string[];
+  locationScope?: {
+    locationId: string;
+    locationName: string;
+  };
   selectedEquipmentId?: string;
   selectedEquipmentDetail: EquipmentDetail | null;
   showInactiveEquipment: boolean;
@@ -62,6 +66,7 @@ export function EquipmentPanel({
   locations,
   equipment,
   suggestedEquipmentTypes,
+  locationScope,
   selectedEquipmentId,
   selectedEquipmentDetail,
   showInactiveEquipment,
@@ -75,16 +80,28 @@ export function EquipmentPanel({
   onDeleteEquipment
 }: EquipmentPanelProps) {
   const [createDraft, setCreateDraft] = useState<EquipmentCreateDraft>(() =>
-    createDefaultCreateDraft(locations[0]?.id)
+    createDefaultCreateDraft(locationScope?.locationId ?? locations[0]?.id)
   );
   const [detailDraft, setDetailDraft] = useState<EquipmentEditDraft | null>(null);
   const [replacementEquipmentId, setReplacementEquipmentId] = useState('');
+  const isLocationScoped = Boolean(locationScope);
+  const scopedLocationId = locationScope?.locationId;
 
   useEffect(() => {
+    if (scopedLocationId) {
+      setCreateDraft((current) => ({
+        ...current,
+        placementKind: 'location',
+        locationId: scopedLocationId,
+        inventoryLocationLabel: ''
+      }));
+      return;
+    }
+
     if (!createDraft.locationId && locations[0]) {
       setCreateDraft((current) => ({ ...current, locationId: locations[0].id }));
     }
-  }, [createDraft.locationId, locations]);
+  }, [createDraft.locationId, locations, scopedLocationId]);
 
   useEffect(() => {
     setDetailDraft(selectedEquipmentDetail ? createDetailDraft(selectedEquipmentDetail) : null);
@@ -107,7 +124,14 @@ export function EquipmentPanel({
   return (
     <section style={styles.card}>
       <div style={styles.row}>
-        <h2 style={styles.heading}>Equipment</h2>
+        <div>
+          <h2 style={styles.heading}>
+            {locationScope ? `Equipment for ${locationScope.locationName}` : 'Equipment'}
+          </h2>
+          {locationScope ? (
+            <p style={styles.tinyMuted}>Customer-location equipment and service assets.</p>
+          ) : null}
+        </div>
         <label style={styles.inlineLabel}>
           <input
             type="checkbox"
@@ -120,52 +144,63 @@ export function EquipmentPanel({
 
       <div style={styles.panel}>
         <div style={styles.row}>
-          <h3 style={styles.subheading}>Add equipment</h3>
+          <h3 style={styles.subheading}>
+            {locationScope ? 'Add equipment for this location' : 'Add equipment'}
+          </h3>
           <div style={styles.badgeRow}>
             <span style={styles.badge}>Serialized-unit mindset</span>
             <span style={styles.badge}>Location first</span>
           </div>
         </div>
         <div style={styles.formRow}>
-          <select
-            value={createDraft.placementKind}
-            onChange={(event) =>
-              setCreateDraft((current) => ({
-                ...current,
-                placementKind: event.target.value as EquipmentCreateDraft['placementKind']
-              }))
-            }
-            style={styles.input}
-          >
-            <option value="location">Customer location</option>
-            <option value="inventory">Inventory placement</option>
-          </select>
-          {createDraft.placementKind === 'location' ? (
-            <select
-              value={createDraft.locationId}
-              onChange={(event) =>
-                setCreateDraft((current) => ({ ...current, locationId: event.target.value }))
-              }
-              style={styles.input}
-            >
-              {locations.map((location) => (
-                <option key={location.id} value={location.id}>
-                  {location.name}
-                </option>
-              ))}
-            </select>
+          {locationScope ? (
+            <div style={styles.subpanel}>
+              <strong>Customer location</strong>
+              <span style={styles.tinyMuted}>{locationScope.locationName}</span>
+            </div>
           ) : (
-            <input
-              value={createDraft.inventoryLocationLabel}
-              onChange={(event) =>
-                setCreateDraft((current) => ({
-                  ...current,
-                  inventoryLocationLabel: event.target.value
-                }))
-              }
-              placeholder="Inventory placement label"
-              style={styles.input}
-            />
+            <>
+              <select
+                value={createDraft.placementKind}
+                onChange={(event) =>
+                  setCreateDraft((current) => ({
+                    ...current,
+                    placementKind: event.target.value as EquipmentCreateDraft['placementKind']
+                  }))
+                }
+                style={styles.input}
+              >
+                <option value="location">Customer location</option>
+                <option value="inventory">Inventory placement</option>
+              </select>
+              {createDraft.placementKind === 'location' ? (
+                <select
+                  value={createDraft.locationId}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({ ...current, locationId: event.target.value }))
+                  }
+                  style={styles.input}
+                >
+                  {locations.map((location) => (
+                    <option key={location.id} value={location.id}>
+                      {location.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <input
+                  value={createDraft.inventoryLocationLabel}
+                  onChange={(event) =>
+                    setCreateDraft((current) => ({
+                      ...current,
+                      inventoryLocationLabel: event.target.value
+                    }))
+                  }
+                  placeholder="Inventory placement label"
+                  style={styles.input}
+                />
+              )}
+            </>
           )}
           <input
             list="equipment-type-suggestions"
@@ -285,7 +320,18 @@ export function EquipmentPanel({
         />
         <button
           type="button"
-          onClick={() => void onCreateEquipment(createDraft)}
+          onClick={() =>
+            void onCreateEquipment(
+              locationScope
+                ? {
+                    ...createDraft,
+                    placementKind: 'location',
+                    locationId: locationScope.locationId,
+                    inventoryLocationLabel: ''
+                  }
+                : createDraft
+            )
+          }
           style={styles.primaryButton}
         >
           Add equipment
@@ -301,6 +347,13 @@ export function EquipmentPanel({
         <div style={styles.panel}>
           <h3 style={styles.subheading}>Equipment at a glance</h3>
           <div style={styles.list}>
+            {equipment.length === 0 ? (
+              <p style={styles.muted}>
+                {isLocationScoped
+                  ? 'No equipment on this location yet.'
+                  : 'No equipment records yet.'}
+              </p>
+            ) : null}
             {equipment.map((record) => (
               <button
                 key={record.id}

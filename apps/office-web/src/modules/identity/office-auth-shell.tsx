@@ -64,8 +64,8 @@ export function OfficeAuthShell() {
         <div style={styles.kicker}>Milestone foundation</div>
         <h1 style={styles.title}>BellField Office Sign In</h1>
         <p style={styles.muted}>
-          This office shell now leads into employee, equipment, and jobs/appointments foundations
-          using the same API session.
+          This office shell now leads into employee, customer/location, and jobs/appointments
+          foundations using the same API session.
         </p>
         <form onSubmit={handleLogin} style={styles.form}>
           <label style={styles.fieldLabel}>

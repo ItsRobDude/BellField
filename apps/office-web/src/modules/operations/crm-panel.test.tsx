@@ -177,4 +177,68 @@ describe('CrmPanel', () => {
       });
     });
   });
+
+  it('loads equipment from the selected location detail instead of a global rail surface', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [duplicateLocation]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-existing') {
+        return jsonResponse(createdLocation);
+      }
+
+      if (url.pathname === '/operations/equipment') {
+        return jsonResponse({
+          locations: [
+            {
+              id: createdLocation.id,
+              name: createdLocation.name,
+              customerId: createdLocation.customerId,
+              customerName: createdLocation.customerName,
+              addressLine1: createdLocation.addressLine1,
+              city: createdLocation.city,
+              state: createdLocation.state,
+              postalCode: createdLocation.postalCode,
+              contactNames: []
+            }
+          ],
+          suggestedEquipmentTypes: ['Condenser'],
+          equipment: []
+        });
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    await screen.findByRole('heading', { name: 'Create location' });
+    fireEvent.change(screen.getByPlaceholderText('Search by name, address, phone'), {
+      target: { value: 'Main Shop' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search CRM' }));
+    fireEvent.click(await screen.findByText('Main Shop'));
+    fireEvent.click(await screen.findByRole('tab', { name: 'Equipment' }));
+
+    expect(await screen.findByRole('region', { name: 'Location equipment' })).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { name: 'Equipment for Main Shop' })
+    ).toBeInTheDocument();
+    expect(screen.getByText('No equipment on this location yet.')).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Inventory placement' })).not.toBeInTheDocument();
+    expect(
+      fetchMock.mock.calls.some(
+        ([input]) => new URL(String(input)).pathname === '/operations/equipment'
+      )
+    ).toBe(true);
+  });
 });

@@ -50,10 +50,6 @@ vi.mock('./crm-panel', () => ({
   CrmPanel: () => <section aria-label="CRM panel mock">CRM panel mock</section>
 }));
 
-vi.mock('./equipment-panel', () => ({
-  EquipmentPanel: () => <section aria-label="Equipment panel mock">Equipment panel mock</section>
-}));
-
 const mockedOperationsApi = vi.mocked(operationsApi);
 const mockedIdentityApi = vi.mocked(identityApi);
 
@@ -418,18 +414,18 @@ describe('OfficeWorkspaceShell IA', () => {
 
     expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'CRM panel mock' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('region', { name: 'Equipment panel mock' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Jobs queue' })).not.toBeInTheDocument();
     expect(mockedOperationsApi.getOfficeJobIntakeContext).not.toHaveBeenCalled();
     expect(mockedOperationsApi.getOfficeEquipmentWorkspace).not.toHaveBeenCalled();
   });
 
-  it('switches between Dispatch, Customers, Jobs, and Equipment from the rail', async () => {
+  it('switches between Dispatch, Customers, and Jobs from the rail', async () => {
     arrangeWorkspace(buildWorkspace([buildJob()]));
 
     renderShell();
 
     expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Equipment' })).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Customers' }));
     expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
@@ -438,15 +434,6 @@ describe('OfficeWorkspaceShell IA', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
     expect(await screen.findByRole('region', { name: 'Jobs queue' })).toBeInTheDocument();
     expect(mockedOperationsApi.getOfficeEquipmentWorkspace).not.toHaveBeenCalled();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Equipment' }));
-    expect(await screen.findByRole('region', { name: 'Equipment panel mock' })).toBeInTheDocument();
-    expect(mockedOperationsApi.getOfficeEquipmentWorkspace).toHaveBeenCalledWith({
-      sessionToken: 'session-token',
-      apiBaseUrl: 'http://api.test',
-      includeInactive: false
-    });
-    expect(mockedOperationsApi.getOfficeJobIntakeContext).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Dispatch' }));
     expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();

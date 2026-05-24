@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import type { EquipmentDetail, EquipmentSummary, LocationSummary } from '@/lib/operations-api';
 import { EquipmentPanel } from './equipment-panel';
@@ -68,5 +68,41 @@ describe('EquipmentPanel', () => {
     expect(screen.getByText('16x25x1, 20x20x1')).toBeInTheDocument();
     expect(screen.getByText('08/14/2020')).toBeInTheDocument();
     expect(screen.queryByText('4 years old')).not.toBeInTheDocument();
+  });
+
+  it('locks create placement to the selected location when location scoped', () => {
+    const onCreateEquipment = vi.fn(async () => undefined);
+
+    render(
+      <EquipmentPanel
+        locations={[location]}
+        equipment={[]}
+        suggestedEquipmentTypes={['Condenser']}
+        locationScope={{ locationId: location.id, locationName: location.name }}
+        selectedEquipmentDetail={null}
+        showInactiveEquipment={false}
+        canReplaceRemove={false}
+        canDelete={false}
+        onSelectEquipment={vi.fn(async () => undefined)}
+        onShowInactiveChange={vi.fn()}
+        onCreateEquipment={onCreateEquipment}
+        onRecordUpdate={vi.fn(async () => undefined)}
+        onLinkReplacement={vi.fn(async () => undefined)}
+        onDeleteEquipment={vi.fn(async () => undefined)}
+      />
+    );
+
+    expect(screen.getByRole('heading', { name: 'Equipment for Main Shop' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Inventory placement' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add equipment' }));
+
+    expect(onCreateEquipment).toHaveBeenCalledWith(
+      expect.objectContaining({
+        placementKind: 'location',
+        locationId: location.id,
+        inventoryLocationLabel: ''
+      })
+    );
   });
 });
