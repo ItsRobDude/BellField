@@ -155,6 +155,14 @@ BellField should not assume:
 
 The product should remain practical for reused or modest hardware as long as the company understands its limits.
 
+### Installation support posture
+Self-hosted does not mean unsupported install.
+
+BellField should provide one narrow, controlled Windows-friendly setup path before it promises broad setup flexibility.
+Customers should not be expected to run Git, Node.js, pnpm, Docker, migrations, or other developer commands as part of a normal production installation.
+
+The detailed install posture, early support boundary, and readiness gates live in [self-hosted-installation-strategy.md](./self-hosted-installation-strategy.md).
+
 ---
 
 ## 8. Multi-User Office Behavior
@@ -413,6 +421,8 @@ It should first be excellent at this:
 - local data ownership
 - secure remote field access
 - local backup and restore capability
+
+Early paid pilots should assume assisted setup until the BellField Server install path has been proven from a clean runbook, including backup, restore, update, office-desktop access, and field-device sync.
 
 ---
 

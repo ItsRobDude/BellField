@@ -106,6 +106,16 @@ Read when: making hosting, storage, support, Windows, or infrastructure-related 
 
 Does not own: feature behavior, workflow definitions, or code-style rules.
 
+### [self-hosted-installation-strategy.md](./self-hosted-installation-strategy.md)
+
+Audience: contributors planning pilot deployment, installer shape, support boundaries, Windows setup, backups, restore, updates, or customer install expectations.
+
+Purpose: supported self-hosted install posture, early assisted-setup model, unsupported setup boundaries, installer/runbook target, and readiness gates.
+
+Read when: deciding whether a deployment assumption is supportable, planning a pilot install, or turning dev setup into a customer-safe install path.
+
+Does not own: general hosting philosophy; use `deployment-model.md` for that. Does not mean the production installer already exists.
+
 ### [milestone-implementation-plan.md](./milestone-implementation-plan.md)
 
 Audience: contributors deciding what should be built next or whether a change is early.
@@ -245,6 +255,7 @@ For API/client wiring:
 For deployment or hosting changes:
 
 - `deployment-model.md`
+- `self-hosted-installation-strategy.md` when the change affects installer shape, setup support, backup/restore, updates, or pilot install expectations
 
 For planning what belongs in scope:
 

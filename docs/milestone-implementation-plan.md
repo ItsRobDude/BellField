@@ -492,6 +492,9 @@ Run BellField like a real small-shop system, not just a dev project.
 ### Scope
 - self-hosted setup instructions
 - Windows server-PC-friendly deployment path
+- supported install profile and explicit unsupported setup boundary
+- assisted pilot install procedure before any self-serve install claim
+- internal clean-install validation on Rob's Windows PC
 - backup and restore test path
 - multi-office-desktop connection validation
 - remote field access validation
@@ -510,6 +513,8 @@ Milestone 11 is done when:
 - field devices can work and sync back correctly
 - backup/restore has been tested in practice
 - update flow is understandable and safe enough for a real pilot company
+- the install path does not require customer use of repo/dev commands such as Git, Node.js, pnpm, Docker, or migration scripts
+- supported and unsupported customer setup shapes are documented clearly enough to control support risk
 
 ---
 
@@ -630,6 +635,8 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
    harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
 5. Historical snapshot hardening before Milestone 7/8:
    define and persist the customer/location/job display context that invoices and old jobs must preserve.
+6. Self-hosted deployment readiness planning:
+   keep the supported Windows install profile, assisted pilot setup posture, backup/restore/update expectations, and internal Rob install test aligned with `docs/self-hosted-installation-strategy.md` before any paid pilot is treated as repeatable.
 
 ### Milestone-boundary reminders
 

@@ -32,7 +32,7 @@ Refresh it after major implementation lanes land.
 | Intake at scale | Job intake context still loads active customers/locations. Future typeahead should use SQL-backed CRM search rather than full dropdowns. |
 | Historical snapshots | Jobs and dispatch still resolve current customer/location names. Before invoices/posting, define persisted snapshot fields for customer/location/job display context. |
 | Invoice draft | Register entries are shaped for invoice draft reflection, but the invoice draft entity/workflow has not started. |
-| Self-hosted runbook | Backup/restore/update/log guidance is not yet a usable operator runbook. Media root backup is now explicitly required. |
+| Self-hosted runbook | Backup/restore/update/log guidance is not yet a usable operator runbook. Media root backup is now explicitly required, and `docs/self-hosted-installation-strategy.md` now defines the supported-install posture and readiness gates. |
 
 ## Not Started
 

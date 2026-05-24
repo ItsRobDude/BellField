@@ -145,6 +145,7 @@ Product source-of-truth docs:
 Operational and sequencing docs:
 
 - [docs/deployment-model.md](./docs/deployment-model.md) - self-hosted deployment constraints and hosting posture
+- [docs/self-hosted-installation-strategy.md](./docs/self-hosted-installation-strategy.md) - supported install posture, pilot setup boundary, and installer/runbook readiness gates
 - [docs/milestone-implementation-plan.md](./docs/milestone-implementation-plan.md) - build order and milestone discipline
 - [docs/whats-shipped.md](./docs/whats-shipped.md) - current shipped/open/not-started snapshot
 - [docs/architecture-guardrails.md](./docs/architecture-guardrails.md) - checked architecture rules
