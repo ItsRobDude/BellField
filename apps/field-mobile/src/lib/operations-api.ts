@@ -1,6 +1,8 @@
 import type {
   AppointmentFinishOutcome,
   AppointmentStatus,
+  CreateMediaUploadIntentRequest,
+  CreateMediaUploadIntentResponse,
   CreateRegisterEntryRequest,
   CreateEquipmentRequest,
   EquipmentMutationResponse,
@@ -9,6 +11,9 @@ import type {
   FieldAssignedWorkResponse,
   JobMutationResponse,
   LinkEquipmentReplacementRequest,
+  MediaAttachmentKind,
+  MediaAttachmentResponse,
+  MediaAttachmentsResponse,
   RegisterEntryKind,
   RegisterEntrySummary,
   SyncResult
@@ -18,11 +23,15 @@ import { resolveFieldApiBaseUrl } from './api-base-url';
 export type {
   AppointmentFinishOutcome,
   AppointmentStatus,
+  CreateMediaUploadIntentResponse,
   EquipmentSummary,
   EquipmentMutationResponse,
   EquipmentStatus,
   FieldAssignedWorkResponse,
   JobMutationResponse,
+  MediaAttachmentKind,
+  MediaAttachmentResponse,
+  MediaAttachmentsResponse,
   RegisterEntryKind,
   RegisterEntrySummary,
   SyncResult
@@ -175,6 +184,50 @@ export async function voidFieldRegisterEntry(input: {
       ...payload,
       syncSource: 'field-save-queue'
     })
+  });
+}
+
+export async function getFieldMediaAttachments(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  jobId: string;
+}): Promise<MediaAttachmentsResponse> {
+  return requestJson<MediaAttachmentsResponse>(`/operations/jobs/${input.jobId}/media`, {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function createFieldMediaUploadIntent(
+  input: CreateMediaUploadIntentRequest & {
+    sessionToken: string;
+    apiBaseUrl?: string;
+    jobId: string;
+  }
+): Promise<CreateMediaUploadIntentResponse> {
+  const { sessionToken, apiBaseUrl, jobId, ...payload } = input;
+
+  return requestJson<CreateMediaUploadIntentResponse>(`/operations/jobs/${jobId}/media/upload-intents`, {
+    sessionToken,
+    apiBaseUrl,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateFieldMediaAttachment(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  mediaId: string;
+  caption?: string | null;
+}): Promise<MediaAttachmentResponse> {
+  const { sessionToken, apiBaseUrl, mediaId, ...payload } = input;
+
+  return requestJson<MediaAttachmentResponse>(`/operations/media/${mediaId}`, {
+    sessionToken,
+    apiBaseUrl,
+    method: 'PATCH',
+    body: JSON.stringify(payload)
   });
 }
 

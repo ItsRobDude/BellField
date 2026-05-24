@@ -25,9 +25,9 @@ Refresh it after major implementation lanes land.
 
 | Area | Open work |
 | --- | --- |
-| Dispatch closeout | Better previous/today/next date navigation, compact week strip, clearer minimal refresh state, browser/manual smoke steps for schedule/status changes. |
-| Field app layout | Move assigned work toward a real technician home plus focused job detail tabs/tiles instead of one long screen. |
-| Field media | Camera/file-picker capture, local media queue state, upload-intent replay, and blob finalization. Pause before adding a new Expo dependency. |
+| Dispatch closeout | Date picker, Today, previous/next, and refresh controls are present with focused dispatch tests passing. Compact week strip remains polish, and browser/manual smoke steps for schedule/status changes should still be run before calling dispatch fully closed. |
+| Field app layout | Technician workspace now has an assigned-work home and focused job detail tabs for Overview, Appointments, Register, Equipment, and Sync. Mobile smoke is still needed. |
+| Field media | Field-mobile uses approved Expo media dependencies for image/video capture or pick, app-owned local staging, SHA-256 queue metadata, upload-intent replay, and raw blob finalization. Manual device smoke is still needed. |
 | Sync hardening | Reliability checks around register/media partial success, retries, conflict/rejected handling, and revoked-device behavior. |
 | Intake at scale | Job intake context still loads active customers/locations. Future typeahead should use SQL-backed CRM search rather than full dropdowns. |
 | Historical snapshots | Jobs and dispatch still resolve current customer/location names. Before invoices/posting, define persisted snapshot fields for customer/location/job display context. |

@@ -16,6 +16,7 @@ import {
 import {
   addFieldJobNote,
   createFieldEquipment,
+  createFieldMediaUploadIntent,
   createFieldRegisterEntry,
   getAssignedFieldWork,
   linkFieldEquipmentReplacement,
@@ -77,6 +78,19 @@ import {
   nextBackgroundSyncDelayMs,
   shouldRunBackgroundSync
 } from './field-background-sync-schedule';
+import { pickFieldMedia, type FieldMediaSource } from './field-media-capture';
+import { buildMediaUploadOperation } from './field-media-files';
+import { replayFieldMediaUploadOperation } from './field-media-replay';
+import { uploadFieldMediaBlob } from './field-media-upload';
+import {
+  countJobRegisterEntries,
+  fieldDetailTabs,
+  getPendingOperationsForJob,
+  resolveSelectedFieldJob,
+  shouldReturnToFieldHome,
+  summarizeJobQueueBadge,
+  type FieldDetailTab
+} from './field-workspace-layout';
 
 type Props = {
   apiBaseUrl: string;
@@ -177,6 +191,9 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
   const [registerEditDrafts, setRegisterEditDrafts] = useState<Record<string, RegisterEntryDraft>>({});
   const [replacementSelections, setReplacementSelections] = useState<Record<string, string>>({});
   const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [activeDetailTab, setActiveDetailTab] = useState<FieldDetailTab>('overview');
+  const [mediaCaptionDrafts, setMediaCaptionDrafts] = useState<Record<string, string>>({});
   const [officeChangeMessages, setOfficeChangeMessages] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -215,7 +232,16 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     () => summarizeSyncHealth(syncMetadata, pendingOperations),
     [pendingOperations, syncMetadata]
   );
+  const assignedJobs = useMemo(() => assignedWork?.jobs ?? [], [assignedWork]);
+  const selectedJob = resolveSelectedFieldJob(assignedJobs, selectedJobId);
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
+
+  useEffect(() => {
+    if (shouldReturnToFieldHome(assignedJobs, selectedJobId)) {
+      setSelectedJobId(null);
+      setActiveDetailTab('overview');
+    }
+  }, [assignedJobs, selectedJobId]);
 
   useEffect(() => {
     async function initializeWorkspace() {
@@ -312,6 +338,42 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
       }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the note locally.');
+    }
+  }
+
+  function openJobDetail(jobId: string) {
+    setSelectedJobId(jobId);
+    setActiveDetailTab('overview');
+  }
+
+  function returnToHome() {
+    setSelectedJobId(null);
+    setActiveDetailTab('overview');
+  }
+
+  async function queueMediaUpload(job: FieldAssignedWorkResponse['jobs'][number], source: FieldMediaSource) {
+    setErrorMessage(null);
+
+    try {
+      const stagedMedia = await pickFieldMedia(source);
+
+      if (!stagedMedia) {
+        return;
+      }
+
+      const caption = mediaCaptionDrafts[job.id]?.trim();
+      const operation = buildMediaUploadOperation({
+        jobId: job.id,
+        stagedMedia,
+        caption,
+        baseUpdatedAt: findJobBaseUpdatedAt(serverSnapshot, job.id)
+      });
+
+      await queuePendingOperation(operation);
+      setPendingOperations((current) => [...current, operation]);
+      setMediaCaptionDrafts((current) => ({ ...current, [job.id]: '' }));
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to queue media locally.');
     }
   }
 
@@ -1098,6 +1160,34 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             }
           }
 
+          if (operation.kind === 'mediaUpload') {
+            await replayFieldMediaUploadOperation(operation, {
+              createUploadIntent: (mediaOperation) =>
+                createFieldMediaUploadIntent({
+                  sessionToken,
+                  apiBaseUrl,
+                  jobId: mediaOperation.jobId,
+                  appointmentId: mediaOperation.appointmentId,
+                  kind: mediaOperation.mediaKind,
+                  contentType: mediaOperation.contentType,
+                  byteSize: mediaOperation.byteSize,
+                  sha256: mediaOperation.sha256,
+                  originalFilename: mediaOperation.originalFilename,
+                  caption: mediaOperation.caption,
+                  capturedAt: mediaOperation.capturedAt
+                }),
+              uploadBlob: ({ mediaId, uploadToken, localUri }) =>
+                uploadFieldMediaBlob({
+                  apiBaseUrl,
+                  mediaId,
+                  uploadToken,
+                  localUri
+                })
+            });
+
+            await preserveAppliedOperation(operation.id, currentServerSnapshot);
+          }
+
           if (operation.kind === 'equipmentUpdate') {
             const response = await updateFieldEquipment({
               sessionToken,
@@ -1403,13 +1493,70 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-          {(assignedWork?.jobs ?? []).map((job) => {
+          {assignedJobs.map((job) => {
             const location = locationLookup.get(job.locationId);
             const equipment = (assignedWork?.equipment ?? []).filter((record) => record.locationId === job.locationId);
             const workOrderLine = formatWorkOrderLine(job);
+            const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
+
+            if (selectedJob && selectedJob.id !== job.id) {
+              return null;
+            }
+
+            if (!selectedJob) {
+              return (
+                <Pressable key={job.id} onPress={() => openJobDetail(job.id)} style={styles.jobHomeCard}>
+                  <View style={styles.jobHomeHeader}>
+                    <View style={styles.flexColumn}>
+                      <Text style={styles.sectionTitle}>
+                        Job {job.jobNumber}: {job.summary}
+                      </Text>
+                      {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
+                    </View>
+                    <Text
+                      style={[
+                        styles.queueBadge,
+                        queueBadge.tone === 'alert'
+                          ? styles.queueBadgeAlert
+                          : queueBadge.tone === 'attention'
+                            ? styles.queueBadgeAttention
+                            : styles.queueBadgeQuiet
+                      ]}
+                    >
+                      {queueBadge.label}
+                    </Text>
+                  </View>
+                  <Text style={styles.summaryText}>
+                    {location?.name ?? job.locationName} - {formatFieldLocationAddress(location)}
+                  </Text>
+                  <Text style={styles.summaryText}>
+                    Appointments: {job.appointments.length} - Register: {countJobRegisterEntries(job)} - Equipment:{' '}
+                    {equipment.length}
+                  </Text>
+                  <Text style={styles.pendingText}>Open job detail</Text>
+                </Pressable>
+              );
+            }
 
             return (
               <View key={job.id} style={styles.summaryCard}>
+                <View style={styles.detailHeaderRow}>
+                  <Pressable onPress={returnToHome} style={styles.secondaryButton}>
+                    <Text style={styles.secondaryButtonText}>Back to jobs</Text>
+                  </Pressable>
+                  <Text
+                    style={[
+                      styles.queueBadge,
+                      queueBadge.tone === 'alert'
+                        ? styles.queueBadgeAlert
+                        : queueBadge.tone === 'attention'
+                          ? styles.queueBadgeAttention
+                          : styles.queueBadgeQuiet
+                    ]}
+                  >
+                    {queueBadge.label}
+                  </Text>
+                </View>
                 <Text style={styles.sectionTitle}>
                   Job {job.jobNumber}: {job.summary}
                 </Text>
@@ -1421,7 +1568,26 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                   Contacts: {location?.contacts.map((contact) => contact.displayName).join(', ') || 'None'}
                 </Text>
 
-                {job.appointments.map((appointment) => {
+                <View style={styles.segmentedControl}>
+                  {fieldDetailTabs.map((tab) => (
+                    <Pressable
+                      key={tab.id}
+                      onPress={() => setActiveDetailTab(tab.id)}
+                      style={[styles.segmentButton, activeDetailTab === tab.id ? styles.segmentButtonActive : null]}
+                    >
+                      <Text
+                        style={[
+                          styles.segmentButtonText,
+                          activeDetailTab === tab.id ? styles.segmentButtonTextActive : null
+                        ]}
+                      >
+                        {tab.label}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {activeDetailTab === 'appointments' ? job.appointments.map((appointment) => {
                   const assignmentLine = formatAppointmentAssignmentLine(appointment, employee.id);
                   const queueSummary = summarizeAppointmentQueueState(appointment.id, pendingOperations);
                   const finishedReviewAcknowledgement = formatFinishedReviewAcknowledgement(appointment);
@@ -1541,9 +1707,9 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       ) : null}
                     </View>
                   );
-                })}
+                }) : null}
 
-                <View style={styles.block}>
+                {activeDetailTab === 'overview' ? <View style={styles.block}>
                   <Text style={styles.sectionTitleSmall}>Save note locally</Text>
                   <Text style={styles.summaryText}>This note stays on-device until Sync Now applies it on the server.</Text>
                   <TextInput
@@ -1556,9 +1722,30 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                   <Pressable onPress={() => void queueJobNote(job.id)} style={styles.secondaryButton}>
                     <Text style={styles.secondaryButtonText}>Save note locally</Text>
                   </Pressable>
-                </View>
 
-                <View style={styles.block}>
+                  <View style={styles.reviewCard}>
+                    <Text style={styles.sectionTitleSmall}>Media</Text>
+                    <Text style={styles.summaryText}>
+                      Photos and videos are copied into BellField storage before they enter the sync queue.
+                    </Text>
+                    <TextInput
+                      value={mediaCaptionDrafts[job.id] ?? ''}
+                      onChangeText={(value) => setMediaCaptionDrafts((current) => ({ ...current, [job.id]: value }))}
+                      placeholder="Optional caption"
+                      style={styles.input}
+                    />
+                    <View style={styles.actionRow}>
+                      <Pressable onPress={() => void queueMediaUpload(job, 'camera')} style={styles.secondaryButton}>
+                        <Text style={styles.secondaryButtonText}>Capture media</Text>
+                      </Pressable>
+                      <Pressable onPress={() => void queueMediaUpload(job, 'library')} style={styles.secondaryButton}>
+                        <Text style={styles.secondaryButtonText}>Pick from library</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                </View> : null}
+
+                {activeDetailTab === 'register' ? <View style={styles.block}>
                   <Text style={styles.sectionTitleSmall}>Register entries</Text>
                   {(job.registerEntries ?? []).length === 0 ? (
                     <Text style={styles.summaryText}>No register lines saved for this job yet.</Text>
@@ -1740,9 +1927,37 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       </View>
                     );
                   })()}
-                </View>
+                </View> : null}
 
-                {equipment.map((record) => (
+                {activeDetailTab === 'sync' ? (
+                  <View style={styles.block}>
+                    <Text style={styles.sectionTitleSmall}>Queued work for this job</Text>
+                    {getPendingOperationsForJob(job, equipment, pendingOperations).length === 0 ? (
+                      <Text style={styles.summaryText}>No local changes waiting for this job.</Text>
+                    ) : (
+                      getPendingOperationsForJob(job, equipment, pendingOperations).map((operation) => (
+                        <View key={operation.id} style={styles.queueItem}>
+                          <Text style={styles.summaryText}>{formatPendingOperation(operation)}</Text>
+                          {shouldOfferQueueResolution(operation) ? (
+                            <View style={styles.actionRow}>
+                              <Pressable onPress={() => void retryQueuedOperation(operation.id)} style={styles.secondaryButton}>
+                                <Text style={styles.secondaryButtonText}>Retry on next sync</Text>
+                              </Pressable>
+                              <Pressable onPress={() => confirmDiscardQueuedOperation(operation)} style={styles.dangerButton}>
+                                <Text style={styles.dangerButtonText}>Discard local change</Text>
+                              </Pressable>
+                            </View>
+                          ) : null}
+                        </View>
+                      ))
+                    )}
+                    <Text style={styles.summaryText}>
+                      Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {activeDetailTab === 'equipment' ? equipment.map((record) => (
                   <View key={record.id} style={styles.block}>
                     {(() => {
                       const equipmentDraft = equipmentDrafts[record.id] ?? createEquipmentDraft(record);
@@ -1839,9 +2054,9 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       );
                     })()}
                   </View>
-                ))}
+                )) : null}
 
-                <View style={styles.block}>
+                {activeDetailTab === 'equipment' ? <View style={styles.block}>
                   <Text style={styles.sectionTitleSmall}>Add equipment at this location</Text>
                   {(() => {
                     const createDraft = equipmentCreateDrafts[job.locationId] ?? createEquipmentCreateDraft();
@@ -1933,12 +2148,12 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       </>
                     );
                   })()}
-                </View>
+                </View> : null}
               </View>
             );
           })}
 
-          <View style={styles.summaryCard}>
+          {!selectedJob ? <View style={styles.summaryCard}>
             <Text style={styles.sectionTitle}>Pending queue</Text>
             {pendingOperations.length === 0 ? (
               <Text style={styles.summaryText}>No local changes waiting for sync.</Text>
@@ -1959,7 +2174,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 </View>
               ))
             )}
-          </View>
+          </View> : null}
         </View>
       </ScrollView>
       <StatusBar style="dark" />
@@ -2111,10 +2326,44 @@ const styles = StyleSheet.create({
   title: { color: '#1f2933', fontSize: 28, fontWeight: '700' },
   subtitle: { color: '#52606d', fontSize: 15, lineHeight: 22 },
   summaryCard: { backgroundColor: '#ffffff', borderColor: '#ebdec6', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
+  jobHomeCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#ebdec6',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 8,
+    padding: 16
+  },
+  jobHomeHeader: { alignItems: 'flex-start', flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
+  detailHeaderRow: { alignItems: 'center', flexDirection: 'row', gap: 10, justifyContent: 'space-between' },
+  flexColumn: { flex: 1, gap: 4 },
   noticeCard: { backgroundColor: '#eef6f7', borderColor: '#bdd9df', borderRadius: 18, borderWidth: 1, gap: 8, padding: 16 },
   block: { backgroundColor: '#faf7ef', borderRadius: 14, gap: 8, padding: 12 },
   queueItem: { borderColor: '#ebdec6', borderTopWidth: 1, gap: 8, paddingTop: 10 },
   reviewCard: { backgroundColor: '#f3f7ef', borderColor: '#d5e2cd', borderRadius: 14, borderWidth: 1, gap: 8, padding: 12 },
+  queueBadge: {
+    borderRadius: 999,
+    flexShrink: 0,
+    fontSize: 12,
+    fontWeight: '700',
+    overflow: 'hidden',
+    paddingHorizontal: 10,
+    paddingVertical: 6
+  },
+  queueBadgeAlert: { backgroundColor: '#fdecea', color: '#9f1d15' },
+  queueBadgeAttention: { backgroundColor: '#fff7e1', color: '#8a5a00' },
+  queueBadgeQuiet: { backgroundColor: '#e8f3ed', color: '#1c6b57' },
+  segmentedControl: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  segmentButton: {
+    borderColor: '#cdbfa6',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 8
+  },
+  segmentButtonActive: { backgroundColor: '#1c6b57', borderColor: '#1c6b57' },
+  segmentButtonText: { color: '#1f2933', fontSize: 13, fontWeight: '700' },
+  segmentButtonTextActive: { color: '#ffffff' },
   sectionTitle: { color: '#1f2933', fontSize: 17, fontWeight: '600' },
   sectionTitleSmall: { color: '#1f2933', fontSize: 15, fontWeight: '600' },
   summaryText: { color: '#52606d', fontSize: 14, lineHeight: 20 },

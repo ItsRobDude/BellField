@@ -344,6 +344,33 @@ describe('applyPendingOperations', () => {
     expect(result?.jobs[0]?.timeline[0]?.kind).toBe('registerEntryVoided');
   });
 
+  it('shows queued media uploads as local job timeline entries', () => {
+    const snapshot = buildSnapshot();
+    const operation: PendingOperation = {
+      id: 'op-media',
+      kind: 'mediaUpload',
+      jobId: 'job-1',
+      localMediaId: 'media-1',
+      localUri: 'file:///app/Documents/bellfield-media/media-1.jpg',
+      originalFilename: 'media-1.jpg',
+      mediaKind: 'image',
+      contentType: 'image/jpeg',
+      byteSize: 5,
+      sha256: 'a'.repeat(64),
+      capturedAt: '2026-05-22T14:45:00.000Z',
+      occurredAt: '2026-05-22T14:45:00.000Z',
+      state: 'pending'
+    };
+
+    const result = applyPendingOperations(snapshot, [operation], 'Taylor Tech');
+
+    expect(result?.jobs[0]?.timeline[0]).toMatchObject({
+      id: 'op-media-local-media',
+      kind: 'mediaAttached',
+      message: 'Media queued locally: media-1.jpg.'
+    });
+  });
+
   it('still applies pending edits even when sync marks them conflict or rejected (work is preserved)', () => {
     const snapshot = buildSnapshot();
     const operations: PendingOperation[] = [
@@ -668,11 +695,27 @@ describe('formatPendingOperation', () => {
       state: 'conflict',
       lastResultMessage: 'Office already changed this line.'
     };
+    const mediaUpload: PendingOperation = {
+      id: 'op-media',
+      kind: 'mediaUpload',
+      jobId: 'job-1',
+      localMediaId: 'media-1',
+      localUri: 'file:///media-1.jpg',
+      originalFilename: 'media-1.jpg',
+      mediaKind: 'image',
+      contentType: 'image/jpeg',
+      byteSize: 5,
+      sha256: 'a'.repeat(64),
+      capturedAt: baseTimestamp,
+      occurredAt: baseTimestamp,
+      state: 'pending'
+    };
 
     expect(formatPendingOperation(pending)).toContain('pending sync');
     expect(formatPendingOperation(conflict)).toContain('conflict: Office already advanced this appointment.');
     expect(formatPendingOperation(rejected)).toContain('rejected: Permission denied.');
     expect(formatPendingOperation(registerCreate)).toContain('Register entry queued: Contactor');
     expect(formatPendingOperation(registerVoid)).toContain('conflict: Office already changed this line.');
+    expect(formatPendingOperation(mediaUpload)).toContain('Media upload queued: media-1.jpg');
   });
 });

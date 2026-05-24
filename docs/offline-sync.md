@@ -9,7 +9,7 @@ This is a product behavior document, not a coding document.
 Current implementation note:
 - `docs/field-handoff-findings.md` tracks the field app's current shipped/offline status.
 - In-screen background sync and register entry queueing exist.
-- Field-side media capture/blob replay and revoked-device wipe remain open Milestone 6 work.
+- Field-side media capture/blob replay now has a first implementation; revoked-device wipe remains open Milestone 6 work.
 
 ---
 

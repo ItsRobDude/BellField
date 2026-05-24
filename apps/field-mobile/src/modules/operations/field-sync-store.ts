@@ -29,11 +29,15 @@ function getEntityKey(operation: PendingOperation): string {
     return `register-entry-create:${operation.id}`;
   }
 
+  if (operation.kind === 'mediaUpload') {
+    return `media-upload:${operation.localMediaId}`;
+  }
+
   return `job-note:${operation.id}`;
 }
 
 function shouldReplaceExistingOperation(operation: PendingOperation): boolean {
-  return operation.kind !== 'jobNote' && operation.kind !== 'registerEntryCreate';
+  return operation.kind !== 'jobNote' && operation.kind !== 'registerEntryCreate' && operation.kind !== 'mediaUpload';
 }
 
 async function getDatabase(): Promise<SQLiteDatabase> {

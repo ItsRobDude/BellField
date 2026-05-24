@@ -209,6 +209,29 @@ export function applyPendingOperations(
         )
       };
     }
+
+    if (operation.kind === 'mediaUpload') {
+      nextSnapshot = {
+        ...nextSnapshot,
+        jobs: nextSnapshot.jobs.map((job) =>
+          job.id === operation.jobId
+            ? {
+                ...job,
+                timeline: [
+                  ...job.timeline,
+                  {
+                    id: `${operation.id}-local-media`,
+                    occurredAt: operation.occurredAt,
+                    actorName,
+                    message: `Media queued locally: ${operation.originalFilename}.`,
+                    kind: 'mediaAttached'
+                  }
+                ]
+              }
+            : job
+        )
+      };
+    }
   }
 
   return nextSnapshot;
@@ -330,6 +353,10 @@ export function formatPendingOperation(operation: PendingOperation): string {
 
   if (operation.kind === 'registerEntryVoid') {
     return `Register entry void queued${operation.reason ? `: ${operation.reason}` : ''} (${stateSuffix})`;
+  }
+
+  if (operation.kind === 'mediaUpload') {
+    return `Media upload queued: ${operation.originalFilename} (${stateSuffix})`;
   }
 
   return `Equipment update queued: ${operation.status} (${stateSuffix})`;

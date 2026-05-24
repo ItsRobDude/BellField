@@ -615,17 +615,17 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 | 2 - CRM backbone | Customer, location, contact, ownership history, shared contact links, duplicate warnings, and SQL-backed CRM search exist. | Large-dataset polish should continue with SQL-backed duplicate checks and typeahead-style intake instead of loading every customer/location into forms. |
 | 3 - Equipment context | Equipment records, active/inactive status, history, grouping/replacement links, install date, filters, and office equipment detail surfaces exist. | Field and office location-context ergonomics can improve, but the entity shape is usable. |
 | 4 - Jobs and appointments | Jobs may exist with or without appointments. Appointments belong to jobs. Status updates, finished-visit review acknowledgement, add-appointment follow-up, register entries, media metadata, and unified timeline events exist. | Snapshot behavior for historical job customer/location display context is still a future hardening item before invoices/posting become serious. |
-| 5 - Dispatch board v1 | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, and job detail opened from appointment cards. | Date navigation, manual smoke checks, and later week view remain the main dispatch closeout items. |
-| 6 - Field app/offline | Field assigned-work caching, notes/status/equipment/register queueing, conflict/rejected preservation, Sync Now, and in-screen background sync exist. | Field job detail layout, media capture/blob replay, and revoked-device wipe are still open Milestone 6 work. |
+| 5 - Dispatch board v1 | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, job detail opened from appointment cards, date picker, Today, previous/next, and refresh controls. | Manual browser smoke checks remain the main dispatch closeout item. Compact week strip is polish, not a blocker; week view remains later. |
+| 6 - Field app/offline | Field assigned-work caching, notes/status/equipment/register/media queueing, conflict/rejected preservation, Sync Now, in-screen background sync, and a home/detail field layout exist. | Manual mobile smoke, media upload device smoke, sync hardening, and revoked-device wipe are still open Milestone 6 work. |
 
 ### Current next implementation order
 
 1. Dispatch board closeout:
-   add previous/today/next date controls, compact week strip, clearer minimal refresh state, and browser smoke steps for moving/cancelling/finishing appointments.
-2. Field app Milestone 6 UI pass:
-   move the technician workspace toward assigned-work home plus focused job detail tabs/tiles instead of one long operational card.
-3. Field media capture and upload queue:
-   add the field-side capture/file-pick path, local media queue state, upload-intent replay, and blob finalization.
+   run browser/manual smoke steps for date changes, refresh, job detail open, schedule edits, and status changes. Compact week strip is deferred polish.
+2. Field app Milestone 6 mobile smoke:
+   verify the assigned-work home plus focused job detail tabs on mobile dimensions and real Expo runtime.
+3. Field media smoke and hardening:
+   verify image/video capture or pick, local file persistence, SHA-256 metadata, upload-intent replay, raw blob finalization, and retry after failed blob upload on a device/runtime.
 4. Sync reliability for real field actions:
    harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
 5. Historical snapshot hardening before Milestone 7/8:
@@ -634,6 +634,6 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 ### Milestone-boundary reminders
 
 - Dispatch v1 can keep improving as the daily office home, but route optimization, drag/drop, live sockets, and week view remain later until day-view scheduling is trustworthy.
-- Field media capture may need an Expo camera/file-picker dependency; pause for approval before adding it.
+- Field media capture now uses the approved Expo ImagePicker, FileSystem, and Crypto dependencies; no additional picker/storage dependencies should be added without a new reason.
 - Register entries exist now, but invoice-draft reflection waits for the Milestone 7 invoice draft entity.
 - Payments remain online-only in v1.

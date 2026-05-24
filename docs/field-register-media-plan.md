@@ -28,7 +28,7 @@ Audit refreshed after the register/media backend, field register queue, and offi
 - Shared contracts export media upload intent, metadata, update, and void shapes.
 - API endpoints exist for media metadata, upload intents, raw `application/octet-stream` blob upload, signed-token download, caption edit, and void.
 - Office-web can review media metadata from job detail.
-- Field-mobile camera/file-picker capture and blob replay are still open Milestone 6 work.
+- Field-mobile image/video capture or pick, app-owned local staging, SHA-256 queue metadata, upload-intent replay, and blob finalization are implemented with Expo ImagePicker, FileSystem, and Crypto.
 
 ### Migrations
 - Register/media migrations have shipped:
@@ -200,7 +200,7 @@ Permission checks per §6.
 The field assigned-work response currently includes:
 - `registerEntries?: RegisterEntrySummary[]` per job when the actor can view register entries
 
-Field media capture/blob replay remains open, so media attachments are not yet part of the field assigned-work snapshot.
+Field media capture/blob replay is now queued from field-mobile using the existing media endpoints. Media attachments are still not part of the field assigned-work snapshot.
 When added, they should be filtered by the technician's assigned-work window the same way appointments are today and cached in the existing snapshot.
 
 ---
@@ -230,7 +230,7 @@ Office endpoints reuse the same backend module; only the surface check differs.
   - `registerEntryCreate`
   - `registerEntryEdit`
   - `registerEntryVoid`
-- Future field media slice: media **metadata** intent (the upload-intent POST). The intent payload should include the local file URI and the device-computed sha256 so the queue can attempt the blob upload when connection returns.
+- Media upload operations. Field-mobile stores the app-owned local file URI, original filename, MIME type, byte size, SHA-256, optional caption, and capture timestamp in the pending operation queue. Replay creates/reuses the upload intent, then finalizes the raw blob upload.
 
 ### Online-only in v1
 - The actual media **byte upload**. Even when offline-queued, the blob upload step is deferred. The intent reserves a media row server-side with `uploaded_at = null` and `storage_path = null`; the blob upload is what finalizes it. While the intent is reserved but not finalized, the office view can show "Pending upload from {tech}" via metadata only.
@@ -320,10 +320,10 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 - `PermissionArea` includes `register` and `media`.
 
 ### Field-mobile (pure helpers)
-- Pending operation types extended with `registerEntryCreate`, `registerEntryEdit`, `registerEntryVoid`, `mediaUploadIntent`.
-- `applyPendingOperations` overlays register entries on the cached snapshot in `occurredAt` order.
+- Pending operation types extended with `registerEntryCreate`, `registerEntryEdit`, `registerEntryVoid`, `mediaUpload`.
+- `applyPendingOperations` overlays register entries on the cached snapshot in `occurredAt` order and adds local timeline markers for queued media.
 - `mergeJobMutationIntoAssignedWork` folds an applied register response without leaking `syncResult`/`warningMessages`.
-- The screen renders pending register entries with the same "queued/conflicted/rejected" badges already used for appointment status.
+- The screen renders pending register entries and job-level media queue state with the same "queued/conflicted/rejected" badges already used for appointment status.
 
 ### Office-web
 - Job-card captured-work surface lazy-loads register entries and media attachments.
@@ -338,22 +338,22 @@ Historical sequencing — most of these slices have shipped:
 
 1. **`register_entries` table + `register` permission area.** Shipped.
 2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Shipped.
-3. **Field-mobile queue extension.** Register queueing shipped; field media queueing remains open.
-3a. **Office-web captured-work review.** Shipped in job detail. No field camera capture yet.
-4. **Field-mobile media capture.** Wires the field to capture a photo, store the local URI, queue the intent, and finalize the blob upload on Sync Now. (This step may need a new field-mobile dep for camera access; flag it for product approval first per the no-new-deps rule.)
+3. **Field-mobile queue extension.** Register queueing shipped; field media queueing now has the baseline image/video operation.
+3a. **Office-web captured-work review.** Shipped in job detail.
+4. **Field-mobile media capture.** Shipped baseline. Wires the field to capture/pick image or video media, copy it into app-owned storage, compute SHA-256, queue the upload operation, create/reuse the upload intent, and finalize the raw blob upload on Sync Now.
 
 **Hard boundaries within this plan:**
 - No changes to the `appointments` table for register/media.
 - No change to `AppointmentSummary.registerFollowUpNote`. It stays as a complementary text reminder.
 - No invoice-draft entity. The register table is shaped so M7 can read it without schema changes.
 - No estimate-builder work.
-- No new dependencies in slices 1–3. Slice 4 may need one (camera) and should pause for approval.
+- No new dependencies in slices 1–3. Slice 4 uses the approved Expo media dependencies only.
 
 ---
 
 ## 13. Open product questions
 
-Inline-tagged above, summarized here. Slice 1 answered the first three as implementation assumptions; the remaining media/UX questions still need confirmation before their slices.
+Inline-tagged above, summarized here. Slice 1 answered the first three as implementation assumptions; media dependency choice is now locked for the first field capture slice.
 
 1. **Are `labor`, `serviceItem`, `part`, `membership`, `other` the right v1 kinds?** Slice 1 uses these values only. `discount`, `fee`, and `tax` remain later additions.
 2. **Should `unit_price` and `total_amount` allow negative values?** Slice 1 keeps money fields nonnegative. Discounts/corrections need a later explicit model.
@@ -361,7 +361,7 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 4. **Should technicians be able to edit any register entry on the job, or only the ones they captured?** This plan assumes "any entry on a job they're assigned to" mirroring current note/equipment-edit behavior. Tighter is possible.
 5. **What is the max byte size for an uploaded media file?** Implemented default is 50 MB via `BELLFIELD_MEDIA_MAX_BYTES`. Larger video uploads can wait for chunked-upload support post-v1.
 6. **Should a voided media row delete the blob file from disk?** Implemented behavior keeps the file; true delete remains a later dangerous action.
-7. **Camera/file-picker library for slice 4.** No new dep without product approval. Recommendation: `expo-image-picker` since the field app is already Expo-based, but defer to slice 4.
+7. **Camera/file-picker library for slice 4.** Answered. Use approved Expo dependencies: `expo-image-picker`, `expo-file-system`, and `expo-crypto`.
 8. **Should `registerFollowUpNote` (the existing free-text reminder on the appointment) eventually be replaced by structured register entries?** Recommendation: no. They serve different purposes — `registerFollowUpNote` is a "remind office to look at X" note, structured register entries are billable line items. Confirm to keep both.
 
 ---
@@ -383,7 +383,7 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 Captured for traceability:
 
 - **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Slice 1 now provides backend register entries without removing `registerFollowUpNote`; invoice-draft reflection still waits for the invoice-draft entity.
-- **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Backend metadata/blob storage is now present; field-mobile camera capture and blob replay remain the open field slice.
+- **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Backend metadata/blob storage is present, and field-mobile now stages image/video media locally before replaying upload intents and raw blob uploads on Sync Now. Generic document attachment remains deferred.
 - No other doc/code disagreements found in this audit.
 
 ---
@@ -393,8 +393,8 @@ Captured for traceability:
 The old queue-resolution coordination lane has landed.
 These are the remaining boundaries for future work:
 
-- Field-mobile media capture may touch `technician-workspace-screen.tsx`, field sync types/store/replay helpers, and field-mobile operation tests.
-- Pause before adding any camera/file-picker dependency.
+- Field-mobile media capture now touches `technician-workspace-screen.tsx`, field sync types/store/replay helpers, and field-mobile operation tests.
+- Do not add any more camera/file-picker/storage dependencies without a new product or reliability reason.
 - Keep backend media endpoints and contracts stable unless field capture exposes a real contract gap.
 - Do not start invoice-draft mapping from this plan alone; invoice draft belongs to Milestone 7.
 
@@ -409,7 +409,7 @@ Recommended smallest-safe-first order, one PR per item:
 - [x] Slice 2 — `media_attachments` migration + storage scaffolding + intent/blob endpoints + tests. Filesystem only, no UI.
 - [x] Slice 3 — Field-mobile pending-operation extensions (register only). Test against the existing field harness. No media yet.
 - [x] Slice 3a — Office-web captured-work review surface. No media capture yet.
-- [ ] Slice 4 — Field-mobile media capture. Pause for product approval on the camera library dependency before opening.
+- [x] Slice 4 — Field-mobile media capture. Uses approved Expo ImagePicker/FileSystem/Crypto dependencies.
 - [ ] Slice 5 — Office-web deeper invoice/register handoff after invoice drafts exist.
 
 Each slice should run `pnpm --filter @bellfield/api test`, `pnpm check:architecture`, and the touched-app's lint + test. Migrations land with tracked up/down per `docs/database-migrations.md`.

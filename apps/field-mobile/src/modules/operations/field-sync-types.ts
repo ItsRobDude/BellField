@@ -3,6 +3,7 @@ import type {
   AppointmentStatus,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  MediaAttachmentKind,
   RegisterEntryKind,
   SyncResult
 } from '@/lib/operations-api';
@@ -73,6 +74,21 @@ export type PendingOperation =
       jobId: string;
       registerEntryId: string;
       reason?: string;
+      baseUpdatedAt?: string;
+    })
+  | (PendingOperationBase & {
+      kind: 'mediaUpload';
+      jobId: string;
+      appointmentId?: string;
+      localMediaId: string;
+      localUri: string;
+      originalFilename: string;
+      mediaKind: MediaAttachmentKind;
+      contentType: string;
+      byteSize: number;
+      sha256: string;
+      caption?: string;
+      capturedAt: string;
       baseUpdatedAt?: string;
     })
   | (PendingOperationBase & {
