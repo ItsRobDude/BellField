@@ -24,7 +24,7 @@ const imagePickerMock = vi.hoisted(() => ({
   launchImageLibraryAsync: vi.fn()
 }));
 
-vi.mock('expo-file-system', () => fileSystemMock);
+vi.mock('expo-file-system/legacy', () => fileSystemMock);
 vi.mock('expo-crypto', () => cryptoMock);
 vi.mock('expo-image-picker', () => imagePickerMock);
 

@@ -6,7 +6,7 @@ const fileSystemMock = vi.hoisted(() => ({
   uploadAsync: vi.fn()
 }));
 
-vi.mock('expo-file-system', () => fileSystemMock);
+vi.mock('expo-file-system/legacy', () => fileSystemMock);
 
 // eslint-disable-next-line import/first -- Expo FileSystem must be mocked before loading the upload helper.
 import { uploadFieldMediaBlob } from '../field-media-upload';

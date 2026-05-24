@@ -263,8 +263,10 @@ export function TechnicianWorkspaceScreen({
   const selectedJob = resolveSelectedFieldJob(assignedJobs, selectedJobId);
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
 
+  // Local navigation state must reset when a sync refresh removes the selected job.
   useEffect(() => {
     if (shouldReturnToFieldHome(assignedJobs, selectedJobId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedJobId(null);
       setActiveDetailTab('overview');
     }

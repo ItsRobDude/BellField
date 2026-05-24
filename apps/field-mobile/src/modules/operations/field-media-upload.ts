@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { MediaAttachmentResponse } from '@/lib/operations-api';
 import { resolveFieldApiBaseUrl } from '@/lib/api-base-url';
 import { FieldMediaUploadError } from './field-media-errors';

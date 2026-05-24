@@ -8,7 +8,7 @@ export type PickedFieldMediaAsset = {
   fileName?: string | null;
   fileSize?: number;
   mimeType?: string | null;
-  type?: 'image' | 'video' | 'livePhoto' | 'pairedVideo';
+  type?: 'image' | 'video' | 'livePhoto' | 'pairedVideo' | null;
 };
 
 export type StagedFieldMedia = {
@@ -82,7 +82,7 @@ export function buildMediaUploadOperation(input: {
   };
 }
 
-export function base64ToBytes(value: string): Uint8Array {
+export function base64ToBytes(value: string): Uint8Array<ArrayBuffer> {
   const cleanValue = value.replace(/\s+/g, '');
   const paddingLength = cleanValue.endsWith('==') ? 2 : cleanValue.endsWith('=') ? 1 : 0;
   const outputLength = Math.floor((cleanValue.length * 3) / 4) - paddingLength;
