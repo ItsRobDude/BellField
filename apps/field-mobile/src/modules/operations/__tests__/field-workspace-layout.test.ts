@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { AppointmentSummary, EquipmentSummary, JobSummary } from '@bellfield/contracts';
 import type { PendingOperation } from '../field-sync-types';
 import {
+  buildFieldMediaCaptionDraftKey,
   countJobRegisterEntries,
   fieldDetailTabs,
   getPendingOperationsForJob,
@@ -65,6 +66,13 @@ function buildEquipment(overrides: Partial<EquipmentSummary> = {}): EquipmentSum
 }
 
 describe('field workspace layout helpers', () => {
+  it('keeps job-level and appointment-level media caption drafts separate', () => {
+    expect(buildFieldMediaCaptionDraftKey({ jobId: 'job-1' })).toBe('job:job-1');
+    expect(buildFieldMediaCaptionDraftKey({ jobId: 'job-1', appointmentId: 'appointment-1' })).toBe(
+      'appointment:appointment-1'
+    );
+  });
+
   it('resolves selected jobs and signals when detail should return home', () => {
     const jobs = [buildJob(), buildJob({ id: 'job-2', jobNumber: '1002' })];
 

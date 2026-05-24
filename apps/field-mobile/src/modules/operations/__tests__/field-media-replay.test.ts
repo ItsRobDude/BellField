@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { CreateMediaUploadIntentResponse } from '@/lib/operations-api';
+import { FieldApiError, type CreateMediaUploadIntentResponse } from '@/lib/operations-api';
 import { replayFieldMediaUploadOperation, type MediaUploadOperation } from '../field-media-replay';
+import { FieldMediaUploadError } from '../field-media-errors';
 
 const baseOperation: MediaUploadOperation = {
   id: 'media-1-upload',
@@ -49,7 +50,9 @@ describe('replayFieldMediaUploadOperation', () => {
     const createUploadIntent = vi.fn().mockResolvedValue(buildUploadIntentResponse());
     const uploadBlob = vi.fn().mockResolvedValue(undefined);
 
-    await replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob });
+    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+      status: 'applied'
+    });
 
     expect(createUploadIntent).toHaveBeenCalledWith(baseOperation);
     expect(uploadBlob).toHaveBeenCalledWith({
@@ -69,7 +72,9 @@ describe('replayFieldMediaUploadOperation', () => {
     );
     const uploadBlob = vi.fn();
 
-    await replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob });
+    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+      status: 'applied'
+    });
 
     expect(uploadBlob).not.toHaveBeenCalled();
   });
@@ -84,7 +89,9 @@ describe('replayFieldMediaUploadOperation', () => {
     await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).rejects.toThrow(
       'Server unavailable.'
     );
-    await replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob });
+    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+      status: 'applied'
+    });
 
     expect(baseOperation.state).toBe('pending');
     expect(createUploadIntent).toHaveBeenCalledTimes(2);
@@ -102,5 +109,45 @@ describe('replayFieldMediaUploadOperation', () => {
     await expect(
       replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob: vi.fn() })
     ).rejects.toThrow('upload token');
+  });
+
+  it('returns rejected for deterministic upload-intent validation failures', async () => {
+    const createUploadIntent = vi
+      .fn()
+      .mockRejectedValue(new FieldApiError('Media exceeds the configured maximum of 50000000 bytes.', 413));
+
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob: vi.fn() })
+    ).resolves.toEqual({
+      status: 'rejected',
+      message: 'Media exceeds the configured maximum of 50000000 bytes.'
+    });
+  });
+
+  it('keeps network/server upload-intent failures retryable', async () => {
+    const createUploadIntent = vi.fn().mockRejectedValue(new FieldApiError('Server unavailable.', 500));
+
+    await expect(
+      replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob: vi.fn() })
+    ).rejects.toThrow('Server unavailable.');
+  });
+
+  it('returns rejected for deterministic blob upload failures', async () => {
+    const createUploadIntent = vi.fn().mockResolvedValue(buildUploadIntentResponse());
+    const uploadBlob = vi.fn().mockRejectedValue(new FieldMediaUploadError('Uploaded byte size does not match.', 400));
+
+    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).resolves.toEqual({
+      status: 'rejected',
+      message: 'Uploaded byte size does not match.'
+    });
+  });
+
+  it('keeps expired-token blob failures retryable so the next replay can request a fresh token', async () => {
+    const createUploadIntent = vi.fn().mockResolvedValue(buildUploadIntentResponse());
+    const uploadBlob = vi.fn().mockRejectedValue(new FieldMediaUploadError('Media upload token is invalid or expired.', 403));
+
+    await expect(replayFieldMediaUploadOperation(baseOperation, { createUploadIntent, uploadBlob })).rejects.toThrow(
+      'Media upload token is invalid or expired.'
+    );
   });
 });

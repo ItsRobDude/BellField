@@ -12,6 +12,8 @@ import {
 
 export type FieldMediaSource = 'camera' | 'library';
 
+export const fieldMediaMaxBytes = 50 * 1024 * 1024;
+
 export async function pickFieldMedia(source: FieldMediaSource): Promise<StagedFieldMedia | null> {
   const result = source === 'camera' ? await launchCameraPicker() : await launchLibraryPicker();
 
@@ -29,32 +31,51 @@ export async function stagePickedFieldMediaAsset(asset: PickedFieldMediaAsset): 
     throw new Error('BellField could not access app-owned document storage for media.');
   }
 
-  const localMediaId = `media-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  ensureFieldMediaSizeIsAllowed(asset.fileSize);
+
+  const localMediaId = `media-${Crypto.randomUUID()}`;
   const capturedAt = new Date().toISOString();
   const normalizedAsset = normalizePickedFieldMediaAsset(asset, localMediaId, capturedAt);
   const localUri = buildLocalMediaUri(baseDirectory, localMediaId, normalizedAsset.originalFilename);
   const mediaDirectory = `${baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`}bellfield-media/`;
 
-  await FileSystem.makeDirectoryAsync(mediaDirectory, { intermediates: true });
-  await FileSystem.copyAsync({ from: asset.uri, to: localUri });
+  try {
+    await FileSystem.makeDirectoryAsync(mediaDirectory, { intermediates: true });
+    await FileSystem.copyAsync({ from: asset.uri, to: localUri });
 
-  const fileInfo = await FileSystem.getInfoAsync(localUri);
-  if (!fileInfo.exists || fileInfo.isDirectory) {
-    throw new Error('BellField could not stage the selected media file.');
+    const fileInfo = await FileSystem.getInfoAsync(localUri);
+    if (!fileInfo.exists || fileInfo.isDirectory) {
+      throw new Error('BellField could not stage the selected media file.');
+    }
+
+    ensureFieldMediaSizeIsAllowed(fileInfo.size);
+
+    const base64Contents = await FileSystem.readAsStringAsync(localUri, {
+      encoding: FileSystem.EncodingType.Base64
+    });
+    const bytes = base64ToBytes(base64Contents);
+    const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+
+    return {
+      ...normalizedAsset,
+      localUri,
+      byteSize: fileInfo.size,
+      sha256: arrayBufferToHex(digest)
+    };
+  } catch (error) {
+    await deleteStagedFieldMedia(localUri).catch(() => undefined);
+    throw error;
   }
+}
 
-  const base64Contents = await FileSystem.readAsStringAsync(localUri, {
-    encoding: FileSystem.EncodingType.Base64
-  });
-  const bytes = base64ToBytes(base64Contents);
-  const digest = await Crypto.digest(Crypto.CryptoDigestAlgorithm.SHA256, bytes);
+export async function deleteStagedFieldMedia(localUri: string): Promise<void> {
+  await FileSystem.deleteAsync(localUri, { idempotent: true });
+}
 
-  return {
-    ...normalizedAsset,
-    localUri,
-    byteSize: fileInfo.size,
-    sha256: arrayBufferToHex(digest)
-  };
+function ensureFieldMediaSizeIsAllowed(byteSize: number | undefined): void {
+  if (byteSize !== undefined && byteSize > fieldMediaMaxBytes) {
+    throw new Error('Selected media is larger than BellField\'s 50 MB field upload limit.');
+  }
 }
 
 async function launchCameraPicker(): Promise<ImagePicker.ImagePickerResult> {

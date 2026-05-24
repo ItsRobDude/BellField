@@ -27,8 +27,8 @@ Refresh it after major implementation lanes land.
 | --- | --- |
 | Dispatch closeout | Date picker, Today, previous/next, and refresh controls are present with focused dispatch tests passing. Compact week strip remains polish, and browser/manual smoke steps for schedule/status changes should still be run before calling dispatch fully closed. |
 | Field app layout | Technician workspace now has an assigned-work home and focused job detail tabs for Overview, Appointments, Register, Equipment, and Sync. Mobile smoke is still needed. |
-| Field media | Field-mobile uses approved Expo media dependencies for image/video capture or pick, app-owned local staging, SHA-256 queue metadata, upload-intent replay, and raw blob finalization. Manual device smoke is still needed. |
-| Sync hardening | Reliability checks around register/media partial success, retries, conflict/rejected handling, and revoked-device behavior. |
+| Field media | Field-mobile uses approved Expo media dependencies for image/video capture or pick, job/appointment attribution, app-owned local staging, a 50 MB client guard, SHA-256 queue metadata, upload-intent replay, raw blob finalization, rejected-state handling for deterministic media failures, and staged-file cleanup after successful sync. Manual device smoke is still needed. |
+| Sync hardening | Reliability checks around register/media partial success, retries, remaining transient-failure behavior, and revoked-device behavior. |
 | Intake at scale | Job intake context still loads active customers/locations. Future typeahead should use SQL-backed CRM search rather than full dropdowns. |
 | Historical snapshots | Jobs and dispatch still resolve current customer/location names. Before invoices/posting, define persisted snapshot fields for customer/location/job display context. |
 | Invoice draft | Register entries are shaped for invoice draft reflection, but the invoice draft entity/workflow has not started. |

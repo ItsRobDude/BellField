@@ -78,11 +78,12 @@ import {
   nextBackgroundSyncDelayMs,
   shouldRunBackgroundSync
 } from './field-background-sync-schedule';
-import { pickFieldMedia, type FieldMediaSource } from './field-media-capture';
+import { deleteStagedFieldMedia, pickFieldMedia, type FieldMediaSource } from './field-media-capture';
 import { buildMediaUploadOperation } from './field-media-files';
 import { replayFieldMediaUploadOperation } from './field-media-replay';
 import { uploadFieldMediaBlob } from './field-media-upload';
 import {
+  buildFieldMediaCaptionDraftKey,
   countJobRegisterEntries,
   fieldDetailTabs,
   getPendingOperationsForJob,
@@ -351,7 +352,11 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
     setActiveDetailTab('overview');
   }
 
-  async function queueMediaUpload(job: FieldAssignedWorkResponse['jobs'][number], source: FieldMediaSource) {
+  async function queueMediaUpload(
+    job: FieldAssignedWorkResponse['jobs'][number],
+    source: FieldMediaSource,
+    appointmentId?: string
+  ) {
     setErrorMessage(null);
 
     try {
@@ -361,9 +366,11 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
         return;
       }
 
-      const caption = mediaCaptionDrafts[job.id]?.trim();
+      const captionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id, appointmentId });
+      const caption = mediaCaptionDrafts[captionKey]?.trim();
       const operation = buildMediaUploadOperation({
         jobId: job.id,
+        appointmentId,
         stagedMedia,
         caption,
         baseUpdatedAt: findJobBaseUpdatedAt(serverSnapshot, job.id)
@@ -371,7 +378,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
 
       await queuePendingOperation(operation);
       setPendingOperations((current) => [...current, operation]);
-      setMediaCaptionDrafts((current) => ({ ...current, [job.id]: '' }));
+      setMediaCaptionDrafts((current) => ({ ...current, [captionKey]: '' }));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to queue media locally.');
     }
@@ -1161,7 +1168,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
           }
 
           if (operation.kind === 'mediaUpload') {
-            await replayFieldMediaUploadOperation(operation, {
+            const response = await replayFieldMediaUploadOperation(operation, {
               createUploadIntent: (mediaOperation) =>
                 createFieldMediaUploadIntent({
                   sessionToken,
@@ -1185,7 +1192,18 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                 })
             });
 
+            if (response.status === 'rejected') {
+              await updatePendingOperationState(operation.id, 'rejected', response.message);
+              setPendingOperations((current) =>
+                current.map((entry) =>
+                  entry.id === operation.id ? { ...entry, state: 'rejected', lastResultMessage: response.message } : entry
+                )
+              );
+              continue;
+            }
+
             await preserveAppliedOperation(operation.id, currentServerSnapshot);
+            await deleteStagedFieldMedia(operation.localUri).catch(() => undefined);
           }
 
           if (operation.kind === 'equipmentUpdate') {
@@ -1498,6 +1516,7 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
             const equipment = (assignedWork?.equipment ?? []).filter((record) => record.locationId === job.locationId);
             const workOrderLine = formatWorkOrderLine(job);
             const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
+            const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
 
             if (selectedJob && selectedJob.id !== job.id) {
               return null;
@@ -1591,6 +1610,10 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                   const assignmentLine = formatAppointmentAssignmentLine(appointment, employee.id);
                   const queueSummary = summarizeAppointmentQueueState(appointment.id, pendingOperations);
                   const finishedReviewAcknowledgement = formatFinishedReviewAcknowledgement(appointment);
+                  const appointmentMediaCaptionKey = buildFieldMediaCaptionDraftKey({
+                    jobId: job.id,
+                    appointmentId: appointment.id
+                  });
                   return (
                     <View key={appointment.id} style={styles.block}>
                       <Text style={styles.sectionTitleSmall}>{formatAppointmentSchedule(appointment)}</Text>
@@ -1705,6 +1728,32 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                           </View>
                         </View>
                       ) : null}
+
+                      <View style={styles.reviewCard}>
+                        <Text style={styles.sectionTitleSmall}>Appointment media</Text>
+                        <TextInput
+                          value={mediaCaptionDrafts[appointmentMediaCaptionKey] ?? ''}
+                          onChangeText={(value) =>
+                            setMediaCaptionDrafts((current) => ({ ...current, [appointmentMediaCaptionKey]: value }))
+                          }
+                          placeholder="Optional caption for this visit"
+                          style={styles.input}
+                        />
+                        <View style={styles.actionRow}>
+                          <Pressable
+                            onPress={() => void queueMediaUpload(job, 'camera', appointment.id)}
+                            style={styles.secondaryButton}
+                          >
+                            <Text style={styles.secondaryButtonText}>Capture media</Text>
+                          </Pressable>
+                          <Pressable
+                            onPress={() => void queueMediaUpload(job, 'library', appointment.id)}
+                            style={styles.secondaryButton}
+                          >
+                            <Text style={styles.secondaryButtonText}>Pick from library</Text>
+                          </Pressable>
+                        </View>
+                      </View>
                     </View>
                   );
                 }) : null}
@@ -1729,8 +1778,8 @@ export function TechnicianWorkspaceScreen({ apiBaseUrl, employee, sessionToken, 
                       Photos and videos are copied into BellField storage before they enter the sync queue.
                     </Text>
                     <TextInput
-                      value={mediaCaptionDrafts[job.id] ?? ''}
-                      onChangeText={(value) => setMediaCaptionDrafts((current) => ({ ...current, [job.id]: value }))}
+                      value={mediaCaptionDrafts[jobMediaCaptionKey] ?? ''}
+                      onChangeText={(value) => setMediaCaptionDrafts((current) => ({ ...current, [jobMediaCaptionKey]: value }))}
                       placeholder="Optional caption"
                       style={styles.input}
                     />

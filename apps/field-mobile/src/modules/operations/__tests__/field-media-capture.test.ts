@@ -6,12 +6,14 @@ const fileSystemMock = vi.hoisted(() => ({
   makeDirectoryAsync: vi.fn(),
   copyAsync: vi.fn(),
   getInfoAsync: vi.fn(),
-  readAsStringAsync: vi.fn()
+  readAsStringAsync: vi.fn(),
+  deleteAsync: vi.fn()
 }));
 
 const cryptoMock = vi.hoisted(() => ({
   CryptoDigestAlgorithm: { SHA256: 'SHA-256' },
-  digest: vi.fn()
+  digest: vi.fn(),
+  randomUUID: vi.fn()
 }));
 
 const imagePickerMock = vi.hoisted(() => ({
@@ -27,7 +29,7 @@ vi.mock('expo-crypto', () => cryptoMock);
 vi.mock('expo-image-picker', () => imagePickerMock);
 
 // eslint-disable-next-line import/first -- Expo modules must be mocked before loading the capture helper.
-import { pickFieldMedia } from '../field-media-capture';
+import { deleteStagedFieldMedia, fieldMediaMaxBytes, pickFieldMedia } from '../field-media-capture';
 
 describe('pickFieldMedia', () => {
   beforeEach(() => {
@@ -38,6 +40,7 @@ describe('pickFieldMedia', () => {
     fileSystemMock.documentDirectory = 'file:///app/Documents/';
     fileSystemMock.makeDirectoryAsync.mockResolvedValue(undefined);
     fileSystemMock.copyAsync.mockResolvedValue(undefined);
+    fileSystemMock.deleteAsync.mockResolvedValue(undefined);
     fileSystemMock.getInfoAsync.mockResolvedValue({
       exists: true,
       uri: 'file:///app/Documents/bellfield-media/media-1.jpg',
@@ -47,6 +50,7 @@ describe('pickFieldMedia', () => {
     });
     fileSystemMock.readAsStringAsync.mockResolvedValue('AQIDBAU=');
     cryptoMock.digest.mockResolvedValue(new Uint8Array([1, 35, 255]).buffer);
+    cryptoMock.randomUUID.mockReturnValue('11111111-2222-4333-8444-555555555555');
     imagePickerMock.requestCameraPermissionsAsync.mockResolvedValue({ granted: true });
     imagePickerMock.requestMediaLibraryPermissionsAsync.mockResolvedValue({ granted: true });
   });
@@ -81,7 +85,9 @@ describe('pickFieldMedia', () => {
       sha256: '0123ff',
       capturedAt: '2026-05-23T12:00:00.000Z'
     });
-    expect(result?.localUri).toContain('file:///app/Documents/bellfield-media/media-');
+    expect(result?.localUri).toBe(
+      'file:///app/Documents/bellfield-media/media-11111111-2222-4333-8444-555555555555.jpg'
+    );
     expect(fileSystemMock.makeDirectoryAsync).toHaveBeenCalledWith('file:///app/Documents/bellfield-media/', {
       intermediates: true
     });
@@ -97,5 +103,64 @@ describe('pickFieldMedia', () => {
     imagePickerMock.launchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: null });
 
     await expect(pickFieldMedia('library')).resolves.toBeNull();
+  });
+
+  it('rejects oversized picker assets before copying or hashing them', async () => {
+    imagePickerMock.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///library/huge.mov',
+          fileName: 'huge.mov',
+          mimeType: 'video/quicktime',
+          fileSize: fieldMediaMaxBytes + 1,
+          type: 'video'
+        }
+      ]
+    });
+
+    await expect(pickFieldMedia('library')).rejects.toThrow('50 MB');
+
+    expect(fileSystemMock.copyAsync).not.toHaveBeenCalled();
+    expect(fileSystemMock.readAsStringAsync).not.toHaveBeenCalled();
+    expect(cryptoMock.digest).not.toHaveBeenCalled();
+  });
+
+  it('deletes a staged local copy when copied media is too large', async () => {
+    fileSystemMock.getInfoAsync.mockResolvedValue({
+      exists: true,
+      uri: 'file:///app/Documents/bellfield-media/media-1.mov',
+      isDirectory: false,
+      size: fieldMediaMaxBytes + 1,
+      modificationTime: 0
+    });
+    imagePickerMock.launchImageLibraryAsync.mockResolvedValue({
+      canceled: false,
+      assets: [
+        {
+          uri: 'file:///library/huge.mov',
+          fileName: 'huge.mov',
+          mimeType: 'video/quicktime',
+          type: 'video'
+        }
+      ]
+    });
+
+    await expect(pickFieldMedia('library')).rejects.toThrow('50 MB');
+
+    expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith(
+      'file:///app/Documents/bellfield-media/media-11111111-2222-4333-8444-555555555555.mov',
+      { idempotent: true }
+    );
+    expect(fileSystemMock.readAsStringAsync).not.toHaveBeenCalled();
+    expect(cryptoMock.digest).not.toHaveBeenCalled();
+  });
+
+  it('exposes idempotent staged-file cleanup for successful uploads', async () => {
+    await deleteStagedFieldMedia('file:///app/Documents/bellfield-media/media-1.jpg');
+
+    expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith('file:///app/Documents/bellfield-media/media-1.jpg', {
+      idempotent: true
+    });
   });
 });

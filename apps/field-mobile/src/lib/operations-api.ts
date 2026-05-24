@@ -37,6 +37,20 @@ export type {
   SyncResult
 };
 
+export class FieldApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = 'FieldApiError';
+  }
+}
+
+export function isFieldApiError(error: unknown): error is FieldApiError {
+  return error instanceof FieldApiError;
+}
+
 async function requestJson<TResponse>(
   path: string,
   options: RequestInit & { apiBaseUrl?: string; sessionToken: string } = { sessionToken: '' }
@@ -54,7 +68,7 @@ async function requestJson<TResponse>(
 
   if (!response.ok) {
     const errorBody = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(errorBody?.message ?? 'Request failed.');
+    throw new FieldApiError(errorBody?.message ?? 'Request failed.', response.status);
   }
 
   return (await response.json()) as TResponse;

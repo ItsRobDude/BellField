@@ -200,7 +200,7 @@ Permission checks per §6.
 The field assigned-work response currently includes:
 - `registerEntries?: RegisterEntrySummary[]` per job when the actor can view register entries
 
-Field media capture/blob replay is now queued from field-mobile using the existing media endpoints. Media attachments are still not part of the field assigned-work snapshot.
+Field media capture/blob replay is now queued from field-mobile using the existing media endpoints. Field captures can be job-level or appointment-level, use the documented 50 MB client-side guard before hashing, mark deterministic media failures as rejected for queue resolution, and delete staged local files after successful sync. Media attachments are still not part of the field assigned-work snapshot.
 When added, they should be filtered by the technician's assigned-work window the same way appointments are today and cached in the existing snapshot.
 
 ---
@@ -323,7 +323,7 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 - Pending operation types extended with `registerEntryCreate`, `registerEntryEdit`, `registerEntryVoid`, `mediaUpload`.
 - `applyPendingOperations` overlays register entries on the cached snapshot in `occurredAt` order and adds local timeline markers for queued media.
 - `mergeJobMutationIntoAssignedWork` folds an applied register response without leaking `syncResult`/`warningMessages`.
-- The screen renders pending register entries and job-level media queue state with the same "queued/conflicted/rejected" badges already used for appointment status.
+- The screen renders pending register entries and job/appointment media queue state with the same "queued/conflicted/rejected" badges already used for appointment status.
 
 ### Office-web
 - Job-card captured-work surface lazy-loads register entries and media attachments.
@@ -340,7 +340,7 @@ Historical sequencing — most of these slices have shipped:
 2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Shipped.
 3. **Field-mobile queue extension.** Register queueing shipped; field media queueing now has the baseline image/video operation.
 3a. **Office-web captured-work review.** Shipped in job detail.
-4. **Field-mobile media capture.** Shipped baseline. Wires the field to capture/pick image or video media, copy it into app-owned storage, compute SHA-256, queue the upload operation, create/reuse the upload intent, and finalize the raw blob upload on Sync Now.
+4. **Field-mobile media capture.** Shipped baseline. Wires the field to capture/pick image or video media, copy it into app-owned storage, apply a 50 MB client guard, compute SHA-256, queue the upload operation with optional appointment context, create/reuse the upload intent, finalize the raw blob upload on Sync Now, reject deterministic media failures for queue resolution, and clean up the staged local file after successful sync.
 
 **Hard boundaries within this plan:**
 - No changes to the `appointments` table for register/media.

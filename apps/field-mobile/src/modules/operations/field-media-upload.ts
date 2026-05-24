@@ -1,6 +1,7 @@
 import * as FileSystem from 'expo-file-system';
 import type { MediaAttachmentResponse } from '@/lib/operations-api';
 import { resolveFieldApiBaseUrl } from '@/lib/api-base-url';
+import { FieldMediaUploadError } from './field-media-errors';
 
 export async function uploadFieldMediaBlob(input: {
   apiBaseUrl?: string;
@@ -18,7 +19,10 @@ export async function uploadFieldMediaBlob(input: {
   });
 
   if (response.status < 200 || response.status >= 300) {
-    throw new Error(parseMediaUploadErrorBody(response.body) ?? 'Unable to upload media bytes.');
+    throw new FieldMediaUploadError(
+      parseMediaUploadErrorBody(response.body) ?? 'Unable to upload media bytes.',
+      response.status
+    );
   }
 
   return JSON.parse(response.body) as MediaAttachmentResponse;
