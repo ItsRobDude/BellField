@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
 import type {
   ContactDetail,
@@ -81,6 +81,15 @@ type ContactLinkDraft = {
   scope: ContactUpdateScope;
 };
 
+type CrmPanelMode =
+  | 'search'
+  | 'newCustomer'
+  | 'newLocation'
+  | 'newContact'
+  | 'customerDetail'
+  | 'locationDetail'
+  | 'contactDetail';
+
 type LocationDetailTab = 'overview' | 'equipment' | 'contacts' | 'history';
 
 const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
@@ -90,6 +99,8 @@ const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
   { key: 'history', label: 'History' }
 ];
 
+const crmSearchDebounceMs = 250;
+
 export function CrmPanel({
   apiBaseUrl,
   sessionToken,
@@ -98,6 +109,9 @@ export function CrmPanel({
   canDeleteEquipment = false
 }: Props) {
   const [workspace, setWorkspace] = useState<CrmWorkspaceResponse | null>(null);
+  const [mode, setMode] = useState<CrmPanelMode>('search');
+  const [returnModeAfterContactForm, setReturnModeAfterContactForm] =
+    useState<CrmPanelMode>('search');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<CrmSearchResult[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null);
@@ -124,6 +138,7 @@ export function CrmPanel({
   const [crmNoticeMessage, setCrmNoticeMessage] = useState<string | null>(null);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
   const [selectedLocationTab, setSelectedLocationTab] = useState<LocationDetailTab>('overview');
+  const searchRequestIdRef = useRef(0);
 
   useEffect(() => {
     void refreshWorkspace();
@@ -134,6 +149,46 @@ export function CrmPanel({
       setLinkDrafts({});
     }
   }, [selectedCustomer, selectedLocation, selectedContact]);
+
+  useEffect(() => {
+    const requestId = searchRequestIdRef.current + 1;
+    searchRequestIdRef.current = requestId;
+    const query = searchQuery.trim();
+
+    if (mode !== 'search' || query.length < 2) {
+      setSearchResults([]);
+      setIsSearching(false);
+      return;
+    }
+
+    setIsSearching(true);
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await searchOfficeCrm({ sessionToken, apiBaseUrl, query });
+
+          if (searchRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          setSearchResults(response.results);
+        } catch (error) {
+          if (searchRequestIdRef.current !== requestId) {
+            return;
+          }
+
+          onErrorMessage(error instanceof Error ? error.message : 'Unable to search CRM records.');
+          setSearchResults([]);
+        } finally {
+          if (searchRequestIdRef.current === requestId) {
+            setIsSearching(false);
+          }
+        }
+      })();
+    }, crmSearchDebounceMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [apiBaseUrl, mode, onErrorMessage, searchQuery, sessionToken]);
 
   async function refreshWorkspace() {
     setIsRefreshing(true);
@@ -157,23 +212,62 @@ export function CrmPanel({
     }
   }
 
-  async function runSearch(query = searchQuery) {
-    if (!query.trim()) {
-      setSearchResults([]);
+  function clearSelectedRecords() {
+    setSelectedCustomer(null);
+    setSelectedLocation(null);
+    setSelectedContact(null);
+    setSelectedLocationTab('overview');
+    setReassignCustomerId('');
+    setReassignNote('');
+  }
+
+  function returnToSearch() {
+    clearSelectedRecords();
+    setMode('search');
+  }
+
+  function openNewCustomerForm() {
+    setReturnModeAfterContactForm('search');
+    clearSelectedRecords();
+    setCustomerDuplicateWarnings([]);
+    setCustomerForm(createEmptyCustomerForm());
+    setMode('newCustomer');
+  }
+
+  function openNewLocationForm() {
+    setReturnModeAfterContactForm('search');
+    clearSelectedRecords();
+    setLocationDuplicateWarnings([]);
+    setCreateLocationMissingContactConfirmation(false);
+    setLocationForm(createEmptyLocationForm(workspace?.customers[0]?.id ?? ''));
+    setMode('newLocation');
+  }
+
+  function openNewContactForm() {
+    const nextReturnMode =
+      mode === 'customerDetail' || mode === 'locationDetail' ? mode : 'search';
+
+    if (nextReturnMode === 'search') {
+      clearSelectedRecords();
+    }
+
+    setReturnModeAfterContactForm(nextReturnMode);
+    setContactForm(createEmptyContactForm());
+    setMode('newContact');
+  }
+
+  function returnFromContactForm() {
+    if (returnModeAfterContactForm === 'customerDetail' && selectedCustomer) {
+      setMode('customerDetail');
       return;
     }
 
-    setIsSearching(true);
-    onErrorMessage(null);
-
-    try {
-      const response = await searchOfficeCrm({ sessionToken, apiBaseUrl, query });
-      setSearchResults(response.results);
-    } catch (error) {
-      onErrorMessage(error instanceof Error ? error.message : 'Unable to search CRM records.');
-    } finally {
-      setIsSearching(false);
+    if (returnModeAfterContactForm === 'locationDetail' && selectedLocation) {
+      setMode('locationDetail');
+      return;
     }
+
+    returnToSearch();
   }
 
   async function selectResult(result: CrmSearchResult) {
@@ -191,6 +285,7 @@ export function CrmPanel({
         setSelectedContact(null);
         setReassignCustomerId('');
         hydrateCustomerForm(customer);
+        setMode('customerDetail');
       } else if (result.kind === 'location') {
         const location = await getOfficeLocationDetail({
           sessionToken,
@@ -203,6 +298,7 @@ export function CrmPanel({
         setReassignCustomerId(location.customerId);
         hydrateLocationForm(location);
         hydrateLinkDrafts(location.contacts);
+        setMode('locationDetail');
       } else {
         const contact = await getOfficeContactDetail({
           sessionToken,
@@ -213,6 +309,7 @@ export function CrmPanel({
         setSelectedLocation(null);
         setSelectedContact(contact);
         hydrateContactForm(contact);
+        setMode('contactDetail');
       }
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to load CRM detail.');
@@ -256,6 +353,7 @@ export function CrmPanel({
       setSelectedContact(null);
       hydrateCustomerForm(response.customer);
       setCustomerForm(createEmptyCustomerForm());
+      setMode('customerDetail');
       await refreshWorkspace();
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to create customer.');
@@ -345,6 +443,7 @@ export function CrmPanel({
       hydrateLinkDrafts(response.location.contacts);
       setLocationForm(createEmptyLocationForm(locationForm.customerId));
       setReassignCustomerId(response.location.customerId);
+      setMode('locationDetail');
       await refreshWorkspace();
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to create location.');
@@ -417,6 +516,11 @@ export function CrmPanel({
 
   async function handleCreateContactAndMaybeLink() {
     try {
+      const returnMode = selectedCustomer
+        ? 'customerDetail'
+        : selectedLocation
+          ? 'locationDetail'
+          : 'contactDetail';
       const response = await createOfficeContact({
         sessionToken,
         apiBaseUrl,
@@ -439,9 +543,11 @@ export function CrmPanel({
           tags: splitCommaValues(contactForm.tags)
         });
         await reloadSelectedRecord();
+        setMode(returnMode);
       } else {
         setSelectedContact(createdContact);
         hydrateContactForm(createdContact);
+        setMode('contactDetail');
       }
 
       setContactForm(createEmptyContactForm());
@@ -667,20 +773,36 @@ export function CrmPanel({
 
       {crmNoticeMessage ? <p style={styles.notice}>{crmNoticeMessage}</p> : null}
 
-      <div style={styles.splitGrid}>
+      {mode === 'search' ? (
         <div style={styles.panel}>
-          <h3 style={styles.subheading}>Search and select</h3>
-          <div style={styles.formRow}>
+          <div style={styles.row}>
+            <h3 style={styles.subheading}>Find CRM records</h3>
+            <div style={styles.inlineActionBar}>
+              <button type="button" onClick={openNewCustomerForm} style={styles.primaryButton}>
+                New customer
+              </button>
+              <button type="button" onClick={openNewLocationForm} style={styles.button}>
+                New location
+              </button>
+              <button type="button" onClick={openNewContactForm} style={styles.button}>
+                New contact
+              </button>
+            </div>
+          </div>
+          <label style={styles.fieldLabel}>
+            <span>Search</span>
             <input
+              aria-label="CRM search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search by name, address, phone"
               style={styles.input}
             />
-            <button type="button" onClick={() => void runSearch()} style={styles.primaryButton}>
-              {isSearching ? 'Searching...' : 'Search CRM'}
-            </button>
-          </div>
+          </label>
+          {isSearching ? <p style={styles.tinyMuted}>Searching...</p> : null}
+          {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 ? (
+            <p style={styles.tinyMuted}>Type at least 2 characters.</p>
+          ) : null}
           <div style={styles.list}>
             {searchResults.map((result) => (
               <button
@@ -708,9 +830,16 @@ export function CrmPanel({
             ))}
           </div>
         </div>
+      ) : null}
 
+      {mode === 'newCustomer' ? (
         <div style={styles.panel}>
-          <h3 style={styles.subheading}>Create customer</h3>
+          <div style={styles.row}>
+            <h3 style={styles.subheading}>Create customer</h3>
+            <button type="button" onClick={returnToSearch} style={styles.button}>
+              Back
+            </button>
+          </div>
           <div style={styles.formRow}>
             <input
               value={customerForm.name}
@@ -839,11 +968,16 @@ export function CrmPanel({
             Create customer
           </button>
         </div>
-      </div>
+      ) : null}
 
-      <div style={styles.splitGrid}>
+      {mode === 'newLocation' ? (
         <div style={styles.panel}>
-          <h3 style={styles.subheading}>Create location</h3>
+          <div style={styles.row}>
+            <h3 style={styles.subheading}>Create location</h3>
+            <button type="button" onClick={returnToSearch} style={styles.button}>
+              Back
+            </button>
+          </div>
           <div style={styles.formRow}>
             <select
               value={locationForm.customerId}
@@ -1008,9 +1142,16 @@ export function CrmPanel({
             Create location
           </button>
         </div>
+      ) : null}
 
+      {mode === 'newContact' ? (
         <div style={styles.panel}>
-          <h3 style={styles.subheading}>Create shared contact</h3>
+          <div style={styles.row}>
+            <h3 style={styles.subheading}>Create shared contact</h3>
+            <button type="button" onClick={returnFromContactForm} style={styles.button}>
+              Back
+            </button>
+          </div>
           <div style={styles.formRow}>
             <input
               value={contactForm.displayName}
@@ -1061,11 +1202,24 @@ export function CrmPanel({
             {selectedCustomer || selectedLocation ? 'Create and link contact' : 'Create contact'}
           </button>
         </div>
-      </div>
+      ) : null}
 
-      {selectedCustomer || selectedLocation || selectedContact ? (
+      {(mode === 'customerDetail' || mode === 'locationDetail' || mode === 'contactDetail') &&
+      (selectedCustomer || selectedLocation || selectedContact) ? (
         <div style={styles.panel}>
-          <h3 style={styles.subheading}>Selected detail</h3>
+          <div style={styles.row}>
+            <h3 style={styles.subheading}>Selected detail</h3>
+            <div style={styles.inlineActionBar}>
+              {selectedCustomer || selectedLocation ? (
+                <button type="button" onClick={openNewContactForm} style={styles.button}>
+                  New contact
+                </button>
+              ) : null}
+              <button type="button" onClick={returnToSearch} style={styles.button}>
+                Back
+              </button>
+            </div>
+          </div>
           {selectedCustomer ? (
             <div style={styles.list}>
               <div style={styles.row}>
