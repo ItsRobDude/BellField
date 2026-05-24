@@ -93,40 +93,44 @@ export function DispatchBoardPanel({
         </div>
       </div>
 
-      <div style={timelineHeaderRowStyle} aria-hidden="true">
-        <div />
-        <div style={timelineLaneViewportStyle}>
-          <div style={timelineHeaderStyle}>
-            {timelineTickLabels.map((tick) => (
-              <span
-                key={tick.label}
-                style={{ ...timelineTickStyle, gridColumn: `${tick.column} / span 4` }}
-              >
-                {tick.label}
-              </span>
+      <div style={dispatchTimelineViewportStyle} role="group" aria-label="Dispatch timeline">
+        <div style={dispatchTimelineContentStyle}>
+          <div style={timelineHeaderRowStyle} aria-hidden="true">
+            <div style={timelineHeaderLabelStyle} />
+            <div style={timelineLaneCellStyle}>
+              <div style={timelineHeaderStyle}>
+                {timelineTickLabels.map((tick) => (
+                  <span
+                    key={tick.label}
+                    style={{ ...timelineTickStyle, gridColumn: `${tick.column} / span 4` }}
+                  >
+                    {tick.label}
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div style={dispatchBoardStyle}>
+            <DispatchTimelineRow
+              label="Unassigned"
+              ariaLabel="Unassigned appointments"
+              cards={model.unassignedQueue}
+              badgeStyle={unassignedCount > 0 ? styles.dangerBadge : styles.badge}
+              onOpenJobDetail={onOpenJobDetail}
+            />
+            {model.technicianRows.map((row) => (
+              <DispatchTimelineRow
+                key={row.technicianId}
+                label={row.technicianName}
+                ariaLabel={`Appointments for ${row.technicianName}`}
+                cards={row.cards}
+                badgeStyle={styles.badge}
+                onOpenJobDetail={onOpenJobDetail}
+              />
             ))}
           </div>
         </div>
-      </div>
-
-      <div style={dispatchBoardStyle}>
-        <DispatchTimelineRow
-          label="Unassigned"
-          ariaLabel="Unassigned appointments"
-          cards={model.unassignedQueue}
-          badgeStyle={unassignedCount > 0 ? styles.dangerBadge : styles.badge}
-          onOpenJobDetail={onOpenJobDetail}
-        />
-        {model.technicianRows.map((row) => (
-          <DispatchTimelineRow
-            key={row.technicianId}
-            label={row.technicianName}
-            ariaLabel={`Appointments for ${row.technicianName}`}
-            cards={row.cards}
-            badgeStyle={styles.badge}
-            onOpenJobDetail={onOpenJobDetail}
-          />
-        ))}
       </div>
     </section>
   );
@@ -153,7 +157,7 @@ function DispatchTimelineRow({
         <strong>{label}</strong>
         <span style={badgeStyle}>{cards.length}</span>
       </div>
-      <div style={timelineLaneViewportStyle}>
+      <div style={timelineLaneCellStyle}>
         <div style={timelineLaneStyle}>
           {cards.length === 0 ? <span style={emptyTimelineStyle}>None</span> : null}
           {cards.map((card, index) => (
@@ -292,20 +296,42 @@ const refreshControlStyle: CSSProperties = {
   justifyContent: 'flex-end'
 };
 
-const dispatchBoardStyle: CSSProperties = {
+const timelineLabelWidth = '8.5rem';
+const timelineLaneMinWidth = '58rem';
+const timelineColumnGap = '0.75rem';
+
+const dispatchTimelineViewportStyle: CSSProperties = {
+  marginTop: '0.75rem',
+  overflowX: 'auto',
+  paddingBottom: '0.35rem'
+};
+
+const dispatchTimelineContentStyle: CSSProperties = {
   display: 'grid',
   gap: '0.85rem',
-  marginTop: '1rem'
+  minWidth: `calc(${timelineLabelWidth} + ${timelineColumnGap} + ${timelineLaneMinWidth})`,
+  width: '100%'
+};
+
+const dispatchBoardStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.85rem'
 };
 
 const timelineGridTemplateColumns = `repeat(${timelineSlotCount}, minmax(1rem, 1fr)) minmax(11rem, 12rem)`;
 
 const timelineHeaderRowStyle: CSSProperties = {
   display: 'grid',
-  gap: '0.75rem',
-  gridTemplateColumns: '8.5rem minmax(0, 1fr)',
-  minWidth: 0,
-  marginTop: '0.75rem'
+  gap: timelineColumnGap,
+  gridTemplateColumns: `${timelineLabelWidth} minmax(${timelineLaneMinWidth}, 1fr)`,
+  minWidth: 0
+};
+
+const timelineHeaderLabelStyle: CSSProperties = {
+  background: '#f7f9f7',
+  left: 0,
+  position: 'sticky',
+  zIndex: 2
 };
 
 const timelineHeaderStyle: CSSProperties = {
@@ -314,7 +340,8 @@ const timelineHeaderStyle: CSSProperties = {
   fontSize: '0.8rem',
   gap: '0.25rem',
   gridTemplateColumns: timelineGridTemplateColumns,
-  minWidth: '58rem'
+  minWidth: timelineLaneMinWidth,
+  width: '100%'
 };
 
 const timelineTickStyle: CSSProperties = {
@@ -325,8 +352,8 @@ const timelineTickStyle: CSSProperties = {
 const timelineRowStyle: CSSProperties = {
   alignItems: 'stretch',
   display: 'grid',
-  gap: '0.75rem',
-  gridTemplateColumns: '8.5rem minmax(0, 1fr)',
+  gap: timelineColumnGap,
+  gridTemplateColumns: `${timelineLabelWidth} minmax(${timelineLaneMinWidth}, 1fr)`,
   minWidth: 0
 };
 
@@ -338,12 +365,14 @@ const timelineRowLabelStyle: CSSProperties = {
   display: 'grid',
   gap: '0.5rem',
   justifyItems: 'start',
-  padding: '0.8rem'
+  left: 0,
+  padding: '0.8rem',
+  position: 'sticky',
+  zIndex: 2
 };
 
-const timelineLaneViewportStyle: CSSProperties = {
-  overflowX: 'auto',
-  paddingBottom: '0.15rem'
+const timelineLaneCellStyle: CSSProperties = {
+  minWidth: 0
 };
 
 const timelineLaneStyle: CSSProperties = {
@@ -355,8 +384,9 @@ const timelineLaneStyle: CSSProperties = {
   gap: '0.5rem',
   gridTemplateColumns: timelineGridTemplateColumns,
   minHeight: '6.5rem',
-  minWidth: '58rem',
-  padding: '0.75rem'
+  minWidth: timelineLaneMinWidth,
+  padding: '0.75rem',
+  width: '100%'
 };
 
 const timelineCardStyle: CSSProperties = {

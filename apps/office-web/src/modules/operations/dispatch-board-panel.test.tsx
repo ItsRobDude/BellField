@@ -192,6 +192,39 @@ describe('DispatchBoardPanel', () => {
     ).toBeTruthy();
   });
 
+  it('uses one shared timeline scroller for unassigned and technician rows', () => {
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        appointmentId: 'appt-tech1',
+        technicianId: 'tech-1',
+        technicianName: 'Taylor Tech'
+      }),
+      buildDispatchAppointment({
+        appointmentId: 'appt-tech2',
+        jobId: 'job-2',
+        jobNumber: '1002',
+        technicianId: 'tech-2',
+        technicianName: 'Sam Tech'
+      })
+    ]);
+
+    render(<DispatchBoardPanel dispatchBoard={dispatchBoard} viewDate="2026-05-22" />);
+
+    const timeline = screen.getByRole('group', { name: 'Dispatch timeline' });
+    const unassignedRegion = screen.getByRole('region', { name: /Unassigned appointments/i });
+    const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
+    const samRegion = screen.getByRole('region', { name: /Appointments for Sam Tech/i });
+
+    expect(timeline).toHaveStyle({ overflowX: 'auto' });
+    expect(timeline).toContainElement(unassignedRegion);
+    expect(timeline).toContainElement(taylorRegion);
+    expect(timeline).toContainElement(samRegion);
+
+    [unassignedRegion, taylorRegion, samRegion].forEach((row) => {
+      expect(row.children[1]).not.toHaveStyle({ overflowX: 'auto' });
+    });
+  });
+
   it('opens a calendar picker and commits the selected dispatch date', () => {
     const onViewDateChange = vi.fn();
 
