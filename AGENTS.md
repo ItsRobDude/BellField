@@ -53,13 +53,24 @@ Also read:
 Also read:
 - `docs/workflows-and-state-machines.md`
 
+### If the task involves dispatch board behavior, scheduling, reassignment, or appointment timeline surfaces
+Also read:
+- `docs/screen-behavior-spec.md`
+- `docs/workflows-and-state-machines.md`
+
 ### If the task involves permissions, visibility, overrides, or role behavior
 Also read:
 - `docs/permissions-model.md`
 
-### If the task involves field app offline behavior, sync, device revoke, or queued uploads
+### If the task involves field app offline behavior, background sync, device revoke, or queued uploads
 Also read:
 - `docs/offline-sync.md`
+
+### If the task involves register entries, captured work, media uploads, blobs, or attachment storage
+Also read:
+- `docs/data-modeling-rules.md`
+- `docs/offline-sync.md`
+- `docs/deployment-model.md`
 
 ### If the task involves screen layout, drawer vs full page, tabs, dashboard behavior, or field UX
 Also read:

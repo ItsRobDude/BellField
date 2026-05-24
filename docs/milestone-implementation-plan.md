@@ -297,10 +297,11 @@ Make BellField useful for daily scheduling and dispatch work.
 - technician rows
 - unassigned queue
 - appointment cards
-- right-side detail drawer
-- quick summary/scheduling edits from drawer
-- day/week view toggle
-- live updates for status/assignment changes
+- focused job detail surface opened from appointment cards
+- quick summary/scheduling/status edits from dispatch and job detail
+- day view with previous/today/next date navigation first
+- week view after day-view scheduling is stable
+- refresh behavior for status/assignment changes
 - history of reassignment
 - optional unassigned column behavior
 
@@ -314,8 +315,8 @@ Milestone 5 is done when:
 - appointments show correctly on the timeline
 - unassigned appointments stay in the queue by default
 - dispatcher can reassign/reschedule from the board
-- detail drawer is useful and stable
-- live updates work for office users
+- job detail opened from dispatch is useful and stable
+- refresh behavior keeps office users on current status/assignment data
 - appointment history reflects reassignment and status updates without requiring the field app to be feature-complete first
 - Milestone 6 can consume dispatch assignments in the field app without needing the office to manage work somewhere else
 
@@ -601,72 +602,38 @@ The extras can come later.
 
 ---
 
-## 21. Early Milestone 2-4 Working Gap Audit
+## 21. Current Working Status Snapshot
 
-This section is intentionally a current-repo working note.
+This section is a repo-current orientation note.
+It should be refreshed after major milestone slices land.
+For a shorter status-only version, see `docs/whats-shipped.md`.
 
-Its purpose is to keep the current BellField foundation aligned with the implementation order for Milestones 2-4 and to prevent docs/code drift after hardening passes.
+### Shipped foundation
 
-Audit baseline:
-- `reference-data`
-- `equipment`
-- `jobs-appointments`
-- office workspace panels
-- field assigned-work and offline foundations
+| Milestone | Current repo state | Remaining pressure |
+| --- | --- | --- |
+| 2 - CRM backbone | Customer, location, contact, ownership history, shared contact links, duplicate warnings, and SQL-backed CRM search exist. | Large-dataset polish should continue with SQL-backed duplicate checks and typeahead-style intake instead of loading every customer/location into forms. |
+| 3 - Equipment context | Equipment records, active/inactive status, history, grouping/replacement links, install date, filters, and office equipment detail surfaces exist. | Field and office location-context ergonomics can improve, but the entity shape is usable. |
+| 4 - Jobs and appointments | Jobs may exist with or without appointments. Appointments belong to jobs. Status updates, finished-visit review acknowledgement, add-appointment follow-up, register entries, media metadata, and unified timeline events exist. | Snapshot behavior for historical job customer/location display context is still a future hardening item before invoices/posting become serious. |
+| 5 - Dispatch board v1 | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, and job detail opened from appointment cards. | Date navigation, manual smoke checks, and later week view remain the main dispatch closeout items. |
+| 6 - Field app/offline | Field assigned-work caching, notes/status/equipment/register queueing, conflict/rejected preservation, Sync Now, and in-screen background sync exist. | Field job detail layout, media capture/blob replay, and revoked-device wipe are still open Milestone 6 work. |
 
-### Gap matrix
+### Current next implementation order
 
-| Milestone | Area | Current repo baseline | Status | Next implementation target |
-| --- | --- | --- | --- | --- |
-| 2 | Customer reference data | Customer, location, and contact records exist in persistence-backed reference data and workspace responses, with create/edit paths exposed through the office CRM panel. | First-pass hardened | Keep archive/end-date and duplicate-warning behavior covered by focused tests as the CRM surface matures. |
-| 2 | Location ownership and reassignment | Current location owner, alternate bill-to concepts, reassignment operations, ownership history visibility, and missing phone/email confirmation are present in the office CRM flow. | First-pass hardened | Keep reassignment history readable and avoid letting later job/billing work rewrite location history. |
-| 2 | Shared contact behavior | Shared contact records, customer/location contact links, link-level tags/overrides, archive/reactivate, end-date behavior, and duplicate relink refresh are present and regression-tested. | First-pass hardened | Improve unlink/archive language and add UI-level coverage as the CRM surface grows. |
-| 2 | Office CRM screens | The office workspace has customer/location/contact management, search, create/edit, reassignment, shared-contact linking, and light warning/notice behavior. | First-pass hardened | Keep the UI boring and explicit; do not widen into dispatch or billing from the CRM panel. |
-| 3 | Equipment create/update basics | Equipment can be created, listed, status-updated, shown with active/inactive filtering, and loaded into a detail panel. | Already present | Preserve the current API shape while improving location-context equipment workflows. |
-| 3 | Equipment history, install-state, and grouping | Equipment detail responses carry history, grouping, replacement links, and readable history messages for status, placement, grouping, ungrouping, and replacement actions. | First-pass hardened | Improve office/field location-context UX without pulling in inventory or PO workflow. |
-| 3 | Office and field equipment UX | Office and field can edit equipment data from shared backend truth, with office detail/history visibility already present. | Partially present | Add stronger location-context review/edit ergonomics and component coverage where practical. |
-| 4 | Job and appointment foundation | Jobs, appointments, timeline entries, bill-to override, optional work order values, auto-created first appointment, and status updates are present. | Already present | Keep the parent-job/child-appointment model stable and build on it conservatively. |
-| 4 | Unscheduled jobs and add-appointment workflow | Jobs without appointments remain valid, `needsScheduling` is API-derived from non-cancelled scheduled appointments, and office copy/add-appointment guidance now makes unscheduled work explicit. | First-pass hardened | Build deeper job detail/follow-up flows without creating dispatch board or invoice behavior early. |
-| 4 | Warning-driven job transitions | Close/reopen/cancel warnings are present; cancel warnings count non-cancelled appointments, cancellation updates every non-cancelled appointment under the job, and timeline behavior has focused coverage. | First-pass hardened | Add office component coverage and continue improving readable job-detail follow-up prompts. |
+1. Dispatch board closeout:
+   add previous/today/next date controls, compact week strip, clearer minimal refresh state, and browser smoke steps for moving/cancelling/finishing appointments.
+2. Field app Milestone 6 UI pass:
+   move the technician workspace toward assigned-work home plus focused job detail tabs/tiles instead of one long operational card.
+3. Field media capture and upload queue:
+   add the field-side capture/file-pick path, local media queue state, upload-intent replay, and blob finalization.
+4. Sync reliability for real field actions:
+   harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
+5. Historical snapshot hardening before Milestone 7/8:
+   define and persist the customer/location/job display context that invoices and old jobs must preserve.
 
-### Interface state for the next coding pass
-- `reference-data` and shared CRM contracts already carry the Milestone 2 backbone:
-  customer, location, contact, ownership history, shared contact link, archive/end-date, and search shapes.
-- CRM follow-up should improve clarity and coverage rather than inventing a parallel interface:
-  duplicate relinks refresh the existing link, missing location phone/email uses explicit confirmation, and fax alone does not bypass that warning.
-- Equipment contracts already carry history-facing detail, status, grouping, and replacement references while keeping separate equipment identity per physical asset.
-- Jobs and appointments already carry optional work order values, scheduling-need flags, warning messages, and unified timeline entries.
-- Office and field clients should continue consuming the same backend truth:
-  no client-only CRM, equipment, or job rule drift.
+### Milestone-boundary reminders
 
-### Office and field expectations for Milestones 2-4
-- Milestone 2 office expectation:
-  staff can manage customers, locations, and contacts as real records instead of relying on seeded reference data hidden behind job/equipment screens.
-- Milestone 3 office and field expectation:
-  both sides can review and update equipment from the location context without losing history or collapsing separate assets.
-- Milestone 4 office expectation:
-  jobs can be created with or without the first appointment, follow-up appointments can be added to open jobs, and warnings guide risky transitions.
-- Milestone 4 field expectation:
-  appointment progress and notes continue attaching to the same unified job history without dispatch or invoice workflow needing to exist yet.
-
-### Current acceptance scenarios
-- CRM:
-  create customer, create a location with and without phone/email confirmation, confirm fax alone still requires phone/email confirmation, reassign location owner, link and relink an existing contact to both customer and location, archive or end-date a contact, and confirm search/list behavior stays usable.
-- Equipment:
-  add equipment, edit key fields, move status between pending install and active, group and ungroup equipment, link a replacement, hide inactive equipment by default, and confirm history remains understandable.
-- Jobs and appointments:
-  create a job with a first appointment, create a job without an appointment, add a later appointment to the open job, leave blank work order values absent, close a job with a future appointment warning, reopen with history-preserving guidance, cancel a job and verify every non-cancelled appointment under it is cancelled, and confirm the timeline shows the expected history.
-- Milestone-boundary checks:
-  Milestone 2 work should not require dispatch logic, Milestone 3 work should not require PO/inventory workflow, and Milestone 4 work should not require dispatch board or invoice-posting behavior.
-
-### Next implementation order
-1. CRM polish pass:
-   improve archive/end-date wording, duplicate-link notices, and UI-level coverage without changing endpoint paths.
-2. Equipment location-context pass:
-   make office and field equipment review/edit flows easier to use from location context while preserving the current history model.
-3. Jobs follow-up pass:
-   improve job detail/follow-up ergonomics around finished visits, close/reopen choices, and add-another-appointment guidance.
-4. UI test harness pass:
-   add practical office-web component coverage for CRM, equipment detail/history, and jobs/appointments panels.
-5. Verification pass:
-   run the API tests, typecheck, lint, build, architecture check, and targeted smoke checks for any touched app surface.
+- Dispatch v1 can keep improving as the daily office home, but route optimization, drag/drop, live sockets, and week view remain later until day-view scheduling is trustworthy.
+- Field media capture may need an Expo camera/file-picker dependency; pause for approval before adding it.
+- Register entries exist now, but invoice-draft reflection waits for the Milestone 7 invoice draft entity.
+- Payments remain online-only in v1.

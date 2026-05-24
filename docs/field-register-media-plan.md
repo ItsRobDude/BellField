@@ -1,39 +1,55 @@
 # Field Register and Media Implementation Plan
 
-Smallest-safe-first implementation brief for the next Milestone 6 slice covering register entries (line items) and media (photos/videos/files) on the BellField field app, with the office-side API surface that consumes them.
+Shipped/deferred implementation note for the Milestone 6 register entries and media foundation.
 
-This is a brief, not a final spec. The v1 entity shapes are recommended starting points that need product confirmation before the first migration. Office UI is explicitly out of scope here — only API/service contracts.
+This started as an implementation brief.
+Most backend/register slices have now shipped, so treat this document as a historical plan plus a concise status map.
+Use `docs/api-endpoints.md`, `docs/data-modeling-rules.md`, and the code for current API/entity details.
 
-Audience: the next implementation agent. Read this end-to-end first.
+Audience: contributors working on the remaining field-media and invoice/register handoff slices.
 
 ---
 
-## 1. Snapshot of current state
+## 1. Current shipped/deferred status
 
-Audit findings as of `88f43c9 Add structured appointment times to dispatch scheduling`.
+Audit refreshed after the register/media backend, field register queue, and office captured-work review slices landed.
 
 ### Register entries
-- No structured register entity exists in `apps/api`, `packages/contracts`, or the field app.
-- The only register-adjacent field today is `AppointmentSummary.registerFollowUpNote: string`, captured during finish review. It is a single free-text reminder, not a line-item structure.
-- `docs/workflows-and-state-machines.md` §6 and `docs/data-modeling-rules.md` §11 both explicitly call for structured register lines feeding the invoice draft. The current code is behind that spec.
+- `register_entries` exists through tracked migrations.
+- Shared contracts export register entry request/response shapes.
+- API endpoints exist for list/create/edit/void.
+- Field-mobile can queue register entry create/edit/void operations using the existing pending sync model.
+- Office-web can review and edit captured register entries from job detail.
+- `AppointmentSummary.registerFollowUpNote` still exists as a free-text reminder. It complements structured register entries instead of replacing them.
+- Invoice-draft reflection is not implemented yet because the invoice draft entity belongs to Milestone 7.
 
 ### Media
-- Zero presence. No tables, contracts, endpoints, or field-side capture path. `docs/offline-sync.md` §4 and §9 call for queued photo/video/file uploads; the code has none of it.
+- `media_attachments` exists through tracked migrations.
+- Shared contracts export media upload intent, metadata, update, and void shapes.
+- API endpoints exist for media metadata, upload intents, raw `application/octet-stream` blob upload, signed-token download, caption edit, and void.
+- Office-web can review media metadata from job detail.
+- Field-mobile camera/file-picker capture and blob replay are still open Milestone 6 work.
 
 ### Migrations
-- No prior register or media migrations. The proposed v1 will require new migrations.
+- Register/media migrations have shipped:
+  - `20260523_003_register_entries`
+  - `20260523_004_media_attachments`
+  - `20260523_005_media_active_dedupe`
 
 ### Permissions
-- Existing `PermissionArea` includes `jobs`, `appointmentsDispatch`, `invoices`, but not `register` or `media`. A new area is the cleanest path; a fallback that reuses `jobs:*` is listed under open product questions.
+- Dedicated `register` and `media` permission areas have shipped.
+- Technicians currently receive `register:view/create/edit` and `media:view/create/edit`.
+- True delete remains separate from voiding and is not exposed as an ordinary field action.
 
-### Doc/code disagreement
-- `registerFollowUpNote` (single text field) does not implement what §11 of data-modeling-rules describes (line types: labor, service items, parts, memberships, other). The conservative path is to **keep** `registerFollowUpNote` as-is for v1 — it complements structured register entries as a free-text reminder — and layer structured entries on top. No backwards-incompatible change.
+### Remaining doc/code gaps
+- `docs/offline-sync.md` still describes media attachment queueing as a v1 behavior. The backend is ready, but field-side capture/blob replay is still open.
+- `docs/data-modeling-rules.md` now summarizes implemented register/media entity behavior; keep detailed endpoint shape in `docs/api-endpoints.md`.
 
 ---
 
 ## 2. Register: proposed v1 data model
 
-**Status: proposed. Needs product confirmation before migration.**
+**Status: shipped baseline. Keep this section as design history; update current schema details in `docs/data-modeling-rules.md` if behavior changes.**
 
 ### Entity: `register_entries`
 
@@ -79,7 +95,7 @@ These satisfy the §13 "unified history" rule in data-modeling-rules.
 
 ## 3. Media: proposed v1 data model
 
-**Status: proposed. Needs product confirmation before migration.**
+**Status: shipped backend baseline. Field capture and blob replay remain deferred.**
 
 ### Entity: `media_attachments`
 
@@ -93,11 +109,11 @@ These satisfy the §13 "unified history" rule in data-modeling-rules.
 | `content_type` | text | required. e.g. `image/jpeg`. |
 | `byte_size` | bigint | required. |
 | `sha256` | char(64) | required. Used for dedupe + integrity verification on upload completion. |
-| `storage_path` | text | required. Relative to `BELLFIELD_MEDIA_ROOT`. See §4 below. |
+| `storage_path` | text | nullable until blob upload finishes. Relative to `BELLFIELD_MEDIA_ROOT`. See §4 below. |
 | `uploaded_by_employee_id` | uuid | required. |
 | `uploaded_by_name` | text | required. Snapshotted. |
 | `captured_at` | timestamptz | required. Device-reported capture timestamp. May be null for non-camera files; treat null as same as `uploaded_at`. |
-| `uploaded_at` | timestamptz | required. Server-side receipt time. |
+| `uploaded_at` | timestamptz | nullable until the blob upload finishes. Server-side receipt time. |
 | `caption` | text | optional, ≤500 chars. |
 | `is_void` | boolean | default `false`. |
 | `created_at` | timestamptz | required. |
@@ -120,7 +136,7 @@ Notes on shape:
 Default BellField posture is filesystem-on-the-office-server. The plan should not require cloud blob storage to function.
 
 ### Storage layout
-- Configured root: `BELLFIELD_MEDIA_ROOT` env var. Defaults to `<server-data-dir>/media` for Windows-friendly deployment.
+- Configured root: `BELLFIELD_MEDIA_ROOT` env var. Production must set it. Dev/test may fall back to an OS temp directory.
 - Path scheme: `<root>/<job-id>/<media-id><ext>` where `<ext>` is derived from `content_type`. Predictable, easy to inspect, easy to back up.
 - File mode: write-once. Edits create new media rows; old rows void.
 - No file in subdirectory deeper than one level. Keeps Windows filesystem behavior boring.
@@ -146,7 +162,9 @@ If BellField later offers a managed/cloud deployment, the storage adapter can be
 
 ## 5. API endpoints — field-mobile
 
-All endpoints require an authenticated session with `surface = 'field-mobile'`. Permission checks per §6.
+Field metadata endpoints require an authenticated session with `surface = 'field-mobile'`.
+The raw blob upload endpoint uses the signed upload token and does not require a session.
+Permission checks per §6.
 
 ### Register
 - `POST /operations/jobs/{jobId}/register-entries` — create. Request body:
@@ -173,16 +191,17 @@ All endpoints require an authenticated session with `surface = 'field-mobile'`. 
 ### Media
 - `POST /operations/jobs/{jobId}/media/upload-intents` — see §4.
 - `POST /operations/media/{mediaId}/blob` — see §4.
-- `PATCH /operations/media/{mediaId}` — caption edits + void.
+- `PATCH /operations/media/{mediaId}` — caption edits.
+- `POST /operations/media/{mediaId}/void` — void.
 - `GET /operations/media/{mediaId}` — metadata.
 - `GET /operations/media/{mediaId}/blob` — stream bytes (signed token required).
 
 ### What flows back to the field
-The field assigned-work response should grow to include:
-- `registerEntries: RegisterEntrySummary[]` per job
-- `mediaAttachments: MediaAttachmentSummary[]` per job
+The field assigned-work response currently includes:
+- `registerEntries?: RegisterEntrySummary[]` per job when the actor can view register entries
 
-Both should be filtered by the technician's assigned-work window the same way appointments are today. Cached in the existing snapshot.
+Field media capture/blob replay remains open, so media attachments are not yet part of the field assigned-work snapshot.
+When added, they should be filtered by the technician's assigned-work window the same way appointments are today and cached in the existing snapshot.
 
 ---
 
@@ -193,11 +212,12 @@ Office endpoints reuse the same backend module; only the surface check differs.
 - `GET /operations/jobs/{jobId}/register-entries` — list active + voided. Driven by `register:view`.
 - `PATCH /operations/jobs/register-entries/{registerEntryId}` — edit. Driven by `register:edit`.
 - `POST /operations/jobs/register-entries/{registerEntryId}/void` — same.
-- `GET /operations/jobs/{jobId}/media` — list metadata. `jobs:view`.
+- `GET /operations/jobs/{jobId}/media` — list metadata. `media:view`.
 - `GET /operations/media/{mediaId}` and `/blob` — same as field.
-- `PATCH /operations/media/{mediaId}` — caption/void. `jobs:edit` or `media:edit`.
+- `PATCH /operations/media/{mediaId}` — caption edit. `media:edit`.
+- `POST /operations/media/{mediaId}/void` — void. `media:edit`.
 
-**No office UI is specced here.** When the office UI lane picks up register/media, it will add to the existing job-detail surface — no new top-level routes implied.
+**Office UI note.** Register/media review now belongs to the existing job-detail surface. No new top-level office route is implied.
 
 **Invoice draft handoff (later, not now).** When the invoice draft entity lands in Milestone 7, the office invoice-draft loader will read register entries by `job_id` and assemble draft lines. This plan does not implement that mapping; it just keeps the register entity shaped so the M7 mapping is straightforward.
 
@@ -210,7 +230,7 @@ Office endpoints reuse the same backend module; only the surface check differs.
   - `registerEntryCreate`
   - `registerEntryEdit`
   - `registerEntryVoid`
-- Media **metadata** intent (the upload-intent POST). The intent payload includes the local file URI and the device-computed sha256 so the queue can attempt the blob upload when connection returns.
+- Future field media slice: media **metadata** intent (the upload-intent POST). The intent payload should include the local file URI and the device-computed sha256 so the queue can attempt the blob upload when connection returns.
 
 ### Online-only in v1
 - The actual media **byte upload**. Even when offline-queued, the blob upload step is deferred. The intent reserves a media row server-side with `uploaded_at = null` and `storage_path = null`; the blob upload is what finalizes it. While the intent is reserved but not finalized, the office view can show "Pending upload from {tech}" via metadata only.
@@ -225,27 +245,27 @@ Office endpoints reuse the same backend module; only the surface check differs.
 
 ## 8. Permissions
 
-### Recommended new areas
-Add to `PermissionArea` in `packages/contracts/src/index.ts`:
+### Current areas
+`PermissionArea` in `packages/contracts/src/index.ts` now includes:
 - `register` — for register entry CRUD.
 - `media` — for media attachment CRUD.
 
-Default role permissions:
+Current default role permissions:
 | Role | Register | Media |
 | --- | --- | --- |
-| owner | view/create/edit/delete | view/create/edit/delete |
-| admin | view/create/edit/delete | view/create/edit/delete |
-| csr | view/create/edit | view |
-| dispatcher | view | view |
-| bookKeeping | view | view |
+| owner | view/create/edit/delete/configure | view/create/edit/delete/configure |
+| admin | view/create/edit | view/create/edit |
+| csr | view/create/edit | view/create/edit |
+| dispatcher | view/create/edit | view/create/edit |
+| bookKeeping | view/create/edit | view/create/edit |
 | technician | view/create/edit | view/create/edit |
 
-**Technicians explicitly do not get `delete`.** Void via `is_void` is allowed; true delete requires admin/owner. Matches the §14 archive-vs-delete preference in data-modeling-rules.
+**Technicians explicitly do not get `delete`.** Void via `is_void` is allowed; true delete remains a stronger permission path. Matches the §14 archive-vs-delete preference in data-modeling-rules.
 
-### Fallback if new areas are rejected
+### Historical fallback that was rejected
 - Register → `jobs:edit` (create/edit), `jobs:configure` (delete).
 - Media → `jobs:edit`, `jobs:configure`.
-- This is more conservative on the contract but less clear in permission audits later. Recommend `register` / `media` as own areas.
+- This would have been more conservative on the contract but less clear in permission audits. The shipped design uses dedicated `register` and `media` areas.
 
 ### Authorization gates in service code
 - `RegisterEntryService.createEntry` — `getAuthorizedEmployee(sessionToken, 'register:create')` then permission-aware surface checks (field-mobile or office-web).
@@ -312,14 +332,14 @@ The unified-history rule (§13 of data-modeling-rules) means these flow through 
 
 ---
 
-## 12. Migration boundaries
+## 12. Historical migration and slice boundaries
 
-Recommended sequencing — one migration per slice:
+Historical sequencing — most of these slices have shipped:
 
-1. **`register_entries` table + `register` permission area.** Smallest first. New table, new permission key, new DTO/contract types. No changes to existing tables. Field + office endpoints created but only register CRUD is wired.
-2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Adds the table, the `BELLFIELD_MEDIA_ROOT` config, the upload-intent endpoint, the blob endpoint, and backend tests. No retrieval UI.
-3. **Field-mobile queue extension.** Add the new `PendingOperation` kinds, the screen render path, and the offline replay tests. No backend changes.
-3a. **Office-web captured-work review.** Add job-card register/media review, edit, void, and media download/open actions. No field camera capture.
+1. **`register_entries` table + `register` permission area.** Shipped.
+2. **`media_attachments` table + `media` permission area + filesystem storage scaffolding.** Shipped.
+3. **Field-mobile queue extension.** Register queueing shipped; field media queueing remains open.
+3a. **Office-web captured-work review.** Shipped in job detail. No field camera capture yet.
 4. **Field-mobile media capture.** Wires the field to capture a photo, store the local URI, queue the intent, and finalize the blob upload on Sync Now. (This step may need a new field-mobile dep for camera access; flag it for product approval first per the no-new-deps rule.)
 
 **Hard boundaries within this plan:**
@@ -368,17 +388,15 @@ Captured for traceability:
 
 ---
 
-## 16. Files Codex's queue-resolution lane will likely touch (DO NOT EDIT FROM THIS LANE)
+## 16. Current remaining implementation boundaries
 
-For coordination only — the next implementation slice will need to extend these once Codex's lane lands. **Do not** modify them while his queue-resolution lane is in flight:
+The old queue-resolution coordination lane has landed.
+These are the remaining boundaries for future work:
 
-- `apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx`
-- `apps/field-mobile/src/modules/operations/field-sync-store.ts`
-- `apps/field-mobile/src/modules/operations/field-sync-types.ts`
-- `apps/field-mobile/src/modules/operations/field-pending-replay.ts`
-- `apps/field-mobile/src/modules/operations/__tests__/*`
-
-The pending-operation queue extensions in §7 will need additions to `field-sync-types.ts` and `field-pending-replay.ts` once Codex's queue-resolution work lands. Coordinate before opening the next slice.
+- Field-mobile media capture may touch `technician-workspace-screen.tsx`, field sync types/store/replay helpers, and field-mobile operation tests.
+- Pause before adding any camera/file-picker dependency.
+- Keep backend media endpoints and contracts stable unless field capture exposes a real contract gap.
+- Do not start invoice-draft mapping from this plan alone; invoice draft belongs to Milestone 7.
 
 ---
 

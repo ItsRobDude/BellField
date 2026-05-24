@@ -6,6 +6,11 @@ Its purpose is to lock the real-world sync rules before technical implementation
 
 This is a product behavior document, not a coding document.
 
+Current implementation note:
+- `docs/field-handoff-findings.md` tracks the field app's current shipped/offline status.
+- In-screen background sync and register entry queueing exist.
+- Field-side media capture/blob replay and revoked-device wipe remain open Milestone 6 work.
+
 ---
 
 ## 1. Core Sync Philosophy

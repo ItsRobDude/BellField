@@ -490,6 +490,10 @@ Once an invoice is posted:
 
 Everything a technician adds in the job register should reflect immediately on the invoice draft.
 
+Current implementation note:
+- structured register entries exist now
+- the invoice draft entity and live register-to-invoice reflection are still Milestone 7 work
+
 This includes things such as:
 - labor
 - service items

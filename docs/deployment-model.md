@@ -180,6 +180,28 @@ By default, BellField should store files on customer-owned hardware.
 - the customer should be able to choose or change the attachment storage location in settings
 - changing attachment storage location should be a high-permission action
 
+### Current media storage configuration
+The API now stores media blobs on the server filesystem.
+
+Runtime configuration:
+
+- `BELLFIELD_MEDIA_ROOT` - absolute path where uploaded media blobs are stored
+- `BELLFIELD_MEDIA_TOKEN_SECRET` - long random secret used to sign upload/download tokens
+- `BELLFIELD_MEDIA_MAX_BYTES` - optional raw upload size limit, default 50 MB
+- `BELLFIELD_MEDIA_TOKEN_TTL_SECONDS` - optional signed token lifetime, default 300 seconds
+
+Production must set `BELLFIELD_MEDIA_ROOT` and `BELLFIELD_MEDIA_TOKEN_SECRET`.
+Development and test runs may fall back to temporary local values, but that fallback is not a deployment posture.
+
+The current v1 filesystem layout stores blobs under:
+
+```text
+<BELLFIELD_MEDIA_ROOT>/<job-id>/<media-id><extension>
+```
+
+The database stores media metadata and relative storage paths.
+Backups must include both the PostgreSQL database and the media root; backing up only the database will preserve the records but lose the actual uploaded files.
+
 ### File types
 BellField should support:
 - photos

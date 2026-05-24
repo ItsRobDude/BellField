@@ -39,7 +39,9 @@ Important UI posture:
 ## 2. Office App Global Behavior
 
 ### Default landing screen
-When an office user logs in, BellField should land on the **Dashboard** by default.
+For the current operations-focused office app, BellField should land on **Dispatch** by default.
+
+A broader business dashboard can come later, but the daily work surface should not block dispatchers behind a marketing-style or summary-only landing page.
 
 ### Global search behavior
 BellField should not force a search bar onto every screen.
@@ -290,14 +292,15 @@ It should feel operationally serious, but its quick actions should still be lear
 
 ### Default interaction behavior
 When a user clicks an appointment card on the dispatch board:
-- a **right-side detail drawer** should open by default
+- BellField should open the focused job detail surface for that job
 
-That drawer should also include a clear option to open the appointment/job in a full-page view.
+The current v1 implementation uses an in-app job detail view rather than a right-side drawer.
+This keeps appointment review, register entries, media, and timeline history in one readable job-owned surface.
 
-This supports both quick edits and deeper review.
+Future versions may add a compact drawer for very quick dispatch edits, but the drawer should not become a second hidden job screen.
 
-### Drawer edit behavior
-The right-side drawer should allow quick edits to things such as:
+### Dispatch edit behavior
+The dispatch board and focused job detail surface should allow edits to things such as:
 - job summary/caller complaint
 - appointment date
 - optional structured local start/end times
@@ -305,13 +308,14 @@ The right-side drawer should allow quick edits to things such as:
 - technician assignment
 - scheduling-related details
 
-This drawer should be convenient for fast dispatch work.
+These controls should be convenient for fast dispatch work.
 When structured start/end times are present, appointment cards and detail surfaces should prefer those times for display while still preserving the free-form time-window label for context and legacy records.
 
 ### Dispatch view controls
 The dispatch board should support:
 - day view
-- week view
+- date navigation for previous day, today, next day, and a compact week strip
+- week view later
 
 V1 should keep day-view scheduling trustworthy first: the board uses scheduled date plus optional local `HH:mm` start/end times for ordering.
 Week view is the next UI layer after structured times have landed and are stable.
@@ -496,7 +500,7 @@ BellField screen behavior should follow these defaults:
 - account and location pages driven by smart tabs
 - equipment list in a table with side drawer by default
 - jobs as the main operational record with a mixed filtered timeline
-- dispatch board centered on a timeline with right-side detail drawer
+- dispatch board centered on a timeline that opens focused job detail
 - estimate building from jobs but on its own screen
 - invoices usable from both job context and dedicated invoice screen
 - field job layout based on tiles/tabs rather than endless scroll

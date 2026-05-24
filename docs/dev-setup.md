@@ -52,6 +52,16 @@ Root runtime settings:
 - Copy `.env.example` values into your local shell or app-specific `.env` files when running the API or worker.
 - `DATABASE_URL` is required for API runtime and migration scripts.
 - `PORT` controls the local API listen port.
+- `BELLFIELD_MEDIA_ROOT` controls where uploaded media blobs are stored.
+- `BELLFIELD_MEDIA_TOKEN_SECRET` signs short-lived upload/download tokens for media blobs.
+- `BELLFIELD_MEDIA_MAX_BYTES` controls the raw blob upload limit. The default is 50 MB.
+- `BELLFIELD_MEDIA_TOKEN_TTL_SECONDS` controls signed media token lifetime. The default is 300 seconds.
+
+Media config notes:
+
+- Production API startup fails if `BELLFIELD_MEDIA_ROOT` or `BELLFIELD_MEDIA_TOKEN_SECRET` is missing.
+- Development and test runs fall back to an OS temp media folder and a weak dev-only token secret if those values are omitted.
+- Use an absolute Windows-friendly path such as `C:\BellFieldData\media` for local server-style testing.
 
 Client runtime settings:
 

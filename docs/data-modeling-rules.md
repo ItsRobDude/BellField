@@ -462,6 +462,16 @@ Register lines may include:
 ### Register-to-invoice rule
 Register lines should map to invoice-draft content immediately.
 
+Current implementation note:
+- `register_entries` is the current structured register entity.
+- It is anchored to `job_id`, with optional `appointment_id` for the visit that captured it.
+- Supported v1 kinds are `labor`, `serviceItem`, `part`, `membership`, and `other`.
+- `total_amount` is stored as captured, not only derived later.
+- `captured_by_name` is snapshotted so historical lines stay readable after employee changes.
+- Voiding uses `is_void` and `void_reason`; ordinary voiding should not hard-delete the row.
+- Register activity writes into the unified job timeline with register entry event kinds.
+- Invoice-draft reflection is still future Milestone 7 work until the invoice draft entity exists.
+
 ### Costing preview rule
 Before job completion/posting, BellField may show cost previews.
 
@@ -470,7 +480,48 @@ However:
 
 ---
 
-## 12. Purchasing and Inventory Modeling Rules
+## 12. Media Attachment Modeling Rules
+
+### Media meaning
+Media attachments are photos, videos, and documents captured or attached to a job.
+
+### Current media entity
+`media_attachments` is the current media metadata entity.
+
+It is anchored to:
+- `job_id`
+- optional `appointment_id` for the visit that captured the file
+
+The actual bytes live on the server filesystem under `BELLFIELD_MEDIA_ROOT`.
+The database stores metadata and a relative `storage_path`.
+
+### Upload integrity rule
+Media upload intent records should include:
+- content type
+- byte size
+- SHA-256 hash
+- original filename
+- capture timestamp where available
+
+The server verifies byte size and SHA-256 when the blob upload is finalized.
+
+### Dedupe rule
+Active media rows dedupe by `(job_id, sha256)`.
+
+Voided media rows are historical and should not prevent re-attaching the same bytes as a new active row.
+
+### Void vs delete rule
+Ordinary media removal should use `is_void` and optional `void_reason`.
+
+Voiding a media row should keep the blob on disk.
+True deletion of the row or file is a later dangerous action and should require stronger permission.
+
+### Timeline rule
+Media attach, caption edit, and void actions should write readable entries into the unified job timeline.
+
+---
+
+## 13. Purchasing and Inventory Modeling Rules
 
 ### PO destination rule
 A PO must always have one destination/end location.
@@ -508,7 +559,7 @@ Truck inventory should behave much like any other inventory location.
 
 ---
 
-## 13. Activity and Audit Modeling Rules
+## 14. Activity and Audit Modeling Rules
 
 ### History rule
 BellField should preserve readable activity/history for major operational events.
@@ -530,7 +581,7 @@ Even though BellField allows true deletion with permission, BellField should sti
 
 ---
 
-## 14. Archive vs Delete Rules
+## 15. Archive vs Delete Rules
 
 ### Default business preference
 BellField should usually prefer:
@@ -553,7 +604,7 @@ Archived/inactive items should:
 
 ---
 
-## 15. Search Key Rules
+## 16. Search Key Rules
 
 BellField should favor these practical search keys:
 - customer
@@ -570,7 +621,7 @@ Important rule:
 
 ---
 
-## 16. Schema Direction Summary
+## 17. Schema Direction Summary
 
 When schema work begins, BellField’s database design should follow these product rules:
 - long-lived locations
@@ -584,6 +635,7 @@ When schema work begins, BellField’s database design should follow these produ
 - estimates attach to jobs and are visible from locations
 - one main invoice per job, with later adjustments if needed
 - invoice drafts start early and posted invoices lock
+- register entries and media attachments are job-owned records with optional appointment context
 - one PO has one destination
 - equipment-tagged received items can become pending/installed location equipment
 - archived/inactive data leaves active views but remains accessible

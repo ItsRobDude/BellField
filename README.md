@@ -70,6 +70,7 @@ Environment setup:
 - Copy [apps/office-web/.env.example](./apps/office-web/.env.example) for the office app.
 - Copy [apps/field-mobile/.env.example](./apps/field-mobile/.env.example) for the field app.
 - Set `DATABASE_URL` for the API runtime and migration scripts.
+- Set `BELLFIELD_MEDIA_ROOT` and `BELLFIELD_MEDIA_TOKEN_SECRET` for any production-like API run that needs media uploads.
 - Outside local development, point `NEXT_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_API_BASE_URL` at the BellField API running on the office server.
 
 Common development commands:
@@ -129,6 +130,8 @@ Core contributor docs:
 - [docs/engineering-standards.md](./docs/engineering-standards.md) - coding and implementation standards
 - [docs/dev-setup.md](./docs/dev-setup.md) - local development setup and command guidance
 - [docs/database-migrations.md](./docs/database-migrations.md) - API migration workflow and rules
+- [docs/api-endpoints.md](./docs/api-endpoints.md) - current API endpoint catalog
+- [docs/glossary.md](./docs/glossary.md) - common BellField terms
 
 Product source-of-truth docs:
 
@@ -143,6 +146,8 @@ Operational and sequencing docs:
 
 - [docs/deployment-model.md](./docs/deployment-model.md) - self-hosted deployment constraints and hosting posture
 - [docs/milestone-implementation-plan.md](./docs/milestone-implementation-plan.md) - build order and milestone discipline
+- [docs/whats-shipped.md](./docs/whats-shipped.md) - current shipped/open/not-started snapshot
+- [docs/architecture-guardrails.md](./docs/architecture-guardrails.md) - checked architecture rules
 - [docs/modular-monolith-codebase-structure.md](./docs/modular-monolith-codebase-structure.md) - architecture direction and repo-structure guardrails
 
 Historical planning context:

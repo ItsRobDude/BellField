@@ -136,6 +136,16 @@ Read when: creating, applying, or reviewing schema migrations.
 
 Does not own: broader data-modeling rules or product semantics.
 
+### [api-endpoints.md](./api-endpoints.md)
+
+Audience: contributors wiring office-web, field-mobile, or API clients.
+
+Purpose: quick endpoint catalog showing current paths, surfaces, permission gates, and broad response purpose.
+
+Read when: adding UI client calls, reviewing endpoint availability, or orienting around API surfaces.
+
+Does not own: DTO validation details, product semantics, or the exact implementation; controller/service code remains exact source of truth.
+
 ### [modular-monolith-codebase-structure.md](./modular-monolith-codebase-structure.md)
 
 Audience: contributors making architecture or repo-structure decisions.
@@ -145,6 +155,58 @@ Purpose: current repo structure guardrails and target-state modular monolith dir
 Read when: deciding where new code belongs, whether a new package or app is justified, or how modules should stay decoupled.
 
 Does not own: current product behavior or a literal inventory of everything that already exists.
+
+### [architecture-guardrails.md](./architecture-guardrails.md)
+
+Audience: contributors changing imports, package boundaries, or shared-code placement.
+
+Purpose: the current architecture rules enforced by `pnpm check:architecture`.
+
+Read when: adding cross-package imports, moving shared types/helpers, or debugging the architecture check.
+
+Does not own: product behavior or milestone sequencing.
+
+## Current-State and Handoff Docs
+
+### [whats-shipped.md](./whats-shipped.md)
+
+Audience: contributors reorienting quickly.
+
+Purpose: short current-status snapshot of shipped, open, and not-started work.
+
+Read when: asking "where are we?" before choosing the next slice.
+
+Does not own: milestone definitions or product rules.
+
+### [glossary.md](./glossary.md)
+
+Audience: all contributors.
+
+Purpose: one-line definitions for commonly confused product and implementation terms.
+
+Read when: naming UI labels, docs, DTOs, or implementation concepts.
+
+Does not own: full workflow behavior or schema rules.
+
+### [field-handoff-findings.md](./field-handoff-findings.md)
+
+Audience: contributors working on field-mobile and offline sync.
+
+Purpose: field app trust/readability findings and remaining field-side gaps from recent implementation passes.
+
+Read when: picking up Milestone 6 field app work or checking what field behavior is already trustworthy.
+
+Does not own: general sync rules; use `offline-sync.md` for product intent.
+
+### [field-register-media-plan.md](./field-register-media-plan.md)
+
+Audience: contributors working on remaining field media capture or invoice/register handoff.
+
+Purpose: historical implementation plan plus current shipped/deferred status for register and media.
+
+Read when: continuing field media or register-to-invoice work.
+
+Does not own: current endpoint inventory; use `api-endpoints.md` for that.
 
 ## Legacy and Planning Context
 
@@ -175,6 +237,11 @@ For schema or persistence changes:
 - `data-modeling-rules.md`
 - `database-migrations.md`
 
+For API/client wiring:
+
+- `api-endpoints.md`
+- the relevant controller/service files
+
 For deployment or hosting changes:
 
 - `deployment-model.md`
@@ -182,3 +249,4 @@ For deployment or hosting changes:
 For planning what belongs in scope:
 
 - `milestone-implementation-plan.md`
+- `whats-shipped.md` for current repo status

@@ -22,20 +22,24 @@ This keeps migrations explicit, reviewable, and independent from ORM-owned migra
 
 Each migration is a pair of SQL files:
 
-- `<timestamp>_<name>.up.sql`
-- `<timestamp>_<name>.down.sql`
+- `<YYYYMMDD>_<NNN>_<name>.up.sql`
+- `<YYYYMMDD>_<NNN>_<name>.down.sql`
 
 Current naming rules:
 
-- timestamp format: `YYYYMMDDHHMMSS`
+- date format: `YYYYMMDD`
+- same-day sequence format: three digits, starting at `001`
 - name format: lowercase `snake_case`
-- example: `20260416093000_add_customer_flags.up.sql`
+- example: `20260523_008_crm_duplicate_indexes.up.sql`
 
 The create script generates both files:
 
 ```powershell
 pnpm --filter @bellfield/api migration:create -- add_customer_flags
 ```
+
+The script chooses today's date and the next unused same-day sequence based on the existing files in
+`apps/api/src/database/migrations`.
 
 ## 3. Commands
 

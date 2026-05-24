@@ -346,6 +346,10 @@ Practical meaning:
 - the invoice may start mostly blank
 - it exists early so the job can build into it over time
 
+Current implementation note:
+- structured register entries exist now
+- the invoice draft entity and automatic register-to-invoice reflection still belong to Milestone 7
+
 ### Zero-dollar invoice rule
 BellField should still allow/record a zero-dollar invoice.
 

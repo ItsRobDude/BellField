@@ -137,6 +137,56 @@ Within each module, BellField should support permission levels such as:
 - Delete
 - Special actions for that module
 
+### 6.1 Current contract permission areas
+The current shared contract exposes these exact `PermissionArea` values:
+
+| Permission area | Meaning |
+| --- | --- |
+| `customers` | Customer account records |
+| `locations` | Service location records |
+| `contacts` | Shared contact records and contact relationships |
+| `equipment` | Equipment records, placement, grouping, replacement, and operational remove behavior |
+| `jobs` | Parent job records, job status, job notes, and job-owned workflow |
+| `appointmentsDispatch` | Appointment scheduling, assignment, dispatch board, and appointment status |
+| `register` | Job register entries captured by office or field |
+| `media` | Job media metadata, blobs, captions, and voiding |
+| `estimates` | Estimate records and estimate workflow |
+| `invoices` | Invoice drafts/posting workflow |
+| `payments` | Payment workflow |
+| `purchasing` | Purchase order workflow |
+| `inventory` | Inventory locations and material movement |
+| `reports` | Reporting and export views |
+| `employeesPermissions` | Employee records, roles, and permission configuration |
+| `companySettings` | Company-level settings |
+| `supportLogsBackups` | Support logs, diagnostics, backup/export operations |
+
+Current `PermissionAction` values are:
+
+- `view`
+- `create`
+- `edit`
+- `delete`
+- `approve`
+- `post`
+- `export`
+- `configure`
+
+### 6.2 Current default role template snapshot
+The exact source of truth is `apps/api/src/modules/identity-access/default-role-templates.ts`.
+This table summarizes the current defaults so contributors do not have to rediscover them by reading code first.
+
+| Role | Current default permission summary |
+| --- | --- |
+| Owner | Admin core plus delete/configure/approval authority across operational, financial, reporting, employee, settings, and support areas. |
+| Admin | Office core, equipment configure, invoice view/create/edit/post, payment view/create/edit, purchasing view/create/edit, inventory view/create/edit, report view/export, employee permission view/configure, company settings view/configure, support logs/backups view/export, and jobs configure. |
+| CSR | Office core, equipment configure, invoice view, and payment view. |
+| Dispatcher | Office core, equipment configure, invoice view, and report view. |
+| Book Keeping | Office core, invoice view/edit/post, payment view/create/edit, and report view/export. |
+| Technician | Customer/location/contact view, equipment create/edit/configure, appointment dispatch view/edit, register view/create/edit, media view/create/edit, estimate view/create/edit, and invoice view/edit. |
+
+Office core currently means:
+- customers, locations, contacts, equipment, jobs, appointments/dispatch, register, media, and estimates: `view/create/edit`
+
 ---
 
 ## 7. Role Defaults

@@ -1,0 +1,46 @@
+# What Is Currently Shipped
+
+This is a short repo-current status snapshot.
+It is not a changelog.
+Refresh it after major implementation lanes land.
+
+## Shipped Enough To Build On
+
+| Area | Current state | Main source files/docs |
+| --- | --- | --- |
+| Project foundation | Monorepo shape, pnpm scripts, architecture check, migration runner, API/office/field/worker apps. | `README.md`, `docs/dev-setup.md`, `docs/architecture-guardrails.md` |
+| Identity and permissions | Login/session flow, default roles, employee list/update, role templates, permission overrides. | `apps/api/src/modules/identity-access`, `docs/permissions-model.md` |
+| CRM backbone | Customers, locations, contacts, contact links, ownership reassignment, duplicate warnings, missing phone/email confirmation, SQL-backed prefix search. | `apps/api/src/modules/crm`, `apps/api/src/modules/company-data` |
+| Equipment | Equipment create/update/detail/history, active/inactive, grouping, replacement links, install date, filters, warranty fields, office and field mutation paths. | `apps/api/src/modules/equipment`, `apps/office-web/src/modules/operations/equipment-panel.tsx` |
+| Jobs and appointments | Job creation, optional first appointment, unscheduled jobs, add follow-up appointment, status changes, appointment scheduling/status changes, job timeline, finished-visit review acknowledgement. | `apps/api/src/modules/jobs-appointments`, `apps/api/src/modules/job-detail` |
+| Dispatch board v1 | Dedicated dated dispatch read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, job detail opened from appointment cards. | `apps/api/src/modules/dispatch`, `apps/office-web/src/modules/operations/dispatch-board-panel.tsx` |
+| Jobs queue | Paginated office queues for review-needed, waiting on parts, unscheduled, and open jobs. | `apps/api/src/modules/job-queue` |
+| Job detail | Focused office detail payload with bounded timeline, appointments, equipment, register rows when permitted, and media rows when permitted. | `apps/api/src/modules/job-detail`, `apps/office-web/src/modules/operations/job-detail-panel.tsx` |
+| Register entries | Backend table/contracts/API, permission area, job timeline events, field-mobile queueing/replay, office captured-work review/edit/void. | `apps/api/src/modules/jobs-appointments`, `apps/field-mobile/src/modules/operations`, `docs/field-register-media-plan.md` |
+| Media backend | Backend table/contracts/API, permission area, filesystem blob storage, upload/download tokens, metadata/caption/void, active-only SHA dedupe. | `apps/api/src/modules/media`, `docs/deployment-model.md` |
+| Field assigned work | Technician assigned-work fetch, local cache, pending queue, notes/status/equipment/register operations, conflict/rejected preservation, Sync Now, in-screen background sync. | `apps/field-mobile/src/modules/operations`, `docs/field-handoff-findings.md` |
+| Local dev database | User-space PostgreSQL helper and Docker Compose fallback, local migration helper. | `docs/dev-setup.md`, `tools/start-local-postgres.mjs` |
+
+## Open Work On The Current Plate
+
+| Area | Open work |
+| --- | --- |
+| Dispatch closeout | Better previous/today/next date navigation, compact week strip, clearer minimal refresh state, browser/manual smoke steps for schedule/status changes. |
+| Field app layout | Move assigned work toward a real technician home plus focused job detail tabs/tiles instead of one long screen. |
+| Field media | Camera/file-picker capture, local media queue state, upload-intent replay, and blob finalization. Pause before adding a new Expo dependency. |
+| Sync hardening | Reliability checks around register/media partial success, retries, conflict/rejected handling, and revoked-device behavior. |
+| Intake at scale | Job intake context still loads active customers/locations. Future typeahead should use SQL-backed CRM search rather than full dropdowns. |
+| Historical snapshots | Jobs and dispatch still resolve current customer/location names. Before invoices/posting, define persisted snapshot fields for customer/location/job display context. |
+| Invoice draft | Register entries are shaped for invoice draft reflection, but the invoice draft entity/workflow has not started. |
+| Self-hosted runbook | Backup/restore/update/log guidance is not yet a usable operator runbook. Media root backup is now explicitly required. |
+
+## Not Started
+
+- Estimate builder workflow
+- Invoice draft entity
+- Invoice posting and payment workflow
+- Inventory, purchase orders, and job costing
+- Route optimization and drag/drop dispatch
+- Live socket updates
+- Customer portal
+- BellField-hosted SaaS infrastructure
