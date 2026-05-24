@@ -5,17 +5,31 @@ import { useState } from 'react';
 import { getInitialOfficeApiBaseUrl } from '@/lib/api-base-url';
 import { loginToOfficeApi, type EmployeeSummary } from '@/lib/identity-api';
 import { OfficeWorkspaceShell } from '@/modules/operations/office-workspace-shell';
+import {
+  resolveInitialLoginCredentials,
+  shouldShowDemoLoginAccounts,
+  type DemoLoginAccount
+} from './demo-login';
 
-const demoAccounts = [
-  { email: 'owner@bellfield.local', password: 'bellfield-owner', label: 'Owner' },
-  { email: 'admin@bellfield.local', password: 'bellfield-admin', label: 'Admin' },
-  { email: 'dispatcher@bellfield.local', password: 'bellfield-dispatch', label: 'Dispatcher' }
-];
+const demoAccounts: DemoLoginAccount[] =
+  process.env.NODE_ENV === 'production'
+    ? []
+    : [
+        { email: 'owner@bellfield.local', password: 'bellfield-owner', label: 'Owner' },
+        { email: 'admin@bellfield.local', password: 'bellfield-admin', label: 'Admin' },
+        {
+          email: 'dispatcher@bellfield.local',
+          password: 'bellfield-dispatch',
+          label: 'Dispatcher'
+        }
+      ];
 
 export function OfficeAuthShell() {
+  const showDemoAccounts = shouldShowDemoLoginAccounts() && demoAccounts.length > 0;
+  const initialCredentials = resolveInitialLoginCredentials(demoAccounts);
   const [apiBaseUrl, setApiBaseUrl] = useState(getInitialOfficeApiBaseUrl());
-  const [email, setEmail] = useState(demoAccounts[0].email);
-  const [password, setPassword] = useState(demoAccounts[0].password);
+  const [email, setEmail] = useState(initialCredentials.email);
+  const [password, setPassword] = useState(initialCredentials.password);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -76,11 +90,13 @@ export function OfficeAuthShell() {
           </label>
           <p style={styles.helperText}>Enter the BellField API address for this office server.</p>
           <input
+            aria-label="Email"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             style={styles.input}
           />
           <input
+            aria-label="Password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
@@ -90,21 +106,23 @@ export function OfficeAuthShell() {
             {isSubmitting ? 'Signing in...' : 'Sign in'}
           </button>
         </form>
-        <div style={styles.demoList}>
-          {demoAccounts.map((account) => (
-            <button
-              key={account.email}
-              type="button"
-              onClick={() => {
-                setEmail(account.email);
-                setPassword(account.password);
-              }}
-              style={styles.demoButton}
-            >
-              {account.label}: {account.email}
-            </button>
-          ))}
-        </div>
+        {showDemoAccounts ? (
+          <div style={styles.demoList}>
+            {demoAccounts.map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                onClick={() => {
+                  setEmail(account.email);
+                  setPassword(account.password);
+                }}
+                style={styles.demoButton}
+              >
+                {account.label}: {account.email}
+              </button>
+            ))}
+          </div>
+        ) : null}
         {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
       </section>
     </main>

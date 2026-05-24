@@ -14,17 +14,31 @@ import {
 import { getInitialFieldApiBaseUrl } from '@/lib/api-base-url';
 import { loginToFieldApi, type EmployeeSummary } from '@/lib/identity-api';
 import { TechnicianWorkspaceScreen } from '@/modules/operations/technician-workspace-screen';
+import {
+  resolveInitialLoginCredentials,
+  shouldShowDemoLoginAccounts,
+  type DemoLoginAccount
+} from './demo-login';
 
-const demoAccounts = [
-  { label: 'Technician', email: 'tech@bellfield.local', password: 'bellfield-tech' },
-  { label: 'Dispatcher', email: 'dispatcher@bellfield.local', password: 'bellfield-dispatch' },
-  { label: 'Owner', email: 'owner@bellfield.local', password: 'bellfield-owner' }
-];
+const demoAccounts: DemoLoginAccount[] =
+  process.env.NODE_ENV === 'production'
+    ? []
+    : [
+        { label: 'Technician', email: 'tech@bellfield.local', password: 'bellfield-tech' },
+        {
+          label: 'Dispatcher',
+          email: 'dispatcher@bellfield.local',
+          password: 'bellfield-dispatch'
+        },
+        { label: 'Owner', email: 'owner@bellfield.local', password: 'bellfield-owner' }
+      ];
 
 export function TechnicianAuthScreen() {
+  const showDemoAccounts = shouldShowDemoLoginAccounts() && demoAccounts.length > 0;
+  const initialCredentials = resolveInitialLoginCredentials(demoAccounts);
   const [apiBaseUrl, setApiBaseUrl] = useState(getInitialFieldApiBaseUrl());
-  const [email, setEmail] = useState(demoAccounts[0].email);
-  const [password, setPassword] = useState(demoAccounts[0].password);
+  const [email, setEmail] = useState(initialCredentials.email);
+  const [password, setPassword] = useState(initialCredentials.password);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -126,23 +140,25 @@ export function TechnicianAuthScreen() {
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-          <View style={styles.demoCard}>
-            <Text style={styles.sectionTitle}>Demo accounts</Text>
-            {demoAccounts.map((account) => (
-              <Pressable
-                key={account.email}
-                onPress={() => {
-                  setEmail(account.email);
-                  setPassword(account.password);
-                }}
-                style={styles.demoButton}
-              >
-                <Text style={styles.demoButtonText}>
-                  {account.label}: {account.email}
-                </Text>
-              </Pressable>
-            ))}
-          </View>
+          {showDemoAccounts ? (
+            <View style={styles.demoCard}>
+              <Text style={styles.sectionTitle}>Demo accounts</Text>
+              {demoAccounts.map((account) => (
+                <Pressable
+                  key={account.email}
+                  onPress={() => {
+                    setEmail(account.email);
+                    setPassword(account.password);
+                  }}
+                  style={styles.demoButton}
+                >
+                  <Text style={styles.demoButtonText}>
+                    {account.label}: {account.email}
+                  </Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       </ScrollView>
       <StatusBar style="dark" />
