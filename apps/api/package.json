@@ -3,8 +3,8 @@
   "private": true,
   "version": "0.0.1",
   "scripts": {
-    "dev": "nest start --watch",
-    "start": "nest start",
+    "dev": "nest start --watch --entryFile apps/api/src/main",
+    "start": "nest start --entryFile apps/api/src/main",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
     "test": "jest --runInBand",

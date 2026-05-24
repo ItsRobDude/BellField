@@ -75,11 +75,17 @@ Environment setup:
 Common development commands:
 
 ```powershell
+pnpm dev:postgres
+pnpm dev:migrate
 pnpm dev:office-web
 pnpm dev:field-mobile
 pnpm dev:api
 pnpm dev:worker
 ```
+
+`pnpm dev:postgres` starts a local PostgreSQL server from a user-space PostgreSQL install.
+It uses the development `DATABASE_URL` from [.env.example](./.env.example).
+Docker Compose helpers are available with `pnpm dev:postgres:docker` when Docker Desktop is healthy.
 
 Common maintenance commands:
 

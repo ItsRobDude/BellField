@@ -65,11 +65,31 @@ Outside local development, point both client base URLs at the BellField API runn
 Run these from the repository root:
 
 ```powershell
+pnpm dev:postgres
+pnpm dev:migrate
 pnpm dev:office-web
 pnpm dev:field-mobile
 pnpm dev:api
 pnpm dev:worker
 ```
+
+Local database helpers:
+
+```powershell
+pnpm dev:postgres
+pnpm dev:postgres:stop
+pnpm dev:postgres:docker
+pnpm dev:postgres:docker:logs
+pnpm dev:postgres:docker:stop
+pnpm dev:postgres:docker:down
+```
+
+`pnpm dev:postgres` starts a local PostgreSQL server from a user-space PostgreSQL install.
+The default local connection string is `postgresql://postgres:postgres@localhost:5432/bellfield`.
+By default, the helper looks for PostgreSQL binaries under `%LOCALAPPDATA%\Programs\PostgreSQL\16.14\pgsql\bin`.
+Set `POSTGRES_BIN` if PostgreSQL is installed elsewhere.
+`pnpm dev:migrate` applies pending API migrations against that default unless `DATABASE_URL` is already set.
+Docker Compose helpers are kept as an optional path for machines where Docker Desktop is healthy.
 
 Start commands:
 

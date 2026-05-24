@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -52,12 +52,35 @@ export function DispatchBoardPanel({
   onRefresh
 }: DispatchBoardPanelProps) {
   const effectiveViewDate = viewDate || getDateInputValue();
+  const [draftViewDate, setDraftViewDate] = useState(effectiveViewDate);
   const model = useMemo<DispatchBoardModel>(
     () => buildDispatchBoardModel(dispatchBoard),
     [dispatchBoard]
   );
   const totalCardCount = model.cardLookup.size;
   const unassignedCount = model.unassignedQueue.length;
+
+  useEffect(() => {
+    setDraftViewDate(effectiveViewDate);
+  }, [effectiveViewDate]);
+
+  function handleViewDateChange(nextDate: string) {
+    setDraftViewDate(nextDate);
+
+    if (nextDate) {
+      onViewDateChange?.(nextDate);
+    }
+  }
+
+  function handleViewDateBlur() {
+    if (draftViewDate) {
+      return;
+    }
+
+    const today = getDateInputValue();
+    setDraftViewDate(today);
+    onViewDateChange?.(today);
+  }
 
   return (
     <section style={styles.workspacePanel} aria-label="Dispatch board">
@@ -77,8 +100,10 @@ export function DispatchBoardPanel({
           <input
             type="date"
             aria-label="Dispatch date"
-            value={effectiveViewDate}
-            onChange={(event) => onViewDateChange?.(event.target.value || getDateInputValue())}
+            value={draftViewDate}
+            onBlur={handleViewDateBlur}
+            onChange={(event) => handleViewDateChange(event.target.value)}
+            onInput={(event) => handleViewDateChange(event.currentTarget.value)}
             style={styles.input}
           />
         </label>

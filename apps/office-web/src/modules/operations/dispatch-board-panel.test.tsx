@@ -193,6 +193,47 @@ describe('DispatchBoardPanel', () => {
     expect(onViewDateChange).toHaveBeenCalledWith('2026-05-23');
   });
 
+  it('commits date edits from input events as well as change events', () => {
+    const onViewDateChange = vi.fn();
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([buildDispatchAppointment()])}
+        viewDate="2026-05-22"
+        onViewDateChange={onViewDateChange}
+      />
+    );
+
+    fireEvent.input(screen.getByLabelText('Dispatch date'), { target: { value: '2026-04-13' } });
+
+    expect(onViewDateChange).toHaveBeenCalledWith('2026-04-13');
+  });
+
+  it('allows an empty in-progress date edit and resets to today only on blur', () => {
+    const onViewDateChange = vi.fn();
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([buildDispatchAppointment()])}
+        viewDate="2026-05-22"
+        onViewDateChange={onViewDateChange}
+      />
+    );
+
+    const dateInput = screen.getByLabelText('Dispatch date') as HTMLInputElement;
+
+    fireEvent.change(dateInput, { target: { value: '' } });
+
+    expect(dateInput).toHaveValue('');
+    expect(onViewDateChange).not.toHaveBeenCalled();
+
+    fireEvent.blur(dateInput);
+
+    expect(onViewDateChange).toHaveBeenCalledTimes(1);
+    expect(onViewDateChange.mock.calls[0]?.[0]).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(dateInput).toHaveValue(onViewDateChange.mock.calls[0]?.[0]);
+  });
+
   it('calls refresh and reflects refresh state', async () => {
     const onRefresh = vi.fn().mockResolvedValue(undefined);
     const dispatchBoard = buildDispatchBoard([buildDispatchAppointment()]);

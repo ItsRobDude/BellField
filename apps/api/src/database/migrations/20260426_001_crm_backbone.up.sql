@@ -5,34 +5,41 @@ alter table customers
   add column if not exists billing_postal_code text,
   add column if not exists fax text;
 
+with first_location as (
+  select distinct on (customer_id)
+    customer_id,
+    address_line1,
+    city,
+    state,
+    postal_code
+  from locations
+  order by customer_id, created_at asc nulls last, id asc
+)
 update customers customer
 set
   billing_address_line1 = coalesce(customer.billing_address_line1, location.address_line1, 'Billing address pending'),
   billing_city = coalesce(customer.billing_city, location.city, 'Unknown'),
   billing_state = coalesce(customer.billing_state, location.state, 'Unknown'),
   billing_postal_code = coalesce(customer.billing_postal_code, location.postal_code, 'Unknown')
-from lateral (
-  select address_line1, city, state, postal_code
-  from locations
-  where customer_id = customer.id
-  order by created_at asc nulls last, id asc
-  limit 1
-) location
+from first_location location
+where location.customer_id = customer.id
+  and (
+    customer.billing_address_line1 is null
+    or customer.billing_city is null
+    or customer.billing_state is null
+    or customer.billing_postal_code is null
+  );
+
+update customers customer
+set
+  billing_address_line1 = coalesce(customer.billing_address_line1, 'Billing address pending'),
+  billing_city = coalesce(customer.billing_city, 'Unknown'),
+  billing_state = coalesce(customer.billing_state, 'Unknown'),
+  billing_postal_code = coalesce(customer.billing_postal_code, 'Unknown')
 where customer.billing_address_line1 is null
    or customer.billing_city is null
    or customer.billing_state is null
    or customer.billing_postal_code is null;
-
-update customers
-set
-  billing_address_line1 = coalesce(billing_address_line1, 'Billing address pending'),
-  billing_city = coalesce(billing_city, 'Unknown'),
-  billing_state = coalesce(billing_state, 'Unknown'),
-  billing_postal_code = coalesce(billing_postal_code, 'Unknown')
-where billing_address_line1 is null
-   or billing_city is null
-   or billing_state is null
-   or billing_postal_code is null;
 
 alter table customers
   alter column billing_address_line1 set not null,
@@ -49,24 +56,29 @@ alter table locations
   add column if not exists fax text,
   add column if not exists is_active boolean not null default true;
 
+with first_contact as (
+  select distinct on (location.id)
+    location.id as location_id,
+    contacts.phone,
+    contacts.email,
+    contacts.fax
+  from locations location
+  cross join lateral unnest(location.contact_ids) as linked(contact_id)
+  left join contacts on contacts.id = linked.contact_id
+  order by location.id, contacts.display_name asc
+)
 update locations location
 set
   phone = coalesce(location.phone, contact.phone),
   email = coalesce(location.email, contact.email),
   fax = coalesce(location.fax, contact.fax)
-from lateral (
-  select
-    contacts.phone,
-    contacts.email,
-    contacts.fax
-  from contacts
-  where contacts.id = any(location.contact_ids)
-  order by contacts.display_name asc
-  limit 1
-) contact
-where location.phone is null
-   or location.email is null
-   or location.fax is null;
+from first_contact contact
+where contact.location_id = location.id
+  and (
+    location.phone is null
+    or location.email is null
+    or location.fax is null
+  );
 
 create table if not exists customer_contact_links (
   id text primary key,
