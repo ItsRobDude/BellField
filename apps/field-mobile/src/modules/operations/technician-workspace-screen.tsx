@@ -2553,8 +2553,9 @@ export function TechnicianWorkspaceScreen({
                                   <Text style={styles.sectionTitleSmall}>Link replacement</Text>
                                   <Text style={styles.summaryText}>
                                     No eligible replacement equipment is at this location yet.
-                                    Create the replacement equipment for this location, then link it
-                                    here.
+                                    Replacement equipment is usually added when a job PO is
+                                    received. Use manual add only for equipment found at this
+                                    location that is not already in BellField.
                                   </Text>
                                 </View>
                               ) : null}
@@ -2567,7 +2568,7 @@ export function TechnicianWorkspaceScreen({
 
                 {activeDetailTab === 'equipment' ? (
                   <View style={styles.block}>
-                    <Text style={styles.sectionTitleSmall}>Add equipment at this location</Text>
+                    <Text style={styles.sectionTitleSmall}>Add discovered equipment</Text>
                     {(() => {
                       const createDraft =
                         equipmentCreateDrafts[job.locationId] ?? createEquipmentCreateDraft();
