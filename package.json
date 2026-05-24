@@ -10,7 +10,9 @@
     "@typescript-eslint/eslint-plugin": "8.31.0",
     "@typescript-eslint/parser": "8.31.0",
     "eslint": "9.25.0",
+    "lint-staged": "15.5.2",
     "prettier": "3.5.3",
+    "simple-git-hooks": "2.13.1",
     "typescript": "5.8.3"
   },
   "scripts": {
@@ -32,8 +34,16 @@
     "build": "pnpm -r --if-present build",
     "check:architecture": "node tools/check-architecture.mjs",
     "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint",
-    "test": "pnpm -r --if-present test"
+    "test": "pnpm -r --if-present test",
+    "prepare": "simple-git-hooks"
+  },
+  "simple-git-hooks": {
+    "pre-commit": "pnpm exec lint-staged"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}": "prettier --write"
   }
 }
