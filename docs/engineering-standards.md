@@ -120,6 +120,15 @@ BellField code should avoid:
 
 If a simpler, more obvious design is available, BellField should usually choose it.
 
+### File Size Convention
+
+File size is a review signal, not a blind rule.
+
+- Files approaching 800 lines should get a reviewer challenge: can rendering, state, data access, or domain logic be split without adding noise?
+- Files around 1,200 lines or larger should be treated as a blocking maintenance smell unless there is a clear reason, such as generated code, migrations, dense specs, or stable contract definitions.
+- Prefer small co-located extractions before creating new folder hierarchies.
+- Split mechanically first when possible. Move state or ownership only in a separate deliberate pass.
+
 ---
 
 ## 6. Naming Standards
