@@ -13,9 +13,9 @@ import type {
   CreateAppointmentInput,
   CreateJobInput,
   CreateMediaAttachmentInput,
+  CreateRegisterEntryInput,
   DispatchAppointmentRecord,
   FinishedVisitReviewDecision,
-  CreateRegisterEntryInput,
   JobDetailRecord,
   JobRecord,
   JobStatus,
@@ -24,14 +24,14 @@ import type {
   JobsQueueItemRecord,
   JobsQueueKey,
   JobsQueuePageRecord,
-  MediaAttachmentKind,
   MediaAttachmentRecord,
-  RegisterEntryKind,
   RegisterEntryRecord,
   UpdateMediaAttachmentCaptionInput,
-  UpdateRegisterEntryInput,
-  UpdateAppointmentScheduleInput
+  UpdateAppointmentScheduleInput,
+  UpdateRegisterEntryInput
 } from './company-data.types';
+import { JobsMediaDataRepository } from './jobs-media-data.repository';
+import { JobsRegisterDataRepository } from './jobs-register-data.repository';
 
 type JobRow = {
   id: string;
@@ -137,48 +137,6 @@ type TimelineRow = {
   message: string;
 };
 
-type RegisterEntryRow = {
-  id: string;
-  jobId: string;
-  appointmentId: string | null;
-  kind: RegisterEntryKind;
-  description: string;
-  quantity: string | number;
-  unitOfMeasure: string | null;
-  unitPrice: string | number | null;
-  totalAmount: string | number;
-  partNumber: string | null;
-  inventorySourceLabel: string | null;
-  capturedByEmployeeId: string;
-  capturedByName: string;
-  capturedAt: string | Date;
-  isVoid: boolean;
-  voidReason: string | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-};
-
-type MediaAttachmentRow = {
-  id: string;
-  jobId: string;
-  appointmentId: string | null;
-  kind: MediaAttachmentKind;
-  contentType: string;
-  byteSize: string | number;
-  sha256: string;
-  originalFilename: string;
-  caption: string | null;
-  capturedByEmployeeId: string;
-  capturedByName: string;
-  capturedAt: string | Date;
-  storagePath: string | null;
-  uploadedAt: string | Date | null;
-  isVoid: boolean;
-  voidReason: string | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-};
-
 type FinishReviewInput = {
   finishOutcome?: AppointmentFinishOutcome;
   visitNotes?: string;
@@ -188,7 +146,11 @@ type FinishReviewInput = {
 
 @Injectable()
 export class JobsDataRepository {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    private readonly registerRepository = new JobsRegisterDataRepository(databaseService),
+    private readonly mediaRepository = new JobsMediaDataRepository(databaseService)
+  ) {}
 
   async listJobs(): Promise<JobRecord[]> {
     const jobsResult = await this.databaseService.query<JobRow>(
@@ -1093,68 +1055,11 @@ export class JobsDataRepository {
     jobId: string,
     includeVoided = false
   ): Promise<RegisterEntryRecord[]> {
-    const result = await this.databaseService.query<RegisterEntryRow>(
-      `
-        select
-          id,
-          job_id as "jobId",
-          appointment_id as "appointmentId",
-          kind,
-          description,
-          quantity,
-          unit_of_measure as "unitOfMeasure",
-          unit_price as "unitPrice",
-          total_amount as "totalAmount",
-          part_number as "partNumber",
-          inventory_source_label as "inventorySourceLabel",
-          captured_by_employee_id as "capturedByEmployeeId",
-          captured_by_name as "capturedByName",
-          captured_at as "capturedAt",
-          is_void as "isVoid",
-          void_reason as "voidReason",
-          created_at as "createdAt",
-          updated_at as "updatedAt"
-        from register_entries
-        where job_id = $1
-          and ($2::boolean = true or is_void = false)
-        order by captured_at asc, created_at asc, id asc
-      `,
-      [jobId, includeVoided]
-    );
-
-    return result.rows.map((row) => this.toRegisterEntryRecord(row));
+    return this.registerRepository.listRegisterEntriesForJob(jobId, includeVoided);
   }
 
   async getRegisterEntryById(registerEntryId: string): Promise<RegisterEntryRecord | null> {
-    const result = await this.databaseService.query<RegisterEntryRow>(
-      `
-        select
-          id,
-          job_id as "jobId",
-          appointment_id as "appointmentId",
-          kind,
-          description,
-          quantity,
-          unit_of_measure as "unitOfMeasure",
-          unit_price as "unitPrice",
-          total_amount as "totalAmount",
-          part_number as "partNumber",
-          inventory_source_label as "inventorySourceLabel",
-          captured_by_employee_id as "capturedByEmployeeId",
-          captured_by_name as "capturedByName",
-          captured_at as "capturedAt",
-          is_void as "isVoid",
-          void_reason as "voidReason",
-          created_at as "createdAt",
-          updated_at as "updatedAt"
-        from register_entries
-        where id = $1
-        limit 1
-      `,
-      [registerEntryId]
-    );
-
-    return result.rows[0] ? this.toRegisterEntryRecord(result.rows[0]) : null;
+    return this.registerRepository.getRegisterEntryById(registerEntryId);
   }
 
   async createRegisterEntry(
@@ -1163,75 +1068,7 @@ export class JobsDataRepository {
     actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord> {
-    const timelineTime = occurredAt || new Date().toISOString();
-    const registerEntryId = randomUUID();
-
-    await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
-        `
-          insert into register_entries (
-            id,
-            job_id,
-            appointment_id,
-            kind,
-            description,
-            quantity,
-            unit_of_measure,
-            unit_price,
-            total_amount,
-            part_number,
-            inventory_source_label,
-            captured_by_employee_id,
-            captured_by_name,
-            captured_at,
-            is_void,
-            void_reason,
-            created_at,
-            updated_at
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, null, $15, $16)
-        `,
-        [
-          registerEntryId,
-          jobId,
-          input.appointmentId ?? null,
-          input.kind,
-          input.description.trim(),
-          input.quantity,
-          input.unitOfMeasure?.trim() || null,
-          input.unitPrice ?? null,
-          input.totalAmount,
-          input.partNumber?.trim() || null,
-          input.inventorySourceLabel?.trim() || null,
-          actor.id,
-          actor.displayName,
-          timelineTime,
-          timelineTime,
-          timelineTime
-        ]
-      );
-
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, timelineTime]);
-      await this.insertTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId,
-          occurredAt: timelineTime,
-          actorName: actor.displayName,
-          kind: 'registerEntryAdded',
-          message: `Register entry added: ${input.description.trim()}.`
-        },
-        queryable
-      );
-    });
-
-    const registerEntry = await this.getRegisterEntryById(registerEntryId);
-
-    if (!registerEntry) {
-      throw new Error('Created register entry could not be loaded.');
-    }
-
-    return registerEntry;
+    return this.registerRepository.createRegisterEntry(jobId, input, actor, occurredAt);
   }
 
   async updateRegisterEntry(
@@ -1240,91 +1077,12 @@ export class JobsDataRepository {
     actorName: string,
     occurredAt?: string
   ): Promise<RegisterEntryRecord | null> {
-    const existingEntry = await this.getRegisterEntryById(registerEntryId);
-
-    if (!existingEntry) {
-      return null;
-    }
-
-    const timelineTime = occurredAt || new Date().toISOString();
-    const nextEntry: RegisterEntryRecord = {
-      ...existingEntry,
-      appointmentId:
-        input.appointmentId !== undefined
-          ? input.appointmentId?.trim() || undefined
-          : existingEntry.appointmentId,
-      kind: input.kind ?? existingEntry.kind,
-      description:
-        input.description !== undefined ? input.description.trim() : existingEntry.description,
-      quantity: input.quantity ?? existingEntry.quantity,
-      unitOfMeasure:
-        input.unitOfMeasure !== undefined
-          ? input.unitOfMeasure.trim() || undefined
-          : existingEntry.unitOfMeasure,
-      unitPrice:
-        input.unitPrice !== undefined ? (input.unitPrice ?? undefined) : existingEntry.unitPrice,
-      totalAmount: input.totalAmount ?? existingEntry.totalAmount,
-      partNumber:
-        input.partNumber !== undefined
-          ? input.partNumber.trim() || undefined
-          : existingEntry.partNumber,
-      inventorySourceLabel:
-        input.inventorySourceLabel !== undefined
-          ? input.inventorySourceLabel.trim() || undefined
-          : existingEntry.inventorySourceLabel,
-      updatedAt: timelineTime
-    };
-
-    await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
-        `
-          update register_entries
-          set
-            appointment_id = $2,
-            kind = $3,
-            description = $4,
-            quantity = $5,
-            unit_of_measure = $6,
-            unit_price = $7,
-            total_amount = $8,
-            part_number = $9,
-            inventory_source_label = $10,
-            updated_at = $11
-          where id = $1
-        `,
-        [
-          registerEntryId,
-          nextEntry.appointmentId ?? null,
-          nextEntry.kind,
-          nextEntry.description,
-          nextEntry.quantity,
-          nextEntry.unitOfMeasure ?? null,
-          nextEntry.unitPrice ?? null,
-          nextEntry.totalAmount,
-          nextEntry.partNumber ?? null,
-          nextEntry.inventorySourceLabel ?? null,
-          timelineTime
-        ]
-      );
-
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [
-        existingEntry.jobId,
-        timelineTime
-      ]);
-      await this.insertTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: existingEntry.jobId,
-          occurredAt: timelineTime,
-          actorName,
-          kind: 'registerEntryEdited',
-          message: `Register entry edited: ${nextEntry.description}.`
-        },
-        queryable
-      );
-    });
-
-    return this.getRegisterEntryById(registerEntryId);
+    return this.registerRepository.updateRegisterEntry(
+      registerEntryId,
+      input,
+      actorName,
+      occurredAt
+    );
   }
 
   async voidRegisterEntry(
@@ -1333,149 +1091,30 @@ export class JobsDataRepository {
     actorName: string,
     occurredAt?: string
   ): Promise<RegisterEntryRecord | null> {
-    const existingEntry = await this.getRegisterEntryById(registerEntryId);
-
-    if (!existingEntry) {
-      return null;
-    }
-
-    const timelineTime = occurredAt || new Date().toISOString();
-    const trimmedReason = reason?.trim() || null;
-
-    await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
-        `
-          update register_entries
-          set
-            is_void = true,
-            void_reason = $2,
-            updated_at = $3
-          where id = $1
-        `,
-        [registerEntryId, trimmedReason, timelineTime]
-      );
-
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [
-        existingEntry.jobId,
-        timelineTime
-      ]);
-      await this.insertTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: existingEntry.jobId,
-          occurredAt: timelineTime,
-          actorName,
-          kind: 'registerEntryVoided',
-          message: this.buildRegisterEntryVoidedMessage(existingEntry.description, trimmedReason)
-        },
-        queryable
-      );
-    });
-
-    return this.getRegisterEntryById(registerEntryId);
+    return this.registerRepository.voidRegisterEntry(
+      registerEntryId,
+      reason,
+      actorName,
+      occurredAt
+    );
   }
 
   async listMediaAttachmentsForJob(
     jobId: string,
     includeVoided = false
   ): Promise<MediaAttachmentRecord[]> {
-    const result = await this.databaseService.query<MediaAttachmentRow>(
-      `
-        select
-          id,
-          job_id as "jobId",
-          appointment_id as "appointmentId",
-          kind,
-          content_type as "contentType",
-          byte_size as "byteSize",
-          sha256,
-          original_filename as "originalFilename",
-          caption,
-          captured_by_employee_id as "capturedByEmployeeId",
-          captured_by_name as "capturedByName",
-          captured_at as "capturedAt",
-          storage_path as "storagePath",
-          uploaded_at as "uploadedAt",
-          is_void as "isVoid",
-          void_reason as "voidReason",
-          created_at as "createdAt",
-          updated_at as "updatedAt"
-        from media_attachments
-        where job_id = $1
-          and ($2::boolean = true or is_void = false)
-        order by captured_at asc, created_at asc, id asc
-      `,
-      [jobId, includeVoided]
-    );
-
-    return result.rows.map((row) => this.toMediaAttachmentRecord(row));
+    return this.mediaRepository.listMediaAttachmentsForJob(jobId, includeVoided);
   }
 
   async getMediaAttachmentById(mediaId: string): Promise<MediaAttachmentRecord | null> {
-    const result = await this.databaseService.query<MediaAttachmentRow>(
-      `
-        select
-          id,
-          job_id as "jobId",
-          appointment_id as "appointmentId",
-          kind,
-          content_type as "contentType",
-          byte_size as "byteSize",
-          sha256,
-          original_filename as "originalFilename",
-          caption,
-          captured_by_employee_id as "capturedByEmployeeId",
-          captured_by_name as "capturedByName",
-          captured_at as "capturedAt",
-          storage_path as "storagePath",
-          uploaded_at as "uploadedAt",
-          is_void as "isVoid",
-          void_reason as "voidReason",
-          created_at as "createdAt",
-          updated_at as "updatedAt"
-        from media_attachments
-        where id = $1
-        limit 1
-      `,
-      [mediaId]
-    );
-
-    return result.rows[0] ? this.toMediaAttachmentRecord(result.rows[0]) : null;
+    return this.mediaRepository.getMediaAttachmentById(mediaId);
   }
 
   async findMediaAttachmentByJobAndSha(
     jobId: string,
     sha256: string
   ): Promise<MediaAttachmentRecord | null> {
-    const result = await this.databaseService.query<MediaAttachmentRow>(
-      `
-        select
-          id,
-          job_id as "jobId",
-          appointment_id as "appointmentId",
-          kind,
-          content_type as "contentType",
-          byte_size as "byteSize",
-          sha256,
-          original_filename as "originalFilename",
-          caption,
-          captured_by_employee_id as "capturedByEmployeeId",
-          captured_by_name as "capturedByName",
-          captured_at as "capturedAt",
-          storage_path as "storagePath",
-          uploaded_at as "uploadedAt",
-          is_void as "isVoid",
-          void_reason as "voidReason",
-          created_at as "createdAt",
-          updated_at as "updatedAt"
-        from media_attachments
-        where job_id = $1 and sha256 = $2 and is_void = false
-        limit 1
-      `,
-      [jobId, sha256]
-    );
-
-    return result.rows[0] ? this.toMediaAttachmentRecord(result.rows[0]) : null;
+    return this.mediaRepository.findMediaAttachmentByJobAndSha(jobId, sha256);
   }
 
   async createMediaAttachment(
@@ -1483,73 +1122,7 @@ export class JobsDataRepository {
     input: CreateMediaAttachmentInput,
     occurredAt?: string
   ): Promise<MediaAttachmentRecord> {
-    const timelineTime = occurredAt || new Date().toISOString();
-    const mediaId = randomUUID();
-
-    await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
-        `
-          insert into media_attachments (
-            id,
-            job_id,
-            appointment_id,
-            kind,
-            content_type,
-            byte_size,
-            sha256,
-            original_filename,
-            caption,
-            captured_by_employee_id,
-            captured_by_name,
-            captured_at,
-            storage_path,
-            uploaded_at,
-            is_void,
-            void_reason,
-            created_at,
-            updated_at
-          )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, null, null, false, null, $13, $14)
-        `,
-        [
-          mediaId,
-          jobId,
-          input.appointmentId ?? null,
-          input.kind,
-          input.contentType,
-          input.byteSize,
-          input.sha256,
-          input.originalFilename.trim(),
-          input.caption?.trim() || null,
-          input.capturedByEmployeeId,
-          input.capturedByName,
-          input.capturedAt,
-          timelineTime,
-          timelineTime
-        ]
-      );
-
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, timelineTime]);
-      await this.insertTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId,
-          occurredAt: timelineTime,
-          actorName: input.capturedByName,
-          kind: 'mediaAttached',
-          message: `${input.capturedByName} attached ${input.originalFilename.trim()}.`
-        },
-        queryable
-      );
-    });
-
-    const mediaAttachment = await this.getMediaAttachmentById(mediaId);
-
-    if (!mediaAttachment) {
-      throw new Error('Created media attachment could not be loaded.');
-    }
-
-    return mediaAttachment;
+    return this.mediaRepository.createMediaAttachment(jobId, input, occurredAt);
   }
 
   async markMediaAttachmentBlobUploaded(
@@ -1557,19 +1130,7 @@ export class JobsDataRepository {
     storagePath: string,
     uploadedAt: string
   ): Promise<MediaAttachmentRecord | null> {
-    await this.databaseService.query(
-      `
-        update media_attachments
-        set
-          storage_path = $2,
-          uploaded_at = $3,
-          updated_at = $3
-        where id = $1
-      `,
-      [mediaId, storagePath, uploadedAt]
-    );
-
-    return this.getMediaAttachmentById(mediaId);
+    return this.mediaRepository.markMediaAttachmentBlobUploaded(mediaId, storagePath, uploadedAt);
   }
 
   async updateMediaAttachmentCaption(
@@ -1578,45 +1139,7 @@ export class JobsDataRepository {
     actorName: string,
     occurredAt?: string
   ): Promise<MediaAttachmentRecord | null> {
-    const existing = await this.getMediaAttachmentById(mediaId);
-
-    if (!existing) {
-      return null;
-    }
-
-    const timelineTime = occurredAt || new Date().toISOString();
-    const trimmedCaption = input.caption === null ? null : input.caption.trim() || null;
-
-    await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
-        `
-          update media_attachments
-          set
-            caption = $2,
-            updated_at = $3
-          where id = $1
-        `,
-        [mediaId, trimmedCaption, timelineTime]
-      );
-
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [
-        existing.jobId,
-        timelineTime
-      ]);
-      await this.insertTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: existing.jobId,
-          occurredAt: timelineTime,
-          actorName,
-          kind: 'mediaCaptionEdited',
-          message: this.buildMediaCaptionMessage(existing.originalFilename, trimmedCaption)
-        },
-        queryable
-      );
-    });
-
-    return this.getMediaAttachmentById(mediaId);
+    return this.mediaRepository.updateMediaAttachmentCaption(mediaId, input, actorName, occurredAt);
   }
 
   async voidMediaAttachment(
@@ -1625,46 +1148,7 @@ export class JobsDataRepository {
     actorName: string,
     occurredAt?: string
   ): Promise<MediaAttachmentRecord | null> {
-    const existing = await this.getMediaAttachmentById(mediaId);
-
-    if (!existing) {
-      return null;
-    }
-
-    const timelineTime = occurredAt || new Date().toISOString();
-    const trimmedReason = reason?.trim() || null;
-
-    await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
-        `
-          update media_attachments
-          set
-            is_void = true,
-            void_reason = $2,
-            updated_at = $3
-          where id = $1
-        `,
-        [mediaId, trimmedReason, timelineTime]
-      );
-
-      await queryable.query('update jobs set updated_at = $2 where id = $1', [
-        existing.jobId,
-        timelineTime
-      ]);
-      await this.insertTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: existing.jobId,
-          occurredAt: timelineTime,
-          actorName,
-          kind: 'mediaVoided',
-          message: this.buildMediaVoidedMessage(existing.originalFilename, trimmedReason)
-        },
-        queryable
-      );
-    });
-
-    return this.getMediaAttachmentById(mediaId);
+    return this.mediaRepository.voidMediaAttachment(mediaId, reason, actorName, occurredAt);
   }
 
   async listAssignedJobsForEmployee(
@@ -2085,14 +1569,6 @@ export class JobsDataRepository {
     return `${outcome}${notesPart}${chargePart}${followUpPart}`;
   }
 
-  private buildRegisterEntryVoidedMessage(description: string, reason: string | null): string {
-    if (!reason) {
-      return `Register entry voided: ${description}.`;
-    }
-
-    return `Register entry voided: ${description}. Reason: ${reason}${reason.endsWith('.') ? '' : '.'}`;
-  }
-
   private async insertTimelineEntry(entry: TimelineRow, queryable: QueryExecutor): Promise<void> {
     await queryable.query(
       `
@@ -2200,66 +1676,6 @@ export class JobsDataRepository {
       case 'open':
         return "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = false";
     }
-  }
-
-  private buildMediaCaptionMessage(filename: string, caption: string | null): string {
-    if (!caption) {
-      return `Caption cleared on ${filename}.`;
-    }
-    return `Caption updated on ${filename}: ${caption}`;
-  }
-
-  private buildMediaVoidedMessage(filename: string, reason: string | null): string {
-    if (reason) {
-      return `${filename} voided (reason: ${reason}).`;
-    }
-    return `${filename} voided.`;
-  }
-
-  private toMediaAttachmentRecord(row: MediaAttachmentRow): MediaAttachmentRecord {
-    return {
-      id: row.id,
-      jobId: row.jobId,
-      appointmentId: row.appointmentId ?? undefined,
-      kind: row.kind,
-      contentType: row.contentType,
-      byteSize: Number(row.byteSize),
-      sha256: row.sha256,
-      originalFilename: row.originalFilename,
-      caption: row.caption ?? undefined,
-      capturedByEmployeeId: row.capturedByEmployeeId,
-      capturedByName: row.capturedByName,
-      capturedAt: toIsoString(row.capturedAt),
-      storagePath: row.storagePath ?? undefined,
-      uploadedAt: row.uploadedAt ? toIsoString(row.uploadedAt) : undefined,
-      isVoid: row.isVoid,
-      voidReason: row.voidReason ?? undefined,
-      createdAt: toIsoString(row.createdAt),
-      updatedAt: toIsoString(row.updatedAt)
-    };
-  }
-
-  private toRegisterEntryRecord(row: RegisterEntryRow): RegisterEntryRecord {
-    return {
-      id: row.id,
-      jobId: row.jobId,
-      appointmentId: row.appointmentId ?? undefined,
-      kind: row.kind,
-      description: row.description,
-      quantity: Number(row.quantity),
-      unitOfMeasure: row.unitOfMeasure ?? undefined,
-      unitPrice: row.unitPrice === null ? undefined : Number(row.unitPrice),
-      totalAmount: Number(row.totalAmount),
-      partNumber: row.partNumber ?? undefined,
-      inventorySourceLabel: row.inventorySourceLabel ?? undefined,
-      capturedByEmployeeId: row.capturedByEmployeeId,
-      capturedByName: row.capturedByName,
-      capturedAt: toIsoString(row.capturedAt),
-      isVoid: row.isVoid,
-      voidReason: row.voidReason ?? undefined,
-      createdAt: toIsoString(row.createdAt),
-      updatedAt: toIsoString(row.updatedAt)
-    };
   }
 
   private toTimelineEntry(row: TimelineRow): JobTimelineEntry {
