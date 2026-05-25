@@ -12,7 +12,7 @@ import {
   TextInput,
   View
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   addFieldJobNote,
   createFieldEquipment,
@@ -91,6 +91,7 @@ import { buildMediaUploadOperation } from './field-media-files';
 import { replayFieldMediaUploadOperation } from './field-media-replay';
 import { uploadFieldMediaBlob } from './field-media-upload';
 import {
+  buildFieldJobCardMetadata,
   buildFieldMediaCaptionDraftKey,
   buildReplacementEquipmentOptions,
   countJobRegisterEntries,
@@ -98,6 +99,7 @@ import {
   getPendingOperationsForJob,
   resolveSelectedFieldJob,
   shouldReturnToFieldHome,
+  sortFieldJobsBySchedule,
   summarizeJobQueueBadge,
   type FieldDetailTab
 } from './field-workspace-layout';
@@ -157,6 +159,7 @@ type FinishReviewState = {
 };
 
 type FieldAppointment = FieldAssignedWorkResponse['jobs'][number]['appointments'][number];
+type FieldWorkspaceTab = 'jobs' | 'messages' | 'sync' | 'settings';
 
 const fieldAppointmentStatuses: AppointmentStatus[] = [
   'scheduled',
@@ -175,6 +178,13 @@ const registerEntryKinds: RegisterEntryKind[] = [
   'part',
   'membership',
   'other'
+];
+
+const fieldWorkspaceTabs: { id: FieldWorkspaceTab; label: string }[] = [
+  { id: 'jobs', label: 'Jobs' },
+  { id: 'messages', label: 'Messages' },
+  { id: 'sync', label: 'Sync' },
+  { id: 'settings', label: 'Settings' }
 ];
 
 const defaultSyncMetadata: SyncMetadata = {
@@ -202,6 +212,7 @@ export function TechnicianWorkspaceScreen({
   sessionToken,
   onSignOut
 }: Props) {
+  const safeAreaInsets = useSafeAreaInsets();
   const [serverSnapshot, setServerSnapshot] = useState<AssignedWorkSnapshot | null>(null);
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata>(defaultSyncMetadata);
@@ -220,6 +231,7 @@ export function TechnicianWorkspaceScreen({
   const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<FieldDetailTab>('overview');
+  const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<FieldWorkspaceTab>('jobs');
   const [mediaCaptionDrafts, setMediaCaptionDrafts] = useState<Record<string, string>>({});
   const [officeChangeMessages, setOfficeChangeMessages] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -260,17 +272,21 @@ export function TechnicianWorkspaceScreen({
     [pendingOperations, syncMetadata]
   );
   const assignedJobs = useMemo(() => assignedWork?.jobs ?? [], [assignedWork]);
-  const selectedJob = resolveSelectedFieldJob(assignedJobs, selectedJobId);
+  const scheduledJobs = useMemo(
+    () => sortFieldJobsBySchedule(assignedJobs, employee.id),
+    [assignedJobs, employee.id]
+  );
+  const selectedJob = resolveSelectedFieldJob(scheduledJobs, selectedJobId);
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
 
   // Local navigation state must reset when a sync refresh removes the selected job.
   useEffect(() => {
-    if (shouldReturnToFieldHome(assignedJobs, selectedJobId)) {
+    if (shouldReturnToFieldHome(scheduledJobs, selectedJobId)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedJobId(null);
       setActiveDetailTab('overview');
     }
-  }, [assignedJobs, selectedJobId]);
+  }, [scheduledJobs, selectedJobId]);
 
   useEffect(() => {
     async function initializeWorkspace() {
@@ -377,6 +393,7 @@ export function TechnicianWorkspaceScreen({
   function openJobDetail(jobId: string) {
     setSelectedJobId(jobId);
     setActiveDetailTab('overview');
+    setActiveWorkspaceTab('jobs');
   }
 
   function returnToHome() {
@@ -1641,6 +1658,39 @@ export function TechnicianWorkspaceScreen({
     );
   }
 
+  function renderPendingQueue() {
+    return (
+      <View style={styles.summaryCard}>
+        <Text style={styles.sectionTitle}>Pending queue</Text>
+        {pendingOperations.length === 0 ? (
+          <Text style={styles.summaryText}>No local changes waiting for sync.</Text>
+        ) : (
+          pendingOperations.map((operation) => (
+            <View key={operation.id} style={styles.queueItem}>
+              <Text style={styles.summaryText}>{formatPendingOperation(operation)}</Text>
+              {shouldOfferQueueResolution(operation) ? (
+                <View style={styles.actionRow}>
+                  <Pressable
+                    onPress={() => void retryQueuedOperation(operation.id)}
+                    style={styles.secondaryButton}
+                  >
+                    <Text style={styles.secondaryButtonText}>Retry on next sync</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => confirmDiscardQueuedOperation(operation)}
+                    style={styles.dangerButton}
+                  >
+                    <Text style={styles.dangerButtonText}>Discard local change</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          ))
+        )}
+      </View>
+    );
+  }
+
   if (isInitializing) {
     return (
       <SafeAreaView style={styles.container}>
@@ -1654,7 +1704,12 @@ export function TechnicianWorkspaceScreen({
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: 108 + safeAreaInsets.bottom }
+        ]}
+      >
         <View style={styles.card}>
           <Text style={styles.kicker}>BellField Field</Text>
           <Text style={styles.title}>{employee.displayName}</Text>
@@ -1662,44 +1717,53 @@ export function TechnicianWorkspaceScreen({
             Review assigned work, save updates on this device, and sync them back to the office.
           </Text>
 
-          <View
-            accessibilityLabel={`Sync status: ${syncHealth.headline}`}
-            style={[styles.summaryCard, getSyncHealthCardStyle(syncHealth.tone)]}
-          >
-            <Text style={styles.sectionTitle}>{syncHealth.headline}</Text>
-            {syncHealth.detail ? <Text style={styles.summaryText}>{syncHealth.detail}</Text> : null}
-            {syncHealth.tone === 'quiet' ? (
-              <Text style={styles.summaryText}>
-                Background sync is healthy. Field edits stay protected on this device until the next
-                sync.
-              </Text>
-            ) : null}
-            <Text style={styles.summaryText}>
-              Scope: {assignedWork?.windowStartDate ?? 'today'} through{' '}
-              {assignedWork?.windowEndDate ?? 'tomorrow'}
-            </Text>
-            <Text style={styles.summaryText}>
-              Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
-            </Text>
-          </View>
+          {activeWorkspaceTab !== 'sync' ? (
+            <>
+              <View
+                accessibilityLabel={`Sync status: ${syncHealth.headline}`}
+                style={[styles.summaryCard, getSyncHealthCardStyle(syncHealth.tone)]}
+              >
+                <Text style={styles.sectionTitle}>{syncHealth.headline}</Text>
+                {syncHealth.detail ? (
+                  <Text style={styles.summaryText}>{syncHealth.detail}</Text>
+                ) : null}
+                {syncHealth.tone === 'quiet' ? (
+                  <Text style={styles.summaryText}>
+                    Background sync is healthy. Field edits stay protected on this device until the
+                    next sync.
+                  </Text>
+                ) : null}
+                <Text style={styles.summaryText}>
+                  Scope: {assignedWork?.windowStartDate ?? 'today'} through{' '}
+                  {assignedWork?.windowEndDate ?? 'tomorrow'}
+                </Text>
+                <Text style={styles.summaryText}>
+                  Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
+                </Text>
+              </View>
 
-          <View style={styles.actionRow}>
-            <Pressable onPress={() => void refreshAssignedWork()} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>
-                {isRefreshing ? 'Refreshing...' : 'Refresh jobs'}
-              </Text>
-            </Pressable>
-            <Pressable onPress={() => void syncNow()} style={styles.primaryButton}>
-              {isSyncing ? (
-                <ActivityIndicator color="#ffffff" />
-              ) : (
-                <Text style={styles.primaryButtonText}>Sync Now</Text>
-              )}
-            </Pressable>
-            <Pressable onPress={handleSignOut} style={styles.secondaryButton}>
-              <Text style={styles.secondaryButtonText}>Sign out</Text>
-            </Pressable>
-          </View>
+              <View style={styles.actionRow}>
+                <Pressable
+                  onPress={() => void refreshAssignedWork()}
+                  style={styles.secondaryButton}
+                >
+                  <Text style={styles.secondaryButtonText}>
+                    {isRefreshing ? 'Refreshing...' : 'Refresh jobs'}
+                  </Text>
+                </Pressable>
+                <Pressable onPress={() => void syncNow()} style={styles.primaryButton}>
+                  {isSyncing ? (
+                    <ActivityIndicator color="#ffffff" />
+                  ) : (
+                    <Text style={styles.primaryButtonText}>Sync Now</Text>
+                  )}
+                </Pressable>
+                <Pressable onPress={handleSignOut} style={styles.secondaryButton}>
+                  <Text style={styles.secondaryButtonText}>Sign out</Text>
+                </Pressable>
+              </View>
+            </>
+          ) : null}
 
           {officeChangeMessages.length > 0 ? (
             <View style={styles.noticeCard}>
@@ -1719,737 +1783,946 @@ export function TechnicianWorkspaceScreen({
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
-          {assignedJobs.map((job) => {
-            const location = locationLookup.get(job.locationId);
-            const equipment = (assignedWork?.equipment ?? []).filter(
-              (record) => record.locationId === job.locationId
-            );
-            const workOrderLine = formatWorkOrderLine(job);
-            const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
-            const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
+          {activeWorkspaceTab === 'jobs' && scheduledJobs.length === 0 ? (
+            <View style={styles.summaryCard}>
+              <Text style={styles.sectionTitle}>No assigned jobs</Text>
+              <Text style={styles.summaryText}>
+                Assigned work for today and tomorrow will appear here after the next refresh.
+              </Text>
+            </View>
+          ) : null}
 
-            if (selectedJob && selectedJob.id !== job.id) {
-              return null;
-            }
+          {activeWorkspaceTab === 'jobs'
+            ? scheduledJobs.map((job) => {
+                const location = locationLookup.get(job.locationId);
+                const equipment = (assignedWork?.equipment ?? []).filter(
+                  (record) => record.locationId === job.locationId
+                );
+                const workOrderLine = formatWorkOrderLine(job);
+                const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
+                const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
+                const cardMetadata = buildFieldJobCardMetadata({
+                  currentEmployeeId: employee.id,
+                  equipmentCount: equipment.length,
+                  job,
+                  locationAddress: formatFieldLocationAddress(location),
+                  locationName: location?.name ?? job.locationName,
+                  registerEntryCount: countJobRegisterEntries(job)
+                });
+                const isExpanded = selectedJob?.id === job.id;
 
-            if (!selectedJob) {
-              return (
-                <Pressable
-                  key={job.id}
-                  onPress={() => openJobDetail(job.id)}
-                  style={styles.jobHomeCard}
-                >
-                  <View style={styles.jobHomeHeader}>
-                    <View style={styles.flexColumn}>
-                      <Text style={styles.sectionTitle}>
-                        Job {job.jobNumber}: {job.summary}
-                      </Text>
-                      {workOrderLine ? (
-                        <Text style={styles.summaryText}>{workOrderLine}</Text>
-                      ) : null}
-                    </View>
-                    <Text
-                      style={[
-                        styles.queueBadge,
-                        queueBadge.tone === 'alert'
-                          ? styles.queueBadgeAlert
-                          : queueBadge.tone === 'attention'
-                            ? styles.queueBadgeAttention
-                            : styles.queueBadgeQuiet
-                      ]}
-                    >
-                      {queueBadge.label}
-                    </Text>
-                  </View>
-                  <Text style={styles.summaryText}>
-                    {location?.name ?? job.locationName} - {formatFieldLocationAddress(location)}
-                  </Text>
-                  <Text style={styles.summaryText}>
-                    Appointments: {job.appointments.length} - Register:{' '}
-                    {countJobRegisterEntries(job)} - Equipment: {equipment.length}
-                  </Text>
-                  <Text style={styles.pendingText}>Open job detail</Text>
-                </Pressable>
-              );
-            }
-
-            return (
-              <View key={job.id} style={styles.summaryCard}>
-                <View style={styles.detailHeaderRow}>
-                  <Pressable onPress={returnToHome} style={styles.secondaryButton}>
-                    <Text style={styles.secondaryButtonText}>Back to jobs</Text>
-                  </Pressable>
-                  <Text
-                    style={[
-                      styles.queueBadge,
-                      queueBadge.tone === 'alert'
-                        ? styles.queueBadgeAlert
-                        : queueBadge.tone === 'attention'
-                          ? styles.queueBadgeAttention
-                          : styles.queueBadgeQuiet
-                    ]}
-                  >
-                    {queueBadge.label}
-                  </Text>
-                </View>
-                <Text style={styles.sectionTitle}>
-                  Job {job.jobNumber}: {job.summary}
-                </Text>
-                {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
-                <Text style={styles.summaryText}>
-                  {location?.name ?? job.locationName} - {formatFieldLocationAddress(location)} -{' '}
-                  {job.billToCustomerName}
-                </Text>
-                <Text style={styles.summaryText}>
-                  Contacts:{' '}
-                  {location?.contacts.map((contact) => contact.displayName).join(', ') || 'None'}
-                </Text>
-
-                <View style={styles.segmentedControl}>
-                  {fieldDetailTabs.map((tab) => (
+                if (!isExpanded) {
+                  return (
                     <Pressable
-                      key={tab.id}
-                      onPress={() => setActiveDetailTab(tab.id)}
-                      style={[
-                        styles.segmentButton,
-                        activeDetailTab === tab.id ? styles.segmentButtonActive : null
-                      ]}
+                      key={job.id}
+                      onPress={() => openJobDetail(job.id)}
+                      style={styles.jobHomeCard}
                     >
+                      <View style={styles.jobHomeHeader}>
+                        <View style={styles.flexColumn}>
+                          <Text style={styles.scheduleLabel}>{cardMetadata.scheduleLabel}</Text>
+                          <Text style={styles.jobCardTitle}>{cardMetadata.title}</Text>
+                          {workOrderLine ? (
+                            <Text style={styles.summaryText}>{workOrderLine}</Text>
+                          ) : null}
+                        </View>
+                        <Text
+                          style={[
+                            styles.queueBadge,
+                            queueBadge.tone === 'alert'
+                              ? styles.queueBadgeAlert
+                              : queueBadge.tone === 'attention'
+                                ? styles.queueBadgeAttention
+                                : styles.queueBadgeQuiet
+                          ]}
+                        >
+                          {queueBadge.label}
+                        </Text>
+                      </View>
+                      <Text style={styles.summaryText}>{cardMetadata.locationLine}</Text>
+                      <Text style={styles.summaryText}>{cardMetadata.countsLine}</Text>
+                      <Text style={styles.pendingText}>Open job detail</Text>
+                    </Pressable>
+                  );
+                }
+
+                return (
+                  <View key={job.id} style={styles.expandedJobCard}>
+                    <View style={styles.detailHeaderRow}>
+                      <Pressable onPress={returnToHome} style={styles.secondaryButton}>
+                        <Text style={styles.secondaryButtonText}>Collapse</Text>
+                      </Pressable>
                       <Text
                         style={[
-                          styles.segmentButtonText,
-                          activeDetailTab === tab.id ? styles.segmentButtonTextActive : null
+                          styles.queueBadge,
+                          queueBadge.tone === 'alert'
+                            ? styles.queueBadgeAlert
+                            : queueBadge.tone === 'attention'
+                              ? styles.queueBadgeAttention
+                              : styles.queueBadgeQuiet
                         ]}
                       >
-                        {tab.label}
+                        {queueBadge.label}
                       </Text>
-                    </Pressable>
-                  ))}
-                </View>
-
-                {activeDetailTab === 'appointments'
-                  ? job.appointments.map((appointment) => {
-                      const assignmentLine = formatAppointmentAssignmentLine(
-                        appointment,
-                        employee.id
-                      );
-                      const queueSummary = summarizeAppointmentQueueState(
-                        appointment.id,
-                        pendingOperations
-                      );
-                      const finishedReviewAcknowledgement =
-                        formatFinishedReviewAcknowledgement(appointment);
-                      const appointmentMediaCaptionKey = buildFieldMediaCaptionDraftKey({
-                        jobId: job.id,
-                        appointmentId: appointment.id
-                      });
-                      return (
-                        <View key={appointment.id} style={styles.block}>
-                          <Text style={styles.sectionTitleSmall}>
-                            {formatAppointmentSchedule(appointment)}
-                          </Text>
-                          <Text style={styles.summaryText}>{assignmentLine}</Text>
-                          {queueSummary ? (
-                            <Text
-                              style={
-                                queueSummary.tone === 'alert'
-                                  ? styles.errorText
-                                  : styles.pendingText
-                              }
-                            >
-                              {queueSummary.label}
-                            </Text>
-                          ) : null}
-                          <Text style={styles.summaryText}>
-                            Latest local appointment status: {appointment.status}
-                          </Text>
-                          {finishedReviewAcknowledgement ? (
-                            <Text style={styles.summaryText}>{finishedReviewAcknowledgement}</Text>
-                          ) : null}
-                          <View style={styles.actionRow}>
-                            {fieldAppointmentStatuses.map((status) => (
-                              <Pressable
-                                key={status}
-                                onPress={() =>
-                                  handleAppointmentStatusPress(job.id, appointment, status)
-                                }
-                                style={styles.tagButton}
-                              >
-                                <Text style={styles.tagButtonText}>{status}</Text>
-                              </Pressable>
-                            ))}
-                          </View>
-
-                          {finishReview?.appointmentId === appointment.id ? (
-                            <View style={styles.reviewCard}>
-                              <Text style={styles.sectionTitleSmall}>Finish review</Text>
-                              <Text style={styles.summaryText}>
-                                BellField should prompt for notes, outcome, and charge activity
-                                before finishing this visit.
-                              </Text>
-                              <Text style={styles.summaryText}>
-                                Outcome: {formatFinishOutcome(finishReview.finishOutcome)}
-                              </Text>
-                              <View style={styles.actionRow}>
-                                {(
-                                  [
-                                    'completed',
-                                    'followUpNeeded',
-                                    'noAccess'
-                                  ] as AppointmentFinishOutcome[]
-                                ).map((outcome) => (
-                                  <Pressable
-                                    key={outcome}
-                                    onPress={() =>
-                                      setFinishReview((current) =>
-                                        current && current.appointmentId === appointment.id
-                                          ? { ...current, finishOutcome: outcome }
-                                          : current
-                                      )
-                                    }
-                                    style={styles.tagButton}
-                                  >
-                                    <Text style={styles.tagButtonText}>
-                                      {formatFinishOutcome(outcome)}
-                                    </Text>
-                                  </Pressable>
-                                ))}
-                              </View>
-                              <Text style={styles.summaryText}>
-                                Charge activity: {finishReview.hasChargeActivity ? 'Yes' : 'No'}
-                              </Text>
-                              <View style={styles.actionRow}>
-                                <Pressable
-                                  onPress={() =>
-                                    setFinishReview((current) =>
-                                      current && current.appointmentId === appointment.id
-                                        ? { ...current, hasChargeActivity: true }
-                                        : current
-                                    )
-                                  }
-                                  style={styles.tagButton}
-                                >
-                                  <Text style={styles.tagButtonText}>Charges added</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() =>
-                                    setFinishReview((current) =>
-                                      current && current.appointmentId === appointment.id
-                                        ? { ...current, hasChargeActivity: false }
-                                        : current
-                                    )
-                                  }
-                                  style={styles.tagButton}
-                                >
-                                  <Text style={styles.tagButtonText}>No charges</Text>
-                                </Pressable>
-                              </View>
-                              <TextInput
-                                value={finishReview.visitNotes}
-                                onChangeText={(value) =>
-                                  setFinishReview((current) =>
-                                    current && current.appointmentId === appointment.id
-                                      ? { ...current, visitNotes: value }
-                                      : current
-                                  )
-                                }
-                                multiline
-                                placeholder="Visit notes"
-                                style={styles.input}
-                              />
-                              <TextInput
-                                value={finishReview.registerReminder}
-                                onChangeText={(value) =>
-                                  setFinishReview((current) =>
-                                    current && current.appointmentId === appointment.id
-                                      ? { ...current, registerReminder: value }
-                                      : current
-                                  )
-                                }
-                                multiline
-                                placeholder="Register item or follow-up reminder"
-                                style={styles.input}
-                              />
-                              <View style={styles.actionRow}>
-                                <Pressable
-                                  onPress={() => commitFinishReview(false, false)}
-                                  style={styles.primaryButton}
-                                >
-                                  <Text style={styles.primaryButtonText}>Save finish locally</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => setFinishReview(null)}
-                                  style={styles.secondaryButton}
-                                >
-                                  <Text style={styles.secondaryButtonText}>Cancel</Text>
-                                </Pressable>
-                              </View>
-                            </View>
-                          ) : null}
-
-                          <View style={styles.reviewCard}>
-                            <Text style={styles.sectionTitleSmall}>Appointment media</Text>
-                            <TextInput
-                              value={mediaCaptionDrafts[appointmentMediaCaptionKey] ?? ''}
-                              onChangeText={(value) =>
-                                setMediaCaptionDrafts((current) => ({
-                                  ...current,
-                                  [appointmentMediaCaptionKey]: value
-                                }))
-                              }
-                              placeholder="Optional caption for this visit"
-                              style={styles.input}
-                            />
-                            <View style={styles.actionRow}>
-                              <Pressable
-                                onPress={() => void queueMediaUpload(job, 'camera', appointment.id)}
-                                style={styles.secondaryButton}
-                              >
-                                <Text style={styles.secondaryButtonText}>Capture media</Text>
-                              </Pressable>
-                              <Pressable
-                                onPress={() =>
-                                  void queueMediaUpload(job, 'library', appointment.id)
-                                }
-                                style={styles.secondaryButton}
-                              >
-                                <Text style={styles.secondaryButtonText}>Pick from library</Text>
-                              </Pressable>
-                            </View>
-                          </View>
-                        </View>
-                      );
-                    })
-                  : null}
-
-                {activeDetailTab === 'overview' ? (
-                  <View style={styles.block}>
-                    <Text style={styles.sectionTitleSmall}>Save note locally</Text>
-                    <Text style={styles.summaryText}>
-                      This note stays on-device until Sync Now applies it on the server.
-                    </Text>
-                    <TextInput
-                      value={noteDrafts[job.id] ?? ''}
-                      onChangeText={(value) =>
-                        setNoteDrafts((current) => ({ ...current, [job.id]: value }))
-                      }
-                      multiline
-                      placeholder="Add visit notes that should queue until sync."
-                      style={styles.input}
-                    />
-                    <Pressable
-                      onPress={() => void queueJobNote(job.id)}
-                      style={styles.secondaryButton}
-                    >
-                      <Text style={styles.secondaryButtonText}>Save note locally</Text>
-                    </Pressable>
-
-                    <View style={styles.reviewCard}>
-                      <Text style={styles.sectionTitleSmall}>Media</Text>
-                      <Text style={styles.summaryText}>
-                        Photos and videos are copied into BellField storage before they enter the
-                        sync queue.
-                      </Text>
-                      <TextInput
-                        value={mediaCaptionDrafts[jobMediaCaptionKey] ?? ''}
-                        onChangeText={(value) =>
-                          setMediaCaptionDrafts((current) => ({
-                            ...current,
-                            [jobMediaCaptionKey]: value
-                          }))
-                        }
-                        placeholder="Optional caption"
-                        style={styles.input}
-                      />
-                      <View style={styles.actionRow}>
-                        <Pressable
-                          onPress={() => void queueMediaUpload(job, 'camera')}
-                          style={styles.secondaryButton}
-                        >
-                          <Text style={styles.secondaryButtonText}>Capture media</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => void queueMediaUpload(job, 'library')}
-                          style={styles.secondaryButton}
-                        >
-                          <Text style={styles.secondaryButtonText}>Pick from library</Text>
-                        </Pressable>
-                      </View>
                     </View>
-                  </View>
-                ) : null}
-
-                {activeDetailTab === 'register' ? (
-                  <View style={styles.block}>
-                    <Text style={styles.sectionTitleSmall}>Register entries</Text>
-                    {(job.registerEntries ?? []).length === 0 ? (
-                      <Text style={styles.summaryText}>
-                        No register lines saved for this job yet.
-                      </Text>
-                    ) : (
-                      (job.registerEntries ?? []).map((entry) => {
-                        const editDraft =
-                          registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
-                        const isLocalEntry = isLocalRegisterEntry(entry);
-
-                        return (
-                          <View key={entry.id} style={styles.queueItem}>
-                            <Text style={styles.summaryText}>
-                              {formatRegisterEntryKind(entry.kind)} - {entry.description} -{' '}
-                              {entry.quantity}
-                              {entry.unitOfMeasure ? ` ${entry.unitOfMeasure}` : ''} -{' '}
-                              {formatCurrency(entry.totalAmount)}
-                              {entry.isVoid ? ' - voided' : ''}
-                            </Text>
-                            {entry.voidReason ? (
-                              <Text style={styles.pendingText}>
-                                Void reason: {entry.voidReason}
-                              </Text>
-                            ) : null}
-                            {isLocalEntry ? (
-                              <Text style={styles.pendingText}>
-                                This line is queued locally. Wait for sync or discard it from the
-                                pending queue before changing it.
-                              </Text>
-                            ) : null}
-                            {!entry.isVoid && !isLocalEntry ? (
-                              <>
-                                <View style={styles.actionRow}>
-                                  {registerEntryKinds.map((entryKind) => (
-                                    <Pressable
-                                      key={entryKind}
-                                      onPress={() =>
-                                        updateRegisterEditDraft(entry, {
-                                          registerEntryKind: entryKind
-                                        })
-                                      }
-                                      style={styles.tagButton}
-                                    >
-                                      <Text style={styles.tagButtonText}>
-                                        {formatRegisterEntryKind(entryKind)}
-                                      </Text>
-                                    </Pressable>
-                                  ))}
-                                </View>
-                                <TextInput
-                                  value={editDraft.description}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { description: value })
-                                  }
-                                  placeholder="Description"
-                                  style={styles.input}
-                                />
-                                <TextInput
-                                  value={editDraft.quantity}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { quantity: value })
-                                  }
-                                  keyboardType="decimal-pad"
-                                  placeholder="Quantity"
-                                  style={styles.input}
-                                />
-                                <TextInput
-                                  value={editDraft.unitOfMeasure}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { unitOfMeasure: value })
-                                  }
-                                  placeholder="Unit"
-                                  style={styles.input}
-                                />
-                                <TextInput
-                                  value={editDraft.unitPrice}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { unitPrice: value })
-                                  }
-                                  keyboardType="decimal-pad"
-                                  placeholder="Unit price"
-                                  style={styles.input}
-                                />
-                                <TextInput
-                                  value={editDraft.totalAmount}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { totalAmount: value })
-                                  }
-                                  keyboardType="decimal-pad"
-                                  placeholder="Total amount"
-                                  style={styles.input}
-                                />
-                                <TextInput
-                                  value={editDraft.partNumber}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { partNumber: value })
-                                  }
-                                  placeholder="Part number"
-                                  style={styles.input}
-                                />
-                                <TextInput
-                                  value={editDraft.inventorySourceLabel}
-                                  onChangeText={(value) =>
-                                    updateRegisterEditDraft(entry, { inventorySourceLabel: value })
-                                  }
-                                  placeholder="Source label"
-                                  style={styles.input}
-                                />
-                                <View style={styles.actionRow}>
-                                  <Pressable
-                                    onPress={() => void queueRegisterEntryEdit(entry)}
-                                    style={styles.secondaryButton}
-                                  >
-                                    <Text style={styles.secondaryButtonText}>
-                                      Save register edit locally
-                                    </Text>
-                                  </Pressable>
-                                  <Pressable
-                                    onPress={() => confirmVoidRegisterEntry(entry)}
-                                    style={styles.dangerButton}
-                                  >
-                                    <Text style={styles.dangerButtonText}>Void line locally</Text>
-                                  </Pressable>
-                                </View>
-                              </>
-                            ) : null}
-                          </View>
-                        );
-                      })
-                    )}
-
-                    {(() => {
-                      const createDraft =
-                        registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
-
-                      return (
-                        <View style={styles.reviewCard}>
-                          <Text style={styles.sectionTitleSmall}>Add register line</Text>
-                          <View style={styles.actionRow}>
-                            {registerEntryKinds.map((entryKind) => (
-                              <Pressable
-                                key={entryKind}
-                                onPress={() =>
-                                  updateRegisterCreateDraft(job.id, {
-                                    registerEntryKind: entryKind
-                                  })
-                                }
-                                style={styles.tagButton}
-                              >
-                                <Text style={styles.tagButtonText}>
-                                  {formatRegisterEntryKind(entryKind)}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                          {job.appointments.length > 0 ? (
-                            <View style={styles.actionRow}>
-                              <Pressable
-                                onPress={() =>
-                                  updateRegisterCreateDraft(job.id, { appointmentId: '' })
-                                }
-                                style={styles.tagButton}
-                              >
-                                <Text style={styles.tagButtonText}>Job-level</Text>
-                              </Pressable>
-                              {job.appointments.map((appointment) => (
-                                <Pressable
-                                  key={appointment.id}
-                                  onPress={() =>
-                                    updateRegisterCreateDraft(job.id, {
-                                      appointmentId: appointment.id
-                                    })
-                                  }
-                                  style={styles.tagButton}
-                                >
-                                  <Text style={styles.tagButtonText}>
-                                    {formatAppointmentSchedule(appointment)}
-                                  </Text>
-                                </Pressable>
-                              ))}
-                            </View>
-                          ) : null}
-                          <TextInput
-                            value={createDraft.description}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { description: value })
-                            }
-                            placeholder="Description"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.quantity}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { quantity: value })
-                            }
-                            keyboardType="decimal-pad"
-                            placeholder="Quantity"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.unitOfMeasure}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { unitOfMeasure: value })
-                            }
-                            placeholder="Unit"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.unitPrice}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { unitPrice: value })
-                            }
-                            keyboardType="decimal-pad"
-                            placeholder="Unit price"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.totalAmount}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { totalAmount: value })
-                            }
-                            keyboardType="decimal-pad"
-                            placeholder="Total amount"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.partNumber}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { partNumber: value })
-                            }
-                            placeholder="Part number"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.inventorySourceLabel}
-                            onChangeText={(value) =>
-                              updateRegisterCreateDraft(job.id, { inventorySourceLabel: value })
-                            }
-                            placeholder="Source label"
-                            style={styles.input}
-                          />
-                          <Pressable
-                            onPress={() => void queueRegisterEntryCreate(job)}
-                            style={styles.secondaryButton}
-                          >
-                            <Text style={styles.secondaryButtonText}>
-                              Save register line locally
-                            </Text>
-                          </Pressable>
-                        </View>
-                      );
-                    })()}
-                  </View>
-                ) : null}
-
-                {activeDetailTab === 'sync' ? (
-                  <View style={styles.block}>
-                    <Text style={styles.sectionTitleSmall}>Queued work for this job</Text>
-                    {getPendingOperationsForJob(job, equipment, pendingOperations).length === 0 ? (
-                      <Text style={styles.summaryText}>No local changes waiting for this job.</Text>
-                    ) : (
-                      getPendingOperationsForJob(job, equipment, pendingOperations).map(
-                        (operation) => (
-                          <View key={operation.id} style={styles.queueItem}>
-                            <Text style={styles.summaryText}>
-                              {formatPendingOperation(operation)}
-                            </Text>
-                            {shouldOfferQueueResolution(operation) ? (
-                              <View style={styles.actionRow}>
-                                <Pressable
-                                  onPress={() => void retryQueuedOperation(operation.id)}
-                                  style={styles.secondaryButton}
-                                >
-                                  <Text style={styles.secondaryButtonText}>Retry on next sync</Text>
-                                </Pressable>
-                                <Pressable
-                                  onPress={() => confirmDiscardQueuedOperation(operation)}
-                                  style={styles.dangerButton}
-                                >
-                                  <Text style={styles.dangerButtonText}>Discard local change</Text>
-                                </Pressable>
-                              </View>
-                            ) : null}
-                          </View>
-                        )
-                      )
-                    )}
+                    <Text style={styles.scheduleLabel}>{cardMetadata.scheduleLabel}</Text>
+                    <Text style={styles.jobCardTitle}>{cardMetadata.title}</Text>
+                    {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
+                    <Text style={styles.summaryText}>{cardMetadata.locationLine}</Text>
+                    <Text style={styles.summaryText}>Bill to: {job.billToCustomerName}</Text>
                     <Text style={styles.summaryText}>
-                      Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
+                      Contacts:{' '}
+                      {location?.contacts.map((contact) => contact.displayName).join(', ') ||
+                        'None'}
                     </Text>
-                  </View>
-                ) : null}
 
-                {activeDetailTab === 'equipment'
-                  ? equipment.map((record) => (
-                      <View key={record.id} style={styles.block}>
-                        {(() => {
-                          const equipmentDraft =
-                            equipmentDrafts[record.id] ?? createEquipmentDraft(record);
-                          const replacementOptions = buildReplacementEquipmentOptions(
-                            record,
-                            equipment
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      style={styles.segmentedControlScroller}
+                      contentContainerStyle={styles.segmentedControl}
+                    >
+                      {fieldDetailTabs.map((tab) => (
+                        <Pressable
+                          key={tab.id}
+                          onPress={() => setActiveDetailTab(tab.id)}
+                          style={[
+                            styles.segmentButton,
+                            activeDetailTab === tab.id ? styles.segmentButtonActive : null
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.segmentButtonText,
+                              activeDetailTab === tab.id ? styles.segmentButtonTextActive : null
+                            ]}
+                          >
+                            {tab.label}
+                          </Text>
+                        </Pressable>
+                      ))}
+                    </ScrollView>
+
+                    {activeDetailTab === 'appointments'
+                      ? job.appointments.map((appointment) => {
+                          const assignmentLine = formatAppointmentAssignmentLine(
+                            appointment,
+                            employee.id
                           );
-                          const selectedReplacementId = replacementSelections[record.id] ?? '';
-
+                          const queueSummary = summarizeAppointmentQueueState(
+                            appointment.id,
+                            pendingOperations
+                          );
+                          const finishedReviewAcknowledgement =
+                            formatFinishedReviewAcknowledgement(appointment);
+                          const appointmentMediaCaptionKey = buildFieldMediaCaptionDraftKey({
+                            jobId: job.id,
+                            appointmentId: appointment.id
+                          });
                           return (
-                            <>
+                            <View key={appointment.id} style={styles.block}>
                               <Text style={styles.sectionTitleSmall}>
-                                {record.equipmentType}: {record.brand} {record.model}
+                                {formatAppointmentSchedule(appointment)}
                               </Text>
-                              <Text style={styles.summaryText}>Serial: {record.serialNumber}</Text>
+                              <Text style={styles.summaryText}>{assignmentLine}</Text>
+                              {queueSummary ? (
+                                <Text
+                                  style={
+                                    queueSummary.tone === 'alert'
+                                      ? styles.errorText
+                                      : styles.pendingText
+                                  }
+                                >
+                                  {queueSummary.label}
+                                </Text>
+                              ) : null}
                               <Text style={styles.summaryText}>
-                                Age: {record.ageLabel ?? 'Unknown age'}
+                                Latest local appointment status: {appointment.status}
                               </Text>
-                              <Text style={styles.summaryText}>
-                                System group: {record.systemGroup?.name ?? 'Ungrouped'}
-                              </Text>
-                              <Text style={styles.summaryText}>
-                                Current local equipment status: {record.status}
-                              </Text>
+                              {finishedReviewAcknowledgement ? (
+                                <Text style={styles.summaryText}>
+                                  {finishedReviewAcknowledgement}
+                                </Text>
+                              ) : null}
                               <View style={styles.actionRow}>
-                                {(
-                                  [
-                                    'active',
-                                    'pendingInstall',
-                                    'inactive',
-                                    ...(canReplaceRemoveEquipment
-                                      ? (['removed'] as EquipmentStatus[])
-                                      : [])
-                                  ] as EquipmentStatus[]
-                                ).map((status) => (
+                                {fieldAppointmentStatuses.map((status) => (
                                   <Pressable
                                     key={status}
-                                    onPress={() => updateEquipmentDraft(record, { status })}
+                                    onPress={() =>
+                                      handleAppointmentStatusPress(job.id, appointment, status)
+                                    }
                                     style={styles.tagButton}
                                   >
                                     <Text style={styles.tagButtonText}>{status}</Text>
                                   </Pressable>
                                 ))}
                               </View>
+
+                              {finishReview?.appointmentId === appointment.id ? (
+                                <View style={styles.reviewCard}>
+                                  <Text style={styles.sectionTitleSmall}>Finish review</Text>
+                                  <Text style={styles.summaryText}>
+                                    BellField should prompt for notes, outcome, and charge activity
+                                    before finishing this visit.
+                                  </Text>
+                                  <Text style={styles.summaryText}>
+                                    Outcome: {formatFinishOutcome(finishReview.finishOutcome)}
+                                  </Text>
+                                  <View style={styles.actionRow}>
+                                    {(
+                                      [
+                                        'completed',
+                                        'followUpNeeded',
+                                        'noAccess'
+                                      ] as AppointmentFinishOutcome[]
+                                    ).map((outcome) => (
+                                      <Pressable
+                                        key={outcome}
+                                        onPress={() =>
+                                          setFinishReview((current) =>
+                                            current && current.appointmentId === appointment.id
+                                              ? { ...current, finishOutcome: outcome }
+                                              : current
+                                          )
+                                        }
+                                        style={styles.tagButton}
+                                      >
+                                        <Text style={styles.tagButtonText}>
+                                          {formatFinishOutcome(outcome)}
+                                        </Text>
+                                      </Pressable>
+                                    ))}
+                                  </View>
+                                  <Text style={styles.summaryText}>
+                                    Charge activity: {finishReview.hasChargeActivity ? 'Yes' : 'No'}
+                                  </Text>
+                                  <View style={styles.actionRow}>
+                                    <Pressable
+                                      onPress={() =>
+                                        setFinishReview((current) =>
+                                          current && current.appointmentId === appointment.id
+                                            ? { ...current, hasChargeActivity: true }
+                                            : current
+                                        )
+                                      }
+                                      style={styles.tagButton}
+                                    >
+                                      <Text style={styles.tagButtonText}>Charges added</Text>
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() =>
+                                        setFinishReview((current) =>
+                                          current && current.appointmentId === appointment.id
+                                            ? { ...current, hasChargeActivity: false }
+                                            : current
+                                        )
+                                      }
+                                      style={styles.tagButton}
+                                    >
+                                      <Text style={styles.tagButtonText}>No charges</Text>
+                                    </Pressable>
+                                  </View>
+                                  <TextInput
+                                    value={finishReview.visitNotes}
+                                    onChangeText={(value) =>
+                                      setFinishReview((current) =>
+                                        current && current.appointmentId === appointment.id
+                                          ? { ...current, visitNotes: value }
+                                          : current
+                                      )
+                                    }
+                                    multiline
+                                    placeholder="Visit notes"
+                                    style={styles.input}
+                                  />
+                                  <TextInput
+                                    value={finishReview.registerReminder}
+                                    onChangeText={(value) =>
+                                      setFinishReview((current) =>
+                                        current && current.appointmentId === appointment.id
+                                          ? { ...current, registerReminder: value }
+                                          : current
+                                      )
+                                    }
+                                    multiline
+                                    placeholder="Register item or follow-up reminder"
+                                    style={styles.input}
+                                  />
+                                  <View style={styles.actionRow}>
+                                    <Pressable
+                                      onPress={() => commitFinishReview(false, false)}
+                                      style={styles.primaryButton}
+                                    >
+                                      <Text style={styles.primaryButtonText}>
+                                        Save finish locally
+                                      </Text>
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => setFinishReview(null)}
+                                      style={styles.secondaryButton}
+                                    >
+                                      <Text style={styles.secondaryButtonText}>Cancel</Text>
+                                    </Pressable>
+                                  </View>
+                                </View>
+                              ) : null}
+
+                              <View style={styles.reviewCard}>
+                                <Text style={styles.sectionTitleSmall}>Appointment media</Text>
+                                <TextInput
+                                  value={mediaCaptionDrafts[appointmentMediaCaptionKey] ?? ''}
+                                  onChangeText={(value) =>
+                                    setMediaCaptionDrafts((current) => ({
+                                      ...current,
+                                      [appointmentMediaCaptionKey]: value
+                                    }))
+                                  }
+                                  placeholder="Optional caption for this visit"
+                                  style={styles.input}
+                                />
+                                <View style={styles.actionRow}>
+                                  <Pressable
+                                    onPress={() =>
+                                      void queueMediaUpload(job, 'camera', appointment.id)
+                                    }
+                                    style={styles.secondaryButton}
+                                  >
+                                    <Text style={styles.secondaryButtonText}>Capture media</Text>
+                                  </Pressable>
+                                  <Pressable
+                                    onPress={() =>
+                                      void queueMediaUpload(job, 'library', appointment.id)
+                                    }
+                                    style={styles.secondaryButton}
+                                  >
+                                    <Text style={styles.secondaryButtonText}>
+                                      Pick from library
+                                    </Text>
+                                  </Pressable>
+                                </View>
+                              </View>
+                            </View>
+                          );
+                        })
+                      : null}
+
+                    {activeDetailTab === 'overview' ? (
+                      <View style={styles.block}>
+                        <Text style={styles.sectionTitleSmall}>Save note locally</Text>
+                        <Text style={styles.summaryText}>
+                          This note stays on-device until Sync Now applies it on the server.
+                        </Text>
+                        <TextInput
+                          value={noteDrafts[job.id] ?? ''}
+                          onChangeText={(value) =>
+                            setNoteDrafts((current) => ({ ...current, [job.id]: value }))
+                          }
+                          multiline
+                          placeholder="Add visit notes that should queue until sync."
+                          style={styles.input}
+                        />
+                        <Pressable
+                          onPress={() => void queueJobNote(job.id)}
+                          style={styles.secondaryButton}
+                        >
+                          <Text style={styles.secondaryButtonText}>Save note locally</Text>
+                        </Pressable>
+
+                        <View style={styles.reviewCard}>
+                          <Text style={styles.sectionTitleSmall}>Media</Text>
+                          <Text style={styles.summaryText}>
+                            Photos and videos are copied into BellField storage before they enter
+                            the sync queue.
+                          </Text>
+                          <TextInput
+                            value={mediaCaptionDrafts[jobMediaCaptionKey] ?? ''}
+                            onChangeText={(value) =>
+                              setMediaCaptionDrafts((current) => ({
+                                ...current,
+                                [jobMediaCaptionKey]: value
+                              }))
+                            }
+                            placeholder="Optional caption"
+                            style={styles.input}
+                          />
+                          <View style={styles.actionRow}>
+                            <Pressable
+                              onPress={() => void queueMediaUpload(job, 'camera')}
+                              style={styles.secondaryButton}
+                            >
+                              <Text style={styles.secondaryButtonText}>Capture media</Text>
+                            </Pressable>
+                            <Pressable
+                              onPress={() => void queueMediaUpload(job, 'library')}
+                              style={styles.secondaryButton}
+                            >
+                              <Text style={styles.secondaryButtonText}>Pick from library</Text>
+                            </Pressable>
+                          </View>
+                        </View>
+                      </View>
+                    ) : null}
+
+                    {activeDetailTab === 'register' ? (
+                      <View style={styles.block}>
+                        <Text style={styles.sectionTitleSmall}>Register entries</Text>
+                        {(job.registerEntries ?? []).length === 0 ? (
+                          <Text style={styles.summaryText}>
+                            No register lines saved for this job yet.
+                          </Text>
+                        ) : (
+                          (job.registerEntries ?? []).map((entry) => {
+                            const editDraft =
+                              registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
+                            const isLocalEntry = isLocalRegisterEntry(entry);
+
+                            return (
+                              <View key={entry.id} style={styles.queueItem}>
+                                <Text style={styles.summaryText}>
+                                  {formatRegisterEntryKind(entry.kind)} - {entry.description} -{' '}
+                                  {entry.quantity}
+                                  {entry.unitOfMeasure ? ` ${entry.unitOfMeasure}` : ''} -{' '}
+                                  {formatCurrency(entry.totalAmount)}
+                                  {entry.isVoid ? ' - voided' : ''}
+                                </Text>
+                                {entry.voidReason ? (
+                                  <Text style={styles.pendingText}>
+                                    Void reason: {entry.voidReason}
+                                  </Text>
+                                ) : null}
+                                {isLocalEntry ? (
+                                  <Text style={styles.pendingText}>
+                                    This line is queued locally. Wait for sync or discard it from
+                                    the pending queue before changing it.
+                                  </Text>
+                                ) : null}
+                                {!entry.isVoid && !isLocalEntry ? (
+                                  <>
+                                    <View style={styles.actionRow}>
+                                      {registerEntryKinds.map((entryKind) => (
+                                        <Pressable
+                                          key={entryKind}
+                                          onPress={() =>
+                                            updateRegisterEditDraft(entry, {
+                                              registerEntryKind: entryKind
+                                            })
+                                          }
+                                          style={styles.tagButton}
+                                        >
+                                          <Text style={styles.tagButtonText}>
+                                            {formatRegisterEntryKind(entryKind)}
+                                          </Text>
+                                        </Pressable>
+                                      ))}
+                                    </View>
+                                    <TextInput
+                                      value={editDraft.description}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, { description: value })
+                                      }
+                                      placeholder="Description"
+                                      style={styles.input}
+                                    />
+                                    <TextInput
+                                      value={editDraft.quantity}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, { quantity: value })
+                                      }
+                                      keyboardType="decimal-pad"
+                                      placeholder="Quantity"
+                                      style={styles.input}
+                                    />
+                                    <TextInput
+                                      value={editDraft.unitOfMeasure}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, { unitOfMeasure: value })
+                                      }
+                                      placeholder="Unit"
+                                      style={styles.input}
+                                    />
+                                    <TextInput
+                                      value={editDraft.unitPrice}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, { unitPrice: value })
+                                      }
+                                      keyboardType="decimal-pad"
+                                      placeholder="Unit price"
+                                      style={styles.input}
+                                    />
+                                    <TextInput
+                                      value={editDraft.totalAmount}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, { totalAmount: value })
+                                      }
+                                      keyboardType="decimal-pad"
+                                      placeholder="Total amount"
+                                      style={styles.input}
+                                    />
+                                    <TextInput
+                                      value={editDraft.partNumber}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, { partNumber: value })
+                                      }
+                                      placeholder="Part number"
+                                      style={styles.input}
+                                    />
+                                    <TextInput
+                                      value={editDraft.inventorySourceLabel}
+                                      onChangeText={(value) =>
+                                        updateRegisterEditDraft(entry, {
+                                          inventorySourceLabel: value
+                                        })
+                                      }
+                                      placeholder="Source label"
+                                      style={styles.input}
+                                    />
+                                    <View style={styles.actionRow}>
+                                      <Pressable
+                                        onPress={() => void queueRegisterEntryEdit(entry)}
+                                        style={styles.secondaryButton}
+                                      >
+                                        <Text style={styles.secondaryButtonText}>
+                                          Save register edit locally
+                                        </Text>
+                                      </Pressable>
+                                      <Pressable
+                                        onPress={() => confirmVoidRegisterEntry(entry)}
+                                        style={styles.dangerButton}
+                                      >
+                                        <Text style={styles.dangerButtonText}>
+                                          Void line locally
+                                        </Text>
+                                      </Pressable>
+                                    </View>
+                                  </>
+                                ) : null}
+                              </View>
+                            );
+                          })
+                        )}
+
+                        {(() => {
+                          const createDraft =
+                            registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
+
+                          return (
+                            <View style={styles.reviewCard}>
+                              <Text style={styles.sectionTitleSmall}>Add register line</Text>
+                              <View style={styles.actionRow}>
+                                {registerEntryKinds.map((entryKind) => (
+                                  <Pressable
+                                    key={entryKind}
+                                    onPress={() =>
+                                      updateRegisterCreateDraft(job.id, {
+                                        registerEntryKind: entryKind
+                                      })
+                                    }
+                                    style={styles.tagButton}
+                                  >
+                                    <Text style={styles.tagButtonText}>
+                                      {formatRegisterEntryKind(entryKind)}
+                                    </Text>
+                                  </Pressable>
+                                ))}
+                              </View>
+                              {job.appointments.length > 0 ? (
+                                <View style={styles.actionRow}>
+                                  <Pressable
+                                    onPress={() =>
+                                      updateRegisterCreateDraft(job.id, { appointmentId: '' })
+                                    }
+                                    style={styles.tagButton}
+                                  >
+                                    <Text style={styles.tagButtonText}>Job-level</Text>
+                                  </Pressable>
+                                  {job.appointments.map((appointment) => (
+                                    <Pressable
+                                      key={appointment.id}
+                                      onPress={() =>
+                                        updateRegisterCreateDraft(job.id, {
+                                          appointmentId: appointment.id
+                                        })
+                                      }
+                                      style={styles.tagButton}
+                                    >
+                                      <Text style={styles.tagButtonText}>
+                                        {formatAppointmentSchedule(appointment)}
+                                      </Text>
+                                    </Pressable>
+                                  ))}
+                                </View>
+                              ) : null}
                               <TextInput
-                                value={equipmentDraft.model}
+                                value={createDraft.description}
                                 onChangeText={(value) =>
-                                  updateEquipmentDraft(record, { model: value })
+                                  updateRegisterCreateDraft(job.id, { description: value })
+                                }
+                                placeholder="Description"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.quantity}
+                                onChangeText={(value) =>
+                                  updateRegisterCreateDraft(job.id, { quantity: value })
+                                }
+                                keyboardType="decimal-pad"
+                                placeholder="Quantity"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.unitOfMeasure}
+                                onChangeText={(value) =>
+                                  updateRegisterCreateDraft(job.id, { unitOfMeasure: value })
+                                }
+                                placeholder="Unit"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.unitPrice}
+                                onChangeText={(value) =>
+                                  updateRegisterCreateDraft(job.id, { unitPrice: value })
+                                }
+                                keyboardType="decimal-pad"
+                                placeholder="Unit price"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.totalAmount}
+                                onChangeText={(value) =>
+                                  updateRegisterCreateDraft(job.id, { totalAmount: value })
+                                }
+                                keyboardType="decimal-pad"
+                                placeholder="Total amount"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.partNumber}
+                                onChangeText={(value) =>
+                                  updateRegisterCreateDraft(job.id, { partNumber: value })
+                                }
+                                placeholder="Part number"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.inventorySourceLabel}
+                                onChangeText={(value) =>
+                                  updateRegisterCreateDraft(job.id, { inventorySourceLabel: value })
+                                }
+                                placeholder="Source label"
+                                style={styles.input}
+                              />
+                              <Pressable
+                                onPress={() => void queueRegisterEntryCreate(job)}
+                                style={styles.secondaryButton}
+                              >
+                                <Text style={styles.secondaryButtonText}>
+                                  Save register line locally
+                                </Text>
+                              </Pressable>
+                            </View>
+                          );
+                        })()}
+                      </View>
+                    ) : null}
+
+                    {activeDetailTab === 'sync' ? (
+                      <View style={styles.block}>
+                        <Text style={styles.sectionTitleSmall}>Queued work for this job</Text>
+                        {getPendingOperationsForJob(job, equipment, pendingOperations).length ===
+                        0 ? (
+                          <Text style={styles.summaryText}>
+                            No local changes waiting for this job.
+                          </Text>
+                        ) : (
+                          getPendingOperationsForJob(job, equipment, pendingOperations).map(
+                            (operation) => (
+                              <View key={operation.id} style={styles.queueItem}>
+                                <Text style={styles.summaryText}>
+                                  {formatPendingOperation(operation)}
+                                </Text>
+                                {shouldOfferQueueResolution(operation) ? (
+                                  <View style={styles.actionRow}>
+                                    <Pressable
+                                      onPress={() => void retryQueuedOperation(operation.id)}
+                                      style={styles.secondaryButton}
+                                    >
+                                      <Text style={styles.secondaryButtonText}>
+                                        Retry on next sync
+                                      </Text>
+                                    </Pressable>
+                                    <Pressable
+                                      onPress={() => confirmDiscardQueuedOperation(operation)}
+                                      style={styles.dangerButton}
+                                    >
+                                      <Text style={styles.dangerButtonText}>
+                                        Discard local change
+                                      </Text>
+                                    </Pressable>
+                                  </View>
+                                ) : null}
+                              </View>
+                            )
+                          )
+                        )}
+                        <Text style={styles.summaryText}>
+                          Last successful sync:{' '}
+                          {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
+                        </Text>
+                      </View>
+                    ) : null}
+
+                    {activeDetailTab === 'equipment'
+                      ? equipment.map((record) => (
+                          <View key={record.id} style={styles.block}>
+                            {(() => {
+                              const equipmentDraft =
+                                equipmentDrafts[record.id] ?? createEquipmentDraft(record);
+                              const replacementOptions = buildReplacementEquipmentOptions(
+                                record,
+                                equipment
+                              );
+                              const selectedReplacementId = replacementSelections[record.id] ?? '';
+
+                              return (
+                                <>
+                                  <Text style={styles.sectionTitleSmall}>
+                                    {record.equipmentType}: {record.brand} {record.model}
+                                  </Text>
+                                  <Text style={styles.summaryText}>
+                                    Serial: {record.serialNumber}
+                                  </Text>
+                                  <Text style={styles.summaryText}>
+                                    Age: {record.ageLabel ?? 'Unknown age'}
+                                  </Text>
+                                  <Text style={styles.summaryText}>
+                                    System group: {record.systemGroup?.name ?? 'Ungrouped'}
+                                  </Text>
+                                  <Text style={styles.summaryText}>
+                                    Current local equipment status: {record.status}
+                                  </Text>
+                                  <View style={styles.actionRow}>
+                                    {(
+                                      [
+                                        'active',
+                                        'pendingInstall',
+                                        'inactive',
+                                        ...(canReplaceRemoveEquipment
+                                          ? (['removed'] as EquipmentStatus[])
+                                          : [])
+                                      ] as EquipmentStatus[]
+                                    ).map((status) => (
+                                      <Pressable
+                                        key={status}
+                                        onPress={() => updateEquipmentDraft(record, { status })}
+                                        style={styles.tagButton}
+                                      >
+                                        <Text style={styles.tagButtonText}>{status}</Text>
+                                      </Pressable>
+                                    ))}
+                                  </View>
+                                  <TextInput
+                                    value={equipmentDraft.model}
+                                    onChangeText={(value) =>
+                                      updateEquipmentDraft(record, { model: value })
+                                    }
+                                    placeholder="Model"
+                                    style={styles.input}
+                                  />
+                                  <TextInput
+                                    value={equipmentDraft.serialNumber}
+                                    onChangeText={(value) =>
+                                      updateEquipmentDraft(record, { serialNumber: value })
+                                    }
+                                    placeholder="Serial number"
+                                    style={styles.input}
+                                  />
+                                  <TextInput
+                                    value={equipmentDraft.filterSizes}
+                                    onChangeText={(value) =>
+                                      updateEquipmentDraft(record, { filterSizes: value })
+                                    }
+                                    placeholder="Filters (comma separated)"
+                                    style={styles.input}
+                                  />
+                                  <TextInput
+                                    value={equipmentDraft.equipmentLocationDescription}
+                                    onChangeText={(value) =>
+                                      updateEquipmentDraft(record, {
+                                        equipmentLocationDescription: value
+                                      })
+                                    }
+                                    placeholder="Equipment location"
+                                    style={styles.input}
+                                  />
+                                  <TextInput
+                                    value={equipmentDraft.installDate}
+                                    onChangeText={(value) =>
+                                      updateEquipmentDraft(record, { installDate: value })
+                                    }
+                                    placeholder="Install date (YYYY-MM-DD)"
+                                    style={styles.input}
+                                  />
+                                  {record.warrantyProviderNote ? (
+                                    <Text style={styles.summaryText}>
+                                      Warranty: {record.warrantyProviderNote}
+                                    </Text>
+                                  ) : null}
+                                  <TextInput
+                                    value={equipmentDraft.notes}
+                                    onChangeText={(value) =>
+                                      updateEquipmentDraft(record, { notes: value })
+                                    }
+                                    multiline
+                                    placeholder="Equipment notes"
+                                    style={styles.input}
+                                  />
+                                  <Pressable
+                                    onPress={() => void queueEquipmentUpdate(record)}
+                                    style={styles.secondaryButton}
+                                  >
+                                    <Text style={styles.secondaryButtonText}>
+                                      Save equipment locally
+                                    </Text>
+                                  </Pressable>
+                                  {canReplaceRemoveEquipment && replacementOptions.length > 0 ? (
+                                    <View style={styles.block}>
+                                      <Text style={styles.sectionTitleSmall}>Link replacement</Text>
+                                      <Text style={styles.summaryText}>
+                                        Choose the equipment that replaced this unit.
+                                      </Text>
+                                      <View style={styles.replacementOptionList}>
+                                        {replacementOptions.map((option) => {
+                                          const isSelected = selectedReplacementId === option.id;
+
+                                          return (
+                                            <Pressable
+                                              key={option.id}
+                                              onPress={() =>
+                                                setReplacementSelections((current) => ({
+                                                  ...current,
+                                                  [record.id]: option.id
+                                                }))
+                                              }
+                                              style={[
+                                                styles.replacementOptionButton,
+                                                isSelected
+                                                  ? styles.replacementOptionButtonSelected
+                                                  : null
+                                              ]}
+                                            >
+                                              <Text
+                                                style={[
+                                                  styles.replacementOptionLabel,
+                                                  isSelected
+                                                    ? styles.replacementOptionLabelSelected
+                                                    : null
+                                                ]}
+                                              >
+                                                {option.label}
+                                              </Text>
+                                              <Text
+                                                style={[
+                                                  styles.summaryText,
+                                                  isSelected
+                                                    ? styles.replacementOptionDetailSelected
+                                                    : null
+                                                ]}
+                                              >
+                                                {option.detail}
+                                              </Text>
+                                            </Pressable>
+                                          );
+                                        })}
+                                      </View>
+                                      <Pressable
+                                        onPress={() => void linkReplacement(record.id)}
+                                        disabled={!selectedReplacementId}
+                                        style={[
+                                          styles.secondaryButton,
+                                          !selectedReplacementId ? styles.disabledButton : null
+                                        ]}
+                                      >
+                                        <Text style={styles.secondaryButtonText}>
+                                          Link replacement now
+                                        </Text>
+                                      </Pressable>
+                                    </View>
+                                  ) : null}
+                                  {canReplaceRemoveEquipment && replacementOptions.length === 0 ? (
+                                    <View style={styles.block}>
+                                      <Text style={styles.sectionTitleSmall}>Link replacement</Text>
+                                      <Text style={styles.summaryText}>
+                                        No eligible replacement equipment is at this location yet.
+                                        Replacement equipment is usually added when a job PO is
+                                        received. Use manual add only for equipment found at this
+                                        location that is not already in BellField.
+                                      </Text>
+                                    </View>
+                                  ) : null}
+                                </>
+                              );
+                            })()}
+                          </View>
+                        ))
+                      : null}
+
+                    {activeDetailTab === 'equipment' ? (
+                      <View style={styles.block}>
+                        <Text style={styles.sectionTitleSmall}>Add discovered equipment</Text>
+                        {(() => {
+                          const createDraft =
+                            equipmentCreateDrafts[job.locationId] ?? createEquipmentCreateDraft();
+
+                          return (
+                            <>
+                              <TextInput
+                                value={createDraft.equipmentType}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, {
+                                    equipmentType: value
+                                  })
+                                }
+                                placeholder="Equipment type"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.brand}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, { brand: value })
+                                }
+                                placeholder="Brand"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.model}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, { model: value })
                                 }
                                 placeholder="Model"
                                 style={styles.input}
                               />
                               <TextInput
-                                value={equipmentDraft.serialNumber}
+                                value={createDraft.serialNumber}
                                 onChangeText={(value) =>
-                                  updateEquipmentDraft(record, { serialNumber: value })
+                                  updateEquipmentCreateDraft(job.locationId, {
+                                    serialNumber: value
+                                  })
                                 }
                                 placeholder="Serial number"
                                 style={styles.input}
                               />
                               <TextInput
-                                value={equipmentDraft.filterSizes}
+                                value={createDraft.filterSizes}
                                 onChangeText={(value) =>
-                                  updateEquipmentDraft(record, { filterSizes: value })
+                                  updateEquipmentCreateDraft(job.locationId, { filterSizes: value })
                                 }
                                 placeholder="Filters (comma separated)"
                                 style={styles.input}
                               />
                               <TextInput
-                                value={equipmentDraft.equipmentLocationDescription}
+                                value={createDraft.equipmentLocationDescription}
                                 onChangeText={(value) =>
-                                  updateEquipmentDraft(record, {
+                                  updateEquipmentCreateDraft(job.locationId, {
                                     equipmentLocationDescription: value
                                   })
                                 }
@@ -2457,276 +2730,157 @@ export function TechnicianWorkspaceScreen({
                                 style={styles.input}
                               />
                               <TextInput
-                                value={equipmentDraft.installDate}
+                                value={createDraft.installDate}
                                 onChangeText={(value) =>
-                                  updateEquipmentDraft(record, { installDate: value })
+                                  updateEquipmentCreateDraft(job.locationId, { installDate: value })
                                 }
                                 placeholder="Install date (YYYY-MM-DD)"
                                 style={styles.input}
                               />
-                              {record.warrantyProviderNote ? (
-                                <Text style={styles.summaryText}>
-                                  Warranty: {record.warrantyProviderNote}
-                                </Text>
-                              ) : null}
                               <TextInput
-                                value={equipmentDraft.notes}
+                                value={createDraft.warrantyStartDate}
                                 onChangeText={(value) =>
-                                  updateEquipmentDraft(record, { notes: value })
+                                  updateEquipmentCreateDraft(job.locationId, {
+                                    warrantyStartDate: value
+                                  })
+                                }
+                                placeholder="Warranty start (YYYY-MM-DD)"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.warrantyEndDate}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, {
+                                    warrantyEndDate: value
+                                  })
+                                }
+                                placeholder="Warranty end (YYYY-MM-DD)"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.warrantyProviderNote}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, {
+                                    warrantyProviderNote: value
+                                  })
+                                }
+                                placeholder="Warranty provider or note"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.systemGroupName}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, {
+                                    systemGroupName: value
+                                  })
+                                }
+                                placeholder="System group name"
+                                style={styles.input}
+                              />
+                              <TextInput
+                                value={createDraft.notes}
+                                onChangeText={(value) =>
+                                  updateEquipmentCreateDraft(job.locationId, { notes: value })
                                 }
                                 multiline
                                 placeholder="Equipment notes"
                                 style={styles.input}
                               />
                               <Pressable
-                                onPress={() => void queueEquipmentUpdate(record)}
+                                onPress={() => void createEquipmentAtLocation(job.locationId)}
                                 style={styles.secondaryButton}
                               >
-                                <Text style={styles.secondaryButtonText}>
-                                  Save equipment locally
-                                </Text>
+                                <Text style={styles.secondaryButtonText}>Create equipment now</Text>
                               </Pressable>
-                              {canReplaceRemoveEquipment && replacementOptions.length > 0 ? (
-                                <View style={styles.block}>
-                                  <Text style={styles.sectionTitleSmall}>Link replacement</Text>
-                                  <Text style={styles.summaryText}>
-                                    Choose the equipment that replaced this unit.
-                                  </Text>
-                                  <View style={styles.replacementOptionList}>
-                                    {replacementOptions.map((option) => {
-                                      const isSelected = selectedReplacementId === option.id;
-
-                                      return (
-                                        <Pressable
-                                          key={option.id}
-                                          onPress={() =>
-                                            setReplacementSelections((current) => ({
-                                              ...current,
-                                              [record.id]: option.id
-                                            }))
-                                          }
-                                          style={[
-                                            styles.replacementOptionButton,
-                                            isSelected
-                                              ? styles.replacementOptionButtonSelected
-                                              : null
-                                          ]}
-                                        >
-                                          <Text
-                                            style={[
-                                              styles.replacementOptionLabel,
-                                              isSelected
-                                                ? styles.replacementOptionLabelSelected
-                                                : null
-                                            ]}
-                                          >
-                                            {option.label}
-                                          </Text>
-                                          <Text
-                                            style={[
-                                              styles.summaryText,
-                                              isSelected
-                                                ? styles.replacementOptionDetailSelected
-                                                : null
-                                            ]}
-                                          >
-                                            {option.detail}
-                                          </Text>
-                                        </Pressable>
-                                      );
-                                    })}
-                                  </View>
-                                  <Pressable
-                                    onPress={() => void linkReplacement(record.id)}
-                                    disabled={!selectedReplacementId}
-                                    style={[
-                                      styles.secondaryButton,
-                                      !selectedReplacementId ? styles.disabledButton : null
-                                    ]}
-                                  >
-                                    <Text style={styles.secondaryButtonText}>
-                                      Link replacement now
-                                    </Text>
-                                  </Pressable>
-                                </View>
-                              ) : null}
-                              {canReplaceRemoveEquipment && replacementOptions.length === 0 ? (
-                                <View style={styles.block}>
-                                  <Text style={styles.sectionTitleSmall}>Link replacement</Text>
-                                  <Text style={styles.summaryText}>
-                                    No eligible replacement equipment is at this location yet.
-                                    Replacement equipment is usually added when a job PO is
-                                    received. Use manual add only for equipment found at this
-                                    location that is not already in BellField.
-                                  </Text>
-                                </View>
-                              ) : null}
                             </>
                           );
                         })()}
                       </View>
-                    ))
-                  : null}
-
-                {activeDetailTab === 'equipment' ? (
-                  <View style={styles.block}>
-                    <Text style={styles.sectionTitleSmall}>Add discovered equipment</Text>
-                    {(() => {
-                      const createDraft =
-                        equipmentCreateDrafts[job.locationId] ?? createEquipmentCreateDraft();
-
-                      return (
-                        <>
-                          <TextInput
-                            value={createDraft.equipmentType}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { equipmentType: value })
-                            }
-                            placeholder="Equipment type"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.brand}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { brand: value })
-                            }
-                            placeholder="Brand"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.model}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { model: value })
-                            }
-                            placeholder="Model"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.serialNumber}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { serialNumber: value })
-                            }
-                            placeholder="Serial number"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.filterSizes}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { filterSizes: value })
-                            }
-                            placeholder="Filters (comma separated)"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.equipmentLocationDescription}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, {
-                                equipmentLocationDescription: value
-                              })
-                            }
-                            placeholder="Equipment location"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.installDate}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { installDate: value })
-                            }
-                            placeholder="Install date (YYYY-MM-DD)"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.warrantyStartDate}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, {
-                                warrantyStartDate: value
-                              })
-                            }
-                            placeholder="Warranty start (YYYY-MM-DD)"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.warrantyEndDate}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { warrantyEndDate: value })
-                            }
-                            placeholder="Warranty end (YYYY-MM-DD)"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.warrantyProviderNote}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, {
-                                warrantyProviderNote: value
-                              })
-                            }
-                            placeholder="Warranty provider or note"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.systemGroupName}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { systemGroupName: value })
-                            }
-                            placeholder="System group name"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={createDraft.notes}
-                            onChangeText={(value) =>
-                              updateEquipmentCreateDraft(job.locationId, { notes: value })
-                            }
-                            multiline
-                            placeholder="Equipment notes"
-                            style={styles.input}
-                          />
-                          <Pressable
-                            onPress={() => void createEquipmentAtLocation(job.locationId)}
-                            style={styles.secondaryButton}
-                          >
-                            <Text style={styles.secondaryButtonText}>Create equipment now</Text>
-                          </Pressable>
-                        </>
-                      );
-                    })()}
-                  </View>
-                ) : null}
-              </View>
-            );
-          })}
-
-          {!selectedJob ? (
-            <View style={styles.summaryCard}>
-              <Text style={styles.sectionTitle}>Pending queue</Text>
-              {pendingOperations.length === 0 ? (
-                <Text style={styles.summaryText}>No local changes waiting for sync.</Text>
-              ) : (
-                pendingOperations.map((operation) => (
-                  <View key={operation.id} style={styles.queueItem}>
-                    <Text style={styles.summaryText}>{formatPendingOperation(operation)}</Text>
-                    {shouldOfferQueueResolution(operation) ? (
-                      <View style={styles.actionRow}>
-                        <Pressable
-                          onPress={() => void retryQueuedOperation(operation.id)}
-                          style={styles.secondaryButton}
-                        >
-                          <Text style={styles.secondaryButtonText}>Retry on next sync</Text>
-                        </Pressable>
-                        <Pressable
-                          onPress={() => confirmDiscardQueuedOperation(operation)}
-                          style={styles.dangerButton}
-                        >
-                          <Text style={styles.dangerButtonText}>Discard local change</Text>
-                        </Pressable>
-                      </View>
                     ) : null}
                   </View>
-                ))
-              )}
+                );
+              })
+            : null}
+
+          {activeWorkspaceTab === 'sync' ? (
+            <>
+              <View
+                accessibilityLabel={`Sync status: ${syncHealth.headline}`}
+                style={[styles.summaryCard, getSyncHealthCardStyle(syncHealth.tone)]}
+              >
+                <Text style={styles.sectionTitle}>{syncHealth.headline}</Text>
+                {syncHealth.detail ? (
+                  <Text style={styles.summaryText}>{syncHealth.detail}</Text>
+                ) : null}
+                <Text style={styles.summaryText}>
+                  Scope: {assignedWork?.windowStartDate ?? 'today'} through{' '}
+                  {assignedWork?.windowEndDate ?? 'tomorrow'}
+                </Text>
+                <Text style={styles.summaryText}>
+                  Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
+                </Text>
+                <View style={styles.actionRow}>
+                  <Pressable
+                    onPress={() => void refreshAssignedWork()}
+                    style={styles.secondaryButton}
+                  >
+                    <Text style={styles.secondaryButtonText}>
+                      {isRefreshing ? 'Refreshing...' : 'Refresh jobs'}
+                    </Text>
+                  </Pressable>
+                  <Pressable onPress={() => void syncNow()} style={styles.primaryButton}>
+                    {isSyncing ? (
+                      <ActivityIndicator color="#ffffff" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>Sync Now</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </View>
+              {renderPendingQueue()}
+            </>
+          ) : null}
+
+          {activeWorkspaceTab === 'messages' ? (
+            <View style={styles.summaryCard}>
+              <Text style={styles.sectionTitle}>Messages</Text>
+              <Text style={styles.summaryText}>
+                Team messaging is not available in this version yet. Job notes and office changes
+                still appear inside the assigned work and sync areas.
+              </Text>
+            </View>
+          ) : null}
+
+          {activeWorkspaceTab === 'settings' ? (
+            <View style={styles.summaryCard}>
+              <Text style={styles.sectionTitle}>Settings</Text>
+              <Text style={styles.summaryText}>
+                Field app settings are not available in this version yet. Use Sign out above if this
+                device needs to leave the current technician session.
+              </Text>
             </View>
           ) : null}
         </View>
       </ScrollView>
+      <View style={[styles.bottomNav, { paddingBottom: Math.max(12, safeAreaInsets.bottom + 8) }]}>
+        {fieldWorkspaceTabs.map((tab) => {
+          const isActive = activeWorkspaceTab === tab.id;
+
+          return (
+            <Pressable
+              key={tab.id}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isActive }}
+              onPress={() => setActiveWorkspaceTab(tab.id)}
+              style={[styles.bottomNavButton, isActive ? styles.bottomNavButtonActive : null]}
+            >
+              <Text style={[styles.bottomNavText, isActive ? styles.bottomNavTextActive : null]}>
+                {tab.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
       <StatusBar style="dark" />
     </SafeAreaView>
   );
@@ -2871,16 +3025,15 @@ function isLocalRegisterEntry(
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f2efe6' },
-  scrollContent: { flexGrow: 1, padding: 20 },
+  container: { flex: 1, backgroundColor: '#f7f8fb' },
+  scrollContent: { flexGrow: 1, padding: 16, paddingBottom: 108 },
   loadingState: { alignItems: 'center', flex: 1, gap: 12, justifyContent: 'center', padding: 24 },
   card: {
-    backgroundColor: '#fffdf8',
-    borderColor: '#e4d6bc',
+    backgroundColor: '#f7f8fb',
+    borderColor: '#e4e8f0',
     borderRadius: 24,
-    borderWidth: 1,
     gap: 16,
-    padding: 20
+    padding: 0
   },
   kicker: {
     color: '#936327',
@@ -2889,11 +3042,11 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     textTransform: 'uppercase'
   },
-  title: { color: '#1f2933', fontSize: 28, fontWeight: '700' },
+  title: { color: '#0b1f44', fontSize: 28, fontWeight: '700' },
   subtitle: { color: '#52606d', fontSize: 15, lineHeight: 22 },
   summaryCard: {
     backgroundColor: '#ffffff',
-    borderColor: '#ebdec6',
+    borderColor: '#dfe5ef',
     borderRadius: 18,
     borderWidth: 1,
     gap: 8,
@@ -2901,10 +3054,19 @@ const styles = StyleSheet.create({
   },
   jobHomeCard: {
     backgroundColor: '#ffffff',
-    borderColor: '#ebdec6',
+    borderColor: '#d6deea',
     borderRadius: 18,
     borderWidth: 1,
     gap: 8,
+    padding: 16
+  },
+  expandedJobCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#c9d5e5',
+    borderRadius: 18,
+    borderWidth: 1,
+    gap: 10,
+    overflow: 'hidden',
     padding: 16
   },
   jobHomeHeader: {
@@ -2950,7 +3112,7 @@ const styles = StyleSheet.create({
   queueBadgeAlert: { backgroundColor: '#fdecea', color: '#9f1d15' },
   queueBadgeAttention: { backgroundColor: '#fff7e1', color: '#8a5a00' },
   queueBadgeQuiet: { backgroundColor: '#e8f3ed', color: '#1c6b57' },
-  segmentedControl: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  segmentedControl: { flexDirection: 'row', gap: 8, paddingHorizontal: 4 },
   segmentButton: {
     borderColor: '#cdbfa6',
     borderRadius: 999,
@@ -3026,5 +3188,33 @@ const styles = StyleSheet.create({
   replacementOptionLabel: { color: '#1f2933', fontSize: 14, fontWeight: '700' },
   replacementOptionLabelSelected: { color: '#ffffff' },
   replacementOptionDetailSelected: { color: '#e8f3ed' },
-  errorText: { color: '#b42318', fontSize: 14 }
+  errorText: { color: '#b42318', fontSize: 14 },
+  scheduleLabel: { color: '#475569', fontSize: 13, fontWeight: '700', lineHeight: 18 },
+  jobCardTitle: { color: '#0b1f44', fontSize: 19, fontWeight: '700', lineHeight: 26 },
+  segmentedControlScroller: { marginHorizontal: -4 },
+  bottomNav: {
+    alignItems: 'center',
+    backgroundColor: '#ffffff',
+    borderColor: '#d7deea',
+    borderTopWidth: 1,
+    bottom: 0,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    left: 0,
+    paddingBottom: 12,
+    paddingHorizontal: 12,
+    paddingTop: 8,
+    position: 'absolute',
+    right: 0
+  },
+  bottomNavButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    minWidth: 68,
+    paddingHorizontal: 10,
+    paddingVertical: 10
+  },
+  bottomNavButtonActive: { backgroundColor: '#d6e7ff' },
+  bottomNavText: { color: '#1f2933', fontSize: 12, fontWeight: '700' },
+  bottomNavTextActive: { color: '#0b1f44' }
 });

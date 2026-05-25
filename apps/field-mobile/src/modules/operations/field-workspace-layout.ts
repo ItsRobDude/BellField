@@ -12,6 +12,7 @@ export const fieldDetailTabs = [
 export type FieldDetailTab = (typeof fieldDetailTabs)[number]['id'];
 export type FieldJob = FieldAssignedWorkResponse['jobs'][number];
 export type FieldEquipmentRecord = FieldAssignedWorkResponse['equipment'][number];
+type FieldAppointment = FieldJob['appointments'][number];
 
 export type FieldReplacementEquipmentOption = {
   detail: string;
@@ -23,6 +24,13 @@ export type JobQueueBadge = {
   count: number;
   label: string;
   tone: 'quiet' | 'attention' | 'alert';
+};
+
+export type FieldJobCardMetadata = {
+  countsLine: string;
+  locationLine: string;
+  scheduleLabel: string;
+  title: string;
 };
 
 export function buildFieldMediaCaptionDraftKey(input: {
@@ -45,6 +53,62 @@ export function resolveSelectedFieldJob(
 
 export function shouldReturnToFieldHome(jobs: FieldJob[], selectedJobId: string | null): boolean {
   return Boolean(selectedJobId && !resolveSelectedFieldJob(jobs, selectedJobId));
+}
+
+export function sortFieldJobsBySchedule(jobs: FieldJob[], currentEmployeeId: string): FieldJob[] {
+  return [...jobs].sort((left, right) => {
+    const leftAppointment = selectTimelineAppointment(left, currentEmployeeId);
+    const rightAppointment = selectTimelineAppointment(right, currentEmployeeId);
+    const scheduleCompare = buildAppointmentSortKey(leftAppointment).localeCompare(
+      buildAppointmentSortKey(rightAppointment)
+    );
+
+    if (scheduleCompare !== 0) {
+      return scheduleCompare;
+    }
+
+    return left.jobNumber.localeCompare(right.jobNumber, undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    });
+  });
+}
+
+export function formatFieldJobCardScheduleLabel(job: FieldJob, currentEmployeeId: string): string {
+  const appointment = selectTimelineAppointment(job, currentEmployeeId);
+
+  if (!appointment) {
+    return 'Unscheduled';
+  }
+
+  const dateLabel = appointment.scheduledDate || 'Unscheduled';
+  const structuredTime = formatStructuredTime(appointment);
+
+  if (structuredTime) {
+    return `${dateLabel} - ${structuredTime}`;
+  }
+
+  if (appointment.timeWindowLabel) {
+    return `${dateLabel} - ${appointment.timeWindowLabel}`;
+  }
+
+  return dateLabel;
+}
+
+export function buildFieldJobCardMetadata(input: {
+  currentEmployeeId: string;
+  equipmentCount: number;
+  job: FieldJob;
+  locationAddress: string;
+  locationName: string;
+  registerEntryCount: number;
+}): FieldJobCardMetadata {
+  return {
+    countsLine: `Appointments: ${input.job.appointments.length} - Register: ${input.registerEntryCount} - Equipment: ${input.equipmentCount}`,
+    locationLine: `${input.locationName} - ${input.locationAddress}`,
+    scheduleLabel: formatFieldJobCardScheduleLabel(input.job, input.currentEmployeeId),
+    title: `Job ${input.job.jobNumber}: ${input.job.summary}`
+  };
 }
 
 export function getPendingOperationsForJob(
@@ -146,4 +210,52 @@ function formatReplacementEquipmentDetail(record: FieldEquipmentRecord): string 
   ].filter((entry): entry is string => Boolean(entry));
 
   return detailParts.join(' - ');
+}
+
+function selectTimelineAppointment(
+  job: FieldJob,
+  currentEmployeeId: string
+): FieldAppointment | undefined {
+  const currentTechnicianAppointments = job.appointments.filter(
+    (appointment) =>
+      appointment.technicianId === currentEmployeeId && appointment.status !== 'cancelled'
+  );
+
+  if (currentTechnicianAppointments.length > 0) {
+    return sortAppointments(currentTechnicianAppointments)[0];
+  }
+
+  const activeAppointments = job.appointments.filter(
+    (appointment) => appointment.status !== 'cancelled'
+  );
+
+  return sortAppointments(activeAppointments.length > 0 ? activeAppointments : job.appointments)[0];
+}
+
+function sortAppointments(appointments: FieldAppointment[]): FieldAppointment[] {
+  return [...appointments].sort((left, right) =>
+    buildAppointmentSortKey(left).localeCompare(buildAppointmentSortKey(right))
+  );
+}
+
+function buildAppointmentSortKey(appointment: FieldAppointment | undefined): string {
+  if (!appointment) {
+    return '9999-12-31|99:99|zzzzzz';
+  }
+
+  return [
+    appointment.scheduledDate || '9999-12-31',
+    appointment.scheduledStartTime || '99:99',
+    appointment.scheduledEndTime || '99:99',
+    appointment.timeWindowLabel || 'zzzzzz',
+    appointment.createdAt
+  ].join('|');
+}
+
+function formatStructuredTime(appointment: FieldAppointment): string | undefined {
+  if (appointment.scheduledStartTime && appointment.scheduledEndTime) {
+    return `${appointment.scheduledStartTime}-${appointment.scheduledEndTime}`;
+  }
+
+  return appointment.scheduledStartTime ?? appointment.scheduledEndTime;
 }

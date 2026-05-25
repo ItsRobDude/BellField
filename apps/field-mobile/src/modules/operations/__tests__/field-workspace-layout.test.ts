@@ -2,13 +2,16 @@ import { describe, expect, it } from 'vitest';
 import type { AppointmentSummary, EquipmentSummary, JobSummary } from '@bellfield/contracts';
 import type { PendingOperation } from '../field-sync-types';
 import {
+  buildFieldJobCardMetadata,
   buildFieldMediaCaptionDraftKey,
   buildReplacementEquipmentOptions,
   countJobRegisterEntries,
   fieldDetailTabs,
+  formatFieldJobCardScheduleLabel,
   getPendingOperationsForJob,
   resolveSelectedFieldJob,
   shouldReturnToFieldHome,
+  sortFieldJobsBySchedule,
   summarizeJobQueueBadge
 } from '../field-workspace-layout';
 
@@ -91,6 +94,165 @@ describe('field workspace layout helpers', () => {
       'equipment',
       'sync'
     ]);
+  });
+
+  it('sorts assigned jobs by the current technician appointment timeline', () => {
+    const jobs = [
+      buildJob({
+        id: 'job-2',
+        jobNumber: '1002',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-2',
+            jobId: 'job-2',
+            scheduledDate: '2026-05-24',
+            scheduledStartTime: '13:00',
+            technicianId: 'employee-1'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-1',
+        jobNumber: '1001',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-1',
+            jobId: 'job-1',
+            scheduledDate: '2026-05-24',
+            scheduledStartTime: '08:00',
+            technicianId: 'employee-1'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-3',
+        jobNumber: '1003',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-3',
+            jobId: 'job-3',
+            scheduledDate: '2026-05-25',
+            scheduledStartTime: '09:00',
+            technicianId: 'employee-1'
+          })
+        ]
+      })
+    ];
+
+    expect(sortFieldJobsBySchedule(jobs, 'employee-1').map((job) => job.jobNumber)).toEqual([
+      '1001',
+      '1002',
+      '1003'
+    ]);
+  });
+
+  it('prefers the current technician appointment when sorting mixed-assignment jobs', () => {
+    const jobs = [
+      buildJob({
+        id: 'job-1',
+        jobNumber: '1001',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-other',
+            jobId: 'job-1',
+            scheduledDate: '2026-05-24',
+            scheduledStartTime: '07:00',
+            technicianId: 'employee-2'
+          }),
+          buildAppointment({
+            id: 'appointment-current',
+            jobId: 'job-1',
+            scheduledDate: '2026-05-24',
+            scheduledStartTime: '15:00',
+            technicianId: 'employee-1'
+          })
+        ]
+      }),
+      buildJob({
+        id: 'job-2',
+        jobNumber: '1002',
+        appointments: [
+          buildAppointment({
+            id: 'appointment-2',
+            jobId: 'job-2',
+            scheduledDate: '2026-05-24',
+            scheduledStartTime: '10:00',
+            technicianId: 'employee-1'
+          })
+        ]
+      })
+    ];
+
+    expect(sortFieldJobsBySchedule(jobs, 'employee-1').map((job) => job.jobNumber)).toEqual([
+      '1002',
+      '1001'
+    ]);
+  });
+
+  it('formats schedule labels from structured times, arrival windows, and unscheduled jobs', () => {
+    expect(
+      formatFieldJobCardScheduleLabel(
+        buildJob({
+          appointments: [
+            buildAppointment({
+              scheduledDate: '2026-05-24',
+              scheduledStartTime: '08:00',
+              scheduledEndTime: '10:00',
+              technicianId: 'employee-1'
+            })
+          ]
+        }),
+        'employee-1'
+      )
+    ).toBe('2026-05-24 - 08:00-10:00');
+
+    expect(
+      formatFieldJobCardScheduleLabel(
+        buildJob({
+          appointments: [
+            buildAppointment({
+              scheduledDate: '2026-05-24',
+              timeWindowLabel: '8:00 AM - 10:00 AM',
+              technicianId: 'employee-1'
+            })
+          ]
+        }),
+        'employee-1'
+      )
+    ).toBe('2026-05-24 - 8:00 AM - 10:00 AM');
+
+    expect(formatFieldJobCardScheduleLabel(buildJob({ appointments: [] }), 'employee-1')).toBe(
+      'Unscheduled'
+    );
+  });
+
+  it('builds collapsed job card metadata without losing queue-relevant counts', () => {
+    const job = buildJob({
+      appointments: [
+        buildAppointment({
+          scheduledDate: '2026-05-24',
+          scheduledStartTime: '08:00',
+          scheduledEndTime: '10:00',
+          technicianId: 'employee-1'
+        })
+      ]
+    });
+
+    expect(
+      buildFieldJobCardMetadata({
+        currentEmployeeId: 'employee-1',
+        equipmentCount: 2,
+        job,
+        locationAddress: '214 Cedar Avenue, Everett, WA 98201',
+        locationName: 'Parker Residence',
+        registerEntryCount: 1
+      })
+    ).toEqual({
+      countsLine: 'Appointments: 1 - Register: 1 - Equipment: 2',
+      locationLine: 'Parker Residence - 214 Cedar Avenue, Everett, WA 98201',
+      scheduleLabel: '2026-05-24 - 08:00-10:00',
+      title: 'Job 1001: No cooling'
+    });
   });
 
   it('builds queue badges from job, appointment, equipment, register, and media operations', () => {
