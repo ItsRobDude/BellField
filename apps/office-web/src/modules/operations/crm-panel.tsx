@@ -28,6 +28,18 @@ import {
   updateOfficeCustomer,
   updateOfficeLocation
 } from '@/lib/operations-api';
+import { CrmContactCreatePanel } from './crm-contact-create-panel';
+import { CrmCustomerCreatePanel } from './crm-customer-create-panel';
+import { CrmLocationCreatePanel } from './crm-location-create-panel';
+import type {
+  ContactFormState,
+  ContactLinkDraft,
+  CrmPanelMode,
+  CustomerFormState,
+  LocationDetailTab,
+  LocationFormState
+} from './crm-panel-types';
+import { CrmSearchPanel } from './crm-search-panel';
 import { LocationEquipmentSection } from './location-equipment-section';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -38,59 +50,6 @@ type Props = {
   canReplaceRemoveEquipment?: boolean;
   canDeleteEquipment?: boolean;
 };
-
-type CustomerFormState = {
-  name: string;
-  accountType: string;
-  billingAddressLine1: string;
-  billingCity: string;
-  billingState: string;
-  billingPostalCode: string;
-  phone: string;
-  email: string;
-  fax: string;
-  flags: string;
-};
-
-type LocationFormState = {
-  customerId: string;
-  name: string;
-  addressLine1: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  phone: string;
-  email: string;
-  fax: string;
-  alternateBillToCustomerIds: string[];
-};
-
-type ContactFormState = {
-  displayName: string;
-  phone: string;
-  email: string;
-  fax: string;
-  tags: string;
-};
-
-type ContactLinkDraft = {
-  phone: string;
-  email: string;
-  fax: string;
-  tags: string;
-  scope: ContactUpdateScope;
-};
-
-type CrmPanelMode =
-  | 'search'
-  | 'newCustomer'
-  | 'newLocation'
-  | 'newContact'
-  | 'customerDetail'
-  | 'locationDetail'
-  | 'contactDetail';
-
-type LocationDetailTab = 'overview' | 'equipment' | 'contacts' | 'history';
 
 const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
@@ -779,434 +738,53 @@ export function CrmPanel({
       {crmNoticeMessage ? <p style={styles.notice}>{crmNoticeMessage}</p> : null}
 
       {mode === 'search' ? (
-        <div style={styles.panel}>
-          <div style={styles.row}>
-            <h3 style={styles.subheading}>Find customers, locations, and contacts</h3>
-            <div style={styles.inlineActionBar}>
-              <button type="button" onClick={openNewCustomerForm} style={styles.primaryButton}>
-                New customer
-              </button>
-              <button type="button" onClick={openNewLocationForm} style={styles.button}>
-                New location
-              </button>
-              <button type="button" onClick={openNewContactForm} style={styles.button}>
-                New contact
-              </button>
-            </div>
-          </div>
-          <label style={styles.fieldLabel}>
-            <span>Search</span>
-            <input
-              aria-label="Customer, location, or contact search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search by name, address, phone"
-              style={styles.input}
-            />
-          </label>
-          {isSearching ? <p style={styles.tinyMuted}>Searching...</p> : null}
-          {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 ? (
-            <p style={styles.tinyMuted}>Type at least 2 characters.</p>
-          ) : null}
-          <div style={styles.list}>
-            {searchResults.map((result) => (
-              <button
-                key={`${result.kind}-${result.id}`}
-                type="button"
-                onClick={() => void selectResult(result)}
-                style={styles.cardButton}
-              >
-                <strong>
-                  {result.title} {result.badges.includes('DNU') ? '(DNU)' : ''}
-                </strong>
-                <span style={styles.tinyMuted}>
-                  {result.kind} - {result.subtitle}
-                </span>
-                {result.badges.length > 0 ? (
-                  <span style={styles.badgeRow}>
-                    {result.badges.map((badge: string) => (
-                      <span key={badge} style={badge === 'DNU' ? styles.dangerBadge : styles.badge}>
-                        {badge}
-                      </span>
-                    ))}
-                  </span>
-                ) : null}
-              </button>
-            ))}
-          </div>
-        </div>
+        <CrmSearchPanel
+          isSearching={isSearching}
+          onNewContact={openNewContactForm}
+          onNewCustomer={openNewCustomerForm}
+          onNewLocation={openNewLocationForm}
+          onSearchQueryChange={setSearchQuery}
+          onSelectResult={(result) => void selectResult(result)}
+          searchQuery={searchQuery}
+          searchResults={searchResults}
+        />
       ) : null}
 
       {mode === 'newCustomer' ? (
-        <div style={styles.panel}>
-          <div style={styles.row}>
-            <h3 style={styles.subheading}>Create customer</h3>
-            <button type="button" onClick={returnToSearch} style={styles.button}>
-              Back
-            </button>
-          </div>
-          <div style={styles.formRow}>
-            <input
-              value={customerForm.name}
-              onChange={(event) => {
-                setCustomerForm((current) => ({ ...current, name: event.target.value }));
-                setCustomerDuplicateWarnings([]);
-              }}
-              placeholder="Customer name"
-              style={styles.input}
-            />
-            <select
-              value={customerForm.accountType}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, accountType: event.target.value }))
-              }
-              style={styles.input}
-            >
-              <option value="residential">Residential</option>
-              <option value="company">Company</option>
-              <option value="propertyManager">Property manager</option>
-              <option value="landlord">Landlord</option>
-            </select>
-            <input
-              value={customerForm.billingAddressLine1}
-              onChange={(event) => {
-                setCustomerForm((current) => ({
-                  ...current,
-                  billingAddressLine1: event.target.value
-                }));
-                setCustomerDuplicateWarnings([]);
-              }}
-              placeholder="Billing address"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.billingCity}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, billingCity: event.target.value }))
-              }
-              placeholder="City"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.billingState}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, billingState: event.target.value }))
-              }
-              placeholder="State"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.billingPostalCode}
-              onChange={(event) =>
-                setCustomerForm((current) => ({
-                  ...current,
-                  billingPostalCode: event.target.value
-                }))
-              }
-              placeholder="Postal code"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.phone}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, phone: event.target.value }))
-              }
-              placeholder="Phone"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.email}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, email: event.target.value }))
-              }
-              placeholder="Email"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.fax}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, fax: event.target.value }))
-              }
-              placeholder="Fax"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.flags}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, flags: event.target.value }))
-              }
-              placeholder="Flags (comma separated)"
-              style={styles.input}
-            />
-          </div>
-          {customerDuplicateWarnings.length > 0 ? (
-            <div style={styles.subpanel}>
-              <strong>Possible duplicate customer</strong>
-              {customerDuplicateWarnings.map((warning) => (
-                <div key={warning.id} style={styles.tinyMuted}>
-                  {warning.title} - {warning.subtitle}
-                </div>
-              ))}
-              <div style={styles.row}>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateCustomer(true)}
-                  style={styles.primaryButton}
-                >
-                  Create anyway
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCustomerDuplicateWarnings([])}
-                  style={styles.button}
-                >
-                  Keep editing
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void handleCreateCustomer()}
-            style={styles.primaryButton}
-          >
-            Create customer
-          </button>
-        </div>
+        <CrmCustomerCreatePanel
+          customerForm={customerForm}
+          duplicateWarnings={customerDuplicateWarnings}
+          onBack={returnToSearch}
+          onChangeCustomerForm={setCustomerForm}
+          onClearDuplicateWarnings={() => setCustomerDuplicateWarnings([])}
+          onCreateCustomer={(forceConfirm) => void handleCreateCustomer(forceConfirm)}
+        />
       ) : null}
 
       {mode === 'newLocation' ? (
-        <div style={styles.panel}>
-          <div style={styles.row}>
-            <h3 style={styles.subheading}>Create location</h3>
-            <button type="button" onClick={returnToSearch} style={styles.button}>
-              Back
-            </button>
-          </div>
-          <div style={styles.formRow}>
-            <select
-              value={locationForm.customerId}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, customerId: event.target.value }))
-              }
-              style={styles.input}
-            >
-              {activeCustomerOptions.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-            <input
-              value={locationForm.name}
-              onChange={(event) => {
-                setLocationForm((current) => ({ ...current, name: event.target.value }));
-                setLocationDuplicateWarnings([]);
-              }}
-              placeholder="Location name"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.addressLine1}
-              onChange={(event) => {
-                setLocationForm((current) => ({ ...current, addressLine1: event.target.value }));
-                setLocationDuplicateWarnings([]);
-              }}
-              placeholder="Service address"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.city}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, city: event.target.value }))
-              }
-              placeholder="City"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.state}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, state: event.target.value }))
-              }
-              placeholder="State"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.postalCode}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, postalCode: event.target.value }))
-              }
-              placeholder="Postal code"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.phone}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, phone: event.target.value }))
-              }
-              placeholder="Phone"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.email}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, email: event.target.value }))
-              }
-              placeholder="Email"
-              style={styles.input}
-            />
-            <input
-              value={locationForm.fax}
-              onChange={(event) =>
-                setLocationForm((current) => ({ ...current, fax: event.target.value }))
-              }
-              placeholder="Fax"
-              style={styles.input}
-            />
-          </div>
-          <label style={styles.inlineLabel}>
-            <span>Alternate bill-to customers</span>
-            <select
-              multiple
-              value={locationForm.alternateBillToCustomerIds}
-              onChange={(event) =>
-                setLocationForm((current) => ({
-                  ...current,
-                  alternateBillToCustomerIds: Array.from(event.target.selectedOptions).map(
-                    (option) => option.value
-                  )
-                }))
-              }
-              style={styles.input}
-            >
-              {activeCustomerOptions.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          {locationDuplicateWarnings.length > 0 ? (
-            <div style={styles.subpanel}>
-              <strong>Possible duplicate location</strong>
-              {locationDuplicateWarnings.map((warning) => (
-                <div key={warning.id} style={styles.tinyMuted}>
-                  {warning.title} - {warning.subtitle}
-                </div>
-              ))}
-              <div style={styles.row}>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateLocation({ confirmDuplicate: true })}
-                  style={styles.primaryButton}
-                >
-                  Create anyway
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLocationDuplicateWarnings([])}
-                  style={styles.button}
-                >
-                  Keep editing
-                </button>
-              </div>
-            </div>
-          ) : null}
-          {createLocationMissingContactConfirmation ? (
-            <div style={styles.subpanel}>
-              <strong>Location has no phone or email</strong>
-              <div style={styles.tinyMuted}>This location has no phone or email. Is that okay?</div>
-              {locationForm.fax.trim() ? (
-                <div style={styles.tinyMuted}>
-                  Fax will be saved, but phone and email are still missing.
-                </div>
-              ) : null}
-              <div style={styles.row}>
-                <button
-                  type="button"
-                  onClick={() => void handleCreateLocation({ confirmMissingContactInfo: true })}
-                  style={styles.primaryButton}
-                >
-                  Create without phone or email
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setCreateLocationMissingContactConfirmation(false)}
-                  style={styles.button}
-                >
-                  Keep editing
-                </button>
-              </div>
-            </div>
-          ) : null}
-          <button
-            type="button"
-            onClick={() => void handleCreateLocation()}
-            style={styles.primaryButton}
-          >
-            Create location
-          </button>
-        </div>
+        <CrmLocationCreatePanel
+          activeCustomerOptions={activeCustomerOptions}
+          duplicateWarnings={locationDuplicateWarnings}
+          locationForm={locationForm}
+          missingContactConfirmation={createLocationMissingContactConfirmation}
+          onBack={returnToSearch}
+          onCancelMissingContactConfirmation={() =>
+            setCreateLocationMissingContactConfirmation(false)
+          }
+          onChangeLocationForm={setLocationForm}
+          onClearDuplicateWarnings={() => setLocationDuplicateWarnings([])}
+          onCreateLocation={(options) => void handleCreateLocation(options)}
+        />
       ) : null}
 
       {mode === 'newContact' ? (
-        <div style={styles.panel}>
-          <div style={styles.row}>
-            <h3 style={styles.subheading}>New contact</h3>
-            <button type="button" onClick={returnFromContactForm} style={styles.button}>
-              Back
-            </button>
-          </div>
-          <div style={styles.formRow}>
-            <input
-              value={contactForm.displayName}
-              onChange={(event) =>
-                setContactForm((current) => ({ ...current, displayName: event.target.value }))
-              }
-              placeholder="Display name"
-              style={styles.input}
-            />
-            <input
-              value={contactForm.phone}
-              onChange={(event) =>
-                setContactForm((current) => ({ ...current, phone: event.target.value }))
-              }
-              placeholder="Phone"
-              style={styles.input}
-            />
-            <input
-              value={contactForm.email}
-              onChange={(event) =>
-                setContactForm((current) => ({ ...current, email: event.target.value }))
-              }
-              placeholder="Email"
-              style={styles.input}
-            />
-            <input
-              value={contactForm.fax}
-              onChange={(event) =>
-                setContactForm((current) => ({ ...current, fax: event.target.value }))
-              }
-              placeholder="Fax"
-              style={styles.input}
-            />
-            <input
-              value={contactForm.tags}
-              onChange={(event) =>
-                setContactForm((current) => ({ ...current, tags: event.target.value }))
-              }
-              placeholder="Tags (comma separated)"
-              style={styles.input}
-            />
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleCreateContactAndMaybeLink()}
-            style={styles.primaryButton}
-          >
-            {selectedCustomer || selectedLocation ? 'Create and link contact' : 'Create contact'}
-          </button>
-        </div>
+        <CrmContactCreatePanel
+          contactForm={contactForm}
+          isLinkingToSelectedRecord={Boolean(selectedCustomer || selectedLocation)}
+          onBack={returnFromContactForm}
+          onChangeContactForm={setContactForm}
+          onCreateContact={() => void handleCreateContactAndMaybeLink()}
+        />
       ) : null}
 
       {(mode === 'customerDetail' || mode === 'locationDetail' || mode === 'contactDetail') &&
