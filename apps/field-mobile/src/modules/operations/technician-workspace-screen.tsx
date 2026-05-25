@@ -59,6 +59,7 @@ import {
   summarizeSyncHealth,
   type SyncTone
 } from './field-sync-status';
+import { FieldWorkspaceBottomNav, type FieldWorkspaceTab } from './field-workspace-bottom-nav';
 import {
   buildAppointmentOwnershipWarning,
   formatAppointmentAssignmentLine,
@@ -159,7 +160,6 @@ type FinishReviewState = {
 };
 
 type FieldAppointment = FieldAssignedWorkResponse['jobs'][number]['appointments'][number];
-type FieldWorkspaceTab = 'jobs' | 'messages' | 'sync' | 'settings';
 
 const fieldAppointmentStatuses: AppointmentStatus[] = [
   'scheduled',
@@ -178,13 +178,6 @@ const registerEntryKinds: RegisterEntryKind[] = [
   'part',
   'membership',
   'other'
-];
-
-const fieldWorkspaceTabs: { id: FieldWorkspaceTab; label: string }[] = [
-  { id: 'jobs', label: 'Jobs' },
-  { id: 'messages', label: 'Messages' },
-  { id: 'sync', label: 'Sync' },
-  { id: 'settings', label: 'Settings' }
 ];
 
 const defaultSyncMetadata: SyncMetadata = {
@@ -2862,25 +2855,11 @@ export function TechnicianWorkspaceScreen({
           ) : null}
         </View>
       </ScrollView>
-      <View style={[styles.bottomNav, { paddingBottom: Math.max(12, safeAreaInsets.bottom + 8) }]}>
-        {fieldWorkspaceTabs.map((tab) => {
-          const isActive = activeWorkspaceTab === tab.id;
-
-          return (
-            <Pressable
-              key={tab.id}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isActive }}
-              onPress={() => setActiveWorkspaceTab(tab.id)}
-              style={[styles.bottomNavButton, isActive ? styles.bottomNavButtonActive : null]}
-            >
-              <Text style={[styles.bottomNavText, isActive ? styles.bottomNavTextActive : null]}>
-                {tab.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
+      <FieldWorkspaceBottomNav
+        activeTab={activeWorkspaceTab}
+        onChangeTab={setActiveWorkspaceTab}
+        safeAreaBottom={safeAreaInsets.bottom}
+      />
       <StatusBar style="dark" />
     </SafeAreaView>
   );
@@ -3191,30 +3170,5 @@ const styles = StyleSheet.create({
   errorText: { color: '#b42318', fontSize: 14 },
   scheduleLabel: { color: '#475569', fontSize: 13, fontWeight: '700', lineHeight: 18 },
   jobCardTitle: { color: '#0b1f44', fontSize: 19, fontWeight: '700', lineHeight: 26 },
-  segmentedControlScroller: { marginHorizontal: -4 },
-  bottomNav: {
-    alignItems: 'center',
-    backgroundColor: '#ffffff',
-    borderColor: '#d7deea',
-    borderTopWidth: 1,
-    bottom: 0,
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    left: 0,
-    paddingBottom: 12,
-    paddingHorizontal: 12,
-    paddingTop: 8,
-    position: 'absolute',
-    right: 0
-  },
-  bottomNavButton: {
-    alignItems: 'center',
-    borderRadius: 18,
-    minWidth: 68,
-    paddingHorizontal: 10,
-    paddingVertical: 10
-  },
-  bottomNavButtonActive: { backgroundColor: '#d6e7ff' },
-  bottomNavText: { color: '#1f2933', fontSize: 12, fontWeight: '700' },
-  bottomNavTextActive: { color: '#0b1f44' }
+  segmentedControlScroller: { marginHorizontal: -4 }
 });
