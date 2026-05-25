@@ -55,12 +55,12 @@ import {
   type RegisterEntryEditDraft
 } from './job-work-types';
 import { JobsQueuePanel } from './jobs-queue-panel';
+import { OfficeWorkspaceFrame, type OfficeView } from './office-workspace-frame';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
 const jobIntakeSearchDebounceMs = 250;
-type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'jobDetail';
 
 type Props = {
   apiBaseUrl: string;
@@ -1148,229 +1148,163 @@ export function OfficeWorkspaceShell({
   const selectedJob = selectedJobDetail?.job ?? null;
 
   return (
-    <main style={styles.page}>
-      <div style={styles.shell}>
-        <aside style={styles.rail} aria-label="Office navigation">
-          <div style={styles.railBrand}>BellField</div>
-          <NavButton
-            label="Dispatch"
-            active={activeOfficeView === 'dispatch'}
-            onClick={() => setActiveOfficeView('dispatch')}
-          />
-          <NavButton
-            label="Customers"
-            active={activeOfficeView === 'customers'}
-            onClick={() => setActiveOfficeView('customers')}
-          />
-          <NavButton
-            label="Jobs"
-            active={activeOfficeView === 'jobs'}
-            onClick={() => setActiveOfficeView('jobs')}
-          />
-        </aside>
-
-        <div style={styles.workArea}>
-          <section style={styles.topBar}>
-            <div>
-              <strong>{employee.displayName}</strong>
-              <p style={styles.tinyMuted}>{employee.email}</p>
-            </div>
-            <div style={styles.row}>
-              <button
-                type="button"
-                onClick={() => void handleOpenJobIntake()}
-                disabled={isJobIntakeLoading}
-                style={styles.primaryButton}
-              >
-                {isJobIntakeLoading ? 'Loading...' : 'New job'}
-              </button>
-              <button
-                type="button"
-                onClick={() => void refreshAllWorkspace()}
-                style={styles.button}
-              >
-                {isRefreshing || isDispatchRefreshing || isJobsQueueRefreshing || isJobIntakeLoading
-                  ? 'Refreshing...'
-                  : 'Refresh'}
-              </button>
-              <button type="button" onClick={onSignOut} style={styles.button}>
-                Sign out
-              </button>
-            </div>
-          </section>
-
-          {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-          {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
-
-          {isJobIntakeOpen && jobIntakeContext ? (
-            <JobIntakePanel
-              intakeContext={jobIntakeContext}
-              locationSearchQuery={jobLocationSearchQuery}
-              locationSearchResults={jobLocationSearchResults}
-              isLocationSearchLoading={isJobLocationSearchLoading}
-              selectedLocation={selectedJobLocation}
-              customerLocationOptions={customerLocationOptions}
-              customerLocationMessage={customerLocationMessage}
-              billToOptions={jobBillToOptions}
-              billToWarning={jobBillToWarning}
-              jobBillToCustomerId={jobBillToCustomerId}
-              jobType={jobType}
-              jobCategory={jobCategory}
-              jobOrigin={jobOrigin}
-              jobSummary={jobSummary}
-              jobTechnicianId={jobTechnicianId}
-              jobDate={jobDate}
-              jobStartTime={jobStartTime}
-              jobEndTime={jobEndTime}
-              jobWindow={jobWindow}
-              onLocationSearchQueryChange={setJobLocationSearchQuery}
-              onSelectLocationSearchResult={(result) =>
-                void handleSelectJobIntakeSearchResult(result)
-              }
-              onSelectCustomerLocation={(locationId) =>
-                void handleLoadJobIntakeLocation(locationId)
-              }
-              onClearSelectedLocation={clearJobIntakeLocationSelection}
-              onJobBillToCustomerChange={setJobBillToCustomerId}
-              onJobTypeChange={setJobType}
-              onJobCategoryChange={setJobCategory}
-              onJobOriginChange={setJobOrigin}
-              onJobSummaryChange={setJobSummary}
-              onJobTechnicianChange={setJobTechnicianId}
-              onJobDateChange={handleJobDateChange}
-              onJobStartTimeChange={setJobStartTime}
-              onJobEndTimeChange={setJobEndTime}
-              onJobWindowChange={setJobWindow}
-              onCreateJob={handleCreateJob}
-              onClose={() => setIsJobIntakeOpen(false)}
-            />
-          ) : null}
-
-          {activeOfficeView === 'dispatch' ? (
-            <DispatchBoardPanel
-              dispatchBoard={dispatchBoard}
-              viewDate={dispatchViewDate}
-              onViewDateChange={handleDispatchViewDateChange}
-              onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
-              isRefreshing={isDispatchRefreshing}
-              lastRefreshedAt={lastDispatchRefreshedAt}
-              onRefresh={handleDispatchRefresh}
-            />
-          ) : null}
-
-          {activeOfficeView === 'customers' ? (
-            <CrmPanel
-              apiBaseUrl={apiBaseUrl}
-              sessionToken={sessionToken}
-              onErrorMessage={setErrorMessage}
-              canReplaceRemoveEquipment={canReplaceRemoveEquipment}
-              canDeleteEquipment={canDeleteEquipment}
-            />
-          ) : null}
-
-          {activeOfficeView === 'jobs' && jobsQueue ? (
-            <JobsQueuePanel
-              jobsQueue={jobsQueue}
-              onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
-              onNewJob={() => void handleOpenJobIntake()}
-              onLoadMoreQueue={handleLoadMoreJobsQueue}
-            />
-          ) : null}
-
-          {activeOfficeView === 'jobs' && !jobsQueue ? (
-            <section style={styles.workspacePanel} aria-label="Jobs queue">
-              <p style={styles.muted}>Loading jobs...</p>
-            </section>
-          ) : null}
-
-          {activeOfficeView === 'jobDetail' && selectedJob && selectedJobDetail ? (
-            <JobDetailPanel
-              key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
-              technicians={selectedJobDetail.technicians}
-              job={selectedJob}
-              initialTab={jobDetailInitialTab}
-              focusedAppointmentId={focusedAppointmentId}
-              timelineHasMore={selectedJobDetail.timelineHasMore}
-              timelineLimit={selectedJobDetail.timelineLimit}
-              pendingJobStatusChange={pendingJobStatusChange}
-              appointmentDrafts={appointmentDrafts}
-              appointmentEditDrafts={appointmentEditDrafts}
-              capturedWork={capturedWorkByJobId[selectedJob.id]}
-              onBack={() => setActiveOfficeView('dispatch')}
-              onLoadCapturedWork={loadCapturedWork}
-              onJobStatusReviewRequested={handleJobStatusReviewRequested}
-              onConfirmJobStatusChange={confirmJobStatusChange}
-              onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
-              onAppointmentStatusChange={handleAppointmentStatusChange}
-              onAppointmentDraftChange={(jobId, patch) =>
-                setAppointmentDrafts((current) => ({
-                  ...current,
-                  [jobId]: { ...(current[jobId] ?? createEmptyAppointmentDraft()), ...patch }
-                }))
-              }
-              onAppointmentEditDraftChange={(appointmentId, baseDraft, patch) =>
-                setAppointmentEditDrafts((current) => ({
-                  ...current,
-                  [appointmentId]: { ...(current[appointmentId] ?? baseDraft), ...patch }
-                }))
-              }
-              onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
-              onAddAppointment={handleAddAppointment}
-              onKeepJobOpen={handleKeepJobOpen}
-              onRegisterDraftChange={handleRegisterDraftChange}
-              onSaveRegisterEntry={handleSaveRegisterEntry}
-              onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
-              onVoidRegisterEntry={handleVoidRegisterEntry}
-              onMediaCaptionChange={handleMediaCaptionChange}
-              onSaveMediaCaption={handleSaveMediaCaption}
-              onMediaVoidReasonChange={handleMediaVoidReasonChange}
-              onVoidMediaAttachment={handleVoidMediaAttachment}
-              onOpenMediaAttachment={handleOpenMediaAttachment}
-            />
-          ) : null}
-
-          {activeOfficeView === 'jobDetail' && !selectedJob && isJobDetailLoading ? (
-            <section style={styles.workspacePanel} aria-label="Job detail loading">
-              <p style={styles.muted}>Loading job...</p>
-            </section>
-          ) : null}
-
-          {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && jobsQueue ? (
-            <JobsQueuePanel
-              jobsQueue={jobsQueue}
-              onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
-              onNewJob={() => void handleOpenJobIntake()}
-              onLoadMoreQueue={handleLoadMoreJobsQueue}
-            />
-          ) : null}
-
-          {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && !jobsQueue ? (
-            <section style={styles.workspacePanel} aria-label="Job detail loading">
-              <p style={styles.muted}>Loading job...</p>
-            </section>
-          ) : null}
-        </div>
-      </div>
-    </main>
-  );
-}
-
-function NavButton({
-  label,
-  active,
-  onClick
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      style={active ? styles.activeRailButton : styles.railButton}
-      onClick={onClick}
+    <OfficeWorkspaceFrame
+      activeView={activeOfficeView}
+      employee={employee}
+      errorMessage={errorMessage}
+      isDispatchRefreshing={isDispatchRefreshing}
+      isJobIntakeLoading={isJobIntakeLoading}
+      isJobsQueueRefreshing={isJobsQueueRefreshing}
+      isRefreshing={isRefreshing}
+      noticeMessage={noticeMessage}
+      onOpenJobIntake={() => void handleOpenJobIntake()}
+      onRefresh={() => void refreshAllWorkspace()}
+      onSignOut={onSignOut}
+      onViewChange={setActiveOfficeView}
     >
-      {label}
-    </button>
+      {isJobIntakeOpen && jobIntakeContext ? (
+        <JobIntakePanel
+          intakeContext={jobIntakeContext}
+          locationSearchQuery={jobLocationSearchQuery}
+          locationSearchResults={jobLocationSearchResults}
+          isLocationSearchLoading={isJobLocationSearchLoading}
+          selectedLocation={selectedJobLocation}
+          customerLocationOptions={customerLocationOptions}
+          customerLocationMessage={customerLocationMessage}
+          billToOptions={jobBillToOptions}
+          billToWarning={jobBillToWarning}
+          jobBillToCustomerId={jobBillToCustomerId}
+          jobType={jobType}
+          jobCategory={jobCategory}
+          jobOrigin={jobOrigin}
+          jobSummary={jobSummary}
+          jobTechnicianId={jobTechnicianId}
+          jobDate={jobDate}
+          jobStartTime={jobStartTime}
+          jobEndTime={jobEndTime}
+          jobWindow={jobWindow}
+          onLocationSearchQueryChange={setJobLocationSearchQuery}
+          onSelectLocationSearchResult={(result) => void handleSelectJobIntakeSearchResult(result)}
+          onSelectCustomerLocation={(locationId) => void handleLoadJobIntakeLocation(locationId)}
+          onClearSelectedLocation={clearJobIntakeLocationSelection}
+          onJobBillToCustomerChange={setJobBillToCustomerId}
+          onJobTypeChange={setJobType}
+          onJobCategoryChange={setJobCategory}
+          onJobOriginChange={setJobOrigin}
+          onJobSummaryChange={setJobSummary}
+          onJobTechnicianChange={setJobTechnicianId}
+          onJobDateChange={handleJobDateChange}
+          onJobStartTimeChange={setJobStartTime}
+          onJobEndTimeChange={setJobEndTime}
+          onJobWindowChange={setJobWindow}
+          onCreateJob={handleCreateJob}
+          onClose={() => setIsJobIntakeOpen(false)}
+        />
+      ) : null}
+
+      {activeOfficeView === 'dispatch' ? (
+        <DispatchBoardPanel
+          dispatchBoard={dispatchBoard}
+          viewDate={dispatchViewDate}
+          onViewDateChange={handleDispatchViewDateChange}
+          onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
+          isRefreshing={isDispatchRefreshing}
+          lastRefreshedAt={lastDispatchRefreshedAt}
+          onRefresh={handleDispatchRefresh}
+        />
+      ) : null}
+
+      {activeOfficeView === 'customers' ? (
+        <CrmPanel
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          onErrorMessage={setErrorMessage}
+          canReplaceRemoveEquipment={canReplaceRemoveEquipment}
+          canDeleteEquipment={canDeleteEquipment}
+        />
+      ) : null}
+
+      {activeOfficeView === 'jobs' && jobsQueue ? (
+        <JobsQueuePanel
+          jobsQueue={jobsQueue}
+          onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
+          onNewJob={() => void handleOpenJobIntake()}
+          onLoadMoreQueue={handleLoadMoreJobsQueue}
+        />
+      ) : null}
+
+      {activeOfficeView === 'jobs' && !jobsQueue ? (
+        <section style={styles.workspacePanel} aria-label="Jobs queue">
+          <p style={styles.muted}>Loading jobs...</p>
+        </section>
+      ) : null}
+
+      {activeOfficeView === 'jobDetail' && selectedJob && selectedJobDetail ? (
+        <JobDetailPanel
+          key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
+          technicians={selectedJobDetail.technicians}
+          job={selectedJob}
+          initialTab={jobDetailInitialTab}
+          focusedAppointmentId={focusedAppointmentId}
+          timelineHasMore={selectedJobDetail.timelineHasMore}
+          timelineLimit={selectedJobDetail.timelineLimit}
+          pendingJobStatusChange={pendingJobStatusChange}
+          appointmentDrafts={appointmentDrafts}
+          appointmentEditDrafts={appointmentEditDrafts}
+          capturedWork={capturedWorkByJobId[selectedJob.id]}
+          onBack={() => setActiveOfficeView('dispatch')}
+          onLoadCapturedWork={loadCapturedWork}
+          onJobStatusReviewRequested={handleJobStatusReviewRequested}
+          onConfirmJobStatusChange={confirmJobStatusChange}
+          onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
+          onAppointmentStatusChange={handleAppointmentStatusChange}
+          onAppointmentDraftChange={(jobId, patch) =>
+            setAppointmentDrafts((current) => ({
+              ...current,
+              [jobId]: { ...(current[jobId] ?? createEmptyAppointmentDraft()), ...patch }
+            }))
+          }
+          onAppointmentEditDraftChange={(appointmentId, baseDraft, patch) =>
+            setAppointmentEditDrafts((current) => ({
+              ...current,
+              [appointmentId]: { ...(current[appointmentId] ?? baseDraft), ...patch }
+            }))
+          }
+          onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
+          onAddAppointment={handleAddAppointment}
+          onKeepJobOpen={handleKeepJobOpen}
+          onRegisterDraftChange={handleRegisterDraftChange}
+          onSaveRegisterEntry={handleSaveRegisterEntry}
+          onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
+          onVoidRegisterEntry={handleVoidRegisterEntry}
+          onMediaCaptionChange={handleMediaCaptionChange}
+          onSaveMediaCaption={handleSaveMediaCaption}
+          onMediaVoidReasonChange={handleMediaVoidReasonChange}
+          onVoidMediaAttachment={handleVoidMediaAttachment}
+          onOpenMediaAttachment={handleOpenMediaAttachment}
+        />
+      ) : null}
+
+      {activeOfficeView === 'jobDetail' && !selectedJob && isJobDetailLoading ? (
+        <section style={styles.workspacePanel} aria-label="Job detail loading">
+          <p style={styles.muted}>Loading job...</p>
+        </section>
+      ) : null}
+
+      {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && jobsQueue ? (
+        <JobsQueuePanel
+          jobsQueue={jobsQueue}
+          onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
+          onNewJob={() => void handleOpenJobIntake()}
+          onLoadMoreQueue={handleLoadMoreJobsQueue}
+        />
+      ) : null}
+
+      {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && !jobsQueue ? (
+        <section style={styles.workspacePanel} aria-label="Job detail loading">
+          <p style={styles.muted}>Loading job...</p>
+        </section>
+      ) : null}
+    </OfficeWorkspaceFrame>
   );
 }
