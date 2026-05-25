@@ -30,20 +30,14 @@ import {
   type JobIntakeContextResponse,
   type JobStatus,
   type JobsQueueKey,
-  type JobsQueueResponse,
-  type LocationDetail,
-  type MediaAttachmentSummary,
-  type RegisterEntrySummary
+  type JobsQueueResponse
 } from '@/lib/operations-api';
 import { getCurrentOfficeSession, type EmployeeSummary } from '@/lib/identity-api';
-import { CrmPanel } from './crm-panel';
-import { DispatchBoardPanel } from './dispatch-board-panel';
-import { JobDetailPanel } from './job-detail-panel';
-import {
-  JobIntakePanel,
-  type JobIntakeBillToOption,
-  type JobIntakeCustomerLocationOption,
-  type JobIntakeSelectedLocation
+import { getDateInputValue } from './dispatch-date-picker';
+import type {
+  JobIntakeBillToOption,
+  JobIntakeCustomerLocationOption,
+  JobIntakeSelectedLocation
 } from './job-intake-panel';
 import {
   createEmptyAppointmentDraft,
@@ -54,9 +48,21 @@ import {
   type PendingJobStatusChange,
   type RegisterEntryEditDraft
 } from './job-work-types';
-import { JobsQueuePanel } from './jobs-queue-panel';
 import { OfficeWorkspaceFrame, type OfficeView } from './office-workspace-frame';
-import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import {
+  buildCapturedWorkDetails,
+  createLoadingCapturedWorkDetails,
+  dedupeBillToOptions,
+  getJobStatusReviewMessage,
+  mergeJobsQueueSection,
+  optionalString,
+  parseOptionalNumber,
+  parseRequiredNumber,
+  toActiveCustomerLocationOptions,
+  toJobIntakeSelectedLocation
+} from './office-workspace-shell-helpers';
+import { OfficeWorkspaceLoadingState } from './office-workspace-loading-state';
+import { OfficeWorkspaceSurfaces } from './office-workspace-surfaces';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
@@ -68,190 +74,6 @@ type Props = {
   sessionToken: string;
   onSignOut: () => void;
 };
-
-function toJobIntakeSelectedLocation(location: LocationDetail): JobIntakeSelectedLocation {
-  return {
-    id: location.id,
-    name: location.name,
-    customerId: location.customerId,
-    customerName: location.customerName,
-    addressLine1: location.addressLine1,
-    city: location.city,
-    state: location.state,
-    postalCode: location.postalCode
-  };
-}
-
-function toActiveCustomerLocationOptions(
-  customer: CustomerDetail
-): JobIntakeCustomerLocationOption[] {
-  return customer.locations
-    .filter((location) => location.isActive)
-    .map((location) => ({
-      id: location.id,
-      name: location.name,
-      addressLine1: location.addressLine1,
-      city: location.city,
-      state: location.state,
-      postalCode: location.postalCode
-    }));
-}
-
-function dedupeBillToOptions(options: JobIntakeBillToOption[]): JobIntakeBillToOption[] {
-  const seen = new Set<string>();
-
-  return options.filter((option) => {
-    if (seen.has(option.id)) {
-      return false;
-    }
-
-    seen.add(option.id);
-    return true;
-  });
-}
-
-function getJobStatusReviewMessage(
-  currentStatus: JobStatus,
-  nextStatus: JobStatus,
-  jobSummary: string,
-  cancellableAppointmentCount = 0
-): string {
-  if (currentStatus === nextStatus) {
-    return `Already ${formatJobStatusLabel(nextStatus)}.`;
-  }
-
-  if (nextStatus === 'cancelled') {
-    if (cancellableAppointmentCount === 0) {
-      return `Cancel "${jobSummary}"?`;
-    }
-
-    return `Cancel "${jobSummary}" and ${formatAppointmentCount(cancellableAppointmentCount)}?`;
-  }
-
-  return `Change status to ${formatJobStatusLabel(nextStatus)}?`;
-}
-
-function formatAppointmentCount(count: number): string {
-  return `${count} ${count === 1 ? 'appointment' : 'appointments'}`;
-}
-
-function formatJobStatusLabel(status: JobStatus): string {
-  const labels: Record<JobStatus, string> = {
-    new: 'New',
-    scheduled: 'Scheduled',
-    inProgress: 'In progress',
-    waitingOnParts: 'Waiting on parts',
-    completed: 'Completed',
-    closed: 'Closed',
-    cancelled: 'Cancelled'
-  };
-
-  return labels[status];
-}
-
-function getDateInputValue(date = new Date()): string {
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-
-  return `${date.getFullYear()}-${month}-${day}`;
-}
-
-function createRegisterEntryDraft(entry: RegisterEntrySummary): RegisterEntryEditDraft {
-  return {
-    appointmentId: entry.appointmentId ?? '',
-    kind: entry.kind,
-    description: entry.description,
-    quantity: String(entry.quantity),
-    unitOfMeasure: entry.unitOfMeasure ?? '',
-    unitPrice: entry.unitPrice === undefined ? '' : String(entry.unitPrice),
-    totalAmount: String(entry.totalAmount),
-    partNumber: entry.partNumber ?? '',
-    inventorySourceLabel: entry.inventorySourceLabel ?? ''
-  };
-}
-
-function buildCapturedWorkDetails(
-  registerEntries: RegisterEntrySummary[],
-  mediaAttachments: MediaAttachmentSummary[],
-  previous?: CapturedWorkDetails
-): CapturedWorkDetails {
-  return {
-    isOpen: previous?.isOpen ?? true,
-    isLoading: false,
-    registerEntries,
-    mediaAttachments,
-    registerDrafts: Object.fromEntries(
-      registerEntries.map((entry) => [entry.id, createRegisterEntryDraft(entry)])
-    ),
-    mediaCaptionDrafts: Object.fromEntries(
-      mediaAttachments.map((media) => [media.id, media.caption ?? ''])
-    ),
-    registerVoidReasons: previous?.registerVoidReasons ?? {},
-    mediaVoidReasons: previous?.mediaVoidReasons ?? {}
-  };
-}
-
-function createLoadingCapturedWorkDetails(previous?: CapturedWorkDetails): CapturedWorkDetails {
-  return {
-    isOpen: true,
-    isLoading: true,
-    registerEntries: previous?.registerEntries ?? [],
-    mediaAttachments: previous?.mediaAttachments ?? [],
-    registerDrafts: previous?.registerDrafts ?? {},
-    mediaCaptionDrafts: previous?.mediaCaptionDrafts ?? {},
-    registerVoidReasons: previous?.registerVoidReasons ?? {},
-    mediaVoidReasons: previous?.mediaVoidReasons ?? {}
-  };
-}
-
-function parseRequiredNumber(value: string, fieldLabel: string): number {
-  if (!value.trim()) {
-    throw new Error(`${fieldLabel} is required.`);
-  }
-
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`${fieldLabel} must be a valid number.`);
-  }
-  return parsed;
-}
-
-function parseOptionalNumber(value: string): number | null {
-  if (!value.trim()) {
-    return null;
-  }
-  return parseRequiredNumber(value, 'Unit price');
-}
-
-function optionalString(value: string): string | undefined {
-  const trimmed = value.trim();
-  return trimmed ? trimmed : undefined;
-}
-
-function mergeJobsQueueSection(
-  current: JobsQueueResponse,
-  nextPage: JobsQueueResponse,
-  queueKey: JobsQueueKey
-): JobsQueueResponse {
-  const nextSection = nextPage.queues.find((section) => section.key === queueKey);
-
-  if (!nextSection) {
-    return current;
-  }
-
-  return {
-    limit: current.limit,
-    queues: current.queues.map((section) =>
-      section.key === queueKey
-        ? {
-            ...nextSection,
-            jobs: [...section.jobs, ...nextSection.jobs],
-            totalCount: nextSection.totalCount
-          }
-        : section
-    )
-  };
-}
 
 export function OfficeWorkspaceShell({
   apiBaseUrl,
@@ -1015,6 +837,24 @@ export function OfficeWorkspaceShell({
     }
   }
 
+  function handleAppointmentDraftChange(jobId: string, patch: Partial<AppointmentDraft>) {
+    setAppointmentDrafts((current) => ({
+      ...current,
+      [jobId]: { ...(current[jobId] ?? createEmptyAppointmentDraft()), ...patch }
+    }));
+  }
+
+  function handleAppointmentEditDraftChange(
+    appointmentId: string,
+    baseDraft: AppointmentEditDraft,
+    patch: Partial<AppointmentEditDraft>
+  ) {
+    setAppointmentEditDrafts((current) => ({
+      ...current,
+      [appointmentId]: { ...(current[appointmentId] ?? baseDraft), ...patch }
+    }));
+  }
+
   async function handleSaveAppointmentSchedule(appointmentId: string) {
     const draft = appointmentEditDrafts[appointmentId];
 
@@ -1131,21 +971,13 @@ export function OfficeWorkspaceShell({
 
   if (!dispatchBoard) {
     return (
-      <main style={styles.page}>
-        <section style={styles.card}>
-          <div style={styles.kicker}>BellField Office</div>
-          <h1 style={styles.title}>{employee.displayName}</h1>
-          <p style={styles.muted}>
-            {isDispatchRefreshing ? 'Loading dispatch...' : 'Dispatch is not ready yet.'}
-          </p>
-          {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-        </section>
-      </main>
+      <OfficeWorkspaceLoadingState
+        employee={employee}
+        errorMessage={errorMessage}
+        isDispatchRefreshing={isDispatchRefreshing}
+      />
     );
   }
-
-  const selectedJobDetail = selectedJobId ? (jobDetailsById[selectedJobId] ?? null) : null;
-  const selectedJob = selectedJobDetail?.job ?? null;
 
   return (
     <OfficeWorkspaceFrame
@@ -1162,149 +994,89 @@ export function OfficeWorkspaceShell({
       onSignOut={onSignOut}
       onViewChange={setActiveOfficeView}
     >
-      {isJobIntakeOpen && jobIntakeContext ? (
-        <JobIntakePanel
-          intakeContext={jobIntakeContext}
-          locationSearchQuery={jobLocationSearchQuery}
-          locationSearchResults={jobLocationSearchResults}
-          isLocationSearchLoading={isJobLocationSearchLoading}
-          selectedLocation={selectedJobLocation}
-          customerLocationOptions={customerLocationOptions}
-          customerLocationMessage={customerLocationMessage}
-          billToOptions={jobBillToOptions}
-          billToWarning={jobBillToWarning}
-          jobBillToCustomerId={jobBillToCustomerId}
-          jobType={jobType}
-          jobCategory={jobCategory}
-          jobOrigin={jobOrigin}
-          jobSummary={jobSummary}
-          jobTechnicianId={jobTechnicianId}
-          jobDate={jobDate}
-          jobStartTime={jobStartTime}
-          jobEndTime={jobEndTime}
-          jobWindow={jobWindow}
-          onLocationSearchQueryChange={setJobLocationSearchQuery}
-          onSelectLocationSearchResult={(result) => void handleSelectJobIntakeSearchResult(result)}
-          onSelectCustomerLocation={(locationId) => void handleLoadJobIntakeLocation(locationId)}
-          onClearSelectedLocation={clearJobIntakeLocationSelection}
-          onJobBillToCustomerChange={setJobBillToCustomerId}
-          onJobTypeChange={setJobType}
-          onJobCategoryChange={setJobCategory}
-          onJobOriginChange={setJobOrigin}
-          onJobSummaryChange={setJobSummary}
-          onJobTechnicianChange={setJobTechnicianId}
-          onJobDateChange={handleJobDateChange}
-          onJobStartTimeChange={setJobStartTime}
-          onJobEndTimeChange={setJobEndTime}
-          onJobWindowChange={setJobWindow}
-          onCreateJob={handleCreateJob}
-          onClose={() => setIsJobIntakeOpen(false)}
-        />
-      ) : null}
-
-      {activeOfficeView === 'dispatch' ? (
-        <DispatchBoardPanel
-          dispatchBoard={dispatchBoard}
-          viewDate={dispatchViewDate}
-          onViewDateChange={handleDispatchViewDateChange}
-          onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
-          isRefreshing={isDispatchRefreshing}
-          lastRefreshedAt={lastDispatchRefreshedAt}
-          onRefresh={handleDispatchRefresh}
-        />
-      ) : null}
-
-      {activeOfficeView === 'customers' ? (
-        <CrmPanel
-          apiBaseUrl={apiBaseUrl}
-          sessionToken={sessionToken}
-          onErrorMessage={setErrorMessage}
-          canReplaceRemoveEquipment={canReplaceRemoveEquipment}
-          canDeleteEquipment={canDeleteEquipment}
-        />
-      ) : null}
-
-      {activeOfficeView === 'jobs' && jobsQueue ? (
-        <JobsQueuePanel
-          jobsQueue={jobsQueue}
-          onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
-          onNewJob={() => void handleOpenJobIntake()}
-          onLoadMoreQueue={handleLoadMoreJobsQueue}
-        />
-      ) : null}
-
-      {activeOfficeView === 'jobs' && !jobsQueue ? (
-        <section style={styles.workspacePanel} aria-label="Jobs queue">
-          <p style={styles.muted}>Loading jobs...</p>
-        </section>
-      ) : null}
-
-      {activeOfficeView === 'jobDetail' && selectedJob && selectedJobDetail ? (
-        <JobDetailPanel
-          key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
-          technicians={selectedJobDetail.technicians}
-          job={selectedJob}
-          initialTab={jobDetailInitialTab}
-          focusedAppointmentId={focusedAppointmentId}
-          timelineHasMore={selectedJobDetail.timelineHasMore}
-          timelineLimit={selectedJobDetail.timelineLimit}
-          pendingJobStatusChange={pendingJobStatusChange}
-          appointmentDrafts={appointmentDrafts}
-          appointmentEditDrafts={appointmentEditDrafts}
-          capturedWork={capturedWorkByJobId[selectedJob.id]}
-          onBack={() => setActiveOfficeView('dispatch')}
-          onLoadCapturedWork={loadCapturedWork}
-          onJobStatusReviewRequested={handleJobStatusReviewRequested}
-          onConfirmJobStatusChange={confirmJobStatusChange}
-          onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
-          onAppointmentStatusChange={handleAppointmentStatusChange}
-          onAppointmentDraftChange={(jobId, patch) =>
-            setAppointmentDrafts((current) => ({
-              ...current,
-              [jobId]: { ...(current[jobId] ?? createEmptyAppointmentDraft()), ...patch }
-            }))
-          }
-          onAppointmentEditDraftChange={(appointmentId, baseDraft, patch) =>
-            setAppointmentEditDrafts((current) => ({
-              ...current,
-              [appointmentId]: { ...(current[appointmentId] ?? baseDraft), ...patch }
-            }))
-          }
-          onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
-          onAddAppointment={handleAddAppointment}
-          onKeepJobOpen={handleKeepJobOpen}
-          onRegisterDraftChange={handleRegisterDraftChange}
-          onSaveRegisterEntry={handleSaveRegisterEntry}
-          onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
-          onVoidRegisterEntry={handleVoidRegisterEntry}
-          onMediaCaptionChange={handleMediaCaptionChange}
-          onSaveMediaCaption={handleSaveMediaCaption}
-          onMediaVoidReasonChange={handleMediaVoidReasonChange}
-          onVoidMediaAttachment={handleVoidMediaAttachment}
-          onOpenMediaAttachment={handleOpenMediaAttachment}
-        />
-      ) : null}
-
-      {activeOfficeView === 'jobDetail' && !selectedJob && isJobDetailLoading ? (
-        <section style={styles.workspacePanel} aria-label="Job detail loading">
-          <p style={styles.muted}>Loading job...</p>
-        </section>
-      ) : null}
-
-      {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && jobsQueue ? (
-        <JobsQueuePanel
-          jobsQueue={jobsQueue}
-          onOpenJobDetail={(jobId, appointmentId) => handleOpenJobDetail(jobId, appointmentId)}
-          onNewJob={() => void handleOpenJobIntake()}
-          onLoadMoreQueue={handleLoadMoreJobsQueue}
-        />
-      ) : null}
-
-      {activeOfficeView === 'jobDetail' && !selectedJob && !isJobDetailLoading && !jobsQueue ? (
-        <section style={styles.workspacePanel} aria-label="Job detail loading">
-          <p style={styles.muted}>Loading job...</p>
-        </section>
-      ) : null}
+      <OfficeWorkspaceSurfaces
+        activeOfficeView={activeOfficeView}
+        apiBaseUrl={apiBaseUrl}
+        sessionToken={sessionToken}
+        canReplaceRemoveEquipment={canReplaceRemoveEquipment}
+        canDeleteEquipment={canDeleteEquipment}
+        dispatchBoard={dispatchBoard}
+        dispatchViewDate={dispatchViewDate}
+        isDispatchRefreshing={isDispatchRefreshing}
+        lastDispatchRefreshedAt={lastDispatchRefreshedAt}
+        onDispatchViewDateChange={handleDispatchViewDateChange}
+        onDispatchRefresh={handleDispatchRefresh}
+        onErrorMessage={setErrorMessage}
+        isJobIntakeOpen={isJobIntakeOpen}
+        jobIntakeContext={jobIntakeContext}
+        locationSearchQuery={jobLocationSearchQuery}
+        locationSearchResults={jobLocationSearchResults}
+        isLocationSearchLoading={isJobLocationSearchLoading}
+        selectedLocation={selectedJobLocation}
+        customerLocationOptions={customerLocationOptions}
+        customerLocationMessage={customerLocationMessage}
+        billToOptions={jobBillToOptions}
+        billToWarning={jobBillToWarning}
+        jobBillToCustomerId={jobBillToCustomerId}
+        jobType={jobType}
+        jobCategory={jobCategory}
+        jobOrigin={jobOrigin}
+        jobSummary={jobSummary}
+        jobTechnicianId={jobTechnicianId}
+        jobDate={jobDate}
+        jobStartTime={jobStartTime}
+        jobEndTime={jobEndTime}
+        jobWindow={jobWindow}
+        onLocationSearchQueryChange={setJobLocationSearchQuery}
+        onSelectLocationSearchResult={(result) => void handleSelectJobIntakeSearchResult(result)}
+        onSelectCustomerLocation={(locationId) => void handleLoadJobIntakeLocation(locationId)}
+        onClearSelectedLocation={clearJobIntakeLocationSelection}
+        onJobBillToCustomerChange={setJobBillToCustomerId}
+        onJobTypeChange={setJobType}
+        onJobCategoryChange={setJobCategory}
+        onJobOriginChange={setJobOrigin}
+        onJobSummaryChange={setJobSummary}
+        onJobTechnicianChange={setJobTechnicianId}
+        onJobDateChange={handleJobDateChange}
+        onJobStartTimeChange={setJobStartTime}
+        onJobEndTimeChange={setJobEndTime}
+        onJobWindowChange={setJobWindow}
+        onCreateJob={handleCreateJob}
+        onCloseJobIntake={() => setIsJobIntakeOpen(false)}
+        jobsQueue={jobsQueue}
+        onOpenJobIntake={() => void handleOpenJobIntake()}
+        onLoadMoreJobsQueue={handleLoadMoreJobsQueue}
+        onOpenJobDetail={handleOpenJobDetail}
+        selectedJobId={selectedJobId}
+        jobDetailsById={jobDetailsById}
+        focusedAppointmentId={focusedAppointmentId}
+        jobDetailInitialTab={jobDetailInitialTab}
+        isJobDetailLoading={isJobDetailLoading}
+        pendingJobStatusChange={pendingJobStatusChange}
+        appointmentDrafts={appointmentDrafts}
+        appointmentEditDrafts={appointmentEditDrafts}
+        capturedWorkByJobId={capturedWorkByJobId}
+        onJobDetailBack={() => setActiveOfficeView('dispatch')}
+        onLoadCapturedWork={loadCapturedWork}
+        onJobStatusReviewRequested={handleJobStatusReviewRequested}
+        onConfirmJobStatusChange={confirmJobStatusChange}
+        onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
+        onAppointmentStatusChange={handleAppointmentStatusChange}
+        onAppointmentDraftChange={handleAppointmentDraftChange}
+        onAppointmentEditDraftChange={handleAppointmentEditDraftChange}
+        onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
+        onAddAppointment={handleAddAppointment}
+        onKeepJobOpen={handleKeepJobOpen}
+        onRegisterDraftChange={handleRegisterDraftChange}
+        onSaveRegisterEntry={handleSaveRegisterEntry}
+        onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
+        onVoidRegisterEntry={handleVoidRegisterEntry}
+        onMediaCaptionChange={handleMediaCaptionChange}
+        onSaveMediaCaption={handleSaveMediaCaption}
+        onMediaVoidReasonChange={handleMediaVoidReasonChange}
+        onVoidMediaAttachment={handleVoidMediaAttachment}
+        onOpenMediaAttachment={handleOpenMediaAttachment}
+      />
     </OfficeWorkspaceFrame>
   );
 }
