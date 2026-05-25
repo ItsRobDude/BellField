@@ -996,86 +996,103 @@ export function OfficeWorkspaceShell({
     >
       <OfficeWorkspaceSurfaces
         activeOfficeView={activeOfficeView}
-        apiBaseUrl={apiBaseUrl}
-        sessionToken={sessionToken}
-        canReplaceRemoveEquipment={canReplaceRemoveEquipment}
-        canDeleteEquipment={canDeleteEquipment}
-        dispatchBoard={dispatchBoard}
-        dispatchViewDate={dispatchViewDate}
-        isDispatchRefreshing={isDispatchRefreshing}
-        lastDispatchRefreshedAt={lastDispatchRefreshedAt}
-        onDispatchViewDateChange={handleDispatchViewDateChange}
-        onDispatchRefresh={handleDispatchRefresh}
-        onErrorMessage={setErrorMessage}
-        isJobIntakeOpen={isJobIntakeOpen}
-        jobIntakeContext={jobIntakeContext}
-        locationSearchQuery={jobLocationSearchQuery}
-        locationSearchResults={jobLocationSearchResults}
-        isLocationSearchLoading={isJobLocationSearchLoading}
-        selectedLocation={selectedJobLocation}
-        customerLocationOptions={customerLocationOptions}
-        customerLocationMessage={customerLocationMessage}
-        billToOptions={jobBillToOptions}
-        billToWarning={jobBillToWarning}
-        jobBillToCustomerId={jobBillToCustomerId}
-        jobType={jobType}
-        jobCategory={jobCategory}
-        jobOrigin={jobOrigin}
-        jobSummary={jobSummary}
-        jobTechnicianId={jobTechnicianId}
-        jobDate={jobDate}
-        jobStartTime={jobStartTime}
-        jobEndTime={jobEndTime}
-        jobWindow={jobWindow}
-        onLocationSearchQueryChange={setJobLocationSearchQuery}
-        onSelectLocationSearchResult={(result) => void handleSelectJobIntakeSearchResult(result)}
-        onSelectCustomerLocation={(locationId) => void handleLoadJobIntakeLocation(locationId)}
-        onClearSelectedLocation={clearJobIntakeLocationSelection}
-        onJobBillToCustomerChange={setJobBillToCustomerId}
-        onJobTypeChange={setJobType}
-        onJobCategoryChange={setJobCategory}
-        onJobOriginChange={setJobOrigin}
-        onJobSummaryChange={setJobSummary}
-        onJobTechnicianChange={setJobTechnicianId}
-        onJobDateChange={handleJobDateChange}
-        onJobStartTimeChange={setJobStartTime}
-        onJobEndTimeChange={setJobEndTime}
-        onJobWindowChange={setJobWindow}
-        onCreateJob={handleCreateJob}
-        onCloseJobIntake={() => setIsJobIntakeOpen(false)}
-        jobsQueue={jobsQueue}
-        onOpenJobIntake={() => void handleOpenJobIntake()}
-        onLoadMoreJobsQueue={handleLoadMoreJobsQueue}
-        onOpenJobDetail={handleOpenJobDetail}
-        selectedJobId={selectedJobId}
-        jobDetailsById={jobDetailsById}
-        focusedAppointmentId={focusedAppointmentId}
-        jobDetailInitialTab={jobDetailInitialTab}
-        isJobDetailLoading={isJobDetailLoading}
-        pendingJobStatusChange={pendingJobStatusChange}
-        appointmentDrafts={appointmentDrafts}
-        appointmentEditDrafts={appointmentEditDrafts}
-        capturedWorkByJobId={capturedWorkByJobId}
-        onJobDetailBack={() => setActiveOfficeView('dispatch')}
-        onLoadCapturedWork={loadCapturedWork}
-        onJobStatusReviewRequested={handleJobStatusReviewRequested}
-        onConfirmJobStatusChange={confirmJobStatusChange}
-        onCancelJobStatusChange={() => setPendingJobStatusChange(null)}
-        onAppointmentStatusChange={handleAppointmentStatusChange}
-        onAppointmentDraftChange={handleAppointmentDraftChange}
-        onAppointmentEditDraftChange={handleAppointmentEditDraftChange}
-        onSaveAppointmentSchedule={handleSaveAppointmentSchedule}
-        onAddAppointment={handleAddAppointment}
-        onKeepJobOpen={handleKeepJobOpen}
-        onRegisterDraftChange={handleRegisterDraftChange}
-        onSaveRegisterEntry={handleSaveRegisterEntry}
-        onRegisterVoidReasonChange={handleRegisterVoidReasonChange}
-        onVoidRegisterEntry={handleVoidRegisterEntry}
-        onMediaCaptionChange={handleMediaCaptionChange}
-        onSaveMediaCaption={handleSaveMediaCaption}
-        onMediaVoidReasonChange={handleMediaVoidReasonChange}
-        onVoidMediaAttachment={handleVoidMediaAttachment}
-        onOpenMediaAttachment={handleOpenMediaAttachment}
+        crm={{
+          apiBaseUrl,
+          sessionToken,
+          canReplaceRemoveEquipment,
+          canDeleteEquipment,
+          onErrorMessage: setErrorMessage
+        }}
+        dispatch={{
+          dispatchBoard,
+          dispatchViewDate,
+          isDispatchRefreshing,
+          lastDispatchRefreshedAt,
+          onDispatchViewDateChange: handleDispatchViewDateChange,
+          onDispatchRefresh: handleDispatchRefresh,
+          onOpenJobDetail: handleOpenJobDetail
+        }}
+        jobIntake={{
+          isOpen: isJobIntakeOpen,
+          context: jobIntakeContext,
+          locationSearchQuery: jobLocationSearchQuery,
+          locationSearchResults: jobLocationSearchResults,
+          isLocationSearchLoading: isJobLocationSearchLoading,
+          selectedLocation: selectedJobLocation,
+          customerLocationOptions,
+          customerLocationMessage,
+          billToOptions: jobBillToOptions,
+          billToWarning: jobBillToWarning,
+          jobBillToCustomerId,
+          jobType,
+          jobCategory,
+          jobOrigin,
+          jobSummary,
+          jobTechnicianId,
+          jobDate,
+          jobStartTime,
+          jobEndTime,
+          jobWindow,
+          onLocationSearchQueryChange: setJobLocationSearchQuery,
+          onSelectLocationSearchResult: (result) => void handleSelectJobIntakeSearchResult(result),
+          onSelectCustomerLocation: (locationId) => void handleLoadJobIntakeLocation(locationId),
+          onClearSelectedLocation: clearJobIntakeLocationSelection,
+          onJobBillToCustomerChange: setJobBillToCustomerId,
+          onJobTypeChange: setJobType,
+          onJobCategoryChange: setJobCategory,
+          onJobOriginChange: setJobOrigin,
+          onJobSummaryChange: setJobSummary,
+          onJobTechnicianChange: setJobTechnicianId,
+          onJobDateChange: handleJobDateChange,
+          onJobStartTimeChange: setJobStartTime,
+          onJobEndTimeChange: setJobEndTime,
+          onJobWindowChange: setJobWindow,
+          onCreateJob: handleCreateJob,
+          onClose: () => setIsJobIntakeOpen(false)
+        }}
+        jobs={{
+          jobsQueue,
+          onOpenJobDetail: handleOpenJobDetail,
+          onOpenJobIntake: () => void handleOpenJobIntake(),
+          onLoadMoreJobsQueue: handleLoadMoreJobsQueue
+        }}
+        jobDetail={{
+          selectedJobId,
+          jobDetailsById,
+          focusedAppointmentId,
+          jobDetailInitialTab,
+          isJobDetailLoading,
+          jobsQueueFallback: {
+            jobsQueue,
+            onOpenJobDetail: handleOpenJobDetail,
+            onOpenJobIntake: () => void handleOpenJobIntake(),
+            onLoadMoreJobsQueue: handleLoadMoreJobsQueue
+          },
+          pendingJobStatusChange,
+          appointmentDrafts,
+          appointmentEditDrafts,
+          capturedWorkByJobId,
+          onJobDetailBack: () => setActiveOfficeView('dispatch'),
+          onLoadCapturedWork: loadCapturedWork,
+          onJobStatusReviewRequested: handleJobStatusReviewRequested,
+          onConfirmJobStatusChange: confirmJobStatusChange,
+          onCancelJobStatusChange: () => setPendingJobStatusChange(null),
+          onAppointmentStatusChange: handleAppointmentStatusChange,
+          onAppointmentDraftChange: handleAppointmentDraftChange,
+          onAppointmentEditDraftChange: handleAppointmentEditDraftChange,
+          onSaveAppointmentSchedule: handleSaveAppointmentSchedule,
+          onAddAppointment: handleAddAppointment,
+          onKeepJobOpen: handleKeepJobOpen,
+          onRegisterDraftChange: handleRegisterDraftChange,
+          onSaveRegisterEntry: handleSaveRegisterEntry,
+          onRegisterVoidReasonChange: handleRegisterVoidReasonChange,
+          onVoidRegisterEntry: handleVoidRegisterEntry,
+          onMediaCaptionChange: handleMediaCaptionChange,
+          onSaveMediaCaption: handleSaveMediaCaption,
+          onMediaVoidReasonChange: handleMediaVoidReasonChange,
+          onVoidMediaAttachment: handleVoidMediaAttachment,
+          onOpenMediaAttachment: handleOpenMediaAttachment
+        }}
       />
     </OfficeWorkspaceFrame>
   );

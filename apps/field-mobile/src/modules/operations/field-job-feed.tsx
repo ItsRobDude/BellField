@@ -1,5 +1,5 @@
-import type { Dispatch, SetStateAction } from 'react';
-import { Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import type {
   AppointmentFinishOutcome,
   AppointmentStatus,
@@ -14,7 +14,11 @@ import {
   formatWorkOrderLine,
   summarizeAppointmentQueueState
 } from './field-appointment-display';
-import { formatAppointmentAssignmentLine } from './field-assignment-display';
+import {
+  buildAppointmentOwnershipWarning,
+  formatAppointmentAssignmentLine,
+  shouldConfirmAppointmentOwnership
+} from './field-assignment-display';
 import { formatFinishOutcome, formatPendingOperation } from './field-pending-replay';
 import { shouldOfferQueueResolution } from './field-queue-resolution';
 import type { PendingOperation } from './field-sync-types';
@@ -24,6 +28,7 @@ import {
   createEquipmentDraft,
   createRegisterEntryDraft,
   formatCurrency,
+  formatAppointmentStatusLabel,
   formatRegisterEntryKind,
   isLocalRegisterEntry,
   type EquipmentCreateDraft,
@@ -73,49 +78,37 @@ type FieldJobFeedProps = {
   assignedEquipment: FieldEquipmentRecord[];
   canReplaceRemoveEquipment: boolean;
   currentEmployeeId: string;
-  equipmentCreateDrafts: Record<string, EquipmentCreateDraft>;
-  equipmentDrafts: Record<string, EquipmentDraft>;
-  finishReview: FinishReviewState | null;
   locationLookup: Map<string, FieldLocation>;
-  mediaCaptionDrafts: Record<string, string>;
-  noteDrafts: Record<string, string>;
   pendingOperations: PendingOperation[];
-  registerCreateDrafts: Record<string, RegisterEntryDraft>;
-  registerEditDrafts: Record<string, RegisterEntryDraft>;
-  replacementSelections: Record<string, string>;
   scheduledJobs: FieldJob[];
   selectedJobId: string | null;
   syncLastSuccessfulAt: string | null;
-  onAppointmentStatusPress: (
-    jobId: string,
-    appointment: FieldAppointment,
-    status: AppointmentStatus
-  ) => void;
   onChangeDetailTab: (tab: FieldDetailTab) => void;
-  onChangeFinishReview: Dispatch<SetStateAction<FinishReviewState | null>>;
-  onChangeMediaCaptionDrafts: Dispatch<SetStateAction<Record<string, string>>>;
-  onChangeNoteDrafts: Dispatch<SetStateAction<Record<string, string>>>;
   onConfirmDiscardQueuedOperation: (operation: PendingOperation) => void;
   onConfirmVoidRegisterEntry: (entry: FieldRegisterEntry) => void;
-  onCreateEquipmentAtLocation: (locationId: string) => void;
-  onLinkReplacement: (recordId: string) => void;
+  onCreateEquipmentAtLocation: (
+    locationId: string,
+    draft: EquipmentCreateDraft
+  ) => Promise<boolean>;
+  onLinkReplacement: (recordId: string, replacementEquipmentId: string) => Promise<boolean>;
   onOpenJobDetail: (jobId: string) => void;
-  onQueueEquipmentUpdate: (record: FieldEquipmentRecord) => void;
-  onQueueJobNote: (jobId: string) => void;
-  onQueueMediaUpload: (job: FieldJob, source: FieldMediaSource, appointmentId?: string) => void;
-  onQueueRegisterEntryCreate: (job: FieldJob) => void;
-  onQueueRegisterEntryEdit: (entry: FieldRegisterEntry) => void;
+  onQueueAppointmentStatus: (appointmentId: string, status: AppointmentStatus) => Promise<boolean>;
+  onQueueEquipmentUpdate: (record: FieldEquipmentRecord, draft: EquipmentDraft) => Promise<boolean>;
+  onQueueJobNote: (jobId: string, note: string) => Promise<boolean>;
+  onQueueMediaUpload: (
+    job: FieldJob,
+    source: FieldMediaSource,
+    appointmentId: string | undefined,
+    caption: string | undefined
+  ) => Promise<boolean>;
+  onQueueRegisterEntryCreate: (job: FieldJob, draft: RegisterEntryDraft) => Promise<boolean>;
+  onQueueRegisterEntryEdit: (
+    entry: FieldRegisterEntry,
+    draft: RegisterEntryDraft
+  ) => Promise<boolean>;
   onRetryQueuedOperation: (operationId: string) => void;
   onReturnToHome: () => void;
-  onUpdateEquipmentCreateDraft: (locationId: string, patch: Partial<EquipmentCreateDraft>) => void;
-  onUpdateEquipmentDraft: (record: FieldEquipmentRecord, patch: Partial<EquipmentDraft>) => void;
-  onUpdateRegisterCreateDraft: (jobId: string, patch: Partial<RegisterEntryDraft>) => void;
-  onUpdateRegisterEditDraft: (
-    entry: FieldRegisterEntry,
-    patch: Partial<RegisterEntryDraft>
-  ) => void;
-  onCommitFinishReview: (allowEmptyNotes: boolean, allowNoNotesAndNoCharges: boolean) => void;
-  onSelectReplacement: (recordId: string, replacementEquipmentId: string) => void;
+  onCommitFinishReview: (finishReview: FinishReviewState) => Promise<boolean>;
 };
 
 export function FieldJobFeed({
@@ -123,29 +116,18 @@ export function FieldJobFeed({
   assignedEquipment,
   canReplaceRemoveEquipment,
   currentEmployeeId,
-  equipmentCreateDrafts,
-  equipmentDrafts,
-  finishReview,
   locationLookup,
-  mediaCaptionDrafts,
-  noteDrafts,
   pendingOperations,
-  registerCreateDrafts,
-  registerEditDrafts,
-  replacementSelections,
   scheduledJobs,
   selectedJobId,
   syncLastSuccessfulAt,
-  onAppointmentStatusPress,
   onChangeDetailTab,
-  onChangeFinishReview,
-  onChangeMediaCaptionDrafts,
-  onChangeNoteDrafts,
   onConfirmDiscardQueuedOperation,
   onConfirmVoidRegisterEntry,
   onCreateEquipmentAtLocation,
   onLinkReplacement,
   onOpenJobDetail,
+  onQueueAppointmentStatus,
   onQueueEquipmentUpdate,
   onQueueJobNote,
   onQueueMediaUpload,
@@ -153,13 +135,246 @@ export function FieldJobFeed({
   onQueueRegisterEntryEdit,
   onRetryQueuedOperation,
   onReturnToHome,
-  onUpdateEquipmentCreateDraft,
-  onUpdateEquipmentDraft,
-  onUpdateRegisterCreateDraft,
-  onUpdateRegisterEditDraft,
-  onCommitFinishReview,
-  onSelectReplacement
+  onCommitFinishReview
 }: FieldJobFeedProps) {
+  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
+  const [mediaCaptionDrafts, setMediaCaptionDrafts] = useState<Record<string, string>>({});
+  const [registerCreateDrafts, setRegisterCreateDrafts] = useState<
+    Record<string, RegisterEntryDraft>
+  >({});
+  const [registerEditDrafts, setRegisterEditDrafts] = useState<Record<string, RegisterEntryDraft>>(
+    {}
+  );
+  const [equipmentCreateDrafts, setEquipmentCreateDrafts] = useState<
+    Record<string, EquipmentCreateDraft>
+  >({});
+  const [equipmentDrafts, setEquipmentDrafts] = useState<Record<string, EquipmentDraft>>({});
+  const [replacementSelections, setReplacementSelections] = useState<Record<string, string>>({});
+  const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
+
+  function updateRegisterCreateDraft(jobId: string, patch: Partial<RegisterEntryDraft>) {
+    setRegisterCreateDrafts((current) => ({
+      ...current,
+      [jobId]: {
+        ...(current[jobId] ?? createRegisterEntryDraft()),
+        ...patch
+      }
+    }));
+  }
+
+  function updateRegisterEditDraft(entry: FieldRegisterEntry, patch: Partial<RegisterEntryDraft>) {
+    setRegisterEditDrafts((current) => ({
+      ...current,
+      [entry.id]: {
+        ...(current[entry.id] ?? createRegisterEntryDraft(entry)),
+        ...patch
+      }
+    }));
+  }
+
+  function updateEquipmentDraft(record: FieldEquipmentRecord, patch: Partial<EquipmentDraft>) {
+    setEquipmentDrafts((current) => ({
+      ...current,
+      [record.id]: {
+        ...(current[record.id] ?? createEquipmentDraft(record)),
+        ...patch
+      }
+    }));
+  }
+
+  function updateEquipmentCreateDraft(locationId: string, patch: Partial<EquipmentCreateDraft>) {
+    setEquipmentCreateDrafts((current) => ({
+      ...current,
+      [locationId]: {
+        ...(current[locationId] ?? createEquipmentCreateDraft()),
+        ...patch
+      }
+    }));
+  }
+
+  async function queueJobNote(jobId: string) {
+    const didQueue = await onQueueJobNote(jobId, noteDrafts[jobId] ?? '');
+
+    if (didQueue) {
+      setNoteDrafts((current) => ({ ...current, [jobId]: '' }));
+    }
+  }
+
+  async function queueMediaUpload(job: FieldJob, source: FieldMediaSource, appointmentId?: string) {
+    const captionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id, appointmentId });
+    const didQueue = await onQueueMediaUpload(
+      job,
+      source,
+      appointmentId,
+      mediaCaptionDrafts[captionKey]?.trim() || undefined
+    );
+
+    if (didQueue) {
+      setMediaCaptionDrafts((current) => ({ ...current, [captionKey]: '' }));
+    }
+  }
+
+  async function queueRegisterEntryCreate(job: FieldJob) {
+    const draft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
+    const didQueue = await onQueueRegisterEntryCreate(job, draft);
+
+    if (didQueue) {
+      setRegisterCreateDrafts((current) => ({
+        ...current,
+        [job.id]: createRegisterEntryDraft({ appointmentId: draft.appointmentId || undefined })
+      }));
+    }
+  }
+
+  async function queueRegisterEntryEdit(entry: FieldRegisterEntry) {
+    const draft = registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
+    const didQueue = await onQueueRegisterEntryEdit(entry, draft);
+
+    if (didQueue) {
+      setRegisterEditDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[entry.id];
+        return nextDrafts;
+      });
+    }
+  }
+
+  async function queueEquipmentUpdate(record: FieldEquipmentRecord) {
+    const draft = equipmentDrafts[record.id] ?? createEquipmentDraft(record);
+    const didQueue = await onQueueEquipmentUpdate(record, draft);
+
+    if (didQueue) {
+      setEquipmentDrafts((current) => {
+        const nextDrafts = { ...current };
+        delete nextDrafts[record.id];
+        return nextDrafts;
+      });
+    }
+  }
+
+  async function createEquipmentAtLocation(locationId: string) {
+    const draft = equipmentCreateDrafts[locationId] ?? createEquipmentCreateDraft();
+    const didCreate = await onCreateEquipmentAtLocation(locationId, draft);
+
+    if (didCreate) {
+      setEquipmentCreateDrafts((current) => ({
+        ...current,
+        [locationId]: createEquipmentCreateDraft()
+      }));
+    }
+  }
+
+  async function linkReplacement(recordId: string) {
+    const replacementEquipmentId = replacementSelections[recordId];
+
+    if (!replacementEquipmentId) {
+      return;
+    }
+
+    const didLink = await onLinkReplacement(recordId, replacementEquipmentId);
+
+    if (didLink) {
+      setReplacementSelections((current) => ({ ...current, [recordId]: '' }));
+    }
+  }
+
+  function beginFinishReview(jobId: string, appointmentId: string) {
+    setFinishReview((current) =>
+      current?.appointmentId === appointmentId
+        ? current
+        : {
+            jobId,
+            appointmentId,
+            visitNotes: '',
+            finishOutcome: 'completed',
+            hasChargeActivity: true,
+            registerReminder: ''
+          }
+    );
+  }
+
+  function handleAppointmentStatusPress(
+    jobId: string,
+    appointment: FieldAppointment,
+    status: AppointmentStatus
+  ) {
+    const continueStatusChange = () => {
+      if (status === 'finished') {
+        beginFinishReview(jobId, appointment.id);
+        return;
+      }
+
+      setFinishReview((current) => (current?.appointmentId === appointment.id ? null : current));
+      void onQueueAppointmentStatus(appointment.id, status);
+    };
+
+    if (shouldConfirmAppointmentOwnership(appointment, currentEmployeeId)) {
+      Alert.alert(
+        'Appointment not assigned to you',
+        buildAppointmentOwnershipWarning(
+          appointment,
+          currentEmployeeId,
+          `marking it ${formatAppointmentStatusLabel(status)}`
+        ),
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Continue', onPress: continueStatusChange }
+        ]
+      );
+      return;
+    }
+
+    continueStatusChange();
+  }
+
+  function commitFinishReview(allowEmptyNotes: boolean, allowNoNotesAndNoCharges: boolean) {
+    const currentFinishReview = finishReview;
+
+    if (!currentFinishReview) {
+      return;
+    }
+
+    const visitNotes = currentFinishReview.visitNotes.trim();
+
+    if (!visitNotes && !allowEmptyNotes) {
+      Alert.alert(
+        'Finish without notes?',
+        'BellField should prompt for visit notes before the appointment is marked finished. Continue anyway?',
+        [
+          { text: 'Add notes', style: 'cancel' },
+          {
+            text: 'Continue',
+            onPress: () => commitFinishReview(true, allowNoNotesAndNoCharges)
+          }
+        ]
+      );
+      return;
+    }
+
+    if (!visitNotes && !currentFinishReview.hasChargeActivity && !allowNoNotesAndNoCharges) {
+      Alert.alert(
+        'Finish with no notes and no charges?',
+        'This finish review has no visit notes and no charge activity. BellField should warn before continuing.',
+        [
+          { text: 'Go back', style: 'cancel' },
+          {
+            text: 'Continue',
+            onPress: () => commitFinishReview(true, true)
+          }
+        ]
+      );
+      return;
+    }
+
+    void (async () => {
+      const didQueue = await onCommitFinishReview(currentFinishReview);
+
+      if (didQueue) {
+        setFinishReview(null);
+      }
+    })();
+  }
+
   return (
     <>
       {scheduledJobs.map((job) => {
@@ -289,7 +504,9 @@ export function FieldJobFeed({
                         {fieldAppointmentStatuses.map((status) => (
                           <Pressable
                             key={status}
-                            onPress={() => onAppointmentStatusPress(job.id, appointment, status)}
+                            onPress={() =>
+                              handleAppointmentStatusPress(job.id, appointment, status)
+                            }
                             style={styles.tagButton}
                           >
                             <Text style={styles.tagButtonText}>{status}</Text>
@@ -318,7 +535,7 @@ export function FieldJobFeed({
                               <Pressable
                                 key={outcome}
                                 onPress={() =>
-                                  onChangeFinishReview((current) =>
+                                  setFinishReview((current) =>
                                     current && current.appointmentId === appointment.id
                                       ? { ...current, finishOutcome: outcome }
                                       : current
@@ -338,7 +555,7 @@ export function FieldJobFeed({
                           <View style={styles.actionRow}>
                             <Pressable
                               onPress={() =>
-                                onChangeFinishReview((current) =>
+                                setFinishReview((current) =>
                                   current && current.appointmentId === appointment.id
                                     ? { ...current, hasChargeActivity: true }
                                     : current
@@ -350,7 +567,7 @@ export function FieldJobFeed({
                             </Pressable>
                             <Pressable
                               onPress={() =>
-                                onChangeFinishReview((current) =>
+                                setFinishReview((current) =>
                                   current && current.appointmentId === appointment.id
                                     ? { ...current, hasChargeActivity: false }
                                     : current
@@ -364,7 +581,7 @@ export function FieldJobFeed({
                           <TextInput
                             value={finishReview.visitNotes}
                             onChangeText={(value) =>
-                              onChangeFinishReview((current) =>
+                              setFinishReview((current) =>
                                 current && current.appointmentId === appointment.id
                                   ? { ...current, visitNotes: value }
                                   : current
@@ -377,7 +594,7 @@ export function FieldJobFeed({
                           <TextInput
                             value={finishReview.registerReminder}
                             onChangeText={(value) =>
-                              onChangeFinishReview((current) =>
+                              setFinishReview((current) =>
                                 current && current.appointmentId === appointment.id
                                   ? { ...current, registerReminder: value }
                                   : current
@@ -389,13 +606,13 @@ export function FieldJobFeed({
                           />
                           <View style={styles.actionRow}>
                             <Pressable
-                              onPress={() => onCommitFinishReview(false, false)}
+                              onPress={() => commitFinishReview(false, false)}
                               style={styles.primaryButton}
                             >
                               <Text style={styles.primaryButtonText}>Save finish locally</Text>
                             </Pressable>
                             <Pressable
-                              onPress={() => onChangeFinishReview(null)}
+                              onPress={() => setFinishReview(null)}
                               style={styles.secondaryButton}
                             >
                               <Text style={styles.secondaryButtonText}>Cancel</Text>
@@ -409,7 +626,7 @@ export function FieldJobFeed({
                         <TextInput
                           value={mediaCaptionDrafts[appointmentMediaCaptionKey] ?? ''}
                           onChangeText={(value) =>
-                            onChangeMediaCaptionDrafts((current) => ({
+                            setMediaCaptionDrafts((current) => ({
                               ...current,
                               [appointmentMediaCaptionKey]: value
                             }))
@@ -419,13 +636,13 @@ export function FieldJobFeed({
                         />
                         <View style={styles.actionRow}>
                           <Pressable
-                            onPress={() => onQueueMediaUpload(job, 'camera', appointment.id)}
+                            onPress={() => void queueMediaUpload(job, 'camera', appointment.id)}
                             style={styles.secondaryButton}
                           >
                             <Text style={styles.secondaryButtonText}>Capture media</Text>
                           </Pressable>
                           <Pressable
-                            onPress={() => onQueueMediaUpload(job, 'library', appointment.id)}
+                            onPress={() => void queueMediaUpload(job, 'library', appointment.id)}
                             style={styles.secondaryButton}
                           >
                             <Text style={styles.secondaryButtonText}>Pick from library</Text>
@@ -446,13 +663,13 @@ export function FieldJobFeed({
                 <TextInput
                   value={noteDrafts[job.id] ?? ''}
                   onChangeText={(value) =>
-                    onChangeNoteDrafts((current) => ({ ...current, [job.id]: value }))
+                    setNoteDrafts((current) => ({ ...current, [job.id]: value }))
                   }
                   multiline
                   placeholder="Add visit notes that should queue until sync."
                   style={styles.input}
                 />
-                <Pressable onPress={() => onQueueJobNote(job.id)} style={styles.secondaryButton}>
+                <Pressable onPress={() => void queueJobNote(job.id)} style={styles.secondaryButton}>
                   <Text style={styles.secondaryButtonText}>Save note locally</Text>
                 </Pressable>
 
@@ -465,7 +682,7 @@ export function FieldJobFeed({
                   <TextInput
                     value={mediaCaptionDrafts[jobMediaCaptionKey] ?? ''}
                     onChangeText={(value) =>
-                      onChangeMediaCaptionDrafts((current) => ({
+                      setMediaCaptionDrafts((current) => ({
                         ...current,
                         [jobMediaCaptionKey]: value
                       }))
@@ -475,13 +692,13 @@ export function FieldJobFeed({
                   />
                   <View style={styles.actionRow}>
                     <Pressable
-                      onPress={() => onQueueMediaUpload(job, 'camera')}
+                      onPress={() => void queueMediaUpload(job, 'camera')}
                       style={styles.secondaryButton}
                     >
                       <Text style={styles.secondaryButtonText}>Capture media</Text>
                     </Pressable>
                     <Pressable
-                      onPress={() => onQueueMediaUpload(job, 'library')}
+                      onPress={() => void queueMediaUpload(job, 'library')}
                       style={styles.secondaryButton}
                     >
                       <Text style={styles.secondaryButtonText}>Pick from library</Text>
@@ -497,10 +714,10 @@ export function FieldJobFeed({
                 registerCreateDrafts={registerCreateDrafts}
                 registerEditDrafts={registerEditDrafts}
                 onConfirmVoidRegisterEntry={onConfirmVoidRegisterEntry}
-                onQueueRegisterEntryCreate={onQueueRegisterEntryCreate}
-                onQueueRegisterEntryEdit={onQueueRegisterEntryEdit}
-                onUpdateRegisterCreateDraft={onUpdateRegisterCreateDraft}
-                onUpdateRegisterEditDraft={onUpdateRegisterEditDraft}
+                onQueueRegisterEntryCreate={(targetJob) => void queueRegisterEntryCreate(targetJob)}
+                onQueueRegisterEntryEdit={(entry) => void queueRegisterEntryEdit(entry)}
+                onUpdateRegisterCreateDraft={updateRegisterCreateDraft}
+                onUpdateRegisterEditDraft={updateRegisterEditDraft}
               />
             ) : null}
 
@@ -523,12 +740,19 @@ export function FieldJobFeed({
                 equipmentDrafts={equipmentDrafts}
                 job={job}
                 replacementSelections={replacementSelections}
-                onCreateEquipmentAtLocation={onCreateEquipmentAtLocation}
-                onLinkReplacement={onLinkReplacement}
-                onQueueEquipmentUpdate={onQueueEquipmentUpdate}
-                onSelectReplacement={onSelectReplacement}
-                onUpdateEquipmentCreateDraft={onUpdateEquipmentCreateDraft}
-                onUpdateEquipmentDraft={onUpdateEquipmentDraft}
+                onCreateEquipmentAtLocation={(locationId) =>
+                  void createEquipmentAtLocation(locationId)
+                }
+                onLinkReplacement={(recordId) => void linkReplacement(recordId)}
+                onQueueEquipmentUpdate={(record) => void queueEquipmentUpdate(record)}
+                onSelectReplacement={(recordId, replacementEquipmentId) =>
+                  setReplacementSelections((current) => ({
+                    ...current,
+                    [recordId]: replacementEquipmentId
+                  }))
+                }
+                onUpdateEquipmentCreateDraft={updateEquipmentCreateDraft}
+                onUpdateEquipmentDraft={updateEquipmentDraft}
               />
             ) : null}
           </View>

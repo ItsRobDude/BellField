@@ -47,10 +47,6 @@ import {
   mergeJobMutationIntoAssignedWork
 } from './field-pending-replay';
 import { buildSuccessfulSyncMetadata, summarizeSyncHealth } from './field-sync-status';
-import {
-  buildAppointmentOwnershipWarning,
-  shouldConfirmAppointmentOwnership
-} from './field-assignment-display';
 import { summarizeOfficeAppointmentChanges } from './field-appointment-display';
 import {
   discardPendingOperation as discardPendingOperationFromQueue,
@@ -70,7 +66,6 @@ import { buildMediaUploadOperation } from './field-media-files';
 import { replayFieldMediaUploadOperation } from './field-media-replay';
 import { uploadFieldMediaBlob } from './field-media-upload';
 import {
-  buildFieldMediaCaptionDraftKey,
   shouldReturnToFieldHome,
   sortFieldJobsBySchedule,
   type FieldDetailTab
@@ -86,10 +81,6 @@ import {
   type FieldWorkspaceTab
 } from './field-workspace-shell';
 import {
-  createEquipmentCreateDraft,
-  createEquipmentDraft,
-  createRegisterEntryDraft,
-  formatAppointmentStatusLabel,
   parseRegisterEntryDraft,
   type EquipmentCreateDraft,
   type EquipmentDraft,
@@ -104,8 +95,6 @@ type Props = {
   sessionToken: string;
   onSignOut: () => void;
 };
-
-type FieldAppointment = FieldAssignedWorkResponse['jobs'][number]['appointments'][number];
 
 const defaultSyncMetadata: SyncMetadata = {
   lastSuccessfulSyncAt: null,
@@ -124,23 +113,9 @@ export function TechnicianWorkspaceScreen({
   const [serverSnapshot, setServerSnapshot] = useState<AssignedWorkSnapshot | null>(null);
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata>(defaultSyncMetadata);
-  const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
-  const [equipmentDrafts, setEquipmentDrafts] = useState<Record<string, EquipmentDraft>>({});
-  const [equipmentCreateDrafts, setEquipmentCreateDrafts] = useState<
-    Record<string, EquipmentCreateDraft>
-  >({});
-  const [registerCreateDrafts, setRegisterCreateDrafts] = useState<
-    Record<string, RegisterEntryDraft>
-  >({});
-  const [registerEditDrafts, setRegisterEditDrafts] = useState<Record<string, RegisterEntryDraft>>(
-    {}
-  );
-  const [replacementSelections, setReplacementSelections] = useState<Record<string, string>>({});
-  const [finishReview, setFinishReview] = useState<FinishReviewState | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [activeDetailTab, setActiveDetailTab] = useState<FieldDetailTab>('overview');
   const [activeWorkspaceTab, setActiveWorkspaceTab] = useState<FieldWorkspaceTab>('jobs');
-  const [mediaCaptionDrafts, setMediaCaptionDrafts] = useState<Record<string, string>>({});
   const [officeChangeMessages, setOfficeChangeMessages] = useState<string[]>([]);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(true);
@@ -268,11 +243,11 @@ export function TechnicianWorkspaceScreen({
     }
   }
 
-  async function queueJobNote(jobId: string, noteOverride?: string) {
-    const note = (noteOverride ?? noteDrafts[jobId] ?? '').trim();
+  async function queueJobNote(jobId: string, noteDraft: string): Promise<boolean> {
+    const note = noteDraft.trim();
 
     if (!note) {
-      return;
+      return false;
     }
 
     const operation: PendingOperation = {
@@ -288,12 +263,10 @@ export function TechnicianWorkspaceScreen({
     try {
       await queuePendingOperation(operation);
       setPendingOperations((current) => [...current, operation]);
-
-      if (noteOverride === undefined) {
-        setNoteDrafts((current) => ({ ...current, [jobId]: '' }));
-      }
+      return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save the note locally.');
+      return false;
     }
   }
 
@@ -311,19 +284,19 @@ export function TechnicianWorkspaceScreen({
   async function queueMediaUpload(
     job: FieldAssignedWorkResponse['jobs'][number],
     source: FieldMediaSource,
-    appointmentId?: string
-  ) {
+    appointmentId: string | undefined,
+    captionDraft: string | undefined
+  ): Promise<boolean> {
     setErrorMessage(null);
 
     try {
       const stagedMedia = await pickFieldMedia(source);
 
       if (!stagedMedia) {
-        return;
+        return false;
       }
 
-      const captionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id, appointmentId });
-      const caption = mediaCaptionDrafts[captionKey]?.trim();
+      const caption = captionDraft?.trim();
       const operation = buildMediaUploadOperation({
         jobId: job.id,
         appointmentId,
@@ -334,42 +307,22 @@ export function TechnicianWorkspaceScreen({
 
       await queuePendingOperation(operation);
       setPendingOperations((current) => [...current, operation]);
-      setMediaCaptionDrafts((current) => ({ ...current, [captionKey]: '' }));
+      return true;
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to queue media locally.');
+      return false;
     }
   }
 
-  function updateRegisterCreateDraft(jobId: string, patch: Partial<RegisterEntryDraft>) {
-    setRegisterCreateDrafts((current) => ({
-      ...current,
-      [jobId]: {
-        ...(current[jobId] ?? createRegisterEntryDraft()),
-        ...patch
-      }
-    }));
-  }
-
-  function updateRegisterEditDraft(
-    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number],
-    patch: Partial<RegisterEntryDraft>
-  ) {
-    setRegisterEditDrafts((current) => ({
-      ...current,
-      [entry.id]: {
-        ...(current[entry.id] ?? createRegisterEntryDraft(entry)),
-        ...patch
-      }
-    }));
-  }
-
-  async function queueRegisterEntryCreate(job: FieldAssignedWorkResponse['jobs'][number]) {
-    const draft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
+  async function queueRegisterEntryCreate(
+    job: FieldAssignedWorkResponse['jobs'][number],
+    draft: RegisterEntryDraft
+  ): Promise<boolean> {
     const parsed = parseRegisterEntryDraft(draft, false);
 
     if (!parsed.ok) {
       setErrorMessage(parsed.message);
-      return;
+      return false;
     }
 
     const operation: PendingOperation = {
@@ -393,26 +346,24 @@ export function TechnicianWorkspaceScreen({
     try {
       await queuePendingOperation(operation);
       setPendingOperations((current) => [...current, operation]);
-      setRegisterCreateDrafts((current) => ({
-        ...current,
-        [job.id]: createRegisterEntryDraft({ appointmentId: draft.appointmentId || undefined })
-      }));
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save the register entry locally.'
       );
+      return false;
     }
   }
 
   async function queueRegisterEntryEdit(
-    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]
-  ) {
-    const draft = registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
+    entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number],
+    draft: RegisterEntryDraft
+  ): Promise<boolean> {
     const parsed = parseRegisterEntryDraft(draft, true);
 
     if (!parsed.ok) {
       setErrorMessage(parsed.message);
-      return;
+      return false;
     }
 
     const operation: PendingOperation = {
@@ -447,15 +398,12 @@ export function TechnicianWorkspaceScreen({
         ),
         operation
       ]);
-      setRegisterEditDrafts((current) => {
-        const nextDrafts = { ...current };
-        delete nextDrafts[entry.id];
-        return nextDrafts;
-      });
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save the register edit locally.'
       );
+      return false;
     }
   }
 
@@ -511,7 +459,10 @@ export function TechnicianWorkspaceScreen({
     }
   }
 
-  async function queueAppointmentStatus(appointmentId: string, status: AppointmentStatus) {
+  async function queueAppointmentStatus(
+    appointmentId: string,
+    status: AppointmentStatus
+  ): Promise<boolean> {
     const baseUpdatedAt = findAppointmentBaseUpdatedAt(serverSnapshot, appointmentId);
     const nextOperation: PendingOperation = {
       id: `${appointmentId}-status-${Date.now()}`,
@@ -536,14 +487,18 @@ export function TechnicianWorkspaceScreen({
         ),
         nextOperation
       ]);
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save the appointment status locally.'
       );
+      return false;
     }
   }
 
-  async function queueAppointmentFinishReview(currentFinishReview: FinishReviewState) {
+  async function queueAppointmentFinishReview(
+    currentFinishReview: FinishReviewState
+  ): Promise<boolean> {
     const baseUpdatedAt = findAppointmentBaseUpdatedAt(
       serverSnapshot,
       currentFinishReview.appointmentId
@@ -575,15 +530,19 @@ export function TechnicianWorkspaceScreen({
         ),
         nextOperation
       ]);
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save the finish review locally.'
       );
+      return false;
     }
   }
 
-  async function queueEquipmentUpdate(record: FieldAssignedWorkResponse['equipment'][number]) {
-    const draft = equipmentDrafts[record.id] ?? createEquipmentDraft(record);
+  async function queueEquipmentUpdate(
+    record: FieldAssignedWorkResponse['equipment'][number],
+    draft: EquipmentDraft
+  ): Promise<boolean> {
     const nextOperation: PendingOperation = {
       id: `${record.id}-equipment-${Date.now()}`,
       kind: 'equipmentUpdate',
@@ -612,44 +571,19 @@ export function TechnicianWorkspaceScreen({
         ),
         nextOperation
       ]);
-      setEquipmentDrafts((current) => {
-        const nextDrafts = { ...current };
-        delete nextDrafts[record.id];
-        return nextDrafts;
-      });
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to save the equipment change locally.'
       );
+      return false;
     }
   }
 
-  function updateEquipmentDraft(
-    record: FieldAssignedWorkResponse['equipment'][number],
-    patch: Partial<EquipmentDraft>
-  ) {
-    setEquipmentDrafts((current) => ({
-      ...current,
-      [record.id]: {
-        ...(current[record.id] ?? createEquipmentDraft(record)),
-        ...patch
-      }
-    }));
-  }
-
-  function updateEquipmentCreateDraft(locationId: string, patch: Partial<EquipmentCreateDraft>) {
-    setEquipmentCreateDrafts((current) => ({
-      ...current,
-      [locationId]: {
-        ...(current[locationId] ?? createEquipmentCreateDraft()),
-        ...patch
-      }
-    }));
-  }
-
-  async function createEquipmentAtLocation(locationId: string) {
-    const draft = equipmentCreateDrafts[locationId] ?? createEquipmentCreateDraft();
-
+  async function createEquipmentAtLocation(
+    locationId: string,
+    draft: EquipmentCreateDraft
+  ): Promise<boolean> {
     try {
       await createFieldEquipment({
         sessionToken,
@@ -672,11 +606,8 @@ export function TechnicianWorkspaceScreen({
         status: draft.status,
         notes: draft.notes || undefined
       });
-      setEquipmentCreateDrafts((current) => ({
-        ...current,
-        [locationId]: createEquipmentCreateDraft()
-      }));
       await refreshAssignedWork(false);
+      return true;
     } catch (error) {
       if (
         error instanceof Error &&
@@ -724,20 +655,18 @@ export function TechnicianWorkspaceScreen({
             }
           ]
         );
-        return;
+        return false;
       }
 
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create equipment.');
+      return false;
     }
   }
 
-  async function linkReplacement(recordId: string) {
-    const replacementEquipmentId = replacementSelections[recordId];
-
-    if (!replacementEquipmentId) {
-      return;
-    }
-
+  async function linkReplacement(
+    recordId: string,
+    replacementEquipmentId: string
+  ): Promise<boolean> {
     try {
       await linkFieldEquipmentReplacement({
         equipmentId: recordId,
@@ -745,107 +674,14 @@ export function TechnicianWorkspaceScreen({
         sessionToken,
         apiBaseUrl
       });
-      setReplacementSelections((current) => ({ ...current, [recordId]: '' }));
       await refreshAssignedWork(false);
+      return true;
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to link replacement equipment.'
       );
+      return false;
     }
-  }
-
-  function beginFinishReview(jobId: string, appointmentId: string) {
-    setFinishReview((current) =>
-      current?.appointmentId === appointmentId
-        ? current
-        : {
-            jobId,
-            appointmentId,
-            visitNotes: '',
-            finishOutcome: 'completed',
-            hasChargeActivity: true,
-            registerReminder: ''
-          }
-    );
-  }
-
-  function handleAppointmentStatusPress(
-    jobId: string,
-    appointment: FieldAppointment,
-    status: AppointmentStatus
-  ) {
-    const continueStatusChange = () => {
-      if (status === 'finished') {
-        beginFinishReview(jobId, appointment.id);
-        return;
-      }
-
-      setFinishReview((current) => (current?.appointmentId === appointment.id ? null : current));
-      void queueAppointmentStatus(appointment.id, status);
-    };
-
-    if (shouldConfirmAppointmentOwnership(appointment, employee.id)) {
-      Alert.alert(
-        'Appointment not assigned to you',
-        buildAppointmentOwnershipWarning(
-          appointment,
-          employee.id,
-          `marking it ${formatAppointmentStatusLabel(status)}`
-        ),
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Continue', onPress: continueStatusChange }
-        ]
-      );
-      return;
-    }
-
-    continueStatusChange();
-  }
-
-  function commitFinishReview(allowEmptyNotes: boolean, allowNoNotesAndNoCharges: boolean) {
-    const currentFinishReview = finishReview;
-
-    if (!currentFinishReview) {
-      return;
-    }
-
-    const visitNotes = currentFinishReview.visitNotes.trim();
-
-    if (!visitNotes && !allowEmptyNotes) {
-      Alert.alert(
-        'Finish without notes?',
-        'BellField should prompt for visit notes before the appointment is marked finished. Continue anyway?',
-        [
-          { text: 'Add notes', style: 'cancel' },
-          {
-            text: 'Continue',
-            onPress: () => commitFinishReview(true, allowNoNotesAndNoCharges)
-          }
-        ]
-      );
-      return;
-    }
-
-    if (!visitNotes && !currentFinishReview.hasChargeActivity && !allowNoNotesAndNoCharges) {
-      Alert.alert(
-        'Finish with no notes and no charges?',
-        'This finish review has no visit notes and no charge activity. BellField should warn before continuing.',
-        [
-          { text: 'Go back', style: 'cancel' },
-          {
-            text: 'Continue',
-            onPress: () => commitFinishReview(true, true)
-          }
-        ]
-      );
-      return;
-    }
-
-    void (async () => {
-      await queueAppointmentFinishReview(currentFinishReview);
-      setFinishReview(null);
-    })();
   }
 
   async function retryQueuedOperation(operationId: string) {
@@ -1612,48 +1448,23 @@ export function TechnicianWorkspaceScreen({
               assignedEquipment={assignedWork?.equipment ?? []}
               canReplaceRemoveEquipment={canReplaceRemoveEquipment}
               currentEmployeeId={employee.id}
-              equipmentCreateDrafts={equipmentCreateDrafts}
-              equipmentDrafts={equipmentDrafts}
-              finishReview={finishReview}
               locationLookup={locationLookup}
-              mediaCaptionDrafts={mediaCaptionDrafts}
-              noteDrafts={noteDrafts}
-              onAppointmentStatusPress={handleAppointmentStatusPress}
               onChangeDetailTab={setActiveDetailTab}
-              onChangeFinishReview={setFinishReview}
-              onChangeMediaCaptionDrafts={setMediaCaptionDrafts}
-              onChangeNoteDrafts={setNoteDrafts}
-              onCommitFinishReview={commitFinishReview}
+              onCommitFinishReview={queueAppointmentFinishReview}
               onConfirmDiscardQueuedOperation={confirmDiscardQueuedOperation}
               onConfirmVoidRegisterEntry={confirmVoidRegisterEntry}
-              onCreateEquipmentAtLocation={(locationId) =>
-                void createEquipmentAtLocation(locationId)
-              }
-              onLinkReplacement={(recordId) => void linkReplacement(recordId)}
+              onCreateEquipmentAtLocation={createEquipmentAtLocation}
+              onLinkReplacement={linkReplacement}
               onOpenJobDetail={openJobDetail}
-              onQueueEquipmentUpdate={(record) => void queueEquipmentUpdate(record)}
-              onQueueJobNote={(jobId) => void queueJobNote(jobId)}
-              onQueueMediaUpload={(job, source, appointmentId) =>
-                void queueMediaUpload(job, source, appointmentId)
-              }
-              onQueueRegisterEntryCreate={(job) => void queueRegisterEntryCreate(job)}
-              onQueueRegisterEntryEdit={(entry) => void queueRegisterEntryEdit(entry)}
+              onQueueAppointmentStatus={queueAppointmentStatus}
+              onQueueEquipmentUpdate={queueEquipmentUpdate}
+              onQueueJobNote={queueJobNote}
+              onQueueMediaUpload={queueMediaUpload}
+              onQueueRegisterEntryCreate={queueRegisterEntryCreate}
+              onQueueRegisterEntryEdit={queueRegisterEntryEdit}
               onRetryQueuedOperation={(operationId) => void retryQueuedOperation(operationId)}
               onReturnToHome={returnToHome}
-              onSelectReplacement={(recordId, replacementEquipmentId) =>
-                setReplacementSelections((current) => ({
-                  ...current,
-                  [recordId]: replacementEquipmentId
-                }))
-              }
-              onUpdateEquipmentCreateDraft={updateEquipmentCreateDraft}
-              onUpdateEquipmentDraft={updateEquipmentDraft}
-              onUpdateRegisterCreateDraft={updateRegisterCreateDraft}
-              onUpdateRegisterEditDraft={updateRegisterEditDraft}
               pendingOperations={pendingOperations}
-              registerCreateDrafts={registerCreateDrafts}
-              registerEditDrafts={registerEditDrafts}
-              replacementSelections={replacementSelections}
               scheduledJobs={scheduledJobs}
               selectedJobId={selectedJobId}
               syncLastSuccessfulAt={syncMetadata.lastSuccessfulSyncAt}

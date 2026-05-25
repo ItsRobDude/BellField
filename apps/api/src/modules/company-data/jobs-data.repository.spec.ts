@@ -1,4 +1,8 @@
+import { Test } from '@nestjs/testing';
+import { DatabaseService } from '../../database/database.service';
 import { JobsDataRepository } from './jobs-data.repository';
+import { JobsMediaDataRepository } from './jobs-media-data.repository';
+import { JobsRegisterDataRepository } from './jobs-register-data.repository';
 
 function createJobRow(overrides: Record<string, unknown> = {}) {
   return {
@@ -106,10 +110,36 @@ function createDatabaseService(
   return { databaseService, queryable };
 }
 
+function createJobsDataRepository(databaseService: unknown): JobsDataRepository {
+  const typedDatabaseService = databaseService as DatabaseService;
+
+  return new JobsDataRepository(
+    typedDatabaseService,
+    new JobsRegisterDataRepository(typedDatabaseService),
+    new JobsMediaDataRepository(typedDatabaseService)
+  );
+}
+
 describe('JobsDataRepository', () => {
+  it('can be resolved through Nest with typed child repositories', async () => {
+    const { databaseService } = createDatabaseService();
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        { provide: DatabaseService, useValue: databaseService },
+        JobsRegisterDataRepository,
+        JobsMediaDataRepository,
+        JobsDataRepository
+      ]
+    }).compile();
+
+    expect(moduleRef.get(JobsDataRepository)).toBeInstanceOf(JobsDataRepository);
+
+    await moduleRef.close();
+  });
+
   it('leaves workOrderNumber unset when job creation receives a blank work order', async () => {
     const { databaseService, queryable } = createDatabaseService();
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const job = await repository.createJob(
       {
@@ -135,7 +165,7 @@ describe('JobsDataRepository', () => {
 
   it('cancels every non-cancelled appointment when a job is cancelled', async () => {
     const { databaseService, queryable } = createDatabaseService({ status: 'cancelled' });
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.updateJobStatus(
       'job-1',
@@ -164,7 +194,7 @@ describe('JobsDataRepository', () => {
         rows: [{ appointmentCount: '2' }]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const count = await repository.countCancellableAppointments('job-1');
 
@@ -176,7 +206,7 @@ describe('JobsDataRepository', () => {
 
   it('records appointment creation in the job timeline', async () => {
     const { databaseService } = createDatabaseService();
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.createAppointment(
       'job-1',
@@ -194,7 +224,7 @@ describe('JobsDataRepository', () => {
 
   it('persists structured appointment times when creating an appointment', async () => {
     const { databaseService } = createDatabaseService();
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.createAppointment(
       'job-1',
@@ -239,7 +269,7 @@ describe('JobsDataRepository', () => {
         ]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const appointments = await repository.listAppointmentsForJob('job-1');
 
@@ -288,7 +318,7 @@ describe('JobsDataRepository', () => {
         ]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const appointments = await repository.listDispatchAppointments('2026-05-23', '2026-05-23');
     const sql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
@@ -359,7 +389,7 @@ describe('JobsDataRepository', () => {
         return { rows: [] };
       })
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const detail = await repository.getJobDetailById('job-1', 2);
     const timelineQuery = databaseService.query.mock.calls.find(([sql]) =>
@@ -415,7 +445,7 @@ describe('JobsDataRepository', () => {
         ]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const page = await repository.listJobsQueuePage('review', 21, {
       queueKey: 'review',
@@ -459,7 +489,7 @@ describe('JobsDataRepository', () => {
         ]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const page = await repository.listJobsQueuePage('open', 21, {
       queueKey: 'open',
@@ -475,7 +505,7 @@ describe('JobsDataRepository', () => {
     const databaseService = {
       query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.listJobsQueuePage('waitingOnParts', 20);
     await repository.listJobsQueuePage('unscheduled', 20);
@@ -506,7 +536,7 @@ describe('JobsDataRepository', () => {
 
       return { rows: [] };
     });
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.createAppointment(
       'job-1',
@@ -553,7 +583,7 @@ describe('JobsDataRepository', () => {
 
       return { rows: [] };
     });
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.acknowledgeFinishedVisitReview(
       'job-1',
@@ -585,7 +615,7 @@ describe('JobsDataRepository', () => {
       {},
       { scheduledDate: '2026-04-15' }
     );
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.updateAppointmentSchedule(
       'appointment-1',
@@ -632,7 +662,7 @@ describe('JobsDataRepository', () => {
       {},
       { scheduledDate: '2026-04-15', scheduledStartTime: '08:00:00', scheduledEndTime: '10:00:00' }
     );
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.updateAppointmentSchedule(
       'appointment-1',
@@ -660,7 +690,7 @@ describe('JobsDataRepository', () => {
         {},
         { scheduledDate: '2026-04-15' }
       );
-      const repository = new JobsDataRepository(databaseService as never);
+      const repository = createJobsDataRepository(databaseService);
 
       await repository.updateAppointmentStatus(
         'appointment-1',
@@ -688,7 +718,7 @@ describe('JobsDataRepository', () => {
       {},
       { scheduledDate: '2026-04-15' }
     );
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.updateAppointmentStatus(
       'appointment-1',
@@ -718,7 +748,7 @@ describe('JobsDataRepository', () => {
         {},
         { scheduledDate: '2026-04-15' }
       );
-      const repository = new JobsDataRepository(databaseService as never);
+      const repository = createJobsDataRepository(databaseService);
 
       await repository.updateAppointmentStatus(
         'appointment-1',
@@ -749,7 +779,7 @@ describe('JobsDataRepository', () => {
     const databaseService = {
       query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.listAssignedJobsForEmployee('tech-1', new Set(['2026-04-14']));
 
@@ -764,7 +794,7 @@ describe('JobsDataRepository', () => {
         rows: [{ hasIncompleteAppointment: false }]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.hasIncompleteAppointments('job-1');
 
@@ -778,7 +808,7 @@ describe('JobsDataRepository', () => {
         rows: [{ hasFutureAppointment: false }]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.hasFutureAppointments('job-1', '2026-04-14');
 
@@ -793,7 +823,7 @@ describe('JobsDataRepository', () => {
         rows: [createRegisterEntryRow()]
       }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     const registerEntries = await repository.listRegisterEntriesForJob('job-1');
 
@@ -825,7 +855,7 @@ describe('JobsDataRepository', () => {
         callback(queryable)
       )
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.createRegisterEntry(
       'job-1',
@@ -873,7 +903,7 @@ describe('JobsDataRepository', () => {
         callback(queryable)
       )
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.updateRegisterEntry(
       'register-1',
@@ -916,7 +946,7 @@ describe('JobsDataRepository', () => {
         callback(queryable)
       )
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.voidRegisterEntry(
       'register-1',
@@ -981,7 +1011,7 @@ describe('JobsDataRepository', () => {
         callback(queryable)
       )
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.createMediaAttachment(
       'job-1',
@@ -1039,7 +1069,7 @@ describe('JobsDataRepository', () => {
     const databaseService = {
       query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [mediaRow] }))
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.findMediaAttachmentByJobAndSha('job-1', 'a'.repeat(64));
 
@@ -1078,7 +1108,7 @@ describe('JobsDataRepository', () => {
         return { rows: [] };
       })
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.markMediaAttachmentBlobUploaded(
       'media-1',
@@ -1133,7 +1163,7 @@ describe('JobsDataRepository', () => {
         callback(queryable)
       )
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.voidMediaAttachment(
       'media-1',
@@ -1193,7 +1223,7 @@ describe('JobsDataRepository', () => {
         callback(queryable)
       )
     };
-    const repository = new JobsDataRepository(databaseService as never);
+    const repository = createJobsDataRepository(databaseService);
 
     await repository.updateMediaAttachmentCaption(
       'media-1',

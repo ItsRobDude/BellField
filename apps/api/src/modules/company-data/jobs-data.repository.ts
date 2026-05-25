@@ -148,8 +148,8 @@ type FinishReviewInput = {
 export class JobsDataRepository {
   constructor(
     private readonly databaseService: DatabaseService,
-    private readonly registerRepository = new JobsRegisterDataRepository(databaseService),
-    private readonly mediaRepository = new JobsMediaDataRepository(databaseService)
+    private readonly registerRepository: JobsRegisterDataRepository,
+    private readonly mediaRepository: JobsMediaDataRepository
   ) {}
 
   async listJobs(): Promise<JobRecord[]> {
