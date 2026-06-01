@@ -577,7 +577,7 @@ Current implementation note:
 - `captured_by_name` is snapshotted so historical lines stay readable after employee changes.
 - Voiding uses `is_void` and `void_reason`; ordinary voiding should not hard-delete the row.
 - Register activity writes into the unified job timeline with register entry event kinds.
-- Invoice-draft reflection is still future Milestone 7 work until the invoice draft entity exists.
+- Invoice-draft reflection is implemented: each active register entry reflects into a linked `invoice_line_items` row on its job's main invoice draft, with detach-on-edit so office billing edits are not overwritten by later register changes.
 
 ### Costing preview rule
 

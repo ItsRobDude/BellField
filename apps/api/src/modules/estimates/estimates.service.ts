@@ -190,6 +190,9 @@ export class EstimatesService {
       ['office-web']
     );
 
+    // These checks give friendly, specific errors up front. The conversion
+    // itself re-validates atomically (the guarded estimate claim inside the
+    // transaction), so these are a good-UX layer, not the safety boundary.
     const estimate = await this.requireEstimate(estimateId);
     if (estimate.status !== 'approved') {
       throw new ConflictException(
@@ -201,9 +204,7 @@ export class EstimatesService {
         'This estimate has been superseded by a newer one and cannot be converted.'
       );
     }
-
-    const alreadyConverted = await this.estimatesRepository.getConvertedInvoiceId(estimateId);
-    if (alreadyConverted) {
+    if (estimate.convertedToInvoiceId) {
       throw new ConflictException('This estimate has already been converted to an invoice.');
     }
 
@@ -219,8 +220,10 @@ export class EstimatesService {
 
     const conversionInput: EstimateConversionInput = {
       estimateId: estimate.id,
+      estimateTitle: estimate.title,
       taxRateBasisPoints: estimate.taxRateBasisPoints,
       discount: estimate.discount,
+      actor: { id: actor.id, displayName: actor.displayName },
       lines: estimate.lineItems.map((line) => ({
         estimateLineItemId: line.id,
         kind: line.kind,
@@ -236,13 +239,17 @@ export class EstimatesService {
       }))
     };
 
-    await this.invoicesRepository.convertEstimateIntoDraft(estimate.jobId, conversionInput, mode);
+    // Atomic: claims the estimate, copies lines, stamps audit/timeline, recomputes.
+    const { invoiceId } = await this.invoicesRepository.convertEstimateIntoDraft(
+      estimate.jobId,
+      conversionInput,
+      mode
+    );
 
     const invoice = await this.invoicesRepository.getMainInvoiceForJob(estimate.jobId);
-    if (!invoice) {
+    if (!invoice || invoice.id !== invoiceId) {
       throw new NotFoundException('This job has no main invoice draft.');
     }
-    await this.estimatesRepository.recordConversion(estimateId, invoice.id, actor);
 
     return { invoice };
   }

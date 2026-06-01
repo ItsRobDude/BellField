@@ -57,6 +57,7 @@ export type EstimateRecord = {
   declinedByName?: string;
   sourceEstimateId?: string;
   supersededByEstimateId?: string;
+  convertedToInvoiceId?: string;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string;

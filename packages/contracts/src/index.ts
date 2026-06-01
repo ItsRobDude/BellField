@@ -613,6 +613,8 @@ export interface EstimateSummary {
   sourceEstimateId?: string;
   /** Set on an older estimate that a newer one has replaced. */
   supersededByEstimateId?: string;
+  /** Set once this estimate has been converted into an invoice draft. */
+  convertedToInvoiceId?: string;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string;

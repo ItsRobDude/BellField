@@ -288,7 +288,9 @@ function EstimateCard({
         {estimate.status === 'approved' && estimate.approvedByName ? (
           <span style={styles.tinyMuted}>Approved by {estimate.approvedByName}</span>
         ) : null}
-        {estimate.status === 'approved' && canConvert ? (
+        {estimate.status === 'approved' && estimate.convertedToInvoiceId ? (
+          <span style={styles.badge}>Converted to invoice</span>
+        ) : estimate.status === 'approved' && canConvert ? (
           <button type="button" style={styles.primaryButton} onClick={onConvert}>
             Convert to invoice
           </button>

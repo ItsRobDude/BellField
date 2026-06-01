@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import { recalculateInvoiceTotals } from '../company-data/invoice-reflection-utils';
+import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-utils';
 import type {
   InvoiceDiscountValue,
   InvoiceKindValue,
@@ -43,10 +44,15 @@ export type EstimateConversionLine = {
 /** The approved estimate snapshot conversion copies into the draft. */
 export type EstimateConversionInput = {
   estimateId: string;
+  estimateTitle: string;
   taxRateBasisPoints: number;
   discount?: InvoiceDiscountValue;
   lines: EstimateConversionLine[];
+  actor: { id: string; displayName: string };
 };
+
+/** Result of an atomic conversion: the invoice the estimate was converted into. */
+export type EstimateConversionResult = { invoiceId: string };
 
 type InvoiceRow = {
   id: string;
@@ -363,20 +369,31 @@ export class InvoicesRepository {
   }
 
   /**
-   * Copy an approved estimate's snapshot into the job's main invoice draft.
-   * 'replace' soft-voids the draft's existing active lines first; 'append' adds
-   * after them. The estimate's tax/discount settings are carried onto the
-   * invoice header. Estimate lines are tagged source_kind='estimate' with their
-   * source ids, and they are 'detached' from the start (a converted line is a
-   * billing snapshot, not a live mirror). Recomputes totals via the engine.
+   * Atomically convert an approved estimate's snapshot into the job's main
+   * invoice draft. The whole operation — claiming the estimate, voiding existing
+   * lines (replace mode), copying lines, stamping audit/timeline, recomputing
+   * totals — runs in ONE transaction so it cannot partially apply, and the
+   * estimate claim is a guarded update (`where converted_to_invoice_id is null
+   * and status = 'approved'`) so concurrent or repeat conversions are rejected
+   * by the database, not just by an earlier read.
+   *
+   * Tax/discount handling:
+   * - replace mode (or an empty draft): the invoice adopts the estimate's
+   *   tax/discount, since the estimate becomes the whole bill.
+   * - append onto a draft that already has lines: the invoice header terms are
+   *   LEFT ALONE, so appending an estimate never silently re-taxes or
+   *   re-discounts already-captured register/manual work.
+   *
+   * Estimate lines are tagged source_kind='estimate' with their source ids and
+   * start 'detached' (a converted line is a billing snapshot, not a live mirror).
    */
   async convertEstimateIntoDraft(
     jobId: string,
     input: EstimateConversionInput,
     mode: EstimateConversionMode
-  ): Promise<void> {
+  ): Promise<EstimateConversionResult> {
     const now = new Date().toISOString();
-    await this.databaseService.transaction(async (queryable) => {
+    return this.databaseService.transaction(async (queryable) => {
       const invoiceResult = await queryable.query<{ id: string }>(
         `select id from invoices where job_id = $1 and invoice_kind = 'main' limit 1`,
         [jobId]
@@ -385,6 +402,32 @@ export class InvoicesRepository {
       if (!invoiceId) {
         throw new Error('Job has no main invoice draft.');
       }
+
+      // Claim the estimate atomically: only an approved, not-yet-converted
+      // estimate passes. A race or repeat conversion changes zero rows here and
+      // is rejected, so the invoice lines below can never be written twice.
+      const claim = await queryable.query(
+        `update estimates set
+           converted_to_invoice_id = $2,
+           converted_at = $3,
+           converted_by_employee_id = $4,
+           converted_by_name = $5,
+           updated_at = $3
+         where id = $1 and status = 'approved' and converted_to_invoice_id is null`,
+        [input.estimateId, invoiceId, now, input.actor.id, input.actor.displayName]
+      );
+      if (claim.rowCount === 0) {
+        throw new ConflictException(
+          'This estimate is no longer convertible (not approved, or already converted).'
+        );
+      }
+
+      const existingLines = await queryable.query<{ count: string | number }>(
+        `select count(*) as count from invoice_line_items
+         where invoice_id = $1 and is_void = false`,
+        [invoiceId]
+      );
+      const hadLines = Number(existingLines.rows[0]?.count ?? 0) > 0;
 
       if (mode === 'replace') {
         await queryable.query(
@@ -395,25 +438,29 @@ export class InvoicesRepository {
         );
       }
 
-      // Carry the estimate's pricing settings onto the invoice header.
-      const discount = normalizeDiscountColumns(input.discount);
-      await queryable.query(
-        `update invoices set
-           tax_rate_basis_points = $2,
-           discount_kind = $3,
-           discount_basis_points = $4,
-           discount_amount = $5,
-           updated_at = $6
-         where id = $1`,
-        [
-          invoiceId,
-          input.taxRateBasisPoints,
-          discount.kind,
-          discount.basisPoints,
-          discount.amount,
-          now
-        ]
-      );
+      // Adopt the estimate's tax/discount only when the estimate becomes the
+      // whole bill (empty draft or replace). Appending onto existing lines keeps
+      // the invoice's current header terms untouched.
+      if (mode === 'replace' || !hadLines) {
+        const discount = normalizeDiscountColumns(input.discount);
+        await queryable.query(
+          `update invoices set
+             tax_rate_basis_points = $2,
+             discount_kind = $3,
+             discount_basis_points = $4,
+             discount_amount = $5,
+             updated_at = $6
+           where id = $1`,
+          [
+            invoiceId,
+            input.taxRateBasisPoints,
+            discount.kind,
+            discount.basisPoints,
+            discount.amount,
+            now
+          ]
+        );
+      }
 
       const positionResult = await queryable.query<{ nextPosition: number }>(
         `select coalesce(max(line_position) + 1, 0) as "nextPosition"
@@ -456,7 +503,22 @@ export class InvoicesRepository {
         position += 1;
       }
 
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, now]);
+      await insertJobTimelineEntry(
+        {
+          id: randomUUID(),
+          jobId,
+          occurredAt: now,
+          actorName: input.actor.displayName,
+          kind: 'estimateConverted',
+          message: `Estimate converted to invoice draft: ${input.estimateTitle}.`
+        },
+        queryable
+      );
+
       await recalculateInvoiceTotals(invoiceId, now, queryable);
+
+      return { invoiceId };
     });
   }
 }

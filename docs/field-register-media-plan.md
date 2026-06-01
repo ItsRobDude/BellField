@@ -22,7 +22,7 @@ Audit refreshed after the register/media backend, field register queue, and offi
 - Field-mobile can queue register entry create/edit/void operations using the existing pending sync model.
 - Office-web can review and edit captured register entries from job detail.
 - `AppointmentSummary.registerFollowUpNote` still exists as a free-text reminder. It complements structured register entries instead of replacing them.
-- Invoice-draft reflection is not implemented yet because the invoice draft entity belongs to Milestone 7.
+- Invoice-draft reflection is now implemented (Milestone 7): each active register entry reflects into a linked line on its job's invoice draft, with detach-on-edit when office hand-edits the reflected line.
 
 ### Media
 

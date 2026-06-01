@@ -25,13 +25,11 @@ function createService() {
     createEstimate: jest.fn(),
     replaceEstimate: jest.fn(),
     approveEstimate: jest.fn(),
-    declineEstimate: jest.fn(),
-    getConvertedInvoiceId: jest.fn().mockResolvedValue(null),
-    recordConversion: jest.fn()
+    declineEstimate: jest.fn()
   };
   const invoicesRepository = {
     countActiveLines: jest.fn().mockResolvedValue(0),
-    convertEstimateIntoDraft: jest.fn(),
+    convertEstimateIntoDraft: jest.fn().mockResolvedValue({ invoiceId: 'invoice-main-job-1' }),
     getMainInvoiceForJob: jest.fn().mockResolvedValue({ id: 'invoice-main-job-1' })
   };
 
@@ -260,21 +258,24 @@ describe('EstimatesService', () => {
 });
 
 describe('EstimatesService convertToInvoice', () => {
-  it('converts an approved estimate, copies its snapshot, and records the conversion', async () => {
+  it('converts an approved estimate by copying its snapshot atomically', async () => {
     const { service, estimatesRepository, invoicesRepository } = createService();
     estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
 
     const result = await service.convertToInvoice('token', 'estimate-1', {});
 
+    // The atomic conversion (claim + lines + audit + recompute) is delegated to
+    // the invoices repository as one transaction; it also carries the actor and
+    // estimate title for the in-transaction timeline + audit stamp.
     expect(invoicesRepository.convertEstimateIntoDraft).toHaveBeenCalledWith(
       'job-1',
-      expect.objectContaining({ estimateId: 'estimate-1', lines: expect.any(Array) }),
+      expect.objectContaining({
+        estimateId: 'estimate-1',
+        estimateTitle: expect.any(String),
+        actor: expect.objectContaining({ id: expect.any(String) }),
+        lines: expect.any(Array)
+      }),
       'append'
-    );
-    expect(estimatesRepository.recordConversion).toHaveBeenCalledWith(
-      'estimate-1',
-      'invoice-main-job-1',
-      expect.any(Object)
     );
     expect(result.invoice.id).toBe('invoice-main-job-1');
   });
@@ -316,8 +317,9 @@ describe('EstimatesService convertToInvoice', () => {
 
   it('refuses to convert an estimate that was already converted', async () => {
     const { service, estimatesRepository, invoicesRepository } = createService();
-    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
-    estimatesRepository.getConvertedInvoiceId.mockResolvedValue('invoice-main-job-1');
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      pendingEstimate({ status: 'approved', convertedToInvoiceId: 'invoice-main-job-1' })
+    );
 
     await expect(service.convertToInvoice('token', 'estimate-1', {})).rejects.toBeInstanceOf(
       ConflictException
