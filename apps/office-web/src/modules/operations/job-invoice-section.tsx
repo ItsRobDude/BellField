@@ -5,6 +5,7 @@ import {
   addOfficeInvoiceLine,
   editOfficeInvoiceLine,
   getOfficeInvoiceForJob,
+  postOfficeInvoice,
   voidOfficeInvoiceLine,
   type InvoiceLineItemSummary,
   type InvoiceSummary
@@ -24,6 +25,7 @@ type JobInvoiceSectionProps = {
   apiBaseUrl: string;
   sessionToken: string;
   canEdit: boolean;
+  canPost: boolean;
 };
 
 const sourceLabels: Record<InvoiceLineItemSummary['sourceKind'], string> = {
@@ -35,12 +37,15 @@ const sourceLabels: Record<InvoiceLineItemSummary['sourceKind'], string> = {
 // The job's single main invoice draft: the running bill, fed by reflected
 // register work plus manual office lines. Office users with invoices:edit can
 // add, edit, and void lines; editing a register-sourced line detaches it from
-// its register source on the server. All styling reuses officeWorkspaceStyles.
+// its register source on the server. Users with invoices:post can post (lock)
+// the draft, which freezes its display context and stops further editing. All
+// styling reuses officeWorkspaceStyles.
 export function JobInvoiceSection({
   jobId,
   apiBaseUrl,
   sessionToken,
-  canEdit
+  canEdit,
+  canPost
 }: JobInvoiceSectionProps) {
   const [invoice, setInvoice] = useState<InvoiceSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -136,6 +141,26 @@ export function JobInvoiceSection({
     }
   }
 
+  async function postInvoice() {
+    // Posting is a locking, accounting-significant action: confirm even when permitted.
+    if (
+      !window.confirm(
+        'Post this invoice? Once posted it becomes the locked accounting record and can no longer be edited.'
+      )
+    ) {
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await postOfficeInvoice({ jobId, apiBaseUrl, sessionToken });
+      applyResult(response.invoice, 'Invoice posted.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to post the invoice.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
     <section style={styles.panel} aria-label="Job invoice draft">
       <div style={styles.row}>
@@ -151,6 +176,16 @@ export function JobInvoiceSection({
               onClick={() => setNewLineDraft(createEmptyInvoiceLineDraft())}
             >
               Add line
+            </button>
+          ) : null}
+          {invoice && canPost && invoice.status === 'draft' && !newLineDraft && !editingLineId ? (
+            <button
+              type="button"
+              style={styles.primaryButton}
+              disabled={isSaving}
+              onClick={() => void postInvoice()}
+            >
+              Post invoice
             </button>
           ) : null}
         </div>
@@ -241,10 +276,45 @@ export function JobInvoiceSection({
             </div>
           )}
           <InvoiceTotals invoice={invoice} />
+          {invoice.posted ? <PostedInvoiceSummary posted={invoice.posted} /> : null}
         </>
       )}
     </section>
   );
+}
+
+// The frozen customer/location/job context captured at posting. Shown read-only so the
+// posted bill always renders as it was, regardless of later CRM edits.
+function PostedInvoiceSummary({ posted }: { posted: NonNullable<InvoiceSummary['posted']> }) {
+  const billToAddress = formatAddress(posted.billTo);
+  const serviceAddress = formatAddress(posted.serviceLocation);
+  return (
+    <div style={styles.subpanel}>
+      <h3 style={styles.sectionHeading}>Posted record</h3>
+      <p style={styles.tinyMuted}>
+        Posted by {posted.postedByName} on {posted.postedAt.slice(0, 10)}.
+      </p>
+      <SummaryRow label="Bill to" value={posted.billTo.name} />
+      {billToAddress ? <p style={styles.tinyMuted}>{billToAddress}</p> : null}
+      <SummaryRow label="Service location" value={posted.serviceLocation.name} />
+      {serviceAddress ? <p style={styles.tinyMuted}>{serviceAddress}</p> : null}
+      <SummaryRow label="Job #" value={posted.jobNumber} />
+      {posted.workOrderNumber ? (
+        <SummaryRow label="Work order" value={posted.workOrderNumber} />
+      ) : null}
+    </div>
+  );
+}
+
+function formatAddress(place: {
+  addressLine1?: string;
+  city?: string;
+  state?: string;
+  postalCode?: string;
+}): string {
+  const cityState = [place.city, place.state].filter((part) => part && part.trim()).join(', ');
+  const tail = [cityState, place.postalCode?.trim()].filter(Boolean).join(' ');
+  return [place.addressLine1?.trim(), tail].filter(Boolean).join(', ');
 }
 
 function InvoiceLineEditor({

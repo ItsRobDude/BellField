@@ -426,7 +426,7 @@ Current implementation note:
 
 - structured register entries exist now
 - the eager main invoice draft and automatic register-to-invoice reflection are shipped; approved estimates convert into the draft (atomic, append/replace)
-- invoice posting/locking and payments are the remaining Milestone 8 work
+- invoice posting + the posted lock + a posting-time customer/location/job snapshot have shipped (gated on `invoices:post`); payments, adjustment/credit records, and the bookkeeping workbench remain the rest of Milestone 8
 
 ### Zero-dollar invoice rule
 
@@ -464,6 +464,13 @@ Once posted:
 - the invoice should be locked
 - BellField may allow follow-up actions such as adjustment or credit-style corrections
 - BellField should not allow casual direct editing of the posted invoice itself
+
+Implemented behavior (Milestone 8 first slice):
+
+- posting freezes the bill-to customer, service location, job number, and work order onto the invoice, so later CRM edits cannot rewrite what the posted invoice meant
+- the lock is enforced on every write path — office line edits, estimate conversion, and register reflection all refuse a posted invoice
+- a register entry that syncs in after posting still saves, but is recorded on the job timeline as "not reflected" (it needs an adjustment) instead of changing the locked invoice
+- posting is invoice-only and does not change job status
 
 ---
 
@@ -604,7 +611,7 @@ Reopening closed jobs should normally be controlled by a permission toggle set b
 - Invoice draft exists early
 - Register items feed the invoice draft immediately
 - Office can edit until posting
-- Posting locks the invoice except for later accounting-safe follow-up actions
+- Posting locks the invoice and freezes its customer/location/job display context, except for later accounting-safe follow-up actions
 
 ### V1 design rule
 

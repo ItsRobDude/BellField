@@ -73,14 +73,15 @@ Estimates attach to a job and are priced server-side by `@bellfield/estimating`;
 
 ## Invoices
 
-Every job owns exactly one main invoice draft (created eagerly at job creation, backfilled for existing jobs). Register entries reflect into it automatically; office users can add/edit/void lines; an approved estimate can be converted into it. Posting/locking is M8.
+Every job owns exactly one main invoice draft (created eagerly at job creation, backfilled for existing jobs). Register entries reflect into it automatically; office users can add/edit/void lines; an approved estimate can be converted into it. Posting locks the invoice (gated on `invoices:post`) and atomically freezes a customer/location/job display snapshot; once posted, every mutator (line edits, estimate conversion, register reflection) refuses the invoice — each line/total mutator locks the invoice row `for update` and re-checks `status = 'draft'` in-transaction so a concurrent post cannot be edited around. Posting does not change job status. Payments, adjustment/credit records, and the bookkeeping workbench remain later M8 work.
 
-| Method | Path                                      | Surface | Permission gate | Purpose                                                                  |
-| ------ | ----------------------------------------- | ------- | --------------- | ------------------------------------------------------------------------ |
-| `GET`  | `/operations/jobs/:jobId/invoice`         | office  | `invoices:view` | Load the job's main invoice draft with its active line items and totals. |
-| `POST` | `/operations/jobs/:jobId/invoice/lines`   | office  | `invoices:edit` | Add a manual line to the draft.                                          |
-| `PUT`  | `/operations/invoices/lines/:lineId`      | office  | `invoices:edit` | Edit a draft line (detaches it from its register source).                |
-| `POST` | `/operations/invoices/lines/:lineId/void` | office  | `invoices:edit` | Soft-void a draft line.                                                  |
+| Method | Path                                      | Surface | Permission gate | Purpose                                                                                                |
+| ------ | ----------------------------------------- | ------- | --------------- | ------------------------------------------------------------------------------------------------------ |
+| `GET`  | `/operations/jobs/:jobId/invoice`         | office  | `invoices:view` | Load the job's main invoice draft with its active line items and totals.                               |
+| `POST` | `/operations/jobs/:jobId/invoice/lines`   | office  | `invoices:edit` | Add a manual line to the draft.                                                                        |
+| `PUT`  | `/operations/invoices/lines/:lineId`      | office  | `invoices:edit` | Edit a draft line (detaches it from its register source).                                              |
+| `POST` | `/operations/invoices/lines/:lineId/void` | office  | `invoices:edit` | Soft-void a draft line.                                                                                |
+| `POST` | `/operations/jobs/:jobId/invoice/post`    | office  | `invoices:post` | Post (lock) the draft: freezes the customer/location/job snapshot, then blocks further edits. No body. |
 
 ## Focused Office Work Models
 

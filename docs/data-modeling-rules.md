@@ -546,6 +546,13 @@ Invoices should preserve the customer/location/job context as it existed at the 
 
 This prevents later customer/location changes from corrupting old financial records.
 
+Current implementation note:
+
+- Implemented at posting (migration `20260601_007`): posting freezes the bill-to customer (name, account type, billing address), the service location (name, address), the job number, and the work order number into discrete columns on `invoices`.
+- Snapshot ids (`bill_to_customer_id`, `service_location_id`) are stored as plain text, not foreign keys, so a later customer/location delete can never null a posted record. The audit `posted_by_employee_id` does reference `employees(id)`.
+- Money is not part of this snapshot — totals and per-line amounts already freeze on write.
+- A draft invoice intentionally has no snapshot and resolves current names; freezing only matters once the invoice becomes the locked accounting record.
+
 ---
 
 ## 11. Register and Line Item Modeling Rules

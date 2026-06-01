@@ -39,8 +39,8 @@ function repositoryWith(handlers: Array<{ match: RegExp; rows?: unknown[]; rowCo
 }
 
 const HANDLERS_FOUND_DRAFT = {
-  match: /select id from invoices where job_id/i,
-  rows: [{ id: 'inv-1' }]
+  match: /select id, status from invoices\s+where job_id/i,
+  rows: [{ id: 'inv-1', status: 'draft' }]
 };
 const HANDLERS_CLAIM_OK = { match: /update estimates set/i, rowCount: 1 };
 const HANDLERS_NEXT_POSITION = {
@@ -110,6 +110,10 @@ describe('InvoicesRepository.convertEstimateIntoDraft', () => {
     const result = await repository.convertEstimateIntoDraft('job-1', conversionInput(), 'append');
 
     expect(result).toEqual({ invoiceId: 'inv-1' });
+    // The invoice row is locked FOR UPDATE before any write (posted-lock race guard).
+    expect(findCall(calls, /select id, status from invoices\s+where job_id/i)?.sql).toMatch(
+      /for update/i
+    );
     // The estimate's tax/discount must NOT overwrite the draft's existing terms.
     expect(findCall(calls, HEADER_ADOPT)).toBeUndefined();
     // Append never voids existing lines.
@@ -233,5 +237,173 @@ describe('InvoicesRepository.convertEstimateIntoDraft', () => {
     expect(result).toEqual({ invoiceId: 'inv-1' });
     expect(findCall(calls, HEADER_ADOPT)).toBeDefined();
     expect(countCalls(calls, /insert into invoice_line_items/i)).toBe(1);
+  });
+
+  it('refuses to convert into a posted (locked) invoice and claims no estimate', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: /select id, status from invoices\s+where job_id/i,
+        rows: [{ id: 'inv-1', status: 'posted' }]
+      }
+    ]);
+
+    await expect(
+      repository.convertEstimateIntoDraft('job-1', conversionInput(), 'append')
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    // The posted guard fires before the estimate claim or any line write.
+    expect(findCall(calls, /update estimates set/i)).toBeUndefined();
+    expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
+  });
+});
+
+describe('InvoicesRepository.postInvoice', () => {
+  const snapshot = {
+    billToCustomerId: 'customer-1',
+    billToCustomerName: 'Acme Co',
+    billToAccountType: 'company',
+    billToAddressLine1: '1 Main St',
+    billToCity: 'Springfield',
+    billToState: 'IL',
+    billToPostalCode: '62704',
+    serviceLocationId: 'location-1',
+    serviceLocationName: 'Acme HQ',
+    serviceLocationAddressLine1: '2 Plant Rd',
+    serviceLocationCity: 'Springfield',
+    serviceLocationState: 'IL',
+    serviceLocationPostalCode: '62704',
+    jobNumber: '1001',
+    workOrderNumber: 'WO-9'
+  };
+  const actor = { id: 'owner-1', displayName: 'Olivia Owner' };
+  const POST_UPDATE = /update invoices set\s+status = 'posted'/i;
+
+  it('locks the draft with a guarded update, freezes the snapshot, bumps version, and logs the post', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: POST_UPDATE, rowCount: 1 },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('job-1', snapshot, actor);
+
+    const post = findCall(calls, POST_UPDATE);
+    expect(post).toBeDefined();
+    // Guarded transition: only a draft posts (atomic against a concurrent post).
+    expect(post?.sql).toMatch(/where job_id = \$1 and invoice_kind = 'main' and status = 'draft'/i);
+    // Version bumps; the frozen context is written.
+    expect(post?.sql).toMatch(/version = version \+ 1/i);
+    expect(post?.params).toContain('Acme Co');
+    expect(post?.params).toContain('1001');
+    // Posting must NOT change job status — only touch updated_at.
+    const jobTouch = findCall(calls, /update jobs set/i);
+    expect(jobTouch?.sql).toMatch(/update jobs set updated_at = \$2 where id = \$1/i);
+    expect(jobTouch?.sql).not.toMatch(/status/i);
+    // It records an invoicePosted timeline event and does NOT recompute money.
+    const timeline = findCall(calls, /insert into job_timeline_entries/i);
+    expect(timeline?.params).toContain('invoicePosted');
+    expect(findCall(calls, /update invoices set\s+subtotal_amount/i)).toBeUndefined();
+  });
+
+  it('rejects with a conflict and writes no timeline when the invoice is no longer a draft', async () => {
+    const { repository, calls } = repositoryWith([{ match: POST_UPDATE, rowCount: 0 }]);
+
+    await expect(repository.postInvoice('job-1', snapshot, actor)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, /insert into job_timeline_entries/i)).toBeUndefined();
+    expect(findCall(calls, /update jobs set/i)).toBeUndefined();
+  });
+});
+
+describe('InvoicesRepository line mutators lock the invoice (posted-lock race guard)', () => {
+  const LOCK_BY_JOB =
+    /select id, status from invoices\s+where job_id = \$1 and invoice_kind = 'main'/i;
+  const LOCK_BY_ID = /select status from invoices where id = \$1/i;
+  const validLine = {
+    kind: 'other' as const,
+    description: 'Trip fee',
+    quantity: 1,
+    unitPrice: 40,
+    taxable: true
+  };
+
+  it('addManualLine locks the invoice FOR UPDATE and inserts on a draft', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_JOB, rows: [{ id: 'inv-1', status: 'draft' }] },
+      HANDLERS_NEXT_POSITION,
+      HANDLERS_INSERT_LINE,
+      HANDLERS_RECALC_HEADER,
+      HANDLERS_RECALC_LINES,
+      HANDLERS_RECALC_WRITE
+    ]);
+
+    await repository.addManualLine('job-1', validLine);
+
+    expect(findCall(calls, LOCK_BY_JOB)?.sql).toMatch(/for update/i);
+    expect(findCall(calls, /insert into invoice_line_items/i)).toBeDefined();
+  });
+
+  it('addManualLine refuses a posted invoice and writes nothing', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_JOB, rows: [{ id: 'inv-1', status: 'posted' }] }
+    ]);
+
+    await expect(repository.addManualLine('job-1', validLine)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
+  });
+
+  it('editLine locks the owning invoice by id FOR UPDATE and updates on a draft', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_ID, rows: [{ status: 'draft' }] },
+      { match: /update invoice_line_items set/i, rowCount: 1 },
+      HANDLERS_RECALC_HEADER,
+      HANDLERS_RECALC_LINES,
+      HANDLERS_RECALC_WRITE
+    ]);
+
+    await repository.editLine('line-1', 'inv-1', validLine);
+
+    expect(findCall(calls, LOCK_BY_ID)?.sql).toMatch(/for update/i);
+    expect(findCall(calls, /update invoice_line_items set/i)).toBeDefined();
+  });
+
+  it('editLine refuses a posted invoice and updates no line', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_ID, rows: [{ status: 'posted' }] }
+    ]);
+
+    await expect(repository.editLine('line-1', 'inv-1', validLine)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, /update invoice_line_items set/i)).toBeUndefined();
+  });
+
+  it('voidLine locks the owning invoice by id FOR UPDATE and voids on a draft', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_ID, rows: [{ status: 'draft' }] },
+      { match: /update invoice_line_items set is_void = true/i, rowCount: 1 },
+      HANDLERS_RECALC_HEADER,
+      HANDLERS_RECALC_LINES,
+      HANDLERS_RECALC_WRITE
+    ]);
+
+    await repository.voidLine('line-1', 'inv-1', 'mistake');
+
+    expect(findCall(calls, LOCK_BY_ID)?.sql).toMatch(/for update/i);
+    expect(findCall(calls, /update invoice_line_items set is_void = true/i)).toBeDefined();
+  });
+
+  it('voidLine refuses a posted invoice and voids no line', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_ID, rows: [{ status: 'posted' }] }
+    ]);
+
+    await expect(repository.voidLine('line-1', 'inv-1', 'x')).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, /update invoice_line_items set is_void = true/i)).toBeUndefined();
   });
 });

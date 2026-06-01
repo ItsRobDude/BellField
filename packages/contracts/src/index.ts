@@ -622,7 +622,7 @@ export interface EstimateSummary {
   version: number;
 }
 
-// --- Invoices (Milestone 7, draft stage) ---------------------------------------
+// --- Invoices (Milestone 7 draft + Milestone 8 posting/lock) --------------------
 
 export type InvoiceStatus = 'draft' | 'posted';
 export type InvoiceKind = 'main';
@@ -666,6 +666,37 @@ export interface InvoiceTotals {
   costComplete: boolean;
 }
 
+/**
+ * Customer/location/job display context frozen onto an invoice at the moment it is
+ * posted, so later edits to current CRM records never rewrite what a posted invoice
+ * meant. Money totals are NOT here — those already freeze on write. Present only when
+ * `status === 'posted'`. Address/account-type fields are optional because a customer
+ * or location may legitimately have been recorded without complete address data.
+ */
+export interface PostedInvoiceContext {
+  postedAt: string;
+  postedByName: string;
+  billTo: {
+    customerId: string;
+    name: string;
+    accountType?: string;
+    addressLine1?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+  };
+  serviceLocation: {
+    locationId: string;
+    name: string;
+    addressLine1?: string;
+    city?: string;
+    state?: string;
+    postalCode?: string;
+  };
+  jobNumber: string;
+  workOrderNumber?: string;
+}
+
 export interface InvoiceSummary {
   id: string;
   jobId: string;
@@ -675,6 +706,8 @@ export interface InvoiceSummary {
   discount?: EstimateDiscount;
   lineItems: InvoiceLineItemSummary[];
   totals: InvoiceTotals;
+  /** Frozen display context, set once the invoice is posted (see PostedInvoiceContext). */
+  posted?: PostedInvoiceContext;
   createdAt: string;
   updatedAt: string;
   version: number;

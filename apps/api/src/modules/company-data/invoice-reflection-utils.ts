@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { priceEstimate, type EstimatePricingLine } from '@bellfield/estimating';
 import type { QueryExecutor } from '../../database/database.service';
+import { insertJobTimelineEntry } from './jobs-data-repository-utils';
 
 // Register-to-invoice reflection, shared by the register write paths.
 //
@@ -37,12 +38,67 @@ type ReflectableRegisterEntry = {
   inventorySourceLabel?: string;
 };
 
-async function getMainInvoiceId(jobId: string, queryable: QueryExecutor): Promise<string | null> {
-  const result = await queryable.query<{ id: string }>(
-    `select id from invoices where job_id = $1 and invoice_kind = 'main' limit 1`,
+type MainInvoiceContext = { id: string; status: 'draft' | 'posted' };
+
+/** Load the job's main invoice id AND status, locking the row for the rest of the
+ * transaction. Reflection must know the status so it never writes to a posted (locked)
+ * invoice; the `for update` lock makes that race-proof — once we read 'draft' here, a
+ * concurrent post blocks until this register transaction commits. */
+async function getMainInvoiceContext(
+  jobId: string,
+  queryable: QueryExecutor
+): Promise<MainInvoiceContext | null> {
+  const result = await queryable.query<MainInvoiceContext>(
+    `select id, status from invoices where job_id = $1 and invoice_kind = 'main' limit 1 for update`,
     [jobId]
   );
-  return result.rows[0]?.id ?? null;
+  return result.rows[0] ?? null;
+}
+
+/**
+ * True when this register entry still has a linked, non-void invoice line — i.e. it had
+ * reflected onto the invoice and a change to it would otherwise have flowed through. Used
+ * on the posted branch to decide whether a "not reflected" note is warranted: a detached
+ * (office-edited) or never-linked entry would not reflect even on a draft, so noting it
+ * would mislead.
+ */
+async function hasLinkedInvoiceLine(
+  registerEntryId: string,
+  queryable: QueryExecutor
+): Promise<boolean> {
+  const result = await queryable.query(
+    `select 1 from invoice_line_items
+     where source_register_entry_id = $1 and source_sync_state = 'linked' and is_void = false
+     limit 1`,
+    [registerEntryId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/**
+ * Record on the job timeline that a register change could not flow into the invoice
+ * because it is posted/locked. The register entry itself is still saved by the caller;
+ * this only surfaces that the locked bill does not include it (it needs an adjustment).
+ */
+async function insertRegisterNotReflectedNote(
+  jobId: string,
+  description: string,
+  actorName: string,
+  occurredAt: string,
+  queryable: QueryExecutor
+): Promise<void> {
+  await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, occurredAt]);
+  await insertJobTimelineEntry(
+    {
+      id: randomUUID(),
+      jobId,
+      occurredAt,
+      actorName,
+      kind: 'registerEntryNotReflected',
+      message: `Register entry "${description}" was saved after the invoice was posted; it was not added to the locked invoice and needs an adjustment.`
+    },
+    queryable
+  );
 }
 
 async function nextLinePosition(invoiceId: string, queryable: QueryExecutor): Promise<number> {
@@ -138,15 +194,28 @@ export async function recalculateInvoiceTotals(
 export async function reflectRegisterEntryCreate(
   jobId: string,
   entry: ReflectableRegisterEntry,
+  actorName: string,
   occurredAt: string,
   queryable: QueryExecutor
 ): Promise<void> {
-  const invoiceId = await getMainInvoiceId(jobId, queryable);
-  if (!invoiceId) {
+  const context = await getMainInvoiceContext(jobId, queryable);
+  if (!context) {
+    return;
+  }
+  if (context.status === 'posted') {
+    // The invoice is locked. The register entry itself is already saved by the caller;
+    // we must not add a line to the posted bill. Record that it was not reflected.
+    await insertRegisterNotReflectedNote(
+      jobId,
+      entry.description,
+      actorName,
+      occurredAt,
+      queryable
+    );
     return;
   }
 
-  const position = await nextLinePosition(invoiceId, queryable);
+  const position = await nextLinePosition(context.id, queryable);
   await queryable.query(
     `insert into invoice_line_items (
        id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
@@ -159,7 +228,7 @@ export async function reflectRegisterEntryCreate(
              'register', $10, 'linked', false, $11, $11)`,
     [
       randomUUID(),
-      invoiceId,
+      context.id,
       position,
       entry.kind,
       entry.description,
@@ -172,19 +241,41 @@ export async function reflectRegisterEntryCreate(
     ]
   );
 
-  await recalculateInvoiceTotals(invoiceId, occurredAt, queryable);
+  await recalculateInvoiceTotals(context.id, occurredAt, queryable);
 }
 
 /**
- * Reflect an edit to a register entry into its linked invoice line. Detached
- * lines (office-edited) are intentionally left untouched. No-op if no linked
- * line exists. Recomputes totals when something changed.
+ * Reflect an edit to a register entry into its linked invoice line. Detached lines
+ * (office-edited) are intentionally left untouched. No-op if no linked line exists.
+ * Recomputes totals when something changed.
+ *
+ * The invoice status is resolved BEFORE any line write, so a late edit can never mutate
+ * a posted invoice's line. On a posted invoice the edit is dropped and a "not reflected"
+ * note is recorded only when the entry actually had a linked line that would have moved.
  */
 export async function reflectRegisterEntryUpdate(
   entry: ReflectableRegisterEntry & { jobId: string },
+  actorName: string,
   occurredAt: string,
   queryable: QueryExecutor
 ): Promise<void> {
+  const context = await getMainInvoiceContext(entry.jobId, queryable);
+  if (!context) {
+    return;
+  }
+  if (context.status === 'posted') {
+    if (await hasLinkedInvoiceLine(entry.id, queryable)) {
+      await insertRegisterNotReflectedNote(
+        entry.jobId,
+        entry.description,
+        actorName,
+        occurredAt,
+        queryable
+      );
+    }
+    return;
+  }
+
   const updateResult = await queryable.query(
     `update invoice_line_items set
        kind = $2,
@@ -211,20 +302,36 @@ export async function reflectRegisterEntryUpdate(
   );
 
   if ((updateResult.rowCount ?? 0) > 0) {
-    const invoiceId = await getMainInvoiceId(entry.jobId, queryable);
-    if (invoiceId) {
-      await recalculateInvoiceTotals(invoiceId, occurredAt, queryable);
-    }
+    await recalculateInvoiceTotals(context.id, occurredAt, queryable);
   }
 }
 
-/** Void the linked invoice line when a register entry is voided, then recompute. */
+/**
+ * Void the linked invoice line when a register entry is voided, then recompute.
+ *
+ * As with update, the invoice status is resolved BEFORE the line write so a late void
+ * can never mutate a posted invoice's line; on a posted invoice the void is dropped and
+ * a "not reflected" note is recorded only when a linked line existed.
+ */
 export async function reflectRegisterEntryVoid(
   registerEntryId: string,
   jobId: string,
+  description: string,
+  actorName: string,
   occurredAt: string,
   queryable: QueryExecutor
 ): Promise<void> {
+  const context = await getMainInvoiceContext(jobId, queryable);
+  if (!context) {
+    return;
+  }
+  if (context.status === 'posted') {
+    if (await hasLinkedInvoiceLine(registerEntryId, queryable)) {
+      await insertRegisterNotReflectedNote(jobId, description, actorName, occurredAt, queryable);
+    }
+    return;
+  }
+
   const voidResult = await queryable.query(
     `update invoice_line_items set
        is_void = true,
@@ -237,10 +344,7 @@ export async function reflectRegisterEntryVoid(
   );
 
   if ((voidResult.rowCount ?? 0) > 0) {
-    const invoiceId = await getMainInvoiceId(jobId, queryable);
-    if (invoiceId) {
-      await recalculateInvoiceTotals(invoiceId, occurredAt, queryable);
-    }
+    await recalculateInvoiceTotals(context.id, occurredAt, queryable);
   }
 }
 

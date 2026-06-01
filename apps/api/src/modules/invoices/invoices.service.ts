@@ -7,14 +7,21 @@ import {
 import type { InvoiceLineItemInput, VoidInvoiceLineItemRequest } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
+import { ReferenceDataService } from '../company-data/reference-data.service';
 import { InvoicesRepository, type InvoiceLineWriteInput } from './invoices.repository';
-import type { InvoiceRecord, InvoiceResponseDto, InvoiceSummaryDto } from './invoices.types';
+import type {
+  InvoiceRecord,
+  InvoiceResponseDto,
+  InvoiceSummaryDto,
+  PostedSnapshotInput
+} from './invoices.types';
 
 @Injectable()
 export class InvoicesService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
+    private readonly referenceDataService: ReferenceDataService,
     private readonly invoicesRepository: InvoicesRepository
   ) {}
 
@@ -85,6 +92,56 @@ export class InvoicesService {
     return { invoice: this.toSummary(await this.requireMainInvoice(context.jobId)) };
   }
 
+  /**
+   * Post a job's main invoice draft: lock it and freeze the customer/location/job
+   * display context so later CRM edits cannot rewrite this financial record. Office-only,
+   * gated on invoices:post. Posting does NOT change job status — "posted" is an
+   * invoice/accounting concept only. Corrections after posting use adjustment/credit
+   * records (a later Milestone 8 lane), not edits to the locked invoice.
+   */
+  async postInvoice(sessionToken: string, jobId: string): Promise<InvoiceResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'invoices:post',
+      ['office-web']
+    );
+    const job = await this.jobsDataService.getJobById(jobId);
+    const invoice = await this.requireMainInvoice(jobId);
+    if (invoice.status !== 'draft') {
+      // Friendly pre-check; the repository's guarded UPDATE is the real boundary.
+      throw new ConflictException('Only draft invoices can be posted.');
+    }
+
+    // Freeze the bill-to customer and service location exactly as they read now. These
+    // getters throw NotFound when a referenced record is missing, which correctly blocks
+    // a post against broken references rather than freezing empty context.
+    const [billToCustomer, serviceLocation] = await Promise.all([
+      this.referenceDataService.getCustomerById(job.billToCustomerId),
+      this.referenceDataService.getLocationById(job.locationId)
+    ]);
+
+    const snapshot: PostedSnapshotInput = {
+      billToCustomerId: billToCustomer.id,
+      billToCustomerName: billToCustomer.name,
+      billToAccountType: billToCustomer.accountType,
+      billToAddressLine1: billToCustomer.billingAddressLine1,
+      billToCity: billToCustomer.billingCity,
+      billToState: billToCustomer.billingState,
+      billToPostalCode: billToCustomer.billingPostalCode,
+      serviceLocationId: serviceLocation.id,
+      serviceLocationName: serviceLocation.name,
+      serviceLocationAddressLine1: serviceLocation.addressLine1,
+      serviceLocationCity: serviceLocation.city,
+      serviceLocationState: serviceLocation.state,
+      serviceLocationPostalCode: serviceLocation.postalCode,
+      jobNumber: job.jobNumber,
+      workOrderNumber: job.workOrderNumber
+    };
+
+    await this.invoicesRepository.postInvoice(jobId, snapshot, actor);
+    return { invoice: this.toSummary(await this.requireMainInvoice(jobId)) };
+  }
+
   private validateLineInput(request: InvoiceLineItemInput): InvoiceLineWriteInput {
     const description = request.description?.trim();
     if (!description) {
@@ -119,8 +176,9 @@ export class InvoicesService {
 
   private ensureDraftStatus(status: InvoiceRecord['status']): void {
     if (status !== 'draft') {
-      // Posting/locking is Milestone 8; for now a non-draft is not editable.
-      throw new ConflictException('Only draft invoices can be edited.');
+      // A posted invoice is the locked accounting record; corrections go through
+      // adjustment/credit records, not edits to the posted invoice itself.
+      throw new ConflictException('This invoice is posted and locked; it can no longer be edited.');
     }
   }
 

@@ -8,7 +8,8 @@ import type {
   InvoiceResponse,
   InvoiceStatus,
   InvoiceSummary,
-  InvoiceTotals
+  InvoiceTotals,
+  PostedInvoiceContext
 } from '@bellfield/contracts';
 
 // Alias the contract shapes the controller/service speak in, mirroring the
@@ -33,9 +34,34 @@ export type InvoiceRecord = {
   discount?: InvoiceDiscountValue;
   lineItems: InvoiceLineItemRecord[];
   totals: InvoiceTotalsValue;
+  /** Frozen customer/location/job display context; present only once posted. */
+  posted?: PostedInvoiceContext;
   createdAt: string;
   updatedAt: string;
   version: number;
 };
 
 export type InvoiceLineItemRecord = InvoiceLineItemSummary;
+
+/**
+ * The current customer/location/job display context the service resolves and the
+ * repository freezes onto the invoice at posting. Sourced from the bill-to customer,
+ * service location, and job records as they exist at the posting moment.
+ */
+export type PostedSnapshotInput = {
+  billToCustomerId: string;
+  billToCustomerName: string;
+  billToAccountType: string;
+  billToAddressLine1: string;
+  billToCity: string;
+  billToState: string;
+  billToPostalCode: string;
+  serviceLocationId: string;
+  serviceLocationName: string;
+  serviceLocationAddressLine1: string;
+  serviceLocationCity: string;
+  serviceLocationState: string;
+  serviceLocationPostalCode: string;
+  jobNumber: string;
+  workOrderNumber?: string;
+};

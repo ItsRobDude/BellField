@@ -19,22 +19,29 @@ function createService() {
   const jobsDataService = {
     getJobById: jest.fn().mockResolvedValue({ id: 'job-1', status: 'new' })
   };
+  const referenceDataService = {
+    getCustomerById: jest.fn(),
+    getLocationById: jest.fn()
+  };
   const invoicesRepository = {
     getMainInvoiceForJob: jest.fn(),
     getActiveLineContext: jest.fn(),
     addManualLine: jest.fn(),
     editLine: jest.fn(),
-    voidLine: jest.fn()
+    voidLine: jest.fn(),
+    postInvoice: jest.fn()
   };
 
   return {
     service: new InvoicesService(
       identityAccessService as never,
       jobsDataService as never,
+      referenceDataService as never,
       invoicesRepository as never
     ),
     identityAccessService,
     jobsDataService,
+    referenceDataService,
     invoicesRepository
   };
 }
@@ -270,5 +277,106 @@ describe('InvoicesService line editing', () => {
       ConflictException
     );
     expect(invoicesRepository.editLine).not.toHaveBeenCalled();
+  });
+});
+
+describe('InvoicesService posting', () => {
+  function postingService() {
+    const ctx = createService();
+    ctx.identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'owner-1',
+      displayName: 'Olivia Owner',
+      effectivePermissions: ['invoices:view', 'invoices:post'],
+      sessionSurface: 'office-web'
+    });
+    ctx.jobsDataService.getJobById.mockResolvedValue({
+      id: 'job-1',
+      jobNumber: '1001',
+      locationId: 'location-1',
+      billToCustomerId: 'customer-1',
+      workOrderNumber: 'WO-9',
+      status: 'completed'
+    });
+    ctx.referenceDataService.getCustomerById.mockResolvedValue({
+      id: 'customer-1',
+      name: 'Acme Co',
+      accountType: 'company',
+      billingAddressLine1: '1 Main St',
+      billingCity: 'Springfield',
+      billingState: 'IL',
+      billingPostalCode: '62704'
+    });
+    ctx.referenceDataService.getLocationById.mockResolvedValue({
+      id: 'location-1',
+      name: 'Acme HQ',
+      addressLine1: '2 Plant Rd',
+      city: 'Springfield',
+      state: 'IL',
+      postalCode: '62704'
+    });
+    return ctx;
+  }
+
+  it('posts a draft, gated office-only on invoices:post, freezing the resolved snapshot', async () => {
+    const ctx = postingService();
+    ctx.invoicesRepository.getMainInvoiceForJob
+      .mockResolvedValueOnce(draftInvoice()) // pre-check load
+      .mockResolvedValueOnce(draftInvoice({ status: 'posted' })); // reload after posting
+
+    const result = await ctx.service.postInvoice('token', 'job-1');
+
+    expect(ctx.identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'invoices:post',
+      ['office-web']
+    );
+    expect(ctx.invoicesRepository.postInvoice).toHaveBeenCalledWith(
+      'job-1',
+      expect.objectContaining({
+        billToCustomerId: 'customer-1',
+        billToCustomerName: 'Acme Co',
+        billToAccountType: 'company',
+        billToAddressLine1: '1 Main St',
+        serviceLocationId: 'location-1',
+        serviceLocationName: 'Acme HQ',
+        jobNumber: '1001',
+        workOrderNumber: 'WO-9'
+      }),
+      expect.objectContaining({ id: 'owner-1', displayName: 'Olivia Owner' })
+    );
+    expect(result.invoice.status).toBe('posted');
+  });
+
+  it('posts a zero-dollar draft (there is no minimum-total gate)', async () => {
+    const ctx = postingService();
+    ctx.invoicesRepository.getMainInvoiceForJob
+      .mockResolvedValueOnce(draftInvoice()) // total 0
+      .mockResolvedValueOnce(draftInvoice({ status: 'posted' }));
+
+    await expect(ctx.service.postInvoice('token', 'job-1')).resolves.toBeDefined();
+    expect(ctx.invoicesRepository.postInvoice).toHaveBeenCalled();
+  });
+
+  it('refuses to post a non-draft invoice without resolving a snapshot', async () => {
+    const ctx = postingService();
+    ctx.invoicesRepository.getMainInvoiceForJob.mockResolvedValue(
+      draftInvoice({ status: 'posted' })
+    );
+
+    await expect(ctx.service.postInvoice('token', 'job-1')).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(ctx.referenceDataService.getCustomerById).not.toHaveBeenCalled();
+    expect(ctx.invoicesRepository.postInvoice).not.toHaveBeenCalled();
+  });
+
+  it('propagates a forbidden session and never posts', async () => {
+    const ctx = postingService();
+    ctx.identityAccessService.getAuthorizedEmployee.mockRejectedValue(new ForbiddenException());
+
+    await expect(ctx.service.postInvoice('token', 'job-1')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(ctx.invoicesRepository.postInvoice).not.toHaveBeenCalled();
   });
 });

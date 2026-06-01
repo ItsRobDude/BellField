@@ -471,6 +471,18 @@ Milestone 8 is done when:
 - adjustment/credit-style follow-up is the correction path rather than rewriting posted invoices
 - permissions around invoice actions behave correctly and payments remain aligned with the online-only v1 expectation
 
+### Status (in progress)
+
+Milestone 8 has started. The first slice has shipped:
+
+- invoice posting (draft→posted) gated on `invoices:post`, as a guarded, atomic transition
+- the posted-invoice lock across every write path — office line edits, estimate conversion, and register reflection all refuse a posted invoice
+- the posting-time customer/location/job display snapshot, frozen atomically on the invoice (`invoices` migration `20260601_007`), so later CRM edits cannot rewrite a posted record
+- a late field register entry still saves and is recorded as "not reflected" (needs an adjustment) rather than mutating the locked invoice
+- posting is invoice-only and does not change job status; money is not recomputed (totals already froze on write)
+
+Still ahead in Milestone 8: the payment workflow, adjustment/credit follow-up records, the invoice review/bookkeeping workbench, and verifying the new migration + posting runtime against a live database (not possible on the current dev PC).
+
 ---
 
 ## 14. Milestone 9 - Inventory, PO, and Job Costing
@@ -712,8 +724,8 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
    verify image/video capture or pick, local file persistence, SHA-256 metadata, upload-intent replay, raw blob finalization, appointment attribution, rejected-state handling, cleanup after successful upload, and retry after transient blob failure on a device/runtime.
 4. Sync reliability for real field actions:
    harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
-5. Historical snapshot hardening before Milestone 7/8:
-   define and persist the customer/location/job display context that invoices and old jobs must preserve.
+5. Historical snapshot hardening (shipped for invoices):
+   posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`); open/live jobs and dispatch intentionally still resolve current names. Remaining Milestone 8 money work is the payment workflow, adjustment/credit records, and the bookkeeping workbench.
 6. Self-hosted deployment readiness planning:
    keep the supported Windows install profile, assisted pilot setup posture, backup/restore/update expectations, and internal Rob install test aligned with `docs/self-hosted-installation-strategy.md` before any paid pilot is treated as repeatable.
 
@@ -721,5 +733,5 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 
 - Dispatch v1 can keep improving as the daily office home, but route optimization, drag/drop, live sockets, and week view remain later until day-view scheduling is trustworthy.
 - Field media capture now uses the approved Expo ImagePicker, FileSystem, and Crypto dependencies; no additional picker/storage dependencies should be added without a new reason.
-- Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion have all shipped (Milestone 7); invoice posting/locking and payments are the Milestone 8 lane.
+- Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion shipped in Milestone 7. Invoice posting + the posted lock + the posting-time customer/location/job snapshot have now shipped as the first Milestone 8 slice (migration `20260601_007`); payments, adjustment/credit records, and the bookkeeping workbench remain the rest of M8.
 - Payments remain online-only in v1.

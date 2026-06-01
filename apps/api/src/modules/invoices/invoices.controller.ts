@@ -32,6 +32,16 @@ export class JobInvoiceController {
   ) {
     return this.invoicesService.addLine(getBearerToken(authorizationHeader), jobId, request);
   }
+
+  // Post (lock) the job's main invoice draft. No body: the job is in the path and the
+  // actor comes from the session.
+  @Post('post')
+  async post(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string
+  ) {
+    return this.invoicesService.postInvoice(getBearerToken(authorizationHeader), jobId);
+  }
 }
 
 // Operations on an existing invoice line are addressed by line id directly.

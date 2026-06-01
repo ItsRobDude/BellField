@@ -38,6 +38,7 @@ type JobDetailPanelProps = {
   canApproveEstimate: boolean;
   canViewInvoice: boolean;
   canEditInvoice: boolean;
+  canPostInvoice: boolean;
   canConvertEstimate: boolean;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
@@ -130,6 +131,7 @@ export function JobDetailPanel({
   canApproveEstimate,
   canViewInvoice,
   canEditInvoice,
+  canPostInvoice,
   canConvertEstimate,
   initialTab = 'overview',
   focusedAppointmentId,
@@ -290,6 +292,7 @@ export function JobDetailPanel({
           apiBaseUrl={apiBaseUrl}
           sessionToken={sessionToken}
           canEdit={canEditInvoice}
+          canPost={canPostInvoice}
         />
       ) : null}
       {activeTab === 'media'

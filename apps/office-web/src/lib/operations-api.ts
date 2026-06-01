@@ -951,3 +951,17 @@ export async function voidOfficeInvoiceLine(input: {
     body: JSON.stringify({ reason })
   });
 }
+
+/** Post (lock) a job's main invoice draft. No body: the job is in the path and the actor
+ * comes from the session. Returns the now-posted invoice with its frozen context. */
+export async function postOfficeInvoice(input: {
+  jobId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  return requestJson<InvoiceResponse>(`/operations/jobs/${input.jobId}/invoice/post`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST'
+  });
+}

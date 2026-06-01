@@ -50,7 +50,7 @@ const ownerPermissions = [
   ...permissionKeys('register', ['delete', 'configure']),
   ...permissionKeys('media', ['delete', 'configure']),
   ...permissionKeys('estimates', ['delete', 'approve']),
-  ...permissionKeys('invoices', ['delete', 'approve', 'configure']),
+  ...permissionKeys('invoices', ['delete', 'approve', 'post', 'configure']),
   ...permissionKeys('payments', ['delete', 'configure']),
   ...permissionKeys('purchasing', ['delete', 'approve', 'configure']),
   ...permissionKeys('inventory', ['delete', 'configure']),

@@ -178,7 +178,9 @@ export class JobsRegisterDataRepository {
         queryable
       );
 
-      // Reflect into the job's invoice draft in the same transaction.
+      // Reflect into the job's invoice draft in the same transaction. (If the invoice
+      // is already posted, the entry above still persists; reflection is skipped and a
+      // "not reflected" note is recorded instead.)
       await reflectRegisterEntryCreate(
         jobId,
         {
@@ -190,6 +192,7 @@ export class JobsRegisterDataRepository {
           partNumber: input.partNumber?.trim() || undefined,
           inventorySourceLabel: input.inventorySourceLabel?.trim() || undefined
         },
+        actor.displayName,
         timelineTime,
         queryable
       );
@@ -293,7 +296,8 @@ export class JobsRegisterDataRepository {
         queryable
       );
 
-      // Flow the edit into the linked invoice line (office-detached lines are left alone).
+      // Flow the edit into the linked invoice line (office-detached lines are left alone;
+      // a posted invoice is left untouched and the edit is noted instead).
       await reflectRegisterEntryUpdate(
         {
           id: registerEntryId,
@@ -305,6 +309,7 @@ export class JobsRegisterDataRepository {
           partNumber: nextEntry.partNumber,
           inventorySourceLabel: nextEntry.inventorySourceLabel
         },
+        actorName,
         timelineTime,
         queryable
       );
@@ -357,8 +362,16 @@ export class JobsRegisterDataRepository {
         queryable
       );
 
-      // Void the linked invoice line so the bill no longer includes voided work.
-      await reflectRegisterEntryVoid(registerEntryId, existingEntry.jobId, timelineTime, queryable);
+      // Void the linked invoice line so the bill no longer includes voided work (a posted
+      // invoice is left untouched and the void is noted instead).
+      await reflectRegisterEntryVoid(
+        registerEntryId,
+        existingEntry.jobId,
+        existingEntry.description,
+        actorName,
+        timelineTime,
+        queryable
+      );
     });
 
     return this.getRegisterEntryById(registerEntryId);

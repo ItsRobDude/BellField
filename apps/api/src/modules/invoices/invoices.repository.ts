@@ -1,7 +1,8 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import type { PostedInvoiceContext } from '@bellfield/contracts';
 import { recalculateInvoiceTotals } from '../company-data/invoice-reflection-utils';
 import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-utils';
 import type {
@@ -9,7 +10,8 @@ import type {
   InvoiceKindValue,
   InvoiceLineItemRecord,
   InvoiceRecord,
-  InvoiceStatusValue
+  InvoiceStatusValue,
+  PostedSnapshotInput
 } from './invoices.types';
 
 /** A manual invoice line as the office supplies it (server computes the rest). */
@@ -77,6 +79,24 @@ type InvoiceRow = {
   createdAt: string | Date;
   updatedAt: string | Date;
   version: number;
+  // Posted display-context snapshot; all null until the invoice is posted.
+  postedAt: string | Date | null;
+  postedByName: string | null;
+  billToCustomerId: string | null;
+  billToCustomerName: string | null;
+  billToAccountType: string | null;
+  billToAddressLine1: string | null;
+  billToCity: string | null;
+  billToState: string | null;
+  billToPostalCode: string | null;
+  serviceLocationId: string | null;
+  serviceLocationName: string | null;
+  serviceLocationAddressLine1: string | null;
+  serviceLocationCity: string | null;
+  serviceLocationState: string | null;
+  serviceLocationPostalCode: string | null;
+  jobNumber: string | null;
+  workOrderNumber: string | null;
 };
 
 type InvoiceLineItemRow = {
@@ -120,7 +140,24 @@ const INVOICE_COLUMNS = `
   cost_complete as "costComplete",
   created_at as "createdAt",
   updated_at as "updatedAt",
-  version
+  version,
+  posted_at as "postedAt",
+  posted_by_name as "postedByName",
+  bill_to_customer_id as "billToCustomerId",
+  bill_to_customer_name as "billToCustomerName",
+  bill_to_account_type as "billToAccountType",
+  bill_to_address_line1 as "billToAddressLine1",
+  bill_to_city as "billToCity",
+  bill_to_state as "billToState",
+  bill_to_postal_code as "billToPostalCode",
+  service_location_id as "serviceLocationId",
+  service_location_name as "serviceLocationName",
+  service_location_address_line1 as "serviceLocationAddressLine1",
+  service_location_city as "serviceLocationCity",
+  service_location_state as "serviceLocationState",
+  service_location_postal_code as "serviceLocationPostalCode",
+  job_number as "jobNumber",
+  work_order_number as "workOrderNumber"
 `;
 
 const INVOICE_LINE_COLUMNS = `
@@ -193,6 +230,7 @@ export class InvoicesRepository {
         marginBasisPoints: row.marginBasisPoints === null ? null : Number(row.marginBasisPoints),
         costComplete: row.costComplete
       },
+      posted: toPostedContext(row),
       createdAt: toIsoString(row.createdAt),
       updatedAt: toIsoString(row.updatedAt),
       version: row.version
@@ -220,6 +258,55 @@ export class InvoicesRepository {
       createdAt: toIsoString(row.createdAt),
       updatedAt: toIsoString(row.updatedAt)
     };
+  }
+
+  // --- Posted-lock helpers -------------------------------------------------
+
+  /**
+   * Lock the job's main invoice row for the rest of the transaction and return it.
+   * The `for update` row lock is what makes the posted-lock race-proof: a mutator that
+   * reads 'draft' here holds the row until commit, so a concurrent post cannot slip in
+   * between the read and the writes. (The service-layer status check is only a friendlier
+   * early error; this lock + re-check is the authoritative boundary.)
+   */
+  private async lockMainInvoiceByJob(
+    jobId: string,
+    queryable: QueryExecutor
+  ): Promise<{ id: string; status: InvoiceStatusValue }> {
+    const result = await queryable.query<{ id: string; status: InvoiceStatusValue }>(
+      `select id, status from invoices
+       where job_id = $1 and invoice_kind = 'main'
+       limit 1
+       for update`,
+      [jobId]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error('Job has no main invoice draft.');
+    }
+    return row;
+  }
+
+  /** Lock a specific invoice row by id for the transaction and return its status. */
+  private async lockInvoiceStatusById(
+    invoiceId: string,
+    queryable: QueryExecutor
+  ): Promise<InvoiceStatusValue> {
+    const result = await queryable.query<{ status: InvoiceStatusValue }>(
+      `select status from invoices where id = $1 limit 1 for update`,
+      [invoiceId]
+    );
+    const status = result.rows[0]?.status;
+    if (!status) {
+      throw new Error('Invoice not found.');
+    }
+    return status;
+  }
+
+  private ensureDraftRow(status: InvoiceStatusValue): void {
+    if (status !== 'draft') {
+      throw new ConflictException('This invoice is posted and locked; it can no longer be edited.');
+    }
   }
 
   // --- Office line editing -------------------------------------------------
@@ -258,14 +345,11 @@ export class InvoicesRepository {
   async addManualLine(jobId: string, input: InvoiceLineWriteInput): Promise<void> {
     const now = new Date().toISOString();
     await this.databaseService.transaction(async (queryable) => {
-      const invoiceResult = await queryable.query<{ id: string }>(
-        `select id from invoices where job_id = $1 and invoice_kind = 'main' limit 1`,
-        [jobId]
-      );
-      const invoiceId = invoiceResult.rows[0]?.id;
-      if (!invoiceId) {
-        throw new Error('Job has no main invoice draft.');
-      }
+      // Lock the invoice row and re-check it is a draft, so a concurrent post cannot
+      // land a manual line on a now-posted invoice.
+      const invoice = await this.lockMainInvoiceByJob(jobId, queryable);
+      this.ensureDraftRow(invoice.status);
+      const invoiceId = invoice.id;
 
       const positionResult = await queryable.query<{ nextPosition: number }>(
         `select coalesce(max(line_position) + 1, 0) as "nextPosition"
@@ -311,6 +395,9 @@ export class InvoicesRepository {
   async editLine(lineId: string, invoiceId: string, input: InvoiceLineWriteInput): Promise<void> {
     const now = new Date().toISOString();
     await this.databaseService.transaction(async (queryable) => {
+      // Lock the owning invoice and re-check draft before mutating the line, so a
+      // concurrent post cannot be edited around.
+      this.ensureDraftRow(await this.lockInvoiceStatusById(invoiceId, queryable));
       await queryable.query(
         `update invoice_line_items set
            kind = $2,
@@ -348,6 +435,8 @@ export class InvoicesRepository {
   async voidLine(lineId: string, invoiceId: string, reason: string | undefined): Promise<void> {
     const now = new Date().toISOString();
     await this.databaseService.transaction(async (queryable) => {
+      // Lock the owning invoice and re-check draft before voiding the line.
+      this.ensureDraftRow(await this.lockInvoiceStatusById(invoiceId, queryable));
       await queryable.query(
         `update invoice_line_items set is_void = true, void_reason = $2, updated_at = $3
          where id = $1 and is_void = false`,
@@ -355,6 +444,92 @@ export class InvoicesRepository {
       );
 
       await recalculateInvoiceTotals(invoiceId, now, queryable);
+    });
+  }
+
+  // --- Posting -------------------------------------------------------------
+
+  /**
+   * Post a job's main draft invoice: lock it and freeze the customer/location/job
+   * display-context snapshot, atomically. The guarded `where ... and status = 'draft'`
+   * makes this safe against a concurrent post or any in-flight edit — only a draft
+   * transitions, and a second attempt changes zero rows and is rejected (mirrors the
+   * estimate approve/decline guard). Money is NOT recomputed here: totals already froze
+   * on write, so posting only freezes who/where the bill was for, stamps the audit
+   * columns + timeline, and bumps version.
+   */
+  async postInvoice(
+    jobId: string,
+    snapshot: PostedSnapshotInput,
+    actor: { id: string; displayName: string }
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      const result = await queryable.query(
+        `update invoices set
+           status = 'posted',
+           posted_at = $2,
+           posted_by_employee_id = $3,
+           posted_by_name = $4,
+           bill_to_customer_id = $5,
+           bill_to_customer_name = $6,
+           bill_to_account_type = $7,
+           bill_to_address_line1 = $8,
+           bill_to_city = $9,
+           bill_to_state = $10,
+           bill_to_postal_code = $11,
+           service_location_id = $12,
+           service_location_name = $13,
+           service_location_address_line1 = $14,
+           service_location_city = $15,
+           service_location_state = $16,
+           service_location_postal_code = $17,
+           job_number = $18,
+           work_order_number = $19,
+           updated_at = $2,
+           version = version + 1
+         where job_id = $1 and invoice_kind = 'main' and status = 'draft'`,
+        [
+          jobId,
+          now,
+          actor.id,
+          actor.displayName,
+          snapshot.billToCustomerId,
+          snapshot.billToCustomerName,
+          snapshot.billToAccountType,
+          snapshot.billToAddressLine1,
+          snapshot.billToCity,
+          snapshot.billToState,
+          snapshot.billToPostalCode,
+          snapshot.serviceLocationId,
+          snapshot.serviceLocationName,
+          snapshot.serviceLocationAddressLine1,
+          snapshot.serviceLocationCity,
+          snapshot.serviceLocationState,
+          snapshot.serviceLocationPostalCode,
+          snapshot.jobNumber,
+          snapshot.workOrderNumber ?? null
+        ]
+      );
+
+      if (result.rowCount === 0) {
+        // Either there is no main invoice (a data-integrity gap the service pre-check
+        // would already have surfaced) or it is no longer a draft (already posted).
+        throw new ConflictException('This invoice is no longer a draft and cannot be posted.');
+      }
+
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, now]);
+      await insertJobTimelineEntry(
+        {
+          id: randomUUID(),
+          jobId,
+          occurredAt: now,
+          actorName: actor.displayName,
+          kind: 'invoicePosted',
+          message: 'Invoice posted. The bill is now locked.'
+        },
+        queryable
+      );
     });
   }
 
@@ -402,14 +577,16 @@ export class InvoicesRepository {
   ): Promise<EstimateConversionResult> {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
-      const invoiceResult = await queryable.query<{ id: string }>(
-        `select id from invoices where job_id = $1 and invoice_kind = 'main' limit 1`,
-        [jobId]
-      );
-      const invoiceId = invoiceResult.rows[0]?.id;
-      if (!invoiceId) {
-        throw new Error('Job has no main invoice draft.');
+      // Lock the invoice row up front so a concurrent post cannot land between this read
+      // and the line writes below. The status re-check is the authoritative guard (covers
+      // append/replace/empty uniformly); the service does a friendlier pre-check.
+      const invoice = await this.lockMainInvoiceByJob(jobId, queryable);
+      if (invoice.status !== 'draft') {
+        throw new ConflictException(
+          'This invoice is posted and locked; estimates cannot be converted into it.'
+        );
       }
+      const invoiceId = invoice.id;
 
       // Claim the estimate atomically: only an approved, not-yet-converted
       // estimate passes. A race or repeat conversion changes zero rows here and
@@ -572,4 +749,39 @@ function toDiscount(row: InvoiceRow): InvoiceDiscountValue | undefined {
     return { kind: 'fixed', amount: Number(row.discountAmount) };
   }
   return undefined;
+}
+
+/**
+ * Build the frozen posting context from its columns, or undefined for a draft. The
+ * essential fields (ids, names, job number) are guaranteed non-null when posted by the
+ * `invoices_posted_snapshot` CHECK; the `?? ''` are only type-safety fallbacks. Address
+ * and account-type fields are optional and pass through as undefined when blank.
+ */
+function toPostedContext(row: InvoiceRow): PostedInvoiceContext | undefined {
+  if (!row.postedAt || !row.postedByName) {
+    return undefined;
+  }
+  return {
+    postedAt: toIsoString(row.postedAt),
+    postedByName: row.postedByName,
+    billTo: {
+      customerId: row.billToCustomerId ?? '',
+      name: row.billToCustomerName ?? '',
+      accountType: row.billToAccountType ?? undefined,
+      addressLine1: row.billToAddressLine1 ?? undefined,
+      city: row.billToCity ?? undefined,
+      state: row.billToState ?? undefined,
+      postalCode: row.billToPostalCode ?? undefined
+    },
+    serviceLocation: {
+      locationId: row.serviceLocationId ?? '',
+      name: row.serviceLocationName ?? '',
+      addressLine1: row.serviceLocationAddressLine1 ?? undefined,
+      city: row.serviceLocationCity ?? undefined,
+      state: row.serviceLocationState ?? undefined,
+      postalCode: row.serviceLocationPostalCode ?? undefined
+    },
+    jobNumber: row.jobNumber ?? '',
+    workOrderNumber: row.workOrderNumber ?? undefined
+  };
 }
