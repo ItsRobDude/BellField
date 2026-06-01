@@ -12,6 +12,11 @@ import {
   buildRegisterEntryVoidedMessage,
   insertJobTimelineEntry
 } from './jobs-data-repository-utils';
+import {
+  reflectRegisterEntryCreate,
+  reflectRegisterEntryUpdate,
+  reflectRegisterEntryVoid
+} from './invoice-reflection-utils';
 
 type RegisterEntryRow = {
   id: string;
@@ -172,6 +177,22 @@ export class JobsRegisterDataRepository {
         },
         queryable
       );
+
+      // Reflect into the job's invoice draft in the same transaction.
+      await reflectRegisterEntryCreate(
+        jobId,
+        {
+          id: registerEntryId,
+          kind: input.kind,
+          description: input.description.trim(),
+          totalAmount: input.totalAmount,
+          unitOfMeasure: input.unitOfMeasure?.trim() || undefined,
+          partNumber: input.partNumber?.trim() || undefined,
+          inventorySourceLabel: input.inventorySourceLabel?.trim() || undefined
+        },
+        timelineTime,
+        queryable
+      );
     });
 
     const registerEntry = await this.getRegisterEntryById(registerEntryId);
@@ -271,6 +292,22 @@ export class JobsRegisterDataRepository {
         },
         queryable
       );
+
+      // Flow the edit into the linked invoice line (office-detached lines are left alone).
+      await reflectRegisterEntryUpdate(
+        {
+          id: registerEntryId,
+          jobId: existingEntry.jobId,
+          kind: nextEntry.kind,
+          description: nextEntry.description,
+          totalAmount: nextEntry.totalAmount,
+          unitOfMeasure: nextEntry.unitOfMeasure,
+          partNumber: nextEntry.partNumber,
+          inventorySourceLabel: nextEntry.inventorySourceLabel
+        },
+        timelineTime,
+        queryable
+      );
     });
 
     return this.getRegisterEntryById(registerEntryId);
@@ -319,6 +356,9 @@ export class JobsRegisterDataRepository {
         },
         queryable
       );
+
+      // Void the linked invoice line so the bill no longer includes voided work.
+      await reflectRegisterEntryVoid(registerEntryId, existingEntry.jobId, timelineTime, queryable);
     });
 
     return this.getRegisterEntryById(registerEntryId);
