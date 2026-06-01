@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CompanyDataModule } from '../company-data/company-data.module';
 import { IdentityAccessModule } from '../identity-access/identity-access.module';
-import { JobInvoiceController } from './invoices.controller';
+import { InvoiceLineController, JobInvoiceController } from './invoices.controller';
 import { InvoicesRepository } from './invoices.repository';
 import { InvoicesService } from './invoices.service';
 
@@ -10,7 +10,7 @@ import { InvoicesService } from './invoices.service';
 // the permission-aware actor lookup.
 @Module({
   imports: [CompanyDataModule, IdentityAccessModule],
-  controllers: [JobInvoiceController],
+  controllers: [JobInvoiceController, InvoiceLineController],
   providers: [InvoicesRepository, InvoicesService]
 })
 export class InvoicesModule {}

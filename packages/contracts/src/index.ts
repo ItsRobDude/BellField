@@ -682,6 +682,21 @@ export interface InvoiceResponse {
   invoice: InvoiceSummary;
 }
 
+/** A manual invoice line the office adds, or the shape it edits a line into. */
+export interface InvoiceLineItemInput {
+  kind: InvoiceLineItemKind;
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice: number;
+  unitCost?: number;
+  taxable: boolean;
+}
+
+export interface VoidInvoiceLineItemRequest {
+  reason?: string;
+}
+
 export interface MediaAttachmentSummary {
   id: string;
   jobId: string;

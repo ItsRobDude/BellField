@@ -1,4 +1,9 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException
+} from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
 import type { InvoiceRecord } from './invoices.types';
 
@@ -15,7 +20,11 @@ function createService() {
     getJobById: jest.fn().mockResolvedValue({ id: 'job-1', status: 'new' })
   };
   const invoicesRepository = {
-    getMainInvoiceForJob: jest.fn()
+    getMainInvoiceForJob: jest.fn(),
+    getActiveLineContext: jest.fn(),
+    addManualLine: jest.fn(),
+    editLine: jest.fn(),
+    voidLine: jest.fn()
   };
 
   return {
@@ -143,5 +152,123 @@ describe('InvoicesService', () => {
     expect(result.invoice.lineItems).toHaveLength(1);
     expect(result.invoice.lineItems[0].sourceKind).toBe('register');
     expect(result.invoice.totals.total).toBe(129.9);
+  });
+});
+
+describe('InvoicesService line editing', () => {
+  function editingService() {
+    const ctx = createService();
+    ctx.identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Office',
+      effectivePermissions: ['invoices:view', 'invoices:edit'],
+      sessionSurface: 'office-web'
+    });
+    ctx.invoicesRepository.getMainInvoiceForJob.mockResolvedValue(draftInvoice());
+    return ctx;
+  }
+
+  const validLine = {
+    kind: 'other' as const,
+    description: 'Trip fee',
+    quantity: 1,
+    unitPrice: 40,
+    taxable: true
+  };
+
+  it('adds a manual line, gated office-only on invoices:edit', async () => {
+    const { service, identityAccessService, invoicesRepository } = editingService();
+
+    await service.addLine('token', 'job-1', validLine);
+
+    expect(invoicesRepository.addManualLine).toHaveBeenCalledWith(
+      'job-1',
+      expect.objectContaining({ description: 'Trip fee', unitPrice: 40 })
+    );
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'invoices:edit',
+      ['office-web']
+    );
+  });
+
+  it('rejects a line with non-positive quantity', async () => {
+    const { service } = editingService();
+    await expect(
+      service.addLine('token', 'job-1', { ...validLine, quantity: 0 })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('refuses to add a line to a non-draft invoice', async () => {
+    const { service, invoicesRepository } = editingService();
+    invoicesRepository.getMainInvoiceForJob.mockResolvedValue(draftInvoice({ status: 'posted' }));
+
+    await expect(service.addLine('token', 'job-1', validLine)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(invoicesRepository.addManualLine).not.toHaveBeenCalled();
+  });
+
+  it('edits an existing line on a draft invoice', async () => {
+    const { service, invoicesRepository } = editingService();
+    invoicesRepository.getActiveLineContext.mockResolvedValue({
+      lineId: 'line-1',
+      invoiceId: 'invoice-main-job-1',
+      jobId: 'job-1',
+      invoiceStatus: 'draft',
+      sourceSyncState: 'linked'
+    });
+
+    await service.editLine('token', 'line-1', { ...validLine, unitPrice: 150 });
+
+    expect(invoicesRepository.editLine).toHaveBeenCalledWith(
+      'line-1',
+      'invoice-main-job-1',
+      expect.objectContaining({ unitPrice: 150 })
+    );
+  });
+
+  it('throws NotFound editing a missing line', async () => {
+    const { service, invoicesRepository } = editingService();
+    invoicesRepository.getActiveLineContext.mockResolvedValue(null);
+
+    await expect(service.editLine('token', 'missing', validLine)).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+  });
+
+  it('voids a line on a draft invoice', async () => {
+    const { service, invoicesRepository } = editingService();
+    invoicesRepository.getActiveLineContext.mockResolvedValue({
+      lineId: 'line-1',
+      invoiceId: 'invoice-main-job-1',
+      jobId: 'job-1',
+      invoiceStatus: 'draft',
+      sourceSyncState: 'register'
+    });
+
+    await service.voidLine('token', 'line-1', { reason: 'mistake' });
+
+    expect(invoicesRepository.voidLine).toHaveBeenCalledWith(
+      'line-1',
+      'invoice-main-job-1',
+      'mistake'
+    );
+  });
+
+  it('refuses to edit a line on a non-draft invoice', async () => {
+    const { service, invoicesRepository } = editingService();
+    invoicesRepository.getActiveLineContext.mockResolvedValue({
+      lineId: 'line-1',
+      invoiceId: 'invoice-main-job-1',
+      jobId: 'job-1',
+      invoiceStatus: 'posted',
+      sourceSyncState: 'linked'
+    });
+
+    await expect(service.editLine('token', 'line-1', validLine)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(invoicesRepository.editLine).not.toHaveBeenCalled();
   });
 });

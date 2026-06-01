@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import { recalculateInvoiceTotals } from '../company-data/invoice-reflection-utils';
 import type {
   InvoiceDiscountValue,
   InvoiceKindValue,
@@ -8,6 +10,17 @@ import type {
   InvoiceRecord,
   InvoiceStatusValue
 } from './invoices.types';
+
+/** A manual invoice line as the office supplies it (server computes the rest). */
+export type InvoiceLineWriteInput = {
+  kind: InvoiceLineItemRecord['kind'];
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice: number;
+  unitCost?: number;
+  taxable: boolean;
+};
 
 type InvoiceRow = {
   id: string;
@@ -174,6 +187,147 @@ export class InvoicesRepository {
       updatedAt: toIsoString(row.updatedAt)
     };
   }
+
+  // --- Office line editing -------------------------------------------------
+
+  /** Look up one active invoice line plus the status of its owning invoice. */
+  async getActiveLineContext(lineId: string): Promise<{
+    lineId: string;
+    invoiceId: string;
+    jobId: string;
+    invoiceStatus: InvoiceStatusValue;
+    sourceSyncState: InvoiceLineItemRecord['sourceSyncState'];
+  } | null> {
+    const result = await this.databaseService.query<{
+      lineId: string;
+      invoiceId: string;
+      jobId: string;
+      invoiceStatus: InvoiceStatusValue;
+      sourceSyncState: InvoiceLineItemRecord['sourceSyncState'];
+    }>(
+      `select
+         ili.id as "lineId",
+         ili.invoice_id as "invoiceId",
+         inv.job_id as "jobId",
+         inv.status as "invoiceStatus",
+         ili.source_sync_state as "sourceSyncState"
+       from invoice_line_items ili
+       join invoices inv on inv.id = ili.invoice_id
+       where ili.id = $1 and ili.is_void = false
+       limit 1`,
+      [lineId]
+    );
+    return result.rows[0] ?? null;
+  }
+
+  /** Add a manual office line to a job's main draft, then recompute totals. */
+  async addManualLine(jobId: string, input: InvoiceLineWriteInput): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      const invoiceResult = await queryable.query<{ id: string }>(
+        `select id from invoices where job_id = $1 and invoice_kind = 'main' limit 1`,
+        [jobId]
+      );
+      const invoiceId = invoiceResult.rows[0]?.id;
+      if (!invoiceId) {
+        throw new Error('Job has no main invoice draft.');
+      }
+
+      const positionResult = await queryable.query<{ nextPosition: number }>(
+        `select coalesce(max(line_position) + 1, 0) as "nextPosition"
+         from invoice_line_items where invoice_id = $1 and is_void = false`,
+        [invoiceId]
+      );
+      const position = Number(positionResult.rows[0]?.nextPosition ?? 0);
+
+      await queryable.query(
+        `insert into invoice_line_items (
+           id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
+           unit_price, unit_cost, taxable, line_subtotal_amount, line_cost_amount,
+           source_kind, source_sync_state, is_void, created_at, updated_at
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+                 'manual', 'linked', false, $13, $13)`,
+        [
+          randomUUID(),
+          invoiceId,
+          position,
+          input.kind,
+          input.description.trim(),
+          input.quantity,
+          input.unitOfMeasure?.trim() || null,
+          input.unitPrice,
+          input.unitCost ?? null,
+          input.taxable,
+          roundMoney(input.quantity * input.unitPrice),
+          input.unitCost === undefined ? null : roundMoney(input.quantity * input.unitCost),
+          now
+        ]
+      );
+
+      await recalculateInvoiceTotals(invoiceId, now, queryable);
+    });
+  }
+
+  /**
+   * Edit an invoice line. If the line was register-sourced and still linked,
+   * editing it detaches it so future register changes can't overwrite the
+   * billing edit (manual lines are already detached-equivalent).
+   */
+  async editLine(lineId: string, invoiceId: string, input: InvoiceLineWriteInput): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      await queryable.query(
+        `update invoice_line_items set
+           kind = $2,
+           description = $3,
+           quantity = $4,
+           unit_of_measure = $5,
+           unit_price = $6,
+           unit_cost = $7,
+           taxable = $8,
+           line_subtotal_amount = $9,
+           line_cost_amount = $10,
+           source_sync_state = case when source_kind = 'register' then 'detached' else source_sync_state end,
+           updated_at = $11
+         where id = $1 and is_void = false`,
+        [
+          lineId,
+          input.kind,
+          input.description.trim(),
+          input.quantity,
+          input.unitOfMeasure?.trim() || null,
+          input.unitPrice,
+          input.unitCost ?? null,
+          input.taxable,
+          roundMoney(input.quantity * input.unitPrice),
+          input.unitCost === undefined ? null : roundMoney(input.quantity * input.unitCost),
+          now
+        ]
+      );
+
+      await recalculateInvoiceTotals(invoiceId, now, queryable);
+    });
+  }
+
+  /** Soft-void an invoice line, then recompute totals. */
+  async voidLine(lineId: string, invoiceId: string, reason: string | undefined): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      await queryable.query(
+        `update invoice_line_items set is_void = true, void_reason = $2, updated_at = $3
+         where id = $1 and is_void = false`,
+        [lineId, reason?.trim() || null, now]
+      );
+
+      await recalculateInvoiceTotals(invoiceId, now, queryable);
+    });
+  }
+}
+
+/** Round decimal-dollar money to whole cents (mirrors the engine's edge rounding). */
+function roundMoney(value: number): number {
+  return Math.round(value * 100) / 100;
 }
 
 function toDiscount(row: InvoiceRow): InvoiceDiscountValue | undefined {

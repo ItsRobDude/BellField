@@ -37,6 +37,7 @@ type JobDetailPanelProps = {
   canEditEstimate: boolean;
   canApproveEstimate: boolean;
   canViewInvoice: boolean;
+  canEditInvoice: boolean;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
   timelineHasMore?: boolean;
@@ -127,6 +128,7 @@ export function JobDetailPanel({
   canEditEstimate,
   canApproveEstimate,
   canViewInvoice,
+  canEditInvoice,
   initialTab = 'overview',
   focusedAppointmentId,
   timelineHasMore = false,
@@ -280,7 +282,12 @@ export function JobDetailPanel({
         />
       ) : null}
       {activeTab === 'invoice' && canViewInvoice ? (
-        <JobInvoiceSection jobId={job.id} apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} />
+        <JobInvoiceSection
+          jobId={job.id}
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canEdit={canEditInvoice}
+        />
       ) : null}
       {activeTab === 'media'
         ? renderMedia({

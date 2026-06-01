@@ -39,6 +39,8 @@ import type {
   EstimateStatus,
   EstimateSummary,
   UpdateEstimateRequest,
+  InvoiceLineItemInput,
+  InvoiceLineItemKind,
   InvoiceLineItemSummary,
   InvoiceResponse,
   InvoiceSummary,
@@ -116,6 +118,8 @@ export type {
   EstimateStatus,
   EstimateSummary,
   UpdateEstimateRequest,
+  InvoiceLineItemInput,
+  InvoiceLineItemKind,
   InvoiceLineItemSummary,
   InvoiceResponse,
   InvoiceSummary,
@@ -887,5 +891,47 @@ export async function getOfficeInvoiceForJob(input: {
   return requestJson<InvoiceResponse>(`/operations/jobs/${input.jobId}/invoice`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
+  });
+}
+
+export async function addOfficeInvoiceLine(
+  input: InvoiceLineItemInput & { jobId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<InvoiceResponse> {
+  const { jobId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<InvoiceResponse>(`/operations/jobs/${jobId}/invoice/lines`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function editOfficeInvoiceLine(
+  input: InvoiceLineItemInput & { lineId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<InvoiceResponse> {
+  const { lineId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<InvoiceResponse>(`/operations/invoices/lines/${lineId}`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function voidOfficeInvoiceLine(input: {
+  lineId: string;
+  reason?: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  const { lineId, sessionToken, apiBaseUrl, reason } = input;
+
+  return requestJson<InvoiceResponse>(`/operations/invoices/lines/${lineId}/void`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify({ reason })
   });
 }
