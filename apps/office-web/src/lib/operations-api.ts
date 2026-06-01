@@ -30,6 +30,15 @@ import type {
   EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
+  CreateEstimateRequest,
+  DeclineEstimateRequest,
+  EstimateLineItemInput,
+  EstimateLineItemKind,
+  EstimateResponse,
+  EstimatesResponse,
+  EstimateStatus,
+  EstimateSummary,
+  UpdateEstimateRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -95,6 +104,15 @@ export type {
   EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
+  CreateEstimateRequest,
+  DeclineEstimateRequest,
+  EstimateLineItemInput,
+  EstimateLineItemKind,
+  EstimateResponse,
+  EstimatesResponse,
+  EstimateStatus,
+  EstimateSummary,
+  UpdateEstimateRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -789,6 +807,68 @@ export async function updateOfficeContactLink(
     apiBaseUrl,
     sessionToken,
     method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getOfficeEstimatesForJob(input: {
+  jobId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<EstimatesResponse> {
+  return requestJson<EstimatesResponse>(`/operations/jobs/${input.jobId}/estimates`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function createOfficeEstimate(
+  input: CreateEstimateRequest & { jobId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<EstimateResponse> {
+  const { jobId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<EstimateResponse>(`/operations/jobs/${jobId}/estimates`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateOfficeEstimate(
+  input: UpdateEstimateRequest & { estimateId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<EstimateResponse> {
+  const { estimateId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<EstimateResponse>(`/operations/estimates/${estimateId}`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function approveOfficeEstimate(input: {
+  estimateId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<EstimateResponse> {
+  return requestJson<EstimateResponse>(`/operations/estimates/${input.estimateId}/approve`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST'
+  });
+}
+
+export async function declineOfficeEstimate(
+  input: DeclineEstimateRequest & { estimateId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<EstimateResponse> {
+  const { estimateId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<EstimateResponse>(`/operations/estimates/${estimateId}/decline`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
     body: JSON.stringify(payload)
   });
 }

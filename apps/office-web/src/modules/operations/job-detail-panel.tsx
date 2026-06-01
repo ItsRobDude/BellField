@@ -25,10 +25,16 @@ import {
   type RegisterEntryEditDraft
 } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { JobEstimatesSection } from './job-estimates-section';
 
 type JobDetailPanelProps = {
   technicians: JobsWorkspaceResponse['technicians'];
   job: JobSummary;
+  apiBaseUrl: string;
+  sessionToken: string;
+  canCreateEstimate: boolean;
+  canEditEstimate: boolean;
+  canApproveEstimate: boolean;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
   timelineHasMore?: boolean;
@@ -104,6 +110,7 @@ const tabs: Array<{ id: JobDetailTab; label: string }> = [
   { id: 'overview', label: 'Overview' },
   { id: 'appointments', label: 'Appointments' },
   { id: 'captured', label: 'Captured' },
+  { id: 'estimates', label: 'Estimates' },
   { id: 'media', label: 'Media' },
   { id: 'timeline', label: 'Timeline' }
 ];
@@ -111,6 +118,11 @@ const tabs: Array<{ id: JobDetailTab; label: string }> = [
 export function JobDetailPanel({
   technicians,
   job,
+  apiBaseUrl,
+  sessionToken,
+  canCreateEstimate,
+  canEditEstimate,
+  canApproveEstimate,
   initialTab = 'overview',
   focusedAppointmentId,
   timelineHasMore = false,
@@ -251,6 +263,16 @@ export function JobDetailPanel({
             onVoidRegisterEntry
           })
         : null}
+      {activeTab === 'estimates' ? (
+        <JobEstimatesSection
+          jobId={job.id}
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canCreate={canCreateEstimate}
+          canEdit={canEditEstimate}
+          canApprove={canApproveEstimate}
+        />
+      ) : null}
       {activeTab === 'media'
         ? renderMedia({
             job,

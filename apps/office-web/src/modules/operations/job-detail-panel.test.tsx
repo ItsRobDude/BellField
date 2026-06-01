@@ -167,6 +167,11 @@ function renderDetail(
   const props: Parameters<typeof JobDetailPanel>[0] = {
     technicians: buildWorkspace(job).technicians,
     job,
+    apiBaseUrl: 'http://localhost',
+    sessionToken: 'test-token',
+    canCreateEstimate: true,
+    canEditEstimate: true,
+    canApproveEstimate: true,
     initialTab: input.initialTab,
     focusedAppointmentId: input.focusedAppointmentId,
     pendingJobStatusChange: null,
@@ -427,6 +432,11 @@ function renderProps(
   return {
     technicians: buildWorkspace(job).technicians,
     job,
+    apiBaseUrl: 'http://localhost',
+    sessionToken: 'test-token',
+    canCreateEstimate: true,
+    canEditEstimate: true,
+    canApproveEstimate: true,
     pendingJobStatusChange: null,
     appointmentDrafts: {},
     appointmentEditDrafts: {},

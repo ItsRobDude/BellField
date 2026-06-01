@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "office-web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@bellfield/office-web", "dev"],
+      "port": 3000,
+      "autoPort": true
+    }
+  ]
+}

@@ -49,7 +49,13 @@ export type PendingJobStatusChange = {
   isSubmitting: boolean;
 };
 
-export type JobDetailTab = 'overview' | 'appointments' | 'captured' | 'media' | 'timeline';
+export type JobDetailTab =
+  | 'overview'
+  | 'appointments'
+  | 'captured'
+  | 'estimates'
+  | 'media'
+  | 'timeline';
 
 export const appointmentStatusLabels: Record<AppointmentStatus, string> = {
   scheduled: 'Scheduled',

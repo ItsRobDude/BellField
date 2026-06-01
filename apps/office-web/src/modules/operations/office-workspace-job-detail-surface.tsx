@@ -17,6 +17,11 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 export type OfficeJobDetailSurfaceProps = {
   selectedJobId: string | null;
   jobDetailsById: Record<string, JobDetailResponse>;
+  apiBaseUrl: string;
+  sessionToken: string;
+  canCreateEstimate: boolean;
+  canEditEstimate: boolean;
+  canApproveEstimate: boolean;
   focusedAppointmentId: string | null;
   jobDetailInitialTab: JobDetailTab;
   isJobDetailLoading: boolean;
@@ -63,6 +68,11 @@ export type OfficeJobDetailSurfaceProps = {
 export function OfficeJobDetailSurface({
   selectedJobId,
   jobDetailsById,
+  apiBaseUrl,
+  sessionToken,
+  canCreateEstimate,
+  canEditEstimate,
+  canApproveEstimate,
   focusedAppointmentId,
   jobDetailInitialTab,
   isJobDetailLoading,
@@ -101,6 +111,11 @@ export function OfficeJobDetailSurface({
         key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
         technicians={selectedJobDetail.technicians}
         job={selectedJob}
+        apiBaseUrl={apiBaseUrl}
+        sessionToken={sessionToken}
+        canCreateEstimate={canCreateEstimate}
+        canEditEstimate={canEditEstimate}
+        canApproveEstimate={canApproveEstimate}
         initialTab={jobDetailInitialTab}
         focusedAppointmentId={focusedAppointmentId}
         timelineHasMore={selectedJobDetail.timelineHasMore}

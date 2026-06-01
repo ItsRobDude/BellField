@@ -140,6 +140,9 @@ export function OfficeWorkspaceShell({
 
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
   const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
+  const canCreateEstimate = employee.effectivePermissions.includes('estimates:create');
+  const canEditEstimate = employee.effectivePermissions.includes('estimates:edit');
+  const canApproveEstimate = employee.effectivePermissions.includes('estimates:approve');
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -1059,6 +1062,11 @@ export function OfficeWorkspaceShell({
         jobDetail={{
           selectedJobId,
           jobDetailsById,
+          apiBaseUrl,
+          sessionToken,
+          canCreateEstimate,
+          canEditEstimate,
+          canApproveEstimate,
           focusedAppointmentId,
           jobDetailInitialTab,
           isJobDetailLoading,
