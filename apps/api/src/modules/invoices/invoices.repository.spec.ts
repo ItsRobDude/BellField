@@ -203,7 +203,9 @@ describe('InvoicesRepository.convertEstimateIntoDraft', () => {
       repository.convertEstimateIntoDraft('job-1', conversionInput(), undefined)
     ).rejects.toBeInstanceOf(ConflictException);
 
-    // No lines written, no header touched: the gate fires before any mutation.
+    // No line writes and no header change: the gate fires before those steps.
+    // (The estimate claim update does run first, but it rolls back with the
+    // aborted transaction, so nothing is persisted.)
     expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
     expect(findCall(calls, HEADER_ADOPT)).toBeUndefined();
     expect(findCall(calls, REPLACE_VOID)).toBeUndefined();

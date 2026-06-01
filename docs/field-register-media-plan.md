@@ -47,7 +47,7 @@ Audit refreshed after the register/media backend, field register queue, and offi
 
 ### Remaining doc/code gaps
 
-- `docs/offline-sync.md` still describes media attachment queueing as a v1 behavior. The backend is ready, but field-side capture/blob replay is still open.
+- `docs/offline-sync.md` describes media attachment queueing as a v1 behavior. Both the backend and field-side capture/staging/blob replay are now implemented (see §1 above); manual device smoke is the only remaining step.
 - `docs/data-modeling-rules.md` now summarizes implemented register/media entity behavior; keep detailed endpoint shape in `docs/api-endpoints.md`.
 
 ---
@@ -104,7 +104,7 @@ These satisfy the §13 "unified history" rule in data-modeling-rules.
 
 ## 3. Media: proposed v1 data model
 
-**Status: shipped backend baseline. Field capture and blob replay remain deferred.**
+**Status: shipped. Backend plus field-mobile capture/staging and blob replay are implemented; only manual device smoke remains. Keep this section as design history.**
 
 ### Entity: `media_attachments`
 
