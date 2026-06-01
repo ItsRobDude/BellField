@@ -14,3 +14,7 @@ apps/**/tsconfig.tsbuildinfo
 
 packages/**/dist
 packages/**/tsconfig.tsbuildinfo
+
+# Local scratch: planning docs, AI-collaboration briefs, and generated transcripts.
+# Kept on disk for reference but never committed (e.g. multi-thousand-line Codex logs).
+artifacts/

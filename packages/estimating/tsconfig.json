@@ -1,0 +1,12 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist",
+    // This package is both typechecked by tsc and transpiled per-file by ts-jest.
+    // isolatedModules keeps it safe under single-file transpilation and silences
+    // ts-jest's hybrid-module warning without changing the emitted behavior.
+    "isolatedModules": true
+  },
+  "include": ["src"]
+}
