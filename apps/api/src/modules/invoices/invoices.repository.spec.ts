@@ -506,3 +506,27 @@ describe('InvoicesRepository line mutators lock the invoice (posted-lock race gu
     expect(findCall(calls, /update invoice_line_items set is_void = true/i)).toBeUndefined();
   });
 });
+
+describe('InvoicesRepository.listInvoiceTotalsForJob', () => {
+  it('reads header totals for all of a job’s invoices without a line query', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: /select id, invoice_kind as "invoiceKind", status, total_amount/i,
+        rows: [
+          { id: 'main-1', invoiceKind: 'main', status: 'posted', total: '100.00' },
+          { id: 'adj-1', invoiceKind: 'adjustment', status: 'draft', total: '20.00' }
+        ]
+      }
+    ]);
+
+    const result = await repository.listInvoiceTotalsForJob('job-1');
+
+    expect(findCall(calls, /from invoices where job_id = \$1/i)).toBeDefined();
+    // Header-only: no per-invoice line-item query.
+    expect(findCall(calls, /from invoice_line_items/i)).toBeUndefined();
+    expect(result).toEqual([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 100 },
+      { id: 'adj-1', invoiceKind: 'adjustment', status: 'draft', total: 20 }
+    ]);
+  });
+});

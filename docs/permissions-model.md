@@ -314,7 +314,7 @@ Book Keeping should normally be able to:
 - post invoices
 - apply payments
 - handle payment-related work
-- create adjustments/credits if granted
+- create adjustment and credit records (bookkeeping has `invoices:create` by default)
 - view job notes and technician notes if needed for billing accuracy
 - view dispatch/job information needed to understand billing context
 

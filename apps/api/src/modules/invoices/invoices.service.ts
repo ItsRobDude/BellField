@@ -7,6 +7,7 @@ import {
 import type {
   CreateAdjustmentRequest,
   InvoiceLineItemInput,
+  JobInvoiceBalance,
   VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -49,6 +50,49 @@ export class InvoicesService {
       'office-web'
     ]);
     return { invoice: this.toSummary(await this.requireInvoice(invoiceId)) };
+  }
+
+  /**
+   * Net amount billed on a job: posted main total + posted adjustments − posted credits.
+   * "Billed" means posted, so a draft main (and any draft correction) contributes 0;
+   * `mainInvoiceStatus` says whether the main is posted yet. `netBilled` can be negative
+   * (a net credit balance). Office-only, gated invoices:view. No payments are modeled yet,
+   * so this is net billed, not amount owed after payment.
+   */
+  async getJobInvoiceBalance(sessionToken: string, jobId: string): Promise<JobInvoiceBalance> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:view', [
+      'office-web'
+    ]);
+    // Base NotFound on real job existence, not on an empty invoice query.
+    await this.jobsDataService.getJobById(jobId);
+
+    const invoices = await this.invoicesRepository.listInvoiceTotalsForJob(jobId);
+    const main = invoices.find((invoice) => invoice.invoiceKind === 'main');
+    if (!main) {
+      throw new NotFoundException('This job has no main invoice draft.');
+    }
+
+    // Sum in whole cents so repeated decimal-dollar addition can't drift. Stored totals are
+    // numeric(12,2), so rounding dollars*100 is exact.
+    const toCents = (dollars: number): number => Math.round(dollars * 100);
+    const sumPostedCents = (kind: 'adjustment' | 'credit'): number =>
+      invoices
+        .filter((invoice) => invoice.invoiceKind === kind && invoice.status === 'posted')
+        .reduce((cents, invoice) => cents + toCents(invoice.total), 0);
+
+    const postedMainCents = main.status === 'posted' ? toCents(main.total) : 0;
+    const postedAdjustmentsCents = sumPostedCents('adjustment');
+    const postedCreditsCents = sumPostedCents('credit');
+    const netBilledCents = postedMainCents + postedAdjustmentsCents - postedCreditsCents;
+
+    return {
+      jobId,
+      mainInvoiceStatus: main.status,
+      postedMainTotal: postedMainCents / 100,
+      postedAdjustmentsTotal: postedAdjustmentsCents / 100,
+      postedCreditsTotal: postedCreditsCents / 100,
+      netBilled: netBilledCents / 100
+    };
   }
 
   /** Add a manual line to a job's invoice draft. */

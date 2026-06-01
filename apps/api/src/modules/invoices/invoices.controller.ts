@@ -28,6 +28,15 @@ export class JobInvoiceController {
     return this.invoicesService.getInvoiceForJob(getBearerToken(authorizationHeader), jobId);
   }
 
+  // Net amount billed on the job across its posted invoices (main + adjustments − credits).
+  @Get('balance')
+  async getBalance(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string
+  ) {
+    return this.invoicesService.getJobInvoiceBalance(getBearerToken(authorizationHeader), jobId);
+  }
+
   @Post('lines')
   async addLine(
     @Headers('authorization') authorizationHeader: string | undefined,

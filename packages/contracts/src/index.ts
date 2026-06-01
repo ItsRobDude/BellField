@@ -727,6 +727,22 @@ export interface CreateAdjustmentRequest {
   kind: InvoiceAdjustmentKind;
 }
 
+/**
+ * Net amount billed on a job across its POSTED invoices: the posted main total plus
+ * posted adjustments minus posted credits. "Billed" means posted/accounting-visible, so a
+ * draft main contributes 0 (`mainInvoiceStatus` says whether it is posted yet). `netBilled`
+ * may be negative (a net credit balance). Payments are not modeled yet, so this is net
+ * billed, not amount owed after payment.
+ */
+export interface JobInvoiceBalance {
+  jobId: string;
+  mainInvoiceStatus: InvoiceStatus;
+  postedMainTotal: number;
+  postedAdjustmentsTotal: number;
+  postedCreditsTotal: number;
+  netBilled: number;
+}
+
 /** A manual invoice line the office adds, or the shape it edits a line into. */
 export interface InvoiceLineItemInput {
   kind: InvoiceLineItemKind;

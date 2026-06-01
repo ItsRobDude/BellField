@@ -83,6 +83,7 @@ Every job owns exactly one main invoice draft (created eagerly at job creation, 
 | `POST` | `/operations/invoices/lines/:lineId/void`     | office  | `invoices:edit`   | Soft-void a draft line.                                                                                |
 | `POST` | `/operations/jobs/:jobId/invoice/post`        | office  | `invoices:post`   | Post (lock) the draft: freezes the customer/location/job snapshot, then blocks further edits. No body. |
 | `POST` | `/operations/jobs/:jobId/invoice/adjustments` | office  | `invoices:create` | Create an adjustment or credit against the posted main. Body `{ kind: 'adjustment' \| 'credit' }`.     |
+| `GET`  | `/operations/jobs/:jobId/invoice/balance` | office | `invoices:view` | Net billed across the job's posted invoices: posted main + posted adjustments − posted credits (draft main contributes 0). |
 | `GET`  | `/operations/invoices/:invoiceId`             | office  | `invoices:view`   | Load any invoice by id (the main or an adjustment/credit) with its lines and totals.                   |
 | `POST` | `/operations/invoices/:invoiceId/lines`       | office  | `invoices:edit`   | Add a manual line to a specific invoice (used for adjustment/credit lines).                            |
 | `POST` | `/operations/invoices/:invoiceId/post`        | office  | `invoices:post`   | Post (lock) a specific invoice by id (used for adjustments/credits). No body.                          |

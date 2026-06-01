@@ -32,7 +32,8 @@ function createService() {
     editLine: jest.fn(),
     voidLine: jest.fn(),
     postInvoice: jest.fn(),
-    createAdjustment: jest.fn()
+    createAdjustment: jest.fn(),
+    listInvoiceTotalsForJob: jest.fn()
   };
 
   return {
@@ -473,5 +474,95 @@ describe('InvoicesService adjustments', () => {
     expect(ctx.invoicesRepository.getInvoiceById).toHaveBeenCalledWith('adj-1');
     expect(result.invoice.id).toBe('adj-1');
     expect(result.invoice.invoiceKind).toBe('adjustment');
+  });
+});
+
+describe('InvoicesService job balance', () => {
+  it('counts the posted main plus posted corrections, excluding drafts', async () => {
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 1000 },
+      { id: 'adj-1', invoiceKind: 'adjustment', status: 'posted', total: 100 },
+      { id: 'cred-1', invoiceKind: 'credit', status: 'posted', total: 50 },
+      { id: 'cred-2', invoiceKind: 'credit', status: 'draft', total: 999 }
+    ]);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+
+    expect(result).toEqual({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 1000,
+      postedAdjustmentsTotal: 100,
+      postedCreditsTotal: 50,
+      netBilled: 1050
+    });
+  });
+
+  it('treats a draft main as not yet billed (netBilled 0)', async () => {
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'draft', total: 500 }
+    ]);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+
+    expect(result.mainInvoiceStatus).toBe('draft');
+    expect(result.postedMainTotal).toBe(0);
+    expect(result.netBilled).toBe(0);
+  });
+
+  it('returns a negative netBilled for a net credit balance', async () => {
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 100 },
+      { id: 'cred-1', invoiceKind: 'credit', status: 'posted', total: 150 }
+    ]);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+    expect(result.netBilled).toBe(-50);
+  });
+
+  it('sums in whole cents without float drift', async () => {
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 100.1 },
+      { id: 'adj-1', invoiceKind: 'adjustment', status: 'posted', total: 0.05 },
+      { id: 'cred-1', invoiceKind: 'credit', status: 'posted', total: 0.04 }
+    ]);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+    expect(result.netBilled).toBe(100.11);
+  });
+
+  it('is gated on invoices:view (forbidden propagates, no balance query)', async () => {
+    const { service, identityAccessService, invoicesRepository } = createService();
+    identityAccessService.getAuthorizedEmployee.mockRejectedValue(new ForbiddenException());
+
+    await expect(service.getJobInvoiceBalance('token', 'job-1')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(invoicesRepository.listInvoiceTotalsForJob).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound for a missing job before querying invoices', async () => {
+    const { service, jobsDataService, invoicesRepository } = createService();
+    jobsDataService.getJobById.mockRejectedValue(new NotFoundException('Job not found.'));
+
+    await expect(service.getJobInvoiceBalance('token', 'missing-job')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    expect(invoicesRepository.listInvoiceTotalsForJob).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound when the job has no main invoice (integrity gap)', async () => {
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'adj-1', invoiceKind: 'adjustment', status: 'posted', total: 10 }
+    ]);
+
+    await expect(service.getJobInvoiceBalance('token', 'job-1')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
   });
 });

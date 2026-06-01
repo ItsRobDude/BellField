@@ -237,6 +237,37 @@ export class InvoicesRepository {
     );
   }
 
+  /**
+   * List the header totals of every invoice for a job (all kinds and statuses), for the
+   * job balance read. Header-only — no line items are loaded. Returns drafts too so the
+   * caller can report whether the main is posted yet.
+   */
+  async listInvoiceTotalsForJob(jobId: string): Promise<
+    Array<{
+      id: string;
+      invoiceKind: InvoiceKindValue;
+      status: InvoiceStatusValue;
+      total: number;
+    }>
+  > {
+    const result = await this.databaseService.query<{
+      id: string;
+      invoiceKind: InvoiceKindValue;
+      status: InvoiceStatusValue;
+      total: string | number;
+    }>(
+      `select id, invoice_kind as "invoiceKind", status, total_amount as "total"
+       from invoices where job_id = $1`,
+      [jobId]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      invoiceKind: row.invoiceKind,
+      status: row.status,
+      total: Number(row.total)
+    }));
+  }
+
   private toInvoiceRecord(row: InvoiceRow, lineItems: InvoiceLineItemRecord[]): InvoiceRecord {
     return {
       id: row.id,

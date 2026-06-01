@@ -524,7 +524,7 @@ Current implementation note:
 
 - Implemented (migration `20260601_008`): an adjustment or credit is a separate `invoices` row for the same job (`invoice_kind` `'adjustment'` = extra charge, `'credit'` = reduction), linked to the posted main it corrects via `adjusts_invoice_id`. Both carry POSITIVE amounts; the kind conveys direction, so the `>= 0` money checks and the pricing engine are unchanged.
 - An adjustment/credit can only be created once the main invoice is posted, and has its own draft→posted lifecycle (it locks + freezes its snapshot when posted, like the main).
-- Job balance (main + adjustments − credits) is a read-side concern, not yet computed.
+- Job balance is computed read-side as net billed = posted main total + posted adjustments − posted credits (a draft main contributes 0; "billed" means posted/accounting-visible). Exposed via `GET /operations/jobs/:jobId/invoice/balance`.
 
 ### Invoice draft rule
 
