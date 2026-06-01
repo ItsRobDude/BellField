@@ -1,6 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
 import { InvoicesService } from './invoices.service';
-import { InvoiceLineItemInputDto, VoidInvoiceLineItemRequestBodyDto } from './invoices.dto';
+import {
+  CreateAdjustmentRequestBodyDto,
+  InvoiceLineItemInputDto,
+  VoidInvoiceLineItemRequestBodyDto
+} from './invoices.dto';
 
 function getBearerToken(authorizationHeader: string | undefined): string {
   if (!authorizationHeader) {
@@ -42,6 +46,20 @@ export class JobInvoiceController {
   ) {
     return this.invoicesService.postInvoice(getBearerToken(authorizationHeader), jobId);
   }
+
+  // Create an adjustment or credit against the job's posted main invoice.
+  @Post('adjustments')
+  async createAdjustment(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string,
+    @Body() request: CreateAdjustmentRequestBodyDto
+  ) {
+    return this.invoicesService.createAdjustment(
+      getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
+  }
 }
 
 // Operations on an existing invoice line are addressed by line id directly.
@@ -65,5 +83,43 @@ export class InvoiceLineController {
     @Body() request: VoidInvoiceLineItemRequestBodyDto
   ) {
     return this.invoicesService.voidLine(getBearerToken(authorizationHeader), lineId, request);
+  }
+}
+
+// Operations that address an invoice by id directly — used for adjustment/credit records
+// (the job-scoped controller above covers the one main invoice). The static `lines/...`
+// routes live on InvoiceLineController; these `:invoiceId` routes never collide with them
+// (different segment shapes), and reads/writes here work for the main or an adjustment.
+@Controller('operations/invoices')
+export class InvoiceController {
+  constructor(private readonly invoicesService: InvoicesService) {}
+
+  @Get(':invoiceId')
+  async getOne(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string
+  ) {
+    return this.invoicesService.getInvoice(getBearerToken(authorizationHeader), invoiceId);
+  }
+
+  @Post(':invoiceId/lines')
+  async addLine(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string,
+    @Body() request: InvoiceLineItemInputDto
+  ) {
+    return this.invoicesService.addInvoiceLine(
+      getBearerToken(authorizationHeader),
+      invoiceId,
+      request
+    );
+  }
+
+  @Post(':invoiceId/post')
+  async post(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string
+  ) {
+    return this.invoicesService.postInvoiceById(getBearerToken(authorizationHeader), invoiceId);
   }
 }

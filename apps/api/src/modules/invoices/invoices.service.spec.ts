@@ -25,11 +25,14 @@ function createService() {
   };
   const invoicesRepository = {
     getMainInvoiceForJob: jest.fn(),
+    getInvoiceById: jest.fn(),
     getActiveLineContext: jest.fn(),
     addManualLine: jest.fn(),
+    addLineToInvoice: jest.fn(),
     editLine: jest.fn(),
     voidLine: jest.fn(),
-    postInvoice: jest.fn()
+    postInvoice: jest.fn(),
+    createAdjustment: jest.fn()
   };
 
   return {
@@ -172,6 +175,8 @@ describe('InvoicesService line editing', () => {
       sessionSurface: 'office-web'
     });
     ctx.invoicesRepository.getMainInvoiceForJob.mockResolvedValue(draftInvoice());
+    // edit/void now reload the line's own invoice by id (which may be an adjustment).
+    ctx.invoicesRepository.getInvoiceById.mockResolvedValue(draftInvoice());
     return ctx;
   }
 
@@ -330,8 +335,9 @@ describe('InvoicesService posting', () => {
       'invoices:post',
       ['office-web']
     );
+    // Posts by the resolved main invoice id (draftInvoice's id), not the job id.
     expect(ctx.invoicesRepository.postInvoice).toHaveBeenCalledWith(
-      'job-1',
+      'invoice-main-job-1',
       expect.objectContaining({
         billToCustomerId: 'customer-1',
         billToCustomerName: 'Acme Co',
@@ -378,5 +384,94 @@ describe('InvoicesService posting', () => {
       ForbiddenException
     );
     expect(ctx.invoicesRepository.postInvoice).not.toHaveBeenCalled();
+  });
+});
+
+describe('InvoicesService adjustments', () => {
+  function adjustingService() {
+    const ctx = createService();
+    ctx.identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'book-1',
+      displayName: 'Bea Books',
+      effectivePermissions: ['invoices:view', 'invoices:create', 'invoices:edit', 'invoices:post'],
+      sessionSurface: 'office-web'
+    });
+    return ctx;
+  }
+
+  it('creates a credit against a posted main, gated office-only on invoices:create', async () => {
+    const ctx = adjustingService();
+    ctx.invoicesRepository.getMainInvoiceForJob.mockResolvedValue(
+      draftInvoice({ status: 'posted' })
+    );
+    ctx.invoicesRepository.createAdjustment.mockResolvedValue(
+      draftInvoice({ id: 'adj-1', invoiceKind: 'credit', adjustsInvoiceId: 'invoice-main-job-1' })
+    );
+
+    const result = await ctx.service.createAdjustment('token', 'job-1', { kind: 'credit' });
+
+    expect(ctx.identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'invoices:create',
+      ['office-web']
+    );
+    // The new record links to the resolved main invoice id.
+    expect(ctx.invoicesRepository.createAdjustment).toHaveBeenCalledWith(
+      'job-1',
+      'credit',
+      'invoice-main-job-1',
+      expect.objectContaining({ id: 'book-1' })
+    );
+    expect(result.invoice.invoiceKind).toBe('credit');
+  });
+
+  it('refuses to create an adjustment while the main invoice is still a draft', async () => {
+    const ctx = adjustingService();
+    ctx.invoicesRepository.getMainInvoiceForJob.mockResolvedValue(draftInvoice());
+
+    await expect(
+      ctx.service.createAdjustment('token', 'job-1', { kind: 'adjustment' })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(ctx.invoicesRepository.createAdjustment).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown adjustment kind', async () => {
+    const ctx = adjustingService();
+
+    await expect(
+      ctx.service.createAdjustment('token', 'job-1', { kind: 'bogus' as never })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(ctx.invoicesRepository.createAdjustment).not.toHaveBeenCalled();
+  });
+
+  it("editing an adjustment line reloads the adjustment, not the job's main invoice", async () => {
+    const ctx = adjustingService();
+    ctx.invoicesRepository.getActiveLineContext.mockResolvedValue({
+      lineId: 'line-1',
+      invoiceId: 'adj-1',
+      jobId: 'job-1',
+      invoiceStatus: 'draft',
+      sourceSyncState: 'manual'
+    });
+    ctx.invoicesRepository.getInvoiceById.mockResolvedValue(
+      draftInvoice({ id: 'adj-1', invoiceKind: 'adjustment' })
+    );
+
+    const result = await ctx.service.editLine('token', 'line-1', {
+      kind: 'other',
+      description: 'Correction',
+      quantity: 1,
+      unitPrice: 10,
+      taxable: true
+    });
+
+    expect(ctx.invoicesRepository.editLine).toHaveBeenCalledWith(
+      'line-1',
+      'adj-1',
+      expect.anything()
+    );
+    expect(ctx.invoicesRepository.getInvoiceById).toHaveBeenCalledWith('adj-1');
+    expect(result.invoice.id).toBe('adj-1');
+    expect(result.invoice.invoiceKind).toBe('adjustment');
   });
 });

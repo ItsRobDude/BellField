@@ -471,6 +471,7 @@ Implemented behavior (Milestone 8 first slice):
 - the lock is enforced on every write path — office line edits, estimate conversion, and register reflection all refuse a posted invoice
 - a register entry that syncs in after posting still saves, but is recorded on the job timeline as "not reflected" (it needs an adjustment) instead of changing the locked invoice
 - posting is invoice-only and does not change job status
+- corrections to a posted invoice are made through a separate adjustment or credit record (a new invoice of kind `adjustment`/`credit`, created only after the main is posted, with its own draft→posted lock and snapshot); both carry positive amounts and the kind conveys direction. The office UI for adjustments is a later slice.
 
 ---
 

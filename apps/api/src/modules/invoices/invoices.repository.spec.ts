@@ -32,6 +32,9 @@ function countCalls(calls: Array<{ sql: string; params: unknown[] }>, fragment: 
 function repositoryWith(handlers: Array<{ match: RegExp; rows?: unknown[]; rowCount?: number }>) {
   const { queryable, calls } = scriptedQueryable(handlers);
   const databaseService = {
+    // Non-transactional reads (e.g. getInvoiceById) run against the same scripted
+    // queryable so reload-after-write paths are exercised too.
+    query: queryable.query,
     transaction: (async (work: (q: QueryExecutor) => unknown) => work(queryable)) as never
   };
   const repository = new InvoicesRepository(databaseService as never);
@@ -278,27 +281,31 @@ describe('InvoicesRepository.postInvoice', () => {
   const actor = { id: 'owner-1', displayName: 'Olivia Owner' };
   const POST_UPDATE = /update invoices set\s+status = 'posted'/i;
 
-  it('locks the draft with a guarded update, freezes the snapshot, bumps version, and logs the post', async () => {
+  it('locks the draft by id, freezes the snapshot, bumps version, and logs the post', async () => {
     const { repository, calls } = repositoryWith([
-      { match: POST_UPDATE, rowCount: 1 },
+      // The guarded update returns the job id (and kind) for the timeline.
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
       HANDLERS_TOUCH_JOB,
       HANDLERS_TIMELINE
     ]);
 
-    await repository.postInvoice('job-1', snapshot, actor);
+    await repository.postInvoice('inv-1', snapshot, actor);
 
     const post = findCall(calls, POST_UPDATE);
     expect(post).toBeDefined();
-    // Guarded transition: only a draft posts (atomic against a concurrent post).
-    expect(post?.sql).toMatch(/where job_id = \$1 and invoice_kind = 'main' and status = 'draft'/i);
-    // Version bumps; the frozen context is written.
+    // Guarded transition by id (works for the main or an adjustment), atomic against a
+    // concurrent post; returns job_id so no second read is needed.
+    expect(post?.sql).toMatch(/where id = \$1 and status = 'draft'/i);
+    expect(post?.sql).toMatch(/returning job_id/i);
     expect(post?.sql).toMatch(/version = version \+ 1/i);
     expect(post?.params).toContain('Acme Co');
     expect(post?.params).toContain('1001');
-    // Posting must NOT change job status — only touch updated_at.
+    // Posting must NOT change job status — only touch updated_at, keyed on the job id
+    // returned by the update.
     const jobTouch = findCall(calls, /update jobs set/i);
     expect(jobTouch?.sql).toMatch(/update jobs set updated_at = \$2 where id = \$1/i);
     expect(jobTouch?.sql).not.toMatch(/status/i);
+    expect(jobTouch?.params).toContain('job-1');
     // It records an invoicePosted timeline event and does NOT recompute money.
     const timeline = findCall(calls, /insert into job_timeline_entries/i);
     expect(timeline?.params).toContain('invoicePosted');
@@ -308,11 +315,76 @@ describe('InvoicesRepository.postInvoice', () => {
   it('rejects with a conflict and writes no timeline when the invoice is no longer a draft', async () => {
     const { repository, calls } = repositoryWith([{ match: POST_UPDATE, rowCount: 0 }]);
 
-    await expect(repository.postInvoice('job-1', snapshot, actor)).rejects.toBeInstanceOf(
+    await expect(repository.postInvoice('inv-1', snapshot, actor)).rejects.toBeInstanceOf(
       ConflictException
     );
     expect(findCall(calls, /insert into job_timeline_entries/i)).toBeUndefined();
     expect(findCall(calls, /update jobs set/i)).toBeUndefined();
+  });
+});
+
+describe('InvoicesRepository.createAdjustment', () => {
+  const actor = { id: 'owner-1', displayName: 'Olivia Owner' };
+  // A complete invoice row for the getInvoiceById reload after creation.
+  const adjustmentRow = {
+    id: 'adj-1',
+    jobId: 'job-1',
+    invoiceKind: 'credit',
+    status: 'draft',
+    taxRateBasisPoints: 0,
+    discountKind: null,
+    discountBasisPoints: null,
+    discountAmount: null,
+    subtotalAmount: 0,
+    discountAmountApplied: 0,
+    taxableBaseAmount: 0,
+    taxAmount: 0,
+    totalAmount: 0,
+    totalCostAmount: 0,
+    profitAmount: 0,
+    marginBasisPoints: null,
+    costComplete: true,
+    createdAt: '2026-06-01T00:00:00.000Z',
+    updatedAt: '2026-06-01T00:00:00.000Z',
+    version: 1,
+    postedAt: null,
+    postedByName: null,
+    billToCustomerId: null,
+    billToCustomerName: null,
+    billToAccountType: null,
+    billToAddressLine1: null,
+    billToCity: null,
+    billToState: null,
+    billToPostalCode: null,
+    serviceLocationId: null,
+    serviceLocationName: null,
+    serviceLocationAddressLine1: null,
+    serviceLocationCity: null,
+    serviceLocationState: null,
+    serviceLocationPostalCode: null,
+    jobNumber: null,
+    workOrderNumber: null,
+    adjustsInvoiceId: 'inv-main'
+  };
+
+  it('inserts a draft of the given kind linked to the main, logs it, and returns it', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: /insert into invoices/i, rowCount: 1 },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE,
+      { match: /from invoices where id = \$1 limit 1/i, rows: [adjustmentRow] },
+      { match: /from invoice_line_items[\s\S]*order by line_position/i, rows: [] }
+    ]);
+
+    const result = await repository.createAdjustment('job-1', 'credit', 'inv-main', actor);
+
+    const insert = findCall(calls, /insert into invoices/i);
+    expect(insert?.params).toContain('credit');
+    expect(insert?.params).toContain('inv-main');
+    const timeline = findCall(calls, /insert into job_timeline_entries/i);
+    expect(timeline?.params).toContain('invoiceAdjustmentCreated');
+    expect(result.invoiceKind).toBe('credit');
+    expect(result.adjustsInvoiceId).toBe('inv-main');
   });
 });
 
@@ -350,6 +422,33 @@ describe('InvoicesRepository line mutators lock the invoice (posted-lock race gu
     ]);
 
     await expect(repository.addManualLine('job-1', validLine)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
+  });
+
+  it('addLineToInvoice locks the invoice by id FOR UPDATE and inserts on a draft', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_ID, rows: [{ status: 'draft' }] },
+      HANDLERS_NEXT_POSITION,
+      HANDLERS_INSERT_LINE,
+      HANDLERS_RECALC_HEADER,
+      HANDLERS_RECALC_LINES,
+      HANDLERS_RECALC_WRITE
+    ]);
+
+    await repository.addLineToInvoice('adj-1', validLine);
+
+    expect(findCall(calls, LOCK_BY_ID)?.sql).toMatch(/for update/i);
+    expect(findCall(calls, /insert into invoice_line_items/i)).toBeDefined();
+  });
+
+  it('addLineToInvoice refuses a posted invoice and writes nothing', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: LOCK_BY_ID, rows: [{ status: 'posted' }] }
+    ]);
+
+    await expect(repository.addLineToInvoice('adj-1', validLine)).rejects.toBeInstanceOf(
       ConflictException
     );
     expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();

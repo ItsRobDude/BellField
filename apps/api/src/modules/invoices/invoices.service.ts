@@ -4,7 +4,11 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import type { InvoiceLineItemInput, VoidInvoiceLineItemRequest } from '@bellfield/contracts';
+import type {
+  CreateAdjustmentRequest,
+  InvoiceLineItemInput,
+  VoidInvoiceLineItemRequest
+} from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
@@ -37,6 +41,14 @@ export class InvoicesService {
 
     const invoice = await this.requireMainInvoice(jobId);
     return { invoice: this.toSummary(invoice) };
+  }
+
+  /** Load any single invoice by id (main or an adjustment/credit). Office-only, invoices:view. */
+  async getInvoice(sessionToken: string, invoiceId: string): Promise<InvoiceResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:view', [
+      'office-web'
+    ]);
+    return { invoice: this.toSummary(await this.requireInvoice(invoiceId)) };
   }
 
   /** Add a manual line to a job's invoice draft. */
@@ -73,7 +85,8 @@ export class InvoicesService {
       context.invoiceId,
       this.validateLineInput(request)
     );
-    return { invoice: this.toSummary(await this.requireMainInvoice(context.jobId)) };
+    // Reload the line's OWN invoice (which may be an adjustment), not the job's main.
+    return { invoice: this.toSummary(await this.requireInvoice(context.invoiceId)) };
   }
 
   /** Void an invoice line. */
@@ -89,7 +102,8 @@ export class InvoicesService {
     this.ensureDraftStatus(context.invoiceStatus);
 
     await this.invoicesRepository.voidLine(lineId, context.invoiceId, request.reason);
-    return { invoice: this.toSummary(await this.requireMainInvoice(context.jobId)) };
+    // Reload the line's OWN invoice (which may be an adjustment), not the job's main.
+    return { invoice: this.toSummary(await this.requireInvoice(context.invoiceId)) };
   }
 
   /**
@@ -112,15 +126,101 @@ export class InvoicesService {
       throw new ConflictException('Only draft invoices can be posted.');
     }
 
-    // Freeze the bill-to customer and service location exactly as they read now. These
-    // getters throw NotFound when a referenced record is missing, which correctly blocks
-    // a post against broken references rather than freezing empty context.
+    const snapshot = await this.resolvePostingSnapshot(job);
+    await this.invoicesRepository.postInvoice(invoice.id, snapshot, actor);
+    return { invoice: this.toSummary(await this.requireMainInvoice(jobId)) };
+  }
+
+  /**
+   * Post (lock) a specific invoice by id. Used for adjustment/credit records (the office
+   * posts the main via postInvoice above). Same gate and snapshot-freeze as the main.
+   */
+  async postInvoiceById(sessionToken: string, invoiceId: string): Promise<InvoiceResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'invoices:post',
+      ['office-web']
+    );
+    const invoice = await this.requireInvoice(invoiceId);
+    if (invoice.status !== 'draft') {
+      throw new ConflictException('Only draft invoices can be posted.');
+    }
+    const job = await this.jobsDataService.getJobById(invoice.jobId);
+    const snapshot = await this.resolvePostingSnapshot(job);
+    await this.invoicesRepository.postInvoice(invoiceId, snapshot, actor);
+    return { invoice: this.toSummary(await this.requireInvoice(invoiceId)) };
+  }
+
+  /**
+   * Create a draft adjustment or credit against a job's posted main invoice (the
+   * correction path for a locked bill). Office-only, gated on invoices:create. Both kinds
+   * carry positive amounts; the kind conveys whether it adds a charge or a credit.
+   */
+  async createAdjustment(
+    sessionToken: string,
+    jobId: string,
+    request: CreateAdjustmentRequest
+  ): Promise<InvoiceResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'invoices:create',
+      ['office-web']
+    );
+    if (request.kind !== 'adjustment' && request.kind !== 'credit') {
+      throw new BadRequestException('Kind must be "adjustment" or "credit".');
+    }
+    await this.jobsDataService.getJobById(jobId);
+    const mainInvoice = await this.requireMainInvoice(jobId);
+    if (mainInvoice.status !== 'posted') {
+      // The correction path exists for a locked bill; there is nothing to correct while
+      // the main invoice is still an editable draft.
+      throw new ConflictException(
+        'An adjustment or credit can only be created after the main invoice is posted.'
+      );
+    }
+
+    const created = await this.invoicesRepository.createAdjustment(
+      jobId,
+      request.kind,
+      mainInvoice.id,
+      actor
+    );
+    return { invoice: this.toSummary(created) };
+  }
+
+  /** Add a manual line to a specific invoice by id (used for adjustment/credit lines). */
+  async addInvoiceLine(
+    sessionToken: string,
+    invoiceId: string,
+    request: InvoiceLineItemInput
+  ): Promise<InvoiceResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:edit', [
+      'office-web'
+    ]);
+    const invoice = await this.requireInvoice(invoiceId);
+    this.ensureDraft(invoice);
+
+    await this.invoicesRepository.addLineToInvoice(invoiceId, this.validateLineInput(request));
+    return { invoice: this.toSummary(await this.requireInvoice(invoiceId)) };
+  }
+
+  /**
+   * Resolve the customer/location/job display context to freeze at posting, from the
+   * invoice's job. The reference-data getters throw NotFound when a referenced record is
+   * missing, which correctly blocks a post against broken references.
+   */
+  private async resolvePostingSnapshot(job: {
+    billToCustomerId: string;
+    locationId: string;
+    jobNumber: string;
+    workOrderNumber?: string;
+  }): Promise<PostedSnapshotInput> {
     const [billToCustomer, serviceLocation] = await Promise.all([
       this.referenceDataService.getCustomerById(job.billToCustomerId),
       this.referenceDataService.getLocationById(job.locationId)
     ]);
 
-    const snapshot: PostedSnapshotInput = {
+    return {
       billToCustomerId: billToCustomer.id,
       billToCustomerName: billToCustomer.name,
       billToAccountType: billToCustomer.accountType,
@@ -137,9 +237,6 @@ export class InvoicesService {
       jobNumber: job.jobNumber,
       workOrderNumber: job.workOrderNumber
     };
-
-    await this.invoicesRepository.postInvoice(jobId, snapshot, actor);
-    return { invoice: this.toSummary(await this.requireMainInvoice(jobId)) };
   }
 
   private validateLineInput(request: InvoiceLineItemInput): InvoiceLineWriteInput {
@@ -188,6 +285,14 @@ export class InvoicesService {
       // Every job should own a main draft (created eagerly + backfilled). A missing
       // one means a data-integrity gap rather than a normal state, so surface it.
       throw new NotFoundException('This job has no main invoice draft.');
+    }
+    return invoice;
+  }
+
+  private async requireInvoice(invoiceId: string): Promise<InvoiceRecord> {
+    const invoice = await this.invoicesRepository.getInvoiceById(invoiceId);
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found.');
     }
     return invoice;
   }

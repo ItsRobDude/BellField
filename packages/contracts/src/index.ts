@@ -625,7 +625,10 @@ export interface EstimateSummary {
 // --- Invoices (Milestone 7 draft + Milestone 8 posting/lock) --------------------
 
 export type InvoiceStatus = 'draft' | 'posted';
-export type InvoiceKind = 'main';
+export type InvoiceKind = 'main' | 'adjustment' | 'credit';
+/** The correction-record kinds an office user can create against a posted main invoice.
+ * 'adjustment' adds a charge; 'credit' reduces what's owed. Both carry positive amounts. */
+export type InvoiceAdjustmentKind = 'adjustment' | 'credit';
 export type InvoiceLineItemKind = EstimateLineItemKind;
 /** Where an invoice line came from. Manual office entry, reflected register work, or a converted estimate. */
 export type InvoiceLineSourceKind = 'manual' | 'register' | 'estimate';
@@ -708,6 +711,8 @@ export interface InvoiceSummary {
   totals: InvoiceTotals;
   /** Frozen display context, set once the invoice is posted (see PostedInvoiceContext). */
   posted?: PostedInvoiceContext;
+  /** For an adjustment/credit, the main invoice it corrects. Null for the main invoice. */
+  adjustsInvoiceId?: string;
   createdAt: string;
   updatedAt: string;
   version: number;
@@ -715,6 +720,11 @@ export interface InvoiceSummary {
 
 export interface InvoiceResponse {
   invoice: InvoiceSummary;
+}
+
+/** Create an adjustment or credit against a job's posted main invoice. */
+export interface CreateAdjustmentRequest {
+  kind: InvoiceAdjustmentKind;
 }
 
 /** A manual invoice line the office adds, or the shape it edits a line into. */

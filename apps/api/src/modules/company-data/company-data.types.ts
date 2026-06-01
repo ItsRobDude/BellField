@@ -265,6 +265,7 @@ export type JobTimelineEntry = {
     | 'estimateDeclined'
     | 'estimateConverted'
     | 'invoicePosted'
+    | 'invoiceAdjustmentCreated'
     | 'registerEntryNotReflected'
     | 'mediaAttached'
     | 'mediaCaptionEdited'

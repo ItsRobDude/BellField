@@ -196,7 +196,7 @@ This table summarizes the current defaults so contributors do not have to redisc
 | Admin        | Office core, equipment configure, invoice view/create/edit/post, payment view/create/edit, purchasing view/create/edit, inventory view/create/edit, report view/export, employee permission view/configure, company settings view/configure, support logs/backups view/export, and jobs configure. |
 | CSR          | Office core, equipment configure, invoice view, and payment view.                                                                                                                                                                                                                                  |
 | Dispatcher   | Office core, equipment configure, invoice view, and report view.                                                                                                                                                                                                                                   |
-| Book Keeping | Office core, invoice view/edit/post, payment view/create/edit, and report view/export.                                                                                                                                                                                                             |
+| Book Keeping | Office core, invoice view/create/edit/post, payment view/create/edit, and report view/export.                                                                                                                                                                                                      |
 | Technician   | Customer/location/contact view, equipment create/edit/configure, appointment dispatch view/edit, register view/create/edit, media view/create/edit, estimate view/create/edit, and invoice view/edit.                                                                                              |
 
 Office core currently means:
@@ -474,7 +474,7 @@ Book Keeping should normally be able to:
 - edit invoice drafts
 - post invoices
 - apply payments
-- create adjustments/credits if granted
+- create adjustment and credit records (bookkeeping has `invoices:create` by default)
 - view notes needed for billing context
 - see dispatch/job context when relevant
 

@@ -481,7 +481,13 @@ Milestone 8 has started. The first slice has shipped:
 - a late field register entry still saves and is recorded as "not reflected" (needs an adjustment) rather than mutating the locked invoice
 - posting is invoice-only and does not change job status; money is not recomputed (totals already froze on write)
 
-Still ahead in Milestone 8: the payment workflow, adjustment/credit follow-up records, the invoice review/bookkeeping workbench, and verifying the new migration + posting runtime against a live database (not possible on the current dev PC).
+The second slice (adjustment/credit correction foundation) has also shipped:
+
+- adjustment and credit records as separate `invoices` kinds (positive amounts; direction by kind), created only after the main is posted and linked via `adjusts_invoice_id` (`invoices` migration `20260601_008`)
+- they reuse the invoice machinery — line add/edit/void and the draft→posted lock + snapshot — generalized to operate by invoice id; `invoices:create` is granted to bookkeeping
+- backend only
+
+Still ahead in Milestone 8: the payment workflow, the invoice review/bookkeeping workbench, the office UI for adjustments, job-balance computation (main + adjustments − credits), and verifying the new migrations + runtime against a live database (not possible on the current dev PC).
 
 ---
 
@@ -725,7 +731,7 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 4. Sync reliability for real field actions:
    harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
 5. Historical snapshot hardening (shipped for invoices):
-   posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`); open/live jobs and dispatch intentionally still resolve current names. Remaining Milestone 8 money work is the payment workflow, adjustment/credit records, and the bookkeeping workbench.
+   posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`), and adjustment/credit correction records are implemented as a backend foundation (migration `20260601_008`); open/live jobs and dispatch intentionally still resolve current names. Remaining Milestone 8 money work is the payment workflow, the bookkeeping workbench, the office UI for adjustments, and job-balance computation.
 6. Self-hosted deployment readiness planning:
    keep the supported Windows install profile, assisted pilot setup posture, backup/restore/update expectations, and internal Rob install test aligned with `docs/self-hosted-installation-strategy.md` before any paid pilot is treated as repeatable.
 

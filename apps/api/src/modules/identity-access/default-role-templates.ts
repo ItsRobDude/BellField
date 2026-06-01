@@ -101,7 +101,9 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
     description: 'Financial review, posting, and payment access.',
     permissions: uniquePermissions([
       ...officeCore,
-      ...permissionKeys('invoices', ['view', 'edit', 'post']),
+      // Bookkeeping owns corrections, so it can create adjustment/credit records
+      // (invoices:create), in addition to viewing, editing, and posting invoices.
+      ...permissionKeys('invoices', ['view', 'create', 'edit', 'post']),
       ...permissionKeys('payments', ['view', 'create', 'edit']),
       ...permissionKeys('reports', ['view', 'export'])
     ])

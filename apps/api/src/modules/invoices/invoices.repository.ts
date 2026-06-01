@@ -97,6 +97,7 @@ type InvoiceRow = {
   serviceLocationPostalCode: string | null;
   jobNumber: string | null;
   workOrderNumber: string | null;
+  adjustsInvoiceId: string | null;
 };
 
 type InvoiceLineItemRow = {
@@ -157,7 +158,8 @@ const INVOICE_COLUMNS = `
   service_location_state as "serviceLocationState",
   service_location_postal_code as "serviceLocationPostalCode",
   job_number as "jobNumber",
-  work_order_number as "workOrderNumber"
+  work_order_number as "workOrderNumber",
+  adjusts_invoice_id as "adjustsInvoiceId"
 `;
 
 const INVOICE_LINE_COLUMNS = `
@@ -210,6 +212,31 @@ export class InvoicesRepository {
     );
   }
 
+  /** Load any single invoice (main or an adjustment/credit) by id, with its active lines. */
+  async getInvoiceById(invoiceId: string): Promise<InvoiceRecord | null> {
+    const invoiceResult = await this.databaseService.query<InvoiceRow>(
+      `select ${INVOICE_COLUMNS} from invoices where id = $1 limit 1`,
+      [invoiceId]
+    );
+
+    const row = invoiceResult.rows[0];
+    if (!row) {
+      return null;
+    }
+
+    const lineResult = await this.databaseService.query<InvoiceLineItemRow>(
+      `select ${INVOICE_LINE_COLUMNS} from invoice_line_items
+       where invoice_id = $1 and is_void = false
+       order by line_position asc`,
+      [row.id]
+    );
+
+    return this.toInvoiceRecord(
+      row,
+      lineResult.rows.map((lineRow) => this.toLineItemRecord(lineRow))
+    );
+  }
+
   private toInvoiceRecord(row: InvoiceRow, lineItems: InvoiceLineItemRecord[]): InvoiceRecord {
     return {
       id: row.id,
@@ -231,6 +258,7 @@ export class InvoicesRepository {
         costComplete: row.costComplete
       },
       posted: toPostedContext(row),
+      adjustsInvoiceId: row.adjustsInvoiceId ?? undefined,
       createdAt: toIsoString(row.createdAt),
       updatedAt: toIsoString(row.updatedAt),
       version: row.version
@@ -341,6 +369,52 @@ export class InvoicesRepository {
     return result.rows[0] ?? null;
   }
 
+  /**
+   * Append a manual line to an ALREADY-LOCKED draft invoice, then recompute totals.
+   * The caller must have locked the invoice row and confirmed it is a draft. Shared by
+   * the main-invoice and adjustment line-add paths so they insert identically.
+   */
+  private async insertLineLocked(
+    invoiceId: string,
+    input: InvoiceLineWriteInput,
+    occurredAt: string,
+    queryable: QueryExecutor
+  ): Promise<void> {
+    const positionResult = await queryable.query<{ nextPosition: number }>(
+      `select coalesce(max(line_position) + 1, 0) as "nextPosition"
+       from invoice_line_items where invoice_id = $1 and is_void = false`,
+      [invoiceId]
+    );
+    const position = Number(positionResult.rows[0]?.nextPosition ?? 0);
+
+    await queryable.query(
+      `insert into invoice_line_items (
+         id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
+         unit_price, unit_cost, taxable, line_subtotal_amount, line_cost_amount,
+         source_kind, source_sync_state, is_void, created_at, updated_at
+       )
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
+               'manual', 'linked', false, $13, $13)`,
+      [
+        randomUUID(),
+        invoiceId,
+        position,
+        input.kind,
+        input.description.trim(),
+        input.quantity,
+        input.unitOfMeasure?.trim() || null,
+        input.unitPrice,
+        input.unitCost ?? null,
+        input.taxable,
+        roundMoney(input.quantity * input.unitPrice),
+        input.unitCost === undefined ? null : roundMoney(input.quantity * input.unitCost),
+        occurredAt
+      ]
+    );
+
+    await recalculateInvoiceTotals(invoiceId, occurredAt, queryable);
+  }
+
   /** Add a manual office line to a job's main draft, then recompute totals. */
   async addManualLine(jobId: string, input: InvoiceLineWriteInput): Promise<void> {
     const now = new Date().toISOString();
@@ -349,41 +423,19 @@ export class InvoicesRepository {
       // land a manual line on a now-posted invoice.
       const invoice = await this.lockMainInvoiceByJob(jobId, queryable);
       this.ensureDraftRow(invoice.status);
-      const invoiceId = invoice.id;
+      await this.insertLineLocked(invoice.id, input, now, queryable);
+    });
+  }
 
-      const positionResult = await queryable.query<{ nextPosition: number }>(
-        `select coalesce(max(line_position) + 1, 0) as "nextPosition"
-         from invoice_line_items where invoice_id = $1 and is_void = false`,
-        [invoiceId]
-      );
-      const position = Number(positionResult.rows[0]?.nextPosition ?? 0);
-
-      await queryable.query(
-        `insert into invoice_line_items (
-           id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
-           unit_price, unit_cost, taxable, line_subtotal_amount, line_cost_amount,
-           source_kind, source_sync_state, is_void, created_at, updated_at
-         )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-                 'manual', 'linked', false, $13, $13)`,
-        [
-          randomUUID(),
-          invoiceId,
-          position,
-          input.kind,
-          input.description.trim(),
-          input.quantity,
-          input.unitOfMeasure?.trim() || null,
-          input.unitPrice,
-          input.unitCost ?? null,
-          input.taxable,
-          roundMoney(input.quantity * input.unitPrice),
-          input.unitCost === undefined ? null : roundMoney(input.quantity * input.unitCost),
-          now
-        ]
-      );
-
-      await recalculateInvoiceTotals(invoiceId, now, queryable);
+  /**
+   * Add a manual line to a specific invoice by id (the main invoice or an
+   * adjustment/credit). Locks the invoice row and re-checks draft, same as addManualLine.
+   */
+  async addLineToInvoice(invoiceId: string, input: InvoiceLineWriteInput): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      this.ensureDraftRow(await this.lockInvoiceStatusById(invoiceId, queryable));
+      await this.insertLineLocked(invoiceId, input, now, queryable);
     });
   }
 
@@ -459,13 +511,16 @@ export class InvoicesRepository {
    * columns + timeline, and bumps version.
    */
   async postInvoice(
-    jobId: string,
+    invoiceId: string,
     snapshot: PostedSnapshotInput,
     actor: { id: string; displayName: string }
   ): Promise<void> {
     const now = new Date().toISOString();
     await this.databaseService.transaction(async (queryable) => {
-      const result = await queryable.query(
+      // Guarded by id + status='draft' so it works for any invoice (the main or an
+      // adjustment/credit) and is atomic against a concurrent post. `returning job_id`
+      // gives us the job for the timeline without a second read.
+      const result = await queryable.query<{ jobId: string; invoiceKind: InvoiceKindValue }>(
         `update invoices set
            status = 'posted',
            posted_at = $2,
@@ -488,9 +543,10 @@ export class InvoicesRepository {
            work_order_number = $19,
            updated_at = $2,
            version = version + 1
-         where job_id = $1 and invoice_kind = 'main' and status = 'draft'`,
+         where id = $1 and status = 'draft'
+         returning job_id as "jobId", invoice_kind as "invoiceKind"`,
         [
-          jobId,
+          invoiceId,
           now,
           actor.id,
           actor.displayName,
@@ -512,11 +568,56 @@ export class InvoicesRepository {
         ]
       );
 
-      if (result.rowCount === 0) {
-        // Either there is no main invoice (a data-integrity gap the service pre-check
-        // would already have surfaced) or it is no longer a draft (already posted).
+      const posted = result.rows[0];
+      if (result.rowCount === 0 || !posted) {
+        // The invoice is missing (a data-integrity gap the service pre-check would have
+        // surfaced) or no longer a draft (already posted).
         throw new ConflictException('This invoice is no longer a draft and cannot be posted.');
       }
+
+      const message =
+        posted.invoiceKind === 'credit'
+          ? 'Credit posted and locked.'
+          : posted.invoiceKind === 'adjustment'
+            ? 'Adjustment posted and locked.'
+            : 'Invoice posted. The bill is now locked.';
+
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [posted.jobId, now]);
+      await insertJobTimelineEntry(
+        {
+          id: randomUUID(),
+          jobId: posted.jobId,
+          occurredAt: now,
+          actorName: actor.displayName,
+          kind: 'invoicePosted',
+          message
+        },
+        queryable
+      );
+    });
+  }
+
+  /**
+   * Create a draft adjustment or credit record for a job, linked to the posted main it
+   * corrects (adjusts_invoice_id). Both kinds carry positive amounts; the kind conveys
+   * direction. The caller (service) guarantees the main invoice is posted.
+   */
+  async createAdjustment(
+    jobId: string,
+    kind: 'adjustment' | 'credit',
+    adjustsInvoiceId: string,
+    actor: { id: string; displayName: string }
+  ): Promise<InvoiceRecord> {
+    const now = new Date().toISOString();
+    const invoiceId = randomUUID();
+    await this.databaseService.transaction(async (queryable) => {
+      await queryable.query(
+        `insert into invoices (
+           id, job_id, invoice_kind, status, adjusts_invoice_id, created_at, updated_at, version
+         )
+         values ($1, $2, $3, 'draft', $4, $5, $5, 1)`,
+        [invoiceId, jobId, kind, adjustsInvoiceId, now]
+      );
 
       await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, now]);
       await insertJobTimelineEntry(
@@ -525,12 +626,18 @@ export class InvoicesRepository {
           jobId,
           occurredAt: now,
           actorName: actor.displayName,
-          kind: 'invoicePosted',
-          message: 'Invoice posted. The bill is now locked.'
+          kind: 'invoiceAdjustmentCreated',
+          message: kind === 'credit' ? 'Credit started.' : 'Adjustment started.'
         },
         queryable
       );
     });
+
+    const created = await this.getInvoiceById(invoiceId);
+    if (!created) {
+      throw new Error('Created adjustment could not be loaded.');
+    }
+    return created;
   }
 
   /** Count active lines on a job's main draft (used to decide block-with-choice on conversion). */

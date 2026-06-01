@@ -8,7 +8,12 @@ import {
   Min,
   MinLength
 } from 'class-validator';
-import type { InvoiceLineItemInput, VoidInvoiceLineItemRequest } from '@bellfield/contracts';
+import type {
+  CreateAdjustmentRequest,
+  InvoiceAdjustmentKind,
+  InvoiceLineItemInput,
+  VoidInvoiceLineItemRequest
+} from '@bellfield/contracts';
 import {
   estimateLineItemKinds,
   type EstimateLineItemKindValue
@@ -51,4 +56,9 @@ export class VoidInvoiceLineItemRequestBodyDto implements VoidInvoiceLineItemReq
   @IsString()
   @MaxLength(500)
   reason?: string;
+}
+
+export class CreateAdjustmentRequestBodyDto implements CreateAdjustmentRequest {
+  @IsIn(['adjustment', 'credit'])
+  kind!: InvoiceAdjustmentKind;
 }
