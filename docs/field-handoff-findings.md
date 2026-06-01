@@ -66,7 +66,8 @@ Covered by `field-queue-resolution.test.ts`.
 These are real gaps a technician will notice once dispatch starts driving real-world schedule changes. None of them needed a fix to make the lane safe to land, but they should be on a later field lane's plate.
 
 1. **No explicit route/navigation action from the address.** The full address is visible now, but there is no tap target to hand it to device maps.
-2. **No field-side detail drawer.** The screen remains one scrollable operational card, so the new trust signals are readable but not organized into the dashboard/detail pattern described in the screen behavior spec.
+
+(The original single-scrollable-card gap noted here has since been addressed: the field app now uses a job feed plus a focused job detail with tabbed sections and a bottom nav — see `field-job-feed.tsx`, `field-workspace-shell.tsx`, `FieldWorkspaceBottomNav`.)
 
 ---
 
@@ -76,7 +77,7 @@ Cross-referenced against `docs/milestone-implementation-plan.md` §11 and `docs/
 
 | Milestone 6 scope item                   | Current state                                                                                                                                                                                                                       |
 | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Technician home / dashboard              | Partial. The technician workspace is a single scrollable card, not a home/dashboard per `docs/screen-behavior-spec.md` §11.                                                                                                         |
+| Technician home / dashboard              | Present. The technician workspace is now a job feed plus a focused job detail with tabbed sections and a bottom nav, rather than a single scrollable card.                                                                          |
 | Assigned jobs for today/tomorrow window  | Present. Backend window enforced; local cache mirrors the snapshot.                                                                                                                                                                 |
 | Local cached job/location/equipment data | Present via `expo-sqlite` store.                                                                                                                                                                                                    |
 | Notes                                    | Present. Queueable + replay-safe.                                                                                                                                                                                                   |
@@ -109,8 +110,16 @@ These are now pinned by tests and should stay true:
 
 ## Recommended next field lane
 
-1. **Media queueing/capture.** Real Milestone 6 scope, still absent on field-mobile.
-2. **Field dashboard/detail split.** Move the single long card toward the documented technician home/detail workflow once the data and sync trust surfaces are stable.
-3. **Estimate drafting foundations.** Still absent and should wait until register/media trust is stable.
+Both the original top items here — field media queueing/capture and the
+dashboard/detail split — have since landed (see `field-media-*.ts` plus the
+feed/detail/bottom-nav layout). Remaining field-side gaps:
 
-Each item is small enough to ship as its own lane and none of them require dispatch-model decisions to be settled first.
+1. **Route/navigation action from the address.** Add a tap target that hands the
+   service address to device maps.
+2. **Lost/revoked device behavior.** No wipe-on-reconnect or sign-out-on-revoke
+   surface on the field side yet.
+3. **Estimate drafting on the field side.** Estimates are office-only in the
+   current milestone; a field builder is a later, deliberate lane.
+
+Each item is small enough to ship as its own lane and none of them require
+dispatch-model decisions to be settled first.

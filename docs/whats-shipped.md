@@ -32,15 +32,14 @@ Refresh it after major implementation lanes land.
 | Sync hardening       | Reliability checks around register/media partial success, retries, remaining transient-failure behavior, and revoked-device behavior.                                                                                                                                                                                                                                              |
 | Intake at scale      | Job intake context still loads active customers/locations. Future typeahead should use SQL-backed CRM search rather than full dropdowns.                                                                                                                                                                                                                                           |
 | Historical snapshots | Jobs and dispatch still resolve current customer/location names. Before invoices/posting, define persisted snapshot fields for customer/location/job display context.                                                                                                                                                                                                              |
-| Invoice draft        | Register entries are shaped for invoice draft reflection, but the invoice draft entity/workflow has not started.                                                                                                                                                                                                                                                                   |
+| Invoice draft        | Foundation shipped: every job owns one eager, DB-enforced main invoice draft (created at job creation, backfilled for existing jobs), with an office-only `invoices:view` read endpoint and an Invoice tab in job detail. Still open in this milestone: register-entry reflection into invoice lines, office line editing, and estimate→invoice-draft conversion. Posting is M8.   |
 | Self-hosted runbook  | Backup/restore/update/log guidance is not yet a usable operator runbook. Media root backup is now explicitly required, and `docs/self-hosted-installation-strategy.md` now defines the supported-install posture and readiness gates.                                                                                                                                              |
 
 ## Not Started
 
 - Estimate options (good/better/best), PDF export, and customer acceptance
 - Field-app estimate builder
-- Estimate-to-invoice conversion
-- Invoice draft entity
+- Register-to-invoice reflection, invoice line editing, and estimate-to-invoice conversion (invoice draft entity itself has shipped)
 - Invoice posting and payment workflow
 - Inventory, purchase orders, and job costing
 - Route optimization and drag/drop dispatch

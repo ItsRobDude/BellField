@@ -70,6 +70,14 @@ Estimates attach to a job and are priced server-side by `@bellfield/estimating`;
 | `POST` | `/operations/estimates/:estimateId/approve` | office  | `estimates:approve` | Approve a pending estimate (immutable afterward).                          |
 | `POST` | `/operations/estimates/:estimateId/decline` | office  | `estimates:approve` | Decline a pending estimate with an optional reason.                        |
 
+## Invoices
+
+Every job owns exactly one main invoice draft (created eagerly at job creation, backfilled for existing jobs). This milestone covers the draft read; register reflection, office line editing, and estimate conversion follow, and posting is M8.
+
+| Method | Path                              | Surface | Permission gate | Purpose                                                                  |
+| ------ | --------------------------------- | ------- | --------------- | ------------------------------------------------------------------------ |
+| `GET`  | `/operations/jobs/:jobId/invoice` | office  | `invoices:view` | Load the job's main invoice draft with its active line items and totals. |
+
 ## Focused Office Work Models
 
 | Method | Path                                                           | Surface | Permission gate             | Purpose                                                                                                           |
