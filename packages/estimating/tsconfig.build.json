@@ -1,0 +1,7 @@
+{
+  // Build config for emitting dist/. Identical to tsconfig.json but excludes the
+  // co-located *.spec.ts test files so they never land in the published dist.
+  // tsconfig.json (used by `typecheck`) still includes specs so they are checked.
+  "extends": "./tsconfig.json",
+  "exclude": ["dist", "node_modules", "src/**/*.spec.ts"]
+}

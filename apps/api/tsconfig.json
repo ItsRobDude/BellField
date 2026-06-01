@@ -11,7 +11,8 @@
     "outDir": "./dist",
     "baseUrl": "./",
     "paths": {
-      "@bellfield/contracts": ["../../packages/contracts/src/index.ts"]
+      "@bellfield/contracts": ["../../packages/contracts/src/index.ts"],
+      "@bellfield/estimating": ["../../packages/estimating/src/index.ts"]
     },
     "incremental": true,
     "skipLibCheck": true,

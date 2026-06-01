@@ -1,12 +1,22 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // The repo base config targets NodeNext, but @bellfield/api is a CommonJS
+    // NestJS app that require()s this package's emitted output at runtime (unlike
+    // @bellfield/contracts, which is type-only and erased). Emit CommonJS + node
+    // resolution so `nest start` can load dist/index.js without an ESM/require
+    // interop seam. The package is intentionally NOT "type": "module".
+    "module": "commonjs",
+    "moduleResolution": "node",
     "rootDir": "src",
     "outDir": "dist",
-    // This package is both typechecked by tsc and transpiled per-file by ts-jest.
-    // isolatedModules keeps it safe under single-file transpilation and silences
-    // ts-jest's hybrid-module warning without changing the emitted behavior.
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "noEmit": false,
+    // Safe under ts-jest's per-file transpilation; no behavioral effect on tsc.
     "isolatedModules": true
   },
-  "include": ["src"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
 }
