@@ -15,6 +15,7 @@ import {
   ValidateNested
 } from 'class-validator';
 import type {
+  ConvertEstimateToInvoiceRequest,
   CreateEstimateRequest,
   DeclineEstimateRequest,
   EstimateDiscount,
@@ -135,4 +136,10 @@ export class DeclineEstimateRequestBodyDto implements DeclineEstimateRequest {
   @IsString()
   @MaxLength(500)
   reason?: string;
+}
+
+export class ConvertEstimateToInvoiceRequestBodyDto implements ConvertEstimateToInvoiceRequest {
+  @IsOptional()
+  @IsIn(['append', 'replace'])
+  mode?: 'append' | 'replace';
 }

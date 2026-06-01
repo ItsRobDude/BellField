@@ -24,6 +24,7 @@ export type OfficeJobDetailSurfaceProps = {
   canApproveEstimate: boolean;
   canViewInvoice: boolean;
   canEditInvoice: boolean;
+  canConvertEstimate: boolean;
   focusedAppointmentId: string | null;
   jobDetailInitialTab: JobDetailTab;
   isJobDetailLoading: boolean;
@@ -77,6 +78,7 @@ export function OfficeJobDetailSurface({
   canApproveEstimate,
   canViewInvoice,
   canEditInvoice,
+  canConvertEstimate,
   focusedAppointmentId,
   jobDetailInitialTab,
   isJobDetailLoading,
@@ -122,6 +124,7 @@ export function OfficeJobDetailSurface({
         canApproveEstimate={canApproveEstimate}
         canViewInvoice={canViewInvoice}
         canEditInvoice={canEditInvoice}
+        canConvertEstimate={canConvertEstimate}
         initialTab={jobDetailInitialTab}
         focusedAppointmentId={focusedAppointmentId}
         timelineHasMore={selectedJobDetail.timelineHasMore}

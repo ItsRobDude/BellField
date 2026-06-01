@@ -11,6 +11,9 @@ import { InvoicesService } from './invoices.service';
 @Module({
   imports: [CompanyDataModule, IdentityAccessModule],
   controllers: [JobInvoiceController, InvoiceLineController],
-  providers: [InvoicesRepository, InvoicesService]
+  providers: [InvoicesRepository, InvoicesService],
+  // Exported so the estimates module can write into the invoice draft during
+  // estimate-to-invoice conversion.
+  exports: [InvoicesRepository]
 })
 export class InvoicesModule {}

@@ -1014,6 +1014,17 @@ export interface DeclineEstimateRequest {
   reason?: string;
 }
 
+/**
+ * Convert an approved estimate into the job's invoice draft. `mode` decides what
+ * happens to lines already on the draft: 'append' adds the estimate's lines
+ * after them; 'replace' voids the existing draft lines first. Omitting `mode`
+ * when the draft already has active lines is rejected (block-with-choice), so a
+ * conversion can never silently duplicate billing.
+ */
+export interface ConvertEstimateToInvoiceRequest {
+  mode?: 'append' | 'replace';
+}
+
 export interface MediaAttachmentsResponse {
   mediaAttachments: MediaAttachmentSummary[];
 }

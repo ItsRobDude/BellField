@@ -61,22 +61,26 @@ Most endpoints expect:
 
 Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined. Approval/decline does not change job status, create an invoice, or create any other downstream record; it does write a job timeline entry and bump `jobs.updated_at` as an audit trail.
 
-| Method | Path                                        | Surface | Permission gate     | Purpose                                                                    |
-| ------ | ------------------------------------------- | ------- | ------------------- | -------------------------------------------------------------------------- |
-| `GET`  | `/operations/jobs/:jobId/estimates`         | office  | `estimates:view`    | List estimates for a job with line items and snapshotted totals.           |
-| `POST` | `/operations/jobs/:jobId/estimates`         | office  | `estimates:create`  | Create a pending estimate; the server prices it and persists the snapshot. |
-| `GET`  | `/operations/estimates/:estimateId`         | office  | `estimates:view`    | Load one estimate with line items and totals.                              |
-| `PUT`  | `/operations/estimates/:estimateId`         | office  | `estimates:edit`    | Whole-estimate replacement; allowed only while pending. Re-prices.         |
-| `POST` | `/operations/estimates/:estimateId/approve` | office  | `estimates:approve` | Approve a pending estimate (immutable afterward).                          |
-| `POST` | `/operations/estimates/:estimateId/decline` | office  | `estimates:approve` | Decline a pending estimate with an optional reason.                        |
+| Method | Path                                                   | Surface | Permission gate     | Purpose                                                                                                                                                                                       |
+| ------ | ------------------------------------------------------ | ------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/jobs/:jobId/estimates`                    | office  | `estimates:view`    | List estimates for a job with line items and snapshotted totals.                                                                                                                              |
+| `POST` | `/operations/jobs/:jobId/estimates`                    | office  | `estimates:create`  | Create a pending estimate; the server prices it and persists the snapshot.                                                                                                                    |
+| `GET`  | `/operations/estimates/:estimateId`                    | office  | `estimates:view`    | Load one estimate with line items and totals.                                                                                                                                                 |
+| `PUT`  | `/operations/estimates/:estimateId`                    | office  | `estimates:edit`    | Whole-estimate replacement; allowed only while pending. Re-prices.                                                                                                                            |
+| `POST` | `/operations/estimates/:estimateId/approve`            | office  | `estimates:approve` | Approve a pending estimate (immutable afterward).                                                                                                                                             |
+| `POST` | `/operations/estimates/:estimateId/decline`            | office  | `estimates:approve` | Decline a pending estimate with an optional reason.                                                                                                                                           |
+| `POST` | `/operations/estimates/:estimateId/convert-to-invoice` | office  | `invoices:create`   | Convert an approved estimate's snapshot into the job's invoice draft. Body `{ mode?: 'append' \| 'replace' }`; mode is required when the draft already has active lines. Returns the invoice. |
 
 ## Invoices
 
-Every job owns exactly one main invoice draft (created eagerly at job creation, backfilled for existing jobs). This milestone covers the draft read; register reflection, office line editing, and estimate conversion follow, and posting is M8.
+Every job owns exactly one main invoice draft (created eagerly at job creation, backfilled for existing jobs). Register entries reflect into it automatically; office users can add/edit/void lines; an approved estimate can be converted into it. Posting/locking is M8.
 
-| Method | Path                              | Surface | Permission gate | Purpose                                                                  |
-| ------ | --------------------------------- | ------- | --------------- | ------------------------------------------------------------------------ |
-| `GET`  | `/operations/jobs/:jobId/invoice` | office  | `invoices:view` | Load the job's main invoice draft with its active line items and totals. |
+| Method | Path                                      | Surface | Permission gate | Purpose                                                                  |
+| ------ | ----------------------------------------- | ------- | --------------- | ------------------------------------------------------------------------ |
+| `GET`  | `/operations/jobs/:jobId/invoice`         | office  | `invoices:view` | Load the job's main invoice draft with its active line items and totals. |
+| `POST` | `/operations/jobs/:jobId/invoice/lines`   | office  | `invoices:edit` | Add a manual line to the draft.                                          |
+| `PUT`  | `/operations/invoices/lines/:lineId`      | office  | `invoices:edit` | Edit a draft line (detaches it from its register source).                |
+| `POST` | `/operations/invoices/lines/:lineId/void` | office  | `invoices:edit` | Soft-void a draft line.                                                  |
 
 ## Focused Office Work Models
 

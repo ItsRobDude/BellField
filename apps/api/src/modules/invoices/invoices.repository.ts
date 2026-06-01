@@ -22,6 +22,32 @@ export type InvoiceLineWriteInput = {
   taxable: boolean;
 };
 
+/** How conversion treats lines already on the draft. */
+export type EstimateConversionMode = 'append' | 'replace';
+
+/** A snapshot line copied from an approved estimate during conversion. */
+export type EstimateConversionLine = {
+  estimateLineItemId: string;
+  kind: InvoiceLineItemRecord['kind'];
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice: number;
+  unitCost?: number;
+  taxable: boolean;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  lineCost?: number;
+};
+
+/** The approved estimate snapshot conversion copies into the draft. */
+export type EstimateConversionInput = {
+  estimateId: string;
+  taxRateBasisPoints: number;
+  discount?: InvoiceDiscountValue;
+  lines: EstimateConversionLine[];
+};
+
 type InvoiceRow = {
   id: string;
   jobId: string;
@@ -323,6 +349,131 @@ export class InvoicesRepository {
       await recalculateInvoiceTotals(invoiceId, now, queryable);
     });
   }
+
+  /** Count active lines on a job's main draft (used to decide block-with-choice on conversion). */
+  async countActiveLines(jobId: string): Promise<number> {
+    const result = await this.databaseService.query<{ count: string | number }>(
+      `select count(*) as count
+       from invoice_line_items ili
+       join invoices inv on inv.id = ili.invoice_id
+       where inv.job_id = $1 and inv.invoice_kind = 'main' and ili.is_void = false`,
+      [jobId]
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  /**
+   * Copy an approved estimate's snapshot into the job's main invoice draft.
+   * 'replace' soft-voids the draft's existing active lines first; 'append' adds
+   * after them. The estimate's tax/discount settings are carried onto the
+   * invoice header. Estimate lines are tagged source_kind='estimate' with their
+   * source ids, and they are 'detached' from the start (a converted line is a
+   * billing snapshot, not a live mirror). Recomputes totals via the engine.
+   */
+  async convertEstimateIntoDraft(
+    jobId: string,
+    input: EstimateConversionInput,
+    mode: EstimateConversionMode
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      const invoiceResult = await queryable.query<{ id: string }>(
+        `select id from invoices where job_id = $1 and invoice_kind = 'main' limit 1`,
+        [jobId]
+      );
+      const invoiceId = invoiceResult.rows[0]?.id;
+      if (!invoiceId) {
+        throw new Error('Job has no main invoice draft.');
+      }
+
+      if (mode === 'replace') {
+        await queryable.query(
+          `update invoice_line_items
+           set is_void = true, void_reason = 'Replaced by estimate conversion.', updated_at = $2
+           where invoice_id = $1 and is_void = false`,
+          [invoiceId, now]
+        );
+      }
+
+      // Carry the estimate's pricing settings onto the invoice header.
+      const discount = normalizeDiscountColumns(input.discount);
+      await queryable.query(
+        `update invoices set
+           tax_rate_basis_points = $2,
+           discount_kind = $3,
+           discount_basis_points = $4,
+           discount_amount = $5,
+           updated_at = $6
+         where id = $1`,
+        [
+          invoiceId,
+          input.taxRateBasisPoints,
+          discount.kind,
+          discount.basisPoints,
+          discount.amount,
+          now
+        ]
+      );
+
+      const positionResult = await queryable.query<{ nextPosition: number }>(
+        `select coalesce(max(line_position) + 1, 0) as "nextPosition"
+         from invoice_line_items where invoice_id = $1 and is_void = false`,
+        [invoiceId]
+      );
+      let position = Number(positionResult.rows[0]?.nextPosition ?? 0);
+
+      for (const line of input.lines) {
+        await queryable.query(
+          `insert into invoice_line_items (
+             id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
+             unit_price, unit_cost, taxable, part_number, inventory_source_label,
+             line_subtotal_amount, line_cost_amount,
+             source_kind, source_estimate_id, source_estimate_line_item_id, source_sync_state,
+             is_void, created_at, updated_at
+           )
+           values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14,
+                   'estimate', $15, $16, 'detached', false, $17, $17)`,
+          [
+            randomUUID(),
+            invoiceId,
+            position,
+            line.kind,
+            line.description,
+            line.quantity,
+            line.unitOfMeasure ?? null,
+            line.unitPrice,
+            line.unitCost ?? null,
+            line.taxable,
+            line.partNumber ?? null,
+            line.inventorySourceLabel ?? null,
+            roundMoney(line.quantity * line.unitPrice),
+            line.lineCost ?? null,
+            input.estimateId,
+            line.estimateLineItemId,
+            now
+          ]
+        );
+        position += 1;
+      }
+
+      await recalculateInvoiceTotals(invoiceId, now, queryable);
+    });
+  }
+}
+
+/** Map an optional discount union to its three nullable columns. */
+function normalizeDiscountColumns(discount: InvoiceDiscountValue | undefined): {
+  kind: 'percent' | 'fixed' | null;
+  basisPoints: number | null;
+  amount: number | null;
+} {
+  if (!discount) {
+    return { kind: null, basisPoints: null, amount: null };
+  }
+  if (discount.kind === 'percent') {
+    return { kind: 'percent', basisPoints: discount.basisPoints, amount: null };
+  }
+  return { kind: 'fixed', basisPoints: null, amount: discount.amount };
 }
 
 /** Round decimal-dollar money to whole cents (mirrors the engine's edge rounding). */

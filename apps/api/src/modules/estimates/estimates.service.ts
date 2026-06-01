@@ -9,8 +9,14 @@ import {
   type EstimateDiscount as EngineDiscount,
   type EstimatePricingLine
 } from '@bellfield/estimating';
+import type { ConvertEstimateToInvoiceRequest, InvoiceResponse } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
+import {
+  InvoicesRepository,
+  type EstimateConversionInput,
+  type EstimateConversionMode
+} from '../invoices/invoices.repository';
 import { EstimatesRepository } from './estimates.repository';
 import type {
   CreateEstimateRequestDto,
@@ -30,7 +36,8 @@ export class EstimatesService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
-    private readonly estimatesRepository: EstimatesRepository
+    private readonly estimatesRepository: EstimatesRepository,
+    private readonly invoicesRepository: InvoicesRepository
   ) {}
 
   async listEstimatesForJob(sessionToken: string, jobId: string): Promise<EstimatesResponseDto> {
@@ -162,6 +169,82 @@ export class EstimatesService {
       throw new NotFoundException('Estimate not found.');
     }
     return { estimate: this.toSummary(declined) };
+  }
+
+  /**
+   * Convert an approved estimate into its job's invoice draft. Explicit office
+   * action (never automatic on approval). Copies the estimate's frozen snapshot
+   * into the draft and stamps audit metadata on the estimate without touching its
+   * money or status. Requires the conversion-capable permission (invoices:create);
+   * uses estimates:approve as the gate since converting commits quoted work to the
+   * bill — same authority that approved it.
+   */
+  async convertToInvoice(
+    sessionToken: string,
+    estimateId: string,
+    request: ConvertEstimateToInvoiceRequest
+  ): Promise<InvoiceResponse> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'invoices:create',
+      ['office-web']
+    );
+
+    const estimate = await this.requireEstimate(estimateId);
+    if (estimate.status !== 'approved') {
+      throw new ConflictException(
+        `Only approved estimates can be converted to an invoice (status: ${estimate.status}).`
+      );
+    }
+    if (estimate.supersededByEstimateId) {
+      throw new ConflictException(
+        'This estimate has been superseded by a newer one and cannot be converted.'
+      );
+    }
+
+    const alreadyConverted = await this.estimatesRepository.getConvertedInvoiceId(estimateId);
+    if (alreadyConverted) {
+      throw new ConflictException('This estimate has already been converted to an invoice.');
+    }
+
+    // Block-with-choice: if the draft already has active lines, the caller must
+    // say whether to append or replace, so conversion never silently duplicates.
+    const activeLines = await this.invoicesRepository.countActiveLines(estimate.jobId);
+    if (activeLines > 0 && !request.mode) {
+      throw new ConflictException(
+        'The invoice draft already has lines. Choose "append" or "replace" to convert this estimate.'
+      );
+    }
+    const mode: EstimateConversionMode = request.mode ?? 'append';
+
+    const conversionInput: EstimateConversionInput = {
+      estimateId: estimate.id,
+      taxRateBasisPoints: estimate.taxRateBasisPoints,
+      discount: estimate.discount,
+      lines: estimate.lineItems.map((line) => ({
+        estimateLineItemId: line.id,
+        kind: line.kind,
+        description: line.description,
+        quantity: line.quantity,
+        unitOfMeasure: line.unitOfMeasure,
+        unitPrice: line.unitPrice,
+        unitCost: line.unitCost,
+        taxable: line.taxable,
+        partNumber: line.partNumber,
+        inventorySourceLabel: line.inventorySourceLabel,
+        lineCost: line.lineCost
+      }))
+    };
+
+    await this.invoicesRepository.convertEstimateIntoDraft(estimate.jobId, conversionInput, mode);
+
+    const invoice = await this.invoicesRepository.getMainInvoiceForJob(estimate.jobId);
+    if (!invoice) {
+      throw new NotFoundException('This job has no main invoice draft.');
+    }
+    await this.estimatesRepository.recordConversion(estimateId, invoice.id, actor);
+
+    return { invoice };
   }
 
   /**

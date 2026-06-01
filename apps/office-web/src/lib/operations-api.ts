@@ -883,6 +883,22 @@ export async function declineOfficeEstimate(
   });
 }
 
+export async function convertOfficeEstimateToInvoice(input: {
+  estimateId: string;
+  mode?: 'append' | 'replace';
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  const { estimateId, sessionToken, apiBaseUrl, mode } = input;
+
+  return requestJson<InvoiceResponse>(`/operations/estimates/${estimateId}/convert-to-invoice`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify({ mode })
+  });
+}
+
 export async function getOfficeInvoiceForJob(input: {
   jobId: string;
   sessionToken: string;

@@ -145,6 +145,9 @@ export function OfficeWorkspaceShell({
   const canApproveEstimate = employee.effectivePermissions.includes('estimates:approve');
   const canViewInvoice = employee.effectivePermissions.includes('invoices:view');
   const canEditInvoice = employee.effectivePermissions.includes('invoices:edit');
+  // Converting an approved estimate writes invoice lines, so it is gated on
+  // invoices:create (the same authority that creates billing).
+  const canConvertEstimate = employee.effectivePermissions.includes('invoices:create');
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -1071,6 +1074,7 @@ export function OfficeWorkspaceShell({
           canApproveEstimate,
           canViewInvoice,
           canEditInvoice,
+          canConvertEstimate,
           focusedAppointmentId,
           jobDetailInitialTab,
           isJobDetailLoading,

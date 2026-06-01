@@ -403,6 +403,49 @@ export class EstimatesRepository {
     return this.getEstimateById(estimateId);
   }
 
+  /** Return the invoice id this estimate was already converted into, if any. */
+  async getConvertedInvoiceId(estimateId: string): Promise<string | null> {
+    const result = await this.databaseService.query<{ convertedToInvoiceId: string | null }>(
+      `select converted_to_invoice_id as "convertedToInvoiceId" from estimates where id = $1`,
+      [estimateId]
+    );
+    return result.rows[0]?.convertedToInvoiceId ?? null;
+  }
+
+  /**
+   * Record that an estimate was converted into an invoice. Audit metadata only —
+   * the estimate's money and status are untouched, honoring the rule that
+   * conversion is a separate explicit action, not a mutation of the estimate.
+   */
+  async recordConversion(
+    estimateId: string,
+    invoiceId: string,
+    actor: { id: string; displayName: string }
+  ): Promise<void> {
+    const existing = await this.getEstimateById(estimateId);
+    if (!existing) {
+      return;
+    }
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      await queryable.query(
+        `update estimates set
+           converted_to_invoice_id = $2,
+           converted_at = $3,
+           converted_by_employee_id = $4,
+           converted_by_name = $5,
+           updated_at = $3
+         where id = $1`,
+        [estimateId, invoiceId, now, actor.id, actor.displayName]
+      );
+      await this.touchJobWithTimeline(queryable, existing.jobId, now, {
+        actorName: actor.displayName,
+        kind: 'estimateConverted',
+        message: `Estimate converted to invoice draft: ${existing.title}.`
+      });
+    });
+  }
+
   private async insertLineItems(
     queryable: QueryExecutor,
     estimateId: string,
@@ -448,7 +491,12 @@ export class EstimatesRepository {
     occurredAt: string,
     timeline: {
       actorName: string;
-      kind: 'estimateCreated' | 'estimateUpdated' | 'estimateApproved' | 'estimateDeclined';
+      kind:
+        | 'estimateCreated'
+        | 'estimateUpdated'
+        | 'estimateApproved'
+        | 'estimateDeclined'
+        | 'estimateConverted';
       message: string;
     }
   ): Promise<void> {

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   approveOfficeEstimate,
+  convertOfficeEstimateToInvoice,
   createOfficeEstimate,
   declineOfficeEstimate,
   getOfficeEstimatesForJob,
@@ -28,6 +29,7 @@ type JobEstimatesSectionProps = {
   canCreate: boolean;
   canEdit: boolean;
   canApprove: boolean;
+  canConvert: boolean;
 };
 
 // Estimates attach to a job, so this section lives inside the job detail surface.
@@ -40,7 +42,8 @@ export function JobEstimatesSection({
   sessionToken,
   canCreate,
   canEdit,
-  canApprove
+  canApprove,
+  canConvert
 }: JobEstimatesSectionProps) {
   const [estimates, setEstimates] = useState<EstimateSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -152,6 +155,27 @@ export function JobEstimatesSection({
     }
   }
 
+  async function convert(estimateId: string, mode?: 'append' | 'replace') {
+    setErrorMessage(null);
+    setNoticeMessage(null);
+    try {
+      await convertOfficeEstimateToInvoice({ estimateId, mode, apiBaseUrl, sessionToken });
+      setNoticeMessage('Estimate converted to the invoice draft. See the Invoice tab.');
+      await loadEstimates();
+    } catch (error) {
+      // The API blocks with a choice when the draft already has lines; offer it.
+      const message = error instanceof Error ? error.message : 'Unable to convert the estimate.';
+      if (!mode && /append.*replace|replace.*append/i.test(message)) {
+        const replace = window.confirm(
+          'The invoice draft already has lines.\n\nOK = replace them with this estimate.\nCancel = add this estimate to the existing lines.'
+        );
+        await convert(estimateId, replace ? 'replace' : 'append');
+        return;
+      }
+      setErrorMessage(message);
+    }
+  }
+
   return (
     <section style={styles.panel} aria-label="Job estimates">
       <div style={styles.row}>
@@ -189,9 +213,11 @@ export function JobEstimatesSection({
               estimate={estimate}
               canEdit={canEdit}
               canApprove={canApprove}
+              canConvert={canConvert}
               onEdit={() => startEditEstimate(estimate)}
               onApprove={() => void approve(estimate.id)}
               onDecline={() => void decline(estimate.id)}
+              onConvert={() => void convert(estimate.id)}
             />
           ))}
         </div>
@@ -204,16 +230,20 @@ function EstimateCard({
   estimate,
   canEdit,
   canApprove,
+  canConvert,
   onEdit,
   onApprove,
-  onDecline
+  onDecline,
+  onConvert
 }: {
   estimate: EstimateSummary;
   canEdit: boolean;
   canApprove: boolean;
+  canConvert: boolean;
   onEdit: () => void;
   onApprove: () => void;
   onDecline: () => void;
+  onConvert: () => void;
 }) {
   const isPending = estimate.status === 'pending';
 
@@ -257,6 +287,11 @@ function EstimateCard({
         ) : null}
         {estimate.status === 'approved' && estimate.approvedByName ? (
           <span style={styles.tinyMuted}>Approved by {estimate.approvedByName}</span>
+        ) : null}
+        {estimate.status === 'approved' && canConvert ? (
+          <button type="button" style={styles.primaryButton} onClick={onConvert}>
+            Convert to invoice
+          </button>
         ) : null}
         {estimate.status === 'declined' && estimate.declinedByName ? (
           <span style={styles.tinyMuted}>Declined by {estimate.declinedByName}</span>

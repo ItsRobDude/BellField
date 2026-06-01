@@ -38,6 +38,7 @@ type JobDetailPanelProps = {
   canApproveEstimate: boolean;
   canViewInvoice: boolean;
   canEditInvoice: boolean;
+  canConvertEstimate: boolean;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
   timelineHasMore?: boolean;
@@ -129,6 +130,7 @@ export function JobDetailPanel({
   canApproveEstimate,
   canViewInvoice,
   canEditInvoice,
+  canConvertEstimate,
   initialTab = 'overview',
   focusedAppointmentId,
   timelineHasMore = false,
@@ -279,6 +281,7 @@ export function JobDetailPanel({
           canCreate={canCreateEstimate}
           canEdit={canEditEstimate}
           canApprove={canApproveEstimate}
+          canConvert={canConvertEstimate}
         />
       ) : null}
       {activeTab === 'invoice' && canViewInvoice ? (
