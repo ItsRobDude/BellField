@@ -59,7 +59,7 @@ Most endpoints expect:
 
 ## Estimates
 
-Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined, and approval/decline never mutate the job.
+Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined. Approval/decline does not change job status, create an invoice, or create any other downstream record; it does write a job timeline entry and bump `jobs.updated_at` as an audit trail.
 
 | Method | Path                                        | Surface | Permission gate     | Purpose                                                                    |
 | ------ | ------------------------------------------- | ------- | ------------------- | -------------------------------------------------------------------------- |

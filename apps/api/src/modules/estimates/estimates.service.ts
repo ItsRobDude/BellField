@@ -34,14 +34,21 @@ export class EstimatesService {
   ) {}
 
   async listEstimatesForJob(sessionToken: string, jobId: string): Promise<EstimatesResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view');
+    // Estimates are an office-only surface in this milestone: the field app has no
+    // estimate builder yet, and these endpoints do no per-technician assignment
+    // scoping, so a field session must not reach them. Restrict to office-web.
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view', [
+      'office-web'
+    ]);
     await this.ensureJobExists(jobId);
     const estimates = await this.estimatesRepository.listEstimatesForJob(jobId);
     return { estimates: estimates.map((estimate) => this.toSummary(estimate)) };
   }
 
   async getEstimate(sessionToken: string, estimateId: string): Promise<EstimateResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view');
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view', [
+      'office-web'
+    ]);
     const estimate = await this.requireEstimate(estimateId);
     return { estimate: this.toSummary(estimate) };
   }
@@ -53,7 +60,8 @@ export class EstimatesService {
   ): Promise<EstimateResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(
       sessionToken,
-      'estimates:create'
+      'estimates:create',
+      ['office-web']
     );
     await this.ensureJobExists(jobId);
 
@@ -77,7 +85,8 @@ export class EstimatesService {
   ): Promise<EstimateResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(
       sessionToken,
-      'estimates:edit'
+      'estimates:edit',
+      ['office-web']
     );
     const existing = await this.requireEstimate(estimateId);
 
@@ -110,7 +119,8 @@ export class EstimatesService {
   async approveEstimate(sessionToken: string, estimateId: string): Promise<EstimateResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(
       sessionToken,
-      'estimates:approve'
+      'estimates:approve',
+      ['office-web']
     );
     const existing = await this.requireEstimate(estimateId);
     if (existing.status !== 'pending') {
@@ -133,7 +143,8 @@ export class EstimatesService {
   ): Promise<EstimateResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(
       sessionToken,
-      'estimates:approve'
+      'estimates:approve',
+      ['office-web']
     );
     const existing = await this.requireEstimate(estimateId);
     if (existing.status !== 'pending') {
@@ -275,6 +286,11 @@ function normalizeDiscount(
         'A percent discount needs a basisPoints value of zero or more.'
       );
     }
+    // A true discriminated union: a percent discount must not also carry a fixed
+    // amount, so a conflicting payload can't slip past as "percent with junk".
+    if (candidate.amount !== undefined) {
+      throw new BadRequestException('A percent discount must not include a fixed amount.');
+    }
     return { kind: 'percent', basisPoints: candidate.basisPoints };
   }
 
@@ -285,6 +301,9 @@ function normalizeDiscount(
       candidate.amount < 0
     ) {
       throw new BadRequestException('A fixed discount needs an amount of zero or more.');
+    }
+    if (candidate.basisPoints !== undefined) {
+      throw new BadRequestException('A fixed discount must not include percent basisPoints.');
     }
     return { kind: 'fixed', amount: candidate.amount };
   }

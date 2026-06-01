@@ -171,6 +171,42 @@ describe('EstimatesService', () => {
     expect(writeInput.discount).toEqual({ kind: 'fixed', amount: 25 });
   });
 
+  it('rejects a discount that mixes percent and fixed fields', async () => {
+    const { service } = createService();
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Conflicting discount',
+        discount: { kind: 'percent', basisPoints: 1000, amount: -50 } as never,
+        lineItems: [{ kind: 'part', description: 'X', quantity: 1, unitPrice: 100, taxable: true }]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('restricts every estimate operation to office-web sessions', async () => {
+    const { service, estimatesRepository, identityAccessService } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate());
+    estimatesRepository.createEstimate.mockResolvedValue(pendingEstimate());
+    estimatesRepository.replaceEstimate.mockResolvedValue(pendingEstimate());
+    estimatesRepository.approveEstimate.mockResolvedValue(pendingEstimate({ status: 'approved' }));
+    estimatesRepository.declineEstimate.mockResolvedValue(pendingEstimate({ status: 'declined' }));
+
+    await service.listEstimatesForJob('token', 'job-1');
+    await service.getEstimate('token', 'estimate-1');
+    await service.createEstimate('token', 'job-1', {
+      title: 'Q',
+      lineItems: [{ kind: 'part', description: 'X', quantity: 1, unitPrice: 10, taxable: true }]
+    });
+    await service.updateEstimate('token', 'estimate-1', { title: 'Q2' });
+    await service.approveEstimate('token', 'estimate-1');
+    await service.declineEstimate('token', 'estimate-1', {});
+
+    // Every authorization call must constrain the session to office-web. The field
+    // app has no estimate builder yet and these endpoints do no assignment scoping.
+    for (const call of identityAccessService.getAuthorizedEmployee.mock.calls) {
+      expect(call[2]).toEqual(['office-web']);
+    }
+  });
+
   it('refuses to edit an approved estimate (strict lifecycle)', async () => {
     const { service, estimatesRepository } = createService();
     estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
