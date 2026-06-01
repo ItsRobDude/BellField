@@ -176,12 +176,17 @@ export class EstimatesService {
     }
 
     const resolvedTaxRate = taxRateBasisPoints ?? 0;
+    // Defensively validate the discount shape. The DTO only checks that it is an
+    // object, so a malformed payload like { kind: 'bogus', amount: 50 } reaches
+    // here; normalize it into a known discriminated union or reject it, rather
+    // than silently treating any non-percent kind as a fixed discount.
+    const normalizedDiscount = normalizeDiscount(discount);
 
     let priced;
     try {
       priced = priceEstimate(lineItems.map(toPricingLine), {
         taxRateBasisPoints: resolvedTaxRate,
-        discount: toEngineDiscount(discount)
+        discount: toEngineDiscount(normalizedDiscount)
       });
     } catch (error) {
       // The engine throws RangeError on invalid money/quantity; surface it as a
@@ -207,7 +212,7 @@ export class EstimatesService {
       title: trimmedTitle,
       description: description?.trim() || undefined,
       taxRateBasisPoints: resolvedTaxRate,
-      discount,
+      discount: normalizedDiscount,
       validUntil: validUntil || undefined,
       lineItems,
       totals,
@@ -244,6 +249,47 @@ function toPricingLine(line: EstimateLineItemInputValue): EstimatePricingLine {
     unitCostDollars: line.unitCost,
     taxable: line.taxable
   };
+}
+
+/**
+ * Validate a client-supplied discount into a known discriminated union. The DTO
+ * only guarantees `discount` is an object, so this is the real gate: an unknown
+ * kind, a missing/invalid value, or extra-but-wrong fields are rejected with a
+ * 400 instead of being coerced into a fixed discount.
+ */
+function normalizeDiscount(
+  discount: EstimateDiscountValue | undefined
+): EstimateDiscountValue | undefined {
+  if (discount === undefined || discount === null) {
+    return undefined;
+  }
+  const candidate = discount as { kind?: unknown; basisPoints?: unknown; amount?: unknown };
+
+  if (candidate.kind === 'percent') {
+    if (
+      typeof candidate.basisPoints !== 'number' ||
+      !Number.isFinite(candidate.basisPoints) ||
+      candidate.basisPoints < 0
+    ) {
+      throw new BadRequestException(
+        'A percent discount needs a basisPoints value of zero or more.'
+      );
+    }
+    return { kind: 'percent', basisPoints: candidate.basisPoints };
+  }
+
+  if (candidate.kind === 'fixed') {
+    if (
+      typeof candidate.amount !== 'number' ||
+      !Number.isFinite(candidate.amount) ||
+      candidate.amount < 0
+    ) {
+      throw new BadRequestException('A fixed discount needs an amount of zero or more.');
+    }
+    return { kind: 'fixed', amount: candidate.amount };
+  }
+
+  throw new BadRequestException("Discount kind must be 'percent' or 'fixed'.");
 }
 
 function toEngineDiscount(discount: EstimateDiscountValue | undefined): EngineDiscount | undefined {

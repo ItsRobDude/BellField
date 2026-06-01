@@ -57,6 +57,19 @@ Most endpoints expect:
 | `POST`  | `/operations/jobs/register-entries/:registerEntryId/void` | office or field | `register:edit`                                       | Soft-void register entry.                                                                                          |
 | `GET`   | `/operations/jobs/field/assigned-work`                    | field           | `appointmentsDispatch:view`                           | Load assigned work window for the signed-in technician.                                                            |
 
+## Estimates
+
+Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined, and approval/decline never mutate the job.
+
+| Method | Path                                        | Surface | Permission gate     | Purpose                                                                    |
+| ------ | ------------------------------------------- | ------- | ------------------- | -------------------------------------------------------------------------- |
+| `GET`  | `/operations/jobs/:jobId/estimates`         | office  | `estimates:view`    | List estimates for a job with line items and snapshotted totals.           |
+| `POST` | `/operations/jobs/:jobId/estimates`         | office  | `estimates:create`  | Create a pending estimate; the server prices it and persists the snapshot. |
+| `GET`  | `/operations/estimates/:estimateId`         | office  | `estimates:view`    | Load one estimate with line items and totals.                              |
+| `PUT`  | `/operations/estimates/:estimateId`         | office  | `estimates:edit`    | Whole-estimate replacement; allowed only while pending. Re-prices.         |
+| `POST` | `/operations/estimates/:estimateId/approve` | office  | `estimates:approve` | Approve a pending estimate (immutable afterward).                          |
+| `POST` | `/operations/estimates/:estimateId/decline` | office  | `estimates:approve` | Decline a pending estimate with an optional reason.                        |
+
 ## Focused Office Work Models
 
 | Method | Path                                                           | Surface | Permission gate             | Purpose                                                                                                           |

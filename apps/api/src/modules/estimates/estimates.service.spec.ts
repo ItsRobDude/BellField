@@ -132,6 +132,45 @@ describe('EstimatesService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('rejects an unknown discount kind instead of treating it as fixed', async () => {
+    const { service, estimatesRepository } = createService();
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Bogus discount',
+        // The DTO only checks that discount is an object, so this malformed
+        // payload reaches the service; it must be rejected, not coerced.
+        discount: { kind: 'bogus', amount: 50 } as never,
+        lineItems: [{ kind: 'part', description: 'X', quantity: 1, unitPrice: 100, taxable: true }]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(estimatesRepository.createEstimate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a percent discount with a non-numeric basisPoints', async () => {
+    const { service } = createService();
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Bad percent',
+        discount: { kind: 'percent', basisPoints: 'lots' } as never,
+        lineItems: [{ kind: 'part', description: 'X', quantity: 1, unitPrice: 100, taxable: true }]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('accepts a well-formed fixed discount and forwards it to the repository', async () => {
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.createEstimate.mockImplementation(async () => pendingEstimate());
+
+    await service.createEstimate('token', 'job-1', {
+      title: 'Fixed discount',
+      discount: { kind: 'fixed', amount: 25 },
+      lineItems: [{ kind: 'part', description: 'X', quantity: 1, unitPrice: 100, taxable: true }]
+    });
+
+    const [, writeInput] = estimatesRepository.createEstimate.mock.calls[0];
+    expect(writeInput.discount).toEqual({ kind: 'fixed', amount: 25 });
+  });
+
   it('refuses to edit an approved estimate (strict lifecycle)', async () => {
     const { service, estimatesRepository } = createService();
     estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));

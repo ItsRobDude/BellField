@@ -235,6 +235,8 @@ function EstimateCard({
         </div>
       </div>
 
+      <EstimateLineItems estimate={estimate} />
+
       <EstimateTotals estimate={estimate} />
 
       <div style={styles.inlineActionBar}>
@@ -261,6 +263,48 @@ function EstimateCard({
         ) : null}
       </div>
     </article>
+  );
+}
+
+// Read-only line-item summary so a reviewer (who may not have edit access) can
+// see exactly what is being quoted before approving or declining, and so
+// approved/declined estimates remain inspectable.
+function EstimateLineItems({ estimate }: { estimate: EstimateSummary }) {
+  if (estimate.lineItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <div style={styles.tableWrap}>
+      <table style={styles.table}>
+        <thead>
+          <tr>
+            <th style={styles.tableHeadCell}>Item</th>
+            <th style={styles.tableHeadCell}>Kind</th>
+            <th style={styles.tableHeadCell}>Qty</th>
+            <th style={styles.tableHeadCell}>Unit price</th>
+            <th style={styles.tableHeadCell}>Line total</th>
+          </tr>
+        </thead>
+        <tbody>
+          {estimate.lineItems.map((line) => (
+            <tr key={line.id}>
+              <td style={styles.tableCell}>
+                {line.description}
+                {line.taxable ? '' : ' (non-taxable)'}
+              </td>
+              <td style={styles.tableCell}>{estimateLineItemKindLabels[line.kind]}</td>
+              <td style={styles.tableCell}>
+                {line.quantity}
+                {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''}
+              </td>
+              <td style={styles.tableCell}>{formatCurrency(line.unitPrice)}</td>
+              <td style={styles.tableCell}>{formatCurrency(line.lineSubtotal)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 

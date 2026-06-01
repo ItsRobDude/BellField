@@ -18,3 +18,6 @@ packages/**/tsconfig.tsbuildinfo
 # Local scratch: planning docs, AI-collaboration briefs, and generated transcripts.
 # Kept on disk for reference but never committed (e.g. multi-thousand-line Codex logs).
 artifacts/
+
+# Local Claude Code preview tooling config (not shared project config).
+.claude/launch.json

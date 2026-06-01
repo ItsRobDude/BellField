@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString, toOptionalDateString } from '../../database/database-row.utils';
@@ -255,7 +255,10 @@ export class EstimatesRepository {
     const discount = normalizeDiscountColumns(input.discount);
 
     await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
+      // Guard the status transition in the WHERE clause, not just in the service's
+      // earlier read: two concurrent requests could both pass the read-time check,
+      // so the database is the only place that can enforce "still pending" atomically.
+      const updateResult = await queryable.query(
         `
           update estimates
           set
@@ -277,7 +280,7 @@ export class EstimatesRepository {
             cost_complete = $17,
             updated_at = $18,
             version = version + 1
-          where id = $1
+          where id = $1 and status = 'pending'
         `,
         [
           estimateId,
@@ -300,6 +303,12 @@ export class EstimatesRepository {
           now
         ]
       );
+
+      if (updateResult.rowCount === 0) {
+        throw new ConflictException(
+          'This estimate is no longer pending and can no longer be edited.'
+        );
+      }
 
       // Lines are positional and fully replaced on every write, so the simplest
       // correct approach is delete-then-insert inside the same transaction.
@@ -326,15 +335,22 @@ export class EstimatesRepository {
 
     const now = new Date().toISOString();
     await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
+      // status guard in the WHERE clause makes the pending -> approved transition
+      // atomic against a concurrent approve/decline/edit.
+      const updateResult = await queryable.query(
         `
           update estimates
           set status = 'approved', approved_at = $2, approved_by_employee_id = $3,
               approved_by_name = $4, updated_at = $2, version = version + 1
-          where id = $1
+          where id = $1 and status = 'pending'
         `,
         [estimateId, now, actor.id, actor.displayName]
       );
+
+      if (updateResult.rowCount === 0) {
+        throw new ConflictException('This estimate is no longer pending and cannot be approved.');
+      }
+
       await this.touchJobWithTimeline(queryable, existing.jobId, now, {
         actorName: actor.displayName,
         kind: 'estimateApproved',
@@ -359,15 +375,22 @@ export class EstimatesRepository {
     const trimmedReason = reason?.trim() || null;
 
     await this.databaseService.transaction(async (queryable) => {
-      await queryable.query(
+      // status guard in the WHERE clause makes the pending -> declined transition
+      // atomic against a concurrent approve/decline/edit.
+      const updateResult = await queryable.query(
         `
           update estimates
           set status = 'declined', declined_at = $2, declined_by_employee_id = $3,
               declined_by_name = $4, updated_at = $2, version = version + 1
-          where id = $1
+          where id = $1 and status = 'pending'
         `,
         [estimateId, now, actor.id, actor.displayName]
       );
+
+      if (updateResult.rowCount === 0) {
+        throw new ConflictException('This estimate is no longer pending and cannot be declined.');
+      }
+
       await this.touchJobWithTimeline(queryable, existing.jobId, now, {
         actorName: actor.displayName,
         kind: 'estimateDeclined',
