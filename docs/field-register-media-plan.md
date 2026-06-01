@@ -86,7 +86,7 @@ Indexes:
 
 Notes on shape:
 
-- **No FK to invoice draft yet.** When the invoice-draft entity exists (M7), the draft will read register lines via job-id. The register table does not need to know about invoice posting.
+- **No FK from the register to the invoice.** The invoice draft exists and reflection is shipped, but the dependency runs the other way: each register entry reflects into a durable invoice line tagged `source_register_entry_id` (the invoice references the register, not vice versa). The register table stays unaware of invoice posting.
 - **No status field.** Sync state (pending/conflict/rejected) belongs to the pending operation queue, not the entity. Once a row exists, it just exists.
 - **`total_amount` is stored.** Computed in the caller from `quantity × unit_price` when both are set, stored for snapshot integrity so later unit-price drift on a catalog doesn't rewrite historical job costs.
 
@@ -239,7 +239,7 @@ Office endpoints reuse the same backend module; only the surface check differs.
 
 **Office UI note.** Register/media review now belongs to the existing job-detail surface. No new top-level office route is implied.
 
-**Invoice draft handoff (later, not now).** When the invoice draft entity lands in Milestone 7, the office invoice-draft loader will read register entries by `job_id` and assemble draft lines. This plan does not implement that mapping; it just keeps the register entity shaped so the M7 mapping is straightforward.
+**Invoice draft handoff (shipped).** The invoice draft entity exists and reflection is implemented: rather than the loader re-reading register entries by `job_id`, each register write reflects into a durable invoice line tagged `source_register_entry_id` (detach-on-edit). This register plan deliberately stayed unaware of that mapping; the dependency runs from the invoice toward the register, not the reverse.
 
 ---
 
@@ -257,7 +257,7 @@ Office endpoints reuse the same backend module; only the surface check differs.
 
 - The actual media **byte upload**. Even when offline-queued, the blob upload step is deferred. The intent reserves a media row server-side with `uploaded_at = null` and `storage_path = null`; the blob upload is what finalizes it. While the intent is reserved but not finalized, the office view can show "Pending upload from {tech}" via metadata only.
 - Bulk media operations (no API in v1).
-- Posting register entries onto an invoice draft (M7 territory).
+- Posting/locking an invoice (M8 territory). Register-to-invoice-draft reflection itself is shipped; the remaining work is the posted, locked accounting record.
 
 ### Replay provenance
 
@@ -404,7 +404,7 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 
 - Register-line drag-and-drop reordering, bulk operations, pricing catalogs.
 - Media thumbnails and EXIF stripping (worker task).
-- Invoice draft integration (M7 lane).
+- Invoice posting/locking and payments (M8 lane). Invoice-draft reflection and estimate conversion already landed.
 - Discount/fee/tax kinds if not in v1.
 - Voided-undo affordance UX.
 - Lost/revoked device wipe of locally-staged media bytes (touches the broader device-revoke work that's still absent on the field side).
@@ -416,7 +416,7 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 
 Captured for traceability:
 
-- **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Slice 1 now provides backend register entries without removing `registerFollowUpNote`; invoice-draft reflection still waits for the invoice-draft entity.
+- **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Backend register entries shipped (without removing `registerFollowUpNote`), and register-to-invoice-draft reflection is now implemented; this disagreement is resolved.
 - **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Backend metadata/blob storage is present, and field-mobile now stages image/video media locally before replaying upload intents and raw blob uploads on Sync Now. Generic document attachment remains deferred.
 - No other doc/code disagreements found in this audit.
 
@@ -430,7 +430,7 @@ These are the remaining boundaries for future work:
 - Field-mobile media capture now touches `technician-workspace-screen.tsx`, field sync types/store/replay helpers, and field-mobile operation tests.
 - Do not add any more camera/file-picker/storage dependencies without a new product or reliability reason.
 - Keep backend media endpoints and contracts stable unless field capture exposes a real contract gap.
-- Do not start invoice-draft mapping from this plan alone; invoice draft belongs to Milestone 7.
+- Invoice-draft reflection and estimate conversion have shipped; the remaining invoice work (posting/locking, payments) is the Milestone 8 lane, not this register plan.
 
 ---
 

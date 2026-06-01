@@ -721,5 +721,5 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 
 - Dispatch v1 can keep improving as the daily office home, but route optimization, drag/drop, live sockets, and week view remain later until day-view scheduling is trustworthy.
 - Field media capture now uses the approved Expo ImagePicker, FileSystem, and Crypto dependencies; no additional picker/storage dependencies should be added without a new reason.
-- Register entries exist now, but invoice-draft reflection waits for the Milestone 7 invoice draft entity.
+- Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion have all shipped (Milestone 7); invoice posting/locking and payments are the Milestone 8 lane.
 - Payments remain online-only in v1.

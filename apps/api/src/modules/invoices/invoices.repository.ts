@@ -38,6 +38,8 @@ export type EstimateConversionLine = {
   taxable: boolean;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** Frozen per-line subtotal from the approved estimate snapshot (copied, not re-derived). */
+  lineSubtotal: number;
   lineCost?: number;
 };
 
@@ -384,13 +386,19 @@ export class InvoicesRepository {
    *   LEFT ALONE, so appending an estimate never silently re-taxes or
    *   re-discounts already-captured register/manual work.
    *
+   * `mode` may be undefined. The block-with-choice gate is enforced HERE, inside
+   * the transaction: if the draft already has lines and no mode was given, we
+   * reject so the caller must explicitly pick append or replace. Counting in the
+   * service is only a friendly pre-check; a line added between that read and this
+   * transaction can't slip through as a silent append.
+   *
    * Estimate lines are tagged source_kind='estimate' with their source ids and
    * start 'detached' (a converted line is a billing snapshot, not a live mirror).
    */
   async convertEstimateIntoDraft(
     jobId: string,
     input: EstimateConversionInput,
-    mode: EstimateConversionMode
+    mode?: EstimateConversionMode
   ): Promise<EstimateConversionResult> {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
@@ -428,6 +436,16 @@ export class InvoicesRepository {
         [invoiceId]
       );
       const hadLines = Number(existingLines.rows[0]?.count ?? 0) > 0;
+
+      // Authoritative block-with-choice gate: a draft that already has lines
+      // requires an explicit append/replace decision. Enforced inside the
+      // transaction so a line added after the service's pre-check can't convert
+      // as a silent append.
+      if (hadLines && !mode) {
+        throw new ConflictException(
+          'The invoice draft already has lines. Choose "append" or "replace" to convert this estimate.'
+        );
+      }
 
       if (mode === 'replace') {
         await queryable.query(
@@ -493,7 +511,10 @@ export class InvoicesRepository {
             line.taxable,
             line.partNumber ?? null,
             line.inventorySourceLabel ?? null,
-            roundMoney(line.quantity * line.unitPrice),
+            // Copy the estimate's frozen per-line subtotal verbatim rather than
+            // re-deriving it, so the converted invoice line matches the approved
+            // estimate snapshot exactly (accounting trust).
+            line.lineSubtotal,
             line.lineCost ?? null,
             input.estimateId,
             line.estimateLineItemId,

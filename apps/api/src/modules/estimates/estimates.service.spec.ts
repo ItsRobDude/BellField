@@ -266,7 +266,9 @@ describe('EstimatesService convertToInvoice', () => {
 
     // The atomic conversion (claim + lines + audit + recompute) is delegated to
     // the invoices repository as one transaction; it also carries the actor and
-    // estimate title for the in-transaction timeline + audit stamp.
+    // estimate title for the in-transaction timeline + audit stamp. The mode is
+    // passed through unchanged (undefined here) — the repository enforces the
+    // block-with-choice gate in-transaction rather than the service defaulting it.
     expect(invoicesRepository.convertEstimateIntoDraft).toHaveBeenCalledWith(
       'job-1',
       expect.objectContaining({
@@ -275,7 +277,7 @@ describe('EstimatesService convertToInvoice', () => {
         actor: expect.objectContaining({ id: expect.any(String) }),
         lines: expect.any(Array)
       }),
-      'append'
+      undefined
     );
     expect(result.invoice.id).toBe('invoice-main-job-1');
   });

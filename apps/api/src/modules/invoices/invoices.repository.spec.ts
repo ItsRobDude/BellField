@@ -80,7 +80,11 @@ function conversionInput(): EstimateConversionInput {
         description: 'Estimate part',
         quantity: 1,
         unitPrice: 200,
-        taxable: true
+        taxable: true,
+        // Deliberately NOT equal to quantity * unitPrice (200), so a test can
+        // prove the converted line copies the frozen snapshot rather than
+        // re-deriving the subtotal.
+        lineSubtotal: 199.99
       }
     ],
     actor: { id: 'emp-1', displayName: 'Olivia Owner' }
@@ -113,6 +117,10 @@ describe('InvoicesRepository.convertEstimateIntoDraft', () => {
     // The estimate line is still inserted and totals recomputed from the header.
     expect(countCalls(calls, /insert into invoice_line_items/i)).toBe(1);
     expect(findCall(calls, HANDLERS_RECALC_WRITE.match)).toBeDefined();
+    // The inserted line copies the estimate's frozen subtotal (199.99), not the
+    // re-derived quantity * unitPrice (200). line_subtotal_amount is the 13th value.
+    const insert = findCall(calls, /insert into invoice_line_items/i);
+    expect(insert?.params[12]).toBe(199.99);
   });
 
   it('appending onto an empty draft adopts the estimate tax/discount (it becomes the whole bill)', async () => {
@@ -179,5 +187,49 @@ describe('InvoicesRepository.convertEstimateIntoDraft', () => {
     expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
     expect(findCall(calls, HEADER_ADOPT)).toBeUndefined();
     expect(findCall(calls, REPLACE_VOID)).toBeUndefined();
+  });
+
+  it('rejects in-transaction when the draft has lines but no mode was given (block-with-choice TOCTOU)', async () => {
+    // The service may pass mode=undefined after a clean pre-check, but a line can
+    // be added before this transaction runs. hadLines=true here proves the gate is
+    // enforced atomically, not just by the earlier read.
+    const { repository, calls } = repositoryWith([
+      HANDLERS_FOUND_DRAFT,
+      HANDLERS_CLAIM_OK,
+      { match: /select count\(\*\) as count from invoice_line_items/i, rows: [{ count: 1 }] }
+    ]);
+
+    await expect(
+      repository.convertEstimateIntoDraft('job-1', conversionInput(), undefined)
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    // No lines written, no header touched: the gate fires before any mutation.
+    expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
+    expect(findCall(calls, HEADER_ADOPT)).toBeUndefined();
+    expect(findCall(calls, REPLACE_VOID)).toBeUndefined();
+  });
+
+  it('appending onto an empty draft with no mode adopts the estimate terms (no block)', async () => {
+    // hadLines=false + mode undefined: nothing to disambiguate, so it proceeds and
+    // the estimate becomes the whole bill.
+    const { repository, calls } = repositoryWith([
+      HANDLERS_FOUND_DRAFT,
+      HANDLERS_CLAIM_OK,
+      { match: /select count\(\*\) as count from invoice_line_items/i, rows: [{ count: 0 }] },
+      { match: HEADER_ADOPT, rowCount: 1 },
+      HANDLERS_NEXT_POSITION,
+      HANDLERS_INSERT_LINE,
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE,
+      HANDLERS_RECALC_HEADER,
+      HANDLERS_RECALC_LINES,
+      HANDLERS_RECALC_WRITE
+    ]);
+
+    const result = await repository.convertEstimateIntoDraft('job-1', conversionInput(), undefined);
+
+    expect(result).toEqual({ invoiceId: 'inv-1' });
+    expect(findCall(calls, HEADER_ADOPT)).toBeDefined();
+    expect(countCalls(calls, /insert into invoice_line_items/i)).toBe(1);
   });
 });

@@ -425,7 +425,8 @@ Practical meaning:
 Current implementation note:
 
 - structured register entries exist now
-- the invoice draft entity and automatic register-to-invoice reflection still belong to Milestone 7
+- the eager main invoice draft and automatic register-to-invoice reflection are shipped; approved estimates convert into the draft (atomic, append/replace)
+- invoice posting/locking and payments are the remaining Milestone 8 work
 
 ### Zero-dollar invoice rule
 

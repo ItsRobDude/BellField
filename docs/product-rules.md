@@ -598,7 +598,9 @@ Everything a technician adds in the job register should reflect immediately on t
 Current implementation note:
 
 - structured register entries exist now
-- the invoice draft entity and live register-to-invoice reflection are still Milestone 7 work
+- every job owns one eager main invoice draft, and register entries reflect into it automatically (create/edit/void) as durable, detach-on-edit line rows
+- approved estimates also convert into the draft (atomic, append/replace)
+- still ahead (Milestone 8): invoice posting/locking and payments
 
 This includes things such as:
 

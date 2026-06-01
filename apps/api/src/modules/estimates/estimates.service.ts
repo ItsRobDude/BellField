@@ -12,11 +12,7 @@ import {
 import type { ConvertEstimateToInvoiceRequest, InvoiceResponse } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
-import {
-  InvoicesRepository,
-  type EstimateConversionInput,
-  type EstimateConversionMode
-} from '../invoices/invoices.repository';
+import { InvoicesRepository, type EstimateConversionInput } from '../invoices/invoices.repository';
 import { EstimatesRepository } from './estimates.repository';
 import type {
   CreateEstimateRequestDto,
@@ -175,9 +171,8 @@ export class EstimatesService {
    * Convert an approved estimate into its job's invoice draft. Explicit office
    * action (never automatic on approval). Copies the estimate's frozen snapshot
    * into the draft and stamps audit metadata on the estimate without touching its
-   * money or status. Requires the conversion-capable permission (invoices:create);
-   * uses estimates:approve as the gate since converting commits quoted work to the
-   * bill — same authority that approved it.
+   * money or status. Gated on invoices:create, since converting commits quoted
+   * work to the bill.
    */
   async convertToInvoice(
     sessionToken: string,
@@ -208,15 +203,18 @@ export class EstimatesService {
       throw new ConflictException('This estimate has already been converted to an invoice.');
     }
 
-    // Block-with-choice: if the draft already has active lines, the caller must
-    // say whether to append or replace, so conversion never silently duplicates.
+    // Block-with-choice (friendly pre-check): if the draft already has active
+    // lines, the caller must say whether to append or replace, so conversion
+    // never silently duplicates. This is a fast, specific error for the common
+    // case — the AUTHORITATIVE gate lives inside convertEstimateIntoDraft, which
+    // re-counts in-transaction so a line added between here and the conversion
+    // can't slip through as a silent append.
     const activeLines = await this.invoicesRepository.countActiveLines(estimate.jobId);
     if (activeLines > 0 && !request.mode) {
       throw new ConflictException(
         'The invoice draft already has lines. Choose "append" or "replace" to convert this estimate.'
       );
     }
-    const mode: EstimateConversionMode = request.mode ?? 'append';
 
     const conversionInput: EstimateConversionInput = {
       estimateId: estimate.id,
@@ -235,15 +233,18 @@ export class EstimatesService {
         taxable: line.taxable,
         partNumber: line.partNumber,
         inventorySourceLabel: line.inventorySourceLabel,
+        lineSubtotal: line.lineSubtotal,
         lineCost: line.lineCost
       }))
     };
 
     // Atomic: claims the estimate, copies lines, stamps audit/timeline, recomputes.
+    // Pass the caller's choice through unchanged (may be undefined); the repository
+    // enforces the block-with-choice gate in-transaction.
     const { invoiceId } = await this.invoicesRepository.convertEstimateIntoDraft(
       estimate.jobId,
       conversionInput,
-      mode
+      request.mode
     );
 
     const invoice = await this.invoicesRepository.getMainInvoiceForJob(estimate.jobId);
