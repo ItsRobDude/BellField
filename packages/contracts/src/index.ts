@@ -620,6 +620,68 @@ export interface EstimateSummary {
   version: number;
 }
 
+// --- Invoices (Milestone 7, draft stage) ---------------------------------------
+
+export type InvoiceStatus = 'draft' | 'posted';
+export type InvoiceKind = 'main';
+export type InvoiceLineItemKind = EstimateLineItemKind;
+/** Where an invoice line came from. Manual office entry, reflected register work, or a converted estimate. */
+export type InvoiceLineSourceKind = 'manual' | 'register' | 'estimate';
+/** Whether an invoice line still mirrors its source (linked) or was hand-edited by office (detached). */
+export type InvoiceLineSourceSyncState = 'linked' | 'detached';
+
+export interface InvoiceLineItemSummary {
+  id: string;
+  invoiceId: string;
+  position: number;
+  kind: InvoiceLineItemKind;
+  description: string;
+  quantity: number;
+  unitOfMeasure?: string;
+  unitPrice: number;
+  unitCost?: number;
+  taxable: boolean;
+  partNumber?: string;
+  inventorySourceLabel?: string;
+  lineSubtotal: number;
+  lineCost?: number;
+  sourceKind: InvoiceLineSourceKind;
+  sourceSyncState: InvoiceLineSourceSyncState;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Snapshotted invoice totals (dollars), same shape and engine source as estimate totals. */
+export interface InvoiceTotals {
+  subtotal: number;
+  discount: number;
+  taxableBase: number;
+  tax: number;
+  total: number;
+  totalCost: number;
+  profit: number;
+  marginBasisPoints: number | null;
+  costComplete: boolean;
+}
+
+export interface InvoiceSummary {
+  id: string;
+  jobId: string;
+  invoiceKind: InvoiceKind;
+  status: InvoiceStatus;
+  taxRateBasisPoints: number;
+  discount?: EstimateDiscount;
+  lineItems: InvoiceLineItemSummary[];
+  totals: InvoiceTotals;
+  createdAt: string;
+  updatedAt: string;
+  version: number;
+}
+
+export interface InvoiceResponse {
+  invoice: InvoiceSummary;
+}
+
 export interface MediaAttachmentSummary {
   id: string;
   jobId: string;

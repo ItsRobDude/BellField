@@ -30,6 +30,7 @@ import type {
   UpdateAppointmentScheduleInput,
   UpdateRegisterEntryInput
 } from './company-data.types';
+import { ensureMainInvoiceDraft } from './jobs-data-repository-utils';
 import { JobsMediaDataRepository } from './jobs-media-data.repository';
 import { JobsRegisterDataRepository } from './jobs-register-data.repository';
 
@@ -672,6 +673,9 @@ export class JobsDataRepository {
       if (hasInitialAppointment) {
         await this.createAppointment(jobId, input, actorName, now, queryable);
       }
+
+      // Every job owns one main invoice draft from the moment it exists.
+      await ensureMainInvoiceDraft(jobId, now, queryable);
     });
 
     const job = await this.getJobById(jobId);

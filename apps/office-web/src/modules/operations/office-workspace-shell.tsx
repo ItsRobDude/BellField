@@ -143,6 +143,7 @@ export function OfficeWorkspaceShell({
   const canCreateEstimate = employee.effectivePermissions.includes('estimates:create');
   const canEditEstimate = employee.effectivePermissions.includes('estimates:edit');
   const canApproveEstimate = employee.effectivePermissions.includes('estimates:approve');
+  const canViewInvoice = employee.effectivePermissions.includes('invoices:view');
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -1067,6 +1068,7 @@ export function OfficeWorkspaceShell({
           canCreateEstimate,
           canEditEstimate,
           canApproveEstimate,
+          canViewInvoice,
           focusedAppointmentId,
           jobDetailInitialTab,
           isJobDetailLoading,

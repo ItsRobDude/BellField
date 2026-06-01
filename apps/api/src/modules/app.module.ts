@@ -6,6 +6,7 @@ import { DispatchModule } from './dispatch/dispatch.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { EstimatesModule } from './estimates/estimates.module';
 import { IdentityAccessModule } from './identity-access/identity-access.module';
+import { InvoicesModule } from './invoices/invoices.module';
 import { JobDetailModule } from './job-detail/job-detail.module';
 import { JobQueueModule } from './job-queue/job-queue.module';
 import { JobsAppointmentsModule } from './jobs-appointments/jobs-appointments.module';
@@ -20,6 +21,7 @@ import { MediaModule } from './media/media.module';
     DispatchModule,
     EquipmentModule,
     EstimatesModule,
+    InvoicesModule,
     JobDetailModule,
     JobQueueModule,
     JobsAppointmentsModule,

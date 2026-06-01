@@ -39,6 +39,9 @@ import type {
   EstimateStatus,
   EstimateSummary,
   UpdateEstimateRequest,
+  InvoiceLineItemSummary,
+  InvoiceResponse,
+  InvoiceSummary,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -113,6 +116,9 @@ export type {
   EstimateStatus,
   EstimateSummary,
   UpdateEstimateRequest,
+  InvoiceLineItemSummary,
+  InvoiceResponse,
+  InvoiceSummary,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -870,5 +876,16 @@ export async function declineOfficeEstimate(
     sessionToken,
     method: 'POST',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function getOfficeInvoiceForJob(input: {
+  jobId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  return requestJson<InvoiceResponse>(`/operations/jobs/${input.jobId}/invoice`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
   });
 }

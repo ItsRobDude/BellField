@@ -54,6 +54,7 @@ export type JobDetailTab =
   | 'appointments'
   | 'captured'
   | 'estimates'
+  | 'invoice'
   | 'media'
   | 'timeline';
 

@@ -26,6 +26,7 @@ import {
 } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { JobEstimatesSection } from './job-estimates-section';
+import { JobInvoiceSection } from './job-invoice-section';
 
 type JobDetailPanelProps = {
   technicians: JobsWorkspaceResponse['technicians'];
@@ -35,6 +36,7 @@ type JobDetailPanelProps = {
   canCreateEstimate: boolean;
   canEditEstimate: boolean;
   canApproveEstimate: boolean;
+  canViewInvoice: boolean;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
   timelineHasMore?: boolean;
@@ -111,6 +113,7 @@ const tabs: Array<{ id: JobDetailTab; label: string }> = [
   { id: 'appointments', label: 'Appointments' },
   { id: 'captured', label: 'Captured' },
   { id: 'estimates', label: 'Estimates' },
+  { id: 'invoice', label: 'Invoice' },
   { id: 'media', label: 'Media' },
   { id: 'timeline', label: 'Timeline' }
 ];
@@ -123,6 +126,7 @@ export function JobDetailPanel({
   canCreateEstimate,
   canEditEstimate,
   canApproveEstimate,
+  canViewInvoice,
   initialTab = 'overview',
   focusedAppointmentId,
   timelineHasMore = false,
@@ -186,16 +190,18 @@ export function JobDetailPanel({
       </div>
 
       <nav aria-label="Job detail tabs" style={styles.tabList}>
-        {tabs.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            style={activeTab === tab.id ? styles.activeTabButton : styles.tabButton}
-            onClick={() => setActiveTab(tab.id)}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {tabs
+          .filter((tab) => tab.id !== 'invoice' || canViewInvoice)
+          .map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              style={activeTab === tab.id ? styles.activeTabButton : styles.tabButton}
+              onClick={() => setActiveTab(tab.id)}
+            >
+              {tab.label}
+            </button>
+          ))}
       </nav>
 
       {job.needsOfficeReview ? (
@@ -272,6 +278,9 @@ export function JobDetailPanel({
           canEdit={canEditEstimate}
           canApprove={canApproveEstimate}
         />
+      ) : null}
+      {activeTab === 'invoice' && canViewInvoice ? (
+        <JobInvoiceSection jobId={job.id} apiBaseUrl={apiBaseUrl} sessionToken={sessionToken} />
       ) : null}
       {activeTab === 'media'
         ? renderMedia({

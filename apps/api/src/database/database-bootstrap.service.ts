@@ -369,6 +369,26 @@ export class DatabaseBootstrapService implements OnModuleInit {
           job.updatedAt
         ]
       );
+
+      // Seeded jobs bypass the normal create path, so give each its one main
+      // invoice draft here too. Idempotent, so re-running the seed stays safe.
+      // One placeholder per column to match the seed-insert convention.
+      await this.databaseService.query(
+        `
+          insert into invoices (
+            id,
+            job_id,
+            invoice_kind,
+            status,
+            created_at,
+            updated_at,
+            version
+          )
+          values ($1, $2, $3, $4, $5, $6, $7)
+          on conflict (job_id) where invoice_kind = 'main' do nothing
+        `,
+        [`invoice-main-${job.id}`, job.id, 'main', 'draft', job.createdAt, job.createdAt, 1]
+      );
     }
   }
 
