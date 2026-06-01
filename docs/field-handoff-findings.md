@@ -74,22 +74,22 @@ These are real gaps a technician will notice once dispatch starts driving real-w
 
 Cross-referenced against `docs/milestone-implementation-plan.md` §11 and `docs/offline-sync.md`:
 
-| Milestone 6 scope item                   | Current state                                                                                                                          |
-| ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| Technician home / dashboard              | Partial. The technician workspace is a single scrollable card, not a home/dashboard per `docs/screen-behavior-spec.md` §11.            |
-| Assigned jobs for today/tomorrow window  | Present. Backend window enforced; local cache mirrors the snapshot.                                                                    |
-| Local cached job/location/equipment data | Present via `expo-sqlite` store.                                                                                                       |
-| Notes                                    | Present. Queueable + replay-safe.                                                                                                      |
-| Appointment statuses                     | Present. Field side excludes `cancelled`.                                                                                              |
-| Register entries                         | Present for field-mobile line creation/edit/void with offline queue replay. Finish review still keeps its separate free-text reminder. |
-| Equipment edits                          | Present.                                                                                                                               |
-| Estimate drafting foundations            | **Not present.**                                                                                                                       |
-| Photo/video/file queueing                | **Not present.**                                                                                                                       |
-| Background sync                          | Present as an in-screen mounted-workspace loop plus active-app regain trigger. No OS-level background fetch.                           |
-| Sync Now button                          | Present.                                                                                                                               |
-| Pending sync indicator                   | Present (quiet-by-default tone).                                                                                                       |
-| Conflict flagging foundations            | Present (conflict/rejected states with provenance).                                                                                    |
-| Lost/revoked device behavior             | **Not present** on the field side. No wipe-on-reconnect or sign-out-on-revoke surface.                                                 |
+| Milestone 6 scope item                   | Current state                                                                                                                                                                                                                       |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Technician home / dashboard              | Partial. The technician workspace is a single scrollable card, not a home/dashboard per `docs/screen-behavior-spec.md` §11.                                                                                                         |
+| Assigned jobs for today/tomorrow window  | Present. Backend window enforced; local cache mirrors the snapshot.                                                                                                                                                                 |
+| Local cached job/location/equipment data | Present via `expo-sqlite` store.                                                                                                                                                                                                    |
+| Notes                                    | Present. Queueable + replay-safe.                                                                                                                                                                                                   |
+| Appointment statuses                     | Present. Field side excludes `cancelled`.                                                                                                                                                                                           |
+| Register entries                         | Present for field-mobile line creation/edit/void with offline queue replay. Finish review still keeps its separate free-text reminder.                                                                                              |
+| Equipment edits                          | Present.                                                                                                                                                                                                                            |
+| Estimate drafting foundations            | **Not present.** Estimates are office-only in the current milestone; the field app has no estimate builder yet.                                                                                                                     |
+| Photo/video/file queueing                | Present. Expo image/video capture or pick with app-owned local staging, a 50 MB client guard, SHA-256 metadata, upload-intent replay, raw blob finalization, and staged-file cleanup after sync. Manual device smoke still pending. |
+| Background sync                          | Present as an in-screen mounted-workspace loop plus active-app regain trigger. No OS-level background fetch.                                                                                                                        |
+| Sync Now button                          | Present.                                                                                                                                                                                                                            |
+| Pending sync indicator                   | Present (quiet-by-default tone).                                                                                                                                                                                                    |
+| Conflict flagging foundations            | Present (conflict/rejected states with provenance).                                                                                                                                                                                 |
+| Lost/revoked device behavior             | **Not present** on the field side. No wipe-on-reconnect or sign-out-on-revoke surface.                                                                                                                                              |
 
 ---
 
