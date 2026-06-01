@@ -4,6 +4,7 @@ import { HealthModule } from '../health/health.module';
 import { CrmModule } from './crm/crm.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { EquipmentModule } from './equipment/equipment.module';
+import { EstimatesModule } from './estimates/estimates.module';
 import { IdentityAccessModule } from './identity-access/identity-access.module';
 import { JobDetailModule } from './job-detail/job-detail.module';
 import { JobQueueModule } from './job-queue/job-queue.module';
@@ -18,6 +19,7 @@ import { MediaModule } from './media/media.module';
     CrmModule,
     DispatchModule,
     EquipmentModule,
+    EstimatesModule,
     JobDetailModule,
     JobQueueModule,
     JobsAppointmentsModule,
