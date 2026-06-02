@@ -1,6 +1,10 @@
 'use client';
 
 import type { DispatchBoardResponse } from '@/lib/operations-api';
+import {
+  OfficeBookkeepingSurface,
+  type OfficeBookkeepingSurfaceProps
+} from './office-workspace-bookkeeping-surface';
 import { CrmPanel } from './crm-panel';
 import { DispatchBoardPanel } from './dispatch-board-panel';
 import {
@@ -42,6 +46,7 @@ type OfficeWorkspaceSurfacesProps = {
   jobDetail: OfficeJobDetailSurfaceProps;
   jobIntake: OfficeJobIntakeSurfaceProps;
   jobs: OfficeJobsQueueSurfaceProps;
+  bookkeeping: OfficeBookkeepingSurfaceProps;
 };
 
 export function OfficeWorkspaceSurfaces({
@@ -50,7 +55,8 @@ export function OfficeWorkspaceSurfaces({
   dispatch,
   jobDetail,
   jobIntake,
-  jobs
+  jobs,
+  bookkeeping
 }: OfficeWorkspaceSurfacesProps) {
   return (
     <>
@@ -79,6 +85,8 @@ export function OfficeWorkspaceSurfaces({
       ) : null}
 
       {activeOfficeView === 'jobs' ? <OfficeJobsQueueSurface {...jobs} /> : null}
+
+      {activeOfficeView === 'bookkeeping' ? <OfficeBookkeepingSurface {...bookkeeping} /> : null}
 
       {activeOfficeView === 'jobDetail' ? <OfficeJobDetailSurface {...jobDetail} /> : null}
     </>

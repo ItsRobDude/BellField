@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { HealthModule } from '../health/health.module';
+import { BookkeepingModule } from './bookkeeping/bookkeeping.module';
 import { CrmModule } from './crm/crm.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { EquipmentModule } from './equipment/equipment.module';
@@ -17,6 +18,7 @@ import { MediaModule } from './media/media.module';
     DatabaseModule,
     HealthModule,
     IdentityAccessModule,
+    BookkeepingModule,
     CrmModule,
     DispatchModule,
     EquipmentModule,

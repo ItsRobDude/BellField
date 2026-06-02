@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
-export type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'jobDetail';
+export type OfficeView = 'dispatch' | 'customers' | 'jobs' | 'bookkeeping' | 'jobDetail';
 
 type OfficeWorkspaceFrameProps = {
   activeView: OfficeView;
@@ -15,6 +15,7 @@ type OfficeWorkspaceFrameProps = {
   isJobIntakeLoading: boolean;
   isJobsQueueRefreshing: boolean;
   isRefreshing: boolean;
+  canViewBookkeeping: boolean;
   noticeMessage: string | null;
   onOpenJobIntake: () => void;
   onRefresh: () => void;
@@ -31,6 +32,7 @@ export function OfficeWorkspaceFrame({
   isJobIntakeLoading,
   isJobsQueueRefreshing,
   isRefreshing,
+  canViewBookkeeping,
   noticeMessage,
   onOpenJobIntake,
   onRefresh,
@@ -60,6 +62,13 @@ export function OfficeWorkspaceFrame({
             active={activeView === 'jobs'}
             onClick={() => onViewChange('jobs')}
           />
+          {canViewBookkeeping ? (
+            <NavButton
+              label="Bookkeeping"
+              active={activeView === 'bookkeeping'}
+              onClick={() => onViewChange('bookkeeping')}
+            />
+          ) : null}
         </aside>
 
         <div style={styles.workArea}>

@@ -1004,6 +1004,7 @@ export function OfficeWorkspaceShell({
       isJobIntakeLoading={isJobIntakeLoading}
       isJobsQueueRefreshing={isJobsQueueRefreshing}
       isRefreshing={isRefreshing}
+      canViewBookkeeping={canViewInvoice}
       noticeMessage={noticeMessage}
       onOpenJobIntake={() => void handleOpenJobIntake()}
       onRefresh={() => void refreshAllWorkspace()}
@@ -1071,6 +1072,11 @@ export function OfficeWorkspaceShell({
           onOpenJobDetail: handleOpenJobDetail,
           onOpenJobIntake: () => void handleOpenJobIntake(),
           onLoadMoreJobsQueue: handleLoadMoreJobsQueue
+        }}
+        bookkeeping={{
+          apiBaseUrl,
+          sessionToken,
+          onOpenJob: (jobId) => handleOpenJobDetail(jobId, undefined, 'invoice')
         }}
         jobDetail={{
           selectedJobId,

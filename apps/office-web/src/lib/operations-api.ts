@@ -43,6 +43,9 @@ import type {
   InvoiceLineItemInput,
   InvoiceLineItemKind,
   InvoiceLineItemSummary,
+  BookkeepingQueuesResponse,
+  BookkeepingInvoiceItem,
+  BookkeepingBalanceItem,
   InvoiceResponse,
   InvoiceSummary,
   JobAdjustmentsResponse,
@@ -130,6 +133,9 @@ export type {
   InvoiceLineItemInput,
   InvoiceLineItemKind,
   InvoiceLineItemSummary,
+  BookkeepingQueuesResponse,
+  BookkeepingInvoiceItem,
+  BookkeepingBalanceItem,
   InvoiceResponse,
   InvoiceSummary,
   JobAdjustmentsResponse,
@@ -1091,5 +1097,16 @@ export async function voidOfficePayment(input: {
     sessionToken,
     method: 'POST',
     body: JSON.stringify({ reason })
+  });
+}
+
+/** Cross-job bookkeeping worklists: ready-to-post, open balances, recently posted. */
+export async function getOfficeBookkeepingQueues(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<BookkeepingQueuesResponse> {
+  return requestJson<BookkeepingQueuesResponse>('/operations/bookkeeping/invoice-queues', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
   });
 }
