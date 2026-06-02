@@ -13,6 +13,7 @@ import { JobDetailModule } from './job-detail/job-detail.module';
 import { JobQueueModule } from './job-queue/job-queue.module';
 import { JobsAppointmentsModule } from './jobs-appointments/jobs-appointments.module';
 import { MediaModule } from './media/media.module';
+import { PurchasingModule } from './purchasing/purchasing.module';
 
 @Module({
   imports: [
@@ -29,7 +30,8 @@ import { MediaModule } from './media/media.module';
     JobDetailModule,
     JobQueueModule,
     JobsAppointmentsModule,
-    MediaModule
+    MediaModule,
+    PurchasingModule
   ]
 })
 export class AppModule {}
