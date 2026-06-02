@@ -722,6 +722,11 @@ export interface InvoiceResponse {
   invoice: InvoiceSummary;
 }
 
+/** A job's adjustment/credit correction records (each a full invoice), newest first. */
+export interface JobAdjustmentsResponse {
+  adjustments: InvoiceSummary[];
+}
+
 /** Create an adjustment or credit against a job's posted main invoice. */
 export interface CreateAdjustmentRequest {
   kind: InvoiceAdjustmentKind;

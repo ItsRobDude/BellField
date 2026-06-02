@@ -39,11 +39,14 @@ import type {
   EstimateStatus,
   EstimateSummary,
   UpdateEstimateRequest,
+  InvoiceAdjustmentKind,
   InvoiceLineItemInput,
   InvoiceLineItemKind,
   InvoiceLineItemSummary,
   InvoiceResponse,
   InvoiceSummary,
+  JobAdjustmentsResponse,
+  JobInvoiceBalance,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -118,11 +121,14 @@ export type {
   EstimateStatus,
   EstimateSummary,
   UpdateEstimateRequest,
+  InvoiceAdjustmentKind,
   InvoiceLineItemInput,
   InvoiceLineItemKind,
   InvoiceLineItemSummary,
   InvoiceResponse,
   InvoiceSummary,
+  JobAdjustmentsResponse,
+  JobInvoiceBalance,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -960,6 +966,75 @@ export async function postOfficeInvoice(input: {
   apiBaseUrl?: string;
 }): Promise<InvoiceResponse> {
   return requestJson<InvoiceResponse>(`/operations/jobs/${input.jobId}/invoice/post`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST'
+  });
+}
+
+/** Net amount billed on a job across its posted invoices (main + adjustments − credits). */
+export async function getOfficeJobInvoiceBalance(input: {
+  jobId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<JobInvoiceBalance> {
+  return requestJson<JobInvoiceBalance>(`/operations/jobs/${input.jobId}/invoice/balance`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+/** List a job's adjustment/credit correction records (each a full invoice). */
+export async function listOfficeJobAdjustments(input: {
+  jobId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<JobAdjustmentsResponse> {
+  return requestJson<JobAdjustmentsResponse>(
+    `/operations/jobs/${input.jobId}/invoice/adjustments`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
+}
+
+/** Create a draft adjustment or credit against a job's posted main invoice. */
+export async function createOfficeJobAdjustment(input: {
+  jobId: string;
+  kind: InvoiceAdjustmentKind;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  return requestJson<InvoiceResponse>(`/operations/jobs/${input.jobId}/invoice/adjustments`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST',
+    body: JSON.stringify({ kind: input.kind })
+  });
+}
+
+/** Add a manual line to any invoice by id (used for adjustment/credit lines). */
+export async function addOfficeInvoiceLineById(
+  input: InvoiceLineItemInput & { invoiceId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<InvoiceResponse> {
+  const { invoiceId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<InvoiceResponse>(`/operations/invoices/${invoiceId}/lines`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+/** Post (lock) any invoice by id (used for adjustment/credit records). */
+export async function postOfficeInvoiceById(input: {
+  invoiceId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  return requestJson<InvoiceResponse>(`/operations/invoices/${input.invoiceId}/post`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken,
     method: 'POST'

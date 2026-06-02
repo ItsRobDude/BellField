@@ -9,13 +9,29 @@ vi.mock('@/lib/operations-api', () => ({
   addOfficeInvoiceLine: vi.fn(),
   editOfficeInvoiceLine: vi.fn(),
   voidOfficeInvoiceLine: vi.fn(),
-  postOfficeInvoice: vi.fn()
+  postOfficeInvoice: vi.fn(),
+  // Used by the corrections section, which mounts once the main invoice is posted.
+  getOfficeJobInvoiceBalance: vi.fn(),
+  listOfficeJobAdjustments: vi.fn(),
+  createOfficeJobAdjustment: vi.fn(),
+  addOfficeInvoiceLineById: vi.fn(),
+  postOfficeInvoiceById: vi.fn()
 }));
 
 const mockedApi = vi.mocked(operationsApi);
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // Defaults so the corrections section can load when a posted invoice mounts it.
+  mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue({
+    jobId: 'job-1',
+    mainInvoiceStatus: 'posted',
+    postedMainTotal: 0,
+    postedAdjustmentsTotal: 0,
+    postedCreditsTotal: 0,
+    netBilled: 0
+  });
+  mockedApi.listOfficeJobAdjustments.mockResolvedValue({ adjustments: [] });
 });
 
 afterEach(() => {
@@ -86,6 +102,7 @@ function renderSection(canPost: boolean) {
       sessionToken="test-token"
       canEdit
       canPost={canPost}
+      canCreateAdjustments
     />
   );
 }

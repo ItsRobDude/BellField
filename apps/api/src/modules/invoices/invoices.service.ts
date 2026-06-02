@@ -95,6 +95,24 @@ export class InvoicesService {
     };
   }
 
+  /**
+   * List a job's adjustment/credit correction records (each a full invoice), newest first.
+   * Office-only, gated on invoices:view. Empty until the main is posted and a correction is
+   * created.
+   */
+  async getJobAdjustments(
+    sessionToken: string,
+    jobId: string
+  ): Promise<{ adjustments: InvoiceSummaryDto[] }> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:view', [
+      'office-web'
+    ]);
+    await this.jobsDataService.getJobById(jobId);
+
+    const adjustments = await this.invoicesRepository.listAdjustmentsForJob(jobId);
+    return { adjustments: adjustments.map((invoice) => this.toSummary(invoice)) };
+  }
+
   /** Add a manual line to a job's invoice draft. */
   async addLine(
     sessionToken: string,

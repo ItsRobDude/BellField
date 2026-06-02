@@ -293,6 +293,9 @@ export function JobDetailPanel({
           sessionToken={sessionToken}
           canEdit={canEditInvoice}
           canPost={canPostInvoice}
+          // Adjustments/credits are gated on invoices:create — the same authority
+          // that converts an estimate into the invoice.
+          canCreateAdjustments={canConvertEstimate}
         />
       ) : null}
       {activeTab === 'media'

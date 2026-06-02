@@ -56,6 +56,15 @@ export class JobInvoiceController {
     return this.invoicesService.postInvoice(getBearerToken(authorizationHeader), jobId);
   }
 
+  // List the job's adjustment/credit correction records (each a full invoice).
+  @Get('adjustments')
+  async listAdjustments(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string
+  ) {
+    return this.invoicesService.getJobAdjustments(getBearerToken(authorizationHeader), jobId);
+  }
+
   // Create an adjustment or credit against the job's posted main invoice.
   @Post('adjustments')
   async createAdjustment(

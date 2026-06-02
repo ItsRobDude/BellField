@@ -238,6 +238,44 @@ export class InvoicesRepository {
   }
 
   /**
+   * Load a job's adjustment/credit correction records (full records with their active
+   * lines), newest first. Excludes the main invoice. Used by the office corrections UI.
+   */
+  async listAdjustmentsForJob(jobId: string): Promise<InvoiceRecord[]> {
+    const invoiceResult = await this.databaseService.query<InvoiceRow>(
+      `select ${INVOICE_COLUMNS} from invoices
+       where job_id = $1 and invoice_kind in ('adjustment', 'credit')
+       order by created_at asc`,
+      [jobId]
+    );
+    if (invoiceResult.rows.length === 0) {
+      return [];
+    }
+
+    const ids = invoiceResult.rows.map((row) => row.id);
+    const lineResult = await this.databaseService.query<InvoiceLineItemRow>(
+      `select ${INVOICE_LINE_COLUMNS} from invoice_line_items
+       where invoice_id = any($1) and is_void = false
+       order by line_position asc`,
+      [ids]
+    );
+    const linesByInvoice = new Map<string, InvoiceLineItemRecord[]>();
+    for (const lineRow of lineResult.rows) {
+      const mapped = this.toLineItemRecord(lineRow);
+      const bucket = linesByInvoice.get(mapped.invoiceId);
+      if (bucket) {
+        bucket.push(mapped);
+      } else {
+        linesByInvoice.set(mapped.invoiceId, [mapped]);
+      }
+    }
+
+    return invoiceResult.rows.map((row) =>
+      this.toInvoiceRecord(row, linesByInvoice.get(row.id) ?? [])
+    );
+  }
+
+  /**
    * List the header totals of every invoice for a job (all kinds and statuses), for the
    * job balance read. Header-only — no line items are loaded. Returns drafts too so the
    * caller can report whether the main is posted yet.

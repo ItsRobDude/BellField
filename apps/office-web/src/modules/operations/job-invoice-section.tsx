@@ -15,10 +15,17 @@ import {
   buildInvoiceLineDraft,
   createEmptyInvoiceLineDraft,
   invoiceLineKindLabels,
-  invoiceLineKindOptions,
   parseInvoiceLineDraft,
   type InvoiceLineDraft
 } from './job-invoice-types';
+import {
+  formatCurrency,
+  InvoiceLineEditor,
+  InvoiceTotals,
+  invoiceSourceLabels,
+  PostedInvoiceSummary
+} from './job-invoice-shared';
+import { JobInvoiceCorrections } from './job-invoice-corrections';
 
 type JobInvoiceSectionProps = {
   jobId: string;
@@ -26,26 +33,23 @@ type JobInvoiceSectionProps = {
   sessionToken: string;
   canEdit: boolean;
   canPost: boolean;
-};
-
-const sourceLabels: Record<InvoiceLineItemSummary['sourceKind'], string> = {
-  manual: 'Office',
-  register: 'Register',
-  estimate: 'Estimate'
+  canCreateAdjustments: boolean;
 };
 
 // The job's single main invoice draft: the running bill, fed by reflected
 // register work plus manual office lines. Office users with invoices:edit can
 // add, edit, and void lines; editing a register-sourced line detaches it from
 // its register source on the server. Users with invoices:post can post (lock)
-// the draft, which freezes its display context and stops further editing. All
-// styling reuses officeWorkspaceStyles.
+// the draft, which freezes its display context and stops further editing. Once
+// posted, the corrections section (adjustments/credits + balance) appears below.
+// All styling reuses officeWorkspaceStyles.
 export function JobInvoiceSection({
   jobId,
   apiBaseUrl,
   sessionToken,
   canEdit,
-  canPost
+  canPost,
+  canCreateAdjustments
 }: JobInvoiceSectionProps) {
   const [invoice, setInvoice] = useState<InvoiceSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -162,290 +166,138 @@ export function JobInvoiceSection({
   }
 
   return (
-    <section style={styles.panel} aria-label="Job invoice draft">
-      <div style={styles.row}>
-        <h2 style={styles.heading}>Invoice draft</h2>
-        <div style={styles.badgeRow}>
-          {invoice ? (
-            <span style={styles.badge}>{invoice.status === 'posted' ? 'Posted' : 'Draft'}</span>
-          ) : null}
-          {invoice && canEdit && invoice.status === 'draft' && !newLineDraft ? (
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => setNewLineDraft(createEmptyInvoiceLineDraft())}
-            >
-              Add line
-            </button>
-          ) : null}
-          {invoice && canPost && invoice.status === 'draft' && !newLineDraft && !editingLineId ? (
-            <button
-              type="button"
-              style={styles.primaryButton}
-              disabled={isSaving}
-              onClick={() => void postInvoice()}
-            >
-              Post invoice
-            </button>
-          ) : null}
+    <>
+      <section style={styles.panel} aria-label="Job invoice draft">
+        <div style={styles.row}>
+          <h2 style={styles.heading}>Invoice draft</h2>
+          <div style={styles.badgeRow}>
+            {invoice ? (
+              <span style={styles.badge}>{invoice.status === 'posted' ? 'Posted' : 'Draft'}</span>
+            ) : null}
+            {invoice && canEdit && invoice.status === 'draft' && !newLineDraft ? (
+              <button
+                type="button"
+                style={styles.button}
+                onClick={() => setNewLineDraft(createEmptyInvoiceLineDraft())}
+              >
+                Add line
+              </button>
+            ) : null}
+            {invoice && canPost && invoice.status === 'draft' && !newLineDraft && !editingLineId ? (
+              <button
+                type="button"
+                style={styles.primaryButton}
+                disabled={isSaving}
+                onClick={() => void postInvoice()}
+              >
+                Post invoice
+              </button>
+            ) : null}
+          </div>
         </div>
-      </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
 
-      {newLineDraft ? (
-        <InvoiceLineEditor
-          heading="New line"
-          draft={newLineDraft}
-          isSaving={isSaving}
-          onChange={setNewLineDraft}
-          onSave={() => void addLine()}
-          onCancel={() => setNewLineDraft(null)}
-        />
-      ) : null}
+        {newLineDraft ? (
+          <InvoiceLineEditor
+            heading="New line"
+            draft={newLineDraft}
+            isSaving={isSaving}
+            onChange={setNewLineDraft}
+            onSave={() => void addLine()}
+            onCancel={() => setNewLineDraft(null)}
+          />
+        ) : null}
 
-      {isLoading ? (
-        <p style={styles.muted}>Loading invoice draft…</p>
-      ) : !invoice ? (
-        <p style={styles.muted}>No invoice draft for this job yet.</p>
-      ) : (
-        <>
-          {invoice.lineItems.length === 0 ? (
-            <p style={styles.muted}>
-              This draft is empty. Register work and converted estimates appear here.
-            </p>
-          ) : (
-            <div style={styles.list}>
-              {invoice.lineItems.map((line) =>
-                editingLineId === line.id && editDraft ? (
-                  <InvoiceLineEditor
-                    key={line.id}
-                    heading={`Edit: ${line.description}`}
-                    draft={editDraft}
-                    isSaving={isSaving}
-                    onChange={setEditDraft}
-                    onSave={() => void saveEdit(line.id)}
-                    onCancel={() => {
-                      setEditingLineId(null);
-                      setEditDraft(null);
-                    }}
-                  />
-                ) : (
-                  <div key={line.id} style={styles.subpanel}>
-                    <div style={styles.row}>
-                      <div style={{ minWidth: 0 }}>
-                        <strong>{line.description}</strong>
-                        <p style={styles.tinyMuted}>
-                          {invoiceLineKindLabels[line.kind]} · {sourceLabels[line.sourceKind]}
-                          {line.sourceSyncState === 'detached' ? ' (edited)' : ''} · {line.quantity}
-                          {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''} ×{' '}
-                          {formatCurrency(line.unitPrice)}
-                          {line.taxable ? '' : ' · non-taxable'}
-                        </p>
-                      </div>
-                      <div style={styles.badgeRow}>
-                        <strong>{formatCurrency(line.lineSubtotal)}</strong>
-                        {canEdit && invoice.status === 'draft' ? (
-                          <>
-                            <button
-                              type="button"
-                              style={styles.button}
-                              onClick={() => {
-                                setEditingLineId(line.id);
-                                setEditDraft(buildInvoiceLineDraft(line));
-                                setNewLineDraft(null);
-                              }}
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              style={styles.dangerButton}
-                              onClick={() => void voidLine(line)}
-                            >
-                              Remove
-                            </button>
-                          </>
-                        ) : null}
+        {isLoading ? (
+          <p style={styles.muted}>Loading invoice draft…</p>
+        ) : !invoice ? (
+          <p style={styles.muted}>No invoice draft for this job yet.</p>
+        ) : (
+          <>
+            {invoice.lineItems.length === 0 ? (
+              <p style={styles.muted}>
+                This draft is empty. Register work and converted estimates appear here.
+              </p>
+            ) : (
+              <div style={styles.list}>
+                {invoice.lineItems.map((line) =>
+                  editingLineId === line.id && editDraft ? (
+                    <InvoiceLineEditor
+                      key={line.id}
+                      heading={`Edit: ${line.description}`}
+                      draft={editDraft}
+                      isSaving={isSaving}
+                      onChange={setEditDraft}
+                      onSave={() => void saveEdit(line.id)}
+                      onCancel={() => {
+                        setEditingLineId(null);
+                        setEditDraft(null);
+                      }}
+                    />
+                  ) : (
+                    <div key={line.id} style={styles.subpanel}>
+                      <div style={styles.row}>
+                        <div style={{ minWidth: 0 }}>
+                          <strong>{line.description}</strong>
+                          <p style={styles.tinyMuted}>
+                            {invoiceLineKindLabels[line.kind]} ·{' '}
+                            {invoiceSourceLabels[line.sourceKind]}
+                            {line.sourceSyncState === 'detached' ? ' (edited)' : ''} ·{' '}
+                            {line.quantity}
+                            {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''} ×{' '}
+                            {formatCurrency(line.unitPrice)}
+                            {line.taxable ? '' : ' · non-taxable'}
+                          </p>
+                        </div>
+                        <div style={styles.badgeRow}>
+                          <strong>{formatCurrency(line.lineSubtotal)}</strong>
+                          {canEdit && invoice.status === 'draft' ? (
+                            <>
+                              <button
+                                type="button"
+                                style={styles.button}
+                                onClick={() => {
+                                  setEditingLineId(line.id);
+                                  setEditDraft(buildInvoiceLineDraft(line));
+                                  setNewLineDraft(null);
+                                }}
+                              >
+                                Edit
+                              </button>
+                              <button
+                                type="button"
+                                style={styles.dangerButton}
+                                onClick={() => void voidLine(line)}
+                              >
+                                Remove
+                              </button>
+                            </>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                )
-              )}
-            </div>
-          )}
-          <InvoiceTotals invoice={invoice} />
-          {invoice.posted ? <PostedInvoiceSummary posted={invoice.posted} /> : null}
-        </>
-      )}
-    </section>
-  );
-}
+                  )
+                )}
+              </div>
+            )}
+            <InvoiceTotals invoice={invoice} />
+            {invoice.posted ? <PostedInvoiceSummary posted={invoice.posted} /> : null}
+          </>
+        )}
+      </section>
 
-// The frozen customer/location/job context captured at posting. Shown read-only so the
-// posted bill always renders as it was, regardless of later CRM edits.
-function PostedInvoiceSummary({ posted }: { posted: NonNullable<InvoiceSummary['posted']> }) {
-  const billToAddress = formatAddress(posted.billTo);
-  const serviceAddress = formatAddress(posted.serviceLocation);
-  return (
-    <div style={styles.subpanel}>
-      <h3 style={styles.sectionHeading}>Posted record</h3>
-      <p style={styles.tinyMuted}>
-        Posted by {posted.postedByName} on {posted.postedAt.slice(0, 10)}.
-      </p>
-      <SummaryRow label="Bill to" value={posted.billTo.name} />
-      {billToAddress ? <p style={styles.tinyMuted}>{billToAddress}</p> : null}
-      <SummaryRow label="Service location" value={posted.serviceLocation.name} />
-      {serviceAddress ? <p style={styles.tinyMuted}>{serviceAddress}</p> : null}
-      <SummaryRow label="Job #" value={posted.jobNumber} />
-      {posted.workOrderNumber ? (
-        <SummaryRow label="Work order" value={posted.workOrderNumber} />
+      {invoice && invoice.status === 'posted' ? (
+        <JobInvoiceCorrections
+          jobId={jobId}
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canEdit={canEdit}
+          canPost={canPost}
+          canCreate={canCreateAdjustments}
+        />
       ) : null}
-    </div>
+    </>
   );
-}
-
-function formatAddress(place: {
-  addressLine1?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-}): string {
-  const cityState = [place.city, place.state].filter((part) => part && part.trim()).join(', ');
-  const tail = [cityState, place.postalCode?.trim()].filter(Boolean).join(' ');
-  return [place.addressLine1?.trim(), tail].filter(Boolean).join(', ');
-}
-
-function InvoiceLineEditor({
-  heading,
-  draft,
-  isSaving,
-  onChange,
-  onSave,
-  onCancel
-}: {
-  heading: string;
-  draft: InvoiceLineDraft;
-  isSaving: boolean;
-  onChange: (draft: InvoiceLineDraft) => void;
-  onSave: () => void;
-  onCancel: () => void;
-}) {
-  function patch(values: Partial<InvoiceLineDraft>) {
-    onChange({ ...draft, ...values });
-  }
-
-  return (
-    <div style={styles.drawerPanel}>
-      <h3 style={styles.sectionHeading}>{heading}</h3>
-      <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          <span>Kind</span>
-          <select
-            style={styles.input}
-            value={draft.kind}
-            onChange={(event) => patch({ kind: event.target.value as InvoiceLineDraft['kind'] })}
-          >
-            {invoiceLineKindOptions.map((kind) => (
-              <option key={kind} value={kind}>
-                {invoiceLineKindLabels[kind]}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
-          <span>Description</span>
-          <input
-            style={styles.input}
-            value={draft.description}
-            onChange={(event) => patch({ description: event.target.value })}
-          />
-        </label>
-      </div>
-      <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          <span>Qty</span>
-          <input
-            style={styles.input}
-            type="number"
-            step="0.01"
-            value={draft.quantity}
-            onChange={(event) => patch({ quantity: event.target.value })}
-          />
-        </label>
-        <label style={styles.fieldLabel}>
-          <span>Unit price</span>
-          <input
-            style={styles.input}
-            type="number"
-            step="0.01"
-            value={draft.unitPrice}
-            onChange={(event) => patch({ unitPrice: event.target.value })}
-          />
-        </label>
-        <label style={styles.fieldLabel}>
-          <span>Unit cost</span>
-          <input
-            style={styles.input}
-            type="number"
-            step="0.01"
-            value={draft.unitCost}
-            onChange={(event) => patch({ unitCost: event.target.value })}
-          />
-        </label>
-        <label style={styles.inlineLabel}>
-          <input
-            type="checkbox"
-            checked={draft.taxable}
-            onChange={(event) => patch({ taxable: event.target.checked })}
-          />
-          <span>Taxable</span>
-        </label>
-      </div>
-      <div style={styles.inlineActionBar}>
-        <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onSave}>
-          {isSaving ? 'Saving…' : 'Save line'}
-        </button>
-        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function InvoiceTotals({ invoice }: { invoice: InvoiceSummary }) {
-  const { totals } = invoice;
-  return (
-    <div style={styles.subpanel}>
-      <SummaryRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
-      {totals.discount > 0 ? (
-        <SummaryRow label="Discount" value={`−${formatCurrency(totals.discount)}`} />
-      ) : null}
-      <SummaryRow label="Tax" value={formatCurrency(totals.tax)} />
-      <SummaryRow label="Total" value={formatCurrency(totals.total)} emphasize />
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  emphasize
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div style={styles.row}>
-      <span style={styles.tinyMuted}>{label}</span>
-      <span style={{ fontWeight: emphasize ? 800 : 600 }}>{value}</span>
-    </div>
-  );
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
 }

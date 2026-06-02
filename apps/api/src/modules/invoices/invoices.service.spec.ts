@@ -33,6 +33,7 @@ function createService() {
     voidLine: jest.fn(),
     postInvoice: jest.fn(),
     createAdjustment: jest.fn(),
+    listAdjustmentsForJob: jest.fn(),
     listInvoiceTotalsForJob: jest.fn()
   };
 
@@ -564,5 +565,56 @@ describe('InvoicesService job balance', () => {
     await expect(service.getJobInvoiceBalance('token', 'job-1')).rejects.toBeInstanceOf(
       NotFoundException
     );
+  });
+});
+
+describe('InvoicesService job adjustments list', () => {
+  it('returns the job correction records mapped to summaries, gated on invoices:view', async () => {
+    const { service, identityAccessService, invoicesRepository } = createService();
+    invoicesRepository.listAdjustmentsForJob.mockResolvedValue([
+      draftInvoice({
+        id: 'adj-1',
+        invoiceKind: 'adjustment',
+        adjustsInvoiceId: 'invoice-main-job-1'
+      }),
+      draftInvoice({
+        id: 'cred-1',
+        invoiceKind: 'credit',
+        status: 'posted',
+        adjustsInvoiceId: 'invoice-main-job-1'
+      })
+    ]);
+
+    const result = await service.getJobAdjustments('token', 'job-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'invoices:view',
+      ['office-web']
+    );
+    expect(result.adjustments).toHaveLength(2);
+    expect(result.adjustments[0].invoiceKind).toBe('adjustment');
+    expect(result.adjustments[1].invoiceKind).toBe('credit');
+    expect(result.adjustments[1].adjustsInvoiceId).toBe('invoice-main-job-1');
+  });
+
+  it('is gated on invoices:view (forbidden propagates, no list query)', async () => {
+    const { service, identityAccessService, invoicesRepository } = createService();
+    identityAccessService.getAuthorizedEmployee.mockRejectedValue(new ForbiddenException());
+
+    await expect(service.getJobAdjustments('token', 'job-1')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(invoicesRepository.listAdjustmentsForJob).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound for a missing job before listing', async () => {
+    const { service, jobsDataService, invoicesRepository } = createService();
+    jobsDataService.getJobById.mockRejectedValue(new NotFoundException('Job not found.'));
+
+    await expect(service.getJobAdjustments('token', 'missing-job')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    expect(invoicesRepository.listAdjustmentsForJob).not.toHaveBeenCalled();
   });
 });
