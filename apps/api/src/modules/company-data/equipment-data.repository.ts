@@ -219,8 +219,12 @@ export class EquipmentDataRepository {
     return result.rows.map((row) => this.toEquipmentRecord(row));
   }
 
-  async getEquipmentById(equipmentId: string): Promise<EquipmentRecord | null> {
-    const result = await this.databaseService.query<EquipmentRow>(
+  async getEquipmentById(
+    equipmentId: string,
+    queryable?: QueryExecutor
+  ): Promise<EquipmentRecord | null> {
+    const executor = queryable ?? this.databaseService;
+    const result = await executor.query<EquipmentRow>(
       this.getEquipmentSelectSql(`
         where equipment.id = $1
         limit 1
@@ -271,7 +275,9 @@ export class EquipmentDataRepository {
     };
 
     await this.saveEquipment(record, true, executor);
-    return (await this.getEquipmentById(record.id)) as EquipmentRecord;
+    // Re-read on the SAME executor so this works inside a caller's open transaction
+    // (reading via the pool would not see the uncommitted row).
+    return (await this.getEquipmentById(record.id, executor)) as EquipmentRecord;
   }
 
   async updateEquipment(

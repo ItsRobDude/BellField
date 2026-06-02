@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import type {
   CreateEquipmentInput,
   EquipmentGroupRecord,
@@ -59,25 +59,38 @@ export class EquipmentDataService {
   }
 
   async createEquipment(input: CreateEquipmentInput, actorName: string): Promise<EquipmentRecord> {
-    const createdEquipmentId = await this.databaseService.transaction(async (queryable) => {
-      const createdEquipment = await this.equipmentDataRepository.createEquipment(input, queryable);
-
-      await this.equipmentDataRepository.addEquipmentHistoryEntry(
-        {
-          id: randomUUID(),
-          equipmentId: createdEquipment.id,
-          occurredAt: createdEquipment.createdAt,
-          actorName,
-          kind: 'created',
-          message: 'Equipment record created.'
-        },
-        queryable
-      );
-
-      return createdEquipment.id;
-    });
-
+    const createdEquipmentId = await this.databaseService.transaction((queryable) =>
+      this.createEquipmentWithinTransaction(input, actorName, queryable)
+    );
     return this.getEquipmentById(createdEquipmentId);
+  }
+
+  /**
+   * Create an equipment record + its 'created' history entry inside a caller's existing
+   * transaction, returning the new id. This is the canonical equipment-creation path; other
+   * modules (e.g. purchasing receiving) call it through this service so equipment creation
+   * and history stay consistent rather than re-implementing the inserts. An optional
+   * message overrides the default history note (e.g. "Received from PO 1005.").
+   */
+  async createEquipmentWithinTransaction(
+    input: CreateEquipmentInput,
+    actorName: string,
+    queryable: QueryExecutor,
+    message = 'Equipment record created.'
+  ): Promise<string> {
+    const createdEquipment = await this.equipmentDataRepository.createEquipment(input, queryable);
+    await this.equipmentDataRepository.addEquipmentHistoryEntry(
+      {
+        id: randomUUID(),
+        equipmentId: createdEquipment.id,
+        occurredAt: createdEquipment.createdAt,
+        actorName,
+        kind: 'created',
+        message
+      },
+      queryable
+    );
+    return createdEquipment.id;
   }
 
   async updateEquipment(

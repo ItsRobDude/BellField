@@ -83,8 +83,17 @@ export class PurchasingService {
       // Each physical serviceable asset gets its own equipment record, so an equipment
       // line is exactly one unit (receiving creates one equipment row from it). Order
       // multiple units as multiple lines.
-      if (line.kind === 'equipment' && line.quantity !== 1) {
-        throw new BadRequestException('An equipment line must have a quantity of 1.');
+      if (line.kind === 'equipment') {
+        if (line.quantity !== 1) {
+          throw new BadRequestException('An equipment line must have a quantity of 1.');
+        }
+        // Equipment received to a job has its cost applied to that job, which needs a
+        // catalog item for the cost movement's provenance.
+        if (hasCustomer && request.jobId && !line.itemId) {
+          throw new BadRequestException(
+            'Equipment on a job purchase order must reference a catalog item.'
+          );
+        }
       }
       // A catalog-linked line must reference a real item whose kind matches the line kind
       // (a part line can't point at an equipment item, and vice versa).
@@ -184,6 +193,12 @@ export class PurchasingService {
         const receivedQty = overrides.get(line.id)?.quantity ?? line.quantity;
         if (receivedQty !== 1) {
           throw new BadRequestException('An equipment line must be received as a quantity of 1.');
+        }
+        // Equipment received to a job applies its cost to the job, which needs a catalog item.
+        if (po.destinationKind === 'customer' && po.jobId && !line.itemId) {
+          throw new BadRequestException(
+            'Equipment received to a job must reference a catalog item so its cost can be applied to the job.'
+          );
         }
       }
     }

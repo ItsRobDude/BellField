@@ -8,6 +8,7 @@ import type {
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import { EquipmentDataService } from '../company-data/equipment-data.service';
 import {
   applyReceiptToInventory,
   applyReceiptToJob,
@@ -78,7 +79,12 @@ const HEADER_SELECT = `
 
 @Injectable()
 export class PurchasingRepository {
-  constructor(private readonly databaseService: DatabaseService) {}
+  constructor(
+    private readonly databaseService: DatabaseService,
+    // Receiving creates equipment through the canonical company-data service (public
+    // service, not its repository) so equipment + history behavior stays consistent.
+    private readonly equipmentDataService: EquipmentDataService
+  ) {}
 
   async createPurchaseOrder(
     input: CreatePurchaseOrderRequestDto,
@@ -330,41 +336,45 @@ export class PurchasingRepository {
           }
           // part to a customer location with no job: cost recorded on the receipt line only.
         } else {
-          // Equipment: create the asset row (the bridge). pendingInstall at a customer
-          // location, active at an inventory location. Equipment is a serialized asset, not
-          // quantity stock, so it posts no inventory movement — and therefore its cost is
-          // NOT in the material job-cost rollup (B6). Equipment cost is captured on the
-          // receipt line + the asset record; the job-cost ledger is for consumable material
-          // (issueToJob / receiveToJob) plus labor/expense. (See docs/inventory-job-costing-plan.md.)
-          const equipmentId = randomUUID();
+          // Equipment: create the asset row (the bridge) through the canonical equipment
+          // path — pendingInstall at a customer location, active at an inventory location.
           const atCustomer = Boolean(po.destCust);
-          await queryable.query(
-            `insert into equipment
-               (id, location_id, inventory_location_label, equipment_type, brand, model,
-                serial_number, status, created_at, updated_at)
-             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
-            [
-              equipmentId,
-              atCustomer ? po.destCust : null,
-              atCustomer ? null : inventoryLocationName,
-              line.eqType,
-              line.eqBrand,
-              line.eqModel,
-              line.eqSerial?.trim() || '',
-              atCustomer ? 'pendingInstall' : 'active',
-              now
-            ]
-          );
-          await queryable.query(
-            `insert into equipment_history_entries
-               (id, equipment_id, occurred_at, actor_name, kind, message, created_at)
-             values ($1, $2, $3, $4, 'created', $5, $3)`,
-            [randomUUID(), equipmentId, now, actor.displayName, `Received from ${poLabel}.`]
+          const equipmentId = await this.equipmentDataService.createEquipmentWithinTransaction(
+            {
+              locationId: atCustomer ? po.destCust! : undefined,
+              inventoryLocationLabel: atCustomer ? undefined : (inventoryLocationName ?? undefined),
+              equipmentType: line.eqType ?? '',
+              brand: line.eqBrand ?? '',
+              model: line.eqModel ?? '',
+              serialNumber: line.eqSerial?.trim() || '',
+              filterSizes: [],
+              status: atCustomer ? 'pendingInstall' : 'active'
+            },
+            actor.displayName,
+            queryable,
+            `Received from ${poLabel}.`
           );
           await queryable.query(
             `update purchase_receipt_lines set created_equipment_id = $2 where id = $1`,
             [receiptLineId, equipmentId]
           );
+
+          // Equipment received to a job counts toward that job's cost (creative-director
+          // call): post a receiveToJob movement at the equipment's cost so the B6 rollup
+          // includes it. Requires a catalog item (movement provenance); the service
+          // validates that an equipment line bound for a job has one. Equipment received to
+          // stock or to a customer with no job is an asset only, with no job-cost impact.
+          if (po.jobId && line.itemId) {
+            await applyReceiptToJob(queryable, {
+              itemId: line.itemId,
+              jobId: po.jobId,
+              quantity,
+              unitCost,
+              sourceId: receiptLineId,
+              actor,
+              occurredAt: now
+            });
+          }
         }
       }
 

@@ -147,6 +147,30 @@ describe('PurchasingService.createPurchaseOrder', () => {
     expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
   });
 
+  it('rejects equipment on a job purchase order without a catalog item', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getJobLocationId.mockResolvedValue('cust-loc-1');
+    await expect(
+      service.createPurchaseOrder('token', {
+        vendorName: 'Acme',
+        destinationCustomerLocationId: 'cust-loc-1',
+        jobId: 'job-1',
+        lines: [
+          {
+            kind: 'equipment',
+            description: 'Furnace',
+            quantity: 1,
+            expectedUnitCost: 2000,
+            equipmentType: 'Furnace',
+            equipmentBrand: 'Carrier',
+            equipmentModel: '59TP6'
+          }
+        ]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
+  });
+
   it('rejects an equipment line with quantity other than 1 (one asset per record)', async () => {
     const { service, purchasingRepository } = createService();
     await expect(
@@ -262,6 +286,31 @@ describe('PurchasingService.receivePurchaseOrder', () => {
 
     await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
       ConflictException
+    );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects receiving equipment to a job without a catalog item (cost cannot post)', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({
+        status: 'ordered',
+        destinationKind: 'customer',
+        jobId: 'job-1',
+        lines: [
+          poLine({
+            kind: 'equipment',
+            equipmentType: 'Furnace',
+            equipmentBrand: 'Carrier',
+            equipmentModel: '59TP6',
+            quantity: 1
+          })
+        ]
+      })
+    );
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      BadRequestException
     );
     expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
   });
