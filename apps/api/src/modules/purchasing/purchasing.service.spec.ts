@@ -16,6 +16,7 @@ function createService() {
     getById: jest.fn(),
     createPurchaseOrder: jest.fn(),
     markOrdered: jest.fn(),
+    receivePurchaseOrder: jest.fn(),
     inventoryLocationExists: jest.fn().mockResolvedValue(true),
     customerLocationExists: jest.fn().mockResolvedValue(true),
     jobExists: jest.fn().mockResolvedValue(true),
@@ -183,5 +184,95 @@ describe('PurchasingService.orderPurchaseOrder', () => {
     await expect(service.orderPurchaseOrder('token', 'po-1')).rejects.toBeInstanceOf(
       ConflictException
     );
+  });
+});
+
+function poLine(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'line-1',
+    position: 0,
+    kind: 'part' as const,
+    description: 'Capacitor',
+    quantity: 2,
+    expectedUnitCost: 12.5,
+    expectedLineCost: 25,
+    ...overrides
+  };
+}
+
+describe('PurchasingService.receivePurchaseOrder', () => {
+  it('receives an ordered PO and re-reads it, gated on purchasing:edit', async () => {
+    const { service, identityAccessService, purchasingRepository } = createService();
+    const ordered = po({
+      status: 'ordered',
+      lines: [poLine({ itemId: 'item-1' })]
+    });
+    purchasingRepository.getById
+      .mockResolvedValueOnce(ordered)
+      .mockResolvedValueOnce(po({ status: 'received', lines: [poLine({ itemId: 'item-1' })] }));
+
+    const result = await service.receivePurchaseOrder('token', 'po-1', {});
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'purchasing:edit',
+      ['office-web']
+    );
+    expect(purchasingRepository.receivePurchaseOrder).toHaveBeenCalled();
+    expect(result.purchaseOrder.status).toBe('received');
+  });
+
+  it('409s when the PO is already received', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(po({ status: 'received' }));
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects a part received into stock without a catalog item', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({
+        status: 'ordered',
+        destinationKind: 'inventory',
+        lines: [poLine({ itemId: undefined })]
+      })
+    );
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects an equipment line missing type/brand/model', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({
+        status: 'ordered',
+        destinationKind: 'customer',
+        lines: [poLine({ kind: 'equipment', equipmentType: 'Condenser' })]
+      })
+    );
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+  });
+
+  it('rejects an override line that is not on the PO', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({ status: 'ordered', destinationKind: 'inventory', lines: [poLine({ itemId: 'item-1' })] })
+    );
+
+    await expect(
+      service.receivePurchaseOrder('token', 'po-1', {
+        lines: [{ purchaseOrderLineId: 'ghost', quantity: 1 }]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

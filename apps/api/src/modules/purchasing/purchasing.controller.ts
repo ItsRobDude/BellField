@@ -1,6 +1,9 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { PurchasingService } from './purchasing.service';
-import { CreatePurchaseOrderRequestBodyDto } from './purchasing.dto';
+import {
+  CreatePurchaseOrderRequestBodyDto,
+  ReceivePurchaseOrderRequestBodyDto
+} from './purchasing.dto';
 
 function getBearerToken(authorizationHeader: string | undefined): string {
   if (!authorizationHeader) {
@@ -35,5 +38,14 @@ export class PurchasingController {
   @Post(':id/order')
   async order(@Headers('authorization') auth: string | undefined, @Param('id') id: string) {
     return this.purchasingService.orderPurchaseOrder(getBearerToken(auth), id);
+  }
+
+  @Post(':id/receive')
+  async receive(
+    @Headers('authorization') auth: string | undefined,
+    @Param('id') id: string,
+    @Body() request: ReceivePurchaseOrderRequestBodyDto
+  ) {
+    return this.purchasingService.receivePurchaseOrder(getBearerToken(auth), id, request);
   }
 }

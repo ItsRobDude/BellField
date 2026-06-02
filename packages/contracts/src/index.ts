@@ -1471,3 +1471,16 @@ export interface PurchaseOrderResponse {
 export interface PurchaseOrdersResponse {
   purchaseOrders: PurchaseOrderSummary[];
 }
+
+/** Optional per-line actuals when receiving a PO (defaults to the line's expected values). */
+export interface ReceivePurchaseOrderLineInput {
+  purchaseOrderLineId: string;
+  quantity?: number;
+  unitCost?: number;
+}
+
+/** Receive a purchase order in full. Lines omitted from `lines` receive at expected qty/cost. */
+export interface ReceivePurchaseOrderRequest {
+  note?: string;
+  lines?: ReceivePurchaseOrderLineInput[];
+}

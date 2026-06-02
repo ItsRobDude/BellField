@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
   PurchaseOrderDestinationKind,
@@ -8,11 +8,18 @@ import type {
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import {
+  applyReceiptToInventory,
+  applyReceiptToJob,
+  type LedgerActor
+} from '../inventory/inventory-ledger-utils';
 import type {
   CreatePurchaseOrderRequestDto,
   PurchaseOrderDto,
   PurchaseOrderSummaryDto
 } from './purchasing.types';
+
+export type ReceiveLineOverride = { quantity?: number; unitCost?: number };
 
 type Actor = { id: string; displayName: string };
 
@@ -208,6 +215,159 @@ export class PurchasingRepository {
       [id]
     );
     return result.rows[0]?.kind ?? null;
+  }
+
+  /**
+   * Receive a purchase order in full, atomically: lock + re-check status, create the
+   * receipt, and apply each line's effect — parts post inventory movements (to stock, or
+   * to the job for a customer-destination PO with a job); equipment creates an asset row
+   * (pendingInstall at a customer location, active at an inventory location). The PO moves
+   * to 'received'. Line validation (item required for movement lines, equipment fields)
+   * is done in the service before this runs.
+   */
+  async receivePurchaseOrder(
+    id: string,
+    overrides: Map<string, ReceiveLineOverride>,
+    note: string | undefined,
+    actor: LedgerActor
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.transaction(async (queryable) => {
+      const poResult = await queryable.query<{
+        poNumber: string | null;
+        status: PurchaseOrderStatus;
+        destInv: string | null;
+        destCust: string | null;
+        jobId: string | null;
+      }>(
+        `select po_number as "poNumber", status,
+           destination_inventory_location_id as "destInv",
+           destination_location_id as "destCust",
+           job_id as "jobId"
+         from purchase_orders where id = $1 for update`,
+        [id]
+      );
+      const po = poResult.rows[0];
+      if (!po) {
+        throw new ConflictException('Purchase order not found.');
+      }
+      if (po.status === 'received' || po.status === 'closed') {
+        throw new ConflictException(`Purchase order is already ${po.status}.`);
+      }
+
+      let inventoryLocationName: string | null = null;
+      if (po.destInv) {
+        const locResult = await queryable.query<{ name: string }>(
+          `select name from inventory_locations where id = $1`,
+          [po.destInv]
+        );
+        inventoryLocationName = locResult.rows[0]?.name ?? null;
+      }
+
+      const lineResult = await queryable.query<{
+        id: string;
+        itemId: string | null;
+        kind: PurchaseOrderLineKind;
+        quantity: string | number;
+        expectedUnitCost: string | number;
+        eqType: string | null;
+        eqBrand: string | null;
+        eqModel: string | null;
+        eqSerial: string | null;
+      }>(
+        `select id, item_id as "itemId", kind, quantity, expected_unit_cost as "expectedUnitCost",
+           equipment_type as "eqType", equipment_brand as "eqBrand",
+           equipment_model as "eqModel", equipment_serial as "eqSerial"
+         from purchase_order_lines where purchase_order_id = $1 order by line_position asc`,
+        [id]
+      );
+
+      const receiptId = randomUUID();
+      await queryable.query(
+        `insert into purchase_receipts
+           (id, purchase_order_id, received_at, received_by_employee_id, received_by_name, note, created_at)
+         values ($1, $2, $3, $4, $5, $6, $3)`,
+        [receiptId, id, now, actor.id, actor.displayName, note?.trim() || null]
+      );
+
+      const poLabel = po.poNumber ? `PO ${po.poNumber}` : 'a purchase order';
+
+      for (const line of lineResult.rows) {
+        const override = overrides.get(line.id) ?? {};
+        const quantity = override.quantity ?? Number(line.quantity);
+        const unitCost = override.unitCost ?? Number(line.expectedUnitCost);
+        const receiptLineId = randomUUID();
+        await queryable.query(
+          `insert into purchase_receipt_lines
+             (id, purchase_receipt_id, purchase_order_line_id, quantity, unit_cost, created_at)
+           values ($1, $2, $3, $4, $5, $6)`,
+          [receiptLineId, receiptId, line.id, quantity, unitCost, now]
+        );
+
+        if (line.kind === 'part') {
+          if (po.destInv) {
+            await applyReceiptToInventory(queryable, {
+              itemId: line.itemId!,
+              locationId: po.destInv,
+              quantity,
+              unitCost,
+              sourceId: receiptLineId,
+              actor,
+              occurredAt: now
+            });
+          } else if (po.jobId) {
+            await applyReceiptToJob(queryable, {
+              itemId: line.itemId!,
+              jobId: po.jobId,
+              quantity,
+              unitCost,
+              sourceId: receiptLineId,
+              actor,
+              occurredAt: now
+            });
+          }
+          // part to a customer location with no job: cost recorded on the receipt line only.
+        } else {
+          // Equipment: create the asset row (the bridge). pendingInstall at a customer
+          // location, active at an inventory location. Equipment is a serialized asset, not
+          // quantity stock, so it does not post an inventory movement.
+          const equipmentId = randomUUID();
+          const atCustomer = Boolean(po.destCust);
+          await queryable.query(
+            `insert into equipment
+               (id, location_id, inventory_location_label, equipment_type, brand, model,
+                serial_number, status, created_at, updated_at)
+             values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)`,
+            [
+              equipmentId,
+              atCustomer ? po.destCust : null,
+              atCustomer ? null : inventoryLocationName,
+              line.eqType,
+              line.eqBrand,
+              line.eqModel,
+              line.eqSerial?.trim() || '',
+              atCustomer ? 'pendingInstall' : 'active',
+              now
+            ]
+          );
+          await queryable.query(
+            `insert into equipment_history_entries
+               (id, equipment_id, occurred_at, actor_name, kind, message, created_at)
+             values ($1, $2, $3, $4, 'created', $5, $3)`,
+            [randomUUID(), equipmentId, now, actor.displayName, `Received from ${poLabel}.`]
+          );
+          await queryable.query(
+            `update purchase_receipt_lines set created_equipment_id = $2 where id = $1`,
+            [receiptLineId, equipmentId]
+          );
+        }
+      }
+
+      await queryable.query(
+        `update purchase_orders set status = 'received', updated_at = $2 where id = $1`,
+        [id, now]
+      );
+    });
   }
 
   /** Transition draft → ordered atomically. Returns false if the PO was not a draft. */

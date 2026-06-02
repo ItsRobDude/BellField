@@ -187,6 +187,67 @@ export async function applyAdjustment(
 }
 
 /**
+ * Receive a part into a stock location at its actual unit cost (an inbound movement at
+ * the captured cost). Must run inside a transaction.
+ */
+export async function applyReceiptToInventory(
+  queryable: QueryExecutor,
+  input: {
+    itemId: string;
+    locationId: string;
+    quantity: number;
+    unitCost: number;
+    sourceId: string;
+    actor: LedgerActor;
+    occurredAt: string;
+  }
+): Promise<void> {
+  await lockItemLocation(queryable, input.itemId, input.locationId);
+  await insertMovement(queryable, {
+    itemId: input.itemId,
+    kind: 'receiveToInventory',
+    quantity: input.quantity,
+    unitCost: roundMoney(input.unitCost),
+    extendedCost: roundValue(input.quantity * input.unitCost),
+    locationId: input.locationId,
+    sourceKind: 'purchaseReceipt',
+    sourceId: input.sourceId,
+    actor: input.actor,
+    occurredAt: input.occurredAt
+  });
+}
+
+/**
+ * Receive a part directly to a job (no stock location) at its actual unit cost — a job
+ * material cost, not on-hand stock. Must run inside a transaction.
+ */
+export async function applyReceiptToJob(
+  queryable: QueryExecutor,
+  input: {
+    itemId: string;
+    jobId: string;
+    quantity: number;
+    unitCost: number;
+    sourceId: string;
+    actor: LedgerActor;
+    occurredAt: string;
+  }
+): Promise<void> {
+  await insertMovement(queryable, {
+    itemId: input.itemId,
+    kind: 'receiveToJob',
+    quantity: input.quantity,
+    unitCost: roundMoney(input.unitCost),
+    extendedCost: roundValue(input.quantity * input.unitCost),
+    jobId: input.jobId,
+    sourceKind: 'purchaseReceipt',
+    sourceId: input.sourceId,
+    actor: input.actor,
+    occurredAt: input.occurredAt
+  });
+}
+
+/**
  * Move stock between two locations as two movements sharing a transfer group; cost
  * travels with the goods at the source's current average. Rejects an over-transfer.
  * Must run inside a transaction.

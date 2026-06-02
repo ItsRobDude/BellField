@@ -13,7 +13,9 @@ import {
 } from 'class-validator';
 import type {
   CreatePurchaseOrderLineRequest,
-  CreatePurchaseOrderRequest
+  CreatePurchaseOrderRequest,
+  ReceivePurchaseOrderLineInput,
+  ReceivePurchaseOrderRequest
 } from '@bellfield/contracts';
 import { purchaseOrderLineKinds, type PurchaseOrderLineKindValue } from './purchasing.types';
 
@@ -96,4 +98,33 @@ export class CreatePurchaseOrderRequestBodyDto implements CreatePurchaseOrderReq
   @ValidateNested({ each: true })
   @Type(() => CreatePurchaseOrderLineRequestBodyDto)
   lines!: CreatePurchaseOrderLineRequestBodyDto[];
+}
+
+export class ReceivePurchaseOrderLineInputDto implements ReceivePurchaseOrderLineInput {
+  @IsString()
+  @MinLength(1)
+  purchaseOrderLineId!: string;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity?: number;
+
+  @IsOptional()
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0)
+  unitCost?: number;
+}
+
+export class ReceivePurchaseOrderRequestBodyDto implements ReceivePurchaseOrderRequest {
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  note?: string;
+
+  @IsOptional()
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ReceivePurchaseOrderLineInputDto)
+  lines?: ReceivePurchaseOrderLineInputDto[];
 }
