@@ -483,11 +483,16 @@ Milestone 8 has started. The first slice has shipped:
 
 The second slice (adjustment/credit correction foundation) has also shipped:
 
-- adjustment and credit records as separate `invoices` kinds (positive amounts; direction by kind), created only after the main is posted and linked via `adjusts_invoice_id` (`invoices` migration `20260601_008`)
+- adjustment and credit records as separate `invoices` kinds (positive amounts; direction by kind), created only after the main is posted and linked via `adjusts_invoice_id` (`invoices` migration `20260601_008`); the parent link is DB-enforced as non-null + `on delete restrict` (`20260601_009`)
 - they reuse the invoice machinery — line add/edit/void and the draft→posted lock + snapshot — generalized to operate by invoice id; `invoices:create` is granted to bookkeeping
-- backend only
+- the office Invoice tab now surfaces the balance and lets bookkeeping add/post adjustments and credits
 
-Still ahead in Milestone 8: the payment workflow, the invoice review/bookkeeping workbench, and the office UI for adjustments. The new invoice migrations and a short API runtime smoke have now been verified locally against the default dev database. (The job balance — net billed across posted invoices — is now computed read-side.)
+The remaining slices have also landed:
+
+- payments (`20260601_010`): online-only v1, manually recorded against posted invoices as an append-only ledger that never mutates invoice totals. Amount due is derived (net billed − non-void payments). Record/list/void are gated on the `payments` area, lock the invoice row, and re-check posted in-transaction; the job timeline gains `paymentRecorded`/`paymentVoided`. Office payments block in the Invoice tab.
+- bookkeeping worklists: a read-only cross-job review surface (office Bookkeeping nav, `invoices:view`) — drafts ready to post, jobs with an open balance, and recently posted invoices, each bounded.
+
+All Milestone 8 migrations (007–010) and the full posting/adjustment/payment/balance/bookkeeping runtime were verified locally against the default dev database. Still later (post-M8): invoice PDF export/delivery and an automated payment-gateway integration.
 
 ---
 

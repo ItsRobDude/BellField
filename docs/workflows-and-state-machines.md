@@ -426,7 +426,7 @@ Current implementation note:
 
 - structured register entries exist now
 - the eager main invoice draft and automatic register-to-invoice reflection are shipped; approved estimates convert into the draft (atomic, append/replace)
-- invoice posting + the posted lock + a posting-time customer/location/job snapshot have shipped (gated on `invoices:post`); payments, adjustment/credit records, and the bookkeeping workbench remain the rest of Milestone 8
+- invoice posting + the posted lock + a posting-time customer/location/job snapshot have shipped (gated on `invoices:post`); adjustment/credit corrections (with office UI), manually recorded payments (online-only v1, derived amount due), and a read-only cross-job bookkeeping worklist have also shipped. Still later (post-M8): invoice PDF export/delivery and an automated payment-gateway integration
 
 ### Zero-dollar invoice rule
 
