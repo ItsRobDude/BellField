@@ -55,11 +55,12 @@ export class InvoicesService {
   }
 
   /**
-   * Net amount billed on a job: posted main total + posted adjustments − posted credits.
-   * "Billed" means posted, so a draft main (and any draft correction) contributes 0;
-   * `mainInvoiceStatus` says whether the main is posted yet. `netBilled` can be negative
-   * (a net credit balance). Office-only, gated invoices:view. No payments are modeled yet,
-   * so this is net billed, not amount owed after payment.
+   * Job money rollup: net billed (posted main total + posted adjustments − posted
+   * credits), plus paidTotal and the derived amountDue (= netBilled − non-void
+   * payments). "Billed" means posted, so a draft main (and any draft correction)
+   * contributes 0; `mainInvoiceStatus` says whether the main is posted yet. netBilled
+   * can be negative (a net credit balance) and amountDue can be negative (overpaid).
+   * Office-only, gated invoices:view.
    */
   async getJobInvoiceBalance(sessionToken: string, jobId: string): Promise<JobInvoiceBalance> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:view', [

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   addOfficeInvoiceLineById,
   createOfficeJobAdjustment,
+  editOfficeInvoiceLine,
   getOfficeJobInvoiceBalance,
   listOfficeJobAdjustments,
   listOfficeJobPayments,
@@ -29,6 +30,7 @@ import {
   type InvoicePaymentPermissions
 } from './job-invoice-shared';
 import {
+  buildInvoiceLineDraft,
   createEmptyInvoiceLineDraft,
   invoiceLineKindLabels,
   parseInvoiceLineDraft,
@@ -88,8 +90,13 @@ export function JobInvoiceCorrections({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
-  const [addLineForId, setAddLineForId] = useState<string | null>(null);
-  const [lineDraft, setLineDraft] = useState<InvoiceLineDraft | null>(null);
+  // A single in-flight line editor across all correction cards. lineId null means a new
+  // line (add); a lineId means editing that line.
+  const [lineEdit, setLineEdit] = useState<{
+    invoiceId: string;
+    lineId: string | null;
+    draft: InvoiceLineDraft;
+  } | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -131,9 +138,10 @@ export function JobInvoiceCorrections({
   function applyCorrection(next: InvoiceSummary, notice: string) {
     setCorrections((current) => {
       const exists = current.some((item) => item.id === next.id);
+      // Newest first: a freshly created correction goes to the top.
       return exists
         ? current.map((item) => (item.id === next.id ? next : item))
-        : [...current, next];
+        : [next, ...current];
     });
     setNoticeMessage(notice);
     setErrorMessage(null);
@@ -151,26 +159,32 @@ export function JobInvoiceCorrections({
     }
   }
 
-  async function saveLine(invoiceId: string) {
-    if (!lineDraft) return;
-    const parsed = parseInvoiceLineDraft(lineDraft);
+  async function saveLineEdit() {
+    if (!lineEdit) return;
+    const parsed = parseInvoiceLineDraft(lineEdit.draft);
     if (!parsed.ok) {
       setErrorMessage(parsed.message);
       return;
     }
     setIsSaving(true);
     try {
-      const response = await addOfficeInvoiceLineById({
-        invoiceId,
-        apiBaseUrl,
-        sessionToken,
-        ...parsed.value
-      });
-      applyCorrection(response.invoice, 'Line added.');
-      setAddLineForId(null);
-      setLineDraft(null);
+      const response = lineEdit.lineId
+        ? await editOfficeInvoiceLine({
+            lineId: lineEdit.lineId,
+            apiBaseUrl,
+            sessionToken,
+            ...parsed.value
+          })
+        : await addOfficeInvoiceLineById({
+            invoiceId: lineEdit.invoiceId,
+            apiBaseUrl,
+            sessionToken,
+            ...parsed.value
+          });
+      applyCorrection(response.invoice, lineEdit.lineId ? 'Line updated.' : 'Line added.');
+      setLineEdit(null);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to add the line.');
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save the line.');
     } finally {
       setIsSaving(false);
     }
@@ -251,11 +265,18 @@ export function JobInvoiceCorrections({
   }
 
   async function voidPayment(payment: Payment) {
-    if (!window.confirm(`Void this ${formatCurrency(payment.amount)} payment?`)) return;
+    // Voiding a payment is a money-ledger correction; capture an optional reason
+    // for the audit trail. A null return means the user cancelled.
+    const reason = window.prompt(
+      `Void this ${formatCurrency(payment.amount)} payment? Optionally note a reason:`,
+      ''
+    );
+    if (reason === null) return;
     setIsSaving(true);
     try {
       const response = await voidOfficePayment({
         paymentId: payment.id,
+        reason: reason.trim() || undefined,
         apiBaseUrl,
         sessionToken
       });
@@ -341,18 +362,26 @@ export function JobInvoiceCorrections({
               canEdit={canEdit}
               canPost={canPost}
               isSaving={isSaving}
-              isAddingLine={addLineForId === correction.id}
-              lineDraft={lineDraft}
-              onStartAddLine={() => {
-                setAddLineForId(correction.id);
-                setLineDraft(createEmptyInvoiceLineDraft());
-              }}
-              onCancelAddLine={() => {
-                setAddLineForId(null);
-                setLineDraft(null);
-              }}
-              onChangeLineDraft={setLineDraft}
-              onSaveLine={() => void saveLine(correction.id)}
+              lineEdit={lineEdit?.invoiceId === correction.id ? lineEdit : null}
+              onStartAddLine={() =>
+                setLineEdit({
+                  invoiceId: correction.id,
+                  lineId: null,
+                  draft: createEmptyInvoiceLineDraft()
+                })
+              }
+              onStartEditLine={(line) =>
+                setLineEdit({
+                  invoiceId: correction.id,
+                  lineId: line.id,
+                  draft: buildInvoiceLineDraft(line)
+                })
+              }
+              onCancelLineEdit={() => setLineEdit(null)}
+              onChangeLineDraft={(draft) =>
+                setLineEdit((current) => (current ? { ...current, draft } : current))
+              }
+              onSaveLine={() => void saveLineEdit()}
               onRemoveLine={(line) => void removeLine(line)}
               onPost={() => void postCorrection(correction)}
             />
@@ -383,10 +412,10 @@ function CorrectionCard({
   canEdit,
   canPost,
   isSaving,
-  isAddingLine,
-  lineDraft,
+  lineEdit,
   onStartAddLine,
-  onCancelAddLine,
+  onStartEditLine,
+  onCancelLineEdit,
   onChangeLineDraft,
   onSaveLine,
   onRemoveLine,
@@ -396,10 +425,10 @@ function CorrectionCard({
   canEdit: boolean;
   canPost: boolean;
   isSaving: boolean;
-  isAddingLine: boolean;
-  lineDraft: InvoiceLineDraft | null;
+  lineEdit: { invoiceId: string; lineId: string | null; draft: InvoiceLineDraft } | null;
   onStartAddLine: () => void;
-  onCancelAddLine: () => void;
+  onStartEditLine: (line: InvoiceLineItemSummary) => void;
+  onCancelLineEdit: () => void;
   onChangeLineDraft: (draft: InvoiceLineDraft) => void;
   onSaveLine: () => void;
   onRemoveLine: (line: InvoiceLineItemSummary) => void;
@@ -408,6 +437,9 @@ function CorrectionCard({
   const isDraft = correction.status === 'draft';
   const kindLabel =
     correctionKindLabels[correction.invoiceKind === 'credit' ? 'credit' : 'adjustment'];
+  const isAddingLine = lineEdit !== null && lineEdit.lineId === null;
+  const editingLineId = lineEdit?.lineId ?? null;
+  const isBusyEditing = lineEdit !== null;
 
   return (
     <div style={styles.subpanel}>
@@ -415,12 +447,12 @@ function CorrectionCard({
         <strong>{kindLabel}</strong>
         <div style={styles.badgeRow}>
           <span style={styles.badge}>{isDraft ? 'Draft' : 'Posted'}</span>
-          {isDraft && canEdit && !isAddingLine ? (
+          {isDraft && canEdit && !isBusyEditing ? (
             <button type="button" style={styles.button} onClick={onStartAddLine}>
               Add line
             </button>
           ) : null}
-          {isDraft && canPost && !isAddingLine && correction.lineItems.length > 0 ? (
+          {isDraft && canPost && !isBusyEditing && correction.lineItems.length > 0 ? (
             <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onPost}>
               Post {kindLabel.toLowerCase()}
             </button>
@@ -431,42 +463,63 @@ function CorrectionCard({
       {correction.lineItems.length === 0 ? (
         <p style={styles.tinyMuted}>No lines yet.</p>
       ) : (
-        correction.lineItems.map((line) => (
-          <div key={line.id} style={styles.row}>
-            <div style={{ minWidth: 0 }}>
-              <span>{line.description}</span>
-              <p style={styles.tinyMuted}>
-                {invoiceLineKindLabels[line.kind]} · {invoiceSourceLabels[line.sourceKind]} ·{' '}
-                {line.quantity}
-                {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''} ×{' '}
-                {formatCurrency(line.unitPrice)}
-                {line.taxable ? '' : ' · non-taxable'}
-              </p>
+        correction.lineItems.map((line) =>
+          editingLineId === line.id && lineEdit ? (
+            <InvoiceLineEditor
+              key={line.id}
+              heading={`Edit: ${line.description}`}
+              draft={lineEdit.draft}
+              isSaving={isSaving}
+              onChange={onChangeLineDraft}
+              onSave={onSaveLine}
+              onCancel={onCancelLineEdit}
+            />
+          ) : (
+            <div key={line.id} style={styles.row}>
+              <div style={{ minWidth: 0 }}>
+                <span>{line.description}</span>
+                <p style={styles.tinyMuted}>
+                  {invoiceLineKindLabels[line.kind]} · {invoiceSourceLabels[line.sourceKind]} ·{' '}
+                  {line.quantity}
+                  {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''} ×{' '}
+                  {formatCurrency(line.unitPrice)}
+                  {line.taxable ? '' : ' · non-taxable'}
+                </p>
+              </div>
+              <div style={styles.badgeRow}>
+                <strong>{formatCurrency(line.lineSubtotal)}</strong>
+                {isDraft && canEdit && !isBusyEditing ? (
+                  <>
+                    <button
+                      type="button"
+                      style={styles.button}
+                      onClick={() => onStartEditLine(line)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.dangerButton}
+                      onClick={() => onRemoveLine(line)}
+                    >
+                      Remove
+                    </button>
+                  </>
+                ) : null}
+              </div>
             </div>
-            <div style={styles.badgeRow}>
-              <strong>{formatCurrency(line.lineSubtotal)}</strong>
-              {isDraft && canEdit ? (
-                <button
-                  type="button"
-                  style={styles.dangerButton}
-                  onClick={() => onRemoveLine(line)}
-                >
-                  Remove
-                </button>
-              ) : null}
-            </div>
-          </div>
-        ))
+          )
+        )
       )}
 
-      {isAddingLine && lineDraft ? (
+      {isAddingLine && lineEdit ? (
         <InvoiceLineEditor
           heading={`New ${kindLabel.toLowerCase()} line`}
-          draft={lineDraft}
+          draft={lineEdit.draft}
           isSaving={isSaving}
           onChange={onChangeLineDraft}
           onSave={onSaveLine}
-          onCancel={onCancelAddLine}
+          onCancel={onCancelLineEdit}
         />
       ) : null}
 
@@ -593,7 +646,9 @@ function PaymentsBlock({
               <p style={styles.tinyMuted}>
                 {payment.receivedAt.slice(0, 10)}
                 {payment.reference ? ` · ${payment.reference}` : ''}
-                {payment.isVoid ? ' · void' : ''}
+                {payment.isVoid
+                  ? ` · void${payment.voidedByName ? ` by ${payment.voidedByName}` : ''}`
+                  : ''}
               </p>
             </div>
             <div style={styles.badgeRow}>

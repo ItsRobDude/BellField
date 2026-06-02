@@ -17,6 +17,8 @@ type PaymentRow = {
   recordedByName: string;
   isVoid: boolean;
   voidReason: string | null;
+  voidedByName: string | null;
+  voidedAt: string | Date | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -33,6 +35,8 @@ const PAYMENT_COLUMNS = `
   recorded_by_name as "recordedByName",
   is_void as "isVoid",
   void_reason as "voidReason",
+  voided_by_name as "voidedByName",
+  voided_at as "voidedAt",
   created_at as "createdAt",
   updated_at as "updatedAt"
 `;
@@ -128,7 +132,11 @@ export class PaymentsRepository {
    * the payment row, rejects a double-void, writes a job timeline entry, and returns
    * the updated record.
    */
-  async voidPayment(paymentId: string, reason: string | undefined): Promise<PaymentRecord> {
+  async voidPayment(
+    paymentId: string,
+    reason: string | undefined,
+    actor: { id: string; displayName: string }
+  ): Promise<PaymentRecord> {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
       const current = await queryable.query<{
@@ -152,8 +160,15 @@ export class PaymentsRepository {
       }
 
       await queryable.query(
-        `update payments set is_void = true, void_reason = $2, updated_at = $3 where id = $1`,
-        [paymentId, reason?.trim() || null, now]
+        `update payments set
+           is_void = true,
+           void_reason = $2,
+           voided_by_employee_id = $3,
+           voided_by_name = $4,
+           voided_at = $5,
+           updated_at = $5
+         where id = $1`,
+        [paymentId, reason?.trim() || null, actor.id, actor.displayName, now]
       );
 
       await insertJobTimelineEntry(
@@ -161,7 +176,7 @@ export class PaymentsRepository {
           id: randomUUID(),
           jobId: row.jobId,
           occurredAt: now,
-          actorName: 'system',
+          actorName: actor.displayName,
           kind: 'paymentVoided',
           message: `Payment of ${formatMoney(row.amount)} voided.`
         },
@@ -206,6 +221,8 @@ function toPaymentRecord(row: PaymentRow): PaymentRecord {
     recordedByName: row.recordedByName,
     isVoid: row.isVoid,
     voidReason: row.voidReason ?? undefined,
+    voidedByName: row.voidedByName ?? undefined,
+    voidedAt: row.voidedAt ? toIsoString(row.voidedAt) : undefined,
     createdAt: toIsoString(row.createdAt),
     updatedAt: toIsoString(row.updatedAt)
   };

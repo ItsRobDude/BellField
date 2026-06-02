@@ -147,7 +147,11 @@ describe('PaymentsService.voidPayment', () => {
       'payments:edit',
       ['office-web']
     );
-    expect(paymentsRepository.voidPayment).toHaveBeenCalledWith('pay-1', 'entered twice');
+    expect(paymentsRepository.voidPayment).toHaveBeenCalledWith(
+      'pay-1',
+      'entered twice',
+      expect.objectContaining({ id: 'office-1', displayName: 'Bea Bookkeeper' })
+    );
     expect(result.payment.isVoid).toBe(true);
   });
 });

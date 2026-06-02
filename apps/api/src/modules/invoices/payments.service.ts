@@ -67,11 +67,16 @@ export class PaymentsService {
     paymentId: string,
     request: VoidPaymentRequestDto
   ): Promise<PaymentResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'payments:edit', [
-      'office-web'
-    ]);
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'payments:edit',
+      ['office-web']
+    );
 
-    const voided = await this.paymentsRepository.voidPayment(paymentId, request.reason);
+    const voided = await this.paymentsRepository.voidPayment(paymentId, request.reason, {
+      id: actor.id,
+      displayName: actor.displayName
+    });
     return { payment: this.toSummary(voided) };
   }
 
@@ -88,6 +93,8 @@ export class PaymentsService {
       recordedByName: record.recordedByName,
       isVoid: record.isVoid,
       voidReason: record.voidReason,
+      voidedByName: record.voidedByName,
+      voidedAt: record.voidedAt,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };

@@ -28,7 +28,11 @@ type BalanceItemRow = {
 export class BookkeepingRepository {
   constructor(private readonly databaseService: DatabaseService) {}
 
-  /** Main invoice drafts that have at least one active line — candidates to post. */
+  /**
+   * Draft invoices that have at least one active line — candidates to post. Includes
+   * main drafts and draft adjustment/credit corrections, so bookkeeping catches every
+   * postable record cross-job (the row's invoiceKind says which).
+   */
   async listReadyToPost(limit: number): Promise<BookkeepingInvoiceItemDto[]> {
     const result = await this.databaseService.query<InvoiceItemRow>(
       `select
@@ -43,8 +47,7 @@ export class BookkeepingRepository {
        from invoices i
        join jobs j on j.id = i.job_id
        join customers c on c.id = j.bill_to_customer_id
-       where i.invoice_kind = 'main'
-         and i.status = 'draft'
+       where i.status = 'draft'
          and exists (
            select 1 from invoice_line_items li
            where li.invoice_id = i.id and li.is_void = false

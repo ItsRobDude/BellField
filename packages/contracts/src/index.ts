@@ -771,6 +771,8 @@ export interface Payment {
   recordedByName: string;
   isVoid: boolean;
   voidReason?: string;
+  voidedByName?: string;
+  voidedAt?: string;
   createdAt: string;
   updatedAt: string;
 }

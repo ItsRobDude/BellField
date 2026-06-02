@@ -245,7 +245,7 @@ export class InvoicesRepository {
     const invoiceResult = await this.databaseService.query<InvoiceRow>(
       `select ${INVOICE_COLUMNS} from invoices
        where job_id = $1 and invoice_kind in ('adjustment', 'credit')
-       order by created_at asc`,
+       order by created_at desc`,
       [jobId]
     );
     if (invoiceResult.rows.length === 0) {
