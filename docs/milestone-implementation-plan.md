@@ -724,6 +724,8 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 | 4 - Jobs and appointments | Jobs may exist with or without appointments. Appointments belong to jobs. Status updates, finished-visit review acknowledgement, add-appointment follow-up, register entries, media metadata, and unified timeline events exist.                                                 | Snapshot behavior for historical job customer/location display context is still a future hardening item before invoices/posting become serious.         |
 | 5 - Dispatch board v1     | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, job detail opened from appointment cards, date picker, Today, previous/next, and refresh controls.                                  | Manual browser smoke checks remain the main dispatch closeout item. Compact week strip is polish, not a blocker; week view remains later.               |
 | 6 - Field app/offline     | Field assigned-work caching, notes/status/equipment/register/media queueing, job/appointment media attribution, media size guardrails, media rejected-state handling, conflict/rejected preservation, Sync Now, in-screen background sync, and a home/detail field layout exist. | Manual mobile smoke, media upload device smoke, remaining transient sync hardening, and revoked-device wipe are still open Milestone 6 work.            |
+| 8 - Invoicing money flow  | Invoice posting, adjustment/credit records with office UI, read-only job invoice balance, append-only payments, and bookkeeping worklists have shipped.                                                                                                                         | Invoice PDF export/delivery and automated payment-gateway integration remain later work, outside the M8 core that is now built.                         |
+| 9 - Inventory/PO/costing  | Backend/API foundations now exist for inventory items/locations, immutable inventory movements, derived on-hand/value, purchase orders, receiving, equipment bridge behavior, issue-to-job, and labor/expense job-cost events.                                                 | Remaining pressure is live DB/migration/runtime verification, office Inventory/Purchasing/Job Cost surfaces, the job-cost read model, and finalized job-cost snapshots. |
 
 ### Current next implementation order
 
@@ -735,14 +737,16 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
    verify image/video capture or pick, local file persistence, SHA-256 metadata, upload-intent replay, raw blob finalization, appointment attribution, rejected-state handling, cleanup after successful upload, and retry after transient blob failure on a device/runtime.
 4. Sync reliability for real field actions:
    harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
-5. Historical snapshot hardening (shipped for invoices):
-   posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`), and adjustment/credit correction records are implemented as a backend foundation (migration `20260601_008`); open/live jobs and dispatch intentionally still resolve current names. Remaining Milestone 8 money work is the payment workflow, the bookkeeping workbench, and the office UI for adjustments; the job balance is now computed read-side.
-6. Self-hosted deployment readiness planning:
+5. M9 inventory/PO/job-costing closeout:
+   inventory, purchasing, and job-cost event backend foundations have landed. Next pressure is live DB/migration/runtime verification, office Inventory/Purchasing/Job Cost surfaces, the job-cost read model, and finalized job-cost snapshots on job completion/reopen.
+6. Historical snapshot hardening beyond invoices:
+   posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`). Open/live jobs and dispatch intentionally still resolve current names; extending frozen snapshots to other historical surfaces remains future hardening only where the product meaning requires it.
+7. Self-hosted deployment readiness planning:
    keep the supported Windows install profile, assisted pilot setup posture, backup/restore/update expectations, and internal Rob install test aligned with `docs/self-hosted-installation-strategy.md` before any paid pilot is treated as repeatable.
 
 ### Milestone-boundary reminders
 
 - Dispatch v1 can keep improving as the daily office home, but route optimization, drag/drop, live sockets, and week view remain later until day-view scheduling is trustworthy.
 - Field media capture now uses the approved Expo ImagePicker, FileSystem, and Crypto dependencies; no additional picker/storage dependencies should be added without a new reason.
-- Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion shipped in Milestone 7. Invoice posting + the posted lock + the posting-time customer/location/job snapshot have now shipped as the first Milestone 8 slice (migration `20260601_007`); payments, adjustment/credit records, and the bookkeeping workbench remain the rest of M8.
+- Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion shipped in Milestone 7. Invoice posting, adjustment/credit records, read-side balance, payments, and bookkeeping worklists have shipped in Milestone 8.
 - Payments remain online-only in v1.

@@ -56,8 +56,6 @@ Most endpoints expect:
 | `PATCH` | `/operations/jobs/register-entries/:registerEntryId`      | office or field | `register:edit`                                       | Edit register entry.                                                                                               |
 | `POST`  | `/operations/jobs/register-entries/:registerEntryId/void` | office or field | `register:edit`                                       | Soft-void register entry.                                                                                          |
 | `GET`   | `/operations/jobs/field/assigned-work`                    | field           | `appointmentsDispatch:view`                           | Load assigned work window for the signed-in technician.                                                            |
-| `POST`  | `/operations/jobs/:jobId/labor`                           | office          | `jobCosting:create`                                   | Post a labor cost event to a job (amount = hours × ratePerHour). Body `{ description, hours, ratePerHour }`.       |
-| `POST`  | `/operations/jobs/:jobId/expenses`                        | office          | `jobCosting:create`                                   | Post an expense cost event to a job. Body `{ description, amount }`.                                               |
 
 ## Estimates
 
@@ -95,7 +93,7 @@ Every job owns exactly one main invoice draft (created eagerly at job creation, 
 | `POST` | `/operations/payments/:paymentId/void`        | office  | `payments:edit`   | Void a payment (the correction path; payments are never edited in place). Body `{ reason? }`.          |
 | `GET`  | `/operations/bookkeeping/invoice-queues`      | office  | `invoices:view`   | Cross-job worklists: ready-to-post, open balances, recently posted (each bounded).                     |
 
-## Inventory and Purchasing (Milestone 9)
+## Inventory, Purchasing, and Job Costing (Milestone 9)
 
 Inventory is an event ledger: on-hand quantity and value are derived from immutable
 `inventory_movements`, never stored. Valuation is weighted-average per (item, location);
@@ -125,6 +123,8 @@ can be received.
 | `POST` | `/operations/purchase-orders`                    | office  | `purchasing:create` | Create a draft PO (one destination, ≥1 line). Body `{ vendorName, destination*, jobId?, lines[] }`.                                                                                                                                                                                                                                                                |
 | `POST` | `/operations/purchase-orders/:id/order`          | office  | `purchasing:edit`   | Transition a draft PO to ordered. No body.                                                                                                                                                                                                                                                                                                                         |
 | `POST` | `/operations/purchase-orders/:id/receive`        | office  | `purchasing:edit`   | Receive an ordered PO in full → inventory movements (parts) + equipment assets; equipment received to a job also posts a `receiveToJob` cost movement. Body `{ note?, lines?, confirmMissingSerial? }` (optional per-line actual qty/cost and equipment `serialNumber` captured at receiving; `confirmMissingSerial` to receive an equipment line with no serial). |
+| `POST` | `/operations/jobs/:jobId/labor`                  | office  | `jobCosting:create` | Append an immutable labor cost event. Body `{ description, hours, ratePerHour }`; amount is computed server-side as hours × rate, rounded to cents.                                                                                                                                                                                                                 |
+| `POST` | `/operations/jobs/:jobId/expenses`               | office  | `jobCosting:create` | Append an immutable expense cost event. Body `{ description, amount }`; material/equipment costs flow through inventory movements instead of this endpoint.                                                                                                                                                                                                         |
 
 ## Focused Office Work Models
 
