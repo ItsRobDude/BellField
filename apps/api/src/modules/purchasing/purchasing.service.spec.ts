@@ -18,7 +18,9 @@ function createService() {
     markOrdered: jest.fn(),
     inventoryLocationExists: jest.fn().mockResolvedValue(true),
     customerLocationExists: jest.fn().mockResolvedValue(true),
-    jobExists: jest.fn().mockResolvedValue(true)
+    jobExists: jest.fn().mockResolvedValue(true),
+    getJobLocationId: jest.fn().mockResolvedValue('cust-loc-1'),
+    getItemKind: jest.fn().mockResolvedValue('part')
   };
 
   return {
@@ -103,6 +105,60 @@ describe('PurchasingService.createPurchaseOrder', () => {
         lines: [validLine]
       })
     ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects a line whose kind does not match the catalog item kind', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getItemKind.mockResolvedValue('equipment');
+    await expect(
+      service.createPurchaseOrder('token', {
+        vendorName: 'Acme',
+        destinationInventoryLocationId: 'loc-1',
+        lines: [{ ...validLine, itemId: 'eq-item', kind: 'part' }]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects a line referencing an unknown catalog item', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getItemKind.mockResolvedValue(null);
+    await expect(
+      service.createPurchaseOrder('token', {
+        vendorName: 'Acme',
+        destinationInventoryLocationId: 'loc-1',
+        lines: [{ ...validLine, itemId: 'ghost' }]
+      })
+    ).rejects.toBeInstanceOf(NotFoundException);
+  });
+
+  it('rejects a customer-destination PO whose job belongs to a different location', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getJobLocationId.mockResolvedValue('other-location');
+    await expect(
+      service.createPurchaseOrder('token', {
+        vendorName: 'Acme',
+        destinationCustomerLocationId: 'cust-loc-1',
+        jobId: 'job-1',
+        lines: [validLine]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('accepts a customer-destination PO whose job matches the destination location', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getJobLocationId.mockResolvedValue('cust-loc-1');
+    purchasingRepository.createPurchaseOrder.mockResolvedValue(
+      po({ destinationKind: 'customer', destinationId: 'cust-loc-1' })
+    );
+    const result = await service.createPurchaseOrder('token', {
+      vendorName: 'Acme',
+      destinationCustomerLocationId: 'cust-loc-1',
+      jobId: 'job-1',
+      lines: [validLine]
+    });
+    expect(result.purchaseOrder.destinationKind).toBe('customer');
   });
 });
 

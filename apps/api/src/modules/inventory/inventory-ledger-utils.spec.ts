@@ -65,6 +65,24 @@ describe('applyAdjustment', () => {
     expect(insert.params).toContain(8); // unit cost
   });
 
+  it('requires a unit cost for a gain onto empty stock (no average to fall back on)', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: LOCK, rows: [] },
+      { match: SNAPSHOT, rows: [{ qty: 0, value: 0 }] }
+    ]);
+
+    await expect(
+      applyAdjustment(queryable, {
+        itemId: 'item-1',
+        locationId: 'loc-1',
+        quantityDelta: 5,
+        actor,
+        occurredAt: '2026-06-02T00:00:00.000Z'
+      })
+    ).rejects.toMatchObject({ status: 400 });
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+
   it('values a loss at the current average', async () => {
     const { queryable, calls } = scriptedQueryable([
       { match: LOCK, rows: [] },

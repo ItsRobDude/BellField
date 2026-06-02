@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { InventoryMovementKind } from '@bellfield/contracts';
 import type { QueryExecutor } from '../../database/database.service';
@@ -9,8 +9,10 @@ import type { QueryExecutor } from '../../database/database.service';
 // module's repository — the same pattern as the invoice reflection utils.
 //
 // Valuation (v1): weighted-average cost per (item, location). On-hand value =
-// SUM(quantity * unit_cost); on-hand qty = SUM(quantity). Outbound movements are
-// valued at the current average so the average is stable and history is never rewritten.
+// SUM(extended_cost); on-hand qty = SUM(quantity); each movement carries a signed
+// extended_cost (its value delta). Outbound movements remove the exact proportional
+// value at the current average — a full depletion removes the exact remainder — so the
+// average is stable and history is never rewritten.
 
 export type LedgerActor = { id: string; displayName: string };
 
@@ -156,6 +158,13 @@ export async function applyAdjustment(
     throw new ConflictException('Adjustment would drive on-hand below zero.');
   }
   const isGain = input.quantityDelta > 0;
+  // A gain onto empty stock has no average to fall back on, so it must state a unit cost
+  // — otherwise it would silently create zero-value stock and understate job cost later.
+  if (isGain && input.unitCost === undefined && snapshot.quantity <= 0) {
+    throw new BadRequestException(
+      'A unit cost is required when adding stock to an empty location.'
+    );
+  }
   const unitCost = isGain
     ? roundMoney(input.unitCost ?? snapshot.averageUnitCost)
     : snapshot.averageUnitCost;

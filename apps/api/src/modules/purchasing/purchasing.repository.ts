@@ -192,6 +192,15 @@ export class PurchasingRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /** The customer service location a job is for, or null if the job is unknown. */
+  async getJobLocationId(id: string): Promise<string | null> {
+    const result = await this.databaseService.query<{ locationId: string | null }>(
+      `select location_id as "locationId" from jobs where id = $1 limit 1`,
+      [id]
+    );
+    return result.rows[0]?.locationId ?? null;
+  }
+
   /** The catalog kind of an item, or null if the id is unknown. */
   async getItemKind(id: string): Promise<PurchaseOrderLineKind | null> {
     const result = await this.databaseService.query<{ kind: PurchaseOrderLineKind }>(

@@ -62,8 +62,18 @@ export class PurchasingService {
     ) {
       throw new NotFoundException('Destination customer location not found.');
     }
-    if (request.jobId && !(await this.purchasingRepository.jobExists(request.jobId))) {
-      throw new NotFoundException('Job not found.');
+    if (request.jobId) {
+      const jobLocationId = await this.purchasingRepository.getJobLocationId(request.jobId);
+      if (jobLocationId === null) {
+        throw new NotFoundException('Job not found.');
+      }
+      // A customer-destination PO that names a job must agree: the job has to be for that
+      // same service location, or receiving would bridge cost/equipment to the wrong place.
+      if (hasCustomer && jobLocationId !== request.destinationCustomerLocationId) {
+        throw new BadRequestException(
+          'The job does not belong to the destination customer location.'
+        );
+      }
     }
     if (!request.lines || request.lines.length === 0) {
       throw new BadRequestException('A purchase order needs at least one line.');
