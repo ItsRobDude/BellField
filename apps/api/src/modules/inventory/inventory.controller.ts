@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import {
+  CreateInventoryAdjustmentRequestBodyDto,
   CreateInventoryItemRequestBodyDto,
   CreateInventoryLocationRequestBodyDto,
+  CreateInventoryTransferRequestBodyDto,
   UpdateInventoryItemRequestBodyDto,
   UpdateInventoryLocationRequestBodyDto
 } from './inventory.dto';
@@ -66,5 +68,31 @@ export class InventoryLocationsController {
     @Body() request: UpdateInventoryLocationRequestBodyDto
   ) {
     return this.inventoryService.updateLocation(getBearerToken(auth), locationId, request);
+  }
+}
+
+@Controller('operations/inventory')
+export class InventoryLedgerController {
+  constructor(private readonly inventoryService: InventoryService) {}
+
+  @Get('on-hand')
+  async onHand(@Headers('authorization') auth: string | undefined) {
+    return this.inventoryService.getOnHand(getBearerToken(auth));
+  }
+
+  @Post('adjustments')
+  async adjust(
+    @Headers('authorization') auth: string | undefined,
+    @Body() request: CreateInventoryAdjustmentRequestBodyDto
+  ) {
+    return this.inventoryService.createAdjustment(getBearerToken(auth), request);
+  }
+
+  @Post('transfers')
+  async transfer(
+    @Headers('authorization') auth: string | undefined,
+    @Body() request: CreateInventoryTransferRequestBodyDto
+  ) {
+    return this.inventoryService.createTransfer(getBearerToken(auth), request);
   }
 }

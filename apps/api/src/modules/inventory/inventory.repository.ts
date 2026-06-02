@@ -1,7 +1,18 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type {
+  InventoryMovement,
+  InventoryMovementKind,
+  InventoryOnHandRow
+} from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import {
+  applyAdjustment,
+  applyTransfer,
+  roundMoney,
+  type LedgerActor
+} from './inventory-ledger-utils';
 import type {
   CreateInventoryItemRequestDto,
   CreateInventoryLocationRequestDto,
@@ -171,6 +182,142 @@ export class InventoryRepository {
         input.isActive,
         now
       ]
+    );
+  }
+
+  // --- Ledger (on-hand, movements, adjustments, transfers) -----------------
+
+  /** Derived on-hand per (item, location), excluding zeroed-out balances. */
+  async getOnHand(): Promise<InventoryOnHandRow[]> {
+    const result = await this.databaseService.query<{
+      itemId: string;
+      itemName: string;
+      itemKind: InventoryItemKindValue;
+      locationId: string;
+      locationName: string;
+      quantity: string | number;
+      totalValue: string | number;
+    }>(
+      `select
+         m.item_id as "itemId",
+         it.name as "itemName",
+         it.kind as "itemKind",
+         m.location_id as "locationId",
+         loc.name as "locationName",
+         sum(m.quantity) as "quantity",
+         sum(m.quantity * m.unit_cost) as "totalValue"
+       from inventory_movements m
+       join inventory_items it on it.id = m.item_id
+       join inventory_locations loc on loc.id = m.location_id
+       where m.location_id is not null
+       group by m.item_id, it.name, it.kind, m.location_id, loc.name
+       having sum(m.quantity) <> 0
+       order by it.name asc, loc.name asc`
+    );
+    return result.rows.map((row) => {
+      const quantity = Math.round(Number(row.quantity) * 10000) / 10000;
+      const totalValue = roundMoney(Number(row.totalValue));
+      return {
+        itemId: row.itemId,
+        itemName: row.itemName,
+        itemKind: row.itemKind,
+        locationId: row.locationId,
+        locationName: row.locationName,
+        quantity,
+        averageUnitCost: quantity > 0 ? roundMoney(totalValue / quantity) : 0,
+        totalValue
+      };
+    });
+  }
+
+  /** Recent movements, optionally filtered to one item or one job. Newest first. */
+  async listMovements(
+    filter: { itemId?: string; jobId?: string },
+    limit: number
+  ): Promise<InventoryMovement[]> {
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    if (filter.itemId) {
+      params.push(filter.itemId);
+      conditions.push(`m.item_id = $${params.length}`);
+    }
+    if (filter.jobId) {
+      params.push(filter.jobId);
+      conditions.push(`m.job_id = $${params.length}`);
+    }
+    params.push(limit);
+    const where = conditions.length ? `where ${conditions.join(' and ')}` : '';
+    const result = await this.databaseService.query<{
+      id: string;
+      itemId: string;
+      itemName: string;
+      kind: InventoryMovementKind;
+      quantity: string | number;
+      unitCost: string | number;
+      locationId: string | null;
+      locationName: string | null;
+      jobId: string | null;
+      note: string | null;
+      actorName: string;
+      occurredAt: string | Date;
+    }>(
+      `select
+         m.id, m.item_id as "itemId", it.name as "itemName", m.kind,
+         m.quantity, m.unit_cost as "unitCost",
+         m.location_id as "locationId", loc.name as "locationName",
+         m.job_id as "jobId", m.note, m.actor_name as "actorName",
+         m.occurred_at as "occurredAt"
+       from inventory_movements m
+       join inventory_items it on it.id = m.item_id
+       left join inventory_locations loc on loc.id = m.location_id
+       ${where}
+       order by m.occurred_at desc, m.created_at desc
+       limit $${params.length}`,
+      params
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      itemId: row.itemId,
+      itemName: row.itemName,
+      kind: row.kind,
+      quantity: Math.round(Number(row.quantity) * 10000) / 10000,
+      unitCost: roundMoney(Number(row.unitCost)),
+      locationId: row.locationId ?? undefined,
+      locationName: row.locationName ?? undefined,
+      jobId: row.jobId ?? undefined,
+      note: row.note ?? undefined,
+      actorName: row.actorName,
+      occurredAt: toIsoString(row.occurredAt)
+    }));
+  }
+
+  /** Record a stock adjustment (gain/loss) atomically. */
+  async recordAdjustment(input: {
+    itemId: string;
+    locationId: string;
+    quantityDelta: number;
+    unitCost?: number;
+    note?: string;
+    actor: LedgerActor;
+  }): Promise<void> {
+    const occurredAt = new Date().toISOString();
+    await this.databaseService.transaction((queryable) =>
+      applyAdjustment(queryable, { ...input, occurredAt })
+    );
+  }
+
+  /** Move stock between two locations atomically. */
+  async recordTransfer(input: {
+    itemId: string;
+    fromLocationId: string;
+    toLocationId: string;
+    quantity: number;
+    note?: string;
+    actor: LedgerActor;
+  }): Promise<void> {
+    const occurredAt = new Date().toISOString();
+    await this.databaseService.transaction((queryable) =>
+      applyTransfer(queryable, { ...input, occurredAt })
     );
   }
 }

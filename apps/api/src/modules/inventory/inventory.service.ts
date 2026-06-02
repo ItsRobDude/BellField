@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import type {
+  CreateInventoryAdjustmentRequest,
+  CreateInventoryTransferRequest,
+  InventoryOnHandResponse
+} from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { InventoryRepository } from './inventory.repository';
 import type {
@@ -75,6 +80,70 @@ export class InventoryService {
     }
     await this.inventoryRepository.updateLocation(locationId, request);
     return { location: (await this.inventoryRepository.getLocationById(locationId))! };
+  }
+
+  // --- Ledger (on-hand, adjustments, transfers) ----------------------------
+
+  async getOnHand(sessionToken: string): Promise<InventoryOnHandResponse> {
+    await this.authorize(sessionToken, 'inventory:view');
+    return { rows: await this.inventoryRepository.getOnHand() };
+  }
+
+  async createAdjustment(
+    sessionToken: string,
+    request: CreateInventoryAdjustmentRequest
+  ): Promise<InventoryOnHandResponse> {
+    const actor = await this.authorize(sessionToken, 'inventory:edit');
+    if (request.quantityDelta === 0) {
+      throw new BadRequestException('Adjustment quantity must be non-zero.');
+    }
+    await this.requireItem(request.itemId);
+    await this.requireLocation(request.locationId);
+
+    await this.inventoryRepository.recordAdjustment({
+      itemId: request.itemId,
+      locationId: request.locationId,
+      quantityDelta: request.quantityDelta,
+      unitCost: request.unitCost,
+      note: request.note,
+      actor: { id: actor.id, displayName: actor.displayName }
+    });
+    return { rows: await this.inventoryRepository.getOnHand() };
+  }
+
+  async createTransfer(
+    sessionToken: string,
+    request: CreateInventoryTransferRequest
+  ): Promise<InventoryOnHandResponse> {
+    const actor = await this.authorize(sessionToken, 'inventory:edit');
+    if (request.fromLocationId === request.toLocationId) {
+      throw new BadRequestException('Transfer source and destination must differ.');
+    }
+    await this.requireItem(request.itemId);
+    await this.requireLocation(request.fromLocationId);
+    await this.requireLocation(request.toLocationId);
+
+    await this.inventoryRepository.recordTransfer({
+      itemId: request.itemId,
+      fromLocationId: request.fromLocationId,
+      toLocationId: request.toLocationId,
+      quantity: request.quantity,
+      note: request.note,
+      actor: { id: actor.id, displayName: actor.displayName }
+    });
+    return { rows: await this.inventoryRepository.getOnHand() };
+  }
+
+  private async requireItem(itemId: string) {
+    if (!(await this.inventoryRepository.getItemById(itemId))) {
+      throw new NotFoundException('Inventory item not found.');
+    }
+  }
+
+  private async requireLocation(locationId: string) {
+    if (!(await this.inventoryRepository.getLocationById(locationId))) {
+      throw new NotFoundException('Inventory location not found.');
+    }
   }
 
   /** Inventory is an office-only function this milestone, like the rest of operations. */
