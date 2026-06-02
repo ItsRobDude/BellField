@@ -201,9 +201,11 @@ export class PurchasingService {
             'Equipment received to a job must reference a catalog item so its cost can be applied to the job.'
           );
         }
-        // Mirror the equipment-create rule against the EFFECTIVE serial: a serial captured
-        // at receiving (override) wins over the PO-line serial; a blank one needs explicit
-        // confirmation, since receiving creates the equipment asset record.
+        // Mirror the equipment-create rule against the EFFECTIVE serial: a non-blank serial
+        // captured at receiving wins over the PO-line serial; an omitted or blank receipt-line
+        // serial falls back to the PO-line serial (so an empty form field never silently wipes a
+        // serial already on the PO). If the effective serial is still blank, receiving needs
+        // explicit confirmation, since it creates the equipment asset record.
         const effectiveSerial =
           overrides.get(line.id)?.serialNumber?.trim() || line.equipmentSerial?.trim();
         if (!effectiveSerial && !request.confirmMissingSerial) {

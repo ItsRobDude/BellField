@@ -387,6 +387,13 @@ describe('PurchasingService.receivePurchaseOrder', () => {
     });
 
     expect(purchasingRepository.receivePurchaseOrder).toHaveBeenCalled();
+    // The captured serial must reach the repository in the per-line override map so it can
+    // be persisted onto the equipment asset (not just satisfy the confirmation check).
+    const overrides = purchasingRepository.receivePurchaseOrder.mock.calls[0][1] as Map<
+      string,
+      { serialNumber?: string }
+    >;
+    expect(overrides.get('line-1')?.serialNumber).toBe('SN-CAPTURED');
   });
 
   it('rejects receiving an equipment line at a quantity other than 1', async () => {

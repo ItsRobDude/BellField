@@ -152,4 +152,54 @@ describe('PurchasingRepository.receivePurchaseOrder', () => {
     expect(movement.params[1]).toBe('equip-item');
     expect(findCalls(calls, PO_RECEIVED)).toHaveLength(1);
   });
+
+  it('persists a serial captured on the receipt line, overriding the PO-line serial', async () => {
+    const equipmentDataService = {
+      createEquipmentWithinTransaction: jest.fn().mockResolvedValue('equip-2')
+    };
+    const { repository } = repositoryWith(
+      [
+        {
+          match: PO_LOCK,
+          rows: [
+            { poNumber: 'PO-3', status: 'ordered', destInv: 'wh-1', destCust: null, jobId: null }
+          ]
+        },
+        { match: /from inventory_locations where id = \$1/i, rows: [{ name: 'Main Warehouse' }] },
+        {
+          match: LINES,
+          rows: [
+            {
+              id: 'line-1',
+              itemId: null,
+              kind: 'equipment',
+              quantity: '1',
+              expectedUnitCost: '900',
+              eqType: 'Coil',
+              eqBrand: 'Trane',
+              eqModel: 'C1',
+              eqSerial: 'PO-SERIAL'
+            }
+          ]
+        },
+        { match: RECEIPT_INSERT, rowCount: 1 },
+        { match: RECEIPT_LINE_INSERT, rowCount: 1 },
+        { match: /update purchase_receipt_lines set created_equipment_id/i, rowCount: 1 },
+        { match: PO_RECEIVED, rowCount: 1 }
+      ],
+      equipmentDataService
+    );
+
+    const overrides = new Map([['line-1', { serialNumber: 'RECEIVED-SERIAL' }]]);
+    await repository.receivePurchaseOrder('po-3', overrides, undefined, actor);
+
+    // The receipt-line serial wins over the PO-line serial and is written to the asset,
+    // which goes active at the inventory location.
+    expect(equipmentDataService.createEquipmentWithinTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ serialNumber: 'RECEIVED-SERIAL', status: 'active' }),
+      'Pat Purchaser',
+      expect.anything(),
+      expect.stringContaining('PO-3')
+    );
+  });
 });

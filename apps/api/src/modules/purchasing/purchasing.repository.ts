@@ -339,8 +339,9 @@ export class PurchasingRepository {
           // Equipment: create the asset row (the bridge) through the canonical equipment
           // path — pendingInstall at a customer location, active at an inventory location.
           const atCustomer = Boolean(po.destCust);
-          // Serial captured at receiving (often first known on arrival) wins over any
-          // serial pre-entered on the PO line.
+          // Serial captured at receiving (often first known on arrival) wins over any serial
+          // pre-entered on the PO line; an omitted/blank receipt serial falls back to the PO
+          // line. Matches the effective-serial rule the service validates against.
           const serialNumber = override.serialNumber?.trim() || line.eqSerial?.trim() || '';
           const equipmentId = await this.equipmentDataService.createEquipmentWithinTransaction(
             {
