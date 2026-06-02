@@ -1500,3 +1500,40 @@ export interface ReceivePurchaseOrderRequest {
   /** Acknowledge creating equipment without a serial number (parallels equipment create). */
   confirmMissingSerial?: boolean;
 }
+
+// --- Job cost events (Milestone 9) ----------------------------------------------
+
+/** Non-inventory job costs. Material/equipment costs flow through inventory movements. */
+export type JobCostEventKind = 'labor' | 'expense';
+
+/** An immutable non-inventory cost charged to a job (labor or expense). */
+export interface JobCostEvent {
+  id: string;
+  jobId: string;
+  kind: JobCostEventKind;
+  description: string;
+  /** Total cost in dollars. Positive for a cost; a reversal carries the negation. */
+  amount: number;
+  /** Labor provenance: hours billed at ratePerHour equals amount. Absent for an expense. */
+  hours?: number;
+  ratePerHour?: number;
+  actorName: string;
+  occurredAt: string;
+}
+
+/** Post a labor cost to a job. The API computes amount = hours * ratePerHour. */
+export interface CreateJobLaborRequest {
+  description: string;
+  hours: number;
+  ratePerHour: number;
+}
+
+/** Post an expense cost to a job. */
+export interface CreateJobExpenseRequest {
+  description: string;
+  amount: number;
+}
+
+export interface JobCostEventResponse {
+  event: JobCostEvent;
+}
