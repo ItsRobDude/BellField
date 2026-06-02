@@ -487,7 +487,7 @@ The second slice (adjustment/credit correction foundation) has also shipped:
 - they reuse the invoice machinery — line add/edit/void and the draft→posted lock + snapshot — generalized to operate by invoice id; `invoices:create` is granted to bookkeeping
 - backend only
 
-Still ahead in Milestone 8: the payment workflow, the invoice review/bookkeeping workbench, the office UI for adjustments, and verifying the new migrations + runtime against a live database (not possible on the current dev PC). (The job balance — net billed across posted invoices — is now computed read-side.)
+Still ahead in Milestone 8: the payment workflow, the invoice review/bookkeeping workbench, and the office UI for adjustments. The new invoice migrations and a short API runtime smoke have now been verified locally against the default dev database. (The job balance — net billed across posted invoices — is now computed read-side.)
 
 ---
 
