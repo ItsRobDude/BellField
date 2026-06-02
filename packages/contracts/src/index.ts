@@ -1237,3 +1237,89 @@ export interface FieldAssignedWorkResponse {
   windowStartDate: string;
   windowEndDate: string;
 }
+
+// --- Inventory (Milestone 9) ----------------------------------------------------
+
+/** A catalog item: a stocked part, or an equipment-type (serialized/trackable) item. */
+export type InventoryItemKind = 'part' | 'equipment';
+
+/**
+ * Catalog identity only — NOT a stock balance. On-hand quantity and actual cost are
+ * derived from the inventory movement ledger; defaultUnitCost is just a planning
+ * convenience used to prefill PO lines.
+ */
+export interface InventoryItem {
+  id: string;
+  sku?: string;
+  name: string;
+  kind: InventoryItemKind;
+  unitOfMeasure?: string;
+  defaultUnitCost?: number;
+  description?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInventoryItemRequest {
+  sku?: string;
+  name: string;
+  kind: InventoryItemKind;
+  unitOfMeasure?: string;
+  defaultUnitCost?: number;
+  description?: string;
+}
+
+export interface UpdateInventoryItemRequest {
+  sku?: string;
+  name: string;
+  kind: InventoryItemKind;
+  unitOfMeasure?: string;
+  defaultUnitCost?: number;
+  description?: string;
+  isActive: boolean;
+}
+
+export interface InventoryItemsResponse {
+  items: InventoryItem[];
+}
+
+export interface InventoryItemResponse {
+  item: InventoryItem;
+}
+
+/** A non-customer stock location: a warehouse, a technician truck/van, or other. */
+export type InventoryLocationKind = 'warehouse' | 'truck' | 'other';
+
+export interface InventoryLocation {
+  id: string;
+  name: string;
+  kind: InventoryLocationKind;
+  /** For a truck/van, the technician it belongs to (optional). */
+  assignedEmployeeId?: string;
+  assignedEmployeeName?: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateInventoryLocationRequest {
+  name: string;
+  kind: InventoryLocationKind;
+  assignedEmployeeId?: string;
+}
+
+export interface UpdateInventoryLocationRequest {
+  name: string;
+  kind: InventoryLocationKind;
+  assignedEmployeeId?: string;
+  isActive: boolean;
+}
+
+export interface InventoryLocationsResponse {
+  locations: InventoryLocation[];
+}
+
+export interface InventoryLocationResponse {
+  location: InventoryLocation;
+}

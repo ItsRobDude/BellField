@@ -1,0 +1,70 @@
+import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
+import { InventoryService } from './inventory.service';
+import {
+  CreateInventoryItemRequestBodyDto,
+  CreateInventoryLocationRequestBodyDto,
+  UpdateInventoryItemRequestBodyDto,
+  UpdateInventoryLocationRequestBodyDto
+} from './inventory.dto';
+
+function getBearerToken(authorizationHeader: string | undefined): string {
+  if (!authorizationHeader) {
+    return '';
+  }
+  const [scheme, token] = authorizationHeader.split(' ');
+  return scheme?.toLowerCase() === 'bearer' && token ? token : '';
+}
+
+@Controller('operations/inventory/items')
+export class InventoryItemsController {
+  constructor(private readonly inventoryService: InventoryService) {}
+
+  @Get()
+  async list(@Headers('authorization') auth: string | undefined) {
+    return this.inventoryService.listItems(getBearerToken(auth));
+  }
+
+  @Post()
+  async create(
+    @Headers('authorization') auth: string | undefined,
+    @Body() request: CreateInventoryItemRequestBodyDto
+  ) {
+    return this.inventoryService.createItem(getBearerToken(auth), request);
+  }
+
+  @Put(':itemId')
+  async update(
+    @Headers('authorization') auth: string | undefined,
+    @Param('itemId') itemId: string,
+    @Body() request: UpdateInventoryItemRequestBodyDto
+  ) {
+    return this.inventoryService.updateItem(getBearerToken(auth), itemId, request);
+  }
+}
+
+@Controller('operations/inventory/locations')
+export class InventoryLocationsController {
+  constructor(private readonly inventoryService: InventoryService) {}
+
+  @Get()
+  async list(@Headers('authorization') auth: string | undefined) {
+    return this.inventoryService.listLocations(getBearerToken(auth));
+  }
+
+  @Post()
+  async create(
+    @Headers('authorization') auth: string | undefined,
+    @Body() request: CreateInventoryLocationRequestBodyDto
+  ) {
+    return this.inventoryService.createLocation(getBearerToken(auth), request);
+  }
+
+  @Put(':locationId')
+  async update(
+    @Headers('authorization') auth: string | undefined,
+    @Param('locationId') locationId: string,
+    @Body() request: UpdateInventoryLocationRequestBodyDto
+  ) {
+    return this.inventoryService.updateLocation(getBearerToken(auth), locationId, request);
+  }
+}
