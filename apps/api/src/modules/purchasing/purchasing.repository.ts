@@ -20,7 +20,7 @@ import type {
   PurchaseOrderSummaryDto
 } from './purchasing.types';
 
-export type ReceiveLineOverride = { quantity?: number; unitCost?: number };
+export type ReceiveLineOverride = { quantity?: number; unitCost?: number; serialNumber?: string };
 
 type Actor = { id: string; displayName: string };
 
@@ -339,6 +339,9 @@ export class PurchasingRepository {
           // Equipment: create the asset row (the bridge) through the canonical equipment
           // path — pendingInstall at a customer location, active at an inventory location.
           const atCustomer = Boolean(po.destCust);
+          // Serial captured at receiving (often first known on arrival) wins over any
+          // serial pre-entered on the PO line.
+          const serialNumber = override.serialNumber?.trim() || line.eqSerial?.trim() || '';
           const equipmentId = await this.equipmentDataService.createEquipmentWithinTransaction(
             {
               locationId: atCustomer ? po.destCust! : undefined,
@@ -346,7 +349,7 @@ export class PurchasingRepository {
               equipmentType: line.eqType ?? '',
               brand: line.eqBrand ?? '',
               model: line.eqModel ?? '',
-              serialNumber: line.eqSerial?.trim() || '',
+              serialNumber,
               filterSizes: [],
               status: atCustomer ? 'pendingInstall' : 'active'
             },

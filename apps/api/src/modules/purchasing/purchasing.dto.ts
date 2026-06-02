@@ -115,6 +115,11 @@ export class ReceivePurchaseOrderLineInputDto implements ReceivePurchaseOrderLin
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
   unitCost?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  serialNumber?: string;
 }
 
 export class ReceivePurchaseOrderRequestBodyDto implements ReceivePurchaseOrderRequest {

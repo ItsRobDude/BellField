@@ -315,6 +315,80 @@ describe('PurchasingService.receivePurchaseOrder', () => {
     expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
   });
 
+  it('rejects receiving blank-serial equipment without confirmation', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({
+        status: 'ordered',
+        destinationKind: 'inventory',
+        lines: [
+          poLine({
+            kind: 'equipment',
+            equipmentType: 'Coil',
+            equipmentBrand: 'Trane',
+            equipmentModel: 'C1',
+            quantity: 1
+          })
+        ]
+      })
+    );
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('allows blank-serial equipment receive when confirmMissingSerial is set', async () => {
+    const { service, purchasingRepository } = createService();
+    const ordered = po({
+      status: 'ordered',
+      destinationKind: 'inventory',
+      lines: [
+        poLine({
+          kind: 'equipment',
+          equipmentType: 'Coil',
+          equipmentBrand: 'Trane',
+          equipmentModel: 'C1',
+          quantity: 1
+        })
+      ]
+    });
+    purchasingRepository.getById
+      .mockResolvedValueOnce(ordered)
+      .mockResolvedValueOnce(po({ status: 'received' }));
+
+    await service.receivePurchaseOrder('token', 'po-1', { confirmMissingSerial: true });
+
+    expect(purchasingRepository.receivePurchaseOrder).toHaveBeenCalled();
+  });
+
+  it('allows blank-PO-serial equipment receive when a serial is captured on the receipt line', async () => {
+    const { service, purchasingRepository } = createService();
+    const ordered = po({
+      status: 'ordered',
+      destinationKind: 'inventory',
+      lines: [
+        poLine({
+          kind: 'equipment',
+          equipmentType: 'Coil',
+          equipmentBrand: 'Trane',
+          equipmentModel: 'C1',
+          quantity: 1
+        })
+      ]
+    });
+    purchasingRepository.getById
+      .mockResolvedValueOnce(ordered)
+      .mockResolvedValueOnce(po({ status: 'received' }));
+
+    await service.receivePurchaseOrder('token', 'po-1', {
+      lines: [{ purchaseOrderLineId: 'line-1', serialNumber: 'SN-CAPTURED' }]
+    });
+
+    expect(purchasingRepository.receivePurchaseOrder).toHaveBeenCalled();
+  });
+
   it('rejects receiving an equipment line at a quantity other than 1', async () => {
     const { service, purchasingRepository } = createService();
     purchasingRepository.getById.mockResolvedValue(

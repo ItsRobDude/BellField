@@ -1477,6 +1477,8 @@ export interface ReceivePurchaseOrderLineInput {
   purchaseOrderLineId: string;
   quantity?: number;
   unitCost?: number;
+  /** Serial captured at receiving for an equipment line (often unknown until arrival). */
+  serialNumber?: string;
 }
 
 /** Receive a purchase order in full. Lines omitted from `lines` receive at expected qty/cost. */

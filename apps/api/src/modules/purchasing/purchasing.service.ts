@@ -168,7 +168,8 @@ export class PurchasingService {
       }
       overrides.set(override.purchaseOrderLineId, {
         quantity: override.quantity,
-        unitCost: override.unitCost
+        unitCost: override.unitCost,
+        serialNumber: override.serialNumber
       });
     }
 
@@ -200,11 +201,14 @@ export class PurchasingService {
             'Equipment received to a job must reference a catalog item so its cost can be applied to the job.'
           );
         }
-        // Mirror the equipment-create rule: a blank serial needs explicit confirmation,
-        // since receiving creates the equipment asset record.
-        if (!line.equipmentSerial?.trim() && !request.confirmMissingSerial) {
+        // Mirror the equipment-create rule against the EFFECTIVE serial: a serial captured
+        // at receiving (override) wins over the PO-line serial; a blank one needs explicit
+        // confirmation, since receiving creates the equipment asset record.
+        const effectiveSerial =
+          overrides.get(line.id)?.serialNumber?.trim() || line.equipmentSerial?.trim();
+        if (!effectiveSerial && !request.confirmMissingSerial) {
           throw new ConflictException(
-            'Equipment serial number is strongly recommended. Set confirmMissingSerial to receive without one.'
+            'Equipment serial number is strongly recommended. Provide it on the receipt line or set confirmMissingSerial.'
           );
         }
       }
