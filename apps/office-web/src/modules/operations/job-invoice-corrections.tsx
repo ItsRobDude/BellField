@@ -302,7 +302,7 @@ export function JobInvoiceCorrections({
             <button
               type="button"
               style={styles.button}
-              disabled={isSaving}
+              disabled={isSaving || lineEdit !== null}
               onClick={() => void createCorrection('adjustment')}
             >
               Add adjustment
@@ -310,7 +310,7 @@ export function JobInvoiceCorrections({
             <button
               type="button"
               style={styles.button}
-              disabled={isSaving}
+              disabled={isSaving || lineEdit !== null}
               onClick={() => void createCorrection('credit')}
             >
               Add credit
@@ -363,6 +363,7 @@ export function JobInvoiceCorrections({
               canPost={canPost}
               isSaving={isSaving}
               lineEdit={lineEdit?.invoiceId === correction.id ? lineEdit : null}
+              otherEditInProgress={lineEdit !== null && lineEdit.invoiceId !== correction.id}
               onStartAddLine={() =>
                 setLineEdit({
                   invoiceId: correction.id,
@@ -413,6 +414,7 @@ function CorrectionCard({
   canPost,
   isSaving,
   lineEdit,
+  otherEditInProgress,
   onStartAddLine,
   onStartEditLine,
   onCancelLineEdit,
@@ -426,6 +428,7 @@ function CorrectionCard({
   canPost: boolean;
   isSaving: boolean;
   lineEdit: { invoiceId: string; lineId: string | null; draft: InvoiceLineDraft } | null;
+  otherEditInProgress: boolean;
   onStartAddLine: () => void;
   onStartEditLine: (line: InvoiceLineItemSummary) => void;
   onCancelLineEdit: () => void;
@@ -440,6 +443,9 @@ function CorrectionCard({
   const isAddingLine = lineEdit !== null && lineEdit.lineId === null;
   const editingLineId = lineEdit?.lineId ?? null;
   const isBusyEditing = lineEdit !== null;
+  // While a line is being edited on ANOTHER card, suppress this card's actions so a
+  // stray click can't discard that unsaved edit (one editor is open at a time).
+  const actionsEnabled = isDraft && canEdit && !isBusyEditing && !otherEditInProgress;
 
   return (
     <div style={styles.subpanel}>
@@ -447,12 +453,16 @@ function CorrectionCard({
         <strong>{kindLabel}</strong>
         <div style={styles.badgeRow}>
           <span style={styles.badge}>{isDraft ? 'Draft' : 'Posted'}</span>
-          {isDraft && canEdit && !isBusyEditing ? (
+          {actionsEnabled ? (
             <button type="button" style={styles.button} onClick={onStartAddLine}>
               Add line
             </button>
           ) : null}
-          {isDraft && canPost && !isBusyEditing && correction.lineItems.length > 0 ? (
+          {isDraft &&
+          canPost &&
+          !isBusyEditing &&
+          !otherEditInProgress &&
+          correction.lineItems.length > 0 ? (
             <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onPost}>
               Post {kindLabel.toLowerCase()}
             </button>
@@ -488,7 +498,7 @@ function CorrectionCard({
               </div>
               <div style={styles.badgeRow}>
                 <strong>{formatCurrency(line.lineSubtotal)}</strong>
-                {isDraft && canEdit && !isBusyEditing ? (
+                {actionsEnabled ? (
                   <>
                     <button
                       type="button"
