@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   ArrayMinSize,
   IsArray,
+  IsBoolean,
   IsIn,
   IsNumber,
   IsOptional,
@@ -127,4 +128,8 @@ export class ReceivePurchaseOrderRequestBodyDto implements ReceivePurchaseOrderR
   @ValidateNested({ each: true })
   @Type(() => ReceivePurchaseOrderLineInputDto)
   lines?: ReceivePurchaseOrderLineInputDto[];
+
+  @IsOptional()
+  @IsBoolean()
+  confirmMissingSerial?: boolean;
 }

@@ -1483,4 +1483,6 @@ export interface ReceivePurchaseOrderLineInput {
 export interface ReceivePurchaseOrderRequest {
   note?: string;
   lines?: ReceivePurchaseOrderLineInput[];
+  /** Acknowledge creating equipment without a serial number (parallels equipment create). */
+  confirmMissingSerial?: boolean;
 }

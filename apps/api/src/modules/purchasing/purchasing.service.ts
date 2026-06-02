@@ -200,6 +200,13 @@ export class PurchasingService {
             'Equipment received to a job must reference a catalog item so its cost can be applied to the job.'
           );
         }
+        // Mirror the equipment-create rule: a blank serial needs explicit confirmation,
+        // since receiving creates the equipment asset record.
+        if (!line.equipmentSerial?.trim() && !request.confirmMissingSerial) {
+          throw new ConflictException(
+            'Equipment serial number is strongly recommended. Set confirmMissingSerial to receive without one.'
+          );
+        }
       }
     }
 

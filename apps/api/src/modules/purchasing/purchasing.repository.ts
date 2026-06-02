@@ -359,11 +359,11 @@ export class PurchasingRepository {
             [receiptLineId, equipmentId]
           );
 
-          // Equipment received to a job counts toward that job's cost (creative-director
-          // call): post a receiveToJob movement at the equipment's cost so the B6 rollup
-          // includes it. Requires a catalog item (movement provenance); the service
-          // validates that an equipment line bound for a job has one. Equipment received to
-          // stock or to a customer with no job is an asset only, with no job-cost impact.
+          // Equipment received to a job counts toward that job's cost: post a receiveToJob
+          // movement at the equipment's cost so the B6 rollup includes it. Requires a
+          // catalog item (movement provenance); the service validates that an equipment line
+          // bound for a job has one. Equipment received to stock or to a customer with no
+          // job is an asset only, with no job-cost impact.
           if (po.jobId && line.itemId) {
             await applyReceiptToJob(queryable, {
               itemId: line.itemId,
