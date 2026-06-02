@@ -79,10 +79,15 @@ export class PurchasingService {
     if (!request.lines || request.lines.length === 0) {
       throw new BadRequestException('A purchase order needs at least one line.');
     }
-    // A catalog-linked line must reference a real item whose kind matches the line kind
-    // (a part line can't point at an equipment item, and vice versa) — this matters for
-    // the receiving/equipment bridge in the next slice.
     for (const line of request.lines) {
+      // Each physical serviceable asset gets its own equipment record, so an equipment
+      // line is exactly one unit (receiving creates one equipment row from it). Order
+      // multiple units as multiple lines.
+      if (line.kind === 'equipment' && line.quantity !== 1) {
+        throw new BadRequestException('An equipment line must have a quantity of 1.');
+      }
+      // A catalog-linked line must reference a real item whose kind matches the line kind
+      // (a part line can't point at an equipment item, and vice versa).
       if (!line.itemId) {
         continue;
       }
@@ -132,8 +137,11 @@ export class PurchasingService {
     if (!po) {
       throw new NotFoundException('Purchase order not found.');
     }
-    if (po.status === 'received' || po.status === 'closed') {
-      throw new ConflictException(`Purchase order is already ${po.status}.`);
+    // A PO must be ordered before it can be received (create → order → receive).
+    if (po.status !== 'ordered') {
+      throw new ConflictException(
+        `Only an ordered purchase order can be received (status: ${po.status}).`
+      );
     }
 
     // Build + validate per-line overrides against this PO's own lines.
@@ -166,13 +174,17 @@ export class PurchasingService {
           'A part received into stock or to a job must reference a catalog item.'
         );
       }
-      if (
-        line.kind === 'equipment' &&
-        (!line.equipmentType || !line.equipmentBrand || !line.equipmentModel)
-      ) {
-        throw new BadRequestException(
-          'An equipment line needs type, brand, and model to create the equipment record.'
-        );
+      if (line.kind === 'equipment') {
+        if (!line.equipmentType || !line.equipmentBrand || !line.equipmentModel) {
+          throw new BadRequestException(
+            'An equipment line needs type, brand, and model to create the equipment record.'
+          );
+        }
+        // One equipment record per physical asset: an equipment line receives one unit.
+        const receivedQty = overrides.get(line.id)?.quantity ?? line.quantity;
+        if (receivedQty !== 1) {
+          throw new BadRequestException('An equipment line must be received as a quantity of 1.');
+        }
       }
     }
 

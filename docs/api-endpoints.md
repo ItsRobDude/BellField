@@ -98,26 +98,30 @@ Every job owns exactly one main invoice draft (created eagerly at job creation, 
 Inventory is an event ledger: on-hand quantity and value are derived from immutable
 `inventory_movements`, never stored. Valuation is weighted-average per (item, location);
 outbound movements remove the exact proportional value so full depletion leaves no
-residual. Purchase orders hold expected cost only and never touch stock or job cost —
-that happens at receiving (a later slice). A PO ends at exactly one destination
-(inventory location or customer location), enforced in the database (no-split).
+residual. Purchase orders hold expected cost only and never touch stock or job cost until
+they are received: receiving captures actual cost and posts movements (parts) or creates
+an equipment asset (the equipment bridge — pendingInstall at a customer location, active
+at an inventory location). A PO ends at exactly one destination (inventory location or
+customer location), enforced in the database (no-split), and must be ordered before it
+can be received.
 
-| Method | Path                                             | Surface | Permission gate     | Purpose                                                                                             |
-| ------ | ------------------------------------------------ | ------- | ------------------- | --------------------------------------------------------------------------------------------------- |
-| `GET`  | `/operations/inventory/items`                    | office  | `inventory:view`    | List catalog items (parts and equipment-type items).                                                |
-| `POST` | `/operations/inventory/items`                    | office  | `inventory:create`  | Create a catalog item.                                                                              |
-| `PUT`  | `/operations/inventory/items/:itemId`            | office  | `inventory:edit`    | Update a catalog item (incl. active state).                                                         |
-| `GET`  | `/operations/inventory/locations`                | office  | `inventory:view`    | List stock locations (warehouse/truck/other).                                                       |
-| `POST` | `/operations/inventory/locations`                | office  | `inventory:create`  | Create a stock location.                                                                            |
-| `PUT`  | `/operations/inventory/locations/:locationId`    | office  | `inventory:edit`    | Update a stock location.                                                                            |
-| `GET`  | `/operations/inventory/on-hand`                  | office  | `inventory:view`    | Derived on-hand per (item, location): quantity, weighted-average cost, total value.                 |
-| `GET`  | `/operations/inventory/movements?itemId=&jobId=` | office  | `inventory:view`    | The immutable movement ledger, optionally filtered to an item or job (newest first).                |
-| `POST` | `/operations/inventory/adjustments`              | office  | `inventory:edit`    | Adjust on-hand (gain/loss). Body `{ itemId, locationId, quantityDelta, unitCost?, note? }`.         |
-| `POST` | `/operations/inventory/transfers`                | office  | `inventory:edit`    | Move stock between locations. Body `{ itemId, fromLocationId, toLocationId, quantity, note? }`.     |
-| `GET`  | `/operations/purchase-orders`                    | office  | `purchasing:view`   | List purchase-order summaries.                                                                      |
-| `GET`  | `/operations/purchase-orders/:id`                | office  | `purchasing:view`   | Load a purchase order with its lines.                                                               |
-| `POST` | `/operations/purchase-orders`                    | office  | `purchasing:create` | Create a draft PO (one destination, ≥1 line). Body `{ vendorName, destination*, jobId?, lines[] }`. |
-| `POST` | `/operations/purchase-orders/:id/order`          | office  | `purchasing:edit`   | Transition a draft PO to ordered. No body.                                                          |
+| Method | Path                                             | Surface | Permission gate     | Purpose                                                                                                                                         |
+| ------ | ------------------------------------------------ | ------- | ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/inventory/items`                    | office  | `inventory:view`    | List catalog items (parts and equipment-type items).                                                                                            |
+| `POST` | `/operations/inventory/items`                    | office  | `inventory:create`  | Create a catalog item.                                                                                                                          |
+| `PUT`  | `/operations/inventory/items/:itemId`            | office  | `inventory:edit`    | Update a catalog item (incl. active state).                                                                                                     |
+| `GET`  | `/operations/inventory/locations`                | office  | `inventory:view`    | List stock locations (warehouse/truck/other).                                                                                                   |
+| `POST` | `/operations/inventory/locations`                | office  | `inventory:create`  | Create a stock location.                                                                                                                        |
+| `PUT`  | `/operations/inventory/locations/:locationId`    | office  | `inventory:edit`    | Update a stock location.                                                                                                                        |
+| `GET`  | `/operations/inventory/on-hand`                  | office  | `inventory:view`    | Derived on-hand per (item, location): quantity, weighted-average cost, total value.                                                             |
+| `GET`  | `/operations/inventory/movements?itemId=&jobId=` | office  | `inventory:view`    | The immutable movement ledger, optionally filtered to an item or job (newest first).                                                            |
+| `POST` | `/operations/inventory/adjustments`              | office  | `inventory:edit`    | Adjust on-hand (gain/loss). Body `{ itemId, locationId, quantityDelta, unitCost?, note? }`.                                                     |
+| `POST` | `/operations/inventory/transfers`                | office  | `inventory:edit`    | Move stock between locations. Body `{ itemId, fromLocationId, toLocationId, quantity, note? }`.                                                 |
+| `GET`  | `/operations/purchase-orders`                    | office  | `purchasing:view`   | List purchase-order summaries.                                                                                                                  |
+| `GET`  | `/operations/purchase-orders/:id`                | office  | `purchasing:view`   | Load a purchase order with its lines.                                                                                                           |
+| `POST` | `/operations/purchase-orders`                    | office  | `purchasing:create` | Create a draft PO (one destination, ≥1 line). Body `{ vendorName, destination*, jobId?, lines[] }`.                                             |
+| `POST` | `/operations/purchase-orders/:id/order`          | office  | `purchasing:edit`   | Transition a draft PO to ordered. No body.                                                                                                      |
+| `POST` | `/operations/purchase-orders/:id/receive`        | office  | `purchasing:edit`   | Receive an ordered PO in full → inventory movements (parts) + equipment assets. Body `{ note?, lines? }` for optional per-line actual qty/cost. |
 
 ## Focused Office Work Models
 

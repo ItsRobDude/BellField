@@ -251,8 +251,10 @@ export class PurchasingRepository {
       if (!po) {
         throw new ConflictException('Purchase order not found.');
       }
-      if (po.status === 'received' || po.status === 'closed') {
-        throw new ConflictException(`Purchase order is already ${po.status}.`);
+      // Re-check under the row lock: only an ordered PO can be received (guards a race
+      // against a concurrent receive/order change).
+      if (po.status !== 'ordered') {
+        throw new ConflictException(`Only an ordered purchase order can be received.`);
       }
 
       let inventoryLocationName: string | null = null;
@@ -330,7 +332,10 @@ export class PurchasingRepository {
         } else {
           // Equipment: create the asset row (the bridge). pendingInstall at a customer
           // location, active at an inventory location. Equipment is a serialized asset, not
-          // quantity stock, so it does not post an inventory movement.
+          // quantity stock, so it posts no inventory movement — and therefore its cost is
+          // NOT in the material job-cost rollup (B6). Equipment cost is captured on the
+          // receipt line + the asset record; the job-cost ledger is for consumable material
+          // (issueToJob / receiveToJob) plus labor/expense. (See docs/inventory-job-costing-plan.md.)
           const equipmentId = randomUUID();
           const atCustomer = Boolean(po.destCust);
           await queryable.query(

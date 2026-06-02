@@ -38,7 +38,9 @@ Simplest correct: capture unit cost on every movement; on-hand value + issue cos
 
 ## Equipment bridge
 
-Equipment-tagged receipt to a customer/job location → create a `pendingInstall` equipment row (reuse existing equipment table + placementChanged history); receipt to inventory/truck → equipment row at that inventory location. Non-equipment parts never enter the equipment tab. Install-later and "move to customer location" reuse existing equipment placement/status.
+Equipment-tagged receipt to a customer/job location → create a `pendingInstall` equipment row (reuse existing equipment table + placementChanged history); receipt to inventory/truck → equipment row at that inventory location. Non-equipment parts never enter the equipment tab. Install-later and "move to customer location" reuse existing equipment placement/status. Each physical asset gets its own equipment record, so an equipment PO line is exactly one unit (validated at PO create + receive).
+
+**Equipment cost vs material job cost (v1 boundary).** Equipment is a serialized capital asset, not consumable stock. A received equipment line creates an equipment asset row and its cost is captured on the `purchase_receipt_line`; it does NOT post an inventory movement and is therefore EXCLUDED from the material job-cost rollup in v1. The job-cost read model (B6) sums consumable material (issueToJob / receiveToJob movements) plus labor/expense cost events. If equipment cost should later count toward a job, add a `job_cost_event` of an `equipment` kind at receive — deferred.
 
 ## Proposed slices (each shippable + reviewed, like M8)
 

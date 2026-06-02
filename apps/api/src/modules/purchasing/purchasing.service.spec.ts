@@ -147,6 +147,28 @@ describe('PurchasingService.createPurchaseOrder', () => {
     expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
   });
 
+  it('rejects an equipment line with quantity other than 1 (one asset per record)', async () => {
+    const { service, purchasingRepository } = createService();
+    await expect(
+      service.createPurchaseOrder('token', {
+        vendorName: 'Acme',
+        destinationInventoryLocationId: 'loc-1',
+        lines: [
+          {
+            kind: 'equipment',
+            description: 'Condenser',
+            quantity: 3,
+            expectedUnitCost: 1400,
+            equipmentType: 'Condenser',
+            equipmentBrand: 'Trane',
+            equipmentModel: 'XR14'
+          }
+        ]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
+  });
+
   it('accepts a customer-destination PO whose job matches the destination location', async () => {
     const { service, purchasingRepository } = createService();
     purchasingRepository.getJobLocationId.mockResolvedValue('cust-loc-1');
@@ -229,6 +251,44 @@ describe('PurchasingService.receivePurchaseOrder', () => {
     await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
       ConflictException
     );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('409s when receiving a draft PO that was never ordered', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({ status: 'draft', lines: [poLine({ itemId: 'item-1' })] })
+    );
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('rejects receiving an equipment line at a quantity other than 1', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({
+        status: 'ordered',
+        destinationKind: 'inventory',
+        lines: [
+          poLine({
+            kind: 'equipment',
+            equipmentType: 'Condenser',
+            equipmentBrand: 'Trane',
+            equipmentModel: 'XR14',
+            quantity: 1
+          })
+        ]
+      })
+    );
+
+    await expect(
+      service.receivePurchaseOrder('token', 'po-1', {
+        lines: [{ purchaseOrderLineId: 'line-1', quantity: 2 }]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
   });
 
