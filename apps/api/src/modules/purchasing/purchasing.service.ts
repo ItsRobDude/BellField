@@ -68,6 +68,23 @@ export class PurchasingService {
     if (!request.lines || request.lines.length === 0) {
       throw new BadRequestException('A purchase order needs at least one line.');
     }
+    // A catalog-linked line must reference a real item whose kind matches the line kind
+    // (a part line can't point at an equipment item, and vice versa) — this matters for
+    // the receiving/equipment bridge in the next slice.
+    for (const line of request.lines) {
+      if (!line.itemId) {
+        continue;
+      }
+      const itemKind = await this.purchasingRepository.getItemKind(line.itemId);
+      if (!itemKind) {
+        throw new NotFoundException('A purchase order line references an unknown inventory item.');
+      }
+      if (itemKind !== line.kind) {
+        throw new BadRequestException(
+          `Line kind "${line.kind}" does not match the catalog item kind "${itemKind}".`
+        );
+      }
+    }
 
     const purchaseOrder = await this.purchasingRepository.createPurchaseOrder(request, {
       id: actor.id,

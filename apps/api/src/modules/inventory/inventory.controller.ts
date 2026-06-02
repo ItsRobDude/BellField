@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import {
   CreateInventoryAdjustmentRequestBodyDto,
@@ -78,6 +78,15 @@ export class InventoryLedgerController {
   @Get('on-hand')
   async onHand(@Headers('authorization') auth: string | undefined) {
     return this.inventoryService.getOnHand(getBearerToken(auth));
+  }
+
+  @Get('movements')
+  async movements(
+    @Headers('authorization') auth: string | undefined,
+    @Query('itemId') itemId?: string,
+    @Query('jobId') jobId?: string
+  ) {
+    return this.inventoryService.listMovements(getBearerToken(auth), { itemId, jobId });
   }
 
   @Post('adjustments')

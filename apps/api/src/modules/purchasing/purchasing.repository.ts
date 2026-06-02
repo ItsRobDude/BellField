@@ -192,6 +192,15 @@ export class PurchasingRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
+  /** The catalog kind of an item, or null if the id is unknown. */
+  async getItemKind(id: string): Promise<PurchaseOrderLineKind | null> {
+    const result = await this.databaseService.query<{ kind: PurchaseOrderLineKind }>(
+      `select kind from inventory_items where id = $1 limit 1`,
+      [id]
+    );
+    return result.rows[0]?.kind ?? null;
+  }
+
   /** Transition draft → ordered atomically. Returns false if the PO was not a draft. */
   async markOrdered(id: string, actor: Actor): Promise<boolean> {
     const now = new Date().toISOString();

@@ -205,7 +205,7 @@ export class InventoryRepository {
          m.location_id as "locationId",
          loc.name as "locationName",
          sum(m.quantity) as "quantity",
-         sum(m.quantity * m.unit_cost) as "totalValue"
+         sum(m.extended_cost) as "totalValue"
        from inventory_movements m
        join inventory_items it on it.id = m.item_id
        join inventory_locations loc on loc.id = m.location_id

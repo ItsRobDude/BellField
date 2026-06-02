@@ -21,6 +21,8 @@ export type MovementInsert = {
   kind: InventoryMovementKind;
   quantity: number; // signed relative to locationId
   unitCost: number;
+  /** Signed value delta at the location (4-decimal). Source of truth for on-hand value. */
+  extendedCost: number;
   locationId?: string | null;
   jobId?: string | null;
   sourceKind?: MovementSourceKind | null;
@@ -34,6 +36,7 @@ export type MovementInsert = {
 
 export type OnHandSnapshot = {
   quantity: number;
+  /** Precise running value (sum of extended_cost) at 4 decimals. */
   totalValue: number;
   averageUnitCost: number;
 };
@@ -42,8 +45,25 @@ export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
 }
 
+/** Value precision for the ledger: 4 decimals (hundredths of a cent) to avoid drift. */
+function roundValue(value: number): number {
+  return Math.round(value * 10000) / 10000;
+}
+
 function roundQty(value: number): number {
   return Math.round(value * 10000) / 10000;
+}
+
+/**
+ * The value to remove for an outbound quantity, valued at the current average. A FULL
+ * depletion removes the exact remaining value (no rounding residual); a partial removes
+ * the proportional value at 4-decimal precision. Returns a positive number.
+ */
+export function outboundValue(snapshot: OnHandSnapshot, quantityOut: number): number {
+  if (quantityOut >= snapshot.quantity) {
+    return snapshot.totalValue;
+  }
+  return roundValue((snapshot.totalValue * quantityOut) / snapshot.quantity);
 }
 
 /** Serialize concurrent writers on a single (item, location) so on-hand can't be raced. */
@@ -65,13 +85,13 @@ export async function getOnHandSnapshot(
   locationId: string
 ): Promise<OnHandSnapshot> {
   const result = await queryable.query<{ qty: string | number; value: string | number }>(
-    `select coalesce(sum(quantity), 0) as qty, coalesce(sum(quantity * unit_cost), 0) as value
+    `select coalesce(sum(quantity), 0) as qty, coalesce(sum(extended_cost), 0) as value
      from inventory_movements
      where item_id = $1 and location_id = $2`,
     [itemId, locationId]
   );
   const quantity = roundQty(Number(result.rows[0]?.qty ?? 0));
-  const totalValue = roundMoney(Number(result.rows[0]?.value ?? 0));
+  const totalValue = roundValue(Number(result.rows[0]?.value ?? 0));
   const averageUnitCost = quantity > 0 ? roundMoney(totalValue / quantity) : 0;
   return { quantity, totalValue, averageUnitCost };
 }
@@ -85,17 +105,18 @@ export async function insertMovement(
   const createdAt = new Date().toISOString();
   await queryable.query(
     `insert into inventory_movements (
-       id, item_id, kind, quantity, unit_cost, location_id, job_id,
+       id, item_id, kind, quantity, unit_cost, extended_cost, location_id, job_id,
        source_kind, source_id, transfer_group_id, reversal_of_movement_id,
        actor_employee_id, actor_name, note, occurred_at, created_at
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
     [
       id,
       movement.itemId,
       movement.kind,
       movement.quantity,
       movement.unitCost,
+      movement.extendedCost,
       movement.locationId ?? null,
       movement.jobId ?? null,
       movement.sourceKind ?? null,
@@ -138,11 +159,16 @@ export async function applyAdjustment(
   const unitCost = isGain
     ? roundMoney(input.unitCost ?? snapshot.averageUnitCost)
     : snapshot.averageUnitCost;
+  // Gain adds qty*cost; loss removes the exact proportional value (full = exact remainder).
+  const extendedCost = isGain
+    ? roundValue(input.quantityDelta * unitCost)
+    : -outboundValue(snapshot, -input.quantityDelta);
   await insertMovement(queryable, {
     itemId: input.itemId,
     kind: isGain ? 'adjustmentGain' : 'adjustmentLoss',
     quantity: input.quantityDelta,
     unitCost,
+    extendedCost,
     locationId: input.locationId,
     sourceKind: 'adjustment',
     actor: input.actor,
@@ -179,6 +205,8 @@ export async function applyTransfer(
   if (source.quantity < input.quantity) {
     throw new ConflictException('Not enough on hand at the source location to transfer.');
   }
+  // Value removed from source = value added to destination (cost travels exactly).
+  const movedValue = outboundValue(source, input.quantity);
   const unitCost = source.averageUnitCost;
   const transferGroupId = randomUUID();
 
@@ -187,6 +215,7 @@ export async function applyTransfer(
     kind: 'transfer',
     quantity: -input.quantity,
     unitCost,
+    extendedCost: -movedValue,
     locationId: input.fromLocationId,
     sourceKind: 'transfer',
     transferGroupId,
@@ -199,6 +228,7 @@ export async function applyTransfer(
     kind: 'transfer',
     quantity: input.quantity,
     unitCost,
+    extendedCost: movedValue,
     locationId: input.toLocationId,
     sourceKind: 'transfer',
     transferGroupId,

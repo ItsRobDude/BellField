@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type {
   CreateInventoryAdjustmentRequest,
   CreateInventoryTransferRequest,
+  InventoryMovementResponse,
   InventoryOnHandResponse
 } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -87,6 +88,15 @@ export class InventoryService {
   async getOnHand(sessionToken: string): Promise<InventoryOnHandResponse> {
     await this.authorize(sessionToken, 'inventory:view');
     return { rows: await this.inventoryRepository.getOnHand() };
+  }
+
+  /** The immutable movement ledger, optionally filtered to one item or job (newest first). */
+  async listMovements(
+    sessionToken: string,
+    filter: { itemId?: string; jobId?: string }
+  ): Promise<InventoryMovementResponse> {
+    await this.authorize(sessionToken, 'inventory:view');
+    return { movements: await this.inventoryRepository.listMovements(filter, 200) };
   }
 
   async createAdjustment(

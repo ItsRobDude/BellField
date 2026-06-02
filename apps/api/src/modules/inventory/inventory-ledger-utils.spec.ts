@@ -133,6 +133,30 @@ describe('applyTransfer', () => {
     expect(findCalls(calls, LOCK)).toHaveLength(2);
   });
 
+  it('fully depletes mixed-cost stock with no value residual', async () => {
+    // 1 unit @ $1 + 2 units @ $2 = 3 units worth $5 (avg 1.6667). Transferring all 3 must
+    // remove EXACTLY $5 (extended_cost), not 3 * rounded-avg, so the source zeroes out.
+    const { queryable, calls } = scriptedQueryable([
+      { match: LOCK, rows: [] },
+      { match: SNAPSHOT, rows: [{ qty: 3, value: 5 }] },
+      { match: INSERT, rowCount: 1 }
+    ]);
+
+    await applyTransfer(queryable, {
+      itemId: 'item-1',
+      fromLocationId: 'loc-from',
+      toLocationId: 'loc-to',
+      quantity: 3,
+      actor,
+      occurredAt: '2026-06-02T00:00:00.000Z'
+    });
+
+    const inserts = findCalls(calls, INSERT);
+    // extended_cost is the 6th value: out leg -5 exactly, in leg +5 exactly.
+    expect(inserts[0].params[5]).toBe(-5);
+    expect(inserts[1].params[5]).toBe(5);
+  });
+
   it('rejects an over-transfer (more than on hand at source)', async () => {
     const { queryable, calls } = scriptedQueryable([
       { match: LOCK, rows: [] },
