@@ -14,6 +14,7 @@ import { IdentityAccessService } from '../identity-access/identity-access.servic
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { InvoicesRepository, type InvoiceLineWriteInput } from './invoices.repository';
+import { PaymentsRepository } from './payments.repository';
 import type {
   InvoiceRecord,
   InvoiceResponseDto,
@@ -27,7 +28,8 @@ export class InvoicesService {
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
     private readonly referenceDataService: ReferenceDataService,
-    private readonly invoicesRepository: InvoicesRepository
+    private readonly invoicesRepository: InvoicesRepository,
+    private readonly paymentsRepository: PaymentsRepository
   ) {}
 
   /** Load a job's single main invoice draft. Office-only, gated on invoices:view. */
@@ -85,13 +87,21 @@ export class InvoicesService {
     const postedCreditsCents = sumPostedCents('credit');
     const netBilledCents = postedMainCents + postedAdjustmentsCents - postedCreditsCents;
 
+    // Payments are a ledger; amount due is derived (net billed − non-void payments)
+    // rather than stored, so recording or voiding a payment never rewrites a posted
+    // invoice. amountDue may be negative (an overpayment / credit balance).
+    const paidCents = await this.paymentsRepository.sumActivePaymentCentsForJob(jobId);
+    const amountDueCents = netBilledCents - paidCents;
+
     return {
       jobId,
       mainInvoiceStatus: main.status,
       postedMainTotal: postedMainCents / 100,
       postedAdjustmentsTotal: postedAdjustmentsCents / 100,
       postedCreditsTotal: postedCreditsCents / 100,
-      netBilled: netBilledCents / 100
+      netBilled: netBilledCents / 100,
+      paidTotal: paidCents / 100,
+      amountDue: amountDueCents / 100
     };
   }
 

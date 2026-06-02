@@ -18,6 +18,14 @@ export const invoiceSourceLabels: Record<InvoiceLineItemSummary['sourceKind'], s
   estimate: 'Estimate'
 };
 
+// Payment actions are gated on the payments permission area, separate from invoice
+// view/edit so office staff can have billing visibility without payment authority.
+export type InvoicePaymentPermissions = {
+  canView: boolean;
+  canRecord: boolean;
+  canVoid: boolean;
+};
+
 export function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
 }

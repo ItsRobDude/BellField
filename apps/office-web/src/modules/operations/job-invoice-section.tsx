@@ -23,7 +23,8 @@ import {
   InvoiceLineEditor,
   InvoiceTotals,
   invoiceSourceLabels,
-  PostedInvoiceSummary
+  PostedInvoiceSummary,
+  type InvoicePaymentPermissions
 } from './job-invoice-shared';
 import { JobInvoiceCorrections } from './job-invoice-corrections';
 
@@ -34,6 +35,7 @@ type JobInvoiceSectionProps = {
   canEdit: boolean;
   canPost: boolean;
   canCreateAdjustments: boolean;
+  paymentPermissions: InvoicePaymentPermissions;
 };
 
 // The job's single main invoice draft: the running bill, fed by reflected
@@ -49,7 +51,8 @@ export function JobInvoiceSection({
   sessionToken,
   canEdit,
   canPost,
-  canCreateAdjustments
+  canCreateAdjustments,
+  paymentPermissions
 }: JobInvoiceSectionProps) {
   const [invoice, setInvoice] = useState<InvoiceSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -291,11 +294,13 @@ export function JobInvoiceSection({
       {invoice && invoice.status === 'posted' ? (
         <JobInvoiceCorrections
           jobId={jobId}
+          mainInvoiceId={invoice.id}
           apiBaseUrl={apiBaseUrl}
           sessionToken={sessionToken}
           canEdit={canEdit}
           canPost={canPost}
           canCreate={canCreateAdjustments}
+          paymentPermissions={paymentPermissions}
         />
       ) : null}
     </>

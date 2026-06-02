@@ -6,12 +6,17 @@ import {
   createOfficeJobAdjustment,
   getOfficeJobInvoiceBalance,
   listOfficeJobAdjustments,
+  listOfficeJobPayments,
   postOfficeInvoiceById,
+  recordOfficePayment,
   voidOfficeInvoiceLine,
+  voidOfficePayment,
   type InvoiceAdjustmentKind,
   type InvoiceLineItemSummary,
   type InvoiceSummary,
-  type JobInvoiceBalance
+  type JobInvoiceBalance,
+  type Payment,
+  type PaymentMethod
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -20,7 +25,8 @@ import {
   InvoiceTotals,
   invoiceSourceLabels,
   PostedInvoiceSummary,
-  SummaryRow
+  SummaryRow,
+  type InvoicePaymentPermissions
 } from './job-invoice-shared';
 import {
   createEmptyInvoiceLineDraft,
@@ -31,11 +37,13 @@ import {
 
 type JobInvoiceCorrectionsProps = {
   jobId: string;
+  mainInvoiceId: string;
   apiBaseUrl: string;
   sessionToken: string;
   canEdit: boolean;
   canPost: boolean;
   canCreate: boolean;
+  paymentPermissions: InvoicePaymentPermissions;
 };
 
 const correctionKindLabels: Record<InvoiceAdjustmentKind, string> = {
@@ -43,43 +51,70 @@ const correctionKindLabels: Record<InvoiceAdjustmentKind, string> = {
   credit: 'Credit'
 };
 
-// The job-level correction surface, shown once the main invoice is posted. It shows the
-// net billed balance and the adjustment/credit records (each its own draft→posted invoice),
-// reusing the same line editor and money formatting as the main draft. Adjustments add a
-// charge; credits reduce what's owed. Both are created as drafts, edited, then posted.
+const paymentMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  check: 'Check',
+  card: 'Card',
+  ach: 'ACH',
+  other: 'Other'
+};
+
+const paymentMethodOptions: PaymentMethod[] = ['cash', 'check', 'card', 'ach', 'other'];
+
+type PaymentDraft = { amount: string; method: PaymentMethod; reference: string; memo: string };
+
+function emptyPaymentDraft(): PaymentDraft {
+  return { amount: '', method: 'card', reference: '', memo: '' };
+}
+
+// The job-level money rollup, shown once the main invoice is posted: the net billed
+// balance and amount due, the adjustment/credit records (each its own draft→posted
+// invoice), and the payment ledger. Reuses the same line editor and money formatting
+// as the main draft. Adjustments add a charge; credits reduce what's owed; payments
+// reduce the amount due without ever changing invoice totals.
 export function JobInvoiceCorrections({
   jobId,
+  mainInvoiceId,
   apiBaseUrl,
   sessionToken,
   canEdit,
   canPost,
-  canCreate
+  canCreate,
+  paymentPermissions
 }: JobInvoiceCorrectionsProps) {
   const [balance, setBalance] = useState<JobInvoiceBalance | null>(null);
   const [corrections, setCorrections] = useState<InvoiceSummary[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [addLineForId, setAddLineForId] = useState<string | null>(null);
   const [lineDraft, setLineDraft] = useState<InvoiceLineDraft | null>(null);
+  const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+
+  const canViewPayments = paymentPermissions.canView;
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const [balanceResult, adjustmentsResult] = await Promise.all([
+      const [balanceResult, adjustmentsResult, paymentsResult] = await Promise.all([
         getOfficeJobInvoiceBalance({ jobId, apiBaseUrl, sessionToken }),
-        listOfficeJobAdjustments({ jobId, apiBaseUrl, sessionToken })
+        listOfficeJobAdjustments({ jobId, apiBaseUrl, sessionToken }),
+        canViewPayments
+          ? listOfficeJobPayments({ jobId, apiBaseUrl, sessionToken })
+          : Promise.resolve({ payments: [] })
       ]);
       setBalance(balanceResult);
       setCorrections(adjustmentsResult.adjustments);
+      setPayments(paymentsResult.payments);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load corrections.');
     } finally {
       setIsLoading(false);
     }
-  }, [apiBaseUrl, jobId, sessionToken]);
+  }, [apiBaseUrl, canViewPayments, jobId, sessionToken]);
 
   useEffect(() => {
     void load();
@@ -93,7 +128,6 @@ export function JobInvoiceCorrections({
     }
   }
 
-  // Replace one correction in the list with the server's updated copy.
   function applyCorrection(next: InvoiceSummary, notice: string) {
     setCorrections((current) => {
       const exists = current.some((item) => item.id === next.id);
@@ -176,9 +210,7 @@ export function JobInvoiceCorrections({
       });
       applyCorrection(
         response.invoice,
-        `${
-          correctionKindLabels[correction.invoiceKind === 'credit' ? 'credit' : 'adjustment']
-        } posted.`
+        `${label.charAt(0).toUpperCase()}${label.slice(1)} posted.`
       );
       void refreshBalance();
     } catch (error) {
@@ -188,8 +220,60 @@ export function JobInvoiceCorrections({
     }
   }
 
+  async function savePayment() {
+    if (!paymentDraft) return;
+    const amount = Number(paymentDraft.amount);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setErrorMessage('Enter a payment amount greater than zero.');
+      return;
+    }
+    setIsSaving(true);
+    try {
+      const response = await recordOfficePayment({
+        invoiceId: mainInvoiceId,
+        amount,
+        method: paymentDraft.method,
+        reference: paymentDraft.reference.trim() || undefined,
+        memo: paymentDraft.memo.trim() || undefined,
+        apiBaseUrl,
+        sessionToken
+      });
+      setPayments((current) => [response.payment, ...current]);
+      setPaymentDraft(null);
+      setNoticeMessage('Payment recorded.');
+      setErrorMessage(null);
+      void refreshBalance();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to record the payment.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function voidPayment(payment: Payment) {
+    if (!window.confirm(`Void this ${formatCurrency(payment.amount)} payment?`)) return;
+    setIsSaving(true);
+    try {
+      const response = await voidOfficePayment({
+        paymentId: payment.id,
+        apiBaseUrl,
+        sessionToken
+      });
+      setPayments((current) =>
+        current.map((item) => (item.id === response.payment.id ? response.payment : item))
+      );
+      setNoticeMessage('Payment voided.');
+      setErrorMessage(null);
+      void refreshBalance();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to void the payment.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
   return (
-    <section style={styles.panel} aria-label="Invoice corrections and balance">
+    <section style={styles.panel} aria-label="Invoice corrections, balance, and payments">
       <div style={styles.row}>
         <h2 style={styles.heading}>Corrections &amp; balance</h2>
         {canCreate ? (
@@ -229,7 +313,15 @@ export function JobInvoiceCorrections({
           {balance.postedCreditsTotal > 0 ? (
             <SummaryRow label="Credits" value={`−${formatCurrency(balance.postedCreditsTotal)}`} />
           ) : null}
-          <SummaryRow label="Net billed" value={formatCurrency(balance.netBilled)} emphasize />
+          <SummaryRow label="Net billed" value={formatCurrency(balance.netBilled)} />
+          {canViewPayments ? (
+            <>
+              {balance.paidTotal > 0 ? (
+                <SummaryRow label="Paid" value={`−${formatCurrency(balance.paidTotal)}`} />
+              ) : null}
+              <SummaryRow label="Amount due" value={formatCurrency(balance.amountDue)} emphasize />
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -267,6 +359,21 @@ export function JobInvoiceCorrections({
           ))}
         </div>
       )}
+
+      {canViewPayments ? (
+        <PaymentsBlock
+          payments={payments}
+          canRecord={paymentPermissions.canRecord}
+          canVoid={paymentPermissions.canVoid}
+          isSaving={isSaving}
+          paymentDraft={paymentDraft}
+          onStartRecord={() => setPaymentDraft(emptyPaymentDraft())}
+          onCancelRecord={() => setPaymentDraft(null)}
+          onChangeDraft={setPaymentDraft}
+          onSavePayment={() => void savePayment()}
+          onVoidPayment={(payment) => void voidPayment(payment)}
+        />
+      ) : null}
     </section>
   );
 }
@@ -365,6 +472,145 @@ function CorrectionCard({
 
       <InvoiceTotals invoice={correction} />
       {correction.posted ? <PostedInvoiceSummary posted={correction.posted} /> : null}
+    </div>
+  );
+}
+
+function PaymentsBlock({
+  payments,
+  canRecord,
+  canVoid,
+  isSaving,
+  paymentDraft,
+  onStartRecord,
+  onCancelRecord,
+  onChangeDraft,
+  onSavePayment,
+  onVoidPayment
+}: {
+  payments: Payment[];
+  canRecord: boolean;
+  canVoid: boolean;
+  isSaving: boolean;
+  paymentDraft: PaymentDraft | null;
+  onStartRecord: () => void;
+  onCancelRecord: () => void;
+  onChangeDraft: (draft: PaymentDraft) => void;
+  onSavePayment: () => void;
+  onVoidPayment: (payment: Payment) => void;
+}) {
+  function patch(values: Partial<PaymentDraft>) {
+    if (paymentDraft) {
+      onChangeDraft({ ...paymentDraft, ...values });
+    }
+  }
+
+  return (
+    <div style={styles.subpanel}>
+      <div style={styles.row}>
+        <h3 style={styles.sectionHeading}>Payments</h3>
+        {canRecord && !paymentDraft ? (
+          <button type="button" style={styles.button} disabled={isSaving} onClick={onStartRecord}>
+            Record payment
+          </button>
+        ) : null}
+      </div>
+
+      {paymentDraft ? (
+        <div style={styles.drawerPanel}>
+          <div style={styles.formGridCompact}>
+            <label style={styles.fieldLabel}>
+              <span>Amount</span>
+              <input
+                style={styles.input}
+                type="number"
+                step="0.01"
+                value={paymentDraft.amount}
+                onChange={(event) => patch({ amount: event.target.value })}
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              <span>Method</span>
+              <select
+                style={styles.input}
+                value={paymentDraft.method}
+                onChange={(event) => patch({ method: event.target.value as PaymentMethod })}
+              >
+                {paymentMethodOptions.map((method) => (
+                  <option key={method} value={method}>
+                    {paymentMethodLabels[method]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={styles.fieldLabel}>
+              <span>Reference</span>
+              <input
+                style={styles.input}
+                value={paymentDraft.reference}
+                onChange={(event) => patch({ reference: event.target.value })}
+              />
+            </label>
+            <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
+              <span>Memo</span>
+              <input
+                style={styles.input}
+                value={paymentDraft.memo}
+                onChange={(event) => patch({ memo: event.target.value })}
+              />
+            </label>
+          </div>
+          <div style={styles.inlineActionBar}>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              disabled={isSaving}
+              onClick={onSavePayment}
+            >
+              {isSaving ? 'Saving…' : 'Record payment'}
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              disabled={isSaving}
+              onClick={onCancelRecord}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {payments.length === 0 ? (
+        <p style={styles.tinyMuted}>No payments recorded yet.</p>
+      ) : (
+        payments.map((payment) => (
+          <div key={payment.id} style={styles.row}>
+            <div style={{ minWidth: 0 }}>
+              <span style={payment.isVoid ? { textDecoration: 'line-through' } : undefined}>
+                {formatCurrency(payment.amount)} · {paymentMethodLabels[payment.method]}
+              </span>
+              <p style={styles.tinyMuted}>
+                {payment.receivedAt.slice(0, 10)}
+                {payment.reference ? ` · ${payment.reference}` : ''}
+                {payment.isVoid ? ' · void' : ''}
+              </p>
+            </div>
+            <div style={styles.badgeRow}>
+              {canVoid && !payment.isVoid ? (
+                <button
+                  type="button"
+                  style={styles.dangerButton}
+                  disabled={isSaving}
+                  onClick={() => onVoidPayment(payment)}
+                >
+                  Void
+                </button>
+              ) : null}
+            </div>
+          </div>
+        ))
+      )}
     </div>
   );
 }

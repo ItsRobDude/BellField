@@ -47,6 +47,11 @@ import type {
   InvoiceSummary,
   JobAdjustmentsResponse,
   JobInvoiceBalance,
+  JobPaymentsResponse,
+  Payment,
+  PaymentMethod,
+  PaymentResponse,
+  RecordPaymentRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -129,6 +134,11 @@ export type {
   InvoiceSummary,
   JobAdjustmentsResponse,
   JobInvoiceBalance,
+  JobPaymentsResponse,
+  Payment,
+  PaymentMethod,
+  PaymentResponse,
+  RecordPaymentRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -1038,5 +1048,48 @@ export async function postOfficeInvoiceById(input: {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken,
     method: 'POST'
+  });
+}
+
+/** List a job's payments across its posted invoices (newest first). */
+export async function listOfficeJobPayments(input: {
+  jobId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<JobPaymentsResponse> {
+  return requestJson<JobPaymentsResponse>(`/operations/jobs/${input.jobId}/invoice/payments`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+/** Record a payment against a posted invoice. */
+export async function recordOfficePayment(
+  input: RecordPaymentRequest & { invoiceId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<PaymentResponse> {
+  const { invoiceId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<PaymentResponse>(`/operations/invoices/${invoiceId}/payments`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+/** Void a payment by id (the correction path; payments are never edited in place). */
+export async function voidOfficePayment(input: {
+  paymentId: string;
+  reason?: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<PaymentResponse> {
+  const { paymentId, sessionToken, apiBaseUrl, reason } = input;
+
+  return requestJson<PaymentResponse>(`/operations/payments/${paymentId}/void`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify({ reason })
   });
 }

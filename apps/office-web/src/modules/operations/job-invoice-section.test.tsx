@@ -15,7 +15,10 @@ vi.mock('@/lib/operations-api', () => ({
   listOfficeJobAdjustments: vi.fn(),
   createOfficeJobAdjustment: vi.fn(),
   addOfficeInvoiceLineById: vi.fn(),
-  postOfficeInvoiceById: vi.fn()
+  postOfficeInvoiceById: vi.fn(),
+  listOfficeJobPayments: vi.fn(),
+  recordOfficePayment: vi.fn(),
+  voidOfficePayment: vi.fn()
 }));
 
 const mockedApi = vi.mocked(operationsApi);
@@ -29,9 +32,12 @@ beforeEach(() => {
     postedMainTotal: 0,
     postedAdjustmentsTotal: 0,
     postedCreditsTotal: 0,
-    netBilled: 0
+    netBilled: 0,
+    paidTotal: 0,
+    amountDue: 0
   });
   mockedApi.listOfficeJobAdjustments.mockResolvedValue({ adjustments: [] });
+  mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [] });
 });
 
 afterEach(() => {
@@ -103,6 +109,7 @@ function renderSection(canPost: boolean) {
       canEdit
       canPost={canPost}
       canCreateAdjustments
+      paymentPermissions={{ canView: true, canRecord: true, canVoid: true }}
     />
   );
 }

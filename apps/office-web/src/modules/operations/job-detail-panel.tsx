@@ -27,6 +27,7 @@ import {
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { JobEstimatesSection } from './job-estimates-section';
 import { JobInvoiceSection } from './job-invoice-section';
+import type { InvoicePaymentPermissions } from './job-invoice-shared';
 
 type JobDetailPanelProps = {
   technicians: JobsWorkspaceResponse['technicians'];
@@ -40,6 +41,7 @@ type JobDetailPanelProps = {
   canEditInvoice: boolean;
   canPostInvoice: boolean;
   canConvertEstimate: boolean;
+  paymentPermissions: InvoicePaymentPermissions;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
   timelineHasMore?: boolean;
@@ -133,6 +135,7 @@ export function JobDetailPanel({
   canEditInvoice,
   canPostInvoice,
   canConvertEstimate,
+  paymentPermissions,
   initialTab = 'overview',
   focusedAppointmentId,
   timelineHasMore = false,
@@ -296,6 +299,7 @@ export function JobDetailPanel({
           // Adjustments/credits are gated on invoices:create — the same authority
           // that converts an estimate into the invoice.
           canCreateAdjustments={canConvertEstimate}
+          paymentPermissions={paymentPermissions}
         />
       ) : null}
       {activeTab === 'media'

@@ -36,18 +36,23 @@ function createService() {
     listAdjustmentsForJob: jest.fn(),
     listInvoiceTotalsForJob: jest.fn()
   };
+  const paymentsRepository = {
+    sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0)
+  };
 
   return {
     service: new InvoicesService(
       identityAccessService as never,
       jobsDataService as never,
       referenceDataService as never,
-      invoicesRepository as never
+      invoicesRepository as never,
+      paymentsRepository as never
     ),
     identityAccessService,
     jobsDataService,
     referenceDataService,
-    invoicesRepository
+    invoicesRepository,
+    paymentsRepository
   };
 }
 
@@ -496,8 +501,36 @@ describe('InvoicesService job balance', () => {
       postedMainTotal: 1000,
       postedAdjustmentsTotal: 100,
       postedCreditsTotal: 50,
-      netBilled: 1050
+      netBilled: 1050,
+      paidTotal: 0,
+      amountDue: 1050
     });
+  });
+
+  it('derives paidTotal and amountDue from non-void payments', async () => {
+    const { service, invoicesRepository, paymentsRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 1000 }
+    ]);
+    // 400.00 paid, in whole cents.
+    paymentsRepository.sumActivePaymentCentsForJob.mockResolvedValue(40000);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+
+    expect(result.netBilled).toBe(1000);
+    expect(result.paidTotal).toBe(400);
+    expect(result.amountDue).toBe(600);
+  });
+
+  it('returns a negative amountDue when overpaid', async () => {
+    const { service, invoicesRepository, paymentsRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 100 }
+    ]);
+    paymentsRepository.sumActivePaymentCentsForJob.mockResolvedValue(15000);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+    expect(result.amountDue).toBe(-50);
   });
 
   it('treats a draft main as not yet billed (netBilled 0)', async () => {

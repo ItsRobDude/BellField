@@ -736,8 +736,8 @@ export interface CreateAdjustmentRequest {
  * Net amount billed on a job across its POSTED invoices: the posted main total plus
  * posted adjustments minus posted credits. "Billed" means posted/accounting-visible, so a
  * draft main contributes 0 (`mainInvoiceStatus` says whether it is posted yet). `netBilled`
- * may be negative (a net credit balance). Payments are not modeled yet, so this is net
- * billed, not amount owed after payment.
+ * may be negative (a net credit balance). `paidTotal` is the sum of the job's non-void
+ * payments; `amountDue` = netBilled − paidTotal (may be negative = overpaid/credit balance).
  */
 export interface JobInvoiceBalance {
   jobId: string;
@@ -746,6 +746,57 @@ export interface JobInvoiceBalance {
   postedAdjustmentsTotal: number;
   postedCreditsTotal: number;
   netBilled: number;
+  paidTotal: number;
+  amountDue: number;
+}
+
+// --- Payments (Milestone 8, online-only v1) -------------------------------------
+
+/** How a manually recorded payment was tendered. */
+export type PaymentMethod = 'cash' | 'check' | 'card' | 'ach' | 'other';
+
+/**
+ * A payment received against a posted invoice. An append-only ledger entry: it never
+ * changes invoice totals; the job's amount due is derived as net billed − non-void
+ * payments. A correction is a void (`isVoid`), not an edit of the amount.
+ */
+export interface Payment {
+  id: string;
+  invoiceId: string;
+  amount: number;
+  method: PaymentMethod;
+  receivedAt: string;
+  reference?: string;
+  memo?: string;
+  recordedByName: string;
+  isVoid: boolean;
+  voidReason?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Record a payment against a posted invoice. Amount is positive dollars. */
+export interface RecordPaymentRequest {
+  amount: number;
+  method: PaymentMethod;
+  /** ISO date/time the payment was received. Defaults to now when omitted. */
+  receivedAt?: string;
+  reference?: string;
+  memo?: string;
+}
+
+/** Void an existing payment (the correction path; payments are never edited in place). */
+export interface VoidPaymentRequest {
+  reason?: string;
+}
+
+export interface PaymentResponse {
+  payment: Payment;
+}
+
+/** A job's payments across its posted invoices, newest first. */
+export interface JobPaymentsResponse {
+  payments: Payment[];
 }
 
 /** A manual invoice line the office adds, or the shape it edits a line into. */

@@ -13,6 +13,7 @@ import type {
 import type { OfficeJobsQueueSurfaceProps } from './office-workspace-jobs-surface';
 import { OfficeJobsQueueSurface } from './office-workspace-jobs-surface';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import type { InvoicePaymentPermissions } from './job-invoice-shared';
 
 export type OfficeJobDetailSurfaceProps = {
   selectedJobId: string | null;
@@ -26,6 +27,7 @@ export type OfficeJobDetailSurfaceProps = {
   canEditInvoice: boolean;
   canPostInvoice: boolean;
   canConvertEstimate: boolean;
+  paymentPermissions: InvoicePaymentPermissions;
   focusedAppointmentId: string | null;
   jobDetailInitialTab: JobDetailTab;
   isJobDetailLoading: boolean;
@@ -81,6 +83,7 @@ export function OfficeJobDetailSurface({
   canEditInvoice,
   canPostInvoice,
   canConvertEstimate,
+  paymentPermissions,
   focusedAppointmentId,
   jobDetailInitialTab,
   isJobDetailLoading,
@@ -128,6 +131,7 @@ export function OfficeJobDetailSurface({
         canEditInvoice={canEditInvoice}
         canPostInvoice={canPostInvoice}
         canConvertEstimate={canConvertEstimate}
+        paymentPermissions={paymentPermissions}
         initialTab={jobDetailInitialTab}
         focusedAppointmentId={focusedAppointmentId}
         timelineHasMore={selectedJobDetail.timelineHasMore}
