@@ -40,6 +40,7 @@ export type PermissionArea =
   | 'payments'
   | 'purchasing'
   | 'inventory'
+  | 'jobCosting'
   | 'reports'
   | 'employeesPermissions'
   | 'companySettings'

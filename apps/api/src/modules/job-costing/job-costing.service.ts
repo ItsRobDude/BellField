@@ -4,6 +4,7 @@ import type {
   CreateJobLaborRequest,
   JobCostEventResponse
 } from '@bellfield/contracts';
+import { centsToDollars, dollarsToCents } from '@bellfield/estimating';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobCostingRepository } from './job-costing.repository';
 
@@ -20,7 +21,8 @@ export class JobCostingService {
     jobId: string,
     request: CreateJobLaborRequest
   ): Promise<JobCostEventResponse> {
-    const actor = await this.authorizeEdit(sessionToken);
+    const actor = await this.authorizeCreate(sessionToken);
+    const description = requireDescription(request.description);
     if (request.hours <= 0) {
       throw new BadRequestException('Labor hours must be greater than zero.');
     }
@@ -29,14 +31,15 @@ export class JobCostingService {
     }
     await this.requireJob(jobId);
 
-    const amount = roundMoney(request.hours * request.ratePerHour);
+    // Compute the cost in whole cents (half-up, float-noise absorbed) before storing.
+    const amount = centsToDollars(dollarsToCents(request.hours * request.ratePerHour));
     if (amount <= 0) {
       throw new BadRequestException('Labor cost must be greater than zero.');
     }
 
     const event = await this.jobCostingRepository.insertLabor({
       jobId,
-      description: request.description.trim(),
+      description,
       hours: request.hours,
       ratePerHour: request.ratePerHour,
       amount,
@@ -51,7 +54,8 @@ export class JobCostingService {
     jobId: string,
     request: CreateJobExpenseRequest
   ): Promise<JobCostEventResponse> {
-    const actor = await this.authorizeEdit(sessionToken);
+    const actor = await this.authorizeCreate(sessionToken);
+    const description = requireDescription(request.description);
     if (request.amount <= 0) {
       throw new BadRequestException('Expense amount must be greater than zero.');
     }
@@ -59,8 +63,8 @@ export class JobCostingService {
 
     const event = await this.jobCostingRepository.insertExpense({
       jobId,
-      description: request.description.trim(),
-      amount: roundMoney(request.amount),
+      description,
+      amount: centsToDollars(dollarsToCents(request.amount)),
       actor: { id: actor.id, displayName: actor.displayName }
     });
     return { event };
@@ -72,14 +76,22 @@ export class JobCostingService {
     }
   }
 
-  /** Posting job costs is an office-only edit action this milestone. */
-  private authorizeEdit(sessionToken: string) {
-    return this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobs:edit', [
+  /**
+   * Posting job costs is gated on the dedicated, office-only jobCosting area (not the
+   * broad jobs:edit), since job cost is internal financial data.
+   */
+  private authorizeCreate(sessionToken: string) {
+    return this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobCosting:create', [
       'office-web'
     ]);
   }
 }
 
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+/** Reject a description that is empty once trimmed (the DTO only checks the raw body). */
+function requireDescription(raw: string): string {
+  const description = raw.trim();
+  if (!description) {
+    throw new BadRequestException('A description is required.');
+  }
+  return description;
 }

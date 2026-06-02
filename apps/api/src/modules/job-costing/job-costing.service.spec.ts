@@ -5,8 +5,8 @@ function createService() {
   const identityAccessService = {
     getAuthorizedEmployee: jest.fn().mockResolvedValue({
       id: 'office-1',
-      displayName: 'Pat Purchaser',
-      effectivePermissions: ['jobs:view', 'jobs:edit'],
+      displayName: 'Bea Bookkeeper',
+      effectivePermissions: ['jobCosting:view', 'jobCosting:create', 'jobCosting:edit'],
       sessionSurface: 'office-web'
     })
   };
@@ -24,7 +24,7 @@ function createService() {
 }
 
 describe('JobCostingService.postLabor', () => {
-  it('computes amount = hours * rate and inserts, gated office-only on jobs:edit', async () => {
+  it('computes amount = hours * rate and inserts, gated office-only on jobCosting:create', async () => {
     const { service, identityAccessService, jobCostingRepository } = createService();
 
     await service.postLabor('token', 'job-1', {
@@ -33,9 +33,11 @@ describe('JobCostingService.postLabor', () => {
       ratePerHour: 90
     });
 
-    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith('token', 'jobs:edit', [
-      'office-web'
-    ]);
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'jobCosting:create',
+      ['office-web']
+    );
     expect(jobCostingRepository.jobExists).toHaveBeenCalledWith('job-1');
     expect(jobCostingRepository.insertLabor).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -48,11 +50,44 @@ describe('JobCostingService.postLabor', () => {
     );
   });
 
+  it('rounds the labor cost to whole cents (half-up, float-noise absorbed)', async () => {
+    const { service, jobCostingRepository } = createService();
+
+    // 1.005 * 100 underflows in binary float; the cents helper must still round up to 100.50.
+    await service.postLabor('token', 'job-1', {
+      description: 'Tricky rounding',
+      hours: 1,
+      ratePerHour: 100.5
+    });
+
+    expect(jobCostingRepository.insertLabor).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 100.5 })
+    );
+  });
+
   it('rejects non-positive hours and writes nothing', async () => {
     const { service, jobCostingRepository } = createService();
 
     await expect(
       service.postLabor('token', 'job-1', { description: 'x', hours: 0, ratePerHour: 90 })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(jobCostingRepository.insertLabor).not.toHaveBeenCalled();
+  });
+
+  it('rejects a negative labor rate and writes nothing', async () => {
+    const { service, jobCostingRepository } = createService();
+
+    await expect(
+      service.postLabor('token', 'job-1', { description: 'x', hours: 1, ratePerHour: -5 })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(jobCostingRepository.insertLabor).not.toHaveBeenCalled();
+  });
+
+  it('rejects a blank-after-trim description and writes nothing', async () => {
+    const { service, jobCostingRepository } = createService();
+
+    await expect(
+      service.postLabor('token', 'job-1', { description: '   ', hours: 1, ratePerHour: 90 })
     ).rejects.toBeInstanceOf(BadRequestException);
     expect(jobCostingRepository.insertLabor).not.toHaveBeenCalled();
   });
@@ -95,6 +130,26 @@ describe('JobCostingService.postExpense', () => {
     await expect(
       service.postExpense('token', 'job-1', { description: 'x', amount: 0 })
     ).rejects.toBeInstanceOf(BadRequestException);
+    expect(jobCostingRepository.insertExpense).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound posting an expense to a missing job', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.jobExists.mockResolvedValue(false);
+
+    await expect(
+      service.postExpense('token', 'missing', { description: 'Permit', amount: 50 })
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(jobCostingRepository.insertExpense).not.toHaveBeenCalled();
+  });
+
+  it('propagates a forbidden session and writes nothing', async () => {
+    const { service, identityAccessService, jobCostingRepository } = createService();
+    identityAccessService.getAuthorizedEmployee.mockRejectedValue(new ForbiddenException());
+
+    await expect(
+      service.postExpense('token', 'job-1', { description: 'Permit', amount: 50 })
+    ).rejects.toBeInstanceOf(ForbiddenException);
     expect(jobCostingRepository.insertExpense).not.toHaveBeenCalled();
   });
 });

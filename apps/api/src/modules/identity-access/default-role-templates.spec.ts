@@ -18,3 +18,18 @@ describe('defaultRoleTemplates invoice permissions', () => {
     expect(defaultRoleTemplates.technician.permissions).not.toContain('invoices:create');
   });
 });
+
+// Job cost is internal financial data, gated on its own jobCosting area (not jobs:edit).
+describe('defaultRoleTemplates jobCosting permissions', () => {
+  it('grants owner, admin, and bookkeeping jobCosting:create', () => {
+    for (const role of ['owner', 'admin', 'bookKeeping'] as const) {
+      expect(defaultRoleTemplates[role].permissions).toContain('jobCosting:create');
+    }
+  });
+
+  it('does not grant scheduling/field roles jobCosting:create', () => {
+    expect(defaultRoleTemplates.csr.permissions).not.toContain('jobCosting:create');
+    expect(defaultRoleTemplates.dispatcher.permissions).not.toContain('jobCosting:create');
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('jobCosting:create');
+  });
+});

@@ -33,6 +33,9 @@ const adminCore = [
   ...permissionKeys('payments', ['view', 'create', 'edit']),
   ...permissionKeys('purchasing', ['view', 'create', 'edit']),
   ...permissionKeys('inventory', ['view', 'create', 'edit']),
+  // Job cost is internal financial data, so it is its own area rather than riding on
+  // jobs:edit: admins/owners (and bookkeeping below) can see and post job costs.
+  ...permissionKeys('jobCosting', ['view', 'create', 'edit']),
   ...permissionKeys('reports', ['view', 'export']),
   ...permissionKeys('employeesPermissions', ['view', 'configure']),
   ...permissionKeys('companySettings', ['view', 'configure']),
@@ -105,6 +108,8 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       // (invoices:create), in addition to viewing, editing, and posting invoices.
       ...permissionKeys('invoices', ['view', 'create', 'edit', 'post']),
       ...permissionKeys('payments', ['view', 'create', 'edit']),
+      // Bookkeeping owns financial cost data, so it can see and post job costs.
+      ...permissionKeys('jobCosting', ['view', 'create', 'edit']),
       ...permissionKeys('reports', ['view', 'export'])
     ])
   },

@@ -56,8 +56,8 @@ Most endpoints expect:
 | `PATCH` | `/operations/jobs/register-entries/:registerEntryId`      | office or field | `register:edit`                                       | Edit register entry.                                                                                               |
 | `POST`  | `/operations/jobs/register-entries/:registerEntryId/void` | office or field | `register:edit`                                       | Soft-void register entry.                                                                                          |
 | `GET`   | `/operations/jobs/field/assigned-work`                    | field           | `appointmentsDispatch:view`                           | Load assigned work window for the signed-in technician.                                                            |
-| `POST`  | `/operations/jobs/:jobId/labor`                           | office          | `jobs:edit`                                           | Post a labor cost event to a job (amount = hours × ratePerHour). Body `{ description, hours, ratePerHour }`.       |
-| `POST`  | `/operations/jobs/:jobId/expenses`                        | office          | `jobs:edit`                                           | Post an expense cost event to a job. Body `{ description, amount }`.                                               |
+| `POST`  | `/operations/jobs/:jobId/labor`                           | office          | `jobCosting:create`                                   | Post a labor cost event to a job (amount = hours × ratePerHour). Body `{ description, hours, ratePerHour }`.       |
+| `POST`  | `/operations/jobs/:jobId/expenses`                        | office          | `jobCosting:create`                                   | Post an expense cost event to a job. Body `{ description, amount }`.                                               |
 
 ## Estimates
 
