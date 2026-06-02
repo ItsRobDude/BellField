@@ -10,6 +10,7 @@ import {
 } from 'class-validator';
 import type {
   CreateInventoryAdjustmentRequest,
+  CreateInventoryIssueRequest,
   CreateInventoryItemRequest,
   CreateInventoryLocationRequest,
   CreateInventoryTransferRequest,
@@ -120,6 +121,29 @@ export class CreateInventoryTransferRequestBodyDto implements CreateInventoryTra
   @IsString()
   @MinLength(1)
   toLocationId!: string;
+
+  @IsNumber({ maxDecimalPlaces: 4 })
+  @Min(0.0001)
+  quantity!: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  note?: string;
+}
+
+export class CreateInventoryIssueRequestBodyDto implements CreateInventoryIssueRequest {
+  @IsString()
+  @MinLength(1)
+  itemId!: string;
+
+  @IsString()
+  @MinLength(1)
+  locationId!: string;
+
+  @IsString()
+  @MinLength(1)
+  jobId!: string;
 
   @IsNumber({ maxDecimalPlaces: 4 })
   @Min(0.0001)

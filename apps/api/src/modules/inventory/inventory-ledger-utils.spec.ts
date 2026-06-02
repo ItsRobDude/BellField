@@ -1,5 +1,10 @@
 import { ConflictException } from '@nestjs/common';
-import { applyAdjustment, applyTransfer, getOnHandSnapshot } from './inventory-ledger-utils';
+import {
+  applyAdjustment,
+  applyIssueToJob,
+  applyTransfer,
+  getOnHandSnapshot
+} from './inventory-ledger-utils';
 import type { QueryExecutor } from '../../database/database.service';
 
 function scriptedQueryable(
@@ -186,6 +191,77 @@ describe('applyTransfer', () => {
         itemId: 'item-1',
         fromLocationId: 'loc-from',
         toLocationId: 'loc-to',
+        quantity: 5,
+        actor,
+        occurredAt: '2026-06-02T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+});
+
+describe('applyIssueToJob', () => {
+  it('writes one outbound movement at the location average, carrying the value to the job', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: LOCK, rows: [] },
+      { match: SNAPSHOT, rows: [{ qty: 10, value: 125 }] }, // avg 12.5
+      { match: INSERT, rowCount: 1 }
+    ]);
+
+    const result = await applyIssueToJob(queryable, {
+      itemId: 'item-1',
+      locationId: 'loc-1',
+      jobId: 'job-1',
+      quantity: 4,
+      actor,
+      occurredAt: '2026-06-02T00:00:00.000Z'
+    });
+
+    expect(findCalls(calls, LOCK)).toHaveLength(1);
+    const insert = findCalls(calls, INSERT)[0];
+    // insertMovement params: [id, itemId, kind, quantity, unitCost, extendedCost, locationId, jobId, ...]
+    expect(insert.params[2]).toBe('issueToJob');
+    expect(insert.params[3]).toBe(-4); // signed outbound quantity
+    expect(insert.params[4]).toBe(12.5); // unit cost = location average
+    expect(insert.params[5]).toBe(-50); // value removed (negative at the location)
+    expect(insert.params[6]).toBe('loc-1');
+    expect(insert.params[7]).toBe('job-1');
+    expect(result).toEqual({ unitCost: 12.5, issuedValue: 50 });
+  });
+
+  it('fully depletes mixed-cost stock with no value residual', async () => {
+    // 1 @ $1 + 2 @ $2 = 3 units worth $5. Issuing all 3 removes EXACTLY $5.
+    const { queryable, calls } = scriptedQueryable([
+      { match: LOCK, rows: [] },
+      { match: SNAPSHOT, rows: [{ qty: 3, value: 5 }] },
+      { match: INSERT, rowCount: 1 }
+    ]);
+
+    const result = await applyIssueToJob(queryable, {
+      itemId: 'item-1',
+      locationId: 'loc-1',
+      jobId: 'job-1',
+      quantity: 3,
+      actor,
+      occurredAt: '2026-06-02T00:00:00.000Z'
+    });
+
+    const insert = findCalls(calls, INSERT)[0];
+    expect(insert.params[5]).toBe(-5); // exact remainder, no residual
+    expect(result.issuedValue).toBe(5);
+  });
+
+  it('rejects an over-issue (more than on hand at the location)', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: LOCK, rows: [] },
+      { match: SNAPSHOT, rows: [{ qty: 2, value: 20 }] }
+    ]);
+
+    await expect(
+      applyIssueToJob(queryable, {
+        itemId: 'item-1',
+        locationId: 'loc-1',
+        jobId: 'job-1',
         quantity: 5,
         actor,
         occurredAt: '2026-06-02T00:00:00.000Z'

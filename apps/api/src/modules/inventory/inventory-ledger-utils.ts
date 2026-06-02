@@ -248,6 +248,48 @@ export async function applyReceiptToJob(
 }
 
 /**
+ * Issue stock from a location to a job: a single outbound movement that drops on-hand at
+ * the location and carries that value to the job. The issued value is the quantity at the
+ * location's current average (a full issue removes the exact remainder). Rejects an
+ * over-issue. Returns the unit cost and the (positive) value charged to the job. Must run
+ * inside a transaction.
+ */
+export async function applyIssueToJob(
+  queryable: QueryExecutor,
+  input: {
+    itemId: string;
+    locationId: string;
+    jobId: string;
+    quantity: number;
+    actor: LedgerActor;
+    note?: string;
+    occurredAt: string;
+  }
+): Promise<{ unitCost: number; issuedValue: number }> {
+  await lockItemLocation(queryable, input.itemId, input.locationId);
+  const snapshot = await getOnHandSnapshot(queryable, input.itemId, input.locationId);
+  if (snapshot.quantity < input.quantity) {
+    throw new ConflictException('Not enough on hand at the location to issue to the job.');
+  }
+  const issuedValue = outboundValue(snapshot, input.quantity);
+  const unitCost = snapshot.averageUnitCost;
+  await insertMovement(queryable, {
+    itemId: input.itemId,
+    kind: 'issueToJob',
+    quantity: -input.quantity,
+    unitCost,
+    extendedCost: -issuedValue,
+    locationId: input.locationId,
+    jobId: input.jobId,
+    sourceKind: 'issue',
+    actor: input.actor,
+    note: input.note ?? null,
+    occurredAt: input.occurredAt
+  });
+  return { unitCost, issuedValue };
+}
+
+/**
  * Move stock between two locations as two movements sharing a transfer group; cost
  * travels with the goods at the source's current average. Rejects an over-transfer.
  * Must run inside a transaction.

@@ -1390,6 +1390,18 @@ export interface CreateInventoryTransferRequest {
   note?: string;
 }
 
+/**
+ * Issue stock from a location to a job (an outbound movement). The issued cost is the
+ * quantity valued at the location's current weighted-average; it flows to the job's cost.
+ */
+export interface CreateInventoryIssueRequest {
+  itemId: string;
+  locationId: string;
+  jobId: string;
+  quantity: number;
+  note?: string;
+}
+
 export interface InventoryMovementResponse {
   movements: InventoryMovement[];
 }

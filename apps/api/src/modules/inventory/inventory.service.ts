@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import type {
   CreateInventoryAdjustmentRequest,
+  CreateInventoryIssueRequest,
   CreateInventoryTransferRequest,
   InventoryMovementResponse,
   InventoryOnHandResponse
@@ -144,6 +145,30 @@ export class InventoryService {
     return { rows: await this.inventoryRepository.getOnHand() };
   }
 
+  /** Issue stock from a location to a job; its value flows to the job's cost (B6 rollup). */
+  async issueToJob(
+    sessionToken: string,
+    request: CreateInventoryIssueRequest
+  ): Promise<InventoryOnHandResponse> {
+    const actor = await this.authorize(sessionToken, 'inventory:edit');
+    if (request.quantity <= 0) {
+      throw new BadRequestException('Issue quantity must be positive.');
+    }
+    await this.requireItem(request.itemId);
+    await this.requireLocation(request.locationId);
+    await this.requireJob(request.jobId);
+
+    await this.inventoryRepository.recordIssueToJob({
+      itemId: request.itemId,
+      locationId: request.locationId,
+      jobId: request.jobId,
+      quantity: request.quantity,
+      note: request.note,
+      actor: { id: actor.id, displayName: actor.displayName }
+    });
+    return { rows: await this.inventoryRepository.getOnHand() };
+  }
+
   private async requireItem(itemId: string) {
     if (!(await this.inventoryRepository.getItemById(itemId))) {
       throw new NotFoundException('Inventory item not found.');
@@ -153,6 +178,12 @@ export class InventoryService {
   private async requireLocation(locationId: string) {
     if (!(await this.inventoryRepository.getLocationById(locationId))) {
       throw new NotFoundException('Inventory location not found.');
+    }
+  }
+
+  private async requireJob(jobId: string) {
+    if (!(await this.inventoryRepository.jobExists(jobId))) {
+      throw new NotFoundException('Job not found.');
     }
   }
 

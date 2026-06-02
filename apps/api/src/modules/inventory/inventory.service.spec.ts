@@ -1,4 +1,4 @@
-import { ForbiddenException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import type { InventoryItemRecord, InventoryLocationRecord } from './inventory.types';
 
@@ -19,7 +19,10 @@ function createService() {
     listLocations: jest.fn().mockResolvedValue([]),
     getLocationById: jest.fn(),
     createLocation: jest.fn(),
-    updateLocation: jest.fn()
+    updateLocation: jest.fn(),
+    getOnHand: jest.fn().mockResolvedValue([]),
+    recordIssueToJob: jest.fn(),
+    jobExists: jest.fn().mockResolvedValue(true)
   };
 
   return {
@@ -124,5 +127,55 @@ describe('InventoryService locations', () => {
       service.updateLocation('token', 'missing', { name: 'x', kind: 'warehouse', isActive: true })
     ).rejects.toBeInstanceOf(NotFoundException);
     expect(inventoryRepository.updateLocation).not.toHaveBeenCalled();
+  });
+});
+
+describe('InventoryService issueToJob', () => {
+  const issueRequest = { itemId: 'item-1', locationId: 'loc-1', jobId: 'job-1', quantity: 3 };
+
+  it('issues stock to a job gated on inventory:edit after validating item, location, and job', async () => {
+    const { service, identityAccessService, inventoryRepository } = createService();
+    inventoryRepository.getItemById.mockResolvedValue(item());
+    inventoryRepository.getLocationById.mockResolvedValue(location());
+
+    await service.issueToJob('token', issueRequest);
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'inventory:edit',
+      ['office-web']
+    );
+    expect(inventoryRepository.jobExists).toHaveBeenCalledWith('job-1');
+    expect(inventoryRepository.recordIssueToJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        itemId: 'item-1',
+        locationId: 'loc-1',
+        jobId: 'job-1',
+        quantity: 3
+      })
+    );
+  });
+
+  it('rejects a non-positive issue quantity and writes nothing', async () => {
+    const { service, inventoryRepository } = createService();
+    inventoryRepository.getItemById.mockResolvedValue(item());
+    inventoryRepository.getLocationById.mockResolvedValue(location());
+
+    await expect(
+      service.issueToJob('token', { ...issueRequest, quantity: 0 })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(inventoryRepository.recordIssueToJob).not.toHaveBeenCalled();
+  });
+
+  it('throws NotFound when the job does not exist', async () => {
+    const { service, inventoryRepository } = createService();
+    inventoryRepository.getItemById.mockResolvedValue(item());
+    inventoryRepository.getLocationById.mockResolvedValue(location());
+    inventoryRepository.jobExists.mockResolvedValue(false);
+
+    await expect(service.issueToJob('token', issueRequest)).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    expect(inventoryRepository.recordIssueToJob).not.toHaveBeenCalled();
   });
 });

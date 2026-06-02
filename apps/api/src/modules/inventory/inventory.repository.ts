@@ -9,6 +9,7 @@ import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import {
   applyAdjustment,
+  applyIssueToJob,
   applyTransfer,
   roundMoney,
   type LedgerActor
@@ -319,6 +320,29 @@ export class InventoryRepository {
     await this.databaseService.transaction((queryable) =>
       applyTransfer(queryable, { ...input, occurredAt })
     );
+  }
+
+  /** Issue stock from a location to a job atomically. */
+  async recordIssueToJob(input: {
+    itemId: string;
+    locationId: string;
+    jobId: string;
+    quantity: number;
+    note?: string;
+    actor: LedgerActor;
+  }): Promise<void> {
+    const occurredAt = new Date().toISOString();
+    await this.databaseService.transaction((queryable) =>
+      applyIssueToJob(queryable, { ...input, occurredAt })
+    );
+  }
+
+  /** Whether a job exists (validation for issue-to-job; the jobs table is read-only here). */
+  async jobExists(jobId: string): Promise<boolean> {
+    const result = await this.databaseService.query(`select 1 from jobs where id = $1 limit 1`, [
+      jobId
+    ]);
+    return (result.rowCount ?? 0) > 0;
   }
 }
 

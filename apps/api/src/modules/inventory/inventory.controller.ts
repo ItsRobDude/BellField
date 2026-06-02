@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Param, Post, Put, Query } from '@nestjs
 import { InventoryService } from './inventory.service';
 import {
   CreateInventoryAdjustmentRequestBodyDto,
+  CreateInventoryIssueRequestBodyDto,
   CreateInventoryItemRequestBodyDto,
   CreateInventoryLocationRequestBodyDto,
   CreateInventoryTransferRequestBodyDto,
@@ -103,5 +104,13 @@ export class InventoryLedgerController {
     @Body() request: CreateInventoryTransferRequestBodyDto
   ) {
     return this.inventoryService.createTransfer(getBearerToken(auth), request);
+  }
+
+  @Post('issues')
+  async issue(
+    @Headers('authorization') auth: string | undefined,
+    @Body() request: CreateInventoryIssueRequestBodyDto
+  ) {
+    return this.inventoryService.issueToJob(getBearerToken(auth), request);
   }
 }
