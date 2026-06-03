@@ -138,6 +138,7 @@ export function OfficeWorkspaceShell({
   const jobIntakeLoadInFlightRef = useRef(false);
   const jobLocationSearchRequestRef = useRef(0);
 
+  const canViewInventory = employee.effectivePermissions.includes('inventory:view');
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
   const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
   const canCreateEstimate = employee.effectivePermissions.includes('estimates:create');
@@ -1004,6 +1005,7 @@ export function OfficeWorkspaceShell({
       isJobIntakeLoading={isJobIntakeLoading}
       isJobsQueueRefreshing={isJobsQueueRefreshing}
       isRefreshing={isRefreshing}
+      canViewInventory={canViewInventory}
       canViewBookkeeping={canViewInvoice}
       noticeMessage={noticeMessage}
       onOpenJobIntake={() => void handleOpenJobIntake()}
@@ -1072,6 +1074,11 @@ export function OfficeWorkspaceShell({
           onOpenJobDetail: handleOpenJobDetail,
           onOpenJobIntake: () => void handleOpenJobIntake(),
           onLoadMoreJobsQueue: handleLoadMoreJobsQueue
+        }}
+        inventory={{
+          apiBaseUrl,
+          sessionToken,
+          onOpenJob: (jobId) => handleOpenJobDetail(jobId)
         }}
         bookkeeping={{
           apiBaseUrl,

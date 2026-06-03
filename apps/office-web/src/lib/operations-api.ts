@@ -84,7 +84,18 @@ import type {
   UpdateMediaAttachmentRequest,
   UpdateRegisterEntryRequest,
   VoidMediaAttachmentRequest,
-  VoidRegisterEntryRequest
+  VoidRegisterEntryRequest,
+  InventoryItem,
+  InventoryItemKind,
+  InventoryItemsResponse,
+  InventoryLocation,
+  InventoryLocationKind,
+  InventoryLocationsResponse,
+  InventoryMovement,
+  InventoryMovementKind,
+  InventoryMovementResponse,
+  InventoryOnHandRow,
+  InventoryOnHandResponse
 } from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
@@ -159,7 +170,18 @@ export type {
   LocationSummary,
   MediaAttachmentSummary,
   RegisterEntryKind,
-  RegisterEntrySummary
+  RegisterEntrySummary,
+  InventoryItem,
+  InventoryItemKind,
+  InventoryItemsResponse,
+  InventoryLocation,
+  InventoryLocationKind,
+  InventoryLocationsResponse,
+  InventoryMovement,
+  InventoryMovementKind,
+  InventoryMovementResponse,
+  InventoryOnHandRow,
+  InventoryOnHandResponse
 };
 
 export type JobUpdateResponse = UpdateJobStatusResponse;
@@ -1109,4 +1131,63 @@ export async function getOfficeBookkeepingQueues(input: {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
   });
+}
+
+// --- Inventory (Milestone 9) ----------------------------------------------------
+
+/** Inventory catalog items (active first, then by name). */
+export async function getOfficeInventoryItems(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InventoryItemsResponse> {
+  return requestJson<InventoryItemsResponse>('/operations/inventory/items', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+/** Stock locations (warehouses, trucks). */
+export async function getOfficeInventoryLocations(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InventoryLocationsResponse> {
+  return requestJson<InventoryLocationsResponse>('/operations/inventory/locations', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+/** Derived on-hand per (item, location): quantity, weighted-average cost, total value. */
+export async function getOfficeInventoryOnHand(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InventoryOnHandResponse> {
+  return requestJson<InventoryOnHandResponse>('/operations/inventory/on-hand', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+/** The immutable movement ledger, optionally filtered to one item or job (newest first). */
+export async function getOfficeInventoryMovements(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  itemId?: string;
+  jobId?: string;
+}): Promise<InventoryMovementResponse> {
+  const query = new URLSearchParams();
+  if (input.itemId) {
+    query.set('itemId', input.itemId);
+  }
+  if (input.jobId) {
+    query.set('jobId', input.jobId);
+  }
+  const suffix = query.toString();
+  return requestJson<InventoryMovementResponse>(
+    `/operations/inventory/movements${suffix ? `?${suffix}` : ''}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
 }

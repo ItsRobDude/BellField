@@ -8,6 +8,10 @@ import {
 import { CrmPanel } from './crm-panel';
 import { DispatchBoardPanel } from './dispatch-board-panel';
 import {
+  OfficeInventorySurface,
+  type OfficeInventorySurfaceProps
+} from './office-workspace-inventory-surface';
+import {
   OfficeJobDetailSurface,
   type OfficeJobDetailSurfaceProps
 } from './office-workspace-job-detail-surface';
@@ -46,6 +50,7 @@ type OfficeWorkspaceSurfacesProps = {
   jobDetail: OfficeJobDetailSurfaceProps;
   jobIntake: OfficeJobIntakeSurfaceProps;
   jobs: OfficeJobsQueueSurfaceProps;
+  inventory: OfficeInventorySurfaceProps;
   bookkeeping: OfficeBookkeepingSurfaceProps;
 };
 
@@ -56,6 +61,7 @@ export function OfficeWorkspaceSurfaces({
   jobDetail,
   jobIntake,
   jobs,
+  inventory,
   bookkeeping
 }: OfficeWorkspaceSurfacesProps) {
   return (
@@ -85,6 +91,8 @@ export function OfficeWorkspaceSurfaces({
       ) : null}
 
       {activeOfficeView === 'jobs' ? <OfficeJobsQueueSurface {...jobs} /> : null}
+
+      {activeOfficeView === 'inventory' ? <OfficeInventorySurface {...inventory} /> : null}
 
       {activeOfficeView === 'bookkeeping' ? <OfficeBookkeepingSurface {...bookkeeping} /> : null}
 
