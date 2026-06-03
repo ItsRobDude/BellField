@@ -40,8 +40,8 @@ A hard "phone home or stop working" check would violate all three. So BellField 
 
 Instead, BellField protects the two things it genuinely controls:
 
-1. **Acquisition** — who is allowed to _receive_ the product in the first place (Section 6).
-2. **Updates** — who is allowed to _fetch newer builds_ (Section 7).
+1. **Acquisition** — who is allowed to _receive_ the product in the first place (Section 5).
+2. **Updates** — who is allowed to _fetch newer builds_ (Section 6).
 
 Both are naturally online, BellField-controlled transactions even though the product itself is offline-first. Obtaining software from BellField is inherently a point of control; running it day to day is not. This reframing dissolves the apparent conflict between protection and the offline-first promise.
 
@@ -55,8 +55,8 @@ The license file must be **offline-verifiable**: the product verifies it using a
 
 The license file separates two distinct concepts, and keeping them separate is essential to honoring the perpetual-purchase promise:
 
-- **Perpetual right to run** — proves this is a legitimately licensed copy. This does not expire. It is what the runtime posture (Section 5) checks.
-- **Update-entitlement window** — the date through which the customer is entitled to newer builds. This is checked only by the updater (Section 7). When it lapses, the customer keeps running; they simply cannot pull builds released after that date until they extend coverage.
+- **Perpetual right to run** — proves this is a legitimately licensed copy. This does not expire. It is what the runtime posture (Section 4) checks.
+- **Update-entitlement window** — the date through which the customer is entitled to newer builds. This is checked only by the updater (Section 6). When it lapses, the customer keeps running; they simply cannot pull builds released after that date until they extend coverage.
 
 The license file is also expected to carry customer/license identity and may carry edition or seat information. The concrete schema and signature scheme are intentionally left to a later format-pinning step (Section 10); this document fixes the posture, not the bytes.
 
