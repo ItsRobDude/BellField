@@ -24,6 +24,7 @@ type EventRow = {
   amount: string | number;
   hours: string | number | null;
   ratePerHour: string | number | null;
+  reversalOfEventId: string | null;
   actorName: string;
   occurredAt: string | Date;
 };
@@ -31,6 +32,7 @@ type EventRow = {
 const EVENT_COLUMNS = `
   id, job_id as "jobId", kind, description, amount,
   hours, rate_per_hour as "ratePerHour",
+  reversal_of_event_id as "reversalOfEventId",
   actor_name as "actorName", occurred_at as "occurredAt"
 `;
 
@@ -65,6 +67,7 @@ export class JobCostingRepository {
 
     const rollup = await computeJobCostRollup(this.databaseService, jobId);
     const finalized = await getCurrentJobCostSnapshot(this.databaseService, jobId);
+    const events = await this.listEventsForJob(jobId);
 
     return {
       jobId,
@@ -78,8 +81,46 @@ export class JobCostingRepository {
         totalCost: roundMoney(rollup.totalCost)
       },
       finalized: finalized ?? undefined,
-      isFinalized: finalized !== null
+      isFinalized: finalized !== null,
+      events
     };
+  }
+
+  /** The job's labor/expense cost events (newest first), including reversals. */
+  async listEventsForJob(jobId: string): Promise<JobCostEvent[]> {
+    const result = await this.databaseService.query<EventRow>(
+      `select ${EVENT_COLUMNS} from job_cost_events
+       where job_id = $1
+       order by occurred_at desc, created_at desc`,
+      [jobId]
+    );
+    return result.rows.map(toEvent);
+  }
+
+  /** Whether the given event has already been reversed (a reversal points at it). */
+  async isEventReversed(eventId: string): Promise<boolean> {
+    const result = await this.databaseService.query(
+      `select 1 from job_cost_events where reversal_of_event_id = $1 limit 1`,
+      [eventId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * Append a reversal of an existing event: the negation of its amount, carrying the same
+   * kind and (for labor) hours/rate provenance, linked via reversal_of_event_id.
+   */
+  async insertReversal(input: {
+    jobId: string;
+    kind: JobCostEventKind;
+    description: string;
+    amount: number;
+    hours: number | null;
+    ratePerHour: number | null;
+    reversalOfEventId: string;
+    actor: Actor;
+  }): Promise<JobCostEvent> {
+    return this.insert(input);
   }
 
   /** Append an immutable labor cost event (hours * rate = amount). */
@@ -127,16 +168,17 @@ export class JobCostingRepository {
     amount: number;
     hours: number | null;
     ratePerHour: number | null;
+    reversalOfEventId?: string | null;
     actor: Actor;
   }): Promise<JobCostEvent> {
     const id = randomUUID();
     const now = new Date().toISOString();
     await this.databaseService.query(
       `insert into job_cost_events (
-         id, job_id, kind, description, amount, hours, rate_per_hour,
+         id, job_id, kind, description, amount, hours, rate_per_hour, reversal_of_event_id,
          actor_employee_id, actor_name, occurred_at, created_at
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)`,
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
       [
         id,
         input.jobId,
@@ -145,6 +187,7 @@ export class JobCostingRepository {
         input.amount,
         input.hours,
         input.ratePerHour,
+        input.reversalOfEventId ?? null,
         input.actor.id,
         input.actor.displayName,
         now
@@ -171,6 +214,7 @@ function toEvent(row: EventRow): JobCostEvent {
     amount: roundMoney(Number(row.amount)),
     hours: row.hours === null ? undefined : Number(row.hours),
     ratePerHour: row.ratePerHour === null ? undefined : roundMoney(Number(row.ratePerHour)),
+    reversalOfEventId: row.reversalOfEventId ?? undefined,
     actorName: row.actorName,
     occurredAt: toIsoString(row.occurredAt)
   };

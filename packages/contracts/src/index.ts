@@ -1518,6 +1518,8 @@ export interface JobCostEvent {
   /** Labor provenance: hours billed at ratePerHour equals amount. Absent for an expense. */
   hours?: number;
   ratePerHour?: number;
+  /** Set on a reversal event: the id of the original event it negates. */
+  reversalOfEventId?: string;
   actorName: string;
   occurredAt: string;
 }
@@ -1533,6 +1535,11 @@ export interface CreateJobLaborRequest {
 export interface CreateJobExpenseRequest {
   description: string;
   amount: number;
+}
+
+/** Reverse (correct) a job cost event by posting its negation. Each event reverses once. */
+export interface ReverseJobCostEventRequest {
+  reason?: string;
 }
 
 export interface JobCostEventResponse {
@@ -1563,6 +1570,10 @@ export interface JobCostSnapshot {
  * Job costing read model: the always-current `live` rollup, plus the `finalized` snapshot
  * frozen at completion (absent until the job is completed, or after a reopen until it is
  * completed again). `isFinalized` is true when a current finalized snapshot exists.
+ *
+ * `events` are the labor/expense ledger entries behind the rollup (newest first, including
+ * reversals). Material/equipment detail lives in inventory movements
+ * (`GET /operations/inventory/movements?jobId=`), not here.
  */
 export interface JobCostingSummary {
   jobId: string;
@@ -1572,6 +1583,7 @@ export interface JobCostingSummary {
   live: JobCostRollup;
   finalized?: JobCostSnapshot;
   isFinalized: boolean;
+  events: JobCostEvent[];
 }
 
 export interface JobCostingResponse {

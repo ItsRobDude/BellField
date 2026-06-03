@@ -1,9 +1,15 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import type {
   CreateJobExpenseRequest,
   CreateJobLaborRequest,
   JobCostEventResponse,
-  JobCostingResponse
+  JobCostingResponse,
+  ReverseJobCostEventRequest
 } from '@bellfield/contracts';
 import { centsToDollars, dollarsToCents } from '@bellfield/estimating';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -71,6 +77,54 @@ export class JobCostingService {
     return { event };
   }
 
+  /**
+   * Reverse (correct) a job cost event by posting its negation. The original is never
+   * mutated; the reversal nets it out of the live rollup. Each event can be reversed once,
+   * and a reversal cannot itself be reversed. A finalized snapshot is left untouched.
+   */
+  async reverseEvent(
+    sessionToken: string,
+    jobId: string,
+    eventId: string,
+    request: ReverseJobCostEventRequest
+  ): Promise<JobCostEventResponse> {
+    const actor = await this.authorizeEdit(sessionToken);
+
+    const original = await this.jobCostingRepository.getById(eventId);
+    if (!original || original.jobId !== jobId) {
+      throw new NotFoundException('Job cost event not found.');
+    }
+    if (original.reversalOfEventId) {
+      throw new ConflictException('A reversal event cannot itself be reversed.');
+    }
+    if (await this.jobCostingRepository.isEventReversed(eventId)) {
+      throw new ConflictException('This cost event has already been reversed.');
+    }
+
+    const description =
+      request.reason?.trim() || `Reversal of: ${original.description}`.slice(0, 500);
+
+    try {
+      const event = await this.jobCostingRepository.insertReversal({
+        jobId,
+        kind: original.kind,
+        description,
+        amount: -original.amount,
+        hours: original.hours ?? null,
+        ratePerHour: original.ratePerHour ?? null,
+        reversalOfEventId: original.id,
+        actor: { id: actor.id, displayName: actor.displayName }
+      });
+      return { event };
+    } catch (error) {
+      // Lost a race against a concurrent reversal (the one-reversal-per-event unique index).
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('This cost event has already been reversed.');
+      }
+      throw error;
+    }
+  }
+
   /** Read a job's cost: the live rollup plus the finalized snapshot, if any. */
   async getJobCosting(sessionToken: string, jobId: string): Promise<JobCostingResponse> {
     await this.authorizeView(sessionToken);
@@ -103,6 +157,13 @@ export class JobCostingService {
       'office-web'
     ]);
   }
+
+  /** Correcting (reversing) job costs is an office-only jobCosting:edit action. */
+  private authorizeEdit(sessionToken: string) {
+    return this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobCosting:edit', [
+      'office-web'
+    ]);
+  }
 }
 
 /** Reject a description that is empty once trimmed (the DTO only checks the raw body). */
@@ -112,4 +173,14 @@ function requireDescription(raw: string): string {
     throw new BadRequestException('A description is required.');
   }
   return description;
+}
+
+/** A Postgres unique-constraint violation (e.g. the one-reversal-per-event index). */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === '23505'
+  );
 }

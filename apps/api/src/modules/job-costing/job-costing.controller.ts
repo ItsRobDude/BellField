@@ -1,7 +1,11 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { JobCostingService } from './job-costing.service';
-import { CreateJobExpenseRequestBodyDto, CreateJobLaborRequestBodyDto } from './job-costing.dto';
+import {
+  CreateJobExpenseRequestBodyDto,
+  CreateJobLaborRequestBodyDto,
+  ReverseJobCostEventRequestBodyDto
+} from './job-costing.dto';
 
 @Controller('operations/jobs')
 export class JobCostingController {
@@ -31,5 +35,15 @@ export class JobCostingController {
     @Body() request: CreateJobExpenseRequestBodyDto
   ) {
     return this.jobCostingService.postExpense(getBearerToken(auth), jobId, request);
+  }
+
+  @Post(':jobId/cost-events/:eventId/reverse')
+  async reverseEvent(
+    @Headers('authorization') auth: string | undefined,
+    @Param('jobId') jobId: string,
+    @Param('eventId') eventId: string,
+    @Body() request: ReverseJobCostEventRequestBodyDto
+  ) {
+    return this.jobCostingService.reverseEvent(getBearerToken(auth), jobId, eventId, request);
   }
 }

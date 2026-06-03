@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException
+} from '@nestjs/common';
 import { JobCostingService } from './job-costing.service';
 
 function createService() {
@@ -14,7 +19,10 @@ function createService() {
     jobExists: jest.fn().mockResolvedValue(true),
     insertLabor: jest.fn().mockResolvedValue({ id: 'evt-1' }),
     insertExpense: jest.fn().mockResolvedValue({ id: 'evt-2' }),
-    getJobCosting: jest.fn()
+    getJobCosting: jest.fn(),
+    getById: jest.fn(),
+    isEventReversed: jest.fn().mockResolvedValue(false),
+    insertReversal: jest.fn().mockResolvedValue({ id: 'rev-1' })
   };
 
   return {
@@ -184,6 +192,116 @@ describe('JobCostingService.getJobCosting', () => {
 
     await expect(service.getJobCosting('token', 'missing')).rejects.toBeInstanceOf(
       NotFoundException
+    );
+  });
+});
+
+describe('JobCostingService.reverseEvent', () => {
+  const laborEvent = {
+    id: 'evt-1',
+    jobId: 'job-1',
+    kind: 'labor' as const,
+    description: 'Install labor',
+    amount: 190,
+    hours: 2,
+    ratePerHour: 95
+  };
+
+  it('posts the negation, carrying kind/provenance, gated on jobCosting:edit', async () => {
+    const { service, identityAccessService, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue(laborEvent);
+
+    await service.reverseEvent('token', 'job-1', 'evt-1', { reason: 'Wrong rate' });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'jobCosting:edit',
+      ['office-web']
+    );
+    expect(jobCostingRepository.insertReversal).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        kind: 'labor',
+        amount: -190,
+        hours: 2,
+        ratePerHour: 95,
+        reversalOfEventId: 'evt-1',
+        description: 'Wrong rate'
+      })
+    );
+  });
+
+  it('defaults the reversal description from the original when no reason is given', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue(laborEvent);
+
+    await service.reverseEvent('token', 'job-1', 'evt-1', {});
+
+    expect(jobCostingRepository.insertReversal).toHaveBeenCalledWith(
+      expect.objectContaining({ description: 'Reversal of: Install labor' })
+    );
+  });
+
+  it('reverses an expense with no labor provenance', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue({
+      id: 'evt-2',
+      jobId: 'job-1',
+      kind: 'expense',
+      description: 'Permit',
+      amount: 50,
+      hours: undefined,
+      ratePerHour: undefined
+    });
+
+    await service.reverseEvent('token', 'job-1', 'evt-2', {});
+
+    expect(jobCostingRepository.insertReversal).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'expense', amount: -50, hours: null, ratePerHour: null })
+    );
+  });
+
+  it('throws NotFound when the event belongs to a different job', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue({ ...laborEvent, jobId: 'other-job' });
+
+    await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    expect(jobCostingRepository.insertReversal).not.toHaveBeenCalled();
+  });
+
+  it('refuses to reverse a reversal event', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue({
+      ...laborEvent,
+      reversalOfEventId: 'evt-0'
+    });
+
+    await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(jobCostingRepository.insertReversal).not.toHaveBeenCalled();
+  });
+
+  it('refuses to reverse an already-reversed event', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue(laborEvent);
+    jobCostingRepository.isEventReversed.mockResolvedValue(true);
+
+    await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(jobCostingRepository.insertReversal).not.toHaveBeenCalled();
+  });
+
+  it('translates a unique-violation race into a conflict', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue(laborEvent);
+    jobCostingRepository.insertReversal.mockRejectedValue({ code: '23505' });
+
+    await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
+      ConflictException
     );
   });
 });
