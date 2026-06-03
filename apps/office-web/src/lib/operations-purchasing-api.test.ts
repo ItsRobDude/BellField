@@ -1,5 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { getOfficePurchaseOrder, listOfficePurchaseOrders } from './operations-api';
+import {
+  createOfficePurchaseOrder,
+  getOfficePurchaseOrder,
+  listOfficePurchaseOrders,
+  orderOfficePurchaseOrder,
+  receiveOfficePurchaseOrder
+} from './operations-api';
 
 function mockJsonResponse(body: unknown) {
   return new Response(JSON.stringify(body), {
@@ -41,6 +47,43 @@ describe('operations-api purchasing read helpers', () => {
       2,
       'http://api.test/operations/purchase-orders/po-1',
       expect.anything()
+    );
+  });
+
+  it('creates, orders, and receives purchase orders at the right endpoints', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse({ purchaseOrder: { id: 'po-1', lines: [] } }))
+      .mockResolvedValueOnce(mockJsonResponse({ purchaseOrder: { id: 'po-1', lines: [] } }))
+      .mockResolvedValueOnce(mockJsonResponse({ purchaseOrder: { id: 'po-1', lines: [] } }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    const auth = { sessionToken: 'session-token', apiBaseUrl: 'http://api.test' };
+    await createOfficePurchaseOrder({
+      ...auth,
+      body: {
+        vendorName: 'Acme',
+        destinationInventoryLocationId: 'loc-1',
+        lines: [{ kind: 'part', description: 'Capacitor', quantity: 2, expectedUnitCost: 12.5 }]
+      }
+    });
+    await orderOfficePurchaseOrder({ ...auth, purchaseOrderId: 'po-1' });
+    await receiveOfficePurchaseOrder({ ...auth, purchaseOrderId: 'po-1', body: {} });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://api.test/operations/purchase-orders',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://api.test/operations/purchase-orders/po-1/order',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://api.test/operations/purchase-orders/po-1/receive',
+      expect.objectContaining({ method: 'POST' })
     );
   });
 });
