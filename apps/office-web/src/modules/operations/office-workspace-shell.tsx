@@ -144,6 +144,9 @@ export function OfficeWorkspaceShell({
   const canViewPurchasing = employee.effectivePermissions.includes('purchasing:view');
   const canCreatePurchasing = employee.effectivePermissions.includes('purchasing:create');
   const canEditPurchasing = employee.effectivePermissions.includes('purchasing:edit');
+  const canViewJobCosting = employee.effectivePermissions.includes('jobCosting:view');
+  const canCreateJobCosting = employee.effectivePermissions.includes('jobCosting:create');
+  const canEditJobCosting = employee.effectivePermissions.includes('jobCosting:edit');
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
   const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
   const canCreateEstimate = employee.effectivePermissions.includes('estimates:create');
@@ -1112,6 +1115,9 @@ export function OfficeWorkspaceShell({
           canEditInvoice,
           canPostInvoice,
           canConvertEstimate,
+          canViewJobCosting,
+          canCreateJobCosting,
+          canEditJobCosting,
           paymentPermissions,
           focusedAppointmentId,
           jobDetailInitialTab,

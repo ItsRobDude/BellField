@@ -27,6 +27,7 @@ import {
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { JobEstimatesSection } from './job-estimates-section';
 import { JobInvoiceSection } from './job-invoice-section';
+import { JobCostSection } from './job-cost-section';
 import type { InvoicePaymentPermissions } from './job-invoice-shared';
 
 type JobDetailPanelProps = {
@@ -41,6 +42,9 @@ type JobDetailPanelProps = {
   canEditInvoice: boolean;
   canPostInvoice: boolean;
   canConvertEstimate: boolean;
+  canViewJobCosting: boolean;
+  canCreateJobCosting: boolean;
+  canEditJobCosting: boolean;
   paymentPermissions: InvoicePaymentPermissions;
   initialTab?: JobDetailTab;
   focusedAppointmentId?: string | null;
@@ -119,6 +123,7 @@ const tabs: Array<{ id: JobDetailTab; label: string }> = [
   { id: 'captured', label: 'Captured' },
   { id: 'estimates', label: 'Estimates' },
   { id: 'invoice', label: 'Invoice' },
+  { id: 'jobCost', label: 'Job cost' },
   { id: 'media', label: 'Media' },
   { id: 'timeline', label: 'Timeline' }
 ];
@@ -135,6 +140,9 @@ export function JobDetailPanel({
   canEditInvoice,
   canPostInvoice,
   canConvertEstimate,
+  canViewJobCosting,
+  canCreateJobCosting,
+  canEditJobCosting,
   paymentPermissions,
   initialTab = 'overview',
   focusedAppointmentId,
@@ -201,6 +209,7 @@ export function JobDetailPanel({
       <nav aria-label="Job detail tabs" style={styles.tabList}>
         {tabs
           .filter((tab) => tab.id !== 'invoice' || canViewInvoice)
+          .filter((tab) => tab.id !== 'jobCost' || canViewJobCosting)
           .map((tab) => (
             <button
               key={tab.id}
@@ -300,6 +309,15 @@ export function JobDetailPanel({
           // that converts an estimate into the invoice.
           canCreateAdjustments={canConvertEstimate}
           paymentPermissions={paymentPermissions}
+        />
+      ) : null}
+      {activeTab === 'jobCost' && canViewJobCosting ? (
+        <JobCostSection
+          jobId={job.id}
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canCreate={canCreateJobCosting}
+          canEdit={canEditJobCosting}
         />
       ) : null}
       {activeTab === 'media'

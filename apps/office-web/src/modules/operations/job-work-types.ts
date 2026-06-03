@@ -55,6 +55,7 @@ export type JobDetailTab =
   | 'captured'
   | 'estimates'
   | 'invoice'
+  | 'jobCost'
   | 'media'
   | 'timeline';
 
