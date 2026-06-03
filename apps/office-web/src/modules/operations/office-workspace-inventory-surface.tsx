@@ -45,7 +45,8 @@ const movementKindLabels: Record<InventoryMovementKind, string> = {
 };
 
 function formatQuantity(value: number): string {
-  return Number.isInteger(value) ? String(value) : value.toFixed(2);
+  // Quantities are stored at 4-decimal precision; show up to 4 dp, trimming trailing zeros.
+  return Number(value.toFixed(4)).toString();
 }
 
 // Read-only inventory overview: derived on-hand, the catalog, stock locations, and the
@@ -107,9 +108,7 @@ export function OfficeInventorySurface({
 
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
 
-      {isLoading && !hasLoaded ? (
-        <p style={styles.muted}>Loading inventory…</p>
-      ) : (
+      {hasLoaded ? (
         <>
           <InventoryPanel title="On hand" count={onHand.length} emptyText="No stock on hand yet.">
             <Table head={['Item', 'Kind', 'Location', 'Quantity', 'Avg unit cost', 'Total value']}>
@@ -175,7 +174,19 @@ export function OfficeInventorySurface({
             count={movements.length}
             emptyText="No movements recorded yet."
           >
-            <Table head={['When', 'Item', 'Activity', 'Qty', 'Unit cost', 'Location', 'Job', 'By']}>
+            <Table
+              head={[
+                'When',
+                'Item',
+                'Activity',
+                'Qty',
+                'Unit cost',
+                'Location',
+                'Job',
+                'By',
+                'Note'
+              ]}
+            >
               {movements.map((movement) => (
                 <tr key={movement.id}>
                   <td style={styles.tableCell}>{movement.occurredAt.slice(0, 10)}</td>
@@ -188,7 +199,7 @@ export function OfficeInventorySurface({
                     {movement.jobId ? (
                       <button
                         type="button"
-                        style={{ ...styles.tableRowButton, color: '#176b5b', fontWeight: 700 }}
+                        style={styles.tableLinkButton}
                         onClick={() => onOpenJob(movement.jobId as string)}
                       >
                         View job
@@ -198,12 +209,15 @@ export function OfficeInventorySurface({
                     )}
                   </td>
                   <td style={styles.tableCell}>{movement.actorName}</td>
+                  <td style={styles.tableCell}>{movement.note ?? '—'}</td>
                 </tr>
               ))}
             </Table>
           </InventoryPanel>
         </>
-      )}
+      ) : isLoading ? (
+        <p style={styles.muted}>Loading inventory…</p>
+      ) : null}
     </section>
   );
 }

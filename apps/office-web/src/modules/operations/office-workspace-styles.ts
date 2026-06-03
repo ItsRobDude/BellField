@@ -327,5 +327,15 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     padding: 0,
     textAlign: 'left',
     width: '100%'
+  },
+  tableLinkButton: {
+    background: 'transparent',
+    border: 'none',
+    color: '#176b5b',
+    cursor: 'pointer',
+    fontSize: '0.95rem',
+    fontWeight: 700,
+    padding: 0,
+    textAlign: 'left'
   }
 };
