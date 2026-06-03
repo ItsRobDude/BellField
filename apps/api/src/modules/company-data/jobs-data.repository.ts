@@ -30,6 +30,7 @@ import type {
   UpdateAppointmentScheduleInput,
   UpdateRegisterEntryInput
 } from './company-data.types';
+import { isReopenTransition } from './company-data.types';
 import { ensureMainInvoiceDraft } from './jobs-data-repository-utils';
 import { JobsMediaDataRepository } from './jobs-media-data.repository';
 import { JobsRegisterDataRepository } from './jobs-register-data.repository';
@@ -40,15 +41,6 @@ import {
   freezeJobCostSnapshot,
   supersedeCurrentJobCostSnapshot
 } from '../job-costing/job-cost-rollup-utils';
-
-// Job lifecycle phases for the cost-snapshot hook (mirrors jobs-appointments' reopen rule).
-const FINAL_JOB_STATUSES: readonly JobStatus[] = ['completed', 'closed', 'cancelled'];
-const ACTIVE_JOB_STATUSES: readonly JobStatus[] = [
-  'new',
-  'scheduled',
-  'inProgress',
-  'waitingOnParts'
-];
 
 type JobRow = {
   id: string;
@@ -764,10 +756,7 @@ export class JobsDataRepository {
       if (previousStatus !== undefined) {
         if (status === 'completed' && previousStatus !== 'completed') {
           await freezeJobCostSnapshot(queryable, jobId, actorName, timelineTime);
-        } else if (
-          FINAL_JOB_STATUSES.includes(previousStatus) &&
-          ACTIVE_JOB_STATUSES.includes(status)
-        ) {
+        } else if (isReopenTransition(previousStatus, status)) {
           await supersedeCurrentJobCostSnapshot(queryable, jobId, timelineTime);
         }
       }

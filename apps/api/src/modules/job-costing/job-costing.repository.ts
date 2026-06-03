@@ -8,7 +8,11 @@ import type {
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
-import { computeJobCostRollup, getCurrentJobCostSnapshot } from './job-cost-rollup-utils';
+import {
+  computeJobCostRollup,
+  getCurrentJobCostSnapshot,
+  roundMoney
+} from './job-cost-rollup-utils';
 
 type Actor = { id: string; displayName: string };
 
@@ -156,10 +160,6 @@ export class JobCostingRepository {
     );
     return result.rows[0] ? toEvent(result.rows[0]) : null;
   }
-}
-
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
 }
 
 function toEvent(row: EventRow): JobCostEvent {

@@ -16,13 +16,11 @@ import type {
 export type InventoryItemKindValue = InventoryItemKind;
 export type InventoryLocationKindValue = InventoryLocationKind;
 
-export type InventoryItemDto = InventoryItem;
 export type InventoryItemResponseDto = InventoryItemResponse;
 export type InventoryItemsResponseDto = InventoryItemsResponse;
 export type CreateInventoryItemRequestDto = CreateInventoryItemRequest;
 export type UpdateInventoryItemRequestDto = UpdateInventoryItemRequest;
 
-export type InventoryLocationDto = InventoryLocation;
 export type InventoryLocationResponseDto = InventoryLocationResponse;
 export type InventoryLocationsResponseDto = InventoryLocationsResponse;
 export type CreateInventoryLocationRequestDto = CreateInventoryLocationRequest;

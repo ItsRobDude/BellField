@@ -1,14 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { getBearerToken } from '../../common/http/bearer-token';
 import { PaymentsService } from './payments.service';
 import { RecordPaymentRequestBodyDto, VoidPaymentRequestBodyDto } from './payments.dto';
-
-function getBearerToken(authorizationHeader: string | undefined): string {
-  if (!authorizationHeader) {
-    return '';
-  }
-  const [scheme, token] = authorizationHeader.split(' ');
-  return scheme?.toLowerCase() === 'bearer' && token ? token : '';
-}
 
 // Payments are listed at the job level (a job's whole payment history across its
 // invoices).

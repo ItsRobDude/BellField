@@ -1,18 +1,11 @@
 import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
+import { getBearerToken } from '../../common/http/bearer-token';
 import { InvoicesService } from './invoices.service';
 import {
   CreateAdjustmentRequestBodyDto,
   InvoiceLineItemInputDto,
   VoidInvoiceLineItemRequestBodyDto
 } from './invoices.dto';
-
-function getBearerToken(authorizationHeader: string | undefined): string {
-  if (!authorizationHeader) {
-    return '';
-  }
-  const [scheme, token] = authorizationHeader.split(' ');
-  return scheme?.toLowerCase() === 'bearer' && token ? token : '';
-}
 
 // A job owns one main invoice, so the draft and its line additions are addressed
 // under the job path.

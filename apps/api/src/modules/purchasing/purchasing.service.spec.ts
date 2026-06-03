@@ -19,7 +19,6 @@ function createService() {
     receivePurchaseOrder: jest.fn(),
     inventoryLocationExists: jest.fn().mockResolvedValue(true),
     customerLocationExists: jest.fn().mockResolvedValue(true),
-    jobExists: jest.fn().mockResolvedValue(true),
     getJobLocationId: jest.fn().mockResolvedValue('cust-loc-1'),
     getItemKind: jest.fn().mockResolvedValue('part')
   };

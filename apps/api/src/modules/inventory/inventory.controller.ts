@@ -1,4 +1,5 @@
 import { Body, Controller, Get, Headers, Param, Post, Put, Query } from '@nestjs/common';
+import { getBearerToken } from '../../common/http/bearer-token';
 import { InventoryService } from './inventory.service';
 import {
   CreateInventoryAdjustmentRequestBodyDto,
@@ -9,14 +10,6 @@ import {
   UpdateInventoryItemRequestBodyDto,
   UpdateInventoryLocationRequestBodyDto
 } from './inventory.dto';
-
-function getBearerToken(authorizationHeader: string | undefined): string {
-  if (!authorizationHeader) {
-    return '';
-  }
-  const [scheme, token] = authorizationHeader.split(' ');
-  return scheme?.toLowerCase() === 'bearer' && token ? token : '';
-}
 
 @Controller('operations/inventory/items')
 export class InventoryItemsController {

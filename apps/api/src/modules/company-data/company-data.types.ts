@@ -169,6 +169,22 @@ export const jobStatuses = [
   'cancelled'
 ] as const satisfies readonly JobStatus[];
 
+/** Active (open) job phases: work can still happen. */
+export const activeJobStatuses: readonly JobStatus[] = [
+  'new',
+  'scheduled',
+  'inProgress',
+  'waitingOnParts'
+];
+
+/** Final job phases: the job is closed to new work. */
+export const finalJobStatuses: readonly JobStatus[] = ['completed', 'closed', 'cancelled'];
+
+/** A reopen moves a job from a final phase back to an active one (gated on jobs:configure). */
+export function isReopenTransition(currentStatus: JobStatus, nextStatus: JobStatus): boolean {
+  return finalJobStatuses.includes(currentStatus) && activeJobStatuses.includes(nextStatus);
+}
+
 export type AppointmentStatus = ContractAppointmentStatus;
 
 export const appointmentStatuses = [

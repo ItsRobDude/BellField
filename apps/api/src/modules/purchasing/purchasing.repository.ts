@@ -198,13 +198,6 @@ export class PurchasingRepository {
     return (result.rowCount ?? 0) > 0;
   }
 
-  async jobExists(id: string): Promise<boolean> {
-    const result = await this.databaseService.query(`select 1 from jobs where id = $1 limit 1`, [
-      id
-    ]);
-    return (result.rowCount ?? 0) > 0;
-  }
-
   /** The customer service location a job is for, or null if the job is unknown. */
   async getJobLocationId(id: string): Promise<string | null> {
     const result = await this.databaseService.query<{ locationId: string | null }>(
@@ -260,7 +253,9 @@ export class PurchasingRepository {
       // Re-check under the row lock: only an ordered PO can be received (guards a race
       // against a concurrent receive/order change).
       if (po.status !== 'ordered') {
-        throw new ConflictException(`Only an ordered purchase order can be received.`);
+        throw new ConflictException(
+          `Only an ordered purchase order can be received (status: ${po.status}).`
+        );
       }
 
       let inventoryLocationName: string | null = null;

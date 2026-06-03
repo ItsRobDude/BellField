@@ -13,7 +13,6 @@ import { PurchasingService } from './purchasing.service';
 @Module({
   imports: [CompanyDataModule, IdentityAccessModule],
   controllers: [PurchasingController],
-  providers: [PurchasingRepository, PurchasingService],
-  exports: [PurchasingRepository]
+  providers: [PurchasingRepository, PurchasingService]
 })
 export class PurchasingModule {}

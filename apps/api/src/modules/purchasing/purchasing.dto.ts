@@ -23,6 +23,7 @@ import { purchaseOrderLineKinds, type PurchaseOrderLineKindValue } from './purch
 export class CreatePurchaseOrderLineRequestBodyDto implements CreatePurchaseOrderLineRequest {
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(64)
   itemId?: string;
 
@@ -76,16 +77,19 @@ export class CreatePurchaseOrderRequestBodyDto implements CreatePurchaseOrderReq
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(64)
   destinationInventoryLocationId?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(64)
   destinationCustomerLocationId?: string;
 
   @IsOptional()
   @IsString()
+  @MinLength(1)
   @MaxLength(64)
   jobId?: string;
 

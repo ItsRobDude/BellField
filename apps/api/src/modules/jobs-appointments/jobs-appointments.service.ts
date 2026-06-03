@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { AppointmentFinishOutcome, AppointmentStatus, JobStatus } from '@bellfield/contracts';
+import { isReopenTransition } from '../company-data/company-data.types';
 import type { JobRecord } from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
@@ -31,9 +32,6 @@ import type {
   UpdateJobStatusResponseDto,
   VoidRegisterEntryRequestDto
 } from './jobs-appointments.types';
-
-const activeJobStatuses: JobStatus[] = ['new', 'scheduled', 'inProgress', 'waitingOnParts'];
-const finalJobStatuses: JobStatus[] = ['completed', 'closed', 'cancelled'];
 
 type JobSummaryOptions = {
   includeRegisterEntries?: boolean;
@@ -171,7 +169,7 @@ export class JobsAppointmentsService {
       );
     }
 
-    if (this.isReopenTransition(jobBeforeUpdate.status, request.status)) {
+    if (isReopenTransition(jobBeforeUpdate.status, request.status)) {
       warningMessages.push(
         'Reopening this job keeps prior appointments and history intact, and follow-up appointments can be added under this job.'
       );
@@ -935,7 +933,7 @@ export class JobsAppointmentsService {
   ): void {
     const permissions = new Set(actor.effectivePermissions);
 
-    if (this.isReopenTransition(currentStatus, nextStatus)) {
+    if (isReopenTransition(currentStatus, nextStatus)) {
       if (!permissions.has('jobs:configure')) {
         throw new ForbiddenException('Reopening a job requires job configuration permission.');
       }
@@ -1118,10 +1116,6 @@ export class JobsAppointmentsService {
       jobStatus !== 'closed' &&
       jobStatus !== 'cancelled'
     );
-  }
-
-  private isReopenTransition(currentStatus: JobStatus, nextStatus: JobStatus): boolean {
-    return finalJobStatuses.includes(currentStatus) && activeJobStatuses.includes(nextStatus);
   }
 
   private async evaluateFieldJobMutationAccess(

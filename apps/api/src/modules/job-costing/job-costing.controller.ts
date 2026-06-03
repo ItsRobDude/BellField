@@ -1,14 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { getBearerToken } from '../../common/http/bearer-token';
 import { JobCostingService } from './job-costing.service';
 import { CreateJobExpenseRequestBodyDto, CreateJobLaborRequestBodyDto } from './job-costing.dto';
-
-function getBearerToken(authorizationHeader: string | undefined): string {
-  if (!authorizationHeader) {
-    return '';
-  }
-  const [scheme, token] = authorizationHeader.split(' ');
-  return scheme?.toLowerCase() === 'bearer' && token ? token : '';
-}
 
 @Controller('operations/jobs')
 export class JobCostingController {

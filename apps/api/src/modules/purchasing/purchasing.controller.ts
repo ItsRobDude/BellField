@@ -1,17 +1,10 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
+import { getBearerToken } from '../../common/http/bearer-token';
 import { PurchasingService } from './purchasing.service';
 import {
   CreatePurchaseOrderRequestBodyDto,
   ReceivePurchaseOrderRequestBodyDto
 } from './purchasing.dto';
-
-function getBearerToken(authorizationHeader: string | undefined): string {
-  if (!authorizationHeader) {
-    return '';
-  }
-  const [scheme, token] = authorizationHeader.split(' ');
-  return scheme?.toLowerCase() === 'bearer' && token ? token : '';
-}
 
 @Controller('operations/purchase-orders')
 export class PurchasingController {
