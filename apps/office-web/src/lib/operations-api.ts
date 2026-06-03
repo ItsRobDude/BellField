@@ -104,7 +104,15 @@ import type {
   InventoryOnHandResponse,
   CreateInventoryAdjustmentRequest,
   CreateInventoryTransferRequest,
-  CreateInventoryIssueRequest
+  CreateInventoryIssueRequest,
+  PurchaseOrder,
+  PurchaseOrderSummary,
+  PurchaseOrderLine,
+  PurchaseOrderStatus,
+  PurchaseOrderDestinationKind,
+  PurchaseOrderLineKind,
+  PurchaseOrderResponse,
+  PurchaseOrdersResponse
 } from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
@@ -199,7 +207,15 @@ export type {
   InventoryOnHandResponse,
   CreateInventoryAdjustmentRequest,
   CreateInventoryTransferRequest,
-  CreateInventoryIssueRequest
+  CreateInventoryIssueRequest,
+  PurchaseOrder,
+  PurchaseOrderSummary,
+  PurchaseOrderLine,
+  PurchaseOrderStatus,
+  PurchaseOrderDestinationKind,
+  PurchaseOrderLineKind,
+  PurchaseOrderResponse,
+  PurchaseOrdersResponse
 };
 
 export type JobUpdateResponse = UpdateJobStatusResponse;
@@ -1311,4 +1327,32 @@ export async function issueOfficeInventoryToJob(input: {
     method: 'POST',
     body: JSON.stringify(input.body)
   });
+}
+
+// --- Purchasing (Milestone 9) ---------------------------------------------------
+
+/** Purchase-order summaries (newest first). */
+export async function listOfficePurchaseOrders(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<PurchaseOrdersResponse> {
+  return requestJson<PurchaseOrdersResponse>('/operations/purchase-orders', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+/** A single purchase order with its lines. */
+export async function getOfficePurchaseOrder(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  purchaseOrderId: string;
+}): Promise<PurchaseOrderResponse> {
+  return requestJson<PurchaseOrderResponse>(
+    `/operations/purchase-orders/${input.purchaseOrderId}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
 }

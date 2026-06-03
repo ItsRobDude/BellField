@@ -141,6 +141,7 @@ export function OfficeWorkspaceShell({
   const canViewInventory = employee.effectivePermissions.includes('inventory:view');
   const canCreateInventory = employee.effectivePermissions.includes('inventory:create');
   const canEditInventory = employee.effectivePermissions.includes('inventory:edit');
+  const canViewPurchasing = employee.effectivePermissions.includes('purchasing:view');
   const canReplaceRemoveEquipment = employee.effectivePermissions.includes('equipment:configure');
   const canDeleteEquipment = employee.effectivePermissions.includes('equipment:delete');
   const canCreateEstimate = employee.effectivePermissions.includes('estimates:create');
@@ -1008,6 +1009,7 @@ export function OfficeWorkspaceShell({
       isJobsQueueRefreshing={isJobsQueueRefreshing}
       isRefreshing={isRefreshing}
       canViewInventory={canViewInventory}
+      canViewPurchasing={canViewPurchasing}
       canViewBookkeeping={canViewInvoice}
       noticeMessage={noticeMessage}
       onOpenJobIntake={() => void handleOpenJobIntake()}
@@ -1082,6 +1084,11 @@ export function OfficeWorkspaceShell({
           sessionToken,
           canCreate: canCreateInventory,
           canEdit: canEditInventory,
+          onOpenJob: (jobId) => handleOpenJobDetail(jobId)
+        }}
+        purchasing={{
+          apiBaseUrl,
+          sessionToken,
           onOpenJob: (jobId) => handleOpenJobDetail(jobId)
         }}
         bookkeeping={{

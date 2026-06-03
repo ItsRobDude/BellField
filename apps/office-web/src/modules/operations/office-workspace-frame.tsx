@@ -23,6 +23,7 @@ type OfficeWorkspaceFrameProps = {
   isJobsQueueRefreshing: boolean;
   isRefreshing: boolean;
   canViewInventory: boolean;
+  canViewPurchasing: boolean;
   canViewBookkeeping: boolean;
   noticeMessage: string | null;
   onOpenJobIntake: () => void;
@@ -41,6 +42,7 @@ export function OfficeWorkspaceFrame({
   isJobsQueueRefreshing,
   isRefreshing,
   canViewInventory,
+  canViewPurchasing,
   canViewBookkeeping,
   noticeMessage,
   onOpenJobIntake,
@@ -76,6 +78,13 @@ export function OfficeWorkspaceFrame({
               label="Inventory"
               active={activeView === 'inventory'}
               onClick={() => onViewChange('inventory')}
+            />
+          ) : null}
+          {canViewPurchasing ? (
+            <NavButton
+              label="Purchasing"
+              active={activeView === 'purchasing'}
+              onClick={() => onViewChange('purchasing')}
             />
           ) : null}
           {canViewBookkeeping ? (

@@ -12,6 +12,10 @@ import {
   type OfficeInventorySurfaceProps
 } from './office-workspace-inventory-surface';
 import {
+  OfficePurchasingSurface,
+  type OfficePurchasingSurfaceProps
+} from './office-workspace-purchasing-surface';
+import {
   OfficeJobDetailSurface,
   type OfficeJobDetailSurfaceProps
 } from './office-workspace-job-detail-surface';
@@ -51,6 +55,7 @@ type OfficeWorkspaceSurfacesProps = {
   jobIntake: OfficeJobIntakeSurfaceProps;
   jobs: OfficeJobsQueueSurfaceProps;
   inventory: OfficeInventorySurfaceProps;
+  purchasing: OfficePurchasingSurfaceProps;
   bookkeeping: OfficeBookkeepingSurfaceProps;
 };
 
@@ -62,6 +67,7 @@ export function OfficeWorkspaceSurfaces({
   jobIntake,
   jobs,
   inventory,
+  purchasing,
   bookkeeping
 }: OfficeWorkspaceSurfacesProps) {
   return (
@@ -93,6 +99,8 @@ export function OfficeWorkspaceSurfaces({
       {activeOfficeView === 'jobs' ? <OfficeJobsQueueSurface {...jobs} /> : null}
 
       {activeOfficeView === 'inventory' ? <OfficeInventorySurface {...inventory} /> : null}
+
+      {activeOfficeView === 'purchasing' ? <OfficePurchasingSurface {...purchasing} /> : null}
 
       {activeOfficeView === 'bookkeeping' ? <OfficeBookkeepingSurface {...bookkeeping} /> : null}
 
