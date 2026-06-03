@@ -21,15 +21,18 @@ describe('defaultRoleTemplates invoice permissions', () => {
 
 // Job cost is internal financial data, gated on its own jobCosting area (not jobs:edit).
 describe('defaultRoleTemplates jobCosting permissions', () => {
-  it('grants owner, admin, and bookkeeping jobCosting:create', () => {
+  it('grants owner, admin, and bookkeeping jobCosting view/create/edit', () => {
     for (const role of ['owner', 'admin', 'bookKeeping'] as const) {
-      expect(defaultRoleTemplates[role].permissions).toContain('jobCosting:create');
+      expect(defaultRoleTemplates[role].permissions).toEqual(
+        expect.arrayContaining(['jobCosting:view', 'jobCosting:create', 'jobCosting:edit'])
+      );
     }
   });
 
-  it('does not grant scheduling/field roles jobCosting:create', () => {
-    expect(defaultRoleTemplates.csr.permissions).not.toContain('jobCosting:create');
-    expect(defaultRoleTemplates.dispatcher.permissions).not.toContain('jobCosting:create');
-    expect(defaultRoleTemplates.technician.permissions).not.toContain('jobCosting:create');
+  it('does not grant scheduling/field roles jobCosting create/edit (cost entry or correction)', () => {
+    for (const role of ['csr', 'dispatcher', 'technician'] as const) {
+      expect(defaultRoleTemplates[role].permissions).not.toContain('jobCosting:create');
+      expect(defaultRoleTemplates[role].permissions).not.toContain('jobCosting:edit');
+    }
   });
 });
