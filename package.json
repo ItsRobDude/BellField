@@ -7,11 +7,13 @@
     "pnpm": "10.13.1"
   },
   "devDependencies": {
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.2",
     "@typescript-eslint/eslint-plugin": "8.31.0",
     "@typescript-eslint/parser": "8.31.0",
     "eslint": "9.25.0",
     "lint-staged": "15.5.2",
     "prettier": "3.5.3",
+    "secretlint": "^13.0.2",
     "simple-git-hooks": "2.13.1",
     "typescript": "5.8.3"
   },
@@ -35,6 +37,8 @@
     "build": "pnpm -r --if-present build",
     "check:architecture": "node tools/check-architecture.mjs",
     "check:ui-copy": "node tools/check-ui-copy.mjs",
+    "security:secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
+    "security:audit": "pnpm audit --prod",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",

@@ -37,6 +37,9 @@ jobs:
       - name: UI copy guardrails
         run: pnpm check:ui-copy
 
+      - name: Secret scan
+        run: pnpm security:secrets
+
       - name: Lint
         run: pnpm lint
 
@@ -48,3 +51,10 @@ jobs:
 
       - name: Build
         run: pnpm build
+
+      # Advisory only: surfaces dependency advisories in the log without failing
+      # the build, since most are transitive and need coordinated dependency
+      # bumps rather than blocking unrelated PRs. Tighten once the backlog clears.
+      - name: Dependency audit (advisory)
+        run: pnpm security:audit
+        continue-on-error: true
