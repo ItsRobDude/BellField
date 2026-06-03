@@ -21,4 +21,5 @@ artifacts/
 
 # Local Claude Code preview tooling config (not shared project config).
 .claude/launch.json
-tmp-codex-ui2-out.txt
+# Transient Codex review scratch files (prompt + captured output).
+tmp-codex-*.txt
