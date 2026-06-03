@@ -87,15 +87,24 @@ import type {
   VoidRegisterEntryRequest,
   InventoryItem,
   InventoryItemKind,
+  InventoryItemResponse,
   InventoryItemsResponse,
+  CreateInventoryItemRequest,
+  UpdateInventoryItemRequest,
   InventoryLocation,
   InventoryLocationKind,
+  InventoryLocationResponse,
   InventoryLocationsResponse,
+  CreateInventoryLocationRequest,
+  UpdateInventoryLocationRequest,
   InventoryMovement,
   InventoryMovementKind,
   InventoryMovementResponse,
   InventoryOnHandRow,
-  InventoryOnHandResponse
+  InventoryOnHandResponse,
+  CreateInventoryAdjustmentRequest,
+  CreateInventoryTransferRequest,
+  CreateInventoryIssueRequest
 } from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
@@ -173,15 +182,24 @@ export type {
   RegisterEntrySummary,
   InventoryItem,
   InventoryItemKind,
+  InventoryItemResponse,
   InventoryItemsResponse,
+  CreateInventoryItemRequest,
+  UpdateInventoryItemRequest,
   InventoryLocation,
   InventoryLocationKind,
+  InventoryLocationResponse,
   InventoryLocationsResponse,
+  CreateInventoryLocationRequest,
+  UpdateInventoryLocationRequest,
   InventoryMovement,
   InventoryMovementKind,
   InventoryMovementResponse,
   InventoryOnHandRow,
-  InventoryOnHandResponse
+  InventoryOnHandResponse,
+  CreateInventoryAdjustmentRequest,
+  CreateInventoryTransferRequest,
+  CreateInventoryIssueRequest
 };
 
 export type JobUpdateResponse = UpdateJobStatusResponse;
@@ -1190,4 +1208,107 @@ export async function getOfficeInventoryMovements(input: {
       sessionToken: input.sessionToken
     }
   );
+}
+
+/** Create a catalog item. */
+export async function createOfficeInventoryItem(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  body: CreateInventoryItemRequest;
+}): Promise<InventoryItemResponse> {
+  return requestJson<InventoryItemResponse>('/operations/inventory/items', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST',
+    body: JSON.stringify(input.body)
+  });
+}
+
+/** Update a catalog item (including active state). */
+export async function updateOfficeInventoryItem(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  itemId: string;
+  body: UpdateInventoryItemRequest;
+}): Promise<InventoryItemResponse> {
+  return requestJson<InventoryItemResponse>(`/operations/inventory/items/${input.itemId}`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'PUT',
+    body: JSON.stringify(input.body)
+  });
+}
+
+/** Create a stock location. */
+export async function createOfficeInventoryLocation(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  body: CreateInventoryLocationRequest;
+}): Promise<InventoryLocationResponse> {
+  return requestJson<InventoryLocationResponse>('/operations/inventory/locations', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST',
+    body: JSON.stringify(input.body)
+  });
+}
+
+/** Update a stock location (including active state). */
+export async function updateOfficeInventoryLocation(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  locationId: string;
+  body: UpdateInventoryLocationRequest;
+}): Promise<InventoryLocationResponse> {
+  return requestJson<InventoryLocationResponse>(
+    `/operations/inventory/locations/${input.locationId}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken,
+      method: 'PUT',
+      body: JSON.stringify(input.body)
+    }
+  );
+}
+
+/** Adjust on-hand at a location (gain/loss). Returns refreshed on-hand. */
+export async function createOfficeInventoryAdjustment(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  body: CreateInventoryAdjustmentRequest;
+}): Promise<InventoryOnHandResponse> {
+  return requestJson<InventoryOnHandResponse>('/operations/inventory/adjustments', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST',
+    body: JSON.stringify(input.body)
+  });
+}
+
+/** Transfer stock between two locations. Returns refreshed on-hand. */
+export async function createOfficeInventoryTransfer(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  body: CreateInventoryTransferRequest;
+}): Promise<InventoryOnHandResponse> {
+  return requestJson<InventoryOnHandResponse>('/operations/inventory/transfers', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST',
+    body: JSON.stringify(input.body)
+  });
+}
+
+/** Issue stock from a location to a job. Returns refreshed on-hand. */
+export async function issueOfficeInventoryToJob(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  body: CreateInventoryIssueRequest;
+}): Promise<InventoryOnHandResponse> {
+  return requestJson<InventoryOnHandResponse>('/operations/inventory/issues', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'POST',
+    body: JSON.stringify(input.body)
+  });
 }

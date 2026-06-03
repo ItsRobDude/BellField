@@ -2,17 +2,26 @@
 
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import {
+  createOfficeInventoryAdjustment,
+  createOfficeInventoryItem,
+  createOfficeInventoryLocation,
+  createOfficeInventoryTransfer,
   getOfficeInventoryItems,
   getOfficeInventoryLocations,
   getOfficeInventoryMovements,
   getOfficeInventoryOnHand,
+  getOfficeJobsWorkspace,
+  issueOfficeInventoryToJob,
+  updateOfficeInventoryItem,
+  updateOfficeInventoryLocation,
   type InventoryItem,
   type InventoryItemKind,
   type InventoryLocation,
   type InventoryLocationKind,
   type InventoryMovement,
   type InventoryMovementKind,
-  type InventoryOnHandRow
+  type InventoryOnHandRow,
+  type JobSummary
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from './job-invoice-shared';
@@ -20,6 +29,8 @@ import { formatCurrency } from './job-invoice-shared';
 export type OfficeInventorySurfaceProps = {
   apiBaseUrl: string;
   sessionToken: string;
+  canCreate: boolean;
+  canEdit: boolean;
   onOpenJob: (jobId: string) => void;
 };
 
@@ -49,22 +60,90 @@ function formatQuantity(value: number): string {
   return Number(value.toFixed(4)).toString();
 }
 
-// Read-only inventory overview: derived on-hand, the catalog, stock locations, and the
-// movement ledger. Stacked panels (no in-surface tabs), all styling from
-// officeWorkspaceStyles. Write actions (adjust/transfer/issue, item/location CRUD) are a
-// later slice; this surface establishes the read shell.
+type ItemDraft = {
+  sku: string;
+  name: string;
+  kind: InventoryItemKind;
+  unitOfMeasure: string;
+  defaultUnitCost: string;
+  description: string;
+  isActive: boolean;
+};
+
+type LocationDraft = {
+  name: string;
+  kind: InventoryLocationKind;
+  assignedEmployeeId: string;
+  isActive: boolean;
+};
+
+type ActiveForm =
+  | { kind: 'item'; editingId: string | null; draft: ItemDraft }
+  | { kind: 'location'; editingId: string | null; draft: LocationDraft }
+  | {
+      kind: 'adjust';
+      itemId: string;
+      locationId: string;
+      quantityDelta: string;
+      unitCost: string;
+      note: string;
+    }
+  | {
+      kind: 'transfer';
+      itemId: string;
+      fromLocationId: string;
+      toLocationId: string;
+      quantity: string;
+      note: string;
+    }
+  | {
+      kind: 'issue';
+      itemId: string;
+      locationId: string;
+      jobId: string;
+      quantity: string;
+      note: string;
+    };
+
+const emptyItemDraft: ItemDraft = {
+  sku: '',
+  name: '',
+  kind: 'part',
+  unitOfMeasure: '',
+  defaultUnitCost: '',
+  description: '',
+  isActive: true
+};
+
+const emptyLocationDraft: LocationDraft = {
+  name: '',
+  kind: 'warehouse',
+  assignedEmployeeId: '',
+  isActive: true
+};
+
+// Inventory overview + write actions. Read panels (on-hand, items, locations, movements)
+// plus a single active form for catalog/location edits and stock actions (adjust, transfer,
+// issue-to-job), mirroring the single-editor pattern from the invoice corrections surface.
+// All styling reuses officeWorkspaceStyles.
 export function OfficeInventorySurface({
   apiBaseUrl,
   sessionToken,
+  canCreate,
+  canEdit,
   onOpenJob
 }: OfficeInventorySurfaceProps) {
   const [onHand, setOnHand] = useState<InventoryOnHandRow[]>([]);
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [locations, setLocations] = useState<InventoryLocation[]>([]);
   const [movements, setMovements] = useState<InventoryMovement[]>([]);
+  const [jobs, setJobs] = useState<JobSummary[] | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [activeForm, setActiveForm] = useState<ActiveForm | null>(null);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -92,21 +171,250 @@ export function OfficeInventorySurface({
     void load();
   }, [load]);
 
+  // The issue-to-job job picker loads on demand the first time a stock issue is opened.
+  const ensureJobs = useCallback(async () => {
+    if (jobs) {
+      return;
+    }
+    try {
+      const workspace = await getOfficeJobsWorkspace({ apiBaseUrl, sessionToken });
+      setJobs(workspace.jobs);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load jobs.');
+    }
+  }, [apiBaseUrl, jobs, sessionToken]);
+
+  const activeItems = items.filter((item) => item.isActive);
+  const activeLocations = locations.filter((location) => location.isActive);
+
+  function closeForm() {
+    setActiveForm(null);
+  }
+
+  async function afterWrite(message: string) {
+    setNoticeMessage(message);
+    setActiveForm(null);
+    await load();
+  }
+
+  async function submitForm() {
+    if (!activeForm) {
+      return;
+    }
+    setIsSaving(true);
+    setErrorMessage(null);
+    setNoticeMessage(null);
+    try {
+      await runSubmit(activeForm);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function runSubmit(form: ActiveForm) {
+    if (form.kind === 'item') {
+      const body = {
+        sku: emptyToUndefined(form.draft.sku),
+        name: form.draft.name.trim(),
+        kind: form.draft.kind,
+        unitOfMeasure: emptyToUndefined(form.draft.unitOfMeasure),
+        defaultUnitCost: parseOptionalNumber(form.draft.defaultUnitCost),
+        description: emptyToUndefined(form.draft.description)
+      };
+      if (form.editingId) {
+        await updateOfficeInventoryItem({
+          apiBaseUrl,
+          sessionToken,
+          itemId: form.editingId,
+          body: { ...body, isActive: form.draft.isActive }
+        });
+        await afterWrite('Item updated.');
+      } else {
+        await createOfficeInventoryItem({ apiBaseUrl, sessionToken, body });
+        await afterWrite('Item created.');
+      }
+      return;
+    }
+    if (form.kind === 'location') {
+      const body = {
+        name: form.draft.name.trim(),
+        kind: form.draft.kind,
+        assignedEmployeeId: emptyToUndefined(form.draft.assignedEmployeeId)
+      };
+      if (form.editingId) {
+        await updateOfficeInventoryLocation({
+          apiBaseUrl,
+          sessionToken,
+          locationId: form.editingId,
+          body: { ...body, isActive: form.draft.isActive }
+        });
+        await afterWrite('Location updated.');
+      } else {
+        await createOfficeInventoryLocation({ apiBaseUrl, sessionToken, body });
+        await afterWrite('Location created.');
+      }
+      return;
+    }
+    if (form.kind === 'adjust') {
+      await createOfficeInventoryAdjustment({
+        apiBaseUrl,
+        sessionToken,
+        body: {
+          itemId: form.itemId,
+          locationId: form.locationId,
+          quantityDelta: requireNumber(form.quantityDelta, 'Quantity change'),
+          unitCost: parseOptionalNumber(form.unitCost),
+          note: emptyToUndefined(form.note)
+        }
+      });
+      await afterWrite('Adjustment recorded.');
+      return;
+    }
+    if (form.kind === 'transfer') {
+      await createOfficeInventoryTransfer({
+        apiBaseUrl,
+        sessionToken,
+        body: {
+          itemId: form.itemId,
+          fromLocationId: form.fromLocationId,
+          toLocationId: form.toLocationId,
+          quantity: requireNumber(form.quantity, 'Quantity'),
+          note: emptyToUndefined(form.note)
+        }
+      });
+      await afterWrite('Transfer recorded.');
+      return;
+    }
+    await issueOfficeInventoryToJob({
+      apiBaseUrl,
+      sessionToken,
+      body: {
+        itemId: form.itemId,
+        locationId: form.locationId,
+        jobId: form.jobId,
+        quantity: requireNumber(form.quantity, 'Quantity'),
+        note: emptyToUndefined(form.note)
+      }
+    });
+    await afterWrite('Issued to job.');
+  }
+
+  const firstItemId = activeItems[0]?.id ?? '';
+  const firstLocationId = activeLocations[0]?.id ?? '';
+
   return (
     <section style={styles.workspacePanel} aria-label="Inventory">
       <div style={styles.row}>
         <h1 style={styles.heading}>Inventory</h1>
-        <button
-          type="button"
-          style={styles.button}
-          disabled={isLoading}
-          onClick={() => void load()}
-        >
-          {isLoading ? 'Loading…' : 'Refresh'}
-        </button>
+        <div style={styles.inlineActionBar}>
+          {canEdit ? (
+            <>
+              <button
+                type="button"
+                style={styles.button}
+                disabled={isSaving || activeItems.length === 0 || activeLocations.length === 0}
+                onClick={() =>
+                  setActiveForm({
+                    kind: 'adjust',
+                    itemId: firstItemId,
+                    locationId: firstLocationId,
+                    quantityDelta: '',
+                    unitCost: '',
+                    note: ''
+                  })
+                }
+              >
+                Adjust stock
+              </button>
+              <button
+                type="button"
+                style={styles.button}
+                disabled={isSaving || activeItems.length === 0 || activeLocations.length < 2}
+                onClick={() =>
+                  setActiveForm({
+                    kind: 'transfer',
+                    itemId: firstItemId,
+                    fromLocationId: firstLocationId,
+                    toLocationId: activeLocations[1]?.id ?? '',
+                    quantity: '',
+                    note: ''
+                  })
+                }
+              >
+                Transfer
+              </button>
+              <button
+                type="button"
+                style={styles.button}
+                disabled={isSaving || activeItems.length === 0 || activeLocations.length === 0}
+                onClick={() => {
+                  void ensureJobs();
+                  setActiveForm({
+                    kind: 'issue',
+                    itemId: firstItemId,
+                    locationId: firstLocationId,
+                    jobId: '',
+                    quantity: '',
+                    note: ''
+                  });
+                }}
+              >
+                Issue to job
+              </button>
+            </>
+          ) : null}
+          {canCreate ? (
+            <>
+              <button
+                type="button"
+                style={styles.button}
+                disabled={isSaving}
+                onClick={() =>
+                  setActiveForm({ kind: 'item', editingId: null, draft: emptyItemDraft })
+                }
+              >
+                Add item
+              </button>
+              <button
+                type="button"
+                style={styles.button}
+                disabled={isSaving}
+                onClick={() =>
+                  setActiveForm({ kind: 'location', editingId: null, draft: emptyLocationDraft })
+                }
+              >
+                Add location
+              </button>
+            </>
+          ) : null}
+          <button
+            type="button"
+            style={styles.button}
+            disabled={isLoading}
+            onClick={() => void load()}
+          >
+            {isLoading ? 'Loading…' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+
+      {activeForm ? (
+        <InventoryForm
+          form={activeForm}
+          items={activeItems}
+          locations={activeLocations}
+          jobs={jobs}
+          isSaving={isSaving}
+          onChange={setActiveForm}
+          onCancel={closeForm}
+          onSubmit={() => void submitForm()}
+        />
+      ) : null}
 
       {hasLoaded ? (
         <>
@@ -126,7 +434,7 @@ export function OfficeInventorySurface({
           </InventoryPanel>
 
           <InventoryPanel title="Items" count={items.length} emptyText="No catalog items yet.">
-            <Table head={['Name', 'SKU', 'Kind', 'Unit', 'Default cost', 'Status']}>
+            <Table head={['Name', 'SKU', 'Kind', 'Unit', 'Default cost', 'Status', '']}>
               {items.map((item) => (
                 <tr key={item.id}>
                   <td style={styles.tableCell}>{item.name}</td>
@@ -143,6 +451,35 @@ export function OfficeInventorySurface({
                       {item.isActive ? 'Active' : 'Inactive'}
                     </span>
                   </td>
+                  <td style={styles.tableCell}>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        style={styles.tableLinkButton}
+                        disabled={isSaving}
+                        onClick={() =>
+                          setActiveForm({
+                            kind: 'item',
+                            editingId: item.id,
+                            draft: {
+                              sku: item.sku ?? '',
+                              name: item.name,
+                              kind: item.kind,
+                              unitOfMeasure: item.unitOfMeasure ?? '',
+                              defaultUnitCost:
+                                item.defaultUnitCost === undefined
+                                  ? ''
+                                  : String(item.defaultUnitCost),
+                              description: item.description ?? '',
+                              isActive: item.isActive
+                            }
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </Table>
@@ -153,7 +490,7 @@ export function OfficeInventorySurface({
             count={locations.length}
             emptyText="No stock locations yet."
           >
-            <Table head={['Name', 'Kind', 'Assigned to', 'Status']}>
+            <Table head={['Name', 'Kind', 'Assigned to', 'Status', '']}>
               {locations.map((location) => (
                 <tr key={location.id}>
                   <td style={styles.tableCell}>{location.name}</td>
@@ -163,6 +500,29 @@ export function OfficeInventorySurface({
                     <span style={location.isActive ? styles.badge : styles.dangerBadge}>
                       {location.isActive ? 'Active' : 'Inactive'}
                     </span>
+                  </td>
+                  <td style={styles.tableCell}>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        style={styles.tableLinkButton}
+                        disabled={isSaving}
+                        onClick={() =>
+                          setActiveForm({
+                            kind: 'location',
+                            editingId: location.id,
+                            draft: {
+                              name: location.name,
+                              kind: location.kind,
+                              assignedEmployeeId: location.assignedEmployeeId ?? '',
+                              isActive: location.isActive
+                            }
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                    ) : null}
                   </td>
                 </tr>
               ))}
@@ -222,6 +582,368 @@ export function OfficeInventorySurface({
   );
 }
 
+function InventoryForm({
+  form,
+  items,
+  locations,
+  jobs,
+  isSaving,
+  onChange,
+  onCancel,
+  onSubmit
+}: {
+  form: ActiveForm;
+  items: InventoryItem[];
+  locations: InventoryLocation[];
+  jobs: JobSummary[] | null;
+  isSaving: boolean;
+  onChange: (form: ActiveForm) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const title = formTitles[form.kind];
+  return (
+    <form
+      style={styles.panel}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <h2 style={styles.heading}>{title}</h2>
+      <div style={styles.formGridCompact}>
+        {form.kind === 'item' ? (
+          <>
+            <TextField
+              label="Name"
+              value={form.draft.name}
+              onChange={(name) => onChange({ ...form, draft: { ...form.draft, name } })}
+            />
+            <TextField
+              label="SKU"
+              value={form.draft.sku}
+              onChange={(sku) => onChange({ ...form, draft: { ...form.draft, sku } })}
+            />
+            <SelectField
+              label="Kind"
+              value={form.draft.kind}
+              options={[
+                { value: 'part', label: 'Part' },
+                { value: 'equipment', label: 'Equipment' }
+              ]}
+              onChange={(kind) =>
+                onChange({ ...form, draft: { ...form.draft, kind: kind as InventoryItemKind } })
+              }
+            />
+            <TextField
+              label="Unit of measure"
+              value={form.draft.unitOfMeasure}
+              onChange={(unitOfMeasure) =>
+                onChange({ ...form, draft: { ...form.draft, unitOfMeasure } })
+              }
+            />
+            <TextField
+              label="Default unit cost"
+              value={form.draft.defaultUnitCost}
+              onChange={(defaultUnitCost) =>
+                onChange({ ...form, draft: { ...form.draft, defaultUnitCost } })
+              }
+            />
+            <TextField
+              label="Description"
+              value={form.draft.description}
+              onChange={(description) =>
+                onChange({ ...form, draft: { ...form.draft, description } })
+              }
+            />
+            {form.editingId ? (
+              <CheckboxField
+                label="Active"
+                checked={form.draft.isActive}
+                onChange={(isActive) => onChange({ ...form, draft: { ...form.draft, isActive } })}
+              />
+            ) : null}
+          </>
+        ) : null}
+
+        {form.kind === 'location' ? (
+          <>
+            <TextField
+              label="Name"
+              value={form.draft.name}
+              onChange={(name) => onChange({ ...form, draft: { ...form.draft, name } })}
+            />
+            <SelectField
+              label="Kind"
+              value={form.draft.kind}
+              options={[
+                { value: 'warehouse', label: 'Warehouse' },
+                { value: 'truck', label: 'Truck / van' },
+                { value: 'other', label: 'Other' }
+              ]}
+              onChange={(kind) =>
+                onChange({
+                  ...form,
+                  draft: { ...form.draft, kind: kind as InventoryLocationKind }
+                })
+              }
+            />
+            <TextField
+              label="Assigned employee id"
+              value={form.draft.assignedEmployeeId}
+              onChange={(assignedEmployeeId) =>
+                onChange({ ...form, draft: { ...form.draft, assignedEmployeeId } })
+              }
+            />
+            {form.editingId ? (
+              <CheckboxField
+                label="Active"
+                checked={form.draft.isActive}
+                onChange={(isActive) => onChange({ ...form, draft: { ...form.draft, isActive } })}
+              />
+            ) : null}
+          </>
+        ) : null}
+
+        {form.kind === 'adjust' ? (
+          <>
+            <ItemSelect
+              items={items}
+              value={form.itemId}
+              onChange={(itemId) => onChange({ ...form, itemId })}
+            />
+            <LocationSelect
+              label="Location"
+              locations={locations}
+              value={form.locationId}
+              onChange={(locationId) => onChange({ ...form, locationId })}
+            />
+            <TextField
+              label="Quantity change (+/−)"
+              value={form.quantityDelta}
+              onChange={(quantityDelta) => onChange({ ...form, quantityDelta })}
+            />
+            <TextField
+              label="Unit cost (gain onto empty)"
+              value={form.unitCost}
+              onChange={(unitCost) => onChange({ ...form, unitCost })}
+            />
+            <TextField
+              label="Note"
+              value={form.note}
+              onChange={(note) => onChange({ ...form, note })}
+            />
+          </>
+        ) : null}
+
+        {form.kind === 'transfer' ? (
+          <>
+            <ItemSelect
+              items={items}
+              value={form.itemId}
+              onChange={(itemId) => onChange({ ...form, itemId })}
+            />
+            <LocationSelect
+              label="From"
+              locations={locations}
+              value={form.fromLocationId}
+              onChange={(fromLocationId) => onChange({ ...form, fromLocationId })}
+            />
+            <LocationSelect
+              label="To"
+              locations={locations}
+              value={form.toLocationId}
+              onChange={(toLocationId) => onChange({ ...form, toLocationId })}
+            />
+            <TextField
+              label="Quantity"
+              value={form.quantity}
+              onChange={(quantity) => onChange({ ...form, quantity })}
+            />
+            <TextField
+              label="Note"
+              value={form.note}
+              onChange={(note) => onChange({ ...form, note })}
+            />
+          </>
+        ) : null}
+
+        {form.kind === 'issue' ? (
+          <>
+            <ItemSelect
+              items={items}
+              value={form.itemId}
+              onChange={(itemId) => onChange({ ...form, itemId })}
+            />
+            <LocationSelect
+              label="From location"
+              locations={locations}
+              value={form.locationId}
+              onChange={(locationId) => onChange({ ...form, locationId })}
+            />
+            <label style={styles.fieldLabel}>
+              Job
+              <select
+                style={styles.input}
+                value={form.jobId}
+                onChange={(event) => onChange({ ...form, jobId: event.target.value })}
+              >
+                <option value="">{jobs ? 'Select a job…' : 'Loading jobs…'}</option>
+                {(jobs ?? []).map((job) => (
+                  <option key={job.id} value={job.id}>
+                    #{job.jobNumber} · {job.summary}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <TextField
+              label="Quantity"
+              value={form.quantity}
+              onChange={(quantity) => onChange({ ...form, quantity })}
+            />
+            <TextField
+              label="Note"
+              value={form.note}
+              onChange={(note) => onChange({ ...form, note })}
+            />
+          </>
+        ) : null}
+      </div>
+      <div style={styles.inlineActionBar}>
+        <button type="submit" style={styles.primaryButton} disabled={isSaving}>
+          {isSaving ? 'Saving…' : 'Save'}
+        </button>
+        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+const formTitles: Record<ActiveForm['kind'], string> = {
+  item: 'Catalog item',
+  location: 'Stock location',
+  adjust: 'Adjust stock',
+  transfer: 'Transfer stock',
+  issue: 'Issue stock to a job'
+};
+
+function ItemSelect({
+  items,
+  value,
+  onChange
+}: {
+  items: InventoryItem[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label style={styles.fieldLabel}>
+      Item
+      <select style={styles.input} value={value} onChange={(event) => onChange(event.target.value)}>
+        {items.map((item) => (
+          <option key={item.id} value={item.id}>
+            {item.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function LocationSelect({
+  label,
+  locations,
+  value,
+  onChange
+}: {
+  label: string;
+  locations: InventoryLocation[];
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label style={styles.fieldLabel}>
+      {label}
+      <select style={styles.input} value={value} onChange={(event) => onChange(event.target.value)}>
+        {locations.map((location) => (
+          <option key={location.id} value={location.id}>
+            {location.name}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function TextField({
+  label,
+  value,
+  onChange
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label style={styles.fieldLabel}>
+      {label}
+      <input
+        style={styles.input}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
+  );
+}
+
+function SelectField({
+  label,
+  value,
+  options,
+  onChange
+}: {
+  label: string;
+  value: string;
+  options: Array<{ value: string; label: string }>;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <label style={styles.fieldLabel}>
+      {label}
+      <select style={styles.input} value={value} onChange={(event) => onChange(event.target.value)}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function CheckboxField({
+  label,
+  checked,
+  onChange
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label style={styles.inlineLabel}>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      {label}
+    </label>
+  );
+}
+
 function InventoryPanel({
   title,
   count,
@@ -253,8 +975,8 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
     <table style={styles.table}>
       <thead>
         <tr>
-          {head.map((label) => (
-            <th key={label} style={styles.tableHeadCell}>
+          {head.map((label, index) => (
+            <th key={label || `col-${index}`} style={styles.tableHeadCell}>
               {label}
             </th>
           ))}
@@ -263,4 +985,29 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
       <tbody>{children}</tbody>
     </table>
   );
+}
+
+function emptyToUndefined(value: string): string | undefined {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : undefined;
+}
+
+function parseOptionalNumber(value: string): number | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const parsed = Number(trimmed);
+  if (!Number.isFinite(parsed)) {
+    throw new Error('Enter a valid number.');
+  }
+  return parsed;
+}
+
+function requireNumber(value: string, label: string): number {
+  const parsed = Number(value.trim());
+  if (!value.trim() || !Number.isFinite(parsed)) {
+    throw new Error(`${label} must be a number.`);
+  }
+  return parsed;
 }
