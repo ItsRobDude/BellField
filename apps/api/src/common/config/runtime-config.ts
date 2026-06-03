@@ -11,14 +11,25 @@ function getNodeEnv(value: string | undefined): NodeEnvironment {
   return 'development';
 }
 
-function getPort(value: string | undefined): number {
-  if (!value) {
+/**
+ * Resolves PORT. An unset value uses the default. A value that is set but is not
+ * a positive integer is a misconfiguration: in production it is reported (so the
+ * caller refuses to start) rather than being silently ignored; in dev/test it
+ * falls back to the default so local runs stay forgiving.
+ */
+function resolvePort(value: string | undefined, isProduction: boolean, problems: string[]): number {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
     return defaultPort;
   }
 
-  const parsedPort = Number(value);
+  const parsedPort = Number(trimmed);
 
   if (!Number.isInteger(parsedPort) || parsedPort <= 0) {
+    if (isProduction) {
+      problems.push(`PORT must be a positive integer; received ${JSON.stringify(value)}.`);
+    }
     return defaultPort;
   }
 
@@ -50,13 +61,47 @@ export type ApiRuntimeConfig = {
   bootstrapSeedData: boolean;
 };
 
+/**
+ * Reads and validates runtime configuration from the environment.
+ *
+ * BellField uses a mixed posture (matching MediaConfigService): production must
+ * fail fast when required configuration is missing or invalid, while dev/test
+ * fall back to safe local defaults. Production problems are collected and
+ * reported together in a single error so an operator can fix everything at once
+ * instead of hitting one boot failure at a time.
+ */
 export function getApiRuntimeConfig(): ApiRuntimeConfig {
   const nodeEnv = getNodeEnv(process.env.NODE_ENV);
+  const isProduction = nodeEnv === 'production';
+  const problems: string[] = [];
+
+  const configuredDatabaseUrl = process.env.DATABASE_URL?.trim();
+  let databaseUrl = defaultDatabaseUrl;
+  if (configuredDatabaseUrl) {
+    databaseUrl = configuredDatabaseUrl;
+  } else if (isProduction) {
+    // In production we must not silently connect to the local dev database.
+    problems.push(
+      'DATABASE_URL must be set to the PostgreSQL connection string for the BellField database.'
+    );
+  }
+
+  const port = resolvePort(process.env.PORT, isProduction, problems);
+
+  if (problems.length > 0) {
+    throw new Error(
+      [
+        `BellField API cannot start: ${problems.length} configuration problem(s) found.`,
+        ...problems.map((problem) => `  - ${problem}`),
+        'See .env.example for the required production settings.'
+      ].join('\n')
+    );
+  }
 
   return {
     nodeEnv,
-    port: getPort(process.env.PORT),
-    databaseUrl: process.env.DATABASE_URL?.trim() || defaultDatabaseUrl,
+    port,
+    databaseUrl,
     bootstrapSeedData: getBoolean(process.env.BOOTSTRAP_SEED_DATA, nodeEnv !== 'production')
   };
 }
