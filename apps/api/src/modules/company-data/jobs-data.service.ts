@@ -88,9 +88,16 @@ export class JobsDataService {
     jobId: string,
     status: JobStatus,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    expectedCurrentStatus?: JobStatus
   ): Promise<JobRecord> {
-    const job = await this.jobsDataRepository.updateJobStatus(jobId, status, actorName, occurredAt);
+    const job = await this.jobsDataRepository.updateJobStatus(
+      jobId,
+      status,
+      actorName,
+      occurredAt,
+      expectedCurrentStatus
+    );
 
     if (!job) {
       throw new NotFoundException('Job not found.');

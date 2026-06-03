@@ -23,6 +23,9 @@ export async function computeJobCostRollup(
   queryable: QueryExecutor,
   jobId: string
 ): Promise<JobCostRollup> {
+  // returnFromJob is a valid movement kind in the schema but has no writer in v1 (returns
+  // are deferred). It is intentionally excluded here; when a return flow lands it should be
+  // added as a negative job-material cost (and the snapshot/rollup tests updated with it).
   const inventory = await queryable.query<{ material: string | number }>(
     `select coalesce(sum(
         case kind

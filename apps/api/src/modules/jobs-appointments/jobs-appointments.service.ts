@@ -181,7 +181,10 @@ export class JobsAppointmentsService {
       jobId,
       request.status,
       actor.displayName,
-      request.occurredAt
+      request.occurredAt,
+      // The status the reopen/edit permission decision above was made against; the
+      // repository rejects under the row lock if it changed meanwhile.
+      jobBeforeUpdate.status
     );
 
     return {

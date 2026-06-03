@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import {
@@ -707,7 +707,11 @@ export class JobsDataRepository {
     jobId: string,
     status: JobStatus,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    // The status the caller validated its permission decision against. Verified under the
+    // row lock so a concurrent change can't turn an authorized edit into an unauthorized
+    // transition (e.g. a jobs:edit move racing a completion into an un-permissioned reopen).
+    expectedCurrentStatus?: JobStatus
   ): Promise<JobRecord | null> {
     const timelineTime = occurredAt || new Date().toISOString();
 
@@ -719,6 +723,18 @@ export class JobsDataRepository {
         [jobId]
       );
       const previousStatus = previousResult.rows[0]?.status;
+
+      // Optimistic concurrency: if the status moved since the caller validated permissions,
+      // reject so the request is re-evaluated against the true current status.
+      if (
+        expectedCurrentStatus !== undefined &&
+        previousStatus !== undefined &&
+        previousStatus !== expectedCurrentStatus
+      ) {
+        throw new ConflictException(
+          'The job status changed since it was loaded. Reload the job and try again.'
+        );
+      }
 
       await queryable.query(
         `
@@ -742,15 +758,18 @@ export class JobsDataRepository {
       );
 
       // Finalize job cost on completion; retire it on a reopen (final -> active). Both run in
-      // this transaction so the snapshot can never disagree with the persisted status.
-      if (status === 'completed' && previousStatus !== 'completed') {
-        await freezeJobCostSnapshot(queryable, jobId, actorName, timelineTime);
-      } else if (
-        previousStatus !== undefined &&
-        FINAL_JOB_STATUSES.includes(previousStatus) &&
-        ACTIVE_JOB_STATUSES.includes(status)
-      ) {
-        await supersedeCurrentJobCostSnapshot(queryable, jobId, timelineTime);
+      // this transaction so the snapshot can never disagree with the persisted status. Only
+      // when the job actually exists (previousStatus is set) — a missing row no-ops here and
+      // surfaces as not-found from the post-transaction read.
+      if (previousStatus !== undefined) {
+        if (status === 'completed' && previousStatus !== 'completed') {
+          await freezeJobCostSnapshot(queryable, jobId, actorName, timelineTime);
+        } else if (
+          FINAL_JOB_STATUSES.includes(previousStatus) &&
+          ACTIVE_JOB_STATUSES.includes(status)
+        ) {
+          await supersedeCurrentJobCostSnapshot(queryable, jobId, timelineTime);
+        }
       }
 
       if (status === 'cancelled') {

@@ -378,6 +378,15 @@ describe('JobsAppointmentsService', () => {
     expect(response.warningMessages).toContain(
       'Reopening this job keeps prior appointments and history intact, and follow-up appointments can be added under this job.'
     );
+    // The status the permission decision was made against is forwarded so the repository can
+    // reject under the lock if it changed (guards a concurrent un-permissioned reopen).
+    expect(jobsDataService.updateJobStatus).toHaveBeenCalledWith(
+      'job-1',
+      'scheduled',
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z',
+      'closed'
+    );
   });
 
   it('rejects out-of-scope field appointment updates without replay provenance', async () => {

@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DatabaseService } from '../../database/database.service';
 import { JobsDataRepository } from './jobs-data.repository';
@@ -71,7 +72,8 @@ function createRegisterEntryRow(overrides: Record<string, unknown> = {}) {
 
 function createDatabaseService(
   jobRowOverrides: Record<string, unknown> = {},
-  appointmentRowOverrides?: Record<string, unknown>
+  appointmentRowOverrides?: Record<string, unknown>,
+  previousStatusForLock?: string
 ) {
   let insertedJobId = 'job-1';
   const appointmentRow = appointmentRowOverrides
@@ -81,6 +83,11 @@ function createDatabaseService(
     query: jest.fn(async (sql: string, params?: unknown[]) => {
       if (sql.includes("nextval('job_number_sequence')")) {
         return { rows: [{ nextNumber: 1004 }] };
+      }
+
+      // The in-transaction "select status ... for update" the status-change hook reads.
+      if (sql.includes('from jobs where id = $1 for update')) {
+        return { rows: previousStatusForLock ? [{ status: previousStatusForLock }] : [] };
       }
 
       if (sql.includes('insert into jobs') && params) {
@@ -189,7 +196,11 @@ describe('JobsDataRepository', () => {
   });
 
   it('freezes a job-cost snapshot when a job is completed', async () => {
-    const { databaseService, queryable } = createDatabaseService({ status: 'completed' });
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'completed' },
+      undefined,
+      'inProgress'
+    );
     const repository = createJobsDataRepository(databaseService);
 
     await repository.updateJobStatus(
@@ -210,8 +221,79 @@ describe('JobsDataRepository', () => {
     expect(lockSelect).toBeDefined();
   });
 
+  it('does not re-freeze a snapshot when an already-completed job is set to completed', async () => {
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'completed' },
+      undefined,
+      'completed'
+    );
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.updateJobStatus(
+      'job-1',
+      'completed',
+      'Olivia Owner',
+      '2026-06-02T00:00:00.000Z'
+    );
+
+    const snapshotWrite = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('job_cost_snapshots')
+    );
+    expect(snapshotWrite).toBeUndefined();
+  });
+
+  it('supersedes the snapshot (no insert) when a completed job is reopened', async () => {
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'inProgress' },
+      undefined,
+      'completed'
+    );
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.updateJobStatus(
+      'job-1',
+      'inProgress',
+      'Alex Admin',
+      '2026-06-02T00:00:00.000Z'
+    );
+
+    const supersede = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update job_cost_snapshots set superseded_at')
+    );
+    expect(supersede).toBeDefined();
+    const snapshotInsert = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_cost_snapshots')
+    );
+    expect(snapshotInsert).toBeUndefined();
+  });
+
+  it('rejects a status change when the locked status differs from the expected status', async () => {
+    const { databaseService, queryable } = createDatabaseService({}, undefined, 'completed');
+    const repository = createJobsDataRepository(databaseService);
+
+    // Caller validated against 'inProgress', but the row is now 'completed' under the lock.
+    await expect(
+      repository.updateJobStatus(
+        'job-1',
+        'scheduled',
+        'Alex Admin',
+        '2026-06-02T00:00:00.000Z',
+        'inProgress'
+      )
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    const statusUpdate = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update jobs')
+    );
+    expect(statusUpdate).toBeUndefined();
+  });
+
   it('does not write a job-cost snapshot when a job is cancelled', async () => {
-    const { databaseService, queryable } = createDatabaseService({ status: 'cancelled' });
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'cancelled' },
+      undefined,
+      'inProgress'
+    );
     const repository = createJobsDataRepository(databaseService);
 
     await repository.updateJobStatus(
