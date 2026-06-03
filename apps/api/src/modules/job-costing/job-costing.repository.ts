@@ -1,8 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { JobCostEvent, JobCostEventKind } from '@bellfield/contracts';
+import type {
+  JobCostEvent,
+  JobCostEventKind,
+  JobCostingSummary,
+  JobStatus
+} from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import { computeJobCostRollup, getCurrentJobCostSnapshot } from './job-cost-rollup-utils';
 
 type Actor = { id: string; displayName: string };
 
@@ -34,6 +40,42 @@ export class JobCostingRepository {
       jobId
     ]);
     return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * The job costing read model: the always-current live rollup plus the finalized snapshot
+   * (if any). Returns null when the job does not exist.
+   */
+  async getJobCosting(jobId: string): Promise<JobCostingSummary | null> {
+    const jobResult = await this.databaseService.query<{
+      jobNumber: string;
+      summary: string;
+      status: JobStatus;
+    }>(`select job_number as "jobNumber", summary, status from jobs where id = $1 limit 1`, [
+      jobId
+    ]);
+    const job = jobResult.rows[0];
+    if (!job) {
+      return null;
+    }
+
+    const rollup = await computeJobCostRollup(this.databaseService, jobId);
+    const finalized = await getCurrentJobCostSnapshot(this.databaseService, jobId);
+
+    return {
+      jobId,
+      jobNumber: job.jobNumber,
+      summary: job.summary,
+      status: job.status,
+      live: {
+        materialCost: roundMoney(rollup.materialCost),
+        laborCost: roundMoney(rollup.laborCost),
+        expenseCost: roundMoney(rollup.expenseCost),
+        totalCost: roundMoney(rollup.totalCost)
+      },
+      finalized: finalized ?? undefined,
+      isFinalized: finalized !== null
+    };
   }
 
   /** Append an immutable labor cost event (hours * rate = amount). */

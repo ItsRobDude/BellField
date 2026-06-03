@@ -33,6 +33,22 @@ import type {
 import { ensureMainInvoiceDraft } from './jobs-data-repository-utils';
 import { JobsMediaDataRepository } from './jobs-media-data.repository';
 import { JobsRegisterDataRepository } from './jobs-register-data.repository';
+// Cross-module *-utils (allowed by the architecture guard): freeze/supersede the finalized
+// job-cost snapshot in the same transaction as the status change, so a completed job's cost
+// is frozen atomically and a reopen retires it. The rollup itself lives with job costing.
+import {
+  freezeJobCostSnapshot,
+  supersedeCurrentJobCostSnapshot
+} from '../job-costing/job-cost-rollup-utils';
+
+// Job lifecycle phases for the cost-snapshot hook (mirrors jobs-appointments' reopen rule).
+const FINAL_JOB_STATUSES: readonly JobStatus[] = ['completed', 'closed', 'cancelled'];
+const ACTIVE_JOB_STATUSES: readonly JobStatus[] = [
+  'new',
+  'scheduled',
+  'inProgress',
+  'waitingOnParts'
+];
 
 type JobRow = {
   id: string;
@@ -696,6 +712,14 @@ export class JobsDataRepository {
     const timelineTime = occurredAt || new Date().toISOString();
 
     await this.databaseService.transaction(async (queryable) => {
+      // Lock the row and read the prior status so the cost-snapshot hook can tell a
+      // completion from a reopen (and guard against re-snapshotting an already-completed job).
+      const previousResult = await queryable.query<{ status: JobStatus }>(
+        `select status from jobs where id = $1 for update`,
+        [jobId]
+      );
+      const previousStatus = previousResult.rows[0]?.status;
+
       await queryable.query(
         `
           update jobs
@@ -716,6 +740,18 @@ export class JobsDataRepository {
         },
         queryable
       );
+
+      // Finalize job cost on completion; retire it on a reopen (final -> active). Both run in
+      // this transaction so the snapshot can never disagree with the persisted status.
+      if (status === 'completed' && previousStatus !== 'completed') {
+        await freezeJobCostSnapshot(queryable, jobId, actorName, timelineTime);
+      } else if (
+        previousStatus !== undefined &&
+        FINAL_JOB_STATUSES.includes(previousStatus) &&
+        ACTIVE_JOB_STATUSES.includes(status)
+      ) {
+        await supersedeCurrentJobCostSnapshot(queryable, jobId, timelineTime);
+      }
 
       if (status === 'cancelled') {
         await queryable.query(

@@ -1538,3 +1538,42 @@ export interface CreateJobExpenseRequest {
 export interface JobCostEventResponse {
   event: JobCostEvent;
 }
+
+/** A job's cost broken into its three sources (dollars). Material is from inventory movements. */
+export interface JobCostRollup {
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  totalCost: number;
+}
+
+/** The cost frozen when a job was completed. `supersededAt` is set once a reopen retires it. */
+export interface JobCostSnapshot {
+  id: string;
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  totalCost: number;
+  createdByName: string;
+  occurredAt: string;
+  supersededAt?: string;
+}
+
+/**
+ * Job costing read model: the always-current `live` rollup, plus the `finalized` snapshot
+ * frozen at completion (absent until the job is completed, or after a reopen until it is
+ * completed again). `isFinalized` is true when a current finalized snapshot exists.
+ */
+export interface JobCostingSummary {
+  jobId: string;
+  jobNumber: string;
+  summary: string;
+  status: JobStatus;
+  live: JobCostRollup;
+  finalized?: JobCostSnapshot;
+  isFinalized: boolean;
+}
+
+export interface JobCostingResponse {
+  costing: JobCostingSummary;
+}

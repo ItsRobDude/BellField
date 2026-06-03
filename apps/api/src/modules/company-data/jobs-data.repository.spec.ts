@@ -188,6 +188,45 @@ describe('JobsDataRepository', () => {
     expect(timelineKinds).toEqual(['jobStatusUpdated', 'syncFlag']);
   });
 
+  it('freezes a job-cost snapshot when a job is completed', async () => {
+    const { databaseService, queryable } = createDatabaseService({ status: 'completed' });
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.updateJobStatus(
+      'job-1',
+      'completed',
+      'Olivia Owner',
+      '2026-06-02T00:00:00.000Z'
+    );
+
+    const snapshotInsert = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into job_cost_snapshots')
+    );
+    expect(snapshotInsert).toBeDefined();
+    // The status row is locked first so the hook can distinguish completion from reopen.
+    const lockSelect = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('from jobs where id = $1 for update')
+    );
+    expect(lockSelect).toBeDefined();
+  });
+
+  it('does not write a job-cost snapshot when a job is cancelled', async () => {
+    const { databaseService, queryable } = createDatabaseService({ status: 'cancelled' });
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.updateJobStatus(
+      'job-1',
+      'cancelled',
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const snapshotWrite = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('job_cost_snapshots')
+    );
+    expect(snapshotWrite).toBeUndefined();
+  });
+
   it('counts only non-cancelled appointments for cancellation warnings', async () => {
     const databaseService = {
       query: jest.fn(async (_sql: string, _params?: unknown[]) => ({

@@ -2,7 +2,8 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type {
   CreateJobExpenseRequest,
   CreateJobLaborRequest,
-  JobCostEventResponse
+  JobCostEventResponse,
+  JobCostingResponse
 } from '@bellfield/contracts';
 import { centsToDollars, dollarsToCents } from '@bellfield/estimating';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -70,6 +71,16 @@ export class JobCostingService {
     return { event };
   }
 
+  /** Read a job's cost: the live rollup plus the finalized snapshot, if any. */
+  async getJobCosting(sessionToken: string, jobId: string): Promise<JobCostingResponse> {
+    await this.authorizeView(sessionToken);
+    const costing = await this.jobCostingRepository.getJobCosting(jobId);
+    if (!costing) {
+      throw new NotFoundException('Job not found.');
+    }
+    return { costing };
+  }
+
   private async requireJob(jobId: string) {
     if (!(await this.jobCostingRepository.jobExists(jobId))) {
       throw new NotFoundException('Job not found.');
@@ -82,6 +93,13 @@ export class JobCostingService {
    */
   private authorizeCreate(sessionToken: string) {
     return this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobCosting:create', [
+      'office-web'
+    ]);
+  }
+
+  /** Reading job cost is gated on the dedicated, office-only jobCosting area. */
+  private authorizeView(sessionToken: string) {
+    return this.identityAccessService.getAuthorizedEmployee(sessionToken, 'jobCosting:view', [
       'office-web'
     ]);
   }

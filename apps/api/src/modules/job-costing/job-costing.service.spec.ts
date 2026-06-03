@@ -13,7 +13,8 @@ function createService() {
   const jobCostingRepository = {
     jobExists: jest.fn().mockResolvedValue(true),
     insertLabor: jest.fn().mockResolvedValue({ id: 'evt-1' }),
-    insertExpense: jest.fn().mockResolvedValue({ id: 'evt-2' })
+    insertExpense: jest.fn().mockResolvedValue({ id: 'evt-2' }),
+    getJobCosting: jest.fn()
   };
 
   return {
@@ -151,5 +152,38 @@ describe('JobCostingService.postExpense', () => {
       service.postExpense('token', 'job-1', { description: 'Permit', amount: 50 })
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(jobCostingRepository.insertExpense).not.toHaveBeenCalled();
+  });
+});
+
+describe('JobCostingService.getJobCosting', () => {
+  it('returns the costing summary, gated office-only on jobCosting:view', async () => {
+    const { service, identityAccessService, jobCostingRepository } = createService();
+    const summary = {
+      jobId: 'job-1',
+      jobNumber: '1004',
+      summary: 'No cooling',
+      status: 'completed',
+      live: { materialCost: 150, laborCost: 200, expenseCost: 50, totalCost: 400 },
+      isFinalized: true
+    };
+    jobCostingRepository.getJobCosting.mockResolvedValue(summary);
+
+    const result = await service.getJobCosting('token', 'job-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'jobCosting:view',
+      ['office-web']
+    );
+    expect(result).toEqual({ costing: summary });
+  });
+
+  it('throws NotFound when the job does not exist', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getJobCosting.mockResolvedValue(null);
+
+    await expect(service.getJobCosting('token', 'missing')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
   });
 });
