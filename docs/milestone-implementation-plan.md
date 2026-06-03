@@ -587,6 +587,7 @@ Run BellField like a real small-shop system, not just a dev project.
 - multi-office-desktop connection validation
 - remote field access validation
 - update path validation
+- signed license file, offline runtime verification, and update-entitlement gating
 - pilot company/company-like testing workflow
 
 ### Not yet

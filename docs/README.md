@@ -116,6 +116,16 @@ Read when: deciding whether a deployment assumption is supportable, planning a p
 
 Does not own: general hosting philosophy; use `deployment-model.md` for that. Does not mean the production installer already exists.
 
+### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
+
+Audience: contributors working on licensing, distribution, updates, or commercial protection posture.
+
+Purpose: the one-time-purchase model, update-window entitlement, and the decision to gate acquisition and updates rather than continued operation, with the refuse-to-start runtime posture and its guardrails.
+
+Read when: touching licensing, the installer/updater, distribution, or any change that could affect whether legitimate customers can run or update the product.
+
+Does not own: general hosting philosophy (`deployment-model.md`) or installer/runbook shape (`self-hosted-installation-strategy.md`). Does not mean any licensing mechanism already exists.
+
 ### [milestone-implementation-plan.md](./milestone-implementation-plan.md)
 
 Audience: contributors deciding what should be built next or whether a change is early.
@@ -266,6 +276,7 @@ For deployment or hosting changes:
 
 - `deployment-model.md`
 - `self-hosted-installation-strategy.md` when the change affects installer shape, setup support, backup/restore, updates, or pilot install expectations
+- `asset-protection-and-licensing.md` when the change affects licensing, distribution, update entitlement, or whether legitimate customers can run or update the product
 
 For planning what belongs in scope:
 
