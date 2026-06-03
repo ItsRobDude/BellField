@@ -12,6 +12,10 @@ import type {
   ReverseJobCostEventRequest
 } from '@bellfield/contracts';
 import { centsToDollars, dollarsToCents } from '@bellfield/estimating';
+import {
+  isFinalJobStatus,
+  REOPEN_FOR_COST_WRITE_MESSAGE
+} from '../company-data/company-data.types';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobCostingRepository } from './job-costing.repository';
 
@@ -36,7 +40,7 @@ export class JobCostingService {
     if (request.ratePerHour < 0) {
       throw new BadRequestException('Labor rate cannot be negative.');
     }
-    await this.requireJob(jobId);
+    await this.requireWritableJob(jobId);
 
     // Compute the cost in whole cents (half-up, float-noise absorbed) before storing.
     const amount = centsToDollars(dollarsToCents(request.hours * request.ratePerHour));
@@ -66,7 +70,7 @@ export class JobCostingService {
     if (request.amount <= 0) {
       throw new BadRequestException('Expense amount must be greater than zero.');
     }
-    await this.requireJob(jobId);
+    await this.requireWritableJob(jobId);
 
     const event = await this.jobCostingRepository.insertExpense({
       jobId,
@@ -94,6 +98,7 @@ export class JobCostingService {
     if (!original || original.jobId !== jobId) {
       throw new NotFoundException('Job cost event not found.');
     }
+    await this.requireWritableJob(jobId);
     if (original.reversalOfEventId) {
       throw new ConflictException('A reversal event cannot itself be reversed.');
     }
@@ -135,9 +140,17 @@ export class JobCostingService {
     return { costing };
   }
 
-  private async requireJob(jobId: string) {
-    if (!(await this.jobCostingRepository.jobExists(jobId))) {
+  /**
+   * The job must exist and be open: cost writes are blocked on a final job (completed/closed/
+   * cancelled) so the finalized cost can't drift — reopen the job to revise it.
+   */
+  private async requireWritableJob(jobId: string) {
+    const status = await this.jobCostingRepository.getJobStatus(jobId);
+    if (status === null) {
       throw new NotFoundException('Job not found.');
+    }
+    if (isFinalJobStatus(status)) {
+      throw new ConflictException(REOPEN_FOR_COST_WRITE_MESSAGE);
     }
   }
 

@@ -185,6 +185,18 @@ export function isReopenTransition(currentStatus: JobStatus, nextStatus: JobStat
   return finalJobStatuses.includes(currentStatus) && activeJobStatuses.includes(nextStatus);
 }
 
+/** Whether a job is in a final phase (completed/closed/cancelled). */
+export function isFinalJobStatus(status: JobStatus): boolean {
+  return finalJobStatuses.includes(status);
+}
+
+/**
+ * Cost-impacting writes (labor/expense/reversal, issue-to-job, receive-to-job) are blocked on
+ * a final job so the finalized cost can't silently drift; revising it means reopening the job
+ * (which supersedes the snapshot), correcting, then completing again (which re-freezes it).
+ */
+export const REOPEN_FOR_COST_WRITE_MESSAGE = 'Reopen the job before changing job cost.';
+
 export type AppointmentStatus = ContractAppointmentStatus;
 
 export const appointmentStatuses = [

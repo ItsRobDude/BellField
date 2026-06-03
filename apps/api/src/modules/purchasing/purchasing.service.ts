@@ -5,6 +5,10 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import type { ReceivePurchaseOrderRequest } from '@bellfield/contracts';
+import {
+  isFinalJobStatus,
+  REOPEN_FOR_COST_WRITE_MESSAGE
+} from '../company-data/company-data.types';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { PurchasingRepository, type ReceiveLineOverride } from './purchasing.repository';
 import type {
@@ -151,6 +155,14 @@ export class PurchasingService {
       throw new ConflictException(
         `Only an ordered purchase order can be received (status: ${po.status}).`
       );
+    }
+    // Receiving a PO bound to a job posts cost to that job, so it is blocked on a final job —
+    // reopen the job before receiving (mirrors the labor/expense/issue-to-job lock).
+    if (po.jobId) {
+      const jobStatus = await this.purchasingRepository.getJobStatus(po.jobId);
+      if (jobStatus !== null && isFinalJobStatus(jobStatus)) {
+        throw new ConflictException(REOPEN_FOR_COST_WRITE_MESSAGE);
+      }
     }
 
     // Build + validate per-line overrides against this PO's own lines.

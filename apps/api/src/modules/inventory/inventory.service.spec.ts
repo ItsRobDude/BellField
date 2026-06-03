@@ -1,4 +1,9 @@
-import { BadRequestException, ForbiddenException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  NotFoundException
+} from '@nestjs/common';
 import { InventoryService } from './inventory.service';
 import type { InventoryItemRecord, InventoryLocationRecord } from './inventory.types';
 
@@ -22,7 +27,7 @@ function createService() {
     updateLocation: jest.fn(),
     getOnHand: jest.fn().mockResolvedValue([]),
     recordIssueToJob: jest.fn(),
-    jobExists: jest.fn().mockResolvedValue(true)
+    getJobStatus: jest.fn().mockResolvedValue('inProgress')
   };
 
   return {
@@ -145,7 +150,7 @@ describe('InventoryService issueToJob', () => {
       'inventory:edit',
       ['office-web']
     );
-    expect(inventoryRepository.jobExists).toHaveBeenCalledWith('job-1');
+    expect(inventoryRepository.getJobStatus).toHaveBeenCalledWith('job-1');
     expect(inventoryRepository.recordIssueToJob).toHaveBeenCalledWith(
       expect.objectContaining({
         itemId: 'item-1',
@@ -171,10 +176,22 @@ describe('InventoryService issueToJob', () => {
     const { service, inventoryRepository } = createService();
     inventoryRepository.getItemById.mockResolvedValue(item());
     inventoryRepository.getLocationById.mockResolvedValue(location());
-    inventoryRepository.jobExists.mockResolvedValue(false);
+    inventoryRepository.getJobStatus.mockResolvedValue(null);
 
     await expect(service.issueToJob('token', issueRequest)).rejects.toBeInstanceOf(
       NotFoundException
+    );
+    expect(inventoryRepository.recordIssueToJob).not.toHaveBeenCalled();
+  });
+
+  it('rejects issuing to a final job — reopen required', async () => {
+    const { service, inventoryRepository } = createService();
+    inventoryRepository.getItemById.mockResolvedValue(item());
+    inventoryRepository.getLocationById.mockResolvedValue(location());
+    inventoryRepository.getJobStatus.mockResolvedValue('completed');
+
+    await expect(service.issueToJob('token', issueRequest)).rejects.toBeInstanceOf(
+      ConflictException
     );
     expect(inventoryRepository.recordIssueToJob).not.toHaveBeenCalled();
   });

@@ -20,6 +20,7 @@ function createService() {
     inventoryLocationExists: jest.fn().mockResolvedValue(true),
     customerLocationExists: jest.fn().mockResolvedValue(true),
     getJobLocationId: jest.fn().mockResolvedValue('cust-loc-1'),
+    getJobStatus: jest.fn().mockResolvedValue('inProgress'),
     getItemKind: jest.fn().mockResolvedValue('part')
   };
 
@@ -282,6 +283,19 @@ describe('PurchasingService.receivePurchaseOrder', () => {
     purchasingRepository.getById.mockResolvedValue(
       po({ status: 'draft', lines: [poLine({ itemId: 'item-1' })] })
     );
+
+    await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(purchasingRepository.receivePurchaseOrder).not.toHaveBeenCalled();
+  });
+
+  it('409s when receiving a PO bound to a final job — reopen required', async () => {
+    const { service, purchasingRepository } = createService();
+    purchasingRepository.getById.mockResolvedValue(
+      po({ status: 'ordered', jobId: 'job-1', lines: [poLine({ itemId: 'item-1' })] })
+    );
+    purchasingRepository.getJobStatus.mockResolvedValue('completed');
 
     await expect(service.receivePurchaseOrder('token', 'po-1', {})).rejects.toBeInstanceOf(
       ConflictException

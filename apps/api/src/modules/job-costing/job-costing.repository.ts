@@ -40,12 +40,13 @@ const EVENT_COLUMNS = `
 export class JobCostingRepository {
   constructor(private readonly databaseService: DatabaseService) {}
 
-  /** Whether a job exists (validation; the jobs table is read-only here). */
-  async jobExists(jobId: string): Promise<boolean> {
-    const result = await this.databaseService.query(`select 1 from jobs where id = $1 limit 1`, [
-      jobId
-    ]);
-    return (result.rowCount ?? 0) > 0;
+  /** The job's status, or null if the job does not exist (the jobs table is read-only here). */
+  async getJobStatus(jobId: string): Promise<JobStatus | null> {
+    const result = await this.databaseService.query<{ status: JobStatus }>(
+      `select status from jobs where id = $1 limit 1`,
+      [jobId]
+    );
+    return result.rows[0]?.status ?? null;
   }
 
   /**

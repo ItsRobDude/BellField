@@ -1,4 +1,9 @@
-import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import type {
   CreateInventoryAdjustmentRequest,
   CreateInventoryIssueRequest,
@@ -6,6 +11,10 @@ import type {
   InventoryMovementResponse,
   InventoryOnHandResponse
 } from '@bellfield/contracts';
+import {
+  isFinalJobStatus,
+  REOPEN_FOR_COST_WRITE_MESSAGE
+} from '../company-data/company-data.types';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { InventoryRepository } from './inventory.repository';
 import type {
@@ -156,7 +165,7 @@ export class InventoryService {
     }
     await this.requireItem(request.itemId);
     await this.requireLocation(request.locationId);
-    await this.requireJob(request.jobId);
+    await this.requireWritableJob(request.jobId);
 
     await this.inventoryRepository.recordIssueToJob({
       itemId: request.itemId,
@@ -181,9 +190,14 @@ export class InventoryService {
     }
   }
 
-  private async requireJob(jobId: string) {
-    if (!(await this.inventoryRepository.jobExists(jobId))) {
+  // Issue-to-job moves cost onto the job, so it is blocked on a final job (reopen to revise).
+  private async requireWritableJob(jobId: string) {
+    const status = await this.inventoryRepository.getJobStatus(jobId);
+    if (status === null) {
       throw new NotFoundException('Job not found.');
+    }
+    if (isFinalJobStatus(status)) {
+      throw new ConflictException(REOPEN_FOR_COST_WRITE_MESSAGE);
     }
   }
 

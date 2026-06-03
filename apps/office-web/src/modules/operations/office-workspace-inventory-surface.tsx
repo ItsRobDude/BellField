@@ -60,6 +60,9 @@ function formatQuantity(value: number): string {
   return Number(value.toFixed(4)).toString();
 }
 
+// Final job phases: issue-to-job is blocked (reopen to revise). Mirrors the API's set.
+const FINAL_JOB_STATUSES: readonly string[] = ['completed', 'closed', 'cancelled'];
+
 type ItemDraft = {
   sku: string;
   name: string;
@@ -611,7 +614,12 @@ function InventoryForm({
   onSubmit: () => void;
 }) {
   const title = formTitles[form.kind];
-  const submittable = canSubmitForm(form);
+  // Issue-to-job is blocked on a final job (reopen to revise); disable Save and explain why.
+  const selectedJobFinal =
+    form.kind === 'issue' && form.jobId
+      ? FINAL_JOB_STATUSES.includes(jobs?.find((job) => job.id === form.jobId)?.status ?? '')
+      : false;
+  const submittable = canSubmitForm(form) && !selectedJobFinal;
   return (
     <form
       style={styles.panel}
@@ -819,6 +827,9 @@ function InventoryForm({
           </>
         ) : null}
       </div>
+      {selectedJobFinal ? (
+        <p style={styles.tinyMuted}>That job is finalized. Reopen it before issuing stock to it.</p>
+      ) : null}
       <div style={styles.inlineActionBar}>
         <button type="submit" style={styles.primaryButton} disabled={isSaving || !submittable}>
           {isSaving ? 'Saving…' : 'Save'}

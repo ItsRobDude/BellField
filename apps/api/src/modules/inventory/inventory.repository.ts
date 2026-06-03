@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type {
   InventoryMovement,
   InventoryMovementKind,
-  InventoryOnHandRow
+  InventoryOnHandRow,
+  JobStatus
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
@@ -337,12 +338,13 @@ export class InventoryRepository {
     );
   }
 
-  /** Whether a job exists (validation for issue-to-job; the jobs table is read-only here). */
-  async jobExists(jobId: string): Promise<boolean> {
-    const result = await this.databaseService.query(`select 1 from jobs where id = $1 limit 1`, [
-      jobId
-    ]);
-    return (result.rowCount ?? 0) > 0;
+  /** The job's status, or null if it does not exist (validation for issue-to-job, read-only). */
+  async getJobStatus(jobId: string): Promise<JobStatus | null> {
+    const result = await this.databaseService.query<{ status: JobStatus }>(
+      `select status from jobs where id = $1 limit 1`,
+      [jobId]
+    );
+    return result.rows[0]?.status ?? null;
   }
 }
 

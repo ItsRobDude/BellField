@@ -16,7 +16,7 @@ function createService() {
     })
   };
   const jobCostingRepository = {
-    jobExists: jest.fn().mockResolvedValue(true),
+    getJobStatus: jest.fn().mockResolvedValue('inProgress'),
     insertLabor: jest.fn().mockResolvedValue({ id: 'evt-1' }),
     insertExpense: jest.fn().mockResolvedValue({ id: 'evt-2' }),
     getJobCosting: jest.fn(),
@@ -47,7 +47,7 @@ describe('JobCostingService.postLabor', () => {
       'jobCosting:create',
       ['office-web']
     );
-    expect(jobCostingRepository.jobExists).toHaveBeenCalledWith('job-1');
+    expect(jobCostingRepository.getJobStatus).toHaveBeenCalledWith('job-1');
     expect(jobCostingRepository.insertLabor).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: 'job-1',
@@ -103,11 +103,21 @@ describe('JobCostingService.postLabor', () => {
 
   it('throws NotFound when the job does not exist', async () => {
     const { service, jobCostingRepository } = createService();
-    jobCostingRepository.jobExists.mockResolvedValue(false);
+    jobCostingRepository.getJobStatus.mockResolvedValue(null);
 
     await expect(
       service.postLabor('token', 'missing', { description: 'x', hours: 1, ratePerHour: 90 })
     ).rejects.toBeInstanceOf(NotFoundException);
+    expect(jobCostingRepository.insertLabor).not.toHaveBeenCalled();
+  });
+
+  it('rejects labor on a completed (final) job — reopen required', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getJobStatus.mockResolvedValue('completed');
+
+    await expect(
+      service.postLabor('token', 'job-1', { description: 'x', hours: 1, ratePerHour: 90 })
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(jobCostingRepository.insertLabor).not.toHaveBeenCalled();
   });
 
@@ -144,11 +154,21 @@ describe('JobCostingService.postExpense', () => {
 
   it('throws NotFound posting an expense to a missing job', async () => {
     const { service, jobCostingRepository } = createService();
-    jobCostingRepository.jobExists.mockResolvedValue(false);
+    jobCostingRepository.getJobStatus.mockResolvedValue(null);
 
     await expect(
       service.postExpense('token', 'missing', { description: 'Permit', amount: 50 })
     ).rejects.toBeInstanceOf(NotFoundException);
+    expect(jobCostingRepository.insertExpense).not.toHaveBeenCalled();
+  });
+
+  it('rejects an expense on a final job — reopen required', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getJobStatus.mockResolvedValue('closed');
+
+    await expect(
+      service.postExpense('token', 'job-1', { description: 'Permit', amount: 50 })
+    ).rejects.toBeInstanceOf(ConflictException);
     expect(jobCostingRepository.insertExpense).not.toHaveBeenCalled();
   });
 
@@ -277,6 +297,17 @@ describe('JobCostingService.reverseEvent', () => {
       ...laborEvent,
       reversalOfEventId: 'evt-0'
     });
+
+    await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(jobCostingRepository.insertReversal).not.toHaveBeenCalled();
+  });
+
+  it('refuses to reverse on a final job — reopen required', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue(laborEvent);
+    jobCostingRepository.getJobStatus.mockResolvedValue('completed');
 
     await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
       ConflictException

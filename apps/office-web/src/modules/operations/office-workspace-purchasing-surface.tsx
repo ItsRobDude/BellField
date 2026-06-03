@@ -1002,7 +1002,11 @@ function ReceivePurchaseOrderForm({
       ) : null}
 
       <div style={styles.inlineActionBar}>
-        <button type="submit" style={styles.primaryButton} disabled={isSaving || !numbersValid}>
+        <button
+          type="submit"
+          style={styles.primaryButton}
+          disabled={isSaving || !numbersValid || (hasMissingSerial && !confirmMissingSerial)}
+        >
           {isSaving ? 'Receiving…' : 'Receive purchase order'}
         </button>
         <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>

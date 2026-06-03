@@ -1,6 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
+  JobStatus,
   PurchaseOrderDestinationKind,
   PurchaseOrderLine,
   PurchaseOrderLineKind,
@@ -205,6 +206,15 @@ export class PurchasingRepository {
       [id]
     );
     return result.rows[0]?.locationId ?? null;
+  }
+
+  /** A job's status, or null if the job is unknown (read-only here). */
+  async getJobStatus(id: string): Promise<JobStatus | null> {
+    const result = await this.databaseService.query<{ status: JobStatus }>(
+      `select status from jobs where id = $1 limit 1`,
+      [id]
+    );
+    return result.rows[0]?.status ?? null;
   }
 
   /** The catalog kind of an item, or null if the id is unknown. */

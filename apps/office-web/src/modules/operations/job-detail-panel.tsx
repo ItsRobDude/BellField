@@ -109,6 +109,9 @@ const jobStatusOptions: JobStatus[] = [
   'cancelled'
 ];
 
+// Final phases: job cost is locked (reopen to revise). Mirrors the API's finalJobStatuses.
+const finalJobStatusValues: JobStatus[] = ['completed', 'closed', 'cancelled'];
+
 const registerKindLabels: Record<RegisterEntryKind, string> = {
   labor: 'Labor',
   serviceItem: 'Service item',
@@ -318,6 +321,7 @@ export function JobDetailPanel({
           sessionToken={sessionToken}
           canCreate={canCreateJobCosting}
           canEdit={canEditJobCosting}
+          jobIsFinal={finalJobStatusValues.includes(job.status)}
         />
       ) : null}
       {activeTab === 'media'

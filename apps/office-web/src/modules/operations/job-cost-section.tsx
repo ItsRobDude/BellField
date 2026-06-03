@@ -17,6 +17,9 @@ export type JobCostSectionProps = {
   sessionToken: string;
   canCreate: boolean;
   canEdit: boolean;
+  // True when the job is completed/closed/cancelled: cost writes are blocked until reopened
+  // (the backend enforces this; the UI disables the actions and explains why).
+  jobIsFinal: boolean;
 };
 
 type ActiveForm =
@@ -33,7 +36,8 @@ export function JobCostSection({
   apiBaseUrl,
   sessionToken,
   canCreate,
-  canEdit
+  canEdit,
+  jobIsFinal
 }: JobCostSectionProps) {
   const [costing, setCosting] = useState<JobCostingSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -128,7 +132,7 @@ export function JobCostSection({
       <div style={styles.row}>
         <h2 style={styles.heading}>Job cost</h2>
         <div style={styles.inlineActionBar}>
-          {canCreate ? (
+          {canCreate && !jobIsFinal ? (
             <>
               <button
                 type="button"
@@ -163,6 +167,11 @@ export function JobCostSection({
 
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
       {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      {jobIsFinal ? (
+        <p style={styles.tinyMuted}>
+          This job is finalized. Reopen it to change job cost (labor, expense, or reversals).
+        </p>
+      ) : null}
 
       <div style={styles.panel}>
         <h3 style={styles.sectionHeading}>Live cost</h3>
@@ -219,7 +228,8 @@ export function JobCostSection({
               <tbody>
                 {events.map((event) => {
                   const isReversal = Boolean(event.reversalOfEventId);
-                  const reversible = canEdit && !isReversal && !reversedIds.has(event.id);
+                  const reversible =
+                    canEdit && !jobIsFinal && !isReversal && !reversedIds.has(event.id);
                   return (
                     <tr key={event.id}>
                       <td style={styles.tableCell}>{event.occurredAt.slice(0, 10)}</td>
