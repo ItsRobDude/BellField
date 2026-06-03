@@ -282,9 +282,11 @@ function CostForm({
 }) {
   const canSubmit =
     form.kind === 'labor'
-      ? Boolean(form.description.trim() && form.hours.trim() && form.ratePerHour.trim())
+      ? Boolean(form.description.trim()) &&
+        isPositiveNumber(form.hours) &&
+        isNonNegativeNumber(form.ratePerHour)
       : form.kind === 'expense'
-        ? Boolean(form.description.trim() && form.amount.trim())
+        ? Boolean(form.description.trim()) && isPositiveNumber(form.amount)
         : true;
   const title =
     form.kind === 'labor' ? 'Add labor' : form.kind === 'expense' ? 'Add expense' : 'Reverse event';
@@ -350,6 +352,16 @@ function CostForm({
       </div>
     </form>
   );
+}
+
+function isPositiveNumber(value: string): boolean {
+  const parsed = Number(value.trim());
+  return value.trim() !== '' && Number.isFinite(parsed) && parsed > 0;
+}
+
+function isNonNegativeNumber(value: string): boolean {
+  const parsed = Number(value.trim());
+  return value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0;
 }
 
 function CostField({

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   createOfficePurchaseOrder,
   getOfficeInventoryItems,
@@ -57,6 +57,16 @@ function formatQuantity(value: number): string {
   return Number(value.toFixed(4)).toString();
 }
 
+function isPositiveNumber(value: string): boolean {
+  const parsed = Number(value.trim());
+  return value.trim() !== '' && Number.isFinite(parsed) && parsed > 0;
+}
+
+function isNonNegativeNumber(value: string): boolean {
+  const parsed = Number(value.trim());
+  return value.trim() !== '' && Number.isFinite(parsed) && parsed >= 0;
+}
+
 // Purchasing surface: PO list + detail (read), creating a draft PO, and marking a draft
 // ordered. Receiving is a later slice. All styling reuses officeWorkspaceStyles.
 export function OfficePurchasingSurface({
@@ -78,6 +88,8 @@ export function OfficePurchasingSurface({
   const [sources, setSources] = useState<CreateSources | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [isReceiving, setIsReceiving] = useState(false);
+  // Sequence guard so a slow detail fetch can't overwrite a newer selection.
+  const openRequestRef = useRef(0);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -99,19 +111,30 @@ export function OfficePurchasingSurface({
 
   const openOrder = useCallback(
     async (purchaseOrderId: string) => {
+      const requestId = openRequestRef.current + 1;
+      openRequestRef.current = requestId;
       setSelectedId(purchaseOrderId);
       setSelectedOrder(null);
+      setIsReceiving(false);
       setIsDetailLoading(true);
       setErrorMessage(null);
       try {
         const result = await getOfficePurchaseOrder({ apiBaseUrl, sessionToken, purchaseOrderId });
+        if (openRequestRef.current !== requestId) {
+          return; // a newer selection superseded this fetch
+        }
         setSelectedOrder(result.purchaseOrder);
       } catch (error) {
+        if (openRequestRef.current !== requestId) {
+          return;
+        }
         setErrorMessage(
           error instanceof Error ? error.message : 'Unable to load the purchase order.'
         );
       } finally {
-        setIsDetailLoading(false);
+        if (openRequestRef.current === requestId) {
+          setIsDetailLoading(false);
+        }
       }
     },
     [apiBaseUrl, sessionToken]
@@ -528,19 +551,41 @@ function CreatePurchaseOrderForm({
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
 
+  // Customer-destination jobs must belong to the chosen customer location (backend rule).
+  const availableJobs =
+    destinationKind === 'customer'
+      ? sources.jobs.filter((job) => job.locationId === customerLocationId)
+      : sources.jobs;
+
+  useEffect(() => {
+    if (jobId && !availableJobs.some((job) => job.id === jobId)) {
+      setJobId('');
+    }
+  }, [availableJobs, jobId]);
+
   const destinationReady =
     destinationKind === 'inventory' ? Boolean(inventoryLocationId) : Boolean(customerLocationId);
+  // A part going into stock, or to a job, posts an inventory movement and needs a catalog item;
+  // equipment received to a job also needs one (its cost provenance). Mirrors the backend.
+  const partPostsMovement =
+    destinationKind === 'inventory' || (destinationKind === 'customer' && jobId !== '');
+  const equipmentNeedsItem = destinationKind === 'customer' && jobId !== '';
+
+  function lineNeedsItem(line: LineDraft): boolean {
+    return line.kind === 'part' ? partPostsMovement : equipmentNeedsItem;
+  }
+
   const linesReady =
     lines.length > 0 &&
     lines.every((line) => {
-      if (!line.description.trim()) {
+      if (!line.description.trim() || !isNonNegativeNumber(line.expectedUnitCost)) {
         return false;
       }
-      if (!Number.isFinite(Number(line.expectedUnitCost))) {
+      if (lineNeedsItem(line) && !line.itemId) {
         return false;
       }
       if (line.kind === 'part') {
-        return Number.isFinite(Number(line.quantity)) && Number(line.quantity) > 0;
+        return isPositiveNumber(line.quantity);
       }
       return Boolean(
         line.equipmentType.trim() && line.equipmentBrand.trim() && line.equipmentModel.trim()
@@ -651,7 +696,7 @@ function CreatePurchaseOrderForm({
             onChange={(event) => setJobId(event.target.value)}
           >
             <option value="">No job</option>
-            {sources.jobs.map((job) => (
+            {availableJobs.map((job) => (
               <option key={job.id} value={job.id}>
                 #{job.jobNumber} · {job.summary}
               </option>
@@ -700,7 +745,7 @@ function CreatePurchaseOrderForm({
               </select>
             </label>
             <label style={styles.fieldLabel}>
-              Catalog item (optional)
+              {lineNeedsItem(line) ? 'Catalog item (required)' : 'Catalog item (optional)'}
               <select
                 style={styles.input}
                 value={line.itemId}
@@ -834,6 +879,14 @@ function ReceivePurchaseOrderForm({
   }
 
   const hasEquipment = order.lines.some((line) => line.kind === 'equipment');
+  // Block obviously-bad numbers inline rather than round-tripping to a backend 400.
+  const numbersValid = order.lines.every((line, index) => {
+    const draft = drafts[index];
+    if (line.kind === 'part' && !isPositiveNumber(draft.quantity)) {
+      return false;
+    }
+    return isNonNegativeNumber(draft.unitCost);
+  });
   // An equipment line with no serial on the PO and none entered here needs the confirm toggle.
   const hasMissingSerial = order.lines.some(
     (line, index) =>
@@ -949,7 +1002,7 @@ function ReceivePurchaseOrderForm({
       ) : null}
 
       <div style={styles.inlineActionBar}>
-        <button type="submit" style={styles.primaryButton} disabled={isSaving}>
+        <button type="submit" style={styles.primaryButton} disabled={isSaving || !numbersValid}>
           {isSaving ? 'Receiving…' : 'Receive purchase order'}
         </button>
         <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
