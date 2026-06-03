@@ -9,6 +9,7 @@ import {
   getOfficePurchaseOrder,
   listOfficePurchaseOrders,
   orderOfficePurchaseOrder,
+  receiveOfficePurchaseOrder,
   type CreatePurchaseOrderLineRequest,
   type CreatePurchaseOrderRequest,
   type InventoryItem,
@@ -18,7 +19,9 @@ import {
   type PurchaseOrder,
   type PurchaseOrderLineKind,
   type PurchaseOrderStatus,
-  type PurchaseOrderSummary
+  type PurchaseOrderSummary,
+  type ReceivePurchaseOrderLineInput,
+  type ReceivePurchaseOrderRequest
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from './job-invoice-shared';
@@ -74,6 +77,7 @@ export function OfficePurchasingSurface({
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [sources, setSources] = useState<CreateSources | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [isReceiving, setIsReceiving] = useState(false);
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -168,6 +172,29 @@ export function OfficePurchasingSurface({
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to order the purchase order.'
+      );
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function submitReceive(purchaseOrderId: string, body: ReceivePurchaseOrderRequest) {
+    setIsSaving(true);
+    setErrorMessage(null);
+    try {
+      const result = await receiveOfficePurchaseOrder({
+        apiBaseUrl,
+        sessionToken,
+        purchaseOrderId,
+        body
+      });
+      setSelectedOrder(result.purchaseOrder);
+      setIsReceiving(false);
+      setNoticeMessage('Purchase order received.');
+      await load();
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to receive the purchase order.'
       );
     } finally {
       setIsSaving(false);
@@ -291,7 +318,14 @@ export function OfficePurchasingSurface({
             )}
           </div>
 
-          {selectedId ? (
+          {selectedId && isReceiving && selectedOrder ? (
+            <ReceivePurchaseOrderForm
+              order={selectedOrder}
+              isSaving={isSaving}
+              onCancel={() => setIsReceiving(false)}
+              onSubmit={(body) => void submitReceive(selectedOrder.id, body)}
+            />
+          ) : selectedId ? (
             <PurchaseOrderDetail
               order={selectedOrder}
               isLoading={isDetailLoading}
@@ -299,6 +333,7 @@ export function OfficePurchasingSurface({
               isSaving={isSaving}
               onOpenJob={onOpenJob}
               onMarkOrdered={() => void markOrdered(selectedId)}
+              onReceive={() => setIsReceiving(true)}
             />
           ) : null}
         </>
@@ -315,7 +350,8 @@ function PurchaseOrderDetail({
   canEdit,
   isSaving,
   onOpenJob,
-  onMarkOrdered
+  onMarkOrdered,
+  onReceive
 }: {
   order: PurchaseOrder | null;
   isLoading: boolean;
@@ -323,6 +359,7 @@ function PurchaseOrderDetail({
   isSaving: boolean;
   onOpenJob: (jobId: string) => void;
   onMarkOrdered: () => void;
+  onReceive: () => void;
 }) {
   if (isLoading && !order) {
     return (
@@ -346,6 +383,16 @@ function PurchaseOrderDetail({
           {canEdit && order.status === 'draft' ? (
             <button type="button" style={styles.button} disabled={isSaving} onClick={onMarkOrdered}>
               {isSaving ? 'Working…' : 'Mark ordered'}
+            </button>
+          ) : null}
+          {canEdit && order.status === 'ordered' ? (
+            <button
+              type="button"
+              style={styles.primaryButton}
+              disabled={isSaving}
+              onClick={onReceive}
+            >
+              Receive
             </button>
           ) : null}
         </div>
@@ -748,6 +795,162 @@ function CreatePurchaseOrderForm({
       <div style={styles.inlineActionBar}>
         <button type="submit" style={styles.primaryButton} disabled={isSaving || !canSubmit}>
           {isSaving ? 'Creating…' : 'Create draft PO'}
+        </button>
+        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
+  );
+}
+
+type ReceiveLineDraft = { quantity: string; unitCost: string; serialNumber: string };
+
+function ReceivePurchaseOrderForm({
+  order,
+  isSaving,
+  onCancel,
+  onSubmit
+}: {
+  order: PurchaseOrder;
+  isSaving: boolean;
+  onCancel: () => void;
+  onSubmit: (body: ReceivePurchaseOrderRequest) => void;
+}) {
+  const [drafts, setDrafts] = useState<ReceiveLineDraft[]>(() =>
+    order.lines.map((line) => ({
+      quantity: String(line.quantity),
+      unitCost: String(line.expectedUnitCost),
+      serialNumber: line.equipmentSerial ?? ''
+    }))
+  );
+  const [note, setNote] = useState('');
+  const [confirmMissingSerial, setConfirmMissingSerial] = useState(false);
+
+  function updateDraft(index: number, patch: Partial<ReceiveLineDraft>) {
+    setDrafts((current) =>
+      current.map((draft, i) => (i === index ? { ...draft, ...patch } : draft))
+    );
+  }
+
+  const hasEquipment = order.lines.some((line) => line.kind === 'equipment');
+  // An equipment line with no serial on the PO and none entered here needs the confirm toggle.
+  const hasMissingSerial = order.lines.some(
+    (line, index) =>
+      line.kind === 'equipment' &&
+      !line.equipmentSerial?.trim() &&
+      !drafts[index]?.serialNumber.trim()
+  );
+
+  function buildBody(): ReceivePurchaseOrderRequest {
+    const lines: ReceivePurchaseOrderLineInput[] = order.lines.map((line, index) => {
+      const draft = drafts[index];
+      const input: ReceivePurchaseOrderLineInput = { purchaseOrderLineId: line.id };
+      if (line.kind === 'part' && draft.quantity.trim()) {
+        input.quantity = Number(draft.quantity);
+      }
+      if (draft.unitCost.trim()) {
+        input.unitCost = Number(draft.unitCost);
+      }
+      if (line.kind === 'equipment' && draft.serialNumber.trim()) {
+        input.serialNumber = draft.serialNumber.trim();
+      }
+      return input;
+    });
+    return {
+      note: note.trim() || undefined,
+      lines,
+      confirmMissingSerial: confirmMissingSerial || undefined
+    };
+  }
+
+  return (
+    <form
+      style={styles.panel}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit(buildBody());
+      }}
+    >
+      <h2 style={styles.heading}>
+        Receive {order.poNumber ? `PO ${order.poNumber}` : 'purchase order'}
+      </h2>
+      <p style={styles.tinyMuted}>
+        Enter the actual received quantity and cost per line. Equipment is received one unit at a
+        time and creates an asset record.
+      </p>
+
+      {order.lines.map((line, index) => (
+        <div key={line.id} style={styles.subpanel}>
+          <div style={styles.row}>
+            <strong>
+              {line.position + 1}. {line.description}
+            </strong>
+            <span style={styles.badge}>{lineKindLabels[line.kind]}</span>
+          </div>
+          <div style={styles.formGridCompact}>
+            {line.kind === 'part' ? (
+              <label style={styles.fieldLabel}>
+                Received quantity
+                <input
+                  style={styles.input}
+                  value={drafts[index].quantity}
+                  onChange={(event) => updateDraft(index, { quantity: event.target.value })}
+                />
+              </label>
+            ) : null}
+            <label style={styles.fieldLabel}>
+              Actual unit cost
+              <input
+                style={styles.input}
+                value={drafts[index].unitCost}
+                onChange={(event) => updateDraft(index, { unitCost: event.target.value })}
+              />
+            </label>
+            {line.kind === 'equipment' ? (
+              <label style={styles.fieldLabel}>
+                Serial number
+                <input
+                  style={styles.input}
+                  value={drafts[index].serialNumber}
+                  onChange={(event) => updateDraft(index, { serialNumber: event.target.value })}
+                />
+              </label>
+            ) : null}
+          </div>
+        </div>
+      ))}
+
+      <label style={styles.fieldLabel}>
+        Note (optional)
+        <input
+          style={styles.input}
+          value={note}
+          onChange={(event) => setNote(event.target.value)}
+        />
+      </label>
+
+      {hasEquipment ? (
+        <label style={styles.inlineLabel}>
+          <input
+            type="checkbox"
+            checked={confirmMissingSerial}
+            onChange={(event) => setConfirmMissingSerial(event.target.checked)}
+          />
+          Receive equipment without a serial number
+        </label>
+      ) : null}
+
+      {hasMissingSerial && !confirmMissingSerial ? (
+        <p style={styles.tinyMuted}>
+          An equipment line has no serial number. Enter one above, or check the box to receive
+          without it.
+        </p>
+      ) : null}
+
+      <div style={styles.inlineActionBar}>
+        <button type="submit" style={styles.primaryButton} disabled={isSaving}>
+          {isSaving ? 'Receiving…' : 'Receive purchase order'}
         </button>
         <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
           Cancel
