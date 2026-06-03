@@ -21,3 +21,4 @@ artifacts/
 
 # Local Claude Code preview tooling config (not shared project config).
 .claude/launch.json
+tmp-codex-ui2-out.txt
