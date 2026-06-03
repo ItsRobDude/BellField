@@ -186,6 +186,9 @@ export function OfficeInventorySurface({
 
   const activeItems = items.filter((item) => item.isActive);
   const activeLocations = locations.filter((location) => location.isActive);
+  // Only one form is open at a time; lock the other triggers so an in-progress draft can't be
+  // silently replaced (mirrors the invoice-corrections single-editor guard).
+  const formOpen = activeForm !== null;
 
   function closeForm() {
     setActiveForm(null);
@@ -314,7 +317,9 @@ export function OfficeInventorySurface({
               <button
                 type="button"
                 style={styles.button}
-                disabled={isSaving || activeItems.length === 0 || activeLocations.length === 0}
+                disabled={
+                  isSaving || formOpen || activeItems.length === 0 || activeLocations.length === 0
+                }
                 onClick={() =>
                   setActiveForm({
                     kind: 'adjust',
@@ -331,7 +336,9 @@ export function OfficeInventorySurface({
               <button
                 type="button"
                 style={styles.button}
-                disabled={isSaving || activeItems.length === 0 || activeLocations.length < 2}
+                disabled={
+                  isSaving || formOpen || activeItems.length === 0 || activeLocations.length < 2
+                }
                 onClick={() =>
                   setActiveForm({
                     kind: 'transfer',
@@ -348,7 +355,9 @@ export function OfficeInventorySurface({
               <button
                 type="button"
                 style={styles.button}
-                disabled={isSaving || activeItems.length === 0 || activeLocations.length === 0}
+                disabled={
+                  isSaving || formOpen || activeItems.length === 0 || activeLocations.length === 0
+                }
                 onClick={() => {
                   void ensureJobs();
                   setActiveForm({
@@ -370,7 +379,7 @@ export function OfficeInventorySurface({
               <button
                 type="button"
                 style={styles.button}
-                disabled={isSaving}
+                disabled={isSaving || formOpen}
                 onClick={() =>
                   setActiveForm({ kind: 'item', editingId: null, draft: emptyItemDraft })
                 }
@@ -380,7 +389,7 @@ export function OfficeInventorySurface({
               <button
                 type="button"
                 style={styles.button}
-                disabled={isSaving}
+                disabled={isSaving || formOpen}
                 onClick={() =>
                   setActiveForm({ kind: 'location', editingId: null, draft: emptyLocationDraft })
                 }
@@ -456,7 +465,7 @@ export function OfficeInventorySurface({
                       <button
                         type="button"
                         style={styles.tableLinkButton}
-                        disabled={isSaving}
+                        disabled={isSaving || formOpen}
                         onClick={() =>
                           setActiveForm({
                             kind: 'item',
@@ -506,7 +515,7 @@ export function OfficeInventorySurface({
                       <button
                         type="button"
                         style={styles.tableLinkButton}
-                        disabled={isSaving}
+                        disabled={isSaving || formOpen}
                         onClick={() =>
                           setActiveForm({
                             kind: 'location',
@@ -602,6 +611,7 @@ function InventoryForm({
   onSubmit: () => void;
 }) {
   const title = formTitles[form.kind];
+  const submittable = canSubmitForm(form);
   return (
     <form
       style={styles.panel}
@@ -810,7 +820,7 @@ function InventoryForm({
         ) : null}
       </div>
       <div style={styles.inlineActionBar}>
-        <button type="submit" style={styles.primaryButton} disabled={isSaving}>
+        <button type="submit" style={styles.primaryButton} disabled={isSaving || !submittable}>
           {isSaving ? 'Saving…' : 'Save'}
         </button>
         <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
@@ -985,6 +995,27 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
       <tbody>{children}</tbody>
     </table>
   );
+}
+
+// Client-side completeness guard so Save is disabled (rather than surfacing a backend DTO
+// error) until the required selections/values are present. The backend still validates.
+function canSubmitForm(form: ActiveForm): boolean {
+  if (form.kind === 'item' || form.kind === 'location') {
+    return form.draft.name.trim() !== '';
+  }
+  if (form.kind === 'adjust') {
+    return Boolean(form.itemId && form.locationId && form.quantityDelta.trim());
+  }
+  if (form.kind === 'transfer') {
+    return Boolean(
+      form.itemId &&
+        form.fromLocationId &&
+        form.toLocationId &&
+        form.fromLocationId !== form.toLocationId &&
+        form.quantity.trim()
+    );
+  }
+  return Boolean(form.itemId && form.locationId && form.jobId && form.quantity.trim());
 }
 
 function emptyToUndefined(value: string): string | undefined {
