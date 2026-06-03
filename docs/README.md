@@ -126,6 +126,16 @@ Read when: touching licensing, the installer/updater, distribution, or any chang
 
 Does not own: general hosting philosophy (`deployment-model.md`) or installer/runbook shape (`self-hosted-installation-strategy.md`). Does not mean any licensing mechanism already exists.
 
+### [launch-readiness.md](./launch-readiness.md)
+
+Audience: contributors and the owner planning what BellField needs to ship to real customers as a company.
+
+Purpose: the cross-cutting launch punch list — install, update, license, backup/restore, observability, operator/support controls, security harness, validation evidence, and legal/commercial surface — mapped to milestones, with an explicit "no SaaS cargo-culting" boundary.
+
+Read when: planning Milestone 10/11 work, scoping company-readiness tasks, or deciding whether a launch concern is being tracked.
+
+Does not own: the install recipe itself (`self-hosted-installation-strategy.md`), licensing posture (`asset-protection-and-licensing.md`), or hosting philosophy (`deployment-model.md`). It is a consolidating checklist, not the source of truth for any single area.
+
 ### [milestone-implementation-plan.md](./milestone-implementation-plan.md)
 
 Audience: contributors deciding what should be built next or whether a change is early.
