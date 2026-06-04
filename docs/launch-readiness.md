@@ -117,6 +117,8 @@ BellField has strong permission modeling and conservative backend rules, but not
 - [ ] Dependabot or equivalent dependency-update flow — _safe now_
 - [ ] a real security review before the first pilot (the repo's security-review path)
 
+**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass): `pnpm audit --prod` is clean except for **one deferred moderate** — `uuid@7.0.3`, pulled transitively through `expo > @expo/config-plugins > xcode` (Expo build tooling, not shipped runtime code). Its only fix is a major bump to `uuid@>=11.1.1`, which `xcode` does not yet support; forcing it through a `pnpm.overrides` major jump is unsafe, so it is **deferred** until Expo/xcode resolves it upstream. Every other Next, NestJS, and Expo advisory was cleared by direct version bumps plus surgical patch-level `pnpm.overrides` (`postcss`, `qs`, `@xmldom/xmldom`, `brace-expansion`, `ws`). Revisit on the next Expo SDK bump.
+
 ---
 
 ## 9. Testing and Validation-Evidence Culture — mostly safe to start now
