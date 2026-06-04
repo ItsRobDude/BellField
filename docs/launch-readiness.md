@@ -117,10 +117,13 @@ BellField has strong permission modeling and conservative backend rules, but not
 - [ ] Dependabot or equivalent dependency-update flow — _safe now_
 - [ ] a real security review before the first pilot (the repo's security-review path)
 
-**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass):
+**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass): **both `pnpm audit --prod` (the `security:audit` script) and the full `pnpm audit` report "No known vulnerabilities found"** — down from 38 advisory-paths, so the CI `security:audit` step now exits zero (genuinely green, not just advisory-tolerated).
 
-- **Production scope** (`pnpm audit --prod` / `security:audit`): down from 38 advisory-paths to **one deferred moderate** — `uuid@7.0.3`, pulled transitively through `expo > @expo/config-plugins > xcode` (Expo build tooling, not shipped runtime code). Its only fix is a major bump to `uuid@>=11.1.1`, which `xcode` does not yet support; forcing it through a `pnpm.overrides` major jump is unsafe, so it is **deferred** until Expo/xcode resolves it upstream. Because of this one residual, `security:audit` still **exits non-zero** — it is wired into CI as advisory-only (`continue-on-error: true`), so it does not block, but it is _not_ a passing/"green" step until this clears. Revisit on the next Expo SDK bump. Every other Next, NestJS, and Expo production advisory was cleared by direct version bumps plus surgical patch-level `pnpm.overrides` (`postcss`, `qs`, `@xmldom/xmldom`, `brace-expansion`, `ws`).
-- **Out of production scope:** the full `pnpm audit` (dev dependencies included) additionally reports lint/build-tooling advisories — currently `fast-uri` (via `secretlint > … > ajv`) and `@eslint/plugin-kit` (via `eslint`). These are dev-only and never shipped; they are intentionally excluded from the `--prod` CI signal and tracked for a separate dev-tooling cleanup (driven by the Dependabot/dependency-update flow above) rather than risky overrides on linter internals.
+How each class was resolved, preferring the least-invasive correct fix:
+
+- **Direct version bumps** carried most of it: Next 15.5.19, NestJS 11.1.24 (pulls patched `multer`, `path-to-regexp`, `file-type`), and the eslint bump to 9.39.4 (pulls patched `@eslint/plugin-kit`).
+- **Range re-resolution** where a parent's semver range already allowed the patch: `fast-uri` (3.1.2 via `ajv`'s `^3.0.1`).
+- **Surgical exact-version `pnpm.overrides`** only for transitives a parent pins below the fix and that have no newer parent: `postcss`, `qs`, `@xmldom/xmldom`, `brace-expansion`, `ws`, and `uuid@7.0.3 → 11.1.1`. The `uuid` case is a deliberate major override (xcode pins `uuid ^7`, the latest xcode still does, and the advisory is only patched in 11.x): it is safe here because the sole consumer is `xcode`, which uses only `require('uuid').v4()` — an export whose signature is unchanged from v7 to v11 — verified by loading `xcode` under the override and generating an id. Each override targets one exact version, so it auto-retires when the upstream parent moves.
 
 ---
 
