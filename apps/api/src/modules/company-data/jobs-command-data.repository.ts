@@ -29,9 +29,10 @@ import {
 } from '../job-costing/job-cost-rollup-utils';
 
 /**
- * Command (write) side for jobs and appointments. Every mutation runs inside a database
- * transaction here, and post-write reads are delegated to JobsReadDataRepository so the
- * read SQL has a single home.
+ * Command (write) side for jobs and appointments. Every public mutation is atomic: it either
+ * opens its own database transaction, or (for createAppointment) runs inside the caller's
+ * transaction when one is supplied — see createAppointment. Post-write reads are delegated to
+ * JobsReadDataRepository so the read SQL has a single home.
  */
 @Injectable()
 export class JobsCommandDataRepository {
@@ -224,7 +225,25 @@ export class JobsCommandDataRepository {
     occurredAt?: string,
     queryable?: QueryExecutor
   ): Promise<AppointmentRecord> {
-    const executor = queryable ?? this.databaseService;
+    // When a caller (createJob) already owns a transaction, join it so the appointment lands
+    // atomically with the job insert. Called on its own (the add-follow-up path), open our own
+    // transaction so the acknowledge/insert/status/timeline writes can't partially apply.
+    if (queryable) {
+      return this.createAppointmentWithin(queryable, jobId, input, actorName, occurredAt);
+    }
+
+    return this.databaseService.transaction((executor) =>
+      this.createAppointmentWithin(executor, jobId, input, actorName, occurredAt)
+    );
+  }
+
+  private async createAppointmentWithin(
+    executor: QueryExecutor,
+    jobId: string,
+    input: CreateAppointmentInput,
+    actorName: string,
+    occurredAt?: string
+  ): Promise<AppointmentRecord> {
     const timelineTime = occurredAt || new Date().toISOString();
     const appointmentId = randomUUID();
     const appointmentRecord: AppointmentRecord = {

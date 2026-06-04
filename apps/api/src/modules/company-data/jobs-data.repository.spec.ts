@@ -332,7 +332,9 @@ describe('JobsDataRepository', () => {
   });
 
   it('records appointment creation in the job timeline', async () => {
-    const { databaseService } = createDatabaseService();
+    // Called standalone, createAppointment opens its own transaction, so the writes land on
+    // the transaction executor (queryable), not directly on databaseService.
+    const { databaseService, queryable } = createDatabaseService();
     const repository = createJobsDataRepository(databaseService);
 
     await repository.createAppointment(
@@ -342,7 +344,7 @@ describe('JobsDataRepository', () => {
       '2026-04-14T11:00:00.000Z'
     );
 
-    const timelineCall = databaseService.query.mock.calls.find(([sql]) =>
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('insert into job_timeline_entries')
     );
     expect(timelineCall?.[1]?.[4]).toBe('appointmentCreated');
@@ -350,7 +352,8 @@ describe('JobsDataRepository', () => {
   });
 
   it('persists structured appointment times when creating an appointment', async () => {
-    const { databaseService } = createDatabaseService();
+    // Standalone createAppointment runs in its own transaction; assert on the executor.
+    const { databaseService, queryable } = createDatabaseService();
     const repository = createJobsDataRepository(databaseService);
 
     await repository.createAppointment(
@@ -366,7 +369,7 @@ describe('JobsDataRepository', () => {
       '2026-04-14T11:00:00.000Z'
     );
 
-    const appointmentInsertCall = databaseService.query.mock.calls.find(([sql]) =>
+    const appointmentInsertCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('insert into appointments')
     );
     expect(String(appointmentInsertCall?.[0] ?? '')).toContain('scheduled_start_time');
@@ -378,10 +381,44 @@ describe('JobsDataRepository', () => {
       'tech-1'
     ]);
 
-    const timelineCall = databaseService.query.mock.calls.find(([sql]) =>
+    const timelineCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('insert into job_timeline_entries')
     );
     expect(timelineCall?.[1]?.[5]).toBe('Appointment added for 2026-04-15 from 13:00 to 15:00.');
+  });
+
+  it('wraps a standalone appointment creation in its own transaction', async () => {
+    const { databaseService } = createDatabaseService();
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.createAppointment(
+      'job-1',
+      { scheduledDate: '2026-04-15' },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    expect(databaseService.transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('reuses the caller transaction when an appointment is created with a queryable', async () => {
+    const { databaseService, queryable } = createDatabaseService();
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.createAppointment(
+      'job-1',
+      { scheduledDate: '2026-04-15' },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z',
+      queryable as never
+    );
+
+    // A caller-owned transaction is joined, not nested: createAppointment must not open another.
+    expect(databaseService.transaction).not.toHaveBeenCalled();
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into appointments')
+    );
+    expect(insertCall).toBeTruthy();
   });
 
   it('maps structured appointment times when listing appointments for a job', async () => {

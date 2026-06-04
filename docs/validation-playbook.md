@@ -69,6 +69,31 @@ Safety rules:
 - Pass `--allow-non-local` only for an intentionally disposable environment.
 - Evidence is written to `artifacts/validation/<timestamp>/m9-api-smoke.json`.
 
+## Jobs Lifecycle API Smoke
+
+The jobs smoke runner proves the jobs/appointments lifecycle through real API endpoints
+against the local API. It is the live-DB companion to the `jobs-data` repository split and the
+standalone `createAppointment` transaction hardening.
+
+```powershell
+pnpm smoke:jobs
+```
+
+What it verifies:
+
+- office admin login
+- create a job with an initial appointment (opens `scheduled`)
+- create a job with no appointment (opens `new`), then add an appointment (standalone
+  createAppointment path, which opens its own transaction) and confirm it promotes to `scheduled`
+- job detail reads return the appointment and timeline history after those writes
+- complete a job (freezes the finalized cost snapshot), then reopen it (supersedes the snapshot)
+- technician sign-in and assigned-work read returns a job scheduled for today
+
+Safety rules match the M9 smoke: the runner refuses non-local API targets by default
+(override with `BELLFIELD_API_BASE_URL` / `--api-base-url` and `--allow-non-local` only for a
+disposable environment). Evidence is written to
+`artifacts/validation/<timestamp>/jobs-lifecycle-api-smoke.json`.
+
 ## Office Browser Smoke
 
 Use browser smoke for UI behavior that component tests cannot honestly prove.
