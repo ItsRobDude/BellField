@@ -9,12 +9,7 @@ import {
   getOfficeMediaBlob,
   getOfficeRegisterEntries,
   getOfficeJobDetail,
-  createOfficeJob,
-  getOfficeCustomerDetail,
-  getOfficeJobIntakeContext,
   getOfficeJobsQueue,
-  getOfficeLocationDetail,
-  searchOfficeCrm,
   updateOfficeAppointmentSchedule,
   updateOfficeAppointmentStatus,
   updateOfficeJobStatus,
@@ -23,22 +18,14 @@ import {
   voidOfficeMediaAttachment,
   voidOfficeRegisterEntry,
   type AppointmentStatus,
-  type CrmSearchResult,
-  type CustomerDetail,
   type DispatchBoardResponse,
   type JobDetailResponse,
-  type JobIntakeContextResponse,
   type JobStatus,
   type JobsQueueKey,
   type JobsQueueResponse
 } from '@/lib/operations-api';
 import { getCurrentOfficeSession, type EmployeeSummary } from '@/lib/identity-api';
 import { getDateInputValue } from './dispatch-date-picker';
-import type {
-  JobIntakeBillToOption,
-  JobIntakeCustomerLocationOption,
-  JobIntakeSelectedLocation
-} from './job-intake-panel';
 import {
   createEmptyAppointmentDraft,
   type AppointmentDraft,
@@ -52,21 +39,18 @@ import { OfficeWorkspaceFrame, type OfficeView } from './office-workspace-frame'
 import {
   buildCapturedWorkDetails,
   createLoadingCapturedWorkDetails,
-  dedupeBillToOptions,
   getJobStatusReviewMessage,
   mergeJobsQueueSection,
   optionalString,
   parseOptionalNumber,
-  parseRequiredNumber,
-  toActiveCustomerLocationOptions,
-  toJobIntakeSelectedLocation
+  parseRequiredNumber
 } from './office-workspace-shell-helpers';
 import { OfficeWorkspaceLoadingState } from './office-workspace-loading-state';
 import { OfficeWorkspaceSurfaces } from './office-workspace-surfaces';
+import { useJobIntakeWorkflow } from './use-job-intake-workflow';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
-const jobIntakeSearchDebounceMs = 250;
 
 type Props = {
   apiBaseUrl: string;
@@ -82,7 +66,6 @@ export function OfficeWorkspaceShell({
   onSignOut
 }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
-  const [jobIntakeContext, setJobIntakeContext] = useState<JobIntakeContextResponse | null>(null);
   const [jobsQueue, setJobsQueue] = useState<JobsQueueResponse | null>(null);
   const [dispatchBoard, setDispatchBoard] = useState<DispatchBoardResponse | null>(null);
   const [jobDetailsById, setJobDetailsById] = useState<Record<string, JobDetailResponse>>({});
@@ -91,34 +74,10 @@ export function OfficeWorkspaceShell({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isDispatchRefreshing, setIsDispatchRefreshing] = useState(false);
   const [isJobsQueueRefreshing, setIsJobsQueueRefreshing] = useState(false);
-  const [isJobIntakeLoading, setIsJobIntakeLoading] = useState(false);
   const [isJobDetailLoading, setIsJobDetailLoading] = useState(false);
   const [lastDispatchRefreshedAt, setLastDispatchRefreshedAt] = useState<string | null>(null);
   const [pendingJobStatusChange, setPendingJobStatusChange] =
     useState<PendingJobStatusChange | null>(null);
-  const [jobLocationId, setJobLocationId] = useState('');
-  const [selectedJobLocation, setSelectedJobLocation] = useState<JobIntakeSelectedLocation | null>(
-    null
-  );
-  const [jobLocationSearchQuery, setJobLocationSearchQuery] = useState('');
-  const [jobLocationSearchResults, setJobLocationSearchResults] = useState<CrmSearchResult[]>([]);
-  const [isJobLocationSearchLoading, setIsJobLocationSearchLoading] = useState(false);
-  const [customerLocationOptions, setCustomerLocationOptions] = useState<
-    JobIntakeCustomerLocationOption[]
-  >([]);
-  const [customerLocationMessage, setCustomerLocationMessage] = useState<string | null>(null);
-  const [jobBillToOptions, setJobBillToOptions] = useState<JobIntakeBillToOption[]>([]);
-  const [jobBillToWarning, setJobBillToWarning] = useState<string | null>(null);
-  const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
-  const [jobType, setJobType] = useState('Service');
-  const [jobCategory, setJobCategory] = useState('General');
-  const [jobOrigin, setJobOrigin] = useState('Inbound phone call');
-  const [jobSummary, setJobSummary] = useState('');
-  const [jobTechnicianId, setJobTechnicianId] = useState('');
-  const [jobDate, setJobDate] = useState('');
-  const [jobStartTime, setJobStartTime] = useState('');
-  const [jobEndTime, setJobEndTime] = useState('');
-  const [jobWindow, setJobWindow] = useState('');
   const [appointmentDrafts, setAppointmentDrafts] = useState<Record<string, AppointmentDraft>>({});
   const [appointmentEditDrafts, setAppointmentEditDrafts] = useState<
     Record<string, AppointmentEditDraft>
@@ -128,15 +87,14 @@ export function OfficeWorkspaceShell({
   >({});
   const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
   const [activeOfficeView, setActiveOfficeView] = useState<OfficeView>('dispatch');
+  const [jobIntakeReturnView, setJobIntakeReturnView] = useState<OfficeView>('dispatch');
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [focusedAppointmentId, setFocusedAppointmentId] = useState<string | null>(null);
   const [jobDetailInitialTab, setJobDetailInitialTab] = useState<JobDetailTab>('overview');
-  const [isJobIntakeOpen, setIsJobIntakeOpen] = useState(false);
   const refreshInFlightRef = useRef(false);
   const dispatchRefreshInFlightRef = useRef(false);
   const jobsQueueRefreshInFlightRef = useRef(false);
-  const jobIntakeLoadInFlightRef = useRef(false);
-  const jobLocationSearchRequestRef = useRef(0);
+  const isJobIntakeOpen = activeOfficeView === 'jobIntake';
 
   const canViewInventory = employee.effectivePermissions.includes('inventory:view');
   const canCreateInventory = employee.effectivePermissions.includes('inventory:create');
@@ -222,84 +180,6 @@ export function OfficeWorkspaceShell({
     }
   }, [apiBaseUrl, sessionToken]);
 
-  const loadJobIntakeContext = useCallback(
-    async (force = false): Promise<JobIntakeContextResponse | null> => {
-      if (!force && jobIntakeContext) {
-        return jobIntakeContext;
-      }
-
-      if (jobIntakeLoadInFlightRef.current) {
-        return jobIntakeContext;
-      }
-
-      jobIntakeLoadInFlightRef.current = true;
-      setIsJobIntakeLoading(true);
-      setErrorMessage(null);
-
-      try {
-        const nextJobIntakeContext = await getOfficeJobIntakeContext({ sessionToken, apiBaseUrl });
-        setJobIntakeContext(nextJobIntakeContext);
-
-        return nextJobIntakeContext;
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : 'Unable to load job intake.');
-        return null;
-      } finally {
-        jobIntakeLoadInFlightRef.current = false;
-        setIsJobIntakeLoading(false);
-      }
-    },
-    [apiBaseUrl, jobIntakeContext, sessionToken]
-  );
-
-  useEffect(() => {
-    const requestId = jobLocationSearchRequestRef.current + 1;
-    jobLocationSearchRequestRef.current = requestId;
-    const trimmedQuery = jobLocationSearchQuery.trim();
-
-    if (!isJobIntakeOpen || selectedJobLocation || trimmedQuery.length < 2) {
-      setJobLocationSearchResults([]);
-      setIsJobLocationSearchLoading(false);
-      return;
-    }
-
-    setIsJobLocationSearchLoading(true);
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const response = await searchOfficeCrm({
-            sessionToken,
-            apiBaseUrl,
-            query: trimmedQuery
-          });
-
-          if (jobLocationSearchRequestRef.current !== requestId) {
-            return;
-          }
-
-          setJobLocationSearchResults(
-            response.results.filter(
-              (result) => result.kind === 'location' || result.kind === 'customer'
-            )
-          );
-        } catch (error) {
-          if (jobLocationSearchRequestRef.current !== requestId) {
-            return;
-          }
-
-          setJobLocationSearchResults([]);
-          setErrorMessage(error instanceof Error ? error.message : 'Unable to search CRM.');
-        } finally {
-          if (jobLocationSearchRequestRef.current === requestId) {
-            setIsJobLocationSearchLoading(false);
-          }
-        }
-      })();
-    }, jobIntakeSearchDebounceMs);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [apiBaseUrl, isJobIntakeOpen, jobLocationSearchQuery, selectedJobLocation, sessionToken]);
-
   const refreshWorkspace = useCallback(async (): Promise<boolean> => {
     if (refreshInFlightRef.current) {
       return false;
@@ -325,26 +205,39 @@ export function OfficeWorkspaceShell({
     }
   }, [apiBaseUrl, sessionToken]);
 
-  const refreshAllWorkspace = useCallback(async (): Promise<boolean> => {
-    const refreshes: Array<Promise<boolean>> = [
+  const refreshCoreWorkspace = useCallback(async (): Promise<boolean> => {
+    const results = await Promise.all([
       refreshWorkspace(),
       refreshDispatchBoard(),
       refreshJobsQueue()
-    ];
+    ]);
+    return results.some(Boolean);
+  }, [refreshDispatchBoard, refreshJobsQueue, refreshWorkspace]);
 
-    if (jobIntakeContext || isJobIntakeOpen) {
-      refreshes.push(loadJobIntakeContext(true).then(Boolean));
+  const jobIntakeWorkflow = useJobIntakeWorkflow({
+    apiBaseUrl,
+    sessionToken,
+    isOpen: isJobIntakeOpen,
+    onClose: handleCloseJobIntake,
+    onErrorMessage: setErrorMessage,
+    onNoticeMessage: setNoticeMessage,
+    onJobCreated: refreshCoreWorkspace
+  });
+
+  const refreshAllWorkspace = useCallback(async (): Promise<boolean> => {
+    const refreshes: Array<Promise<boolean>> = [refreshCoreWorkspace()];
+
+    if (jobIntakeWorkflow.hasContext || isJobIntakeOpen) {
+      refreshes.push(jobIntakeWorkflow.loadContext(true).then(Boolean));
     }
 
     const results = await Promise.all(refreshes);
     return results.some(Boolean);
   }, [
     isJobIntakeOpen,
-    jobIntakeContext,
-    loadJobIntakeContext,
-    refreshDispatchBoard,
-    refreshJobsQueue,
-    refreshWorkspace
+    jobIntakeWorkflow.hasContext,
+    jobIntakeWorkflow.loadContext,
+    refreshCoreWorkspace
   ]);
 
   const loadJobDetail = useCallback(
@@ -609,144 +502,18 @@ export function OfficeWorkspaceShell({
     }
   }
 
-  function clearJobIntakeLocationSelection() {
-    setJobLocationId('');
-    setSelectedJobLocation(null);
-    setJobBillToCustomerId('');
-    setJobBillToOptions([]);
-    setJobBillToWarning(null);
-    setJobLocationSearchQuery('');
-    setJobLocationSearchResults([]);
-    setIsJobLocationSearchLoading(false);
-    setCustomerLocationOptions([]);
-    setCustomerLocationMessage(null);
-  }
-
-  async function handleLoadJobIntakeLocation(locationId: string) {
-    try {
-      setErrorMessage(null);
-      const location = await getOfficeLocationDetail({ sessionToken, apiBaseUrl, locationId });
-      const ownerBillToOption = {
-        id: location.customerId,
-        name: location.customerName
-      };
-      const alternateIds = location.alternateBillToCustomerIds.filter(
-        (customerId) => customerId !== location.customerId
-      );
-      const alternateResults = await Promise.allSettled(
-        alternateIds.map((customerId) =>
-          getOfficeCustomerDetail({ sessionToken, apiBaseUrl, customerId })
-        )
-      );
-      const alternateBillToOptions = alternateResults
-        .filter(
-          (result): result is PromiseFulfilledResult<CustomerDetail> =>
-            result.status === 'fulfilled'
-        )
-        .map((result) => ({
-          id: result.value.id,
-          name: result.value.name
-        }));
-      const failedAlternateCount = alternateResults.filter(
-        (result) => result.status === 'rejected'
-      ).length;
-
-      setSelectedJobLocation(toJobIntakeSelectedLocation(location));
-      setJobLocationId(location.id);
-      setJobBillToOptions(dedupeBillToOptions([ownerBillToOption, ...alternateBillToOptions]));
-      setJobBillToCustomerId(ownerBillToOption.id);
-      setJobBillToWarning(
-        failedAlternateCount > 0
-          ? 'Some alternate bill-to customers could not be loaded. The location owner remains available.'
-          : null
-      );
-      setJobLocationSearchQuery('');
-      setJobLocationSearchResults([]);
-      setIsJobLocationSearchLoading(false);
-      setCustomerLocationOptions([]);
-      setCustomerLocationMessage(null);
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load location detail.');
-    }
-  }
-
-  async function handleSelectJobIntakeSearchResult(result: CrmSearchResult) {
-    if (result.kind === 'location') {
-      await handleLoadJobIntakeLocation(result.id);
-      return;
-    }
-
-    if (result.kind !== 'customer') {
-      return;
-    }
-
-    try {
-      setErrorMessage(null);
-      clearJobIntakeLocationSelection();
-      const customer = await getOfficeCustomerDetail({
-        sessionToken,
-        apiBaseUrl,
-        customerId: result.id
-      });
-      const activeLocations = toActiveCustomerLocationOptions(customer);
-
-      setCustomerLocationOptions(activeLocations);
-      setCustomerLocationMessage(
-        activeLocations.length === 0
-          ? `No active locations found for ${customer.name}. Open Customers to create a location before creating the job.`
-          : null
-      );
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to load customer detail.');
-    }
-  }
-
-  async function handleCreateJob() {
-    if (!jobLocationId) {
-      setErrorMessage('Select a location before creating a job.');
-      return;
-    }
-
-    try {
-      await createOfficeJob({
-        sessionToken,
-        apiBaseUrl,
-        locationId: jobLocationId,
-        billToCustomerId: jobBillToCustomerId || undefined,
-        jobType,
-        category: jobCategory,
-        origin: jobOrigin,
-        summary: jobSummary,
-        scheduledDate: jobDate || undefined,
-        scheduledStartTime: jobDate ? jobStartTime || undefined : undefined,
-        scheduledEndTime: jobDate ? jobEndTime || undefined : undefined,
-        timeWindowLabel: jobWindow || undefined,
-        technicianId: jobTechnicianId || undefined
-      });
-      setJobType('Service');
-      setJobCategory('General');
-      setJobOrigin('Inbound phone call');
-      setJobSummary('');
-      setJobDate('');
-      setJobStartTime('');
-      setJobEndTime('');
-      setJobWindow('');
-      setJobTechnicianId('');
-      clearJobIntakeLocationSelection();
-      setIsJobIntakeOpen(false);
-      setNoticeMessage('Job created.');
-      await refreshAllWorkspace();
-    } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to create job.');
-    }
-  }
-
   async function handleOpenJobIntake() {
-    const context = jobIntakeContext ?? (await loadJobIntakeContext());
+    const returnView = activeOfficeView === 'jobIntake' ? jobIntakeReturnView : activeOfficeView;
+    const context = await jobIntakeWorkflow.loadContext();
 
     if (context) {
-      setIsJobIntakeOpen(true);
+      setJobIntakeReturnView(returnView);
+      setActiveOfficeView('jobIntake');
     }
+  }
+
+  function handleCloseJobIntake() {
+    setActiveOfficeView(jobIntakeReturnView);
   }
 
   function handleJobStatusReviewRequested(
@@ -960,15 +727,6 @@ export function OfficeWorkspaceShell({
     }
   }
 
-  function handleJobDateChange(nextDate: string) {
-    setJobDate(nextDate);
-
-    if (!nextDate) {
-      setJobStartTime('');
-      setJobEndTime('');
-    }
-  }
-
   function handleOpenJobDetail(
     jobId: string,
     appointmentId?: string,
@@ -977,7 +735,6 @@ export function OfficeWorkspaceShell({
     setSelectedJobId(jobId);
     setFocusedAppointmentId(appointmentId ?? null);
     setJobDetailInitialTab(appointmentId ? 'appointments' : initialTab);
-    setIsJobIntakeOpen(false);
     setActiveOfficeView('jobDetail');
     void loadJobDetail(jobId);
   }
@@ -1010,7 +767,7 @@ export function OfficeWorkspaceShell({
       employee={employee}
       errorMessage={errorMessage}
       isDispatchRefreshing={isDispatchRefreshing}
-      isJobIntakeLoading={isJobIntakeLoading}
+      isJobIntakeLoading={jobIntakeWorkflow.isLoading}
       isJobsQueueRefreshing={isJobsQueueRefreshing}
       isRefreshing={isRefreshing}
       canViewInventory={canViewInventory}
@@ -1040,44 +797,7 @@ export function OfficeWorkspaceShell({
           onDispatchRefresh: handleDispatchRefresh,
           onOpenJobDetail: handleOpenJobDetail
         }}
-        jobIntake={{
-          isOpen: isJobIntakeOpen,
-          context: jobIntakeContext,
-          locationSearchQuery: jobLocationSearchQuery,
-          locationSearchResults: jobLocationSearchResults,
-          isLocationSearchLoading: isJobLocationSearchLoading,
-          selectedLocation: selectedJobLocation,
-          customerLocationOptions,
-          customerLocationMessage,
-          billToOptions: jobBillToOptions,
-          billToWarning: jobBillToWarning,
-          jobBillToCustomerId,
-          jobType,
-          jobCategory,
-          jobOrigin,
-          jobSummary,
-          jobTechnicianId,
-          jobDate,
-          jobStartTime,
-          jobEndTime,
-          jobWindow,
-          onLocationSearchQueryChange: setJobLocationSearchQuery,
-          onSelectLocationSearchResult: (result) => void handleSelectJobIntakeSearchResult(result),
-          onSelectCustomerLocation: (locationId) => void handleLoadJobIntakeLocation(locationId),
-          onClearSelectedLocation: clearJobIntakeLocationSelection,
-          onJobBillToCustomerChange: setJobBillToCustomerId,
-          onJobTypeChange: setJobType,
-          onJobCategoryChange: setJobCategory,
-          onJobOriginChange: setJobOrigin,
-          onJobSummaryChange: setJobSummary,
-          onJobTechnicianChange: setJobTechnicianId,
-          onJobDateChange: handleJobDateChange,
-          onJobStartTimeChange: setJobStartTime,
-          onJobEndTimeChange: setJobEndTime,
-          onJobWindowChange: setJobWindow,
-          onCreateJob: handleCreateJob,
-          onClose: () => setIsJobIntakeOpen(false)
-        }}
+        jobIntake={jobIntakeWorkflow.surfaceProps}
         jobs={{
           jobsQueue,
           onOpenJobDetail: handleOpenJobDetail,

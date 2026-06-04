@@ -22,8 +22,10 @@ import { OfficeWorkspaceShell } from './office-workspace-shell';
 vi.mock('@/lib/operations-api', () => ({
   acknowledgeOfficeFinishedVisitReview: vi.fn(),
   addOfficeAppointment: vi.fn(),
+  createOfficeCustomer: vi.fn(),
   createOfficeEquipment: vi.fn(),
   createOfficeJob: vi.fn(),
+  createOfficeLocation: vi.fn(),
   deleteOfficeEquipment: vi.fn(),
   getOfficeEquipmentDetail: vi.fn(),
   getOfficeEquipmentWorkspace: vi.fn(),
@@ -464,6 +466,12 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({ registerEntries: [] });
   mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({ mediaAttachments: [] });
   mockedOperationsApi.getOfficeMediaBlob.mockResolvedValue(new Blob(['media-bytes']));
+  mockedOperationsApi.createOfficeCustomer.mockResolvedValue({
+    customer: buildCustomerDetail(workspace)
+  });
+  mockedOperationsApi.createOfficeLocation.mockResolvedValue({
+    location: buildLocationDetail(workspace)
+  });
   mockedOperationsApi.createOfficeJob.mockResolvedValue(workspace.jobs[0] ?? buildJob());
   mockedOperationsApi.updateOfficeAppointmentSchedule.mockResolvedValue(
     workspace.jobs[0] ?? buildJob()
@@ -561,6 +569,26 @@ describe('OfficeWorkspaceShell IA', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Dispatch' }));
     expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+  });
+
+  it('opens New job as a focused intake view from Customers and closes back', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Customers' }));
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'New job' }));
+    expect(await screen.findByRole('region', { name: 'New job' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'CRM panel mock' })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Job type')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Job problem summary')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create job' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'New job' })).not.toBeInTheDocument();
   });
 
   it('opens job detail from a dispatch appointment card focused on that appointment', async () => {
@@ -663,7 +691,8 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(mockedOperationsApi.getOfficeLocationDetail).not.toHaveBeenCalled();
 
     await selectJobIntakeLocationBySearch('Main');
-    expect(await screen.findByText('Acme - 123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(await screen.findByText('123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(screen.getByText('Owner: Acme')).toBeInTheDocument();
     expect(screen.getByLabelText('Bill to')).toHaveValue('customer-1');
 
     fireEvent.change(screen.getByLabelText('Job type'), { target: { value: 'Maintenance' } });
@@ -767,7 +796,169 @@ describe('OfficeWorkspaceShell IA', () => {
         locationId: 'location-1'
       });
     });
-    expect(await screen.findByText('Acme - 123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(await screen.findByText('123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(screen.getByText('Owner: Acme')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create job' })).not.toBeDisabled();
+  });
+
+  it('keeps a customer with no active locations inside intake with Add location available', async () => {
+    const workspace = buildWorkspace([buildJob()]);
+    workspace.customers.push({
+      id: 'customer-no-location',
+      name: 'No Location Customer',
+      accountType: 'residential',
+      billingAddressLine1: '44 No Place',
+      billingCity: 'Blaine',
+      billingState: 'WA',
+      billingPostalCode: '98230',
+      isActive: true,
+      flags: []
+    });
+    arrangeWorkspace(workspace);
+    mockedOperationsApi.searchOfficeCrm.mockResolvedValue({
+      query: 'No Location',
+      results: [buildCustomerSearchResult(workspace, 'customer-no-location')]
+    });
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    fireEvent.change(await screen.findByLabelText('Job location search'), {
+      target: { value: 'No Location' }
+    });
+
+    const searchResults = await screen.findByLabelText('Job location search results');
+    fireEvent.click(within(searchResults).getByRole('button', { name: /No Location Customer/ }));
+
+    expect(await screen.findByText('No Location Customer')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'No active locations found for No Location Customer. Add a service location to continue.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add location' })).toBeInTheDocument();
+    expect(screen.queryByText(/Open Customers/i)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Job type')).not.toBeInTheDocument();
+  });
+
+  it('warns on inline duplicate customer creation before continuing to location creation', async () => {
+    const workspace = buildWorkspace([buildJob()]);
+    arrangeWorkspace(workspace);
+    mockedOperationsApi.searchOfficeCrm.mockResolvedValue({
+      query: 'Acme',
+      results: [buildCustomerSearchResult(workspace)]
+    });
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'New customer' }));
+    fireEvent.change(await screen.findByLabelText('Customer name'), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create customer' }));
+
+    expect(await screen.findByRole('group', { name: 'Duplicate warnings' })).toBeInTheDocument();
+    expect(mockedOperationsApi.createOfficeCustomer).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create customer anyway' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.createOfficeCustomer).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'Acme',
+          confirmDuplicate: true,
+          sessionToken: 'session-token',
+          apiBaseUrl: 'http://api.test'
+        })
+      );
+    });
+    expect(await screen.findByRole('group', { name: 'Add location' })).toBeInTheDocument();
+  });
+
+  it('confirms missing contact info during inline location creation before selecting it', async () => {
+    const workspace = buildWorkspace([buildJob()]);
+    workspace.customers.push({
+      id: 'customer-no-location',
+      name: 'No Location Customer',
+      accountType: 'residential',
+      billingAddressLine1: '44 No Place',
+      billingCity: 'Blaine',
+      billingState: 'WA',
+      billingPostalCode: '98230',
+      isActive: true,
+      flags: []
+    });
+    const createdLocation: LocationDetail = {
+      id: 'created-location',
+      name: 'New Service Location',
+      customerId: 'customer-no-location',
+      customerName: 'No Location Customer',
+      addressLine1: '55 Service Way',
+      city: 'Blaine',
+      state: 'WA',
+      postalCode: '98230',
+      isActive: true,
+      contacts: [],
+      alternateBillToCustomerIds: [],
+      ownershipHistory: []
+    };
+    arrangeWorkspace(workspace);
+    mockedOperationsApi.searchOfficeCrm.mockResolvedValue({
+      query: 'No Location',
+      results: [buildCustomerSearchResult(workspace, 'customer-no-location')]
+    });
+    mockedOperationsApi.createOfficeLocation.mockResolvedValue({ location: createdLocation });
+    mockedOperationsApi.getOfficeLocationDetail.mockImplementation(async ({ locationId }) =>
+      locationId === 'created-location'
+        ? createdLocation
+        : buildLocationDetail(workspace, locationId)
+    );
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
+    fireEvent.change(await screen.findByLabelText('Job location search'), {
+      target: { value: 'No Location' }
+    });
+    const searchResults = await screen.findByLabelText('Job location search results');
+    fireEvent.click(within(searchResults).getByRole('button', { name: /No Location Customer/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add location' }));
+
+    fireEvent.change(await screen.findByLabelText('Location name'), {
+      target: { value: 'New Service Location' }
+    });
+    fireEvent.change(screen.getByLabelText('Service street'), {
+      target: { value: '55 Service Way' }
+    });
+    fireEvent.change(screen.getByLabelText('Service city'), { target: { value: 'Blaine' } });
+    fireEvent.change(screen.getByLabelText('Service state'), { target: { value: 'WA' } });
+    fireEvent.change(screen.getByLabelText('Service ZIP'), { target: { value: '98230' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create location' }));
+
+    expect(
+      await screen.findByText(
+        'This location has no phone or email. Confirm this is intentional before creating it.'
+      )
+    ).toBeInTheDocument();
+    expect(mockedOperationsApi.createOfficeLocation).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create location without phone or email' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.createOfficeLocation).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: 'customer-no-location',
+          name: 'New Service Location',
+          addressLine1: '55 Service Way',
+          confirmMissingContactInfo: true,
+          sessionToken: 'session-token',
+          apiBaseUrl: 'http://api.test'
+        })
+      );
+    });
+    expect(await screen.findByText('New Service Location')).toBeInTheDocument();
+    expect(screen.getByLabelText('Job type')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create job' })).not.toBeDisabled();
   });
 

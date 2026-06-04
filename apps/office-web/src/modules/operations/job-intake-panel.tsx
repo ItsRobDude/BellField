@@ -1,33 +1,25 @@
 'use client';
 
-import type { CrmSearchResult, JobIntakeContextResponse } from '@/lib/operations-api';
+import { useEffect, useState } from 'react';
+import type {
+  CreateCustomerRequest,
+  CreateLocationRequest,
+  CrmSearchResult,
+  CustomerDetail,
+  DuplicateCandidate,
+  JobIntakeContextResponse,
+  LocationDetail
+} from '@/lib/operations-api';
+import type { CustomerFormState, LocationFormState } from './crm-panel-types';
+import {
+  createEmptyCustomerForm,
+  createEmptyLocationForm,
+  optionalString,
+  splitCommaValues
+} from './job-intake-form-helpers';
+import { JobDetailsStep, SelectedLocationCard } from './job-intake-details';
+import { ServiceLocationStep, type IntakeMode } from './job-intake-quick-create';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-
-const jobTypeOptions = ['Service', 'Maintenance', 'Install', 'Estimate', 'Callback'];
-const jobCategoryOptions = [
-  'General',
-  'Residential',
-  'Commercial',
-  'Warranty',
-  'Maintenance Agreement'
-];
-const jobOriginOptions = [
-  'Inbound phone call',
-  'Outbound phone call',
-  'Email',
-  'Web request',
-  'Walk-in',
-  'PM contract reminder'
-];
-const arrivalWindowOptions = [
-  '',
-  '8:00 AM - 10:00 AM',
-  '10:00 AM - 12:00 PM',
-  '12:00 PM - 2:00 PM',
-  '1:00 PM - 3:00 PM',
-  '2:00 PM - 4:00 PM',
-  '3:00 PM - 5:00 PM'
-];
 
 export type JobIntakeSelectedLocation = {
   id: string;
@@ -38,6 +30,11 @@ export type JobIntakeSelectedLocation = {
   city: string;
   state: string;
   postalCode: string;
+};
+
+export type JobIntakeSelectedCustomer = {
+  id: string;
+  name: string;
 };
 
 export type JobIntakeBillToOption = {
@@ -54,12 +51,22 @@ export type JobIntakeCustomerLocationOption = {
   postalCode: string;
 };
 
+export type JobIntakeCreateCustomerResult =
+  | { status: 'created'; customer: CustomerDetail }
+  | { status: 'duplicate'; duplicateWarnings: DuplicateCandidate[] };
+
+export type JobIntakeCreateLocationResult =
+  | { status: 'created'; location: LocationDetail }
+  | { status: 'duplicate'; duplicateWarnings: DuplicateCandidate[] }
+  | { status: 'missingContact' };
+
 type JobIntakePanelProps = {
   intakeContext: JobIntakeContextResponse;
   locationSearchQuery: string;
   locationSearchResults: CrmSearchResult[];
   isLocationSearchLoading: boolean;
   selectedLocation: JobIntakeSelectedLocation | null;
+  selectedCustomer: JobIntakeSelectedCustomer | null;
   customerLocationOptions: JobIntakeCustomerLocationOption[];
   customerLocationMessage: string | null;
   billToOptions: JobIntakeBillToOption[];
@@ -77,6 +84,8 @@ type JobIntakePanelProps = {
   onLocationSearchQueryChange: (query: string) => void;
   onSelectLocationSearchResult: (result: CrmSearchResult) => void;
   onSelectCustomerLocation: (locationId: string) => void;
+  onCreateCustomer: (input: CreateCustomerRequest) => Promise<JobIntakeCreateCustomerResult>;
+  onCreateLocation: (input: CreateLocationRequest) => Promise<JobIntakeCreateLocationResult>;
   onClearSelectedLocation: () => void;
   onJobBillToCustomerChange: (customerId: string) => void;
   onJobTypeChange: (value: string) => void;
@@ -98,6 +107,7 @@ export function JobIntakePanel({
   locationSearchResults,
   isLocationSearchLoading,
   selectedLocation,
+  selectedCustomer,
   customerLocationOptions,
   customerLocationMessage,
   billToOptions,
@@ -115,6 +125,8 @@ export function JobIntakePanel({
   onLocationSearchQueryChange,
   onSelectLocationSearchResult,
   onSelectCustomerLocation,
+  onCreateCustomer,
+  onCreateLocation,
   onClearSelectedLocation,
   onJobBillToCustomerChange,
   onJobTypeChange,
@@ -129,6 +141,41 @@ export function JobIntakePanel({
   onCreateJob,
   onClose
 }: JobIntakePanelProps) {
+  const [intakeMode, setIntakeMode] = useState<IntakeMode>('search');
+  const [customerForm, setCustomerForm] = useState<CustomerFormState>(createEmptyCustomerForm());
+  const [locationForm, setLocationForm] = useState<LocationFormState>(createEmptyLocationForm());
+  const [customerDuplicateWarnings, setCustomerDuplicateWarnings] = useState<DuplicateCandidate[]>(
+    []
+  );
+  const [locationDuplicateWarnings, setLocationDuplicateWarnings] = useState<DuplicateCandidate[]>(
+    []
+  );
+  const [locationMissingContactConfirmation, setLocationMissingContactConfirmation] =
+    useState(false);
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [isCreatingLocation, setIsCreatingLocation] = useState(false);
+  const [createMessage, setCreateMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      return;
+    }
+
+    setLocationForm((current) => ({ ...current, customerId: selectedCustomer.id }));
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    if (!selectedLocation) {
+      return;
+    }
+
+    setIntakeMode('search');
+    setCustomerDuplicateWarnings([]);
+    setLocationDuplicateWarnings([]);
+    setLocationMissingContactConfirmation(false);
+    setCreateMessage(null);
+  }, [selectedLocation]);
+
   const visibleLocationSearchResults = locationSearchResults.filter(
     (result) => result.kind === 'location' || result.kind === 'customer'
   );
@@ -136,177 +183,200 @@ export function JobIntakePanel({
     ? styles.primaryButton
     : { ...styles.primaryButton, cursor: 'not-allowed', opacity: 0.55 };
 
+  async function submitCustomer(confirmDuplicate = false) {
+    setIsCreatingCustomer(true);
+    setCreateMessage(null);
+
+    try {
+      const result = await onCreateCustomer({
+        name: customerForm.name.trim(),
+        accountType: customerForm.accountType,
+        billingAddressLine1: customerForm.billingAddressLine1.trim(),
+        billingCity: customerForm.billingCity.trim(),
+        billingState: customerForm.billingState.trim(),
+        billingPostalCode: customerForm.billingPostalCode.trim(),
+        phone: optionalString(customerForm.phone),
+        email: optionalString(customerForm.email),
+        fax: optionalString(customerForm.fax),
+        flags: splitCommaValues(customerForm.flags),
+        confirmDuplicate
+      });
+
+      if (result.status === 'duplicate') {
+        setCustomerDuplicateWarnings(result.duplicateWarnings);
+        return;
+      }
+
+      setCustomerForm(createEmptyCustomerForm());
+      setCustomerDuplicateWarnings([]);
+      setLocationForm(createEmptyLocationForm(result.customer.id));
+      setIntakeMode('newLocation');
+      setCreateMessage(`Customer ${result.customer.name} created. Add a service location.`);
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  }
+
+  async function submitLocation(
+    options: {
+      confirmDuplicate?: boolean;
+      confirmMissingContactInfo?: boolean;
+    } = {}
+  ) {
+    if (!selectedCustomer) {
+      return;
+    }
+
+    setIsCreatingLocation(true);
+    setCreateMessage(null);
+
+    try {
+      const result = await onCreateLocation({
+        customerId: selectedCustomer.id,
+        name: locationForm.name.trim(),
+        addressLine1: locationForm.addressLine1.trim(),
+        city: locationForm.city.trim(),
+        state: locationForm.state.trim(),
+        postalCode: locationForm.postalCode.trim(),
+        phone: optionalString(locationForm.phone),
+        email: optionalString(locationForm.email),
+        fax: optionalString(locationForm.fax),
+        alternateBillToCustomerIds: locationForm.alternateBillToCustomerIds,
+        confirmDuplicate: options.confirmDuplicate,
+        confirmMissingContactInfo: options.confirmMissingContactInfo
+      });
+
+      if (result.status === 'missingContact') {
+        setLocationMissingContactConfirmation(true);
+        return;
+      }
+
+      if (result.status === 'duplicate') {
+        setLocationDuplicateWarnings(result.duplicateWarnings);
+        return;
+      }
+
+      setLocationForm(createEmptyLocationForm(result.location.customerId));
+      setLocationDuplicateWarnings([]);
+      setLocationMissingContactConfirmation(false);
+      setIntakeMode('search');
+    } finally {
+      setIsCreatingLocation(false);
+    }
+  }
+
   return (
     <section aria-label="New job" style={styles.workspacePanel}>
       <div style={styles.row}>
-        <h1 style={styles.compactTitle}>New job</h1>
+        <div>
+          <h1 style={styles.compactTitle}>New job</h1>
+          <p style={styles.tinyMuted}>
+            Search or create a service location before entering job details.
+          </p>
+        </div>
         <button type="button" style={styles.button} onClick={onClose}>
           Close
         </button>
       </div>
-      <div style={styles.formGridCompact}>
-        <div style={{ ...styles.formGridFullWidth, display: 'grid', gap: '0.65rem' }}>
-          {selectedLocation ? (
-            <div aria-label="Selected job location" role="group" style={styles.subpanel}>
-              <div style={styles.row}>
-                <div>
-                  <strong>{selectedLocation.name}</strong>
-                  <p style={styles.tinyMuted}>
-                    {selectedLocation.customerName} - {formatAddress(selectedLocation)}
-                  </p>
-                </div>
-                <button type="button" style={styles.button} onClick={onClearSelectedLocation}>
-                  Change
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <label style={styles.fieldLabel}>
-                <span>Location</span>
-                <input
-                  aria-label="Job location search"
-                  value={locationSearchQuery}
-                  onChange={(event) => onLocationSearchQueryChange(event.target.value)}
-                  placeholder="Search location or customer"
-                  style={styles.input}
-                />
-              </label>
-              {isLocationSearchLoading ? <p style={styles.tinyMuted}>Searching...</p> : null}
-              {visibleLocationSearchResults.length > 0 ? (
-                <div
-                  aria-label="Job location search results"
-                  role="group"
-                  style={styles.listCompact}
-                >
-                  {visibleLocationSearchResults.map((result) => (
-                    <button
-                      key={`${result.kind}:${result.id}`}
-                      type="button"
-                      style={styles.cardButton}
-                      onClick={() => onSelectLocationSearchResult(result)}
-                    >
-                      <span style={styles.fieldText}>
-                        {result.kind === 'location' ? 'Location' : 'Customer'}
-                      </span>
-                      <strong>{result.title}</strong>
-                      <span style={styles.tinyMuted}>{result.subtitle}</span>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-              {customerLocationOptions.length > 0 ? (
-                <div aria-label="Customer locations" role="group" style={styles.subpanel}>
-                  <p style={styles.sectionHeading}>Select a location for this customer</p>
-                  <div style={styles.listCompact}>
-                    {customerLocationOptions.map((location) => (
-                      <button
-                        key={location.id}
-                        type="button"
-                        style={styles.cardButton}
-                        onClick={() => onSelectCustomerLocation(location.id)}
-                      >
-                        <strong>{location.name}</strong>
-                        <span style={styles.tinyMuted}>{formatAddress(location)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-              {customerLocationMessage ? (
-                <p style={styles.tinyMuted}>{customerLocationMessage}</p>
-              ) : null}
-            </>
-          )}
-        </div>
-        {selectedLocation ? (
-          <label style={styles.fieldLabel}>
-            <span>Bill to</span>
-            <select
-              value={jobBillToCustomerId}
-              onChange={(event) => onJobBillToCustomerChange(event.target.value)}
-              style={styles.input}
-            >
-              {billToOptions.map((customer) => (
-                <option key={customer.id} value={customer.id}>
-                  {customer.name}
-                </option>
-              ))}
-            </select>
-            {billToWarning ? <span style={styles.tinyMuted}>{billToWarning}</span> : null}
-          </label>
-        ) : null}
-        <SelectField
-          label="Type"
-          value={jobType}
-          options={jobTypeOptions}
-          onChange={onJobTypeChange}
-        />
-        <SelectField
-          label="Category"
-          value={jobCategory}
-          options={jobCategoryOptions}
-          onChange={onJobCategoryChange}
-        />
-        <SelectField
-          label="Origin"
-          value={jobOrigin}
-          options={jobOriginOptions}
-          onChange={onJobOriginChange}
-        />
-        <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
-          <span>Problem summary</span>
-          <textarea
-            aria-label="Job problem summary"
-            value={jobSummary}
-            onChange={(event) => onJobSummaryChange(event.target.value)}
-            style={styles.textarea}
-          />
-        </label>
-      </div>
 
-      <div style={styles.formSection}>
-        <h2 style={styles.sectionHeading}>Appointment scheduling</h2>
-        <div style={styles.formGridCompact}>
-          <TextField label="Dispatch date" type="date" value={jobDate} onChange={onJobDateChange} />
-          <SelectField
-            label="Customer arrival window"
-            value={jobWindow}
-            options={arrivalWindowOptions}
-            optionLabels={{ '': 'No arrival window' }}
-            onChange={onJobWindowChange}
+      {!selectedLocation ? (
+        <ServiceLocationStep
+          createMessage={createMessage}
+          customerDuplicateWarnings={customerDuplicateWarnings}
+          customerForm={customerForm}
+          customerLocationMessage={customerLocationMessage}
+          customerLocationOptions={customerLocationOptions}
+          intakeMode={intakeMode}
+          isCreatingCustomer={isCreatingCustomer}
+          isCreatingLocation={isCreatingLocation}
+          isLocationSearchLoading={isLocationSearchLoading}
+          locationDuplicateWarnings={locationDuplicateWarnings}
+          locationForm={locationForm}
+          locationMissingContactConfirmation={locationMissingContactConfirmation}
+          locationSearchQuery={locationSearchQuery}
+          locationSearchResults={visibleLocationSearchResults}
+          selectedCustomer={selectedCustomer}
+          onAddLocation={() => {
+            if (!selectedCustomer) {
+              return;
+            }
+
+            setLocationForm(createEmptyLocationForm(selectedCustomer.id));
+            setLocationDuplicateWarnings([]);
+            setLocationMissingContactConfirmation(false);
+            setCreateMessage(null);
+            setIntakeMode('newLocation');
+          }}
+          onCancelQuickCreate={() => {
+            setIntakeMode('search');
+            setCustomerDuplicateWarnings([]);
+            setLocationDuplicateWarnings([]);
+            setLocationMissingContactConfirmation(false);
+            setCreateMessage(null);
+          }}
+          onCustomerFormChange={setCustomerForm}
+          onLocationFormChange={setLocationForm}
+          onLocationSearchQueryChange={onLocationSearchQueryChange}
+          onNewCustomer={() => {
+            setCustomerForm(createEmptyCustomerForm());
+            setCustomerDuplicateWarnings([]);
+            setCreateMessage(null);
+            setIntakeMode('newCustomer');
+          }}
+          onSelectCustomerLocation={onSelectCustomerLocation}
+          onSelectLocationSearchResult={onSelectLocationSearchResult}
+          onSubmitCustomer={() => void submitCustomer()}
+          onSubmitCustomerAnyway={() => void submitCustomer(true)}
+          onSubmitLocation={() => void submitLocation()}
+          onSubmitLocationAnyway={() =>
+            void submitLocation({
+              confirmDuplicate: true,
+              confirmMissingContactInfo: locationMissingContactConfirmation
+            })
+          }
+          onSubmitLocationWithoutContact={() =>
+            void submitLocation({
+              confirmMissingContactInfo: true
+            })
+          }
+        />
+      ) : (
+        <>
+          <SelectedLocationCard
+            billToOptions={billToOptions}
+            billToWarning={billToWarning}
+            jobBillToCustomerId={jobBillToCustomerId}
+            selectedLocation={selectedLocation}
+            onClearSelectedLocation={onClearSelectedLocation}
+            onJobBillToCustomerChange={onJobBillToCustomerChange}
           />
-          <TextField
-            label="Scheduled start"
-            type="time"
-            value={jobStartTime}
-            disabled={!jobDate}
-            onChange={onJobStartTimeChange}
+          <JobDetailsStep
+            intakeContext={intakeContext}
+            jobCategory={jobCategory}
+            jobDate={jobDate}
+            jobEndTime={jobEndTime}
+            jobOrigin={jobOrigin}
+            jobStartTime={jobStartTime}
+            jobSummary={jobSummary}
+            jobTechnicianId={jobTechnicianId}
+            jobType={jobType}
+            jobWindow={jobWindow}
+            onJobCategoryChange={onJobCategoryChange}
+            onJobDateChange={onJobDateChange}
+            onJobEndTimeChange={onJobEndTimeChange}
+            onJobOriginChange={onJobOriginChange}
+            onJobStartTimeChange={onJobStartTimeChange}
+            onJobSummaryChange={onJobSummaryChange}
+            onJobTechnicianChange={onJobTechnicianChange}
+            onJobTypeChange={onJobTypeChange}
+            onJobWindowChange={onJobWindowChange}
           />
-          <TextField
-            label="Scheduled end"
-            type="time"
-            value={jobEndTime}
-            disabled={!jobDate}
-            onChange={onJobEndTimeChange}
-          />
-          <label style={styles.fieldLabel}>
-            <span>Technician</span>
-            <select
-              value={jobTechnicianId}
-              onChange={(event) => onJobTechnicianChange(event.target.value)}
-              style={styles.input}
-            >
-              <option value="">Unassigned</option>
-              {intakeContext.technicians.map((technician) => (
-                <option key={technician.id} value={technician.id}>
-                  {technician.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-      </div>
+        </>
+      )}
+
+      {!selectedLocation ? (
+        <p style={styles.tinyMuted}>Select or create a service location to unlock job details.</p>
+      ) : null}
       <button
         type="button"
         style={createJobButtonStyle}
@@ -316,76 +386,5 @@ export function JobIntakePanel({
         Create job
       </button>
     </section>
-  );
-}
-
-function formatAddress(location: {
-  addressLine1: string;
-  city: string;
-  state: string;
-  postalCode: string;
-}): string {
-  return [location.addressLine1, location.city, location.state, location.postalCode]
-    .filter(Boolean)
-    .join(', ');
-}
-
-function SelectField({
-  label,
-  value,
-  options,
-  optionLabels = {},
-  onChange
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  optionLabels?: Record<string, string>;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label style={styles.fieldLabel}>
-      <span>{label}</span>
-      <select
-        aria-label={`Job ${label.toLowerCase()}`}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        style={styles.input}
-      >
-        {options.map((option) => (
-          <option key={option || 'blank'} value={option}>
-            {optionLabels[option] ?? option}
-          </option>
-        ))}
-      </select>
-    </label>
-  );
-}
-
-function TextField({
-  label,
-  value,
-  type = 'text',
-  disabled = false,
-  onChange
-}: {
-  label: string;
-  value: string;
-  type?: string;
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}) {
-  return (
-    <label style={styles.fieldLabel}>
-      <span>{label}</span>
-      <input
-        aria-label={`Job ${label.toLowerCase()}`}
-        value={value}
-        type={type}
-        disabled={disabled}
-        onChange={(event) => onChange(event.target.value)}
-        style={styles.input}
-      />
-    </label>
   );
 }

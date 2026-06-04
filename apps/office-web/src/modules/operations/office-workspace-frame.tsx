@@ -8,6 +8,7 @@ export type OfficeView =
   | 'dispatch'
   | 'customers'
   | 'jobs'
+  | 'jobIntake'
   | 'inventory'
   | 'purchasing'
   | 'bookkeeping'

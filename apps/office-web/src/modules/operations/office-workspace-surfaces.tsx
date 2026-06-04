@@ -72,7 +72,7 @@ export function OfficeWorkspaceSurfaces({
 }: OfficeWorkspaceSurfacesProps) {
   return (
     <>
-      <OfficeJobIntakeSurface {...jobIntake} />
+      {activeOfficeView === 'jobIntake' ? <OfficeJobIntakeSurface {...jobIntake} /> : null}
 
       {activeOfficeView === 'dispatch' ? (
         <DispatchBoardPanel

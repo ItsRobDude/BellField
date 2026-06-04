@@ -1,10 +1,18 @@
 'use client';
 
-import type { CrmSearchResult, JobIntakeContextResponse } from '@/lib/operations-api';
+import type {
+  CreateCustomerRequest,
+  CreateLocationRequest,
+  CrmSearchResult,
+  JobIntakeContextResponse
+} from '@/lib/operations-api';
 import {
   JobIntakePanel,
   type JobIntakeBillToOption,
+  type JobIntakeCreateCustomerResult,
+  type JobIntakeCreateLocationResult,
   type JobIntakeCustomerLocationOption,
+  type JobIntakeSelectedCustomer,
   type JobIntakeSelectedLocation
 } from './job-intake-panel';
 
@@ -15,6 +23,7 @@ export type OfficeJobIntakeSurfaceProps = {
   locationSearchResults: CrmSearchResult[];
   isLocationSearchLoading: boolean;
   selectedLocation: JobIntakeSelectedLocation | null;
+  selectedCustomer: JobIntakeSelectedCustomer | null;
   customerLocationOptions: JobIntakeCustomerLocationOption[];
   customerLocationMessage: string | null;
   billToOptions: JobIntakeBillToOption[];
@@ -32,6 +41,8 @@ export type OfficeJobIntakeSurfaceProps = {
   onLocationSearchQueryChange: (query: string) => void;
   onSelectLocationSearchResult: (result: CrmSearchResult) => void;
   onSelectCustomerLocation: (locationId: string) => void;
+  onCreateCustomer: JobIntakePanelCreateCustomerHandler;
+  onCreateLocation: JobIntakePanelCreateLocationHandler;
   onClearSelectedLocation: () => void;
   onJobBillToCustomerChange: (customerId: string) => void;
   onJobTypeChange: (value: string) => void;
@@ -54,6 +65,7 @@ export function OfficeJobIntakeSurface({
   locationSearchResults,
   isLocationSearchLoading,
   selectedLocation,
+  selectedCustomer,
   customerLocationOptions,
   customerLocationMessage,
   billToOptions,
@@ -71,6 +83,8 @@ export function OfficeJobIntakeSurface({
   onLocationSearchQueryChange,
   onSelectLocationSearchResult,
   onSelectCustomerLocation,
+  onCreateCustomer,
+  onCreateLocation,
   onClearSelectedLocation,
   onJobBillToCustomerChange,
   onJobTypeChange,
@@ -96,6 +110,7 @@ export function OfficeJobIntakeSurface({
       locationSearchResults={locationSearchResults}
       isLocationSearchLoading={isLocationSearchLoading}
       selectedLocation={selectedLocation}
+      selectedCustomer={selectedCustomer}
       customerLocationOptions={customerLocationOptions}
       customerLocationMessage={customerLocationMessage}
       billToOptions={billToOptions}
@@ -113,6 +128,8 @@ export function OfficeJobIntakeSurface({
       onLocationSearchQueryChange={onLocationSearchQueryChange}
       onSelectLocationSearchResult={onSelectLocationSearchResult}
       onSelectCustomerLocation={onSelectCustomerLocation}
+      onCreateCustomer={onCreateCustomer}
+      onCreateLocation={onCreateLocation}
       onClearSelectedLocation={onClearSelectedLocation}
       onJobBillToCustomerChange={onJobBillToCustomerChange}
       onJobTypeChange={onJobTypeChange}
@@ -129,3 +146,11 @@ export function OfficeJobIntakeSurface({
     />
   );
 }
+
+type JobIntakePanelCreateCustomerHandler = (
+  input: CreateCustomerRequest
+) => Promise<JobIntakeCreateCustomerResult>;
+
+type JobIntakePanelCreateLocationHandler = (
+  input: CreateLocationRequest
+) => Promise<JobIntakeCreateLocationResult>;
