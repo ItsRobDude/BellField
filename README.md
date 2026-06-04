@@ -104,6 +104,12 @@ Architecture guardrails are documented in [docs/architecture-guardrails.md](./do
 pnpm check:architecture
 ```
 
+Source file-size guardrails are documented in [docs/maintainability-refactor-plan.md](./docs/maintainability-refactor-plan.md) and checked with:
+
+```powershell
+pnpm check:file-size
+```
+
 User-facing copy guardrails catch internal scaffold/milestone wording before it reaches the office or field UI:
 
 ```powershell

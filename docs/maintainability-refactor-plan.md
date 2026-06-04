@@ -1,0 +1,187 @@
+# Maintainability Refactor Plan
+
+This document tracks BellField's intentional refactor work.
+
+The goal is not to make the codebase abstract.
+The goal is to keep BellField readable while the product grows.
+
+Refactors in this plan should be behavior-preserving unless they are paired with a named, reviewed product or UX fix.
+
+---
+
+## Current Rule
+
+BellField treats large source files as a review signal and very large source files as maintenance debt.
+
+Executable check:
+
+```powershell
+pnpm check:file-size
+```
+
+The check applies to non-test TypeScript source under `apps/` and `packages/`.
+
+Rules:
+
+- New source files at `800+` lines fail unless they are deliberately added to the baseline.
+- Source files at `1200+` lines are a blocking maintenance smell unless there is a narrow documented reason.
+- Existing oversized files are baseline-locked in `tools/check-file-size.mjs`; they may shrink, but they should not grow.
+- Tests, migrations, and docs are reviewed with judgment instead of this source-file guard.
+
+When a file trips the guard, prefer the boring fix:
+
+- extract a focused rendering component
+- extract a pure formatting or mapping helper
+- split data access by read model or command
+- split contract groups by product domain
+
+Do not replace one large file with one large hook or one vague shared utility.
+
+---
+
+## Baseline Snapshot
+
+Current non-test source snapshot when this plan was created:
+
+| Metric                       | Count |
+| ---------------------------- | ----: |
+| Source TS/TSX files          |   205 |
+| Source files at `300+` lines |    51 |
+| Source files at `500+` lines |    21 |
+| Source files at `800+` lines |    10 |
+
+Current oversized baseline:
+
+| Lines | File                                                                       | Refactor direction                                                                              |
+| ----: | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+|  1738 | `apps/api/src/modules/company-data/jobs-data.repository.ts`                | Split job read models, command writes, timeline/register/media helpers, and shared row mapping. |
+|  1591 | `packages/contracts/src/index.ts`                                          | Split contracts by domain, keep `index.ts` as a re-export barrel.                               |
+|  1502 | `apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx` | Split assigned-work home, focused job detail, tab bodies, and sync chrome.                      |
+|  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                     | Split customer/location/contact sections and search/detail state.                               |
+|  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`           | Split reference lookups by CRM/equipment/job context.                                           |
+|  1197 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts`      | Split job commands, appointment commands, status transitions, and closeout/follow-up rules.     |
+|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`        | Split workspace state/actions by surface and keep shell as orchestration.                       |
+|   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`              | First appointments split completed; continue splitting remaining tab sections when touched.     |
+|  1073 | `apps/office-web/src/lib/operations-api.ts`                                | Split API helpers by domain and keep compatibility exports.                                     |
+|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                     | Split posting/line/balance/correction persistence helpers.                                      |
+
+The baseline is intentionally strict: these files are allowed to remain temporarily oversized, but not to keep growing.
+
+---
+
+## Execution Order
+
+### Slice 1 - Job Detail Appointments
+
+Purpose:
+
+- fix the confusing always-visible blank appointment form
+- isolate appointment rendering/editing from the broader job detail panel
+- reduce pressure in `job-detail-panel.tsx`
+
+Status: shipped as the first cleanup slice.
+
+Implementation shape:
+
+- extracted a focused appointments section component
+- kept existing backend/API behavior
+- collapsed new appointment fields behind an explicit `Add appointment` action
+- kept save/status interactions tested
+
+Validation:
+
+```powershell
+pnpm --filter @bellfield/office-web test -- job-detail-panel
+pnpm --filter @bellfield/office-web test -- office-workspace-shell
+pnpm --filter @bellfield/office-web lint
+pnpm check:file-size
+```
+
+### Slice 2 - Office Workspace Shell Action Boundaries
+
+Purpose:
+
+- keep `office-workspace-shell.tsx` from becoming the permanent owner of every workflow action
+- separate surface-specific async handlers and notices from the top-level shell where practical
+
+Implementation shape:
+
+- extract narrow action helpers by workflow area only when touched
+- keep cross-surface refresh orchestration explicit
+- avoid a single giant `useOfficeWorkspaceState` hook
+
+Validation:
+
+- office-web tests for touched workflows
+- office-web typecheck/lint
+- `pnpm check:file-size`
+
+### Slice 3 - API Job Persistence Split
+
+Purpose:
+
+- make job persistence easier to review before more history/reporting work lands
+
+Implementation shape:
+
+- split `jobs-data.repository.ts` by behavior group without changing public service contracts
+- prefer row-mapper helpers and focused query files over new abstractions
+- keep transaction ownership obvious
+
+Validation:
+
+- API tests for jobs, appointments, dispatch, register/media, invoices, and job-costing
+- `pnpm check:architecture`
+- `pnpm check:file-size`
+
+### Slice 4 - Contracts Domain Split
+
+Purpose:
+
+- remove the shared-contract choke point without changing import semantics for clients
+
+Implementation shape:
+
+- move domain groups into contract files such as CRM, jobs, invoices, inventory, purchasing, and job costing
+- keep `packages/contracts/src/index.ts` as the public re-export surface
+- avoid client-side type redeclarations
+
+Validation:
+
+- root typecheck
+- client API tests
+- `pnpm check:architecture`
+- `pnpm check:file-size`
+
+### Slice 5 - Field Workspace Screen Split
+
+Purpose:
+
+- lower risk before more real-device field smoke and sync hardening
+
+Implementation shape:
+
+- split the assigned-work home, focused job detail, tab sections, and sync/status chrome
+- preserve the offline/sync mental model
+- avoid moving queue/replay business rules into UI components
+
+Validation:
+
+- field-mobile tests
+- field-mobile typecheck/lint
+- manual field smoke when runtime behavior changes
+
+---
+
+## Refactor Discipline
+
+Each refactor slice should:
+
+- name the behavior it is preserving
+- include tests before or during the move
+- split mechanically first, then improve ownership in a separate pass if needed
+- avoid broad formatting-only churn in unrelated files
+- leave public API contracts unchanged unless the slice explicitly owns contract cleanup
+- update this plan when a baseline file is reduced or removed from the oversized list
+
+Stop and reassess if a refactor requires changing product behavior, permissions, persistence semantics, or accounting/history meaning.

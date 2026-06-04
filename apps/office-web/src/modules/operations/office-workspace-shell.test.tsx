@@ -852,6 +852,7 @@ describe('OfficeWorkspaceShell IA', () => {
         technicianId: 'tech-2'
       });
     });
+    expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
   });
 
   it('runs finished-visit review actions from job detail', async () => {

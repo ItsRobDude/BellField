@@ -8,6 +8,15 @@ Run it with:
 pnpm check:architecture
 ```
 
+BellField also uses a source file-size guard to prevent large files from quietly growing:
+
+```powershell
+pnpm check:file-size
+```
+
+The file-size guard is baseline-aware.
+Known oversized files are tracked in [maintainability-refactor-plan.md](./maintainability-refactor-plan.md) and locked in `tools/check-file-size.mjs`; they may shrink, but they should not grow.
+
 The check protects these rules:
 
 - shared API/client wire types belong in `packages/contracts`

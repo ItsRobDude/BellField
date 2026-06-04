@@ -128,6 +128,7 @@ File size is a review signal, not a blind rule.
 - Files around 1,200 lines or larger should be treated as a blocking maintenance smell unless there is a clear reason, such as generated code, migrations, dense specs, or stable contract definitions.
 - Prefer small co-located extractions before creating new folder hierarchies.
 - Split mechanically first when possible. Move state or ownership only in a separate deliberate pass.
+- Run `pnpm check:file-size` to enforce the current source-file baseline. Existing oversized files may shrink, but they should not grow without an explicit update to `docs/maintainability-refactor-plan.md`.
 
 ---
 

@@ -281,6 +281,23 @@ describe('JobDetailPanel', () => {
     expect(onSaveAppointmentSchedule).toHaveBeenCalledWith('appt-1');
   });
 
+  it('keeps the add-appointment form collapsed until requested', () => {
+    renderDetail({ initialTab: 'appointments' });
+
+    expect(screen.queryByRole('region', { name: 'Add appointment' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add appointment' }));
+
+    const addAppointment = screen.getByRole('region', { name: 'Add appointment' });
+    expect(within(addAppointment).getByLabelText('New appointment date')).toBeInTheDocument();
+    expect(within(addAppointment).getByLabelText('New appointment start time')).toBeInTheDocument();
+
+    fireEvent.click(within(addAppointment).getByRole('button', { name: 'Cancel' }));
+
+    expect(screen.queryByRole('region', { name: 'Add appointment' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add appointment' })).toBeInTheDocument();
+  });
+
   it('requires confirmation before cancelling an appointment', () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const onAppointmentStatusChange = vi.fn(async () => undefined);

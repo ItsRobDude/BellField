@@ -206,6 +206,16 @@ Read when: adding cross-package imports, moving shared types/helpers, or debuggi
 
 Does not own: product behavior or milestone sequencing.
 
+### [maintainability-refactor-plan.md](./maintainability-refactor-plan.md)
+
+Audience: contributors planning or executing cleanup/refactor work.
+
+Purpose: current oversized-file baseline, executable file-size rule, and the ordered refactor lanes needed to keep BellField maintainable.
+
+Read when: a source file is approaching the file-size guard, a feature needs to touch an oversized file, or planning a behavior-preserving cleanup slice.
+
+Does not own: product behavior, workflow semantics, or package-boundary rules.
+
 ## Current-State and Handoff Docs
 
 ### [whats-shipped.md](./whats-shipped.md)
@@ -302,6 +312,7 @@ For planning what belongs in scope:
 
 - `milestone-implementation-plan.md`
 - `whats-shipped.md` for current repo status
+- `maintainability-refactor-plan.md` for cleanup that repairs weak structure without adding product scope
 
 For validation and smoke proof:
 

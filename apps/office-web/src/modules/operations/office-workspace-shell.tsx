@@ -854,7 +854,7 @@ export function OfficeWorkspaceShell({
         return;
       }
 
-      setNoticeMessage('Appointment status updated.');
+      setNoticeMessage('Appointment updated.');
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to update appointment status.'
