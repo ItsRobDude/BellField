@@ -111,13 +111,16 @@ The admin/support surface a small shop and BellField support actually need day t
 BellField has strong permission modeling and conservative backend rules, but not a production security/release harness. BellField already has CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)), so several of these are cheap to wire in.
 
 - [ ] secret scanning (e.g. secretlint/gitleaks) wired into existing CI — _safe now_
-- [ ] dependency audit (`pnpm audit`) as a CI signal — _safe now_
+- [ ] production dependency audit (`pnpm audit --prod`, exposed as the `security:audit` script) as a CI signal — _safe now_
 - [ ] `SECURITY.md` and a vulnerability-disclosure path — _safe now_
 - [ ] startup validation of required production env vars (`BELLFIELD_MEDIA_ROOT`, `BELLFIELD_MEDIA_TOKEN_SECRET`, `DATABASE_URL`) so prod cannot boot on weak dev fallbacks — _safe now, prevents a real misconfig class_
 - [ ] Dependabot or equivalent dependency-update flow — _safe now_
 - [ ] a real security review before the first pilot (the repo's security-review path)
 
-**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass): `pnpm audit --prod` is clean except for **one deferred moderate** — `uuid@7.0.3`, pulled transitively through `expo > @expo/config-plugins > xcode` (Expo build tooling, not shipped runtime code). Its only fix is a major bump to `uuid@>=11.1.1`, which `xcode` does not yet support; forcing it through a `pnpm.overrides` major jump is unsafe, so it is **deferred** until Expo/xcode resolves it upstream. Every other Next, NestJS, and Expo advisory was cleared by direct version bumps plus surgical patch-level `pnpm.overrides` (`postcss`, `qs`, `@xmldom/xmldom`, `brace-expansion`, `ws`). Revisit on the next Expo SDK bump.
+**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass):
+
+- **Production scope** (`pnpm audit --prod` / `security:audit`): down from 38 advisory-paths to **one deferred moderate** — `uuid@7.0.3`, pulled transitively through `expo > @expo/config-plugins > xcode` (Expo build tooling, not shipped runtime code). Its only fix is a major bump to `uuid@>=11.1.1`, which `xcode` does not yet support; forcing it through a `pnpm.overrides` major jump is unsafe, so it is **deferred** until Expo/xcode resolves it upstream. Because of this one residual, `security:audit` still **exits non-zero** — it is wired into CI as advisory-only (`continue-on-error: true`), so it does not block, but it is _not_ a passing/"green" step until this clears. Revisit on the next Expo SDK bump. Every other Next, NestJS, and Expo production advisory was cleared by direct version bumps plus surgical patch-level `pnpm.overrides` (`postcss`, `qs`, `@xmldom/xmldom`, `brace-expansion`, `ws`).
+- **Out of production scope:** the full `pnpm audit` (dev dependencies included) additionally reports lint/build-tooling advisories — currently `fast-uri` (via `secretlint > … > ajv`) and `@eslint/plugin-kit` (via `eslint`). These are dev-only and never shipped; they are intentionally excluded from the `--prod` CI signal and tracked for a separate dev-tooling cleanup (driven by the Dependabot/dependency-update flow above) rather than risky overrides on linter internals.
 
 ---
 
