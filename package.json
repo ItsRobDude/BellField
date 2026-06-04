@@ -6,6 +6,11 @@
     "node": "24.x",
     "pnpm": "10.13.1"
   },
+  "pnpm": {
+    "overrides": {
+      "postcss@8.4.31": "8.5.15"
+    }
+  },
   "devDependencies": {
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.2",
     "@typescript-eslint/eslint-plugin": "8.31.0",
