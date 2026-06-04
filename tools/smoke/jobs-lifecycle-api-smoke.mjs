@@ -109,7 +109,10 @@ try {
     status: unscheduledJob.status
   });
 
-  const addedAppointment = await request(
+  // POST .../appointments returns the updated JobSummary (not the appointment), so the new
+  // appointment is read out of the returned job's appointments array — and that promotion to
+  // 'scheduled' with exactly one appointment is itself the proof the add landed.
+  const jobAfterAddingAppointment = await request(
     'POST',
     `/operations/jobs/${unscheduledJob.id}/appointments`,
     {
@@ -119,11 +122,20 @@ try {
       technicianId
     }
   );
-  evidence.created.addedAppointmentId = addedAppointment.id;
-  check('appointment added to a previously unscheduled job', Boolean(addedAppointment.id), {
-    id: addedAppointment.id,
-    status: addedAppointment.status
-  });
+  const addedAppointment = jobAfterAddingAppointment.appointments?.[0];
+  evidence.created.addedAppointmentId = addedAppointment?.id;
+  check(
+    'appointment added to a previously unscheduled job (returned on the job summary)',
+    jobAfterAddingAppointment.status === 'scheduled' &&
+      jobAfterAddingAppointment.appointments?.length === 1 &&
+      Boolean(addedAppointment?.id),
+    {
+      jobId: jobAfterAddingAppointment.id,
+      jobStatus: jobAfterAddingAppointment.status,
+      appointmentId: addedAppointment?.id,
+      appointmentStatus: addedAppointment?.status
+    }
+  );
 
   const afterAddDetail = await request(
     'GET',
