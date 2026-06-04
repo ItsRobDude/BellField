@@ -52,16 +52,15 @@ Current non-test source snapshot when this plan was created:
 
 Current oversized baseline:
 
-| Lines | File                                                                       | Refactor direction                                                                          |
-| ----: | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-|  1502 | `apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx` | Split assigned-work home, focused job detail, tab bodies, and sync chrome.                  |
-|  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                     | Split customer/location/contact sections and search/detail state.                           |
-|  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`           | Split reference lookups by CRM/equipment/job context.                                       |
-|  1197 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts`      | Split job commands, appointment commands, status transitions, and closeout/follow-up rules. |
-|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`        | Split workspace state/actions by surface and keep shell as orchestration.                   |
-|   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`              | First appointments split completed; continue splitting remaining tab sections when touched. |
-|  1073 | `apps/office-web/src/lib/operations-api.ts`                                | Split API helpers by domain and keep compatibility exports.                                 |
-|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                     | Split posting/line/balance/correction persistence helpers.                                  |
+| Lines | File                                                                  | Refactor direction                                                                          |
+| ----: | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+|  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                | Split customer/location/contact sections and search/detail state.                           |
+|  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`      | Split reference lookups by CRM/equipment/job context.                                       |
+|  1197 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts` | Split job commands, appointment commands, status transitions, and closeout/follow-up rules. |
+|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`   | Split workspace state/actions by surface and keep shell as orchestration.                   |
+|   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`         | First appointments split completed; continue splitting remaining tab sections when touched. |
+|  1073 | `apps/office-web/src/lib/operations-api.ts`                           | Split API helpers by domain and keep compatibility exports.                                 |
+|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                | Split posting/line/balance/correction persistence helpers.                                  |
 
 The baseline is intentionally strict: these files are allowed to remain temporarily oversized, but not to keep growing.
 
@@ -178,17 +177,28 @@ Purpose:
 
 - lower risk before more real-device field smoke and sync hardening
 
-Implementation shape:
+Status: shipped in two steps. `technician-workspace-screen.tsx` went from 1502 lines to 501
+and dropped off the oversized baseline. The render already delegated to extracted tab/home
+components from earlier slices; this slice moved the remaining bulk — the offline logic — out:
 
-- split the assigned-work home, focused job detail, tab sections, and sync/status chrome
-- preserve the offline/sync mental model
-- avoid moving queue/replay business rules into UI components
+- step 5a (`field-sync-drain.ts`): the offline-queue replay engine (`runSyncDrain` →
+  `drainFieldSyncQueue(ctx, options)`). The screen keeps a thin wrapper, so `syncNow` and the
+  background loop are unchanged.
+- step 5b (`field-operation-handlers.ts`): the queue handlers (build PendingOperation →
+  persist → update state, plus retry/discard and equipment create/link) →
+  `createFieldOperationHandlers(deps)`. The screen destructures them into the same names the
+  render already used.
+
+Both moves are verbatim: each extracted file destructures its dependency object into the exact
+local names the moved bodies already used, so no in-body logic changed. The offline/sync mental
+model and the queue/replay business rules stay out of the component, per the plan.
 
 Validation:
 
-- field-mobile tests
-- field-mobile typecheck/lint
-- manual field smoke when runtime behavior changes
+- field-mobile tests (106 passing), typecheck, lint
+- `pnpm check:file-size` (screen off the baseline)
+- manual field smoke still owed for the field lane (the screen has no automated render test);
+  runtime behavior is unchanged by construction
 
 ---
 
