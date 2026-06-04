@@ -1,8 +1,10 @@
 import { ConflictException } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { DatabaseService } from '../../database/database.service';
+import { JobsCommandDataRepository } from './jobs-command-data.repository';
 import { JobsDataRepository } from './jobs-data.repository';
 import { JobsMediaDataRepository } from './jobs-media-data.repository';
+import { JobsReadDataRepository } from './jobs-read-data.repository';
 import { JobsRegisterDataRepository } from './jobs-register-data.repository';
 
 function createJobRow(overrides: Record<string, unknown> = {}) {
@@ -119,9 +121,11 @@ function createDatabaseService(
 
 function createJobsDataRepository(databaseService: unknown): JobsDataRepository {
   const typedDatabaseService = databaseService as DatabaseService;
+  const readRepository = new JobsReadDataRepository(typedDatabaseService);
 
   return new JobsDataRepository(
-    typedDatabaseService,
+    readRepository,
+    new JobsCommandDataRepository(typedDatabaseService, readRepository),
     new JobsRegisterDataRepository(typedDatabaseService),
     new JobsMediaDataRepository(typedDatabaseService)
   );
@@ -135,6 +139,8 @@ describe('JobsDataRepository', () => {
         { provide: DatabaseService, useValue: databaseService },
         JobsRegisterDataRepository,
         JobsMediaDataRepository,
+        JobsReadDataRepository,
+        JobsCommandDataRepository,
         JobsDataRepository
       ]
     }).compile();

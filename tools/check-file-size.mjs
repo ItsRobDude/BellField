@@ -11,7 +11,6 @@ const blockingLineLimit = 1200;
 
 const legacyOversizedFiles = new Map(
   [
-    ['apps/api/src/modules/company-data/jobs-data.repository.ts', 1738],
     ['packages/contracts/src/index.ts', 1591],
     ['apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx', 1502],
     ['apps/office-web/src/modules/operations/crm-panel.tsx', 1355],

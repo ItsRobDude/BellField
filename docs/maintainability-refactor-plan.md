@@ -52,18 +52,17 @@ Current non-test source snapshot when this plan was created:
 
 Current oversized baseline:
 
-| Lines | File                                                                       | Refactor direction                                                                              |
-| ----: | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-|  1738 | `apps/api/src/modules/company-data/jobs-data.repository.ts`                | Split job read models, command writes, timeline/register/media helpers, and shared row mapping. |
-|  1591 | `packages/contracts/src/index.ts`                                          | Split contracts by domain, keep `index.ts` as a re-export barrel.                               |
-|  1502 | `apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx` | Split assigned-work home, focused job detail, tab bodies, and sync chrome.                      |
-|  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                     | Split customer/location/contact sections and search/detail state.                               |
-|  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`           | Split reference lookups by CRM/equipment/job context.                                           |
-|  1197 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts`      | Split job commands, appointment commands, status transitions, and closeout/follow-up rules.     |
-|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`        | Split workspace state/actions by surface and keep shell as orchestration.                       |
-|   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`              | First appointments split completed; continue splitting remaining tab sections when touched.     |
-|  1073 | `apps/office-web/src/lib/operations-api.ts`                                | Split API helpers by domain and keep compatibility exports.                                     |
-|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                     | Split posting/line/balance/correction persistence helpers.                                      |
+| Lines | File                                                                       | Refactor direction                                                                          |
+| ----: | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+|  1591 | `packages/contracts/src/index.ts`                                          | Split contracts by domain, keep `index.ts` as a re-export barrel.                           |
+|  1502 | `apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx` | Split assigned-work home, focused job detail, tab bodies, and sync chrome.                  |
+|  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                     | Split customer/location/contact sections and search/detail state.                           |
+|  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`           | Split reference lookups by CRM/equipment/job context.                                       |
+|  1197 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts`      | Split job commands, appointment commands, status transitions, and closeout/follow-up rules. |
+|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`        | Split workspace state/actions by surface and keep shell as orchestration.                   |
+|   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`              | First appointments split completed; continue splitting remaining tab sections when touched. |
+|  1073 | `apps/office-web/src/lib/operations-api.ts`                                | Split API helpers by domain and keep compatibility exports.                                 |
+|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                     | Split posting/line/balance/correction persistence helpers.                                  |
 
 The baseline is intentionally strict: these files are allowed to remain temporarily oversized, but not to keep growing.
 
@@ -122,11 +121,19 @@ Purpose:
 
 - make job persistence easier to review before more history/reporting work lands
 
+Status: shipped. `jobs-data.repository.ts` went from 1738 lines to a 319-line delegating
+facade and dropped off the oversized baseline entirely.
+
 Implementation shape:
 
-- split `jobs-data.repository.ts` by behavior group without changing public service contracts
-- prefer row-mapper helpers and focused query files over new abstractions
-- keep transaction ownership obvious
+- split `jobs-data.repository.ts` by behavior group without changing public service contracts:
+  - `jobs-data-row-mappers.ts` — pure row types + record/message mapping helpers (no DB access)
+  - `jobs-read-data.repository.ts` (`JobsReadDataRepository`) — every non-mutating read model + `hydrateJobs`
+  - `jobs-command-data.repository.ts` (`JobsCommandDataRepository`) — every transactional write + status-derivation helpers, delegating post-write reads to the read repository
+  - `jobs-data.repository.ts` (`JobsDataRepository`) — a thin facade preserving the single injection point `JobsDataService` depends on
+- transaction ownership stays obvious: all transactions now live in the command repository
+- reused the shared `insertJobTimelineEntry` helper, dropping the private duplicate
+- no public service contract changed; the repository spec drives the unchanged facade surface
 
 Validation:
 
