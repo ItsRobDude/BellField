@@ -1,0 +1,89 @@
+import type { JobStatus } from './jobs.js';
+
+// --- Job cost events (Milestone 9) ----------------------------------------------
+
+/** Non-inventory job costs. Material/equipment costs flow through inventory movements. */
+export type JobCostEventKind = 'labor' | 'expense';
+
+/** An immutable non-inventory cost charged to a job (labor or expense). */
+export interface JobCostEvent {
+  id: string;
+  jobId: string;
+  kind: JobCostEventKind;
+  description: string;
+  /** Total cost in dollars. Positive for a cost; a reversal carries the negation. */
+  amount: number;
+  /** Labor provenance: hours billed at ratePerHour equals amount. Absent for an expense. */
+  hours?: number;
+  ratePerHour?: number;
+  /** Set on a reversal event: the id of the original event it negates. */
+  reversalOfEventId?: string;
+  actorName: string;
+  occurredAt: string;
+}
+
+/** Post a labor cost to a job. The API computes amount = hours * ratePerHour. */
+export interface CreateJobLaborRequest {
+  description: string;
+  hours: number;
+  ratePerHour: number;
+}
+
+/** Post an expense cost to a job. */
+export interface CreateJobExpenseRequest {
+  description: string;
+  amount: number;
+}
+
+/** Reverse (correct) a job cost event by posting its negation. Each event reverses once. */
+export interface ReverseJobCostEventRequest {
+  reason?: string;
+}
+
+export interface JobCostEventResponse {
+  event: JobCostEvent;
+}
+
+/** A job's cost broken into its three sources (dollars). Material is from inventory movements. */
+export interface JobCostRollup {
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  totalCost: number;
+}
+
+/** The cost frozen when a job was completed. `supersededAt` is set once a reopen retires it. */
+export interface JobCostSnapshot {
+  id: string;
+  materialCost: number;
+  laborCost: number;
+  expenseCost: number;
+  totalCost: number;
+  createdByName: string;
+  occurredAt: string;
+  supersededAt?: string;
+}
+
+/**
+ * Job costing read model: the always-current `live` rollup, plus the `finalized` snapshot
+ * frozen at completion (absent until the job is completed, or after a reopen until it is
+ * completed again). `isFinalized` is true when a current finalized snapshot exists.
+ *
+ * `events` are the labor/expense ledger entries behind the rollup (newest first, including
+ * reversals). Material/equipment detail lives in inventory movements
+ * (`GET /operations/inventory/movements?jobId=`), not here.
+ */
+export interface JobCostingSummary {
+  jobId: string;
+  jobNumber: string;
+  summary: string;
+  status: JobStatus;
+  live: JobCostRollup;
+  finalized?: JobCostSnapshot;
+  isFinalized: boolean;
+  events: JobCostEvent[];
+}
+
+export interface JobCostingResponse {
+  costing: JobCostingSummary;
+}

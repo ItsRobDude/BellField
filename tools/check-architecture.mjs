@@ -40,14 +40,22 @@ if (failures.length > 0) {
 console.log('Architecture check passed.');
 
 function readContractExportNames() {
-  const contractIndex = path.join(repoRoot, 'packages', 'contracts', 'src', 'index.ts');
-  const content = readFileSync(contractIndex, 'utf8');
+  // The contract types are split across per-domain files re-exported by index.ts (the index
+  // is now just a barrel), so collect declared names from every file under contracts/src —
+  // not index.ts alone, which would miss them all.
+  const contractsSrc = path.join(repoRoot, 'packages', 'contracts', 'src');
+  const files = [];
+  walk(contractsSrc, files);
+
   const names = new Set();
   const exportPattern = /^export\s+(?:interface|type)\s+([A-Za-z0-9_]+)/gm;
-  let match;
 
-  while ((match = exportPattern.exec(content)) !== null) {
-    names.add(match[1]);
+  for (const filePath of files) {
+    const content = readFileSync(filePath, 'utf8');
+    let match;
+    while ((match = exportPattern.exec(content)) !== null) {
+      names.add(match[1]);
+    }
   }
 
   return names;

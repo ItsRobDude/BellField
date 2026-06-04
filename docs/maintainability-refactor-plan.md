@@ -54,7 +54,6 @@ Current oversized baseline:
 
 | Lines | File                                                                       | Refactor direction                                                                          |
 | ----: | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-|  1591 | `packages/contracts/src/index.ts`                                          | Split contracts by domain, keep `index.ts` as a re-export barrel.                           |
 |  1502 | `apps/field-mobile/src/modules/operations/technician-workspace-screen.tsx` | Split assigned-work home, focused job detail, tab bodies, and sync chrome.                  |
 |  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                     | Split customer/location/contact sections and search/detail state.                           |
 |  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`           | Split reference lookups by CRM/equipment/job context.                                       |
@@ -147,18 +146,31 @@ Purpose:
 
 - remove the shared-contract choke point without changing import semantics for clients
 
+Status: shipped. `packages/contracts/src/index.ts` went from 1591 lines to a 16-line barrel
+and dropped off the oversized baseline entirely.
+
 Implementation shape:
 
-- move domain groups into contract files such as CRM, jobs, invoices, inventory, purchasing, and job costing
-- keep `packages/contracts/src/index.ts` as the public re-export surface
-- avoid client-side type redeclarations
+- moved every declaration verbatim (no renames, no reshaping) into 13 private per-domain
+  files: `platform-health`, `identity-access`, `crm`, `equipment`, `jobs`, `dispatch`,
+  `media`, `estimates`, `invoices-payments`, `inventory`, `purchasing`, `job-costing`,
+  `bookkeeping`
+- `index.ts` is now a pure re-export barrel using NodeNext-safe `export * from './x.js'`
+  specifiers; the package's public surface is unchanged (clients still import only from
+  `@bellfield/contracts` — no subpath exports were added)
+- cross-domain references resolve through type-only `import type { ... } from './y.js'` lines
+  between the private files
+- updated `tools/check-architecture.mjs` so the client-API-type-redeclaration guard collects
+  exported interface/type names from all `packages/contracts/src/**/*.ts`, not just `index.ts`
+  (which would otherwise miss every name after the split)
 
 Validation:
 
-- root typecheck
-- client API tests
+- `pnpm --filter @bellfield/contracts typecheck`
 - `pnpm check:architecture`
 - `pnpm check:file-size`
+- `pnpm typecheck` (all 8 projects)
+- `pnpm test`
 
 ### Slice 5 - Field Workspace Screen Split
 
