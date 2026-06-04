@@ -37,6 +37,7 @@ function repositoryWith(
 
 const actor = { id: 'emp-1', displayName: 'Pat Purchaser' };
 const PO_LOCK = /from purchase_orders where id = \$1\s+for update/i;
+const JOB_LOCK = /from jobs where id = \$1\s+for update/i;
 const LINES = /from purchase_order_lines where purchase_order_id/i;
 const MOVEMENT_INSERT = /insert into inventory_movements/i;
 const RECEIPT_INSERT = /insert into purchase_receipts/i;
@@ -111,6 +112,8 @@ describe('PurchasingRepository.receivePurchaseOrder', () => {
             }
           ]
         },
+        // Cost-write lock on the job row: the PO is bound to a still-open job.
+        { match: JOB_LOCK, rows: [{ status: 'inProgress' }] },
         {
           match: LINES,
           rows: [
@@ -151,6 +154,59 @@ describe('PurchasingRepository.receivePurchaseOrder', () => {
     expect(movement.params[7]).toBe('job-1'); // jobId
     expect(movement.params[1]).toBe('equip-item');
     expect(findCalls(calls, PO_RECEIVED)).toHaveLength(1);
+  });
+
+  it('does not post job cost for equipment received to inventory, even with a stray job id + item', async () => {
+    // Defense-in-depth for the equipment branch: job cost only posts when the PO is
+    // customer-destination (create + the DB constraint forbid a job on an inventory PO, but the
+    // receive path must not double-count an asset as both stock and job cost regardless).
+    const equipmentDataService = {
+      createEquipmentWithinTransaction: jest.fn().mockResolvedValue('equip-3')
+    };
+    const { repository, calls } = repositoryWith(
+      [
+        {
+          match: PO_LOCK,
+          rows: [
+            { poNumber: 'PO-4', status: 'ordered', destInv: 'wh-1', destCust: null, jobId: 'job-x' }
+          ]
+        },
+        { match: JOB_LOCK, rows: [{ status: 'inProgress' }] },
+        { match: /from inventory_locations where id = \$1/i, rows: [{ name: 'Main Warehouse' }] },
+        {
+          match: LINES,
+          rows: [
+            {
+              id: 'line-1',
+              itemId: 'equip-item',
+              kind: 'equipment',
+              quantity: '1',
+              expectedUnitCost: '1800',
+              eqType: 'Condenser',
+              eqBrand: 'Trane',
+              eqModel: 'XR14',
+              eqSerial: 'SN-9'
+            }
+          ]
+        },
+        { match: RECEIPT_INSERT, rowCount: 1 },
+        { match: RECEIPT_LINE_INSERT, rowCount: 1 },
+        { match: /update purchase_receipt_lines set created_equipment_id/i, rowCount: 1 },
+        { match: PO_RECEIVED, rowCount: 1 }
+      ],
+      equipmentDataService
+    );
+
+    await repository.receivePurchaseOrder('po-4', new Map(), undefined, actor);
+
+    // Asset is created active at the inventory location; no receiveToJob movement is posted.
+    expect(equipmentDataService.createEquipmentWithinTransaction).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'active' }),
+      'Pat Purchaser',
+      expect.anything(),
+      expect.stringContaining('PO-4')
+    );
+    expect(findCalls(calls, MOVEMENT_INSERT)).toHaveLength(0);
   });
 
   it('persists a serial captured on the receipt line, overriding the PO-line serial', async () => {

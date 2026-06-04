@@ -7,42 +7,51 @@ function createRepository() {
   let listRows: unknown[] = [];
   let reversedRowCount = 0;
 
-  const databaseService = {
-    query: jest.fn(async (sql: string, params: unknown[] = []) => {
-      calls.push({ sql, params });
+  const query = jest.fn(async (sql: string, params: unknown[] = []) => {
+    calls.push({ sql, params });
 
-      if (/insert into job_cost_events/i.test(sql)) {
-        return { rows: [], rowCount: 1 };
-      }
-      if (/where reversal_of_event_id = \$1/i.test(sql)) {
-        return { rows: [], rowCount: reversedRowCount };
-      }
-      if (/from job_cost_events\s+where job_id = \$1/i.test(sql)) {
-        return { rows: listRows };
-      }
-      if (/from job_cost_events where id = \$1/i.test(sql)) {
-        // Echo the most recent insert as the persisted row.
-        const insert = [...calls].reverse().find((c) => /insert into job_cost_events/i.test(c.sql));
-        const p = (insert?.params ?? []) as unknown[];
-        return {
-          rows: [
-            {
-              id: p[0],
-              jobId: p[1],
-              kind: p[2],
-              description: p[3],
-              amount: p[4],
-              hours: p[5],
-              ratePerHour: p[6],
-              reversalOfEventId: p[7],
-              actorName: p[9],
-              occurredAt: p[10]
-            }
-          ]
-        };
-      }
-      return { rows: [] };
-    })
+    if (/from jobs where id = \$1\s+for update/i.test(sql)) {
+      // The cost-write lock: default to a writable (open) job so inserts proceed.
+      return { rows: [{ status: 'inProgress' }] };
+    }
+    if (/insert into job_cost_events/i.test(sql)) {
+      return { rows: [], rowCount: 1 };
+    }
+    if (/where reversal_of_event_id = \$1/i.test(sql)) {
+      return { rows: [], rowCount: reversedRowCount };
+    }
+    if (/from job_cost_events\s+where job_id = \$1/i.test(sql)) {
+      return { rows: listRows };
+    }
+    if (/from job_cost_events where id = \$1/i.test(sql)) {
+      // Echo the most recent insert as the persisted row.
+      const insert = [...calls].reverse().find((c) => /insert into job_cost_events/i.test(c.sql));
+      const p = (insert?.params ?? []) as unknown[];
+      return {
+        rows: [
+          {
+            id: p[0],
+            jobId: p[1],
+            kind: p[2],
+            description: p[3],
+            amount: p[4],
+            hours: p[5],
+            ratePerHour: p[6],
+            reversalOfEventId: p[7],
+            actorName: p[9],
+            occurredAt: p[10]
+          }
+        ]
+      };
+    }
+    return { rows: [] };
+  });
+
+  // The insert now runs inside a transaction (lock the job row, then write); route the
+  // transaction's queryable back through the same scripted query handler.
+  const databaseService = {
+    query,
+    transaction: jest.fn(async (work: (q: unknown) => unknown) => work({ query }))
   };
 
   const repository = new JobCostingRepository(databaseService as never);

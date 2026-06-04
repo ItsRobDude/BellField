@@ -95,11 +95,13 @@ export function CreatePurchaseOrderForm({
     setLines((current) => current.map((line, i) => (i === index ? { ...line, ...patch } : line)));
   }
 
-  // Customer-destination jobs must belong to the chosen customer location (backend rule).
+  // A job only rides a customer-destination PO (backend rule), and must belong to the chosen
+  // customer location. An inventory-destination PO carries no job, so the list is empty and the
+  // field is hidden — the effect below clears any job picked before switching to inventory.
   const availableJobs =
     destinationKind === 'customer'
       ? sources.jobs.filter((job) => job.locationId === customerLocationId)
-      : sources.jobs;
+      : [];
 
   useEffect(() => {
     if (jobId && !availableJobs.some((job) => job.id === jobId)) {
@@ -232,21 +234,23 @@ export function CreatePurchaseOrderForm({
             </select>
           </label>
         )}
-        <label style={styles.fieldLabel}>
-          Job (optional)
-          <select
-            style={styles.input}
-            value={jobId}
-            onChange={(event) => setJobId(event.target.value)}
-          >
-            <option value="">No job</option>
-            {availableJobs.map((job) => (
-              <option key={job.id} value={job.id}>
-                #{job.jobNumber} · {job.summary}
-              </option>
-            ))}
-          </select>
-        </label>
+        {destinationKind === 'customer' ? (
+          <label style={styles.fieldLabel}>
+            Job (optional)
+            <select
+              style={styles.input}
+              value={jobId}
+              onChange={(event) => setJobId(event.target.value)}
+            >
+              <option value="">No job</option>
+              {availableJobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  #{job.jobNumber} · {job.summary}
+                </option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <label style={styles.fieldLabel}>
           Notes (optional)
           <input

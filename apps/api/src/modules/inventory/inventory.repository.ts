@@ -8,6 +8,7 @@ import type {
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import { lockJobForCostWrite } from '../company-data/job-cost-write-guard';
 import {
   applyAdjustment,
   applyIssueToJob,
@@ -333,9 +334,13 @@ export class InventoryRepository {
     actor: LedgerActor;
   }): Promise<void> {
     const occurredAt = new Date().toISOString();
-    await this.databaseService.transaction((queryable) =>
-      applyIssueToJob(queryable, { ...input, occurredAt })
-    );
+    await this.databaseService.transaction(async (queryable) => {
+      // Lock the job and reject final jobs in the same transaction as the movement, so the
+      // status check and the cost-bearing write commit atomically against a concurrent
+      // completion (which freezes the cost snapshot under the same lock).
+      await lockJobForCostWrite(queryable, input.jobId);
+      await applyIssueToJob(queryable, { ...input, occurredAt });
+    });
   }
 
   /** The job's status, or null if it does not exist (validation for issue-to-job, read-only). */

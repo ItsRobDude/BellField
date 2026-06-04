@@ -68,13 +68,21 @@ export class PurchasingService {
       throw new NotFoundException('Destination customer location not found.');
     }
     if (request.jobId) {
+      // A job only has meaning on a customer-destination PO: receiving bridges its cost and
+      // equipment to that job. An inventory-destination PO buys stock for the warehouse and
+      // never posts job cost, so a job there would be silently ignored — reject it instead.
+      if (hasInventory) {
+        throw new BadRequestException(
+          'A job can only be set on a customer-destination purchase order.'
+        );
+      }
       const jobLocationId = await this.purchasingRepository.getJobLocationId(request.jobId);
       if (jobLocationId === null) {
         throw new NotFoundException('Job not found.');
       }
-      // A customer-destination PO that names a job must agree: the job has to be for that
-      // same service location, or receiving would bridge cost/equipment to the wrong place.
-      if (hasCustomer && jobLocationId !== request.destinationCustomerLocationId) {
+      // The job has to be for that same service location, or receiving would bridge
+      // cost/equipment to the wrong place.
+      if (jobLocationId !== request.destinationCustomerLocationId) {
         throw new BadRequestException(
           'The job does not belong to the destination customer location.'
         );
@@ -92,8 +100,9 @@ export class PurchasingService {
           throw new BadRequestException('An equipment line must have a quantity of 1.');
         }
         // Equipment received to a job has its cost applied to that job, which needs a
-        // catalog item for the cost movement's provenance.
-        if (hasCustomer && request.jobId && !line.itemId) {
+        // catalog item for the cost movement's provenance. (A job implies a customer
+        // destination, enforced above.)
+        if (request.jobId && !line.itemId) {
           throw new BadRequestException(
             'Equipment on a job purchase order must reference a catalog item.'
           );

@@ -16,7 +16,7 @@ Event/ledger model, NOT editable counts:
 
 - `inventory_items` — catalog identity only (part vs equipment-type, active). No on-hand/avg-cost stored.
 - `inventory_locations` — warehouse/truck/van (customer locations stay in `locations`, not stock locations).
-- `purchase_orders` — vendor (freetext v1), status, optional job_id, exactly ONE destination (`destination_inventory_location_id` XOR `destination_location_id`) → no-split is structural.
+- `purchase_orders` — vendor (freetext v1), status, optional job_id (valid only with a customer destination — a job only bridges cost/equipment when the PO ends at a customer location; enforced by service + a `job_id is null or destination_location_id is not null` check), exactly ONE destination (`destination_inventory_location_id` XOR `destination_location_id`) → no-split is structural.
 - `purchase_order_lines` — expected qty + expected unit cost (planning only); part vs equipment + optional equipment metadata.
 - `purchase_receipts` + `purchase_receipt_lines` — actual received qty + actual unit cost (cost truth enters here).
 - `inventory_movements` — immutable ledger. kinds: receiveToInventory, receiveToJob, issueToJob, transfer, adjustmentGain, adjustmentLoss, returnFromJob. item, qty (signed), unit-cost snapshot, source/dest refs, doc refs (receipt/job/register), actor snapshot, occurred_at, optional reversal_of_movement_id.

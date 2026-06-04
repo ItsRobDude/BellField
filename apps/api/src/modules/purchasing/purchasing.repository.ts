@@ -10,6 +10,7 @@ import type {
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
+import { lockJobForCostWrite } from '../company-data/job-cost-write-guard';
 import {
   applyReceiptToInventory,
   applyReceiptToJob,
@@ -268,6 +269,13 @@ export class PurchasingRepository {
         );
       }
 
+      // A PO bound to a job posts cost to that job on receipt, so lock the job row and reject
+      // final jobs in this same transaction — atomic against a concurrent completion freezing
+      // the cost snapshot (mirrors the labor/expense/issue-to-job lock).
+      if (po.jobId) {
+        await lockJobForCostWrite(queryable, po.jobId);
+      }
+
       let inventoryLocationName: string | null = null;
       if (po.destInv) {
         const locResult = await queryable.query<{ name: string }>(
@@ -370,10 +378,10 @@ export class PurchasingRepository {
 
           // Equipment received to a job counts toward that job's cost: post a receiveToJob
           // movement at the equipment's cost so the B6 rollup includes it. Requires a
-          // catalog item (movement provenance); the service validates that an equipment line
-          // bound for a job has one. Equipment received to stock or to a customer with no
-          // job is an asset only, with no job-cost impact.
-          if (po.jobId && line.itemId) {
+          // customer destination (a job only ever rides a customer-destination PO) and a
+          // catalog item (movement provenance); the service validates both. Equipment received
+          // to stock — or to a customer with no job — is an asset only, no job-cost impact.
+          if (po.destCust && po.jobId && line.itemId) {
             await applyReceiptToJob(queryable, {
               itemId: line.itemId,
               jobId: po.jobId,

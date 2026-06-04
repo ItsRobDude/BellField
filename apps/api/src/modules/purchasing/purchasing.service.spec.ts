@@ -147,6 +147,21 @@ describe('PurchasingService.createPurchaseOrder', () => {
     expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
   });
 
+  it('rejects a job on an inventory-destination PO (a job only rides a customer PO)', async () => {
+    const { service, purchasingRepository } = createService();
+    await expect(
+      service.createPurchaseOrder('token', {
+        vendorName: 'Acme',
+        destinationInventoryLocationId: 'loc-1',
+        jobId: 'job-1',
+        lines: [validLine]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // Rejected before even resolving the job's location.
+    expect(purchasingRepository.getJobLocationId).not.toHaveBeenCalled();
+    expect(purchasingRepository.createPurchaseOrder).not.toHaveBeenCalled();
+  });
+
   it('rejects equipment on a job purchase order without a catalog item', async () => {
     const { service, purchasingRepository } = createService();
     purchasingRepository.getJobLocationId.mockResolvedValue('cust-loc-1');
