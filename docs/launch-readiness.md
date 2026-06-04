@@ -131,7 +131,7 @@ How each class was resolved, preferring the least-invasive correct fix:
 
 BidRivet's most transferable strength is not a tool, it is the habit of capturing dated proof for risky lanes. BellField has solid static/unit/build checks but most device, DB, installer, backup/restore, update, and production smoke proof is future or local-only.
 
-- [ ] a validation playbook with dated evidence artifacts for risky lanes — _safe now (process)_
+- [ ] a validation playbook with dated evidence artifacts for risky lanes — _process started in [validation-playbook.md](./validation-playbook.md); keep collecting dated artifacts_
 - [ ] a production-style smoke checklist: multi-office-desktop access, field-device sign-in and sync, media survives restart, backup, restore, update
 - [ ] end-to-end coverage for critical office money-path flows
 - [ ] real-hardware field-device proof (extend [field-mobile-smoke.md](./field-mobile-smoke.md))

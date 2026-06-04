@@ -89,6 +89,9 @@ Recommended screenshot names:
 - `field-job-equipment.png`
 - `field-job-sync.png`
 - `field-media-queued.png`
+- `field-sync-api-stopped.png`
+- `field-sync-retry-success.png`
+- `field-media-upload-success.png`
 
 Checklist:
 
@@ -102,7 +105,30 @@ Checklist:
 8. Capture or pick image/video media if the current device/runtime supports it.
 9. Run Sync Now.
 10. Confirm successful queued operations clear.
-11. If feasible, simulate a retryable failure by stopping the API before Sync Now, then restart the API and retry.
+11. If feasible, simulate a retryable failure:
+    - queue at least one register or media operation
+    - stop the API before Sync Now
+    - run Sync Now and confirm the operation remains retryable rather than disappearing
+    - restart the API
+    - run Sync Now again and confirm the operation clears
+12. For media, confirm the upload intent is replayed, the raw blob finalizes, the media row becomes uploaded, and the staged local file is cleaned up after successful sync.
+13. Note any skipped device/runtime capability, such as camera unavailable in the current Expo runtime.
+
+## Evidence Note
+
+Create a short note beside the screenshots, for example:
+
+```text
+commit: <git sha>
+api: http://127.0.0.1:3001
+device: <device model / Android version>
+expo: <Expo Go or dev-client version>
+result: pass/fail/partial
+skipped:
+- camera capture skipped because ...
+findings:
+- ...
+```
 
 ## Cleanup
 

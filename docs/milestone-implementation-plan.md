@@ -739,7 +739,7 @@ For a shorter status-only version, see `docs/whats-shipped.md`.
 4. Sync reliability for real field actions:
    harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
 5. M9 inventory/PO/job-costing closeout:
-   shipped end to end — backend (inventory, purchasing, issue-to-job, labor/expense events, the job-cost read model, finalized snapshots, and the finalized-job cost lock) and the office Inventory/Purchasing/Job Cost surfaces. Remaining pressure is live multi-user smoke; field-app inventory is intentionally deferred.
+   shipped end to end — backend (inventory, purchasing, issue-to-job, labor/expense events, the job-cost read model, finalized snapshots, and the finalized-job cost lock) and the office Inventory/Purchasing/Job Cost surfaces. `pnpm smoke:m9` now covers the local API/DB workflow; remaining pressure is live multi-user smoke and manual office-browser evidence. Field-app inventory is intentionally deferred.
 6. Historical snapshot hardening beyond invoices:
    posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`). Open/live jobs and dispatch intentionally still resolve current names; extending frozen snapshots to other historical surfaces remains future hardening only where the product meaning requires it.
 7. Self-hosted deployment readiness planning:

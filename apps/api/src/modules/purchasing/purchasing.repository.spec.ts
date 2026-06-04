@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { PurchasingRepository } from './purchasing.repository';
 import type { QueryExecutor } from '../../database/database.service';
 
@@ -141,6 +142,10 @@ describe('PurchasingRepository.receivePurchaseOrder', () => {
 
     await repository.receivePurchaseOrder('po-2', new Map(), undefined, actor);
 
+    const jobLockIndex = calls.findIndex((c) => JOB_LOCK.test(c.sql));
+    const receiptIndex = calls.findIndex((c) => RECEIPT_INSERT.test(c.sql));
+    expect(jobLockIndex).toBeGreaterThanOrEqual(0);
+    expect(receiptIndex).toBeGreaterThan(jobLockIndex);
     // The asset is created through the canonical equipment service, pendingInstall at the customer location.
     expect(equipmentDataService.createEquipmentWithinTransaction).toHaveBeenCalledWith(
       expect.objectContaining({ locationId: 'cust-1', status: 'pendingInstall' }),
@@ -207,6 +212,41 @@ describe('PurchasingRepository.receivePurchaseOrder', () => {
       expect.stringContaining('PO-4')
     );
     expect(findCalls(calls, MOVEMENT_INSERT)).toHaveLength(0);
+  });
+
+  it('rejects a job-bound receipt when the job is final before receipt rows or movements are written', async () => {
+    const equipmentDataService = {
+      createEquipmentWithinTransaction: jest.fn().mockResolvedValue('equip-1')
+    };
+    const { repository, calls } = repositoryWith(
+      [
+        {
+          match: PO_LOCK,
+          rows: [
+            {
+              poNumber: 'PO-5',
+              status: 'ordered',
+              destInv: null,
+              destCust: 'cust-1',
+              jobId: 'job-1'
+            }
+          ]
+        },
+        { match: JOB_LOCK, rows: [{ status: 'completed' }] }
+      ],
+      equipmentDataService
+    );
+
+    await expect(
+      repository.receivePurchaseOrder('po-5', new Map(), undefined, actor)
+    ).rejects.toThrow(ConflictException);
+
+    expect(findCalls(calls, JOB_LOCK)).toHaveLength(1);
+    expect(findCalls(calls, RECEIPT_INSERT)).toHaveLength(0);
+    expect(findCalls(calls, RECEIPT_LINE_INSERT)).toHaveLength(0);
+    expect(findCalls(calls, MOVEMENT_INSERT)).toHaveLength(0);
+    expect(findCalls(calls, PO_RECEIVED)).toHaveLength(0);
+    expect(equipmentDataService.createEquipmentWithinTransaction).not.toHaveBeenCalled();
   });
 
   it('persists a serial captured on the receipt line, overriding the PO-line serial', async () => {

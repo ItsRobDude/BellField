@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { JobCostingRepository } from './job-costing.repository';
 
 // Scripted databaseService (no real DB): records queries and echoes an inserted row back to
@@ -6,13 +7,13 @@ function createRepository() {
   const calls: Array<{ sql: string; params: unknown[] }> = [];
   let listRows: unknown[] = [];
   let reversedRowCount = 0;
+  let jobLockRows: unknown[] = [{ status: 'inProgress' }];
 
   const query = jest.fn(async (sql: string, params: unknown[] = []) => {
     calls.push({ sql, params });
 
     if (/from jobs where id = \$1\s+for update/i.test(sql)) {
-      // The cost-write lock: default to a writable (open) job so inserts proceed.
-      return { rows: [{ status: 'inProgress' }] };
+      return { rows: jobLockRows };
     }
     if (/insert into job_cost_events/i.test(sql)) {
       return { rows: [], rowCount: 1 };
@@ -63,12 +64,74 @@ function createRepository() {
     },
     setReversed: (reversed: boolean) => {
       reversedRowCount = reversed ? 1 : 0;
+    },
+    setLockedJobStatus: (status: string | null) => {
+      jobLockRows = status ? [{ status }] : [];
     }
   };
 }
 
 const actor = { id: 'emp-1', displayName: 'Olivia Owner' };
 const INSERT = /insert into job_cost_events/i;
+const JOB_LOCK = /from jobs where id = \$1\s+for update/i;
+
+describe('JobCostingRepository.insertLabor', () => {
+  it('locks the job row before appending the labor event', async () => {
+    const { repository, calls } = createRepository();
+
+    await repository.insertLabor({
+      jobId: 'job-1',
+      description: 'Install labor',
+      hours: 2,
+      ratePerHour: 95,
+      amount: 190,
+      actor
+    });
+
+    const lockIndex = calls.findIndex((c) => JOB_LOCK.test(c.sql));
+    const insertIndex = calls.findIndex((c) => INSERT.test(c.sql));
+    expect(lockIndex).toBeGreaterThanOrEqual(0);
+    expect(insertIndex).toBeGreaterThan(lockIndex);
+    expect(calls[lockIndex].params).toEqual(['job-1']);
+  });
+
+  it('rejects a final job under the transaction lock before writing labor', async () => {
+    const { repository, calls, setLockedJobStatus } = createRepository();
+    setLockedJobStatus('completed');
+
+    await expect(
+      repository.insertLabor({
+        jobId: 'job-1',
+        description: 'Install labor',
+        hours: 2,
+        ratePerHour: 95,
+        amount: 190,
+        actor
+      })
+    ).rejects.toThrow(ConflictException);
+
+    expect(calls.some((c) => INSERT.test(c.sql))).toBe(false);
+  });
+});
+
+describe('JobCostingRepository.insertExpense', () => {
+  it('locks the job row before appending the expense event', async () => {
+    const { repository, calls } = createRepository();
+
+    await repository.insertExpense({
+      jobId: 'job-1',
+      description: 'Permit',
+      amount: 50,
+      actor
+    });
+
+    const lockIndex = calls.findIndex((c) => JOB_LOCK.test(c.sql));
+    const insertIndex = calls.findIndex((c) => INSERT.test(c.sql));
+    expect(lockIndex).toBeGreaterThanOrEqual(0);
+    expect(insertIndex).toBeGreaterThan(lockIndex);
+    expect(calls[lockIndex].params).toEqual(['job-1']);
+  });
+});
 
 describe('JobCostingRepository.insertReversal', () => {
   it('writes a labor reversal: negated amount, carried hours/rate, reversal link', async () => {

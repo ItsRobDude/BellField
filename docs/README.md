@@ -136,6 +136,16 @@ Read when: planning Milestone 10/11 work, scoping company-readiness tasks, or de
 
 Does not own: the install recipe itself (`self-hosted-installation-strategy.md`), licensing posture (`asset-protection-and-licensing.md`), or hosting philosophy (`deployment-model.md`). It is a consolidating checklist, not the source of truth for any single area.
 
+### [validation-playbook.md](./validation-playbook.md)
+
+Audience: contributors validating risky local DB, office UI, field-device, or release-readiness lanes.
+
+Purpose: repeatable validation layers, evidence locations, local M9 smoke usage, and the boundary between automated checks and manual browser/device proof.
+
+Read when: closing out a milestone, proving a workflow with local DB/API state, or collecting dated evidence for browser/device behavior.
+
+Does not own: product behavior, migration rules, or install strategy.
+
 ### [milestone-implementation-plan.md](./milestone-implementation-plan.md)
 
 Audience: contributors deciding what should be built next or whether a change is early.
@@ -292,3 +302,8 @@ For planning what belongs in scope:
 
 - `milestone-implementation-plan.md`
 - `whats-shipped.md` for current repo status
+
+For validation and smoke proof:
+
+- `validation-playbook.md`
+- `field-mobile-smoke.md` for real-device field app checks
