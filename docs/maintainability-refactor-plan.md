@@ -55,7 +55,6 @@ Current oversized baseline:
 | Lines | File                                                                  | Refactor direction                                                                          |
 | ----: | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 |  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                | Split customer/location/contact sections and search/detail state.                           |
-|  1271 | `apps/api/src/modules/company-data/reference-data.repository.ts`      | Split reference lookups by CRM/equipment/job context.                                       |
 |  1197 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts` | Split job commands, appointment commands, status transitions, and closeout/follow-up rules. |
 |  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`   | Split workspace state/actions by surface and keep shell as orchestration.                   |
 |   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`         | First appointments split completed; continue splitting remaining tab sections when touched. |

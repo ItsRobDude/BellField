@@ -1,4 +1,12 @@
 import { ReferenceDataRepository } from './reference-data.repository';
+import { ReferenceReadDataRepository } from './reference-read-data.repository';
+
+function createReferenceDataRepository(databaseService: unknown): ReferenceDataRepository {
+  return new ReferenceDataRepository(
+    new ReferenceReadDataRepository(databaseService as never),
+    databaseService as never
+  );
+}
 
 describe('ReferenceDataRepository', () => {
   it('searches CRM records with one bounded SQL query and maps result fields', async () => {
@@ -24,7 +32,7 @@ describe('ReferenceDataRepository', () => {
         ]
       }))
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     const results = await repository.searchCrm(' Acme ', 25);
     const sql = String(databaseService.query.mock.calls[0]?.[0] ?? '');
@@ -60,7 +68,7 @@ describe('ReferenceDataRepository', () => {
     const databaseService = {
       query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     await repository.searchCrm('(555) 111', 10);
 
@@ -76,7 +84,7 @@ describe('ReferenceDataRepository', () => {
     const databaseService = {
       query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     await repository.searchCrm('Acme_%', 10);
 
@@ -104,7 +112,7 @@ describe('ReferenceDataRepository', () => {
         ]
       }))
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     const candidates = await repository.findCustomerDuplicateCandidates({
       normalizedName: 'acmeheating',
@@ -159,7 +167,7 @@ describe('ReferenceDataRepository', () => {
         ]
       }))
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     const candidates = await repository.findLocationDuplicateCandidates({
       normalizedName: 'acmeshop',
@@ -220,7 +228,7 @@ describe('ReferenceDataRepository', () => {
         return { rows: [] };
       })
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     const link = await repository.createContactLink({
       contactId: 'contact-1',
@@ -273,7 +281,7 @@ describe('ReferenceDataRepository', () => {
         return { rows: [] };
       })
     };
-    const repository = new ReferenceDataRepository(databaseService as never);
+    const repository = createReferenceDataRepository(databaseService);
 
     const link = await repository.createContactLink({
       contactId: 'contact-1',

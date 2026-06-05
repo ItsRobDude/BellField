@@ -9,9 +9,11 @@ import { JobsReadDataRepository } from './jobs-read-data.repository';
 import { JobsRegisterDataRepository } from './jobs-register-data.repository';
 import { ReferenceDataRepository } from './reference-data.repository';
 import { ReferenceDataService } from './reference-data.service';
+import { ReferenceReadDataRepository } from './reference-read-data.repository';
 
 @Module({
   providers: [
+    ReferenceReadDataRepository,
     ReferenceDataRepository,
     ReferenceDataService,
     EquipmentDataRepository,
