@@ -118,6 +118,9 @@ export class JobCostingService {
         hours: original.hours ?? null,
         ratePerHour: original.ratePerHour ?? null,
         reversalOfEventId: original.id,
+        // Carry the source register link onto the reversal too, so the audit trail stays
+        // intact when a register-driven cost is reversed.
+        sourceRegisterEntryId: original.sourceRegisterEntryId ?? null,
         actor: { id: actor.id, displayName: actor.displayName }
       });
       return { event };

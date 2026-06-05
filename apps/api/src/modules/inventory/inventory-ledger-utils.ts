@@ -320,9 +320,11 @@ export async function applyReturnFromJob(
     quantity: string | number;
     unitCost: string | number;
     extendedCost: string | number;
+    sourceRegisterEntryId: string | null;
   }>(
     `select item_id as "itemId", location_id as "locationId", job_id as "jobId",
-            kind, quantity, unit_cost as "unitCost", extended_cost as "extendedCost"
+            kind, quantity, unit_cost as "unitCost", extended_cost as "extendedCost",
+            source_register_entry_id as "sourceRegisterEntryId"
      from inventory_movements
      where id = $1`,
     [input.reversalOfMovementId]
@@ -362,6 +364,8 @@ export async function applyReturnFromJob(
     jobId: original.jobId,
     sourceKind: 'return',
     reversalOfMovementId: input.reversalOfMovementId,
+    // Carry the same register link as the issue it reverses (audit + idempotency).
+    sourceRegisterEntryId: original.sourceRegisterEntryId ?? null,
     actor: input.actor,
     note: input.note ?? null,
     occurredAt: input.occurredAt

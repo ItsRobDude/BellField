@@ -28,7 +28,7 @@ type ActiveForm =
   | { kind: 'reverse'; eventId: string; reason: string };
 
 // Job cost tab: the live rollup (material/labor/expense), the finalized snapshot frozen at
-// completion, and the labor/expense event ledger with reversal corrections. Material detail
+// completion, and the labor/expense/material event ledger with reversal corrections. Stock material detail
 // lives on the Inventory surface's movements (filtered by job). Styling reuses
 // officeWorkspaceStyles; gated on jobCosting:view (tab) / create / edit.
 export function JobCostSection({
@@ -219,11 +219,11 @@ export function JobCostSection({
 
       <div style={styles.panel}>
         <div style={styles.row}>
-          <h3 style={styles.sectionHeading}>Labor &amp; expense events</h3>
+          <h3 style={styles.sectionHeading}>Cost events</h3>
           <span style={styles.badge}>{events.length}</span>
         </div>
         {events.length === 0 ? (
-          <p style={styles.muted}>No labor or expense costs recorded yet.</p>
+          <p style={styles.muted}>No labor, material, or expense costs recorded yet.</p>
         ) : (
           <div style={styles.tableWrap}>
             <table style={styles.table}>

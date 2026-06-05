@@ -282,7 +282,8 @@ describe('applyReturnFromJob', () => {
     kind: 'issueToJob',
     quantity: -4,
     unitCost: 12.5,
-    extendedCost: -50
+    extendedCost: -50,
+    sourceRegisterEntryId: 're-3'
   };
 
   it('writes a returnFromJob that exactly mirrors the issue it reverses', async () => {
@@ -309,6 +310,7 @@ describe('applyReturnFromJob', () => {
     expect(insert.params[6]).toBe('loc-1');
     expect(insert.params[7]).toBe('job-1');
     expect(insert.params[11]).toBe('mv-issue-1'); // reversal_of_movement_id
+    expect(insert.params[12]).toBe('re-3'); // source_register_entry_id carried from the issue
     expect(result).toEqual({ returnedValue: 50 });
   });
 

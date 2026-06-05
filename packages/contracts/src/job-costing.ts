@@ -9,7 +9,7 @@ import type { JobStatus } from './jobs.js';
  */
 export type JobCostEventKind = 'labor' | 'expense' | 'material';
 
-/** An immutable non-inventory cost charged to a job (labor or expense). */
+/** An immutable non-inventory cost charged to a job (labor, expense, or non-stock material). */
 export interface JobCostEvent {
   id: string;
   jobId: string;
@@ -17,11 +17,13 @@ export interface JobCostEvent {
   description: string;
   /** Total cost in dollars. Positive for a cost; a reversal carries the negation. */
   amount: number;
-  /** Labor provenance: hours billed at ratePerHour equals amount. Absent for an expense. */
+  /** Labor provenance: hours billed at ratePerHour equals amount. Absent for expense/material. */
   hours?: number;
   ratePerHour?: number;
   /** Set on a reversal event: the id of the original event it negates. */
   reversalOfEventId?: string;
+  /** The register/work line this cost came from, when it was created by resolving one. */
+  sourceRegisterEntryId?: string;
   actorName: string;
   occurredAt: string;
 }
@@ -85,7 +87,7 @@ export interface JobCostSnapshot {
  * frozen at completion (absent until the job is completed, or after a reopen until it is
  * completed again). `isFinalized` is true when a current finalized snapshot exists.
  *
- * `events` are the labor/expense ledger entries behind the rollup (newest first, including
+ * `events` are the labor/expense/material ledger entries behind the rollup (newest first, including
  * reversals). Material/equipment detail lives in inventory movements
  * (`GET /operations/inventory/movements?jobId=`), not here.
  */

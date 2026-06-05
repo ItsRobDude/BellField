@@ -26,6 +26,7 @@ type EventRow = {
   hours: string | number | null;
   ratePerHour: string | number | null;
   reversalOfEventId: string | null;
+  sourceRegisterEntryId: string | null;
   actorName: string;
   occurredAt: string | Date;
 };
@@ -34,6 +35,7 @@ const EVENT_COLUMNS = `
   id, job_id as "jobId", kind, description, amount,
   hours, rate_per_hour as "ratePerHour",
   reversal_of_event_id as "reversalOfEventId",
+  source_register_entry_id as "sourceRegisterEntryId",
   actor_name as "actorName", occurred_at as "occurredAt"
 `;
 
@@ -122,6 +124,7 @@ export class JobCostingRepository {
     hours: number | null;
     ratePerHour: number | null;
     reversalOfEventId: string;
+    sourceRegisterEntryId?: string | null;
     actor: Actor;
   }): Promise<JobCostEvent> {
     return this.insert(input);
@@ -251,6 +254,7 @@ function toEvent(row: EventRow): JobCostEvent {
     hours: row.hours === null ? undefined : Number(row.hours),
     ratePerHour: row.ratePerHour === null ? undefined : roundMoney(Number(row.ratePerHour)),
     reversalOfEventId: row.reversalOfEventId ?? undefined,
+    sourceRegisterEntryId: row.sourceRegisterEntryId ?? undefined,
     actorName: row.actorName,
     occurredAt: toIsoString(row.occurredAt)
   };

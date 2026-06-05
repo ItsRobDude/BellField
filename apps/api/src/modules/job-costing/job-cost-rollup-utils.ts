@@ -14,7 +14,8 @@ import type { QueryExecutor } from '../../database/database.service';
 //     location, so the value delivered to the job is its negation; returnFromJob reverses an
 //     issue (positive at the location) and is subtracted, dropping job material cost by the
 //     returned value.
-//   * labor and expense from job_cost_events (amount; reversals are negative, so SUM nets).
+//   * labor, expense, and non-stock material from job_cost_events (amount; reversals are
+//     negative, so SUM nets). Material events are added to materialCost, not expenseCost.
 // Stored at 4 decimals (matching inventory value precision); the read model rounds to cents.
 //
 // Cost completeness: register lines that owe a cost figure but are not yet resolved
