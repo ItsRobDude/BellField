@@ -10,6 +10,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from './job-invoice-shared';
+import { JobCostResolutionPanel } from './job-cost-resolution-panel';
 
 export type JobCostSectionProps = {
   jobId: string;
@@ -204,6 +205,15 @@ export function JobCostSection({
           </p>
         )}
       </div>
+
+      <JobCostResolutionPanel
+        jobId={jobId}
+        apiBaseUrl={apiBaseUrl}
+        sessionToken={sessionToken}
+        canEdit={canEdit}
+        jobIsFinal={jobIsFinal}
+        onResolved={() => void load()}
+      />
 
       {activeForm ? (
         <CostForm
