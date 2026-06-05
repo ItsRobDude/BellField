@@ -197,8 +197,10 @@ Validation:
 
 - field-mobile tests (106 passing), typecheck, lint
 - `pnpm check:file-size` (screen off the baseline)
-- manual field smoke still owed for the field lane (the screen has no automated render test);
-  runtime behavior is unchanged by construction
+- manual field smoke run on real hardware (Galaxy Tab S9 Ultra) and **passed** — login,
+  assigned-work load, queue (note + appointment status), manual + background sync drain,
+  conflict preservation + discard, and the sign-out guard, with the money-path ops verified
+  server-side. See the 2026-06-04 entry in [field-mobile-smoke.md](./field-mobile-smoke.md).
 
 ---
 

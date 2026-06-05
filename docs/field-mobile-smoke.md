@@ -144,3 +144,33 @@ adb reverse --remove tcp:3001
 - PO-driven equipment receiving is the expected primary path for new replacement equipment, but it belongs to the later purchasing/inventory milestone.
 - Manual equipment add remains a fallback for discovered equipment at a customer location.
 - This runbook validates the local Expo/device path; production installer and customer network setup are separate deployment work.
+
+## Run Log
+
+### 2026-06-04 — slice 5 (field workspace screen split) — PASS
+
+- Commit: `e81a514`
+- Device: Samsung Galaxy Tab S9 Ultra (SM-X910), Expo Go SDK 56, real hardware
+- API: `http://localhost:3001` reached over `adb reverse tcp:3001`; Metro over `adb reverse tcp:8081`
+- Purpose: confirm the slice-5 refactor (`field-sync-drain.ts` drain engine +
+  `field-operation-handlers.ts` queue-handler factory) is behavior-preserving on real hardware.
+- Result: **PASS** on every requested flow, core paths verified server-side (DB), no regression:
+  - field login; assigned-work home loads (jobs 1002/1027/1030 + office-change notice)
+  - queue a job note and an appointment-status change (queue badge / "1 change waiting")
+  - background sync auto-drains (`FieldSmokeNote3` reached the job-1002 timeline)
+  - manual Sync Now drains (`OfflineNote1` reached the job-1002 timeline)
+  - **conflict round-trip**: queued `arrived` while offline, office changed the same appointment
+    to `confirmed` (later `updated_at`), sync preserved it as "1 conflict needs office review"
+    with Retry / Discard; Discard cleared the queue and the server kept `confirmed` (the
+    discarded change never applied)
+  - sign-out warning with unsynced work ("Unsynced work … Sign out anyway?")
+  - bonus: offline graceful failure ("Sync failed — work is queued locally" + ConnectException);
+    pending queue survived a full sign-out → sign-in cycle (durable SQLite)
+- Not driven on-device: register / equipment / media queueing specifically (same
+  `createFieldOperationHandlers` + `drainFieldSyncQueue` path the proven ops exercised).
+- Evidence (gitignored): `artifacts/validation/2026-06-04T21-58-46-085Z/field/` — 53 screenshots
+  - `field-smoke-notes.md`.
+- Gotcha re-confirmed: on Windows, `expo start --localhost` binds Metro to IPv6 only and the
+  device can't load the bundle over `adb reverse`; use `--host lan` with
+  `REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1` (as the Start The Field App section already says).
+- Follow-up idea: encode this as a Maestro flow so it is repeatable headlessly.
