@@ -10,6 +10,31 @@ import {
 import { isFinalJobStatus, type RegisterEntryKind } from './company-data.types';
 import { insertJobTimelineEntry } from './jobs-data-repository-utils';
 
+/**
+ * Whether a client-supplied (item, location) pair is a part the caller may auto-cost from: an
+ * ACTIVE part item, on an ACTIVE truck location ASSIGNED TO the caller. The field truck-stock
+ * endpoint already scopes the picker to exactly this set, but a register-create request can carry
+ * arbitrary ids, so the write path must re-verify — otherwise a crafted call could issue stock
+ * from a warehouse, an inactive/foreign location, or another technician's truck. Returns false
+ * (rather than throwing) for any mismatch, including ids that no longer exist (a stale offline
+ * snapshot), so the caller can degrade the line to free-text instead of failing the whole create.
+ */
+export async function isSelfTruckPartRef(
+  queryable: QueryExecutor,
+  input: { itemId: string; locationId: string; actorId: string }
+): Promise<boolean> {
+  const result = await queryable.query<{ ok: number }>(
+    `select 1 as ok
+     from inventory_items it, inventory_locations loc
+     where it.id = $1 and it.is_active = true and it.kind = 'part'
+       and loc.id = $2 and loc.is_active = true and loc.kind = 'truck'
+       and loc.assigned_employee_id = $3
+     limit 1`,
+    [input.itemId, input.locationId, input.actorId]
+  );
+  return result.rows.length > 0;
+}
+
 export type AutoCostStructuredPartInput = {
   registerEntryId: string;
   jobId: string;

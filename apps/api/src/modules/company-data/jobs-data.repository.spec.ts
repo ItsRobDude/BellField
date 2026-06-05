@@ -1021,23 +1021,36 @@ describe('JobsDataRepository', () => {
     expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['job-1', false]);
   });
 
-  it('creates register entries and writes register timeline history', async () => {
+  function createRepoForCreate(options: { jobStatus?: string; selfTruckRef?: boolean } = {}) {
     const queryable = {
-      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        if (String(sql).includes('select status from jobs')) {
+          return { rows: [{ status: options.jobStatus ?? 'inProgress' }] };
+        }
+        // isSelfTruckPartRef pair validation.
+        if (String(sql).includes('inventory_items it, inventory_locations loc')) {
+          return { rows: options.selfTruckRef ? [{ ok: 1 }] : [] };
+        }
+        // On-hand snapshot for auto-cost (enough on hand).
+        if (String(sql).includes('coalesce(sum(quantity)')) {
+          return { rows: [{ qty: 10, value: 200 }] };
+        }
+        return { rows: [] };
+      })
     };
     const databaseService = {
-      query: jest.fn(async (sql: string, _params?: unknown[]) => {
-        if (sql.includes('from register_entries')) {
-          return { rows: [createRegisterEntryRow()] };
-        }
-
-        return { rows: [] };
-      }),
+      query: jest.fn(async (sql: string, _params?: unknown[]) =>
+        sql.includes('from register_entries') ? { rows: [createRegisterEntryRow()] } : { rows: [] }
+      ),
       transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
         callback(queryable)
       )
     };
-    const repository = createJobsDataRepository(databaseService);
+    return { repository: createJobsDataRepository(databaseService), queryable };
+  }
+
+  it('creates register entries and writes register timeline history', async () => {
+    const { repository, queryable } = createRepoForCreate();
 
     await repository.createRegisterEntry(
       'job-1',
@@ -1070,6 +1083,99 @@ describe('JobsDataRepository', () => {
     );
     expect(timelineCall?.[1]?.[4]).toBe('registerEntryAdded');
     expect(timelineCall?.[1]?.[5]).toBe('Register entry added: Contactor.');
+  });
+
+  it('rejects a cost-expected line on a finalized job unless it is a preserved replay', async () => {
+    const { repository, queryable } = createRepoForCreate({ jobStatus: 'completed' });
+
+    await expect(
+      repository.createRegisterEntry(
+        'job-1',
+        { kind: 'part', description: 'Late part', quantity: 1, totalAmount: 50 },
+        { id: 'tech-1', displayName: 'Field Tech' }
+      )
+    ).rejects.toThrow(/reopen/i);
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into register_entries')
+      )
+    ).toBe(false);
+  });
+
+  it('allows a preserved replay of a cost-expected line onto a finalized job', async () => {
+    const { repository, queryable } = createRepoForCreate({ jobStatus: 'completed' });
+
+    await repository.createRegisterEntry(
+      'job-1',
+      { kind: 'part', description: 'Replayed part', quantity: 1, totalAmount: 50 },
+      { id: 'tech-1', displayName: 'Field Tech' },
+      undefined,
+      true // allowFinalizedReplay
+    );
+
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into register_entries')
+      )
+    ).toBe(true);
+  });
+
+  it('nulls structured refs and skips auto-cost when the pair is not the actor own truck', async () => {
+    const { repository, queryable } = createRepoForCreate({ selfTruckRef: false });
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Foreign truck part',
+        quantity: 1,
+        totalAmount: 50,
+        inventoryItemId: 'item-1',
+        inventoryLocationId: 'someone-elses-truck'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into register_entries')
+    );
+    expect(insertCall?.[1]?.[19]).toBeNull(); // inventory_item_id nulled
+    expect(insertCall?.[1]?.[20]).toBeNull(); // inventory_location_id nulled
+    // No issue movement: the unauthorized pair never reaches applyIssueToJob.
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into inventory_movements')
+      )
+    ).toBe(false);
+  });
+
+  it('persists structured refs and auto-issues when the pair is the actor own truck', async () => {
+    const { repository, queryable } = createRepoForCreate({ selfTruckRef: true });
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Own truck part',
+        quantity: 1,
+        totalAmount: 50,
+        inventoryItemId: 'item-1',
+        inventoryLocationId: 'my-truck'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into register_entries')
+    );
+    expect(insertCall?.[1]?.[19]).toBe('item-1'); // inventory_item_id persisted
+    expect(insertCall?.[1]?.[20]).toBe('my-truck'); // inventory_location_id persisted
+    // Auto-cost issued the stock to the job.
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into inventory_movements')
+      )
+    ).toBe(true);
   });
 
   it('updates register entries and can clear nullable fields', async () => {
@@ -1165,6 +1271,25 @@ describe('JobsDataRepository', () => {
     // createRegisterEntryRow is a 'part' with quantity 1.5 — changing quantity must be refused.
     await expect(
       repository.updateRegisterEntry('register-1', { quantity: 5 }, 'Dispatcher')
+    ).rejects.toThrow(/Reverse the resolved cost/i);
+    expect(
+      queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))
+    ).toBe(false);
+  });
+
+  it('rejects changing the structured stock source on a resolved (applied) line', async () => {
+    const { repository, queryable } = updateRepoWithLocked({
+      costingStatus: 'applied',
+      costingPolicy: 'trackedInventory',
+      isVoid: false
+    });
+
+    await expect(
+      repository.updateRegisterEntry(
+        'register-1',
+        { inventoryItemId: 'different-item' },
+        'Dispatcher'
+      )
     ).rejects.toThrow(/Reverse the resolved cost/i);
     expect(
       queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))

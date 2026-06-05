@@ -486,7 +486,13 @@ export class JobsAppointmentsService {
       throw new ConflictException('Reopen the finalized job before adding this register entry.');
     }
 
-    await this.jobsDataService.createRegisterEntry(jobId, request, actor, request.occurredAt);
+    await this.jobsDataService.createRegisterEntry(
+      jobId,
+      request,
+      actor,
+      request.occurredAt,
+      accessCheck.status === 'preservedReplay'
+    );
 
     if (request.syncSource === 'field-save-queue') {
       await this.jobsDataService.addSyncFlag(

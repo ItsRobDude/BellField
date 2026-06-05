@@ -1,4 +1,4 @@
-import { autoCostStructuredPartLine } from './register-auto-cost';
+import { autoCostStructuredPartLine, isSelfTruckPartRef } from './register-auto-cost';
 import type { QueryExecutor } from '../../database/database.service';
 
 function scriptedQueryable(
@@ -108,5 +108,38 @@ describe('autoCostStructuredPartLine', () => {
 
     expect(result).toBe(false);
     expect(calls).toHaveLength(0);
+  });
+});
+
+describe('isSelfTruckPartRef', () => {
+  const VALIDATE = /from inventory_items it, inventory_locations loc/i;
+
+  it("scopes the pair to an active part on the actor's own active truck", async () => {
+    const { queryable, calls } = scriptedQueryable([{ match: VALIDATE, rows: [{ ok: 1 }] }]);
+
+    const ok = await isSelfTruckPartRef(queryable, {
+      itemId: 'item-1',
+      locationId: 'truck-1',
+      actorId: 'tech-7'
+    });
+
+    expect(ok).toBe(true);
+    expect(calls[0].params).toEqual(['item-1', 'truck-1', 'tech-7']);
+    expect(calls[0].sql).toMatch(/loc\.kind = 'truck'/);
+    expect(calls[0].sql).toMatch(/it\.kind = 'part'/);
+    expect(calls[0].sql).toMatch(/assigned_employee_id = \$3/);
+    expect(calls[0].sql).toMatch(/is_active = true/);
+  });
+
+  it('returns false for a mismatch (foreign truck / inactive / stale id)', async () => {
+    const { queryable } = scriptedQueryable([{ match: VALIDATE, rows: [] }]);
+
+    const ok = await isSelfTruckPartRef(queryable, {
+      itemId: 'item-1',
+      locationId: 'warehouse-1',
+      actorId: 'tech-7'
+    });
+
+    expect(ok).toBe(false);
   });
 });

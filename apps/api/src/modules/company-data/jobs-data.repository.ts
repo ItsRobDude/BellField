@@ -227,9 +227,16 @@ export class JobsDataRepository {
     jobId: string,
     input: CreateRegisterEntryInput,
     actor: { id: string; displayName: string },
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord> {
-    return this.registerRepository.createRegisterEntry(jobId, input, actor, occurredAt);
+    return this.registerRepository.createRegisterEntry(
+      jobId,
+      input,
+      actor,
+      occurredAt,
+      allowFinalizedReplay
+    );
   }
 
   async updateRegisterEntry(

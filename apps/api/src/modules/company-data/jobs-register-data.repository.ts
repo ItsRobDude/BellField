@@ -1,24 +1,22 @@
-import {
-  BadRequestException,
-  ConflictException,
-  Injectable,
-  NotFoundException
-} from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { JobCostEventKind, ResolveRegisterCostRequest } from '@bellfield/contracts';
+import type { JobCostEventKind, JobStatus, ResolveRegisterCostRequest } from '@bellfield/contracts';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
-import { applyIssueToJob, applyReturnFromJob } from '../inventory/inventory-ledger-utils';
-import { insertJobCostEventWithin, roundMoney } from '../job-costing/job-cost-rollup-utils';
+import { applyReturnFromJob } from '../inventory/inventory-ledger-utils';
+import { insertJobCostEventWithin } from '../job-costing/job-cost-rollup-utils';
 import { lockJobForCostWrite } from './job-cost-write-guard';
-import type {
-  BillingProjectionState,
-  CostingPolicy,
-  CostingStatus,
-  CreateRegisterEntryInput,
-  RegisterEntryKind,
-  RegisterEntryRecord,
-  UpdateRegisterEntryInput
+import { applyRegisterCostResolution } from './register-cost-resolution';
+import {
+  isFinalJobStatus,
+  REOPEN_FOR_COST_WRITE_MESSAGE,
+  type BillingProjectionState,
+  type CostingPolicy,
+  type CostingStatus,
+  type CreateRegisterEntryInput,
+  type RegisterEntryKind,
+  type RegisterEntryRecord,
+  type UpdateRegisterEntryInput
 } from './company-data.types';
 import {
   buildRegisterEntryVoidedMessage,
@@ -29,8 +27,11 @@ import {
   reflectRegisterEntryUpdate,
   reflectRegisterEntryVoid
 } from './invoice-reflection-utils';
-import { classifyRegisterCosting } from './register-costing-classification';
-import { autoCostStructuredPartLine } from './register-auto-cost';
+import {
+  classifyRegisterCosting,
+  isCostExpectedRegisterKind
+} from './register-costing-classification';
+import { autoCostStructuredPartLine, isSelfTruckPartRef } from './register-auto-cost';
 
 type RegisterEntryRow = {
   id: string;
@@ -144,13 +145,47 @@ export class JobsRegisterDataRepository {
     jobId: string,
     input: CreateRegisterEntryInput,
     actor: { id: string; displayName: string },
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord> {
     const timelineTime = occurredAt || new Date().toISOString();
     const registerEntryId = randomUUID();
     const costing = classifyRegisterCosting(input.kind);
 
     await this.databaseService.transaction(async (queryable) => {
+      // Lock the job row and re-check finality INSIDE the transaction. The service pre-checks
+      // status too, but that read races a concurrent completion: without this lock a cost-
+      // expected line could land after the finalized cost snapshot froze. Only a preserved field
+      // replay may insert onto a finalized job (it is recorded for post-reopen resolution).
+      const jobStatusResult = await queryable.query<{ status: JobStatus }>(
+        `select status from jobs where id = $1 for update`,
+        [jobId]
+      );
+      const jobStatus = jobStatusResult.rows[0]?.status ?? null;
+      if (jobStatus === null) {
+        throw new NotFoundException('Job not found.');
+      }
+      if (
+        isFinalJobStatus(jobStatus) &&
+        isCostExpectedRegisterKind(input.kind) &&
+        !allowFinalizedReplay
+      ) {
+        throw new ConflictException(REOPEN_FOR_COST_WRITE_MESSAGE);
+      }
+
+      // Re-validate any client-supplied structured truck refs server-side. Persist them only when
+      // they name an active part on the caller's own active truck; otherwise null them so the line
+      // is plain free-text (this also avoids a hard FK failure on a stale offline item/location).
+      const itemId = input.inventoryItemId?.trim() || null;
+      const locationId = input.inventoryLocationId?.trim() || null;
+      const structuredRefValid =
+        input.kind === 'part' &&
+        itemId !== null &&
+        locationId !== null &&
+        (await isSelfTruckPartRef(queryable, { itemId, locationId, actorId: actor.id }));
+      const inventoryItemId = structuredRefValid ? itemId : null;
+      const inventoryLocationId = structuredRefValid ? locationId : null;
+
       await queryable.query(
         `
           insert into register_entries (
@@ -200,8 +235,8 @@ export class JobsRegisterDataRepository {
           timelineTime,
           timelineTime,
           timelineTime,
-          input.inventoryItemId?.trim() || null,
-          input.inventoryLocationId?.trim() || null
+          inventoryItemId,
+          inventoryLocationId
         ]
       );
 
@@ -219,13 +254,15 @@ export class JobsRegisterDataRepository {
       );
 
       // Auto-cost a structured truck part at capture time (issue-to-job) when stock allows;
-      // otherwise the line stays in needsResolution for the office. Self-skips when ineligible.
+      // otherwise the line stays in needsResolution for the office. Uses the server-validated
+      // refs (null unless they passed isSelfTruckPartRef above), so it never issues from an
+      // unverified location. Self-skips when ineligible.
       await autoCostStructuredPartLine(queryable, {
         registerEntryId,
         jobId,
         kind: input.kind,
-        itemId: input.inventoryItemId,
-        locationId: input.inventoryLocationId,
+        itemId: inventoryItemId ?? undefined,
+        locationId: inventoryLocationId ?? undefined,
         quantity: input.quantity,
         description: input.description.trim(),
         actor,
@@ -341,14 +378,21 @@ export class JobsRegisterDataRepository {
       let finalCostingStatus: CostingStatus;
       let finalCostingPolicy: CostingPolicy | null;
       if (locked.costingStatus === 'applied' || locked.costingStatus === 'reversed') {
-        // A resolved line's cost artifact is already posted for a specific kind/quantity. Refuse
-        // cost-relevant edits (those need an explicit reversal); keep its cost status as-is.
+        // A resolved line's cost artifact is already posted against a specific kind/quantity and
+        // structured source. Refuse cost-relevant edits (those need an explicit reversal); keep
+        // its cost status as-is.
         const kindChanged = input.kind !== undefined && input.kind !== existingEntry.kind;
         const quantityChanged =
           input.quantity !== undefined && input.quantity !== existingEntry.quantity;
-        if (kindChanged || quantityChanged) {
+        const itemRefChanged =
+          input.inventoryItemId !== undefined &&
+          (input.inventoryItemId.trim() || undefined) !== existingEntry.inventoryItemId;
+        const locationRefChanged =
+          input.inventoryLocationId !== undefined &&
+          (input.inventoryLocationId.trim() || undefined) !== existingEntry.inventoryLocationId;
+        if (kindChanged || quantityChanged || itemRefChanged || locationRefChanged) {
           throw new ConflictException(
-            "Reverse the resolved cost before changing this line's kind or quantity."
+            "Reverse the resolved cost before changing this line's kind, quantity, or stock source."
           );
         }
         finalCostingStatus = locked.costingStatus;
@@ -647,7 +691,7 @@ export class JobsRegisterDataRepository {
       // Reject a finalized job and serialize against a concurrent completion.
       await lockJobForCostWrite(queryable, jobId);
 
-      const policy = await this.applyCostResolution(
+      const policy = await applyRegisterCostResolution(
         queryable,
         {
           id: entry.id,
@@ -681,84 +725,6 @@ export class JobsRegisterDataRepository {
       );
     });
     return { jobId };
-  }
-
-  private async applyCostResolution(
-    queryable: QueryExecutor,
-    entry: {
-      id: string;
-      jobId: string;
-      kind: RegisterEntryKind;
-      quantity: number;
-      description: string;
-    },
-    resolution: ResolveRegisterCostRequest,
-    actor: { id: string; displayName: string },
-    occurredAt: string
-  ): Promise<CostingPolicy> {
-    switch (resolution.mode) {
-      case 'trackedInventory': {
-        this.requireKind(entry.kind, 'part', 'tracked inventory');
-        await applyIssueToJob(queryable, {
-          itemId: resolution.itemId,
-          locationId: resolution.locationId,
-          jobId: entry.jobId,
-          quantity: entry.quantity,
-          actor,
-          sourceRegisterEntryId: entry.id,
-          occurredAt
-        });
-        return 'trackedInventory';
-      }
-      case 'nonStockMaterial': {
-        this.requireKind(entry.kind, 'part', 'non-stock material');
-        const amount = roundMoney(resolution.amount);
-        if (!(amount > 0)) {
-          throw new BadRequestException('Non-stock material cost must be greater than zero.');
-        }
-        await insertJobCostEventWithin(queryable, {
-          jobId: entry.jobId,
-          kind: 'material',
-          description: entry.description,
-          amount,
-          hours: null,
-          ratePerHour: null,
-          sourceRegisterEntryId: entry.id,
-          actor
-        });
-        return 'nonStockMaterial';
-      }
-      case 'laborActual': {
-        this.requireKind(entry.kind, 'labor', 'labor');
-        const amount = roundMoney(resolution.hours * resolution.ratePerHour);
-        if (!(resolution.hours > 0) || resolution.ratePerHour < 0 || !(amount > 0)) {
-          // A zero amount would violate the job_cost_events amount-sign check; a no-cost line
-          // must be resolved as zeroCost, not labor at a 0 rate.
-          throw new BadRequestException(
-            'Labor cost must be greater than zero; use zero-cost for a no-charge line.'
-          );
-        }
-        await insertJobCostEventWithin(queryable, {
-          jobId: entry.jobId,
-          kind: 'labor',
-          description: entry.description,
-          amount,
-          hours: resolution.hours,
-          ratePerHour: resolution.ratePerHour,
-          sourceRegisterEntryId: entry.id,
-          actor
-        });
-        return 'laborActual';
-      }
-      case 'zeroCost':
-        return 'none';
-    }
-  }
-
-  private requireKind(actual: RegisterEntryKind, expected: RegisterEntryKind, label: string): void {
-    if (actual !== expected) {
-      throw new BadRequestException(`A ${actual} line cannot be resolved as ${label}.`);
-    }
   }
 
   private toRegisterEntryRecord(row: RegisterEntryRow): RegisterEntryRecord {

@@ -748,7 +748,8 @@ describe('JobsAppointmentsService', () => {
       'job-1',
       expect.objectContaining({ description: 'Contactor' }),
       expect.objectContaining({ id: 'tech-1', displayName: 'Field Tech' }),
-      '2026-04-14T11:00:00.000Z'
+      '2026-04-14T11:00:00.000Z',
+      false // not a preserved replay
     );
     expect(response.syncResult).toEqual({ status: 'applied' });
     expect(response.registerEntries?.[0]?.description).toBe('Contactor');
