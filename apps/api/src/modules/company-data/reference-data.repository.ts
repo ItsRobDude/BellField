@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
-import { toIsoString, toOptionalDateString, toTextArray } from '../../database/database-row.utils';
+import { toTextArray } from '../../database/database-row.utils';
 import type {
   ContactLinkRecord,
   ContactRecord,
@@ -13,99 +13,31 @@ import type {
   LocationRecord,
   OwnershipHistoryRecord
 } from './company-data.types';
-
-type CustomerRow = {
-  id: string;
-  name: string;
-  accountType: CustomerAccountRecord['accountType'];
-  isActive: boolean;
-  billingAddressLine1: string;
-  billingCity: string;
-  billingState: string;
-  billingPostalCode: string;
-  phone: string | null;
-  email: string | null;
-  fax: string | null;
-  flags: string[] | null;
-};
-
-type ContactRow = {
-  id: string;
-  displayName: string;
-  phone: string | null;
-  email: string | null;
-  fax: string | null;
-  tags: string[] | null;
-  isActive: boolean;
-};
-
-type LocationRow = {
-  id: string;
-  name: string;
-  customerId: string;
-  addressLine1: string;
-  city: string;
-  state: string;
-  postalCode: string;
-  phone: string | null;
-  email: string | null;
-  fax: string | null;
-  isActive: boolean;
-  alternateBillToCustomerIds: string[] | null;
-};
-
-type LocationDuplicateCandidateRow = LocationRow & {
-  customerName: string;
-  customerFlags: string[] | null;
-};
-
-type ContactLinkRow = {
-  id: string;
-  contactId: string;
-  phone: string | null;
-  email: string | null;
-  fax: string | null;
-  tags: string[] | null;
-  isActive: boolean;
-  endDate: string | Date | null;
-};
-
-type OwnershipHistoryRow = {
-  id: string;
-  locationId: string;
-  customerId: string;
-  startedAt: string | Date;
-  endedAt: string | Date | null;
-  note: string | null;
-};
-
-type CrmSearchRow = {
-  id: string;
-  kind: CrmSearchRecord['kind'];
-  title: string;
-  subtitle: string;
-  badges: string[] | null;
-  phone: string | null;
-  addressLine1: string | null;
-  city: string | null;
-  state: string | null;
-  postalCode: string | null;
-  customerId: string | null;
-  customerName: string | null;
-  isActive: boolean;
-  score: string | number;
-};
-
-type CreateCustomerInput = Omit<CustomerAccountRecord, 'id'>;
-type UpdateCustomerInput = Partial<Omit<CustomerAccountRecord, 'id'>>;
-type CreateLocationInput = Omit<LocationRecord, 'id'>;
-type UpdateLocationInput = Partial<Omit<LocationRecord, 'id' | 'customerId'>>;
-type CreateContactInput = Omit<ContactRecord, 'id' | 'isActive'> & { isActive?: boolean };
-type UpdateContactInput = Partial<Omit<ContactRecord, 'id'>>;
-type CreateContactLinkInput = Omit<ContactLinkRecord, 'id'>;
-type UpdateContactLinkInput = Partial<
-  Omit<ContactLinkRecord, 'id' | 'contactId' | 'linkedRecordId' | 'linkedRecordKind'>
->;
+import {
+  escapeLikePrefix,
+  nullIfUndefined,
+  toContactLinkRecord,
+  toContactRecord,
+  toCrmSearchRecord,
+  toCustomerRecord,
+  toLocationRecord,
+  toOwnershipHistoryRecord,
+  type ContactLinkRow,
+  type ContactRow,
+  type CreateContactInput,
+  type CreateContactLinkInput,
+  type CreateCustomerInput,
+  type CreateLocationInput,
+  type CrmSearchRow,
+  type CustomerRow,
+  type LocationDuplicateCandidateRow,
+  type LocationRow,
+  type OwnershipHistoryRow,
+  type UpdateContactInput,
+  type UpdateContactLinkInput,
+  type UpdateCustomerInput,
+  type UpdateLocationInput
+} from './reference-data-row-mappers';
 
 @Injectable()
 export class ReferenceDataRepository {
@@ -133,7 +65,7 @@ export class ReferenceDataRepository {
       `
     );
 
-    return result.rows.map((row) => this.toCustomerRecord(row));
+    return result.rows.map((row) => toCustomerRecord(row));
   }
 
   async searchCrm(query: string, limit: number): Promise<CrmSearchRecord[]> {
@@ -321,7 +253,7 @@ export class ReferenceDataRepository {
       [textQuery, textLikePrefix, phonePrefix, limit]
     );
 
-    return result.rows.map((row) => this.toCrmSearchRecord(row));
+    return result.rows.map((row) => toCrmSearchRecord(row));
   }
 
   async findCustomerDuplicateCandidates(
@@ -373,7 +305,7 @@ export class ReferenceDataRepository {
       ]
     );
 
-    return result.rows.map((row) => this.toCustomerRecord(row));
+    return result.rows.map((row) => toCustomerRecord(row));
   }
 
   async findLocationDuplicateCandidates(
@@ -429,7 +361,7 @@ export class ReferenceDataRepository {
     );
 
     return result.rows.map((row) => ({
-      ...this.toLocationRecord(row),
+      ...toLocationRecord(row),
       customerName: row.customerName,
       customerFlags: toTextArray(row.customerFlags)
     }));
@@ -458,7 +390,7 @@ export class ReferenceDataRepository {
       [customerId]
     );
 
-    return result.rows[0] ? this.toCustomerRecord(result.rows[0]) : null;
+    return result.rows[0] ? toCustomerRecord(result.rows[0]) : null;
   }
 
   async createCustomer(input: CreateCustomerInput): Promise<CustomerAccountRecord> {
@@ -564,7 +496,7 @@ export class ReferenceDataRepository {
       `
     );
 
-    return result.rows.map((row) => this.toContactRecord(row));
+    return result.rows.map((row) => toContactRecord(row));
   }
 
   async getContactById(contactId: string): Promise<ContactRecord | null> {
@@ -585,7 +517,7 @@ export class ReferenceDataRepository {
       [contactId]
     );
 
-    return result.rows[0] ? this.toContactRecord(result.rows[0]) : null;
+    return result.rows[0] ? toContactRecord(result.rows[0]) : null;
   }
 
   async createContact(input: CreateContactInput): Promise<ContactRecord> {
@@ -665,7 +597,7 @@ export class ReferenceDataRepository {
       `
     );
 
-    return result.rows.map((row) => this.toLocationRecord(row));
+    return result.rows.map((row) => toLocationRecord(row));
   }
 
   async listLocationsForCustomer(
@@ -695,7 +627,7 @@ export class ReferenceDataRepository {
       [customerId]
     );
 
-    return result.rows.map((row) => this.toLocationRecord(row));
+    return result.rows.map((row) => toLocationRecord(row));
   }
 
   async getLocationById(locationId: string): Promise<LocationRecord | null> {
@@ -721,7 +653,7 @@ export class ReferenceDataRepository {
       [locationId]
     );
 
-    return result.rows[0] ? this.toLocationRecord(result.rows[0]) : null;
+    return result.rows[0] ? toLocationRecord(result.rows[0]) : null;
   }
 
   async createLocation(input: CreateLocationInput): Promise<LocationRecord> {
@@ -831,7 +763,7 @@ export class ReferenceDataRepository {
       [customerId]
     );
 
-    return result.rows.map((row) => this.toContactLinkRecord(row, customerId, 'customer'));
+    return result.rows.map((row) => toContactLinkRecord(row, customerId, 'customer'));
   }
 
   async listLocationContactLinks(
@@ -857,7 +789,7 @@ export class ReferenceDataRepository {
       [locationId]
     );
 
-    return result.rows.map((row) => this.toContactLinkRecord(row, locationId, 'location'));
+    return result.rows.map((row) => toContactLinkRecord(row, locationId, 'location'));
   }
 
   async listContactLinksForContact(
@@ -906,12 +838,8 @@ export class ReferenceDataRepository {
     ]);
 
     return [
-      ...customerLinks.rows.map((row) =>
-        this.toContactLinkRecord(row, row.linkedRecordId, 'customer')
-      ),
-      ...locationLinks.rows.map((row) =>
-        this.toContactLinkRecord(row, row.linkedRecordId, 'location')
-      )
+      ...customerLinks.rows.map((row) => toContactLinkRecord(row, row.linkedRecordId, 'customer')),
+      ...locationLinks.rows.map((row) => toContactLinkRecord(row, row.linkedRecordId, 'location'))
     ];
   }
 
@@ -938,7 +866,7 @@ export class ReferenceDataRepository {
     );
 
     if (customerResult.rows[0]) {
-      return this.toContactLinkRecord(
+      return toContactLinkRecord(
         customerResult.rows[0],
         customerResult.rows[0].linkedRecordId,
         'customer'
@@ -967,7 +895,7 @@ export class ReferenceDataRepository {
     );
 
     return locationResult.rows[0]
-      ? this.toContactLinkRecord(
+      ? toContactLinkRecord(
           locationResult.rows[0],
           locationResult.rows[0].linkedRecordId,
           'location'
@@ -1089,7 +1017,7 @@ export class ReferenceDataRepository {
       [locationId]
     );
 
-    return result.rows.map((row) => this.toOwnershipHistoryRecord(row));
+    return result.rows.map((row) => toOwnershipHistoryRecord(row));
   }
 
   async addOwnershipHistoryEntry(
@@ -1165,107 +1093,4 @@ export class ReferenceDataRepository {
       [locationId, endedAt]
     );
   }
-
-  private toCustomerRecord(row: CustomerRow): CustomerAccountRecord {
-    return {
-      id: row.id,
-      name: row.name,
-      accountType: row.accountType,
-      isActive: row.isActive,
-      billingAddressLine1: row.billingAddressLine1,
-      billingCity: row.billingCity,
-      billingState: row.billingState,
-      billingPostalCode: row.billingPostalCode,
-      phone: row.phone ?? undefined,
-      email: row.email ?? undefined,
-      fax: row.fax ?? undefined,
-      flags: toTextArray(row.flags)
-    };
-  }
-
-  private toCrmSearchRecord(row: CrmSearchRow): CrmSearchRecord {
-    return {
-      id: row.id,
-      kind: row.kind,
-      title: row.title,
-      subtitle: row.subtitle,
-      badges: toTextArray(row.badges),
-      phone: row.phone ?? undefined,
-      addressLine1: row.addressLine1 ?? undefined,
-      city: row.city ?? undefined,
-      state: row.state ?? undefined,
-      postalCode: row.postalCode ?? undefined,
-      customerId: row.customerId ?? undefined,
-      customerName: row.customerName ?? undefined,
-      isActive: row.isActive,
-      score: Number(row.score)
-    };
-  }
-
-  private toContactRecord(row: ContactRow): ContactRecord {
-    return {
-      id: row.id,
-      displayName: row.displayName,
-      phone: row.phone ?? undefined,
-      email: row.email ?? undefined,
-      fax: row.fax ?? undefined,
-      tags: toTextArray(row.tags),
-      isActive: row.isActive
-    };
-  }
-
-  private toLocationRecord(row: LocationRow): LocationRecord {
-    return {
-      id: row.id,
-      name: row.name,
-      customerId: row.customerId,
-      addressLine1: row.addressLine1,
-      city: row.city,
-      state: row.state,
-      postalCode: row.postalCode,
-      phone: row.phone ?? undefined,
-      email: row.email ?? undefined,
-      fax: row.fax ?? undefined,
-      isActive: row.isActive,
-      alternateBillToCustomerIds: toTextArray(row.alternateBillToCustomerIds)
-    };
-  }
-
-  private toContactLinkRecord(
-    row: ContactLinkRow,
-    linkedRecordId: string,
-    linkedRecordKind: ContactLinkRecord['linkedRecordKind']
-  ): ContactLinkRecord {
-    return {
-      id: row.id,
-      contactId: row.contactId,
-      linkedRecordId,
-      linkedRecordKind,
-      phone: row.phone ?? undefined,
-      email: row.email ?? undefined,
-      fax: row.fax ?? undefined,
-      tags: toTextArray(row.tags),
-      isActive: row.isActive,
-      endDate: toOptionalDateString(row.endDate)
-    };
-  }
-
-  private toOwnershipHistoryRecord(row: OwnershipHistoryRow): OwnershipHistoryRecord {
-    return {
-      id: row.id,
-      locationId: row.locationId,
-      customerId: row.customerId,
-      startedAt: toIsoString(row.startedAt),
-      endedAt: row.endedAt ? toIsoString(row.endedAt) : undefined,
-      note: row.note ?? undefined
-    };
-  }
-}
-
-function nullIfUndefined(value: string | undefined): string | null {
-  return value ?? null;
-}
-
-function escapeLikePrefix(value: string): string {
-  return value.replace(/[\\%_]/g, (character) => `\\${character}`);
 }
