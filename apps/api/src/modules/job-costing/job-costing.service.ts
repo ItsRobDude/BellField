@@ -132,6 +132,14 @@ export class JobCostingService {
     if (original.reversalOfEventId) {
       throw new ConflictException('A reversal event cannot itself be reversed.');
     }
+    if (original.sourceRegisterEntryId) {
+      // This cost came from resolving a register line. Reversing the event alone would net the
+      // cost out while the line stayed `applied` (no re-resolution path). Void the register line
+      // instead — that reverses the artifact AND moves the line back out of `applied`.
+      throw new ConflictException(
+        'This cost came from a register line; void that line to reverse its cost.'
+      );
+    }
     if (await this.jobCostingRepository.isEventReversed(eventId)) {
       throw new ConflictException('This cost event has already been reversed.');
     }

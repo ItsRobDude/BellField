@@ -14,6 +14,11 @@ const COST_EXPECTED_KINDS: ReadonlySet<RegisterEntryKind> = new Set<RegisterEntr
   'labor'
 ]);
 
+/** Whether a register line of this kind owes a job cost (and so could need resolution). */
+export function isCostExpectedRegisterKind(kind: RegisterEntryKind): boolean {
+  return COST_EXPECTED_KINDS.has(kind);
+}
+
 /**
  * Classify a register line's cost side from its kind. The concrete policy
  * (trackedInventory / laborActual / ...) is decided when the office RESOLVES the line, so an

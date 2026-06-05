@@ -1,7 +1,8 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { AppointmentFinishOutcome, AppointmentStatus, JobStatus } from '@bellfield/contracts';
-import { isReopenTransition } from '../company-data/company-data.types';
+import { isFinalJobStatus, isReopenTransition } from '../company-data/company-data.types';
 import type { JobRecord } from '../company-data/company-data.types';
+import { isCostExpectedRegisterKind } from '../company-data/register-costing-classification';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
@@ -454,7 +455,7 @@ export class JobsAppointmentsService {
       sessionToken,
       'register:create'
     );
-    this.validateRegisterEntryCreate(request);
+    this.validateRegisterEntryNumbers(request);
     const currentJob = await this.jobsDataService.getJobById(jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {
@@ -475,10 +476,14 @@ export class JobsAppointmentsService {
       };
     }
 
-    if (currentJob.status === 'cancelled' && accessCheck.status !== 'preservedReplay') {
-      throw new ConflictException(
-        'Register entries cannot be added to cancelled jobs. Reopen the job before adding new entries.'
-      );
+    // Reopen a finalized job before adding register work: cancelled takes none; completed/closed
+    // takes no cost-bearing line (it would be unresolvable cost). Offline replays are preserved.
+    const blockNewRegisterWork =
+      isFinalJobStatus(currentJob.status) &&
+      accessCheck.status !== 'preservedReplay' &&
+      (currentJob.status === 'cancelled' || isCostExpectedRegisterKind(request.kind));
+    if (blockNewRegisterWork) {
+      throw new ConflictException('Reopen the finalized job before adding this register entry.');
     }
 
     await this.jobsDataService.createRegisterEntry(jobId, request, actor, request.occurredAt);
@@ -969,10 +974,6 @@ export class JobsAppointmentsService {
     if (appointment.jobId !== jobId) {
       throw new ConflictException('Register entry appointment must belong to the same job.');
     }
-  }
-
-  private validateRegisterEntryCreate(request: CreateRegisterEntryRequestDto): void {
-    this.validateRegisterEntryNumbers(request);
   }
 
   private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {

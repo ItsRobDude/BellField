@@ -227,6 +227,24 @@ describe('JobsDataRepository', () => {
     expect(lockSelect).toBeDefined();
   });
 
+  it('also freezes a job-cost snapshot when a job is closed (not only completed)', async () => {
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'closed' },
+      undefined,
+      'inProgress'
+    );
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.updateJobStatus('job-1', 'closed', 'Olivia Owner', '2026-06-02T00:00:00.000Z');
+
+    // Closing is a cost-final phase too, so it must freeze (and so block on unresolved cost).
+    expect(
+      queryable.query.mock.calls.find(([sql]) =>
+        String(sql).includes('insert into job_cost_snapshots')
+      )
+    ).toBeDefined();
+  });
+
   it('does not re-freeze a snapshot when an already-completed job is set to completed', async () => {
     const { databaseService, queryable } = createDatabaseService(
       { status: 'completed' },

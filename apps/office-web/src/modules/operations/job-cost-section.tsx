@@ -247,8 +247,14 @@ export function JobCostSection({
               <tbody>
                 {events.map((event) => {
                   const isReversal = Boolean(event.reversalOfEventId);
+                  // A cost from resolving a register line is reversed by voiding that line, not
+                  // here — so it is not directly reversible from the cost ledger.
                   const reversible =
-                    canEdit && !jobIsFinal && !isReversal && !reversedIds.has(event.id);
+                    canEdit &&
+                    !jobIsFinal &&
+                    !isReversal &&
+                    !event.sourceRegisterEntryId &&
+                    !reversedIds.has(event.id);
                   return (
                     <tr key={event.id}>
                       <td style={styles.tableCell}>{event.occurredAt.slice(0, 10)}</td>

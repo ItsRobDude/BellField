@@ -44,13 +44,13 @@ function modeOptions(kind: string): Array<{ value: ResolveMode; label: string }>
   if (kind === 'labor') {
     return [
       { value: 'laborActual', label: 'Labor (hours × rate)' },
-      { value: 'zeroCost', label: 'No charge' }
+      { value: 'zeroCost', label: 'No cost (write off — no parts/labor)' }
     ];
   }
   return [
     { value: 'trackedInventory', label: 'Issue from stock' },
     { value: 'nonStockMaterial', label: 'Non-stock material cost' },
-    { value: 'zeroCost', label: 'No charge' }
+    { value: 'zeroCost', label: 'No cost (write off — no parts/labor)' }
   ];
 }
 

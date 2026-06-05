@@ -260,6 +260,19 @@ describe('JobCostingService.reverseEvent', () => {
     );
   });
 
+  it('refuses to reverse a register-sourced cost event (void the line instead)', async () => {
+    const { service, jobCostingRepository } = createService();
+    jobCostingRepository.getById.mockResolvedValue({
+      ...laborEvent,
+      sourceRegisterEntryId: 're-9'
+    });
+
+    await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(jobCostingRepository.insertReversal).not.toHaveBeenCalled();
+  });
+
   it('defaults the reversal description from the original when no reason is given', async () => {
     const { service, jobCostingRepository } = createService();
     jobCostingRepository.getById.mockResolvedValue(laborEvent);

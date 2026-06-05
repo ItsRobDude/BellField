@@ -839,6 +839,27 @@ describe('JobsAppointmentsService', () => {
     expect(response.syncResult).toEqual({ status: 'applied' });
   });
 
+  it('blocks a cost-bearing register entry on a finalized (completed) job', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('completed'));
+
+    await expect(
+      service.createRegisterEntry('session-token', 'job-1', {
+        kind: 'part',
+        description: 'Late part',
+        quantity: 1,
+        totalAmount: 50
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+  });
+
   it('flags stale field register updates as conflicts', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     const job = createJob('inProgress');
