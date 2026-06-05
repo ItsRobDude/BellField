@@ -303,7 +303,8 @@ export class JobsRegisterDataRepository {
     registerEntryId: string,
     input: UpdateRegisterEntryInput,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord | null> {
     const existingEntry = await this.getRegisterEntryById(registerEntryId);
 
@@ -375,6 +376,15 @@ export class JobsRegisterDataRepository {
         throw new ConflictException('Cannot edit a voided register entry.');
       }
 
+      // Lock the job and read finality in-tx (race-safe with a concurrent completion); the
+      // non-applied branch below uses it to refuse edits that would create unresolved cost on a
+      // finalized job.
+      const jobStatusResult = await queryable.query<{ status: JobStatus }>(
+        `select status from jobs where id = $1 for update`,
+        [existingEntry.jobId]
+      );
+      const jobStatus = jobStatusResult.rows[0]?.status ?? null;
+
       let finalCostingStatus: CostingStatus;
       let finalCostingPolicy: CostingPolicy | null;
       if (locked.costingStatus === 'applied' || locked.costingStatus === 'reversed') {
@@ -398,6 +408,19 @@ export class JobsRegisterDataRepository {
         finalCostingStatus = locked.costingStatus;
         finalCostingPolicy = locked.costingPolicy;
       } else {
+        // A non-applied line that is (or becomes) cost-expected on a finalized job would leave
+        // unresolved cost after the snapshot already froze — e.g. reclassifying a serviceItem
+        // line to `part` turns it into needsResolution that cannot be resolved without reopening.
+        // Block it unless this is a preserved field replay (recorded for post-reopen resolution,
+        // like the create path).
+        if (
+          jobStatus !== null &&
+          isFinalJobStatus(jobStatus) &&
+          isCostExpectedRegisterKind(nextKind) &&
+          !allowFinalizedReplay
+        ) {
+          throw new ConflictException(REOPEN_FOR_COST_WRITE_MESSAGE);
+        }
         const reclassified = classifyRegisterCosting(nextKind);
         finalCostingStatus = reclassified.costingStatus;
         finalCostingPolicy = reclassified.costingPolicy;
@@ -638,7 +661,8 @@ export class JobsRegisterDataRepository {
         ratePerHour: event.ratePerHour === null ? null : Number(event.ratePerHour),
         reversalOfEventId: event.id,
         sourceRegisterEntryId: registerEntryId,
-        actor
+        actor,
+        occurredAt
       });
     }
   }

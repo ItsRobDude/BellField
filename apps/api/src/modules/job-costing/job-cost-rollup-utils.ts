@@ -198,6 +198,9 @@ export type JobCostEventInsert = {
   reversalOfEventId?: string | null;
   sourceRegisterEntryId?: string | null;
   actor: { id: string; displayName: string };
+  /** Business event time (defaults to now). Pass the caller's occurredAt so an offline void/
+   * replay reversal is stamped with the action's time, not the server's insert time. */
+  occurredAt?: string;
 };
 
 /**
@@ -218,7 +221,7 @@ export async function insertJobCostEventWithin(
        id, job_id, kind, description, amount, hours, rate_per_hour, reversal_of_event_id,
        source_register_entry_id, actor_employee_id, actor_name, occurred_at, created_at
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
     [
       id,
       input.jobId,
@@ -231,6 +234,7 @@ export async function insertJobCostEventWithin(
       input.sourceRegisterEntryId ?? null,
       input.actor.id,
       input.actor.displayName,
+      input.occurredAt ?? now,
       now
     ]
   );

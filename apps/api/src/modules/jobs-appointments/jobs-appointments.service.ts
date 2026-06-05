@@ -578,7 +578,8 @@ export class JobsAppointmentsService {
       registerEntryId,
       request,
       actor.displayName,
-      request.occurredAt
+      request.occurredAt,
+      accessCheck.status === 'preservedReplay'
     );
 
     if (request.syncSource === 'field-save-queue') {

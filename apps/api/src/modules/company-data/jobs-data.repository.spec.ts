@@ -1227,15 +1227,21 @@ describe('JobsDataRepository', () => {
     expect(timelineCall?.[1]?.[5]).toBe('Register entry edited: Updated contactor.');
   });
 
-  function updateRepoWithLocked(locked: {
-    costingStatus: string;
-    costingPolicy: string | null;
-    isVoid: boolean;
-  }) {
+  function updateRepoWithLocked(
+    locked: {
+      costingStatus: string;
+      costingPolicy: string | null;
+      isVoid: boolean;
+    },
+    jobStatus = 'inProgress'
+  ) {
     const queryable = {
-      query: jest.fn(async (sql: string) =>
-        String(sql).includes('for update') ? { rows: [locked] } : { rows: [] }
-      )
+      query: jest.fn(async (sql: string) => {
+        if (String(sql).includes('select status from jobs')) {
+          return { rows: [{ status: jobStatus }] };
+        }
+        return String(sql).includes('for update') ? { rows: [locked] } : { rows: [] };
+      })
     };
     const databaseService = {
       query: jest.fn(async (sql: string) =>
@@ -1294,6 +1300,41 @@ describe('JobsDataRepository', () => {
     expect(
       queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))
     ).toBe(false);
+  });
+
+  it('rejects a cost-expected edit on a finalized job unless it is a preserved replay', async () => {
+    const { repository, queryable } = updateRepoWithLocked(
+      { costingStatus: 'notCosted', costingPolicy: null, isVoid: false },
+      'completed'
+    );
+
+    // createRegisterEntryRow is a cost-expected 'part'; editing it on a finalized job would
+    // create unresolved cost after the snapshot froze.
+    await expect(
+      repository.updateRegisterEntry('register-1', { description: 'Late edit' }, 'Dispatcher')
+    ).rejects.toThrow(/reopen/i);
+    expect(
+      queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))
+    ).toBe(false);
+  });
+
+  it('allows a preserved replay edit of a cost-expected line on a finalized job', async () => {
+    const { repository, queryable } = updateRepoWithLocked(
+      { costingStatus: 'notCosted', costingPolicy: null, isVoid: false },
+      'completed'
+    );
+
+    await repository.updateRegisterEntry(
+      'register-1',
+      { description: 'Replayed edit' },
+      'Field Tech',
+      undefined,
+      true // allowFinalizedReplay
+    );
+
+    expect(
+      queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))
+    ).toBe(true);
   });
 
   it('voids register entries without deleting the row', async () => {

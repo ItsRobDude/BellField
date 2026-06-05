@@ -61,7 +61,8 @@ export async function applyRegisterCostResolution(
         hours: null,
         ratePerHour: null,
         sourceRegisterEntryId: entry.id,
-        actor
+        actor,
+        occurredAt
       });
       return 'nonStockMaterial';
     }
@@ -83,7 +84,8 @@ export async function applyRegisterCostResolution(
         hours: resolution.hours,
         ratePerHour: resolution.ratePerHour,
         sourceRegisterEntryId: entry.id,
-        actor
+        actor,
+        occurredAt
       });
       return 'laborActual';
     }

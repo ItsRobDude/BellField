@@ -252,13 +252,15 @@ export class JobsDataService {
     registerEntryId: string,
     input: UpdateRegisterEntryInput,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord> {
     const registerEntry = await this.jobsDataRepository.updateRegisterEntry(
       registerEntryId,
       input,
       actorName,
-      occurredAt
+      occurredAt,
+      allowFinalizedReplay
     );
 
     if (!registerEntry) {

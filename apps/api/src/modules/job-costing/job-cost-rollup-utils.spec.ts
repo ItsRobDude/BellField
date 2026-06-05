@@ -2,6 +2,7 @@ import {
   computeJobCostRollup,
   freezeJobCostSnapshot,
   getCurrentJobCostSnapshot,
+  insertJobCostEventWithin,
   supersedeCurrentJobCostSnapshot
 } from './job-cost-rollup-utils';
 import type { QueryExecutor } from '../../database/database.service';
@@ -30,6 +31,47 @@ const REGISTER = /from register_entries/i;
 const SNAP_INSERT = /insert into job_cost_snapshots/i;
 const SNAP_UPDATE = /update job_cost_snapshots set superseded_at/i;
 const SNAP_SELECT = /from job_cost_snapshots/i;
+
+describe('insertJobCostEventWithin', () => {
+  const EVENT_INSERT = /insert into job_cost_events/i;
+
+  it('stamps occurred_at with the caller occurredAt (for offline void/replay audit)', async () => {
+    const { queryable, calls } = scriptedQueryable([{ match: EVENT_INSERT, rowCount: 1 }]);
+
+    await insertJobCostEventWithin(queryable, {
+      jobId: 'job-1',
+      kind: 'material',
+      description: 'Reversal of: part',
+      amount: -20,
+      hours: null,
+      ratePerHour: null,
+      actor: { id: 'emp-1', displayName: 'Ivy' },
+      occurredAt: '2026-06-01T00:00:00.000Z'
+    });
+
+    const insert = findCall(calls, EVENT_INSERT);
+    // occurred_at ($12) is the caller's time; created_at ($13) is the server insert time.
+    expect(insert?.params?.[11]).toBe('2026-06-01T00:00:00.000Z');
+    expect(insert?.params?.[12]).not.toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it('defaults occurred_at to now when no occurredAt is given', async () => {
+    const { queryable, calls } = scriptedQueryable([{ match: EVENT_INSERT, rowCount: 1 }]);
+
+    await insertJobCostEventWithin(queryable, {
+      jobId: 'job-1',
+      kind: 'labor',
+      description: 'Labor',
+      amount: 100,
+      hours: 2,
+      ratePerHour: 50,
+      actor: { id: 'emp-1', displayName: 'Ivy' }
+    });
+
+    const insert = findCall(calls, EVENT_INSERT);
+    expect(insert?.params?.[11]).toBe(insert?.params?.[12]); // occurred_at === created_at
+  });
+});
 
 describe('computeJobCostRollup', () => {
   it('sums inventory material plus labor and expense events', async () => {

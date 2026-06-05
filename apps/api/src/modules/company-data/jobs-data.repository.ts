@@ -243,13 +243,15 @@ export class JobsDataRepository {
     registerEntryId: string,
     input: UpdateRegisterEntryInput,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord | null> {
     return this.registerRepository.updateRegisterEntry(
       registerEntryId,
       input,
       actorName,
-      occurredAt
+      occurredAt,
+      allowFinalizedReplay
     );
   }
 
