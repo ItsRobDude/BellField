@@ -166,11 +166,32 @@ adb reverse --remove tcp:3001
   - sign-out warning with unsynced work ("Unsynced work … Sign out anyway?")
   - bonus: offline graceful failure ("Sync failed — work is queued locally" + ConnectException);
     pending queue survived a full sign-out → sign-in cycle (durable SQLite)
-- Not driven on-device: register / equipment / media queueing specifically (same
-  `createFieldOperationHandlers` + `drainFieldSyncQueue` path the proven ops exercised).
+- Not driven on-device this run: register / equipment / media queueing specifically (same
+  `createFieldOperationHandlers` + `drainFieldSyncQueue` path the proven ops exercised). Media
+  was driven in the follow-up run below.
 - Evidence (gitignored): `artifacts/validation/2026-06-04T21-58-46-085Z/field/` — 53 screenshots
   - `field-smoke-notes.md`.
 - Gotcha re-confirmed: on Windows, `expo start --localhost` binds Metro to IPv6 only and the
   device can't load the bundle over `adb reverse`; use `--host lan` with
   `REACT_NATIVE_PACKAGER_HOSTNAME=127.0.0.1` (as the Start The Field App section already says).
 - Follow-up idea: encode this as a Maestro flow so it is repeatable headlessly.
+
+### 2026-06-05 — field media upload — PASS
+
+- Device: Samsung Galaxy Tab S9 Ultra (SM-X910), Expo Go SDK 56, real hardware
+- Setup: same as above, plus `BELLFIELD_MEDIA_ROOT` pointed at a throwaway folder so the
+  finalized blob could be inspected on disk.
+- Flow: Job 1002 → Overview → Media → **Pick from library** → select a photo → Done. The app
+  staged the file and queued a media-upload op ("1 change waiting", job badge "1 queued").
+  Manual Sync Now drained it.
+- Result: **PASS**, verified server-side:
+  - upload intent replayed → a `media_attachments` row was created for job 1002 (kind=image,
+    `image/png`, 240409 bytes, original filename from the device)
+  - raw blob finalized: the file landed at `<media root>/job-service-1002/<id>.png` and its
+    on-disk size (240409 bytes) matches the row's `byte_size`
+  - media row marked uploaded: `uploaded_at` and `storage_path` populated, `is_void=false`
+  - the pending queue cleared after the successful sync
+- Staged-file cleanup runs in the same drain success path (`deleteStagedFieldMedia`) but was not
+  independently inspected — the staged file lives in Expo Go's app sandbox, which isn't reachable
+  over adb without root.
+- Evidence (gitignored): `artifacts/validation/2026-06-05T02-15-14-442Z/field-media/`.
