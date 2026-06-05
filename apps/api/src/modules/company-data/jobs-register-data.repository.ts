@@ -251,13 +251,6 @@ export class JobsRegisterDataRepository {
 
     const timelineTime = occurredAt || new Date().toISOString();
     const nextKind = input.kind ?? existingEntry.kind;
-    // Re-derive the cost classification only while the line is still unresolved/uncosted.
-    // Once a line is `applied` (cost posted) or `reversed`, an edit must NOT silently change
-    // its cost side — that requires an explicit void/reversal, not a re-classification.
-    const costing =
-      existingEntry.costingStatus === 'applied' || existingEntry.costingStatus === 'reversed'
-        ? { costingStatus: existingEntry.costingStatus, costingPolicy: existingEntry.costingPolicy }
-        : classifyRegisterCosting(nextKind);
     const nextEntry: RegisterEntryRecord = {
       ...existingEntry,
       appointmentId:
@@ -284,12 +277,55 @@ export class JobsRegisterDataRepository {
           ? input.inventorySourceLabel.trim() || undefined
           : existingEntry.inventorySourceLabel,
       billingProjectionState: input.billingProjectionState ?? existingEntry.billingProjectionState,
-      costingStatus: costing.costingStatus,
-      costingPolicy: costing.costingPolicy ?? undefined,
       updatedAt: timelineTime
     };
 
     await this.databaseService.transaction(async (queryable) => {
+      // Lock the row and read its CURRENT cost state, so the costing decision below is based on
+      // the live value — a concurrent resolver that already moved the line to `applied` (it also
+      // locks `for update`) is serialized with this edit and never clobbered back.
+      const lockedResult = await queryable.query<{
+        costingStatus: CostingStatus;
+        costingPolicy: CostingPolicy | null;
+        isVoid: boolean;
+      }>(
+        `select costing_status as "costingStatus", costing_policy as "costingPolicy",
+                is_void as "isVoid"
+         from register_entries
+         where id = $1
+         for update`,
+        [registerEntryId]
+      );
+      const locked = lockedResult.rows[0];
+      if (!locked) {
+        throw new NotFoundException('Register entry not found.');
+      }
+      if (locked.isVoid) {
+        // Editing a voided line could resurrect a billing line for cancelled work.
+        throw new ConflictException('Cannot edit a voided register entry.');
+      }
+
+      let finalCostingStatus: CostingStatus;
+      let finalCostingPolicy: CostingPolicy | null;
+      if (locked.costingStatus === 'applied' || locked.costingStatus === 'reversed') {
+        // A resolved line's cost artifact is already posted for a specific kind/quantity. Refuse
+        // cost-relevant edits (those need an explicit reversal); keep its cost status as-is.
+        const kindChanged = input.kind !== undefined && input.kind !== existingEntry.kind;
+        const quantityChanged =
+          input.quantity !== undefined && input.quantity !== existingEntry.quantity;
+        if (kindChanged || quantityChanged) {
+          throw new ConflictException(
+            "Reverse the resolved cost before changing this line's kind or quantity."
+          );
+        }
+        finalCostingStatus = locked.costingStatus;
+        finalCostingPolicy = locked.costingPolicy;
+      } else {
+        const reclassified = classifyRegisterCosting(nextKind);
+        finalCostingStatus = reclassified.costingStatus;
+        finalCostingPolicy = reclassified.costingPolicy;
+      }
+
       await queryable.query(
         `
           update register_entries
@@ -321,8 +357,8 @@ export class JobsRegisterDataRepository {
           nextEntry.partNumber ?? null,
           nextEntry.inventorySourceLabel ?? null,
           nextEntry.billingProjectionState,
-          nextEntry.costingStatus,
-          nextEntry.costingPolicy ?? null,
+          finalCostingStatus,
+          finalCostingPolicy ?? null,
           timelineTime
         ]
       );
@@ -448,9 +484,10 @@ export class JobsRegisterDataRepository {
         quantity: string | number;
         description: string;
         costingStatus: CostingStatus;
+        isVoid: boolean;
       }>(
         `select id, job_id as "jobId", kind, quantity, description,
-                costing_status as "costingStatus"
+                costing_status as "costingStatus", is_void as "isVoid"
          from register_entries
          where id = $1
          for update`,
@@ -459,6 +496,11 @@ export class JobsRegisterDataRepository {
       const entry = entryResult.rows[0];
       if (!entry) {
         throw new NotFoundException('Register entry not found.');
+      }
+      if (entry.isVoid) {
+        // A voided line is cancelled work; resolving it would post real cost the rollup counts
+        // while the unresolved count (which excludes voided rows) shows nothing.
+        throw new ConflictException('Cannot resolve the cost of a voided register line.');
       }
       if (entry.costingStatus !== 'needsResolution') {
         throw new ConflictException('This register line is not awaiting cost resolution.');
@@ -550,14 +592,19 @@ export class JobsRegisterDataRepository {
       }
       case 'laborActual': {
         this.requireKind(entry.kind, 'labor', 'labor');
-        if (!(resolution.hours > 0) || resolution.ratePerHour < 0) {
-          throw new BadRequestException('Labor needs positive hours and a non-negative rate.');
+        const amount = roundMoney(resolution.hours * resolution.ratePerHour);
+        if (!(resolution.hours > 0) || resolution.ratePerHour < 0 || !(amount > 0)) {
+          // A zero amount would violate the job_cost_events amount-sign check; a no-cost line
+          // must be resolved as zeroCost, not labor at a 0 rate.
+          throw new BadRequestException(
+            'Labor cost must be greater than zero; use zero-cost for a no-charge line.'
+          );
         }
         await insertJobCostEventWithin(queryable, {
           jobId: entry.jobId,
           kind: 'labor',
           description: entry.description,
-          amount: roundMoney(resolution.hours * resolution.ratePerHour),
+          amount,
           hours: resolution.hours,
           ratePerHour: resolution.ratePerHour,
           sourceRegisterEntryId: entry.id,

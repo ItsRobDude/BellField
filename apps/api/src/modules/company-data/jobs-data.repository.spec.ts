@@ -1056,7 +1056,13 @@ describe('JobsDataRepository', () => {
 
   it('updates register entries and can clear nullable fields', async () => {
     const queryable = {
-      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        // The update path locks + reads the line's current cost state inside the transaction.
+        if (String(sql).includes('for update')) {
+          return { rows: [{ costingStatus: 'notCosted', costingPolicy: null, isVoid: false }] };
+        }
+        return { rows: [] };
+      })
     };
     const databaseService = {
       query: jest.fn(async (sql: string, _params?: unknown[]) => {
@@ -1095,6 +1101,56 @@ describe('JobsDataRepository', () => {
     );
     expect(timelineCall?.[1]?.[4]).toBe('registerEntryEdited');
     expect(timelineCall?.[1]?.[5]).toBe('Register entry edited: Updated contactor.');
+  });
+
+  function updateRepoWithLocked(locked: {
+    costingStatus: string;
+    costingPolicy: string | null;
+    isVoid: boolean;
+  }) {
+    const queryable = {
+      query: jest.fn(async (sql: string) =>
+        String(sql).includes('for update') ? { rows: [locked] } : { rows: [] }
+      )
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string) =>
+        sql.includes('from register_entries') ? { rows: [createRegisterEntryRow()] } : { rows: [] }
+      ),
+      transaction: jest.fn(async (cb: (q: typeof queryable) => Promise<void>) => cb(queryable))
+    };
+    return { repository: createJobsDataRepository(databaseService), queryable };
+  }
+
+  it('rejects editing a voided register entry', async () => {
+    const { repository, queryable } = updateRepoWithLocked({
+      costingStatus: 'notCosted',
+      costingPolicy: null,
+      isVoid: true
+    });
+
+    await expect(
+      repository.updateRegisterEntry('register-1', { description: 'x' }, 'Dispatcher')
+    ).rejects.toThrow(/voided/i);
+    expect(
+      queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))
+    ).toBe(false);
+  });
+
+  it('rejects changing kind or quantity on a resolved (applied) line', async () => {
+    const { repository, queryable } = updateRepoWithLocked({
+      costingStatus: 'applied',
+      costingPolicy: 'trackedInventory',
+      isVoid: false
+    });
+
+    // createRegisterEntryRow is a 'part' with quantity 1.5 — changing quantity must be refused.
+    await expect(
+      repository.updateRegisterEntry('register-1', { quantity: 5 }, 'Dispatcher')
+    ).rejects.toThrow(/Reverse the resolved cost/i);
+    expect(
+      queryable.query.mock.calls.some(([sql]) => String(sql).includes('update register_entries'))
+    ).toBe(false);
   });
 
   it('voids register entries without deleting the row', async () => {

@@ -281,14 +281,14 @@ describe('invoice reflection utils — posted (locked) invoice', () => {
     expect(note?.params).toContain('registerEntryNotReflected');
   });
 
-  it('drops a posted-invoice register edit silently when no linked line existed', async () => {
+  it('drops a posted-invoice edit silently for a non-billing line with no linked line', async () => {
     const { queryable, calls } = scriptedQueryable([
       postedContext,
       { match: /select 1 from invoice_line_items/i, rowCount: 0 }
     ]);
 
     await reflectRegisterEntryUpdate(
-      billableEntry({ jobId: 'job-1', description: 'Edited', totalAmount: 95 }),
+      billableEntry({ jobId: 'job-1', billingProjectionState: 'notBilled', description: 'Edited' }),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
@@ -296,6 +296,30 @@ describe('invoice reflection utils — posted (locked) invoice', () => {
 
     expect(findCall(calls, LINE_UPDATE)).toBeUndefined();
     expect(findCall(calls, NOTE)).toBeUndefined();
+  });
+
+  it('notes a posted-invoice line that becomes billable but cannot be added', async () => {
+    // internalOnly (no line at posting) -> billable after posting: it now wants a customer line
+    // that the locked bill cannot accept, so the office must be told to adjust.
+    const { queryable, calls } = scriptedQueryable([
+      postedContext,
+      { match: /select 1 from invoice_line_items/i, rowCount: 0 }
+    ]);
+
+    await reflectRegisterEntryUpdate(
+      billableEntry({
+        jobId: 'job-1',
+        billingProjectionState: 'billable',
+        description: 'Now billed'
+      }),
+      'Tech Tina',
+      '2026-06-01T00:00:00.000Z',
+      queryable
+    );
+
+    expect(findCall(calls, LINE_UPDATE)).toBeUndefined();
+    const note = findCall(calls, NOTE);
+    expect(note?.params).toContain('registerEntryNotReflected');
   });
 
   it('drops a posted-invoice register void but notes it when a linked line existed', async () => {

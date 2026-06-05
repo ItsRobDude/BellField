@@ -325,7 +325,14 @@ export async function reflectRegisterEntryUpdate(
     return;
   }
   if (context.status === 'posted') {
-    if (await hasLinkedInvoiceLine(entry.id, queryable)) {
+    // The posted bill is locked. Note the edit when it WOULD have changed billing — either it
+    // has a linked line that would move, OR it now wants a customer line (e.g. an internalOnly
+    // line flipped to billable after posting) that can no longer be added. Either way the office
+    // needs an adjustment.
+    const wouldChangeBilling =
+      (await hasLinkedInvoiceLine(entry.id, queryable)) ||
+      billingProducesInvoiceLine(entry.billingProjectionState);
+    if (wouldChangeBilling) {
       await insertRegisterNotReflectedNote(
         entry.jobId,
         entry.description,
