@@ -1043,7 +1043,9 @@ describe('JobsDataRepository', () => {
     );
     expect(insertCall?.[1]?.[4]).toBe('Contactor');
     expect(insertCall?.[1]?.[11]).toBe('billable'); // billing_projection_state defaults to billable
-    expect(insertCall?.[1]?.[12]).toBe('tech-1'); // captured_by_employee_id
+    expect(insertCall?.[1]?.[12]).toBe('needsResolution'); // costing_status (a 'part' is cost-expected)
+    expect(insertCall?.[1]?.[13]).toBeNull(); // costing_policy (decided at resolution)
+    expect(insertCall?.[1]?.[14]).toBe('tech-1'); // captured_by_employee_id
 
     const timelineCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('insert into job_timeline_entries')

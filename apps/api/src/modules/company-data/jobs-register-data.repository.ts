@@ -20,6 +20,7 @@ import {
   reflectRegisterEntryUpdate,
   reflectRegisterEntryVoid
 } from './invoice-reflection-utils';
+import { classifyRegisterCosting } from './register-costing-classification';
 
 type RegisterEntryRow = {
   id: string;
@@ -131,6 +132,7 @@ export class JobsRegisterDataRepository {
   ): Promise<RegisterEntryRecord> {
     const timelineTime = occurredAt || new Date().toISOString();
     const registerEntryId = randomUUID();
+    const costing = classifyRegisterCosting(input.kind);
 
     await this.databaseService.transaction(async (queryable) => {
       await queryable.query(
@@ -148,6 +150,8 @@ export class JobsRegisterDataRepository {
             part_number,
             inventory_source_label,
             billing_projection_state,
+            costing_status,
+            costing_policy,
             captured_by_employee_id,
             captured_by_name,
             captured_at,
@@ -156,7 +160,7 @@ export class JobsRegisterDataRepository {
             created_at,
             updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false, null, $16, $17)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19)
         `,
         [
           registerEntryId,
@@ -171,6 +175,8 @@ export class JobsRegisterDataRepository {
           input.partNumber?.trim() || null,
           input.inventorySourceLabel?.trim() || null,
           input.billingProjectionState ?? 'billable',
+          costing.costingStatus,
+          costing.costingPolicy,
           actor.id,
           actor.displayName,
           timelineTime,
@@ -235,13 +241,21 @@ export class JobsRegisterDataRepository {
     }
 
     const timelineTime = occurredAt || new Date().toISOString();
+    const nextKind = input.kind ?? existingEntry.kind;
+    // Re-derive the cost classification only while the line is still unresolved/uncosted.
+    // Once a line is `applied` (cost posted) or `reversed`, an edit must NOT silently change
+    // its cost side — that requires an explicit void/reversal, not a re-classification.
+    const costing =
+      existingEntry.costingStatus === 'applied' || existingEntry.costingStatus === 'reversed'
+        ? { costingStatus: existingEntry.costingStatus, costingPolicy: existingEntry.costingPolicy }
+        : classifyRegisterCosting(nextKind);
     const nextEntry: RegisterEntryRecord = {
       ...existingEntry,
       appointmentId:
         input.appointmentId !== undefined
           ? input.appointmentId?.trim() || undefined
           : existingEntry.appointmentId,
-      kind: input.kind ?? existingEntry.kind,
+      kind: nextKind,
       description:
         input.description !== undefined ? input.description.trim() : existingEntry.description,
       quantity: input.quantity ?? existingEntry.quantity,
@@ -261,6 +275,8 @@ export class JobsRegisterDataRepository {
           ? input.inventorySourceLabel.trim() || undefined
           : existingEntry.inventorySourceLabel,
       billingProjectionState: input.billingProjectionState ?? existingEntry.billingProjectionState,
+      costingStatus: costing.costingStatus,
+      costingPolicy: costing.costingPolicy ?? undefined,
       updatedAt: timelineTime
     };
 
@@ -279,7 +295,9 @@ export class JobsRegisterDataRepository {
             part_number = $9,
             inventory_source_label = $10,
             billing_projection_state = $11,
-            updated_at = $12
+            costing_status = $12,
+            costing_policy = $13,
+            updated_at = $14
           where id = $1
         `,
         [
@@ -294,6 +312,8 @@ export class JobsRegisterDataRepository {
           nextEntry.partNumber ?? null,
           nextEntry.inventorySourceLabel ?? null,
           nextEntry.billingProjectionState,
+          nextEntry.costingStatus,
+          nextEntry.costingPolicy ?? null,
           timelineTime
         ]
       );
