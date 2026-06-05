@@ -10,7 +10,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAssignedFieldWork } from '@/lib/operations-api';
+import { getAssignedFieldWork, getFieldTruckStock } from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import {
   initializeFieldSyncStore,
@@ -18,7 +18,8 @@ import {
   loadPendingOperations,
   loadSyncMetadata,
   saveAssignedWorkSnapshot,
-  saveSyncMetadata
+  saveSyncMetadata,
+  saveTruckStockSnapshot
 } from './field-sync-store';
 import type { AssignedWorkSnapshot, PendingOperation, SyncMetadata } from './field-sync-types';
 import { applyPendingOperations } from './field-pending-replay';
@@ -61,6 +62,21 @@ const defaultSyncMetadata: SyncMetadata = {
   lastSnapshotVersion: null,
   lastSyncError: null
 };
+
+/**
+ * Refresh + persist the technician's truck-stock snapshot so the part picker (Slice 1b-D) can
+ * read it from the offline cache. Non-fatal: a technician with no assigned truck (or a transient
+ * failure) keeps any cached snapshot and can still capture free-text parts, so this never
+ * surfaces an error or blocks assigned-work loading.
+ */
+async function syncTruckStock(input: { sessionToken: string; apiBaseUrl: string }): Promise<void> {
+  try {
+    const snapshot = await getFieldTruckStock(input);
+    await saveTruckStockSnapshot(snapshot);
+  } catch {
+    // Swallowed by design — see the doc comment above.
+  }
+}
 
 export function TechnicianWorkspaceScreen({
   apiBaseUrl,
@@ -160,6 +176,7 @@ export function TechnicianWorkspaceScreen({
         );
         setServerSnapshot(nextAssignedWork);
         setSyncMetadata(nextSyncMetadata);
+        await syncTruckStock({ sessionToken, apiBaseUrl });
       } catch (error) {
         setErrorMessage(
           error instanceof Error ? error.message : 'Unable to load BellField field storage.'
@@ -193,6 +210,7 @@ export function TechnicianWorkspaceScreen({
       setOfficeChangeMessages(summarizeOfficeAppointmentChanges(serverSnapshot, nextAssignedWork));
       setServerSnapshot(nextAssignedWork);
       setSyncMetadata(nextSyncMetadata);
+      await syncTruckStock({ sessionToken, apiBaseUrl });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh assigned work.');
     } finally {

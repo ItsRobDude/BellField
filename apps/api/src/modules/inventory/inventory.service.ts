@@ -8,6 +8,7 @@ import type {
   CreateInventoryAdjustmentRequest,
   CreateInventoryIssueRequest,
   CreateInventoryTransferRequest,
+  FieldTruckStockResponse,
   InventoryMovementResponse,
   InventoryOnHandResponse
 } from '@bellfield/contracts';
@@ -176,6 +177,22 @@ export class InventoryService {
       actor: { id: actor.id, displayName: actor.displayName }
     });
     return { rows: await this.inventoryRepository.getOnHand() };
+  }
+
+  /**
+   * Field-only: the calling technician's truck-stock snapshot for the part-add picker. Unlike
+   * the office ledger endpoints this is authorized on the field surface (a technician owns the
+   * read of their own truck) and scoped to truck locations assigned to them.
+   */
+  async getFieldTruckStock(sessionToken: string): Promise<FieldTruckStockResponse> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'register:create',
+      ['field-mobile']
+    );
+    const items = await this.inventoryRepository.listTruckStockForEmployee(actor.id);
+    const serverTime = new Date().toISOString();
+    return { items, serverTime, snapshotVersion: serverTime };
   }
 
   private async requireItem(itemId: string) {

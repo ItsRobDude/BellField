@@ -71,3 +71,70 @@ describe('InventoryRepository.recordIssueToJob', () => {
     expect(calls.some((c) => MOVEMENT_INSERT.test(c.sql))).toBe(false);
   });
 });
+
+describe('InventoryRepository.listTruckStockForEmployee', () => {
+  function scriptedTruckStock(rows: unknown[]) {
+    const calls: Array<{ sql: string; params: unknown[] }> = [];
+    const query = (async (sql: string, params: unknown[] = []) => {
+      calls.push({ sql, params });
+      return { rows };
+    }) as unknown as QueryExecutor['query'];
+    const databaseService = { query } as never;
+    return { repository: new InventoryRepository(databaseService), calls };
+  }
+
+  it('scopes the query to the employee and maps qty + weighted-average cost', async () => {
+    const { repository, calls } = scriptedTruckStock([
+      {
+        itemId: 'item-1',
+        sku: 'CAP-45',
+        itemName: 'Capacitor 45uF',
+        unitOfMeasure: 'each',
+        locationId: 'truck-1',
+        locationName: 'Truck 1',
+        quantity: '4',
+        totalValue: '106'
+      }
+    ]);
+
+    const items = await repository.listTruckStockForEmployee('emp-9');
+
+    expect(calls[0].params).toEqual(['emp-9']);
+    expect(calls[0].sql).toMatch(/loc\.kind = 'truck'/);
+    expect(calls[0].sql).toMatch(/it\.kind = 'part'/);
+    expect(calls[0].sql).toMatch(/having sum\(m\.quantity\) > 0/);
+    expect(items).toEqual([
+      {
+        itemId: 'item-1',
+        sku: 'CAP-45',
+        itemName: 'Capacitor 45uF',
+        unitOfMeasure: 'each',
+        locationId: 'truck-1',
+        locationName: 'Truck 1',
+        quantityOnHand: 4,
+        averageUnitCost: 26.5
+      }
+    ]);
+  });
+
+  it('maps null sku/unit to undefined', async () => {
+    const { repository } = scriptedTruckStock([
+      {
+        itemId: 'item-2',
+        sku: null,
+        itemName: 'Generic Fuse',
+        unitOfMeasure: null,
+        locationId: 'truck-1',
+        locationName: 'Truck 1',
+        quantity: '2',
+        totalValue: '5'
+      }
+    ]);
+
+    const [item] = await repository.listTruckStockForEmployee('emp-9');
+
+    expect(item.sku).toBeUndefined();
+    expect(item.unitOfMeasure).toBeUndefined();
+    expect(item.averageUnitCost).toBe(2.5);
+  });
+});

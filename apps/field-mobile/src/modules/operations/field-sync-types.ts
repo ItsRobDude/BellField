@@ -3,6 +3,7 @@ import type {
   AppointmentStatus,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  FieldTruckStockResponse,
   MediaAttachmentKind,
   RegisterEntryKind,
   SyncResult
@@ -105,6 +106,9 @@ export type PendingOperation =
     });
 
 export type AssignedWorkSnapshot = FieldAssignedWorkResponse;
+
+/** The technician's cached truck-stock snapshot (Slice 1b part-add picker). */
+export type TruckStockSnapshot = FieldTruckStockResponse;
 
 export type SyncMetadata = {
   lastSuccessfulSyncAt: string | null;

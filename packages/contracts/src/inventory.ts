@@ -129,6 +129,33 @@ export interface InventoryOnHandResponse {
 }
 
 /**
+ * One pickable part on a technician's truck: a structured (item, truck-location) pair with
+ * its current on-hand quantity and weighted-average cost. Drives the field part-add picker
+ * (Slice 1b) so a captured part can carry structured inventory refs the server auto-costs.
+ */
+export interface FieldTruckStockItem {
+  itemId: string;
+  sku?: string;
+  itemName: string;
+  unitOfMeasure?: string;
+  locationId: string;
+  locationName: string;
+  quantityOnHand: number;
+  averageUnitCost: number;
+}
+
+/**
+ * The technician's truck-stock snapshot: every part with positive on-hand on a truck location
+ * assigned to them. `snapshotVersion` lets the field app skip redundant re-caches, mirroring
+ * the assigned-work snapshot. See docs/job-costing-from-field-capture-spec.md §3.
+ */
+export interface FieldTruckStockResponse {
+  items: FieldTruckStockItem[];
+  serverTime: string;
+  snapshotVersion: string;
+}
+
+/**
  * Adjust on-hand at a location. quantityDelta is signed: positive = gain (found),
  * negative = loss (shrinkage/damage). A gain should carry a unitCost; a loss is valued
  * at the current average.
