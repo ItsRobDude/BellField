@@ -114,6 +114,21 @@ Suggested office smoke evidence:
 
 Capture screenshots under `artifacts/validation/<timestamp>/office/` with names that describe the state being proven, for example `dispatch-schedule-edit.png` or `job-cost-finalized-lock.png`.
 
+### Run log
+
+- **2026-06-05 — PASS.** Drove office-web in a live preview, signed in as the seeded owner.
+  - Dispatch: board loaded (3 appointments under one tech); Today / previous / next day nav and
+    Refresh all worked; opened a job detail from an appointment card; edited an appointment's
+    status (`scheduled` → `confirmed`) and its scheduled date — both persisted (verified in the
+    `appointments` table).
+  - M9 surfaces rendered against real data: Inventory (on-hand / items / locations / recent
+    movements), Purchasing (purchase-order list), and the Job cost tab (live rollup). Posted a
+    labor cost through the Job cost tab; the rollup updated to $200 and a matching
+    `job_cost_events` row was written (verified server-side).
+  - Tooling note: the preview's screenshot capture hung on this run, so evidence is the live
+    preview plus DB verification rather than saved images. A Chrome-extension session or
+    Playwright run would give repeatable screenshots next time.
+
 ## Field Device Smoke
 
 Use [field-mobile-smoke.md](./field-mobile-smoke.md) for the Android/Expo workflow.
