@@ -289,6 +289,8 @@ export interface CreateRegisterEntryRequest {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** How the line projects onto the customer invoice. Defaults to `billable`. */
+  billingProjectionState?: BillingProjectionState;
   occurredAt?: string;
   baseUpdatedAt?: string;
   syncSource?: FieldSyncSource;
@@ -304,6 +306,8 @@ export interface UpdateRegisterEntryRequest {
   totalAmount?: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** Change how the line projects onto the customer invoice. */
+  billingProjectionState?: BillingProjectionState;
   occurredAt?: string;
   baseUpdatedAt?: string;
   syncSource?: FieldSyncSource;

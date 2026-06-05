@@ -1,3 +1,4 @@
+import type { BillingProjectionState } from '@bellfield/contracts';
 import {
   reflectRegisterEntryCreate,
   reflectRegisterEntryUpdate,
@@ -25,14 +26,19 @@ function findCall(calls: Array<{ sql: string; params: unknown[] }>, fragment: Re
   return calls.find((c) => fragment.test(c.sql));
 }
 
-const draftContext = {
-  match: /select id, status from invoices/i,
-  rows: [{ id: 'inv-1', status: 'draft' }]
-};
-const postedContext = {
-  match: /select id, status from invoices/i,
-  rows: [{ id: 'inv-1', status: 'posted' }]
-};
+const INVOICE_CTX = /select id, status from invoices/i;
+const NEXT_POS = /coalesce\(max\(line_position\)/i;
+const HAS_LINKED = /select 1 from invoice_line_items[\s\S]*source_sync_state = 'linked'/i;
+const HAS_ANY =
+  /select 1 from invoice_line_items\s+where source_register_entry_id = \$1 and is_void = false/i;
+const LINE_INSERT = /insert into invoice_line_items/i;
+const LINE_UPDATE = /update invoice_line_items set\s+kind =/i;
+const LINE_VOID = /update invoice_line_items set\s+is_void = true/i;
+const TOTALS = /update invoices set/i;
+const NOTE = /insert into job_timeline_entries/i;
+
+const draftContext = { match: INVOICE_CTX, rows: [{ id: 'inv-1', status: 'draft' }] };
+const postedContext = { match: INVOICE_CTX, rows: [{ id: 'inv-1', status: 'posted' }] };
 const pricingHeader = {
   match: /from invoices where id =/i,
   rows: [
@@ -44,80 +50,181 @@ const emptyLineList = {
   rows: []
 };
 
+function billableEntry(
+  overrides: Partial<{
+    id: string;
+    jobId: string;
+    kind: string;
+    description: string;
+    totalAmount: number;
+    billingProjectionState: BillingProjectionState;
+  }> = {}
+) {
+  return {
+    id: 're-1',
+    jobId: 'job-1',
+    kind: 'part',
+    description: 'Contactor',
+    totalAmount: 125,
+    billingProjectionState: 'billable' as BillingProjectionState,
+    ...overrides
+  };
+}
+
 describe('invoice reflection utils — draft invoice', () => {
-  it('reflects a register create as a quantity-1 linked line at the register total, then recomputes', async () => {
+  it('reflects a billable register create as a quantity-1 linked line at the register total', async () => {
     const { queryable, calls } = scriptedQueryable([
       draftContext,
-      { match: /coalesce\(max\(line_position\)/i, rows: [{ nextPosition: 2 }] },
+      { match: NEXT_POS, rows: [{ nextPosition: 2 }] },
       pricingHeader,
       emptyLineList
     ]);
 
     await reflectRegisterEntryCreate(
       'job-1',
-      { id: 're-1', kind: 'part', description: 'Contactor', totalAmount: 125 },
+      billableEntry(),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
     );
 
     // The invoice row is locked FOR UPDATE before any line write (posted-lock race guard).
-    expect(findCall(calls, /select id, status from invoices/i)?.sql).toMatch(/for update/i);
-    const insert = findCall(calls, /insert into invoice_line_items/i);
+    expect(findCall(calls, INVOICE_CTX)?.sql).toMatch(/for update/i);
+    const insert = findCall(calls, LINE_INSERT);
     expect(insert).toBeDefined();
-    // quantity is the literal 1; unit_price and line_subtotal are the register total.
-    expect(insert?.params).toContain(125);
+    expect(insert?.params[6]).toBe(125); // unit_price = register total
     expect(insert?.params).toContain('re-1');
     expect(insert?.sql).toMatch(/'register'/);
     expect(insert?.sql).toMatch(/values \(\$1, \$2, \$3, \$4, \$5, 1,/);
-    // A recompute (update invoices) follows.
-    expect(findCall(calls, /update invoices set/i)).toBeDefined();
+    expect(findCall(calls, TOTALS)).toBeDefined();
   });
 
-  it('updates only a linked invoice line and recomputes when a row changed', async () => {
+  it('reflects a no-charge register create as a $0 line so the customer still sees the work', async () => {
     const { queryable, calls } = scriptedQueryable([
       draftContext,
-      { match: /update invoice_line_items set/i, rowCount: 1 },
+      { match: NEXT_POS, rows: [{ nextPosition: 0 }] },
+      pricingHeader,
+      emptyLineList
+    ]);
+
+    await reflectRegisterEntryCreate(
+      'job-1',
+      billableEntry({ billingProjectionState: 'noChargeShown' }),
+      'Tech Tina',
+      '2026-06-01T00:00:00.000Z',
+      queryable
+    );
+
+    const insert = findCall(calls, LINE_INSERT);
+    expect(insert).toBeDefined();
+    expect(insert?.params[6]).toBe(0); // unit_price = 0 (no charge), not the register total
+    expect(findCall(calls, TOTALS)).toBeDefined();
+  });
+
+  it('reflects nothing for an internal-only register create (no customer line, no invoice read)', async () => {
+    const { queryable, calls } = scriptedQueryable([draftContext]);
+
+    await reflectRegisterEntryCreate(
+      'job-1',
+      billableEntry({ billingProjectionState: 'internalOnly' }),
+      'Tech Tina',
+      '2026-06-01T00:00:00.000Z',
+      queryable
+    );
+
+    expect(findCall(calls, INVOICE_CTX)).toBeUndefined();
+    expect(findCall(calls, LINE_INSERT)).toBeUndefined();
+    expect(findCall(calls, TOTALS)).toBeUndefined();
+  });
+
+  it('updates the linked invoice line for a billable edit and recomputes', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      draftContext,
+      { match: HAS_LINKED, rowCount: 1, rows: [{ x: 1 }] },
+      { match: LINE_UPDATE, rowCount: 1 },
       pricingHeader,
       emptyLineList
     ]);
 
     await reflectRegisterEntryUpdate(
-      { id: 're-1', jobId: 'job-1', kind: 'part', description: 'New', totalAmount: 95 },
+      billableEntry({ jobId: 'job-1', description: 'New', totalAmount: 95 }),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
     );
 
-    const update = findCall(calls, /update invoice_line_items set/i);
-    // The WHERE clause restricts to linked, non-void lines for this register entry.
+    const update = findCall(calls, LINE_UPDATE);
     expect(update?.sql).toMatch(/source_sync_state = 'linked'/);
-    expect(update?.sql).toMatch(/is_void = false/);
-    expect(findCall(calls, /update invoices set/i)).toBeDefined();
+    expect(update?.params[4]).toBe(95); // unit_price = register total (billable)
+    expect(findCall(calls, TOTALS)).toBeDefined();
   });
 
-  it('does not recompute when the register edit matched no linked line (detached/none)', async () => {
+  it('voids the linked line when a billable line transitions to internal-only', async () => {
     const { queryable, calls } = scriptedQueryable([
       draftContext,
-      { match: /update invoice_line_items set/i, rowCount: 0 }
+      { match: HAS_LINKED, rowCount: 1, rows: [{ x: 1 }] },
+      { match: LINE_VOID, rowCount: 1 },
+      pricingHeader,
+      emptyLineList
     ]);
 
     await reflectRegisterEntryUpdate(
-      { id: 're-1', jobId: 'job-1', kind: 'part', description: 'New', totalAmount: 95 },
+      billableEntry({ jobId: 'job-1', billingProjectionState: 'internalOnly' }),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
     );
 
-    // Nothing reflected: no totals recompute, no note (the invoice is still a draft).
-    expect(findCall(calls, /update invoices set/i)).toBeUndefined();
-    expect(findCall(calls, /insert into job_timeline_entries/i)).toBeUndefined();
+    const voidCall = findCall(calls, LINE_VOID);
+    expect(voidCall?.sql).toMatch(/no longer bills/i);
+    expect(findCall(calls, LINE_UPDATE)).toBeUndefined();
+    expect(findCall(calls, TOTALS)).toBeDefined();
   });
 
-  it('voids the linked invoice line and recomputes', async () => {
+  it('creates a line when an internal-only line transitions to billable (no line yet)', async () => {
     const { queryable, calls } = scriptedQueryable([
       draftContext,
-      { match: /update invoice_line_items set\s+is_void = true/i, rowCount: 1 },
+      { match: HAS_LINKED, rowCount: 0 },
+      { match: HAS_ANY, rowCount: 0 },
+      { match: NEXT_POS, rows: [{ nextPosition: 0 }] },
+      pricingHeader,
+      emptyLineList
+    ]);
+
+    await reflectRegisterEntryUpdate(
+      billableEntry({ jobId: 'job-1' }),
+      'Tech Tina',
+      '2026-06-01T00:00:00.000Z',
+      queryable
+    );
+
+    expect(findCall(calls, LINE_INSERT)).toBeDefined();
+    expect(findCall(calls, TOTALS)).toBeDefined();
+  });
+
+  it('leaves an office-detached line alone (no create, no void, no recompute)', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      draftContext,
+      { match: HAS_LINKED, rowCount: 0 },
+      { match: HAS_ANY, rowCount: 1, rows: [{ x: 1 }] }
+    ]);
+
+    await reflectRegisterEntryUpdate(
+      billableEntry({ jobId: 'job-1', description: 'New', totalAmount: 95 }),
+      'Tech Tina',
+      '2026-06-01T00:00:00.000Z',
+      queryable
+    );
+
+    expect(findCall(calls, LINE_INSERT)).toBeUndefined();
+    expect(findCall(calls, LINE_VOID)).toBeUndefined();
+    expect(findCall(calls, TOTALS)).toBeUndefined();
+  });
+
+  it('voids the linked invoice line on a register void and recomputes', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      draftContext,
+      { match: LINE_VOID, rowCount: 1 },
       pricingHeader,
       emptyLineList
     ]);
@@ -131,9 +238,9 @@ describe('invoice reflection utils — draft invoice', () => {
       queryable
     );
 
-    const voidCall = findCall(calls, /update invoice_line_items set\s+is_void = true/i);
+    const voidCall = findCall(calls, LINE_VOID);
     expect(voidCall?.sql).toMatch(/source_sync_state = 'linked'/);
-    expect(findCall(calls, /update invoices set/i)).toBeDefined();
+    expect(findCall(calls, TOTALS)).toBeDefined();
   });
 });
 
@@ -143,15 +250,15 @@ describe('invoice reflection utils — posted (locked) invoice', () => {
 
     await reflectRegisterEntryCreate(
       'job-1',
-      { id: 're-1', kind: 'part', description: 'Late part', totalAmount: 125 },
+      billableEntry({ description: 'Late part' }),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
     );
 
-    expect(findCall(calls, /insert into invoice_line_items/i)).toBeUndefined();
-    expect(findCall(calls, /update invoices set/i)).toBeUndefined();
-    const note = findCall(calls, /insert into job_timeline_entries/i);
+    expect(findCall(calls, LINE_INSERT)).toBeUndefined();
+    expect(findCall(calls, TOTALS)).toBeUndefined();
+    const note = findCall(calls, NOTE);
     expect(note?.params).toContain('registerEntryNotReflected');
     expect(note?.params).toContain('Tech Tina');
   });
@@ -163,14 +270,14 @@ describe('invoice reflection utils — posted (locked) invoice', () => {
     ]);
 
     await reflectRegisterEntryUpdate(
-      { id: 're-1', jobId: 'job-1', kind: 'part', description: 'Edited', totalAmount: 95 },
+      billableEntry({ jobId: 'job-1', description: 'Edited', totalAmount: 95 }),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
     );
 
-    expect(findCall(calls, /update invoice_line_items set/i)).toBeUndefined();
-    const note = findCall(calls, /insert into job_timeline_entries/i);
+    expect(findCall(calls, LINE_UPDATE)).toBeUndefined();
+    const note = findCall(calls, NOTE);
     expect(note?.params).toContain('registerEntryNotReflected');
   });
 
@@ -181,14 +288,14 @@ describe('invoice reflection utils — posted (locked) invoice', () => {
     ]);
 
     await reflectRegisterEntryUpdate(
-      { id: 're-1', jobId: 'job-1', kind: 'part', description: 'Edited', totalAmount: 95 },
+      billableEntry({ jobId: 'job-1', description: 'Edited', totalAmount: 95 }),
       'Tech Tina',
       '2026-06-01T00:00:00.000Z',
       queryable
     );
 
-    expect(findCall(calls, /update invoice_line_items set/i)).toBeUndefined();
-    expect(findCall(calls, /insert into job_timeline_entries/i)).toBeUndefined();
+    expect(findCall(calls, LINE_UPDATE)).toBeUndefined();
+    expect(findCall(calls, NOTE)).toBeUndefined();
   });
 
   it('drops a posted-invoice register void but notes it when a linked line existed', async () => {
@@ -206,8 +313,8 @@ describe('invoice reflection utils — posted (locked) invoice', () => {
       queryable
     );
 
-    expect(findCall(calls, /update invoice_line_items set\s+is_void = true/i)).toBeUndefined();
-    const note = findCall(calls, /insert into job_timeline_entries/i);
+    expect(findCall(calls, LINE_VOID)).toBeUndefined();
+    const note = findCall(calls, NOTE);
     expect(note?.params).toContain('registerEntryNotReflected');
   });
 });

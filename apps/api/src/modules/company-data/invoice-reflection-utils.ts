@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import type { BillingProjectionState } from '@bellfield/contracts';
 import { priceEstimate, type EstimatePricingLine } from '@bellfield/estimating';
 import type { QueryExecutor } from '../../database/database.service';
 import { insertJobTimelineEntry } from './jobs-data-repository-utils';
@@ -36,7 +37,76 @@ type ReflectableRegisterEntry = {
   unitOfMeasure?: string;
   partNumber?: string;
   inventorySourceLabel?: string;
+  billingProjectionState: BillingProjectionState;
 };
+
+/**
+ * Whether a line projects onto the customer invoice at all. `billable` and `noChargeShown`
+ * both produce an invoice line (the latter at $0 so the customer sees the work); `internalOnly`
+ * and `notBilled` produce no customer-facing line. See the spec §1 (billing projection states).
+ */
+function billingProducesInvoiceLine(state: BillingProjectionState): boolean {
+  return state === 'billable' || state === 'noChargeShown';
+}
+
+/** The unit price a reflected line carries: 0 for a no-charge line, else the captured total. */
+function reflectedUnitPrice(entry: ReflectableRegisterEntry): number {
+  return entry.billingProjectionState === 'noChargeShown' ? 0 : entry.totalAmount;
+}
+
+/**
+ * True when ANY non-void invoice line (linked OR office-detached) already exists for this
+ * register entry. Used to decide whether a billing-state transition should CREATE a fresh
+ * reflected line: we only create one when no line exists at all, so we never duplicate an
+ * office-owned (detached) line.
+ */
+async function hasAnyActiveInvoiceLine(
+  registerEntryId: string,
+  queryable: QueryExecutor
+): Promise<boolean> {
+  const result = await queryable.query(
+    `select 1 from invoice_line_items
+     where source_register_entry_id = $1 and is_void = false
+     limit 1`,
+    [registerEntryId]
+  );
+  return (result.rowCount ?? 0) > 0;
+}
+
+/** Insert one linked, reflected invoice line (quantity 1 at the given unit price). */
+async function insertReflectedInvoiceLine(
+  context: MainInvoiceContext,
+  entry: ReflectableRegisterEntry,
+  unitPrice: number,
+  occurredAt: string,
+  queryable: QueryExecutor
+): Promise<void> {
+  const position = await nextLinePosition(context.id, queryable);
+  await queryable.query(
+    `insert into invoice_line_items (
+       id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
+       unit_price, unit_cost, taxable, part_number, inventory_source_label,
+       line_subtotal_amount, line_cost_amount,
+       source_kind, source_register_entry_id, source_sync_state,
+       is_void, created_at, updated_at
+     )
+     values ($1, $2, $3, $4, $5, 1, $6, $7, null, true, $8, $9, $7, null,
+             'register', $10, 'linked', false, $11, $11)`,
+    [
+      randomUUID(),
+      context.id,
+      position,
+      entry.kind,
+      entry.description,
+      entry.unitOfMeasure ?? null,
+      unitPrice,
+      entry.partNumber ?? null,
+      entry.inventorySourceLabel ?? null,
+      entry.id,
+      occurredAt
+    ]
+  );
+}
 
 type MainInvoiceContext = { id: string; status: 'draft' | 'posted' };
 
@@ -190,7 +260,11 @@ export async function recalculateInvoiceTotals(
   );
 }
 
-/** Reflect a newly created register entry as a linked invoice line, then recompute totals. */
+/**
+ * Reflect a newly created register entry as a linked invoice line, then recompute totals.
+ * `internalOnly` / `notBilled` lines produce no customer-facing line at all; `noChargeShown`
+ * produces a $0 line so the customer still sees the work performed.
+ */
 export async function reflectRegisterEntryCreate(
   jobId: string,
   entry: ReflectableRegisterEntry,
@@ -198,6 +272,12 @@ export async function reflectRegisterEntryCreate(
   occurredAt: string,
   queryable: QueryExecutor
 ): Promise<void> {
+  if (!billingProducesInvoiceLine(entry.billingProjectionState)) {
+    // Not billed to the customer: nothing to reflect, and no "not reflected" note is
+    // warranted even on a posted invoice (it was never going to appear on the bill).
+    return;
+  }
+
   const context = await getMainInvoiceContext(jobId, queryable);
   if (!context) {
     return;
@@ -215,32 +295,13 @@ export async function reflectRegisterEntryCreate(
     return;
   }
 
-  const position = await nextLinePosition(context.id, queryable);
-  await queryable.query(
-    `insert into invoice_line_items (
-       id, invoice_id, line_position, kind, description, quantity, unit_of_measure,
-       unit_price, unit_cost, taxable, part_number, inventory_source_label,
-       line_subtotal_amount, line_cost_amount,
-       source_kind, source_register_entry_id, source_sync_state,
-       is_void, created_at, updated_at
-     )
-     values ($1, $2, $3, $4, $5, 1, $6, $7, null, true, $8, $9, $7, null,
-             'register', $10, 'linked', false, $11, $11)`,
-    [
-      randomUUID(),
-      context.id,
-      position,
-      entry.kind,
-      entry.description,
-      entry.unitOfMeasure ?? null,
-      entry.totalAmount,
-      entry.partNumber ?? null,
-      entry.inventorySourceLabel ?? null,
-      entry.id,
-      occurredAt
-    ]
+  await insertReflectedInvoiceLine(
+    context,
+    entry,
+    reflectedUnitPrice(entry),
+    occurredAt,
+    queryable
   );
-
   await recalculateInvoiceTotals(context.id, occurredAt, queryable);
 }
 
@@ -276,32 +337,66 @@ export async function reflectRegisterEntryUpdate(
     return;
   }
 
-  const updateResult = await queryable.query(
-    `update invoice_line_items set
-       kind = $2,
-       description = $3,
-       unit_of_measure = $4,
-       unit_price = $5,
-       line_subtotal_amount = $5,
-       part_number = $6,
-       inventory_source_label = $7,
-       updated_at = $8
-     where source_register_entry_id = $1
-       and source_sync_state = 'linked'
-       and is_void = false`,
-    [
-      entry.id,
-      entry.kind,
-      entry.description,
-      entry.unitOfMeasure ?? null,
-      entry.totalAmount,
-      entry.partNumber ?? null,
-      entry.inventorySourceLabel ?? null,
-      occurredAt
-    ]
-  );
+  // Reconcile the linked reflection with the entry's current billing projection. Reflection
+  // only ever manages LINKED lines; office-detached lines are left to the office. So a
+  // transition INTO billing creates a line only when no line exists at all (never duplicating
+  // a detached one), and a transition OUT of billing voids the linked line.
+  const producesLine = billingProducesInvoiceLine(entry.billingProjectionState);
+  const hasLinked = await hasLinkedInvoiceLine(entry.id, queryable);
+  let changed = false;
 
-  if ((updateResult.rowCount ?? 0) > 0) {
+  if (producesLine && hasLinked) {
+    const updateResult = await queryable.query(
+      `update invoice_line_items set
+         kind = $2,
+         description = $3,
+         unit_of_measure = $4,
+         unit_price = $5,
+         line_subtotal_amount = $5,
+         part_number = $6,
+         inventory_source_label = $7,
+         updated_at = $8
+       where source_register_entry_id = $1
+         and source_sync_state = 'linked'
+         and is_void = false`,
+      [
+        entry.id,
+        entry.kind,
+        entry.description,
+        entry.unitOfMeasure ?? null,
+        reflectedUnitPrice(entry),
+        entry.partNumber ?? null,
+        entry.inventorySourceLabel ?? null,
+        occurredAt
+      ]
+    );
+    changed = (updateResult.rowCount ?? 0) > 0;
+  } else if (producesLine && !(await hasAnyActiveInvoiceLine(entry.id, queryable))) {
+    // Transition into billing (e.g. internalOnly → billable) with no line yet: create one.
+    await insertReflectedInvoiceLine(
+      context,
+      entry,
+      reflectedUnitPrice(entry),
+      occurredAt,
+      queryable
+    );
+    changed = true;
+  } else if (!producesLine && hasLinked) {
+    // Transition out of billing (e.g. billable → internalOnly): retire the linked line.
+    const voidResult = await queryable.query(
+      `update invoice_line_items set
+         is_void = true,
+         void_reason = 'Register line no longer bills the customer.',
+         updated_at = $2
+       where source_register_entry_id = $1
+         and source_sync_state = 'linked'
+         and is_void = false`,
+      [entry.id, occurredAt]
+    );
+    changed = (voidResult.rowCount ?? 0) > 0;
+  }
+
+  if (changed) {
     await recalculateInvoiceTotals(context.id, occurredAt, queryable);
   }
 }

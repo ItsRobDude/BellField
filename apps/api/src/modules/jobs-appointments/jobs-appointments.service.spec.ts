@@ -874,6 +874,31 @@ describe('JobsAppointmentsService', () => {
     });
   });
 
+  it('accepts an update that only changes the billing projection state', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['register:view', 'register:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getRegisterEntryById.mockResolvedValue(createRegisterEntry());
+    jobsDataService.getJobById.mockResolvedValue(createJob('inProgress'));
+    jobsDataService.updateRegisterEntry.mockResolvedValue(
+      createRegisterEntry({ billingProjectionState: 'noChargeShown' })
+    );
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([
+      createRegisterEntry({ billingProjectionState: 'noChargeShown' })
+    ]);
+
+    await service.updateRegisterEntry('session-token', 'register-1', {
+      billingProjectionState: 'noChargeShown'
+    });
+
+    // billingProjectionState alone is an editable field — the update must not be rejected.
+    expect(jobsDataService.updateRegisterEntry).toHaveBeenCalled();
+  });
+
   it('voids register entries through register:edit without deleting history', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({

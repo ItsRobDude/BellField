@@ -241,6 +241,13 @@ export const registerEntryKinds = [
   'other'
 ] as const satisfies readonly RegisterEntryKind[];
 
+export const billingProjectionStates = [
+  'billable',
+  'noChargeShown',
+  'internalOnly',
+  'notBilled'
+] as const satisfies readonly BillingProjectionState[];
+
 export const mediaAttachmentKinds = [
   'image',
   'video',
@@ -490,6 +497,7 @@ export type CreateRegisterEntryInput = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  billingProjectionState?: BillingProjectionState;
 };
 
 export type UpdateRegisterEntryInput = Partial<

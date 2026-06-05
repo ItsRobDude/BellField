@@ -17,12 +17,14 @@ import {
 import {
   appointmentFinishOutcomes,
   appointmentStatuses,
+  billingProjectionStates,
   fieldSyncSources,
   finishedVisitReviewDecisions,
   jobStatuses,
   registerEntryKinds,
   type AppointmentFinishOutcome,
   type AppointmentStatus,
+  type BillingProjectionState,
   type FieldSyncSource,
   type FinishedVisitReviewDecision,
   type JobStatus,
@@ -312,6 +314,10 @@ export class CreateRegisterEntryRequestBodyDto implements CreateRegisterEntryReq
   inventorySourceLabel?: string;
 
   @IsOptional()
+  @IsIn(billingProjectionStates)
+  billingProjectionState?: BillingProjectionState;
+
+  @IsOptional()
   @IsISO8601()
   occurredAt?: string;
 
@@ -369,6 +375,10 @@ export class UpdateRegisterEntryRequestBodyDto implements UpdateRegisterEntryReq
   @IsString()
   @MaxLength(120)
   inventorySourceLabel?: string;
+
+  @IsOptional()
+  @IsIn(billingProjectionStates)
+  billingProjectionState?: BillingProjectionState;
 
   @IsOptional()
   @IsISO8601()

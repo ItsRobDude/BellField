@@ -972,18 +972,7 @@ export class JobsAppointmentsService {
   }
 
   private validateRegisterEntryCreate(request: CreateRegisterEntryRequestDto): void {
-    this.validatePositiveNumber(
-      request.quantity,
-      'Register entry quantity must be greater than zero.'
-    );
-    this.validateNonNegativeNumber(
-      request.unitPrice,
-      'Register entry unit price cannot be negative.'
-    );
-    this.validateNonNegativeNumber(
-      request.totalAmount,
-      'Register entry total amount cannot be negative.'
-    );
+    this.validateRegisterEntryNumbers(request);
   }
 
   private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {
@@ -996,7 +985,8 @@ export class JobsAppointmentsService {
       request.unitPrice !== undefined ||
       request.totalAmount !== undefined ||
       request.partNumber !== undefined ||
-      request.inventorySourceLabel !== undefined;
+      request.inventorySourceLabel !== undefined ||
+      request.billingProjectionState !== undefined;
 
     if (!hasEditableField) {
       throw new ConflictException(
@@ -1004,6 +994,14 @@ export class JobsAppointmentsService {
       );
     }
 
+    this.validateRegisterEntryNumbers(request);
+  }
+
+  private validateRegisterEntryNumbers(request: {
+    quantity?: number;
+    unitPrice?: number | null;
+    totalAmount?: number;
+  }): void {
     this.validatePositiveNumber(
       request.quantity,
       'Register entry quantity must be greater than zero.'

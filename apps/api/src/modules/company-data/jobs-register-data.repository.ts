@@ -147,6 +147,7 @@ export class JobsRegisterDataRepository {
             total_amount,
             part_number,
             inventory_source_label,
+            billing_projection_state,
             captured_by_employee_id,
             captured_by_name,
             captured_at,
@@ -155,7 +156,7 @@ export class JobsRegisterDataRepository {
             created_at,
             updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, false, null, $15, $16)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, false, null, $16, $17)
         `,
         [
           registerEntryId,
@@ -169,6 +170,7 @@ export class JobsRegisterDataRepository {
           input.totalAmount,
           input.partNumber?.trim() || null,
           input.inventorySourceLabel?.trim() || null,
+          input.billingProjectionState ?? 'billable',
           actor.id,
           actor.displayName,
           timelineTime,
@@ -202,7 +204,8 @@ export class JobsRegisterDataRepository {
           totalAmount: input.totalAmount,
           unitOfMeasure: input.unitOfMeasure?.trim() || undefined,
           partNumber: input.partNumber?.trim() || undefined,
-          inventorySourceLabel: input.inventorySourceLabel?.trim() || undefined
+          inventorySourceLabel: input.inventorySourceLabel?.trim() || undefined,
+          billingProjectionState: input.billingProjectionState ?? 'billable'
         },
         actor.displayName,
         timelineTime,
@@ -257,6 +260,7 @@ export class JobsRegisterDataRepository {
         input.inventorySourceLabel !== undefined
           ? input.inventorySourceLabel.trim() || undefined
           : existingEntry.inventorySourceLabel,
+      billingProjectionState: input.billingProjectionState ?? existingEntry.billingProjectionState,
       updatedAt: timelineTime
     };
 
@@ -274,7 +278,8 @@ export class JobsRegisterDataRepository {
             total_amount = $8,
             part_number = $9,
             inventory_source_label = $10,
-            updated_at = $11
+            billing_projection_state = $11,
+            updated_at = $12
           where id = $1
         `,
         [
@@ -288,6 +293,7 @@ export class JobsRegisterDataRepository {
           nextEntry.totalAmount,
           nextEntry.partNumber ?? null,
           nextEntry.inventorySourceLabel ?? null,
+          nextEntry.billingProjectionState,
           timelineTime
         ]
       );
@@ -319,7 +325,8 @@ export class JobsRegisterDataRepository {
           totalAmount: nextEntry.totalAmount,
           unitOfMeasure: nextEntry.unitOfMeasure,
           partNumber: nextEntry.partNumber,
-          inventorySourceLabel: nextEntry.inventorySourceLabel
+          inventorySourceLabel: nextEntry.inventorySourceLabel,
+          billingProjectionState: nextEntry.billingProjectionState
         },
         actorName,
         timelineTime,
