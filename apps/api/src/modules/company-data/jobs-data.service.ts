@@ -264,13 +264,13 @@ export class JobsDataService {
   async voidRegisterEntry(
     registerEntryId: string,
     reason: string | undefined,
-    actorName: string,
+    actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord> {
     const registerEntry = await this.jobsDataRepository.voidRegisterEntry(
       registerEntryId,
       reason,
-      actorName,
+      actor,
       occurredAt
     );
 

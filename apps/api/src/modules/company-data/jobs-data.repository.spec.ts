@@ -1155,7 +1155,13 @@ describe('JobsDataRepository', () => {
 
   it('voids register entries without deleting the row', async () => {
     const queryable = {
-      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        // The void path locks + reads the line's cost state before writing.
+        if (String(sql).includes('for update')) {
+          return { rows: [{ costingStatus: 'notCosted', isVoid: false }] };
+        }
+        return { rows: [] };
+      })
     };
     const databaseService = {
       query: jest.fn(async (sql: string, _params?: unknown[]) => {
@@ -1174,7 +1180,7 @@ describe('JobsDataRepository', () => {
     await repository.voidRegisterEntry(
       'register-1',
       'Duplicate line.',
-      'Dispatcher',
+      { id: 'office-1', displayName: 'Dispatcher' },
       '2026-04-14T12:00:00.000Z'
     );
 
@@ -1182,7 +1188,13 @@ describe('JobsDataRepository', () => {
       String(sql).includes('update register_entries')
     );
     expect(String(updateCall?.[0] ?? '')).toContain('is_void = true');
-    expect(updateCall?.[1]).toEqual(['register-1', 'Duplicate line.', '2026-04-14T12:00:00.000Z']);
+    // A notCosted line keeps its status; params: [id, reason, costingStatus, occurredAt].
+    expect(updateCall?.[1]).toEqual([
+      'register-1',
+      'Duplicate line.',
+      'notCosted',
+      '2026-04-14T12:00:00.000Z'
+    ]);
 
     const timelineCall = queryable.query.mock.calls.find(([sql]) =>
       String(sql).includes('insert into job_timeline_entries')
@@ -1191,6 +1203,66 @@ describe('JobsDataRepository', () => {
     expect(timelineCall?.[1]?.[5]).toBe(
       'Register entry voided: Contactor. Reason: Duplicate line.'
     );
+  });
+
+  it('reverses cost artifacts and marks the line reversed when voiding a resolved line', async () => {
+    const queryable = {
+      query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        const s = String(sql);
+        if (s.includes('register_entries') && s.includes('for update')) {
+          return { rows: [{ costingStatus: 'applied', isVoid: false }] };
+        }
+        if (s.includes('from jobs where id = $1 for update')) {
+          return { rows: [{ status: 'inProgress' }] }; // writable job — cost reversal allowed
+        }
+        if (s.includes("m.kind = 'issueToJob'")) {
+          return { rows: [{ id: 'mv-issue-1' }] }; // one un-returned issue to reverse
+        }
+        if (s.includes('extended_cost as "extendedCost"')) {
+          return {
+            rows: [
+              {
+                itemId: 'item-1',
+                locationId: 'loc-1',
+                jobId: 'job-1',
+                kind: 'issueToJob',
+                quantity: -2,
+                unitCost: 5,
+                extendedCost: -10,
+                sourceRegisterEntryId: 'register-1'
+              }
+            ]
+          };
+        }
+        return { rows: [] }; // no existing return, no cost events
+      })
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string) =>
+        sql.includes('from register_entries') ? { rows: [createRegisterEntryRow()] } : { rows: [] }
+      ),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
+    };
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.voidRegisterEntry(
+      'register-1',
+      'Wrong part',
+      { id: 'office-1', displayName: 'Dispatcher' },
+      '2026-04-14T12:00:00.000Z'
+    );
+
+    const updateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update register_entries')
+    );
+    expect(updateCall?.[1]?.[2]).toBe('reversed'); // costing_status flips to reversed
+    // a returnFromJob movement is written to reverse the issue
+    const returnInsert = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into inventory_movements')
+    );
+    expect(returnInsert?.[1]?.[2]).toBe('returnFromJob');
   });
 
   it('persists a new media attachment row with the mediaAttached timeline entry', async () => {

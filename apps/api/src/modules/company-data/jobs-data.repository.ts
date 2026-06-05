@@ -249,15 +249,10 @@ export class JobsDataRepository {
   async voidRegisterEntry(
     registerEntryId: string,
     reason: string | undefined,
-    actorName: string,
+    actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord | null> {
-    return this.registerRepository.voidRegisterEntry(
-      registerEntryId,
-      reason,
-      actorName,
-      occurredAt
-    );
+    return this.registerRepository.voidRegisterEntry(registerEntryId, reason, actor, occurredAt);
   }
 
   async resolveRegisterEntryCost(

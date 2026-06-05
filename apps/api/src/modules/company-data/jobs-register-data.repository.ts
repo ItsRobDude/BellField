@@ -5,10 +5,10 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { ResolveRegisterCostRequest } from '@bellfield/contracts';
+import type { JobCostEventKind, ResolveRegisterCostRequest } from '@bellfield/contracts';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
-import { applyIssueToJob } from '../inventory/inventory-ledger-utils';
+import { applyIssueToJob, applyReturnFromJob } from '../inventory/inventory-ledger-utils';
 import { insertJobCostEventWithin, roundMoney } from '../job-costing/job-cost-rollup-utils';
 import { lockJobForCostWrite } from './job-cost-write-guard';
 import type {
@@ -405,7 +405,7 @@ export class JobsRegisterDataRepository {
   async voidRegisterEntry(
     registerEntryId: string,
     reason: string | undefined,
-    actorName: string,
+    actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord | null> {
     const existingEntry = await this.getRegisterEntryById(registerEntryId);
@@ -418,16 +418,43 @@ export class JobsRegisterDataRepository {
     const trimmedReason = reason?.trim() || null;
 
     await this.databaseService.transaction(async (queryable) => {
+      // Lock + read the current cost state (race-safe with a concurrent resolve, and tells us
+      // whether cost was already posted and must now be reversed).
+      const lockedResult = await queryable.query<{ costingStatus: CostingStatus; isVoid: boolean }>(
+        `select costing_status as "costingStatus", is_void as "isVoid"
+         from register_entries
+         where id = $1
+         for update`,
+        [registerEntryId]
+      );
+      const locked = lockedResult.rows[0];
+      if (!locked || locked.isVoid) {
+        // Gone or already voided — nothing to do (idempotent void).
+        return;
+      }
+
+      const reverseCost = locked.costingStatus === 'applied';
+      if (reverseCost) {
+        // Reversing a posted cost is a cost write — reject on a finalized job (reopen required).
+        await lockJobForCostWrite(queryable, existingEntry.jobId);
+      }
+
       await queryable.query(
         `
           update register_entries
           set
             is_void = true,
             void_reason = $2,
-            updated_at = $3
+            costing_status = $3,
+            updated_at = $4
           where id = $1
         `,
-        [registerEntryId, trimmedReason, timelineTime]
+        [
+          registerEntryId,
+          trimmedReason,
+          reverseCost ? 'reversed' : locked.costingStatus,
+          timelineTime
+        ]
       );
 
       await queryable.query('update jobs set updated_at = $2 where id = $1', [
@@ -439,12 +466,23 @@ export class JobsRegisterDataRepository {
           id: randomUUID(),
           jobId: existingEntry.jobId,
           occurredAt: timelineTime,
-          actorName,
+          actorName: actor.displayName,
           kind: 'registerEntryVoided',
           message: buildRegisterEntryVoidedMessage(existingEntry.description, trimmedReason)
         },
         queryable
       );
+
+      if (reverseCost) {
+        // Reverse the cost artifacts this line produced so the rollup drops their cost.
+        await this.reverseRegisterCostArtifacts(
+          queryable,
+          registerEntryId,
+          existingEntry.jobId,
+          actor,
+          timelineTime
+        );
+      }
 
       // Void the linked invoice line so the bill no longer includes voided work (a posted
       // invoice is left untouched and the void is noted instead).
@@ -452,13 +490,76 @@ export class JobsRegisterDataRepository {
         registerEntryId,
         existingEntry.jobId,
         existingEntry.description,
-        actorName,
+        actor.displayName,
         timelineTime,
         queryable
       );
     });
 
     return this.getRegisterEntryById(registerEntryId);
+  }
+
+  /**
+   * Reverse the cost artifacts a register line produced: a `returnFromJob` per un-returned
+   * `issueToJob`, and a negating event per un-reversed labor/material cost event — all linked
+   * back to the same register line. Idempotent: only artifacts without an existing reversal are
+   * touched, so a re-run (or a void after a partial failure) does not double-reverse.
+   */
+  private async reverseRegisterCostArtifacts(
+    queryable: QueryExecutor,
+    registerEntryId: string,
+    jobId: string,
+    actor: { id: string; displayName: string },
+    occurredAt: string
+  ): Promise<void> {
+    const issues = await queryable.query<{ id: string }>(
+      `select m.id
+       from inventory_movements m
+       where m.source_register_entry_id = $1 and m.kind = 'issueToJob'
+         and not exists (
+           select 1 from inventory_movements r
+           where r.kind = 'returnFromJob' and r.reversal_of_movement_id = m.id
+         )`,
+      [registerEntryId]
+    );
+    for (const issue of issues.rows) {
+      await applyReturnFromJob(queryable, {
+        reversalOfMovementId: issue.id,
+        actor,
+        note: 'Register line voided.',
+        occurredAt
+      });
+    }
+
+    const events = await queryable.query<{
+      id: string;
+      kind: JobCostEventKind;
+      amount: string | number;
+      hours: string | number | null;
+      ratePerHour: string | number | null;
+      description: string;
+    }>(
+      `select e.id, e.kind, e.amount, e.hours, e.rate_per_hour as "ratePerHour", e.description
+       from job_cost_events e
+       where e.source_register_entry_id = $1 and e.reversal_of_event_id is null
+         and not exists (
+           select 1 from job_cost_events r where r.reversal_of_event_id = e.id
+         )`,
+      [registerEntryId]
+    );
+    for (const event of events.rows) {
+      await insertJobCostEventWithin(queryable, {
+        jobId,
+        kind: event.kind,
+        description: `Reversal of: ${event.description}`,
+        amount: -Number(event.amount),
+        hours: event.hours === null ? null : Number(event.hours),
+        ratePerHour: event.ratePerHour === null ? null : Number(event.ratePerHour),
+        reversalOfEventId: event.id,
+        sourceRegisterEntryId: registerEntryId,
+        actor
+      });
+    }
   }
 
   /**

@@ -648,7 +648,7 @@ export class JobsAppointmentsService {
     await this.jobsDataService.voidRegisterEntry(
       registerEntryId,
       request.reason,
-      actor.displayName,
+      { id: actor.id, displayName: actor.displayName },
       request.occurredAt
     );
 

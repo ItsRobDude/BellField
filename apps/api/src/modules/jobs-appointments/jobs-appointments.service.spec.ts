@@ -928,7 +928,7 @@ describe('JobsAppointmentsService', () => {
     expect(jobsDataService.voidRegisterEntry).toHaveBeenCalledWith(
       'register-1',
       'Duplicate line.',
-      'Dispatcher',
+      { id: 'office-1', displayName: 'Dispatcher' },
       '2026-04-14T12:00:00.000Z'
     );
     expect(response.registerEntries?.[0]).toMatchObject({
