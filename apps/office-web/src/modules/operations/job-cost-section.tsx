@@ -168,9 +168,7 @@ export function JobCostSection({
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
       {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
       {jobIsFinal ? (
-        <p style={styles.tinyMuted}>
-          This job is finalized. Reopen it to change job cost (labor, expense, or reversals).
-        </p>
+        <p style={styles.tinyMuted}>This job is finalized. Reopen it to change job cost.</p>
       ) : null}
 
       <div style={styles.panel}>

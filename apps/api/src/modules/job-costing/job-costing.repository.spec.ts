@@ -236,6 +236,7 @@ describe('JobCostingRepository.listEventsForJob', () => {
         hours: '2.00',
         ratePerHour: '95.00',
         reversalOfEventId: 'evt-1',
+        sourceRegisterEntryId: 're-7',
         actorName: 'Olivia Owner',
         occurredAt: '2026-06-02T00:00:00.000Z'
       }
@@ -246,5 +247,6 @@ describe('JobCostingRepository.listEventsForJob', () => {
     expect(events).toHaveLength(1);
     expect(events[0].amount).toBe(-190);
     expect(events[0].reversalOfEventId).toBe('evt-1');
+    expect(events[0].sourceRegisterEntryId).toBe('re-7');
   });
 });

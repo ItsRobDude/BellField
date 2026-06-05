@@ -92,7 +92,7 @@ export class JobCostingRepository {
     };
   }
 
-  /** The job's labor/expense cost events (newest first), including reversals. */
+  /** The job's cost events (newest first), including reversals. */
   async listEventsForJob(jobId: string): Promise<JobCostEvent[]> {
     const result = await this.databaseService.query<EventRow>(
       `select ${EVENT_COLUMNS} from job_cost_events
