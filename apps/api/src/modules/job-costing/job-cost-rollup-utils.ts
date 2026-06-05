@@ -1,6 +1,6 @@
 import { ConflictException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { JobCostRollup, JobCostSnapshot } from '@bellfield/contracts';
+import type { JobCostEventKind, JobCostRollup, JobCostSnapshot } from '@bellfield/contracts';
 import type { QueryExecutor } from '../../database/database.service';
 
 // Shared job-cost primitives. Like inventory-ledger-utils, these run against a caller's
@@ -186,4 +186,53 @@ export async function getCurrentJobCostSnapshot(
 /** Round a money value to whole cents for the wire/display boundary. */
 export function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+export type JobCostEventInsert = {
+  jobId: string;
+  kind: JobCostEventKind;
+  description: string;
+  amount: number;
+  hours: number | null;
+  ratePerHour: number | null;
+  reversalOfEventId?: string | null;
+  sourceRegisterEntryId?: string | null;
+  actor: { id: string; displayName: string };
+};
+
+/**
+ * Append one immutable job_cost_events row using the CALLER's transaction (so a cost can be
+ * posted atomically with other writes, e.g. resolving a register line). The caller must have
+ * already locked the job (lockJobForCostWrite). Returns the new event id. The standalone
+ * repository helpers (insertLabor/insertExpense/insertMaterial/insertReversal) wrap this with
+ * their own transaction + lock.
+ */
+export async function insertJobCostEventWithin(
+  queryable: QueryExecutor,
+  input: JobCostEventInsert
+): Promise<string> {
+  const id = randomUUID();
+  const now = new Date().toISOString();
+  await queryable.query(
+    `insert into job_cost_events (
+       id, job_id, kind, description, amount, hours, rate_per_hour, reversal_of_event_id,
+       source_register_entry_id, actor_employee_id, actor_name, occurred_at, created_at
+     )
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
+    [
+      id,
+      input.jobId,
+      input.kind,
+      input.description,
+      input.amount,
+      input.hours,
+      input.ratePerHour,
+      input.reversalOfEventId ?? null,
+      input.sourceRegisterEntryId ?? null,
+      input.actor.id,
+      input.actor.displayName,
+      now
+    ]
+  );
+  return id;
 }

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { ResolveRegisterCostRequest } from '@bellfield/contracts';
 import type { QueryExecutor } from '../../database/database.service';
 import type {
   AppointmentRecord,
@@ -255,6 +256,20 @@ export class JobsDataRepository {
       registerEntryId,
       reason,
       actorName,
+      occurredAt
+    );
+  }
+
+  async resolveRegisterEntryCost(
+    registerEntryId: string,
+    resolution: ResolveRegisterCostRequest,
+    actor: { id: string; displayName: string },
+    occurredAt?: string
+  ): Promise<{ jobId: string }> {
+    return this.registerRepository.resolveRegisterEntryCost(
+      registerEntryId,
+      resolution,
+      actor,
       occurredAt
     );
   }

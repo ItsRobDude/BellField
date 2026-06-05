@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CompanyDataModule } from '../company-data/company-data.module';
 import { IdentityAccessModule } from '../identity-access/identity-access.module';
 import { JobCostingController } from './job-costing.controller';
 import { JobCostingRepository } from './job-costing.repository';
@@ -11,7 +12,7 @@ import { JobCostingService } from './job-costing.service';
 // permission-aware actor lookup. The completion-time snapshot hook lives in company-data's
 // job status change and reuses job-cost-rollup-utils from this module.
 @Module({
-  imports: [IdentityAccessModule],
+  imports: [IdentityAccessModule, CompanyDataModule],
   controllers: [JobCostingController],
   providers: [JobCostingRepository, JobCostingService]
 })

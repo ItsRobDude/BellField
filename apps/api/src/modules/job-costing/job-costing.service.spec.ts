@@ -24,11 +24,20 @@ function createService() {
     isEventReversed: jest.fn().mockResolvedValue(false),
     insertReversal: jest.fn().mockResolvedValue({ id: 'rev-1' })
   };
+  const jobsDataService = {
+    getRegisterEntryById: jest.fn(),
+    resolveRegisterEntryCost: jest.fn().mockResolvedValue({ jobId: 'job-1' })
+  };
 
   return {
-    service: new JobCostingService(identityAccessService as never, jobCostingRepository as never),
+    service: new JobCostingService(
+      identityAccessService as never,
+      jobCostingRepository as never,
+      jobsDataService as never
+    ),
     identityAccessService,
-    jobCostingRepository
+    jobCostingRepository,
+    jobsDataService
   };
 }
 
@@ -334,5 +343,40 @@ describe('JobCostingService.reverseEvent', () => {
     await expect(service.reverseEvent('token', 'job-1', 'evt-1', {})).rejects.toBeInstanceOf(
       ConflictException
     );
+  });
+});
+
+describe('JobCostingService.resolveRegisterCost', () => {
+  it('authorizes office cost-create, resolves the line, and returns refreshed costing', async () => {
+    const { service, identityAccessService, jobCostingRepository, jobsDataService } =
+      createService();
+    jobsDataService.getRegisterEntryById.mockResolvedValue({ id: 're-1', jobId: 'job-1' });
+    jobCostingRepository.getJobCosting.mockResolvedValue({ jobId: 'job-1' });
+
+    const result = await service.resolveRegisterCost('token', 'job-1', 're-1', {
+      mode: 'zeroCost'
+    });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'jobCosting:create',
+      ['office-web']
+    );
+    expect(jobsDataService.resolveRegisterEntryCost).toHaveBeenCalledWith(
+      're-1',
+      { mode: 'zeroCost' },
+      { id: 'office-1', displayName: 'Bea Bookkeeper' }
+    );
+    expect(result).toEqual({ costing: { jobId: 'job-1' } });
+  });
+
+  it('rejects a register entry that belongs to a different job', async () => {
+    const { service, jobsDataService } = createService();
+    jobsDataService.getRegisterEntryById.mockResolvedValue({ id: 're-1', jobId: 'other-job' });
+
+    await expect(
+      service.resolveRegisterCost('token', 'job-1', 're-1', { mode: 'zeroCost' })
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(jobsDataService.resolveRegisterEntryCost).not.toHaveBeenCalled();
   });
 });

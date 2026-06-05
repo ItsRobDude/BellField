@@ -1,7 +1,16 @@
-import { Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { DatabaseService } from '../../database/database.service';
+import type { ResolveRegisterCostRequest } from '@bellfield/contracts';
+import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
+import { applyIssueToJob } from '../inventory/inventory-ledger-utils';
+import { insertJobCostEventWithin, roundMoney } from '../job-costing/job-cost-rollup-utils';
+import { lockJobForCostWrite } from './job-cost-write-guard';
 import type {
   BillingProjectionState,
   CostingPolicy,
@@ -414,6 +423,157 @@ export class JobsRegisterDataRepository {
     });
 
     return this.getRegisterEntryById(registerEntryId);
+  }
+
+  /**
+   * Resolve the cost of a register line that is in `needsResolution`: create the cost artifact
+   * the office chose (stock issue / non-stock material / labor / none), link it to the line via
+   * source_register_entry_id, and move the line to `applied` — all in one transaction. Rejects
+   * a line not awaiting resolution, a finalized job (via the cost-write lock), insufficient
+   * stock (via the issue), and a mode that does not match the line's kind. Returns the job id.
+   */
+  async resolveRegisterEntryCost(
+    registerEntryId: string,
+    resolution: ResolveRegisterCostRequest,
+    actor: { id: string; displayName: string },
+    occurredAt?: string
+  ): Promise<{ jobId: string }> {
+    const timelineTime = occurredAt || new Date().toISOString();
+    let jobId = '';
+    await this.databaseService.transaction(async (queryable) => {
+      const entryResult = await queryable.query<{
+        id: string;
+        jobId: string;
+        kind: RegisterEntryKind;
+        quantity: string | number;
+        description: string;
+        costingStatus: CostingStatus;
+      }>(
+        `select id, job_id as "jobId", kind, quantity, description,
+                costing_status as "costingStatus"
+         from register_entries
+         where id = $1
+         for update`,
+        [registerEntryId]
+      );
+      const entry = entryResult.rows[0];
+      if (!entry) {
+        throw new NotFoundException('Register entry not found.');
+      }
+      if (entry.costingStatus !== 'needsResolution') {
+        throw new ConflictException('This register line is not awaiting cost resolution.');
+      }
+      jobId = entry.jobId;
+      // Reject a finalized job and serialize against a concurrent completion.
+      await lockJobForCostWrite(queryable, jobId);
+
+      const policy = await this.applyCostResolution(
+        queryable,
+        {
+          id: entry.id,
+          jobId,
+          kind: entry.kind,
+          quantity: Number(entry.quantity),
+          description: entry.description
+        },
+        resolution,
+        actor,
+        timelineTime
+      );
+
+      await queryable.query(
+        `update register_entries
+         set costing_status = 'applied', costing_policy = $2, updated_at = $3
+         where id = $1`,
+        [registerEntryId, policy, timelineTime]
+      );
+      await queryable.query('update jobs set updated_at = $2 where id = $1', [jobId, timelineTime]);
+      await insertJobTimelineEntry(
+        {
+          id: randomUUID(),
+          jobId,
+          occurredAt: timelineTime,
+          actorName: actor.displayName,
+          kind: 'registerCostResolved',
+          message: `Register cost resolved: ${entry.description} (${policy}).`
+        },
+        queryable
+      );
+    });
+    return { jobId };
+  }
+
+  private async applyCostResolution(
+    queryable: QueryExecutor,
+    entry: {
+      id: string;
+      jobId: string;
+      kind: RegisterEntryKind;
+      quantity: number;
+      description: string;
+    },
+    resolution: ResolveRegisterCostRequest,
+    actor: { id: string; displayName: string },
+    occurredAt: string
+  ): Promise<CostingPolicy> {
+    switch (resolution.mode) {
+      case 'trackedInventory': {
+        this.requireKind(entry.kind, 'part', 'tracked inventory');
+        await applyIssueToJob(queryable, {
+          itemId: resolution.itemId,
+          locationId: resolution.locationId,
+          jobId: entry.jobId,
+          quantity: entry.quantity,
+          actor,
+          sourceRegisterEntryId: entry.id,
+          occurredAt
+        });
+        return 'trackedInventory';
+      }
+      case 'nonStockMaterial': {
+        this.requireKind(entry.kind, 'part', 'non-stock material');
+        const amount = roundMoney(resolution.amount);
+        if (!(amount > 0)) {
+          throw new BadRequestException('Non-stock material cost must be greater than zero.');
+        }
+        await insertJobCostEventWithin(queryable, {
+          jobId: entry.jobId,
+          kind: 'material',
+          description: entry.description,
+          amount,
+          hours: null,
+          ratePerHour: null,
+          sourceRegisterEntryId: entry.id,
+          actor
+        });
+        return 'nonStockMaterial';
+      }
+      case 'laborActual': {
+        this.requireKind(entry.kind, 'labor', 'labor');
+        if (!(resolution.hours > 0) || resolution.ratePerHour < 0) {
+          throw new BadRequestException('Labor needs positive hours and a non-negative rate.');
+        }
+        await insertJobCostEventWithin(queryable, {
+          jobId: entry.jobId,
+          kind: 'labor',
+          description: entry.description,
+          amount: roundMoney(resolution.hours * resolution.ratePerHour),
+          hours: resolution.hours,
+          ratePerHour: resolution.ratePerHour,
+          sourceRegisterEntryId: entry.id,
+          actor
+        });
+        return 'laborActual';
+      }
+      case 'zeroCost':
+        return 'none';
+    }
+  }
+
+  private requireKind(actual: RegisterEntryKind, expected: RegisterEntryKind, label: string): void {
+    if (actual !== expected) {
+      throw new BadRequestException(`A ${actual} line cannot be resolved as ${label}.`);
+    }
   }
 
   private toRegisterEntryRecord(row: RegisterEntryRow): RegisterEntryRecord {

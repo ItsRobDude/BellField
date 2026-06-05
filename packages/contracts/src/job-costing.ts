@@ -46,6 +46,21 @@ export interface ReverseJobCostEventRequest {
   reason?: string;
 }
 
+/**
+ * Resolve the cost of a register line that is in `needsResolution`. The office picks how the
+ * line costs; the server creates the matching cost artifact (linked to the register line) and
+ * moves the line to `applied`. See docs/job-costing-from-field-capture-spec.md §9.
+ *   - trackedInventory: issue the line's quantity from a stock location at weighted-average cost
+ *   - nonStockMaterial: a supply-house part — record the entered material cost
+ *   - laborActual: labor hours at a burdened cost rate
+ *   - zeroCost: consciously no cost (e.g. courtesy), recorded as an explicit decision
+ */
+export type ResolveRegisterCostRequest =
+  | { mode: 'trackedInventory'; itemId: string; locationId: string }
+  | { mode: 'nonStockMaterial'; amount: number }
+  | { mode: 'laborActual'; hours: number; ratePerHour: number }
+  | { mode: 'zeroCost' };
+
 export interface JobCostEventResponse {
   event: JobCostEvent;
 }

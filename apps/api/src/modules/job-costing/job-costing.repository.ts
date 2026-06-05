@@ -1,5 +1,4 @@
 import { Injectable } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import type {
   JobCostEvent,
   JobCostEventKind,
@@ -12,6 +11,7 @@ import { lockJobForCostWrite } from '../company-data/job-cost-write-guard';
 import {
   computeJobCostRollup,
   getCurrentJobCostSnapshot,
+  insertJobCostEventWithin,
   roundMoney
 } from './job-cost-rollup-utils';
 
@@ -204,33 +204,12 @@ export class JobCostingRepository {
     sourceRegisterEntryId?: string | null;
     actor: Actor;
   }): Promise<JobCostEvent> {
-    const id = randomUUID();
-    const now = new Date().toISOString();
+    let id = '';
     // Lock the job row and reject final jobs in the same transaction as the insert, so a
     // concurrent completion can't freeze the snapshot and then have this cost land after it.
     await this.databaseService.transaction(async (queryable) => {
       await lockJobForCostWrite(queryable, input.jobId);
-      await queryable.query(
-        `insert into job_cost_events (
-           id, job_id, kind, description, amount, hours, rate_per_hour, reversal_of_event_id,
-           source_register_entry_id, actor_employee_id, actor_name, occurred_at, created_at
-         )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
-        [
-          id,
-          input.jobId,
-          input.kind,
-          input.description,
-          input.amount,
-          input.hours,
-          input.ratePerHour,
-          input.reversalOfEventId ?? null,
-          input.sourceRegisterEntryId ?? null,
-          input.actor.id,
-          input.actor.displayName,
-          now
-        ]
-      );
+      id = await insertJobCostEventWithin(queryable, input);
     });
     return (await this.getById(id))!;
   }

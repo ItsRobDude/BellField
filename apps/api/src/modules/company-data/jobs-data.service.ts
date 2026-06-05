@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { ResolveRegisterCostRequest } from '@bellfield/contracts';
 import type {
   AppointmentFinishOutcome,
   AppointmentRecord,
@@ -278,6 +279,20 @@ export class JobsDataService {
     }
 
     return registerEntry;
+  }
+
+  async resolveRegisterEntryCost(
+    registerEntryId: string,
+    resolution: ResolveRegisterCostRequest,
+    actor: { id: string; displayName: string },
+    occurredAt?: string
+  ): Promise<{ jobId: string }> {
+    return this.jobsDataRepository.resolveRegisterEntryCost(
+      registerEntryId,
+      resolution,
+      actor,
+      occurredAt
+    );
   }
 
   async getAppointmentById(appointmentId: string): Promise<AppointmentRecord> {

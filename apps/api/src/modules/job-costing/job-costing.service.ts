@@ -9,6 +9,7 @@ import type {
   CreateJobLaborRequest,
   JobCostEventResponse,
   JobCostingResponse,
+  ResolveRegisterCostRequest,
   ReverseJobCostEventRequest
 } from '@bellfield/contracts';
 import { centsToDollars, dollarsToCents } from '@bellfield/estimating';
@@ -16,6 +17,7 @@ import {
   isFinalJobStatus,
   REOPEN_FOR_COST_WRITE_MESSAGE
 } from '../company-data/company-data.types';
+import { JobsDataService } from '../company-data/jobs-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobCostingRepository } from './job-costing.repository';
 
@@ -23,8 +25,36 @@ import { JobCostingRepository } from './job-costing.repository';
 export class JobCostingService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
-    private readonly jobCostingRepository: JobCostingRepository
+    private readonly jobCostingRepository: JobCostingRepository,
+    private readonly jobsDataService: JobsDataService
   ) {}
+
+  /**
+   * Resolve the cost of a register line in `needsResolution`: the office picks how it costs
+   * (stock issue / non-stock material / labor / zero-cost), the server creates the linked cost
+   * artifact and moves the line to `applied`, and the refreshed job costing is returned.
+   */
+  async resolveRegisterCost(
+    sessionToken: string,
+    jobId: string,
+    registerEntryId: string,
+    resolution: ResolveRegisterCostRequest
+  ): Promise<JobCostingResponse> {
+    const actor = await this.authorizeCreate(sessionToken);
+    const entry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
+    if (entry.jobId !== jobId) {
+      throw new NotFoundException('Register entry not found for this job.');
+    }
+    await this.jobsDataService.resolveRegisterEntryCost(registerEntryId, resolution, {
+      id: actor.id,
+      displayName: actor.displayName
+    });
+    const costing = await this.jobCostingRepository.getJobCosting(jobId);
+    if (!costing) {
+      throw new NotFoundException('Job not found.');
+    }
+    return { costing };
+  }
 
   /** Post a labor cost to a job. amount = hours * ratePerHour (rounded to cents). */
   async postLabor(

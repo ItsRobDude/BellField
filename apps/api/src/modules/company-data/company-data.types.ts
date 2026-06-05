@@ -300,6 +300,7 @@ export type JobTimelineEntry = {
     | 'registerEntryAdded'
     | 'registerEntryEdited'
     | 'registerEntryVoided'
+    | 'registerCostResolved'
     | 'estimateCreated'
     | 'estimateUpdated'
     | 'estimateApproved'

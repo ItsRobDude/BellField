@@ -4,7 +4,9 @@ import { JobCostingService } from './job-costing.service';
 import {
   CreateJobExpenseRequestBodyDto,
   CreateJobLaborRequestBodyDto,
-  ReverseJobCostEventRequestBodyDto
+  ResolveRegisterCostRequestBodyDto,
+  ReverseJobCostEventRequestBodyDto,
+  toResolveRegisterCostRequest
 } from './job-costing.dto';
 
 @Controller('operations/jobs')
@@ -45,5 +47,20 @@ export class JobCostingController {
     @Body() request: ReverseJobCostEventRequestBodyDto
   ) {
     return this.jobCostingService.reverseEvent(getBearerToken(auth), jobId, eventId, request);
+  }
+
+  @Post(':jobId/register-entries/:registerEntryId/resolve-cost')
+  async resolveRegisterCost(
+    @Headers('authorization') auth: string | undefined,
+    @Param('jobId') jobId: string,
+    @Param('registerEntryId') registerEntryId: string,
+    @Body() request: ResolveRegisterCostRequestBodyDto
+  ) {
+    return this.jobCostingService.resolveRegisterCost(
+      getBearerToken(auth),
+      jobId,
+      registerEntryId,
+      toResolveRegisterCostRequest(request)
+    );
   }
 }
