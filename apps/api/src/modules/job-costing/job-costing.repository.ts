@@ -80,7 +80,9 @@ export class JobCostingRepository {
         materialCost: roundMoney(rollup.materialCost),
         laborCost: roundMoney(rollup.laborCost),
         expenseCost: roundMoney(rollup.expenseCost),
-        totalCost: roundMoney(rollup.totalCost)
+        totalCost: roundMoney(rollup.totalCost),
+        unresolvedLineCount: rollup.unresolvedLineCount,
+        costComplete: rollup.costComplete
       },
       finalized: finalized ?? undefined,
       isFinalized: finalized !== null,

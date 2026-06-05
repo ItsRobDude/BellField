@@ -28,6 +28,33 @@ export type FinishedVisitReviewDecision = 'keptOpen' | 'followUpScheduled';
 
 export type RegisterEntryKind = 'labor' | 'serviceItem' | 'part' | 'membership' | 'other';
 
+/**
+ * How a captured work line projects onto the customer invoice. Independent of costing:
+ * a line can be costed without being billed (warranty), or billed without cost (a fee).
+ * See docs/job-costing-from-field-capture-spec.md §1.
+ */
+export type BillingProjectionState =
+  | 'billable' // appears on the invoice draft at a customer-facing amount
+  | 'noChargeShown' // appears on the invoice as an explicit $0 / no-charge line
+  | 'internalOnly' // kept on the job record, excluded from the customer invoice
+  | 'notBilled'; // no billing projection at all
+
+/**
+ * The server-inferred cost policy for a work line (a data concept; the technician never
+ * picks it). See spec §4.
+ */
+export type CostingPolicy =
+  | 'none'
+  | 'trackedInventory'
+  | 'nonStockMaterial'
+  | 'laborActual'
+  | 'laborStandard'
+  | 'expense'
+  | 'compositeServiceTask';
+
+/** The cost resolution state of a work line. See spec §5. */
+export type CostingStatus = 'notCosted' | 'applied' | 'needsResolution' | 'reversed';
+
 export interface SyncResult {
   status: 'applied' | 'conflict' | 'rejected' | 'retryableFailure';
   message?: string;
@@ -77,6 +104,12 @@ export interface RegisterEntrySummary {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** How this line projects onto the customer invoice. Defaults to `billable`. */
+  billingProjectionState: BillingProjectionState;
+  /** Server-inferred cost policy; absent until the line is classified. */
+  costingPolicy?: CostingPolicy;
+  /** Cost resolution state. Defaults to `notCosted` until classified/resolved. */
+  costingStatus: CostingStatus;
   capturedByEmployeeId: string;
   capturedByName: string;
   capturedAt: string;

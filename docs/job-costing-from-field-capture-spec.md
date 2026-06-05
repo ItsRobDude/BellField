@@ -75,9 +75,14 @@ The job-cost rollup must distinguish three quantities, always:
 
 Consequences that the implementation must honor:
 
-1. The rollup response carries `knownCost` **and** an explicit incomplete signal
-   (e.g. `unresolvedLineCount` > 0). It is never collapsed to a single "total" that hides
-   the gap.
+1. The rollup response carries the known/trusted total **and** an explicit incomplete signal.
+   It is never collapsed to a single number that hides the gap. As implemented, `totalCost`
+   **is** the known total — unresolved lines contribute `$0`, never an invented figure — and
+   the incomplete signal is `unresolvedLineCount` (> 0 when lines still owe cost) plus
+   `costComplete` (false while any contributing line is `needsResolution`). A separate
+   `knownCost` field is intentionally omitted: it would equal `totalCost` until estimated
+   costs exist (§2.4), at which point `totalCost` would carry estimates and a distinct
+   actuals-only `knownCost` can be added.
 2. **Margin is suppressed or flagged while cost is incomplete.** A job with unresolved cost
    lines may not present a confident margin or profit number. It shows "margin unavailable —
    N cost lines need resolution," not an optimistic figure.

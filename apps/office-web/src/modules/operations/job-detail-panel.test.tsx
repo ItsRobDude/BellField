@@ -86,6 +86,8 @@ function buildRegisterEntry(overrides: Partial<RegisterEntrySummary> = {}): Regi
     totalAmount: 45,
     partNumber: 'CAP-45',
     inventorySourceLabel: 'truck',
+    billingProjectionState: 'billable',
+    costingStatus: 'notCosted',
     capturedByEmployeeId: 'tech-1',
     capturedByName: 'Taylor Tech',
     capturedAt: baseTimestamp,

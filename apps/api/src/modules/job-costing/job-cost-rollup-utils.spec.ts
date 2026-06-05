@@ -49,7 +49,9 @@ describe('computeJobCostRollup', () => {
       materialCost: 150,
       laborCost: 200,
       expenseCost: 50,
-      totalCost: 400
+      totalCost: 400,
+      unresolvedLineCount: 0,
+      costComplete: true
     });
   });
 
@@ -61,7 +63,14 @@ describe('computeJobCostRollup', () => {
 
     const rollup = await computeJobCostRollup(queryable, 'job-1');
 
-    expect(rollup).toEqual({ materialCost: 0, laborCost: 0, expenseCost: 0, totalCost: 0 });
+    expect(rollup).toEqual({
+      materialCost: 0,
+      laborCost: 0,
+      expenseCost: 0,
+      totalCost: 0,
+      unresolvedLineCount: 0,
+      costComplete: true
+    });
   });
 });
 

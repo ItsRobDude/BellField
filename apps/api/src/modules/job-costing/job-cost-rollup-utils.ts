@@ -61,7 +61,12 @@ export async function computeJobCostRollup(
   laborCost = roundValue(laborCost);
   expenseCost = roundValue(expenseCost);
   const totalCost = roundValue(materialCost + laborCost + expenseCost);
-  return { materialCost, laborCost, expenseCost, totalCost };
+  // Cost-completeness placeholder: no register line can reach `needsResolution` until the
+  // classification + resolution logic ships (Slice 1a-D), so today every job's cost is
+  // complete. Slice 1a-B replaces this with a real count of unresolved register lines.
+  const unresolvedLineCount = 0;
+  const costComplete = unresolvedLineCount === 0;
+  return { materialCost, laborCost, expenseCost, totalCost, unresolvedLineCount, costComplete };
 }
 
 /** Retire the job's current (non-superseded) finalized snapshot, if any. */

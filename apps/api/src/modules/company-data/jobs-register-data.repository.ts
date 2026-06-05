@@ -3,6 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import type {
+  BillingProjectionState,
+  CostingPolicy,
+  CostingStatus,
   CreateRegisterEntryInput,
   RegisterEntryKind,
   RegisterEntryRecord,
@@ -30,6 +33,9 @@ type RegisterEntryRow = {
   totalAmount: string | number;
   partNumber: string | null;
   inventorySourceLabel: string | null;
+  billingProjectionState: BillingProjectionState;
+  costingPolicy: CostingPolicy | null;
+  costingStatus: CostingStatus;
   capturedByEmployeeId: string;
   capturedByName: string;
   capturedAt: string | Date;
@@ -61,6 +67,9 @@ export class JobsRegisterDataRepository {
           total_amount as "totalAmount",
           part_number as "partNumber",
           inventory_source_label as "inventorySourceLabel",
+          billing_projection_state as "billingProjectionState",
+          costing_policy as "costingPolicy",
+          costing_status as "costingStatus",
           captured_by_employee_id as "capturedByEmployeeId",
           captured_by_name as "capturedByName",
           captured_at as "capturedAt",
@@ -94,6 +103,9 @@ export class JobsRegisterDataRepository {
           total_amount as "totalAmount",
           part_number as "partNumber",
           inventory_source_label as "inventorySourceLabel",
+          billing_projection_state as "billingProjectionState",
+          costing_policy as "costingPolicy",
+          costing_status as "costingStatus",
           captured_by_employee_id as "capturedByEmployeeId",
           captured_by_name as "capturedByName",
           captured_at as "capturedAt",
@@ -390,6 +402,9 @@ export class JobsRegisterDataRepository {
       totalAmount: Number(row.totalAmount),
       partNumber: row.partNumber ?? undefined,
       inventorySourceLabel: row.inventorySourceLabel ?? undefined,
+      billingProjectionState: row.billingProjectionState,
+      costingPolicy: row.costingPolicy ?? undefined,
+      costingStatus: row.costingStatus,
       capturedByEmployeeId: row.capturedByEmployeeId,
       capturedByName: row.capturedByName,
       capturedAt: toIsoString(row.capturedAt),

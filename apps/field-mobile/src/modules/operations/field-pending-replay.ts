@@ -395,6 +395,10 @@ function buildLocalRegisterEntry(
     totalAmount: operation.totalAmount,
     partNumber: operation.partNumber,
     inventorySourceLabel: operation.inventorySourceLabel,
+    // Optimistic local default until the server classifies the line (Slice 1a-D) and the
+    // field truck-picker (1b) supplies structured cost fields: billable + uncosted.
+    billingProjectionState: 'billable',
+    costingStatus: 'notCosted',
     capturedByEmployeeId: 'local-device',
     capturedByName: actorName,
     capturedAt: operation.occurredAt,

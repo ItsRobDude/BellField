@@ -1,6 +1,9 @@
 import type {
   AppointmentFinishOutcome as ContractAppointmentFinishOutcome,
   AppointmentStatus as ContractAppointmentStatus,
+  BillingProjectionState as ContractBillingProjectionState,
+  CostingPolicy as ContractCostingPolicy,
+  CostingStatus as ContractCostingStatus,
   CrmSearchResult as ContractCrmSearchResult,
   EquipmentStatus as ContractEquipmentStatus,
   FieldSyncSource as ContractFieldSyncSource,
@@ -214,6 +217,9 @@ export const appointmentStatuses = [
 export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
 export type FinishedVisitReviewDecision = ContractFinishedVisitReviewDecision;
 export type RegisterEntryKind = ContractRegisterEntryKind;
+export type BillingProjectionState = ContractBillingProjectionState;
+export type CostingPolicy = ContractCostingPolicy;
+export type CostingStatus = ContractCostingStatus;
 export type MediaAttachmentKind = ContractMediaAttachmentKind;
 
 export const appointmentFinishOutcomes = [
@@ -462,6 +468,9 @@ export type RegisterEntryRecord = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  billingProjectionState: BillingProjectionState;
+  costingPolicy?: CostingPolicy;
+  costingStatus: CostingStatus;
   capturedByEmployeeId: string;
   capturedByName: string;
   capturedAt: string;

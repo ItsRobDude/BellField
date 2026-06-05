@@ -44,12 +44,24 @@ export interface JobCostEventResponse {
   event: JobCostEvent;
 }
 
-/** A job's cost broken into its three sources (dollars). Material is from inventory movements. */
+/**
+ * A job's cost broken into its three sources (dollars). Material is from inventory movements.
+ *
+ * `totalCost` is the KNOWN/trusted total: register lines still awaiting cost resolution
+ * contribute no dollars and are surfaced via `unresolvedLineCount` rather than an invented
+ * figure (see docs/job-costing-from-field-capture-spec.md §2). `costComplete` is false while
+ * any contributing line is in `needsResolution`; consumers must not present a final cost or a
+ * confident margin while it is false.
+ */
 export interface JobCostRollup {
   materialCost: number;
   laborCost: number;
   expenseCost: number;
   totalCost: number;
+  /** Count of register lines that owe a cost figure but are not yet resolved. */
+  unresolvedLineCount: number;
+  /** True when no contributing line is in `needsResolution` (i.e. the total is final). */
+  costComplete: boolean;
 }
 
 /** The cost frozen when a job was completed. `supersededAt` is set once a reopen retires it. */
