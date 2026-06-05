@@ -2,8 +2,12 @@ import type { JobStatus } from './jobs.js';
 
 // --- Job cost events (Milestone 9) ----------------------------------------------
 
-/** Non-inventory job costs. Material/equipment costs flow through inventory movements. */
-export type JobCostEventKind = 'labor' | 'expense';
+/**
+ * Non-inventory job costs. Stock material/equipment costs flow through inventory movements;
+ * `material` here is non-stock / supply-house material entered at the office (it counts toward
+ * the rollup's materialCost, not expenseCost) so it is never buried as a generic expense.
+ */
+export type JobCostEventKind = 'labor' | 'expense' | 'material';
 
 /** An immutable non-inventory cost charged to a job (labor or expense). */
 export interface JobCostEvent {

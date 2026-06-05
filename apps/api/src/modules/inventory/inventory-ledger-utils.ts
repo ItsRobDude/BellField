@@ -31,6 +31,8 @@ export type MovementInsert = {
   sourceId?: string | null;
   transferGroupId?: string | null;
   reversalOfMovementId?: string | null;
+  /** The register/work line that produced this movement (audit + idempotency + reversal). */
+  sourceRegisterEntryId?: string | null;
   actor: LedgerActor;
   note?: string | null;
   occurredAt: string;
@@ -109,9 +111,9 @@ export async function insertMovement(
     `insert into inventory_movements (
        id, item_id, kind, quantity, unit_cost, extended_cost, location_id, job_id,
        source_kind, source_id, transfer_group_id, reversal_of_movement_id,
-       actor_employee_id, actor_name, note, occurred_at, created_at
+       source_register_entry_id, actor_employee_id, actor_name, note, occurred_at, created_at
      )
-     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)`,
+     values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)`,
     [
       id,
       movement.itemId,
@@ -125,6 +127,7 @@ export async function insertMovement(
       movement.sourceId ?? null,
       movement.transferGroupId ?? null,
       movement.reversalOfMovementId ?? null,
+      movement.sourceRegisterEntryId ?? null,
       movement.actor.id,
       movement.actor.displayName,
       movement.note ?? null,
@@ -264,6 +267,7 @@ export async function applyIssueToJob(
     actor: LedgerActor;
     note?: string;
     occurredAt: string;
+    sourceRegisterEntryId?: string | null;
   }
 ): Promise<{ unitCost: number; issuedValue: number }> {
   await lockItemLocation(queryable, input.itemId, input.locationId);
@@ -282,6 +286,7 @@ export async function applyIssueToJob(
     locationId: input.locationId,
     jobId: input.jobId,
     sourceKind: 'issue',
+    sourceRegisterEntryId: input.sourceRegisterEntryId ?? null,
     actor: input.actor,
     note: input.note ?? null,
     occurredAt: input.occurredAt

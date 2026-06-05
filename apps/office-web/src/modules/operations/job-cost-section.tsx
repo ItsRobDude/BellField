@@ -245,7 +245,7 @@ export function JobCostSection({
                     <tr key={event.id}>
                       <td style={styles.tableCell}>{event.occurredAt.slice(0, 10)}</td>
                       <td style={styles.tableCell}>
-                        {event.kind === 'labor' ? 'Labor' : 'Expense'}
+                        {eventKindLabel(event.kind)}
                         {isReversal ? ' (reversal)' : ''}
                       </td>
                       <td style={styles.tableCell}>
@@ -373,6 +373,12 @@ function CostForm({
       </div>
     </form>
   );
+}
+
+function eventKindLabel(kind: 'labor' | 'expense' | 'material'): string {
+  if (kind === 'labor') return 'Labor';
+  if (kind === 'material') return 'Material';
+  return 'Expense';
 }
 
 function isPositiveNumber(value: string): boolean {

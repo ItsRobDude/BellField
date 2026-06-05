@@ -54,11 +54,14 @@ export async function computeJobCostRollup(
 
   let laborCost = 0;
   let expenseCost = 0;
+  let materialEventCost = 0; // non-stock / supply-house material entered at the office
   for (const row of events.rows) {
     if (row.kind === 'labor') {
       laborCost = Number(row.total);
     } else if (row.kind === 'expense') {
       expenseCost = Number(row.total);
+    } else if (row.kind === 'material') {
+      materialEventCost = Number(row.total);
     }
   }
 
@@ -72,7 +75,8 @@ export async function computeJobCostRollup(
     [jobId]
   );
 
-  const materialCost = roundValue(Number(inventory.rows[0]?.material ?? 0));
+  // Material cost = inventory movements (stock) + non-stock material cost events.
+  const materialCost = roundValue(Number(inventory.rows[0]?.material ?? 0) + materialEventCost);
   laborCost = roundValue(laborCost);
   expenseCost = roundValue(expenseCost);
   const totalCost = roundValue(materialCost + laborCost + expenseCost);

@@ -339,8 +339,8 @@ Slice 1b.
 Scope:
 
 - `source_register_entry_id` links, the resolution **status machine**, and the
-  completeness-aware rollup (`knownCost` + `unresolvedLineCount`, margin suppressed while
-  incomplete, finalization blocked per §2.3).
+  completeness-aware rollup (`totalCost` is the known/trusted total + `unresolvedLineCount` /
+  `costComplete`, per §2; margin suppressed while incomplete, finalization blocked per §2.3).
 - **Billing projection persistence + reflection.** The billing-projection state
   (`billable` / `noChargeShown` / `internalOnly` / `notBilled` per §1) is persisted on the work
   line and drives the invoice-draft reflection in this slice — not deferred. A `noChargeShown`

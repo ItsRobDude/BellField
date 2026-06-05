@@ -79,6 +79,27 @@ describe('computeJobCostRollup', () => {
     });
   });
 
+  it('adds non-stock material cost events into materialCost (not expenseCost)', async () => {
+    const { queryable } = scriptedQueryable([
+      { match: INVENTORY, rows: [{ material: 100 }] },
+      {
+        match: EVENTS,
+        rows: [
+          { kind: 'material', total: 30 },
+          { kind: 'labor', total: 50 }
+        ]
+      },
+      { match: REGISTER, rows: [{ count: 0 }] }
+    ]);
+
+    const rollup = await computeJobCostRollup(queryable, 'job-1');
+
+    expect(rollup.materialCost).toBe(130); // 100 inventory + 30 non-stock material
+    expect(rollup.laborCost).toBe(50);
+    expect(rollup.expenseCost).toBe(0);
+    expect(rollup.totalCost).toBe(180);
+  });
+
   it('reports unresolved register lines and marks the cost incomplete', async () => {
     const { queryable } = scriptedQueryable([
       { match: INVENTORY, rows: [{ material: 45 }] },

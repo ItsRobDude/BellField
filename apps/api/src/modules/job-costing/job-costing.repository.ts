@@ -135,6 +135,7 @@ export class JobCostingRepository {
     ratePerHour: number;
     amount: number;
     actor: Actor;
+    sourceRegisterEntryId?: string | null;
   }): Promise<JobCostEvent> {
     return this.insert({
       jobId: input.jobId,
@@ -143,7 +144,8 @@ export class JobCostingRepository {
       amount: input.amount,
       hours: input.hours,
       ratePerHour: input.ratePerHour,
-      actor: input.actor
+      actor: input.actor,
+      sourceRegisterEntryId: input.sourceRegisterEntryId ?? null
     });
   }
 
@@ -165,6 +167,29 @@ export class JobCostingRepository {
     });
   }
 
+  /**
+   * Append an immutable non-stock material cost event (supply-house part entered at the
+   * office). Counts toward the rollup's materialCost, not expenseCost.
+   */
+  async insertMaterial(input: {
+    jobId: string;
+    description: string;
+    amount: number;
+    actor: Actor;
+    sourceRegisterEntryId?: string | null;
+  }): Promise<JobCostEvent> {
+    return this.insert({
+      jobId: input.jobId,
+      kind: 'material',
+      description: input.description,
+      amount: input.amount,
+      hours: null,
+      ratePerHour: null,
+      actor: input.actor,
+      sourceRegisterEntryId: input.sourceRegisterEntryId ?? null
+    });
+  }
+
   private async insert(input: {
     jobId: string;
     kind: JobCostEventKind;
@@ -173,6 +198,7 @@ export class JobCostingRepository {
     hours: number | null;
     ratePerHour: number | null;
     reversalOfEventId?: string | null;
+    sourceRegisterEntryId?: string | null;
     actor: Actor;
   }): Promise<JobCostEvent> {
     const id = randomUUID();
@@ -184,9 +210,9 @@ export class JobCostingRepository {
       await queryable.query(
         `insert into job_cost_events (
            id, job_id, kind, description, amount, hours, rate_per_hour, reversal_of_event_id,
-           actor_employee_id, actor_name, occurred_at, created_at
+           source_register_entry_id, actor_employee_id, actor_name, occurred_at, created_at
          )
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)`,
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $12)`,
         [
           id,
           input.jobId,
@@ -196,6 +222,7 @@ export class JobCostingRepository {
           input.hours,
           input.ratePerHour,
           input.reversalOfEventId ?? null,
+          input.sourceRegisterEntryId ?? null,
           input.actor.id,
           input.actor.displayName,
           now
