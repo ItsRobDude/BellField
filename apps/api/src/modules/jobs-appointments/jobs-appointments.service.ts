@@ -987,6 +987,8 @@ export class JobsAppointmentsService {
       request.totalAmount !== undefined ||
       request.partNumber !== undefined ||
       request.inventorySourceLabel !== undefined ||
+      request.inventoryItemId !== undefined ||
+      request.inventoryLocationId !== undefined ||
       request.billingProjectionState !== undefined;
 
     if (!hasEditableField) {

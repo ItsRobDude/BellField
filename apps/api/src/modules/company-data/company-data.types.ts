@@ -476,6 +476,8 @@ export type RegisterEntryRecord = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
   billingProjectionState: BillingProjectionState;
   costingPolicy?: CostingPolicy;
   costingStatus: CostingStatus;
@@ -498,6 +500,8 @@ export type CreateRegisterEntryInput = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
   billingProjectionState?: BillingProjectionState;
 };
 

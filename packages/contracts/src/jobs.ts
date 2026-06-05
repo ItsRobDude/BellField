@@ -104,6 +104,10 @@ export interface RegisterEntrySummary {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** Structured stock references the tech picked from their truck (Slice 1b). When both are
+   * present on a `part` line the server auto-costs it as a tracked-inventory issue. */
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
   /** How this line projects onto the customer invoice. Defaults to `billable`. */
   billingProjectionState: BillingProjectionState;
   /** Server-inferred cost policy; absent until the line is classified. */
@@ -289,6 +293,10 @@ export interface CreateRegisterEntryRequest {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** Structured stock references picked from the truck; both present on a `part` line make the
+   * server auto-cost it as a tracked-inventory issue at capture time (Slice 1b). */
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
   /** How the line projects onto the customer invoice. Defaults to `billable`. */
   billingProjectionState?: BillingProjectionState;
   occurredAt?: string;
@@ -306,6 +314,8 @@ export interface UpdateRegisterEntryRequest {
   totalAmount?: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
   /** Change how the line projects onto the customer invoice. */
   billingProjectionState?: BillingProjectionState;
   occurredAt?: string;

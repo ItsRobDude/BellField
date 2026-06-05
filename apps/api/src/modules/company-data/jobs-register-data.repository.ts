@@ -43,6 +43,8 @@ type RegisterEntryRow = {
   totalAmount: string | number;
   partNumber: string | null;
   inventorySourceLabel: string | null;
+  inventoryItemId: string | null;
+  inventoryLocationId: string | null;
   billingProjectionState: BillingProjectionState;
   costingPolicy: CostingPolicy | null;
   costingStatus: CostingStatus;
@@ -77,6 +79,8 @@ export class JobsRegisterDataRepository {
           total_amount as "totalAmount",
           part_number as "partNumber",
           inventory_source_label as "inventorySourceLabel",
+          inventory_item_id as "inventoryItemId",
+          inventory_location_id as "inventoryLocationId",
           billing_projection_state as "billingProjectionState",
           costing_policy as "costingPolicy",
           costing_status as "costingStatus",
@@ -113,6 +117,8 @@ export class JobsRegisterDataRepository {
           total_amount as "totalAmount",
           part_number as "partNumber",
           inventory_source_label as "inventorySourceLabel",
+          inventory_item_id as "inventoryItemId",
+          inventory_location_id as "inventoryLocationId",
           billing_projection_state as "billingProjectionState",
           costing_policy as "costingPolicy",
           costing_status as "costingStatus",
@@ -167,9 +173,11 @@ export class JobsRegisterDataRepository {
             is_void,
             void_reason,
             created_at,
-            updated_at
+            updated_at,
+            inventory_item_id,
+            inventory_location_id
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19, $20, $21)
         `,
         [
           registerEntryId,
@@ -190,7 +198,9 @@ export class JobsRegisterDataRepository {
           actor.displayName,
           timelineTime,
           timelineTime,
-          timelineTime
+          timelineTime,
+          input.inventoryItemId?.trim() || null,
+          input.inventoryLocationId?.trim() || null
         ]
       );
 
@@ -276,6 +286,14 @@ export class JobsRegisterDataRepository {
         input.inventorySourceLabel !== undefined
           ? input.inventorySourceLabel.trim() || undefined
           : existingEntry.inventorySourceLabel,
+      inventoryItemId:
+        input.inventoryItemId !== undefined
+          ? input.inventoryItemId.trim() || undefined
+          : existingEntry.inventoryItemId,
+      inventoryLocationId:
+        input.inventoryLocationId !== undefined
+          ? input.inventoryLocationId.trim() || undefined
+          : existingEntry.inventoryLocationId,
       billingProjectionState: input.billingProjectionState ?? existingEntry.billingProjectionState,
       updatedAt: timelineTime
     };
@@ -339,10 +357,12 @@ export class JobsRegisterDataRepository {
             total_amount = $8,
             part_number = $9,
             inventory_source_label = $10,
-            billing_projection_state = $11,
-            costing_status = $12,
-            costing_policy = $13,
-            updated_at = $14
+            inventory_item_id = $11,
+            inventory_location_id = $12,
+            billing_projection_state = $13,
+            costing_status = $14,
+            costing_policy = $15,
+            updated_at = $16
           where id = $1
         `,
         [
@@ -356,6 +376,8 @@ export class JobsRegisterDataRepository {
           nextEntry.totalAmount,
           nextEntry.partNumber ?? null,
           nextEntry.inventorySourceLabel ?? null,
+          nextEntry.inventoryItemId ?? null,
+          nextEntry.inventoryLocationId ?? null,
           nextEntry.billingProjectionState,
           finalCostingStatus,
           finalCostingPolicy ?? null,
@@ -737,6 +759,8 @@ export class JobsRegisterDataRepository {
       totalAmount: Number(row.totalAmount),
       partNumber: row.partNumber ?? undefined,
       inventorySourceLabel: row.inventorySourceLabel ?? undefined,
+      inventoryItemId: row.inventoryItemId ?? undefined,
+      inventoryLocationId: row.inventoryLocationId ?? undefined,
       billingProjectionState: row.billingProjectionState,
       costingPolicy: row.costingPolicy ?? undefined,
       costingStatus: row.costingStatus,

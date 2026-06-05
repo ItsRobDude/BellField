@@ -314,6 +314,18 @@ export class CreateRegisterEntryRequestBodyDto implements CreateRegisterEntryReq
   inventorySourceLabel?: string;
 
   @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  inventoryItemId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  inventoryLocationId?: string;
+
+  @IsOptional()
   @IsIn(billingProjectionStates)
   billingProjectionState?: BillingProjectionState;
 
@@ -375,6 +387,18 @@ export class UpdateRegisterEntryRequestBodyDto implements UpdateRegisterEntryReq
   @IsString()
   @MaxLength(120)
   inventorySourceLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  inventoryItemId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  inventoryLocationId?: string;
 
   @IsOptional()
   @IsIn(billingProjectionStates)
