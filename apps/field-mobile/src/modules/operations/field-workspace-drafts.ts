@@ -42,6 +42,10 @@ export type RegisterEntryDraft = {
   totalAmount: string;
   partNumber: string;
   inventorySourceLabel: string;
+  /** Structured truck stock the tech picked (Slice 1b). Set together for a `part` line so the
+   * server auto-costs it as a tracked-inventory issue; empty when capturing free-text. */
+  inventoryItemId: string;
+  inventoryLocationId: string;
 };
 
 export type FinishReviewState = {
@@ -97,7 +101,9 @@ export function createRegisterEntryDraft(
     unitPrice: entry?.unitPrice !== undefined ? String(entry.unitPrice) : '',
     totalAmount: entry?.totalAmount !== undefined ? String(entry.totalAmount) : '',
     partNumber: entry?.partNumber ?? '',
-    inventorySourceLabel: entry?.inventorySourceLabel ?? ''
+    inventorySourceLabel: entry?.inventorySourceLabel ?? '',
+    inventoryItemId: entry?.inventoryItemId ?? '',
+    inventoryLocationId: entry?.inventoryLocationId ?? ''
   };
 }
 
@@ -115,6 +121,8 @@ export function parseRegisterEntryDraft(
         totalAmount: number;
         partNumber?: string;
         inventorySourceLabel?: string;
+        inventoryItemId?: string;
+        inventoryLocationId?: string;
       };
     }
   | { ok: false; message: string } {
@@ -147,6 +155,13 @@ export function parseRegisterEntryDraft(
     return { ok: false, message: 'Register entry total amount cannot be negative.' };
   }
 
+  // Structured truck refs only ride along on a part line and only as a complete pair — the
+  // server auto-costs (issue-to-job) when both are present, so a lone id would be meaningless.
+  const inventoryItemId = draft.inventoryItemId.trim();
+  const inventoryLocationId = draft.inventoryLocationId.trim();
+  const hasStructuredRefs =
+    draft.registerEntryKind === 'part' && !!inventoryItemId && !!inventoryLocationId;
+
   return {
     ok: true,
     value: {
@@ -156,7 +171,9 @@ export function parseRegisterEntryDraft(
       unitPrice,
       totalAmount,
       partNumber: draft.partNumber.trim() || undefined,
-      inventorySourceLabel: draft.inventorySourceLabel.trim() || undefined
+      inventorySourceLabel: draft.inventorySourceLabel.trim() || undefined,
+      inventoryItemId: hasStructuredRefs ? inventoryItemId : undefined,
+      inventoryLocationId: hasStructuredRefs ? inventoryLocationId : undefined
     }
   };
 }

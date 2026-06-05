@@ -272,6 +272,8 @@ export async function drainFieldSyncQueue(
             totalAmount: operation.totalAmount,
             partNumber: operation.partNumber,
             inventorySourceLabel: operation.inventorySourceLabel,
+            inventoryItemId: operation.inventoryItemId,
+            inventoryLocationId: operation.inventoryLocationId,
             occurredAt: operation.occurredAt,
             baseUpdatedAt: operation.baseUpdatedAt
           });

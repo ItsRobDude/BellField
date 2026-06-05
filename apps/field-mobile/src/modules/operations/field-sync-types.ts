@@ -53,6 +53,8 @@ export type PendingOperation =
       totalAmount: number;
       partNumber?: string;
       inventorySourceLabel?: string;
+      inventoryItemId?: string;
+      inventoryLocationId?: string;
       baseUpdatedAt?: string;
     })
   | (PendingOperationBase & {

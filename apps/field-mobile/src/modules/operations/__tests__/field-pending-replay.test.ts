@@ -291,6 +291,36 @@ describe('applyPendingOperations', () => {
     expect(snapshot.jobs[0]?.registerEntries).toEqual([]);
   });
 
+  it('carries structured truck refs onto the optimistic part line', () => {
+    const snapshot = buildSnapshot();
+    const operation: PendingOperation = {
+      id: 'op-register-truck',
+      kind: 'registerEntryCreate',
+      jobId: 'job-1',
+      registerEntryKind: 'part',
+      description: 'Capacitor 45uF',
+      quantity: 1,
+      unitOfMeasure: 'each',
+      totalAmount: 60,
+      partNumber: 'CAP-45',
+      inventorySourceLabel: 'Truck 7',
+      inventoryItemId: 'item-1',
+      inventoryLocationId: 'truck-7',
+      occurredAt: '2026-05-22T13:30:00.000Z',
+      state: 'pending'
+    };
+
+    const result = applyPendingOperations(snapshot, [operation], 'Taylor Tech');
+    const registerEntry = result?.jobs[0]?.registerEntries?.[0];
+
+    expect(registerEntry).toMatchObject({
+      inventoryItemId: 'item-1',
+      inventoryLocationId: 'truck-7',
+      // Honest optimistic default: the auto-cost outcome is unknown until the server processes it.
+      costingStatus: 'notCosted'
+    });
+  });
+
   it('applies queued register edits without dropping untouched fields', () => {
     const snapshot = buildSnapshot({
       jobs: [buildJob({ registerEntries: [buildRegisterEntry()] })]

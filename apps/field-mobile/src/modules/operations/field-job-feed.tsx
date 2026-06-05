@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
-import type { AppointmentFinishOutcome, AppointmentStatus } from '@/lib/operations-api';
+import type {
+  AppointmentFinishOutcome,
+  AppointmentStatus,
+  FieldTruckStockItem
+} from '@/lib/operations-api';
 import { EquipmentTab } from './field-equipment-tab';
 import { JobSyncTab } from './field-job-sync-tab';
 import {
@@ -67,6 +71,7 @@ type FieldJobFeedProps = {
   scheduledJobs: FieldJob[];
   selectedJobId: string | null;
   syncLastSuccessfulAt: string | null;
+  truckStockItems: FieldTruckStockItem[];
   onChangeDetailTab: (tab: FieldDetailTab) => void;
   onConfirmDiscardQueuedOperation: (operation: PendingOperation) => void;
   onConfirmVoidRegisterEntry: (entry: FieldRegisterEntry) => void;
@@ -105,6 +110,7 @@ export function FieldJobFeed({
   scheduledJobs,
   selectedJobId,
   syncLastSuccessfulAt,
+  truckStockItems,
   onChangeDetailTab,
   onConfirmDiscardQueuedOperation,
   onConfirmVoidRegisterEntry,
@@ -697,6 +703,7 @@ export function FieldJobFeed({
                 job={job}
                 registerCreateDrafts={registerCreateDrafts}
                 registerEditDrafts={registerEditDrafts}
+                truckStockItems={truckStockItems}
                 onConfirmVoidRegisterEntry={onConfirmVoidRegisterEntry}
                 onQueueRegisterEntryCreate={(targetJob) => void queueRegisterEntryCreate(targetJob)}
                 onQueueRegisterEntryEdit={(entry) => void queueRegisterEntryEdit(entry)}
