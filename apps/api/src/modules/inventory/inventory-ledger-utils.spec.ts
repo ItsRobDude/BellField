@@ -1,7 +1,8 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   applyAdjustment,
   applyIssueToJob,
+  applyReturnFromJob,
   applyTransfer,
   getOnHandSnapshot
 } from './inventory-ledger-utils';
@@ -267,6 +268,81 @@ describe('applyIssueToJob', () => {
         occurredAt: '2026-06-02T00:00:00.000Z'
       })
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+});
+
+describe('applyReturnFromJob', () => {
+  const ORIGINAL = /extended_cost as "extendedCost"/i;
+  const EXISTING = /kind = 'returnFromJob'/i;
+  const issuedMovement = {
+    itemId: 'item-1',
+    locationId: 'loc-1',
+    jobId: 'job-1',
+    kind: 'issueToJob',
+    quantity: -4,
+    unitCost: 12.5,
+    extendedCost: -50
+  };
+
+  it('writes a returnFromJob that exactly mirrors the issue it reverses', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: ORIGINAL, rows: [issuedMovement] },
+      { match: EXISTING, rows: [] },
+      { match: LOCK, rows: [] },
+      { match: INSERT, rowCount: 1 }
+    ]);
+
+    const result = await applyReturnFromJob(queryable, {
+      reversalOfMovementId: 'mv-issue-1',
+      actor,
+      occurredAt: '2026-06-03T00:00:00.000Z'
+    });
+
+    const insert = findCalls(calls, INSERT)[0];
+    // params: [id, itemId, kind, quantity, unitCost, extendedCost, locationId, jobId, ...,
+    //          transferGroupId, reversalOfMovementId, ...]
+    expect(insert.params[2]).toBe('returnFromJob');
+    expect(insert.params[3]).toBe(4); // positive quantity back to the location
+    expect(insert.params[4]).toBe(12.5); // unit cost carried from the issue
+    expect(insert.params[5]).toBe(50); // positive value back to the location
+    expect(insert.params[6]).toBe('loc-1');
+    expect(insert.params[7]).toBe('job-1');
+    expect(insert.params[11]).toBe('mv-issue-1'); // reversal_of_movement_id
+    expect(result).toEqual({ returnedValue: 50 });
+  });
+
+  it('refuses to return the same issue twice', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: ORIGINAL, rows: [issuedMovement] },
+      { match: EXISTING, rows: [{ id: 'mv-return-1' }] }
+    ]);
+
+    await expect(
+      applyReturnFromJob(queryable, {
+        reversalOfMovementId: 'mv-issue-1',
+        actor,
+        occurredAt: '2026-06-03T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+
+  it('rejects reversing a movement that is not an issue-to-job', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      {
+        match: ORIGINAL,
+        rows: [{ ...issuedMovement, kind: 'receiveToJob', quantity: 4, extendedCost: 50 }]
+      }
+    ]);
+
+    await expect(
+      applyReturnFromJob(queryable, {
+        reversalOfMovementId: 'mv-x',
+        actor,
+        occurredAt: '2026-06-03T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(findCalls(calls, INSERT)).toHaveLength(0);
   });
 });

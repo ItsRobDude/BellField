@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type { JobCostRollup, JobCostSnapshot } from '@bellfield/contracts';
 import type { QueryExecutor } from '../../database/database.service';
@@ -10,9 +11,15 @@ import type { QueryExecutor } from '../../database/database.service';
 // The rollup sums a job's cost from three ledgers, all keyed by job_id:
 //   * inventory material/equipment cost from inventory_movements — receiveToJob carries a
 //     positive value (delivered straight to the job); issueToJob is negative at its stock
-//     location, so the value delivered to the job is its negation.
+//     location, so the value delivered to the job is its negation; returnFromJob reverses an
+//     issue (positive at the location) and is subtracted, dropping job material cost by the
+//     returned value.
 //   * labor and expense from job_cost_events (amount; reversals are negative, so SUM nets).
 // Stored at 4 decimals (matching inventory value precision); the read model rounds to cents.
+//
+// Cost completeness: register lines that owe a cost figure but are not yet resolved
+// (costing_status = 'needsResolution') contribute no dollars; they are counted so the rollup
+// can report whether the total is final (see docs/job-costing-from-field-capture-spec.md §2).
 
 /** Value precision: 4 decimals (hundredths of a cent) to avoid drift, like the ledger. */
 function roundValue(value: number): number {
@@ -23,19 +30,17 @@ export async function computeJobCostRollup(
   queryable: QueryExecutor,
   jobId: string
 ): Promise<JobCostRollup> {
-  // returnFromJob is a valid movement kind in the schema but has no writer in v1 (returns
-  // are deferred). It is intentionally excluded here; when a return flow lands it should be
-  // added as a negative job-material cost (and the snapshot/rollup tests updated with it).
   const inventory = await queryable.query<{ material: string | number }>(
     `select coalesce(sum(
         case kind
           when 'receiveToJob' then extended_cost
           when 'issueToJob' then -extended_cost
+          when 'returnFromJob' then -extended_cost
           else 0
         end
       ), 0) as material
      from inventory_movements
-     where job_id = $1 and kind in ('receiveToJob', 'issueToJob')`,
+     where job_id = $1 and kind in ('receiveToJob', 'issueToJob', 'returnFromJob')`,
     [jobId]
   );
 
@@ -57,14 +62,21 @@ export async function computeJobCostRollup(
     }
   }
 
+  // Count active register lines that owe a cost figure but are not yet resolved. This stays
+  // 0 until the classification logic (Slice 1a-D) starts marking lines `needsResolution`,
+  // but the rollup, finalization guard, and office display already react to it here.
+  const unresolved = await queryable.query<{ count: string | number }>(
+    `select count(*) as count
+     from register_entries
+     where job_id = $1 and is_void = false and costing_status = 'needsResolution'`,
+    [jobId]
+  );
+
   const materialCost = roundValue(Number(inventory.rows[0]?.material ?? 0));
   laborCost = roundValue(laborCost);
   expenseCost = roundValue(expenseCost);
   const totalCost = roundValue(materialCost + laborCost + expenseCost);
-  // Cost-completeness placeholder: no register line can reach `needsResolution` until the
-  // classification + resolution logic ships (Slice 1a-D), so today every job's cost is
-  // complete. Slice 1a-B replaces this with a real count of unresolved register lines.
-  const unresolvedLineCount = 0;
+  const unresolvedLineCount = Number(unresolved.rows[0]?.count ?? 0);
   const costComplete = unresolvedLineCount === 0;
   return { materialCost, laborCost, expenseCost, totalCost, unresolvedLineCount, costComplete };
 }
@@ -85,6 +97,11 @@ export async function supersedeCurrentJobCostSnapshot(
 /**
  * Freeze the job's current cost rollup into a new finalized snapshot, first retiring any
  * existing current snapshot so at most one is current per job. Returns the new snapshot id.
+ *
+ * Refuses to finalize while any contributing register line still owes a cost figure
+ * (`needsResolution`): a snapshot frozen over unresolved cost would read as a complete final
+ * cost when it is not (spec §2.3). The throw rolls back the surrounding completion
+ * transaction, so the job stays un-completed until the cost is resolved.
  */
 export async function freezeJobCostSnapshot(
   queryable: QueryExecutor,
@@ -92,8 +109,13 @@ export async function freezeJobCostSnapshot(
   actorName: string,
   occurredAt: string
 ): Promise<string> {
-  await supersedeCurrentJobCostSnapshot(queryable, jobId, occurredAt);
   const rollup = await computeJobCostRollup(queryable, jobId);
+  if (!rollup.costComplete) {
+    throw new ConflictException(
+      `Cannot finalize job cost: ${rollup.unresolvedLineCount} register line(s) still need cost resolution.`
+    );
+  }
+  await supersedeCurrentJobCostSnapshot(queryable, jobId, occurredAt);
   const id = randomUUID();
   const createdAt = new Date().toISOString();
   await queryable.query(

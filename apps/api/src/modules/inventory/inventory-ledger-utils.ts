@@ -290,6 +290,81 @@ export async function applyIssueToJob(
 }
 
 /**
+ * Reverse a prior issue-to-job by returning its stock and value to the originating
+ * location — a `returnFromJob` movement that exactly negates the `issueToJob` it reverses
+ * (same item/location/job, equal-and-opposite quantity and value), linked via
+ * reversal_of_movement_id. This is the ONLY correct way to undo an issue: a positive
+ * `issueToJob` is not a reversal (it is a second issue), and the rollup subtracts
+ * returnFromJob so the job's material cost drops by exactly the issued value. Idempotent:
+ * an issue can be returned once. Must run inside a transaction.
+ */
+export async function applyReturnFromJob(
+  queryable: QueryExecutor,
+  input: {
+    reversalOfMovementId: string;
+    actor: LedgerActor;
+    note?: string;
+    occurredAt: string;
+  }
+): Promise<{ returnedValue: number }> {
+  const result = await queryable.query<{
+    itemId: string;
+    locationId: string | null;
+    jobId: string | null;
+    kind: InventoryMovementKind;
+    quantity: string | number;
+    unitCost: string | number;
+    extendedCost: string | number;
+  }>(
+    `select item_id as "itemId", location_id as "locationId", job_id as "jobId",
+            kind, quantity, unit_cost as "unitCost", extended_cost as "extendedCost"
+     from inventory_movements
+     where id = $1`,
+    [input.reversalOfMovementId]
+  );
+  const original = result.rows[0];
+  if (!original || original.kind !== 'issueToJob') {
+    throw new BadRequestException('A return must reverse an existing issue-to-job movement.');
+  }
+  if (original.locationId == null || original.jobId == null) {
+    throw new BadRequestException('The issue being reversed is missing its location or job.');
+  }
+
+  // One return per issue: refuse a double reversal.
+  const existing = await queryable.query<{ id: string }>(
+    `select id from inventory_movements
+     where kind = 'returnFromJob' and reversal_of_movement_id = $1
+     limit 1`,
+    [input.reversalOfMovementId]
+  );
+  if (existing.rows[0]) {
+    throw new ConflictException('This issue has already been returned.');
+  }
+
+  await lockItemLocation(queryable, original.itemId, original.locationId);
+
+  // The issue stored negative quantity/value at the location; the return is its exact
+  // positive mirror so on-hand value nets back and job material cost drops by issued value.
+  const returnedQuantity = roundQty(-Number(original.quantity));
+  const returnedValue = roundValue(-Number(original.extendedCost));
+  await insertMovement(queryable, {
+    itemId: original.itemId,
+    kind: 'returnFromJob',
+    quantity: returnedQuantity,
+    unitCost: roundMoney(Number(original.unitCost)),
+    extendedCost: returnedValue,
+    locationId: original.locationId,
+    jobId: original.jobId,
+    sourceKind: 'return',
+    reversalOfMovementId: input.reversalOfMovementId,
+    actor: input.actor,
+    note: input.note ?? null,
+    occurredAt: input.occurredAt
+  });
+  return { returnedValue };
+}
+
+/**
  * Move stock between two locations as two movements sharing a transfer group; cost
  * travels with the goods at the source's current average. Rejects an over-transfer.
  * Must run inside a transaction.

@@ -179,8 +179,19 @@ export function JobCostSection({
           <CostField label="Material" value={costing.live.materialCost} />
           <CostField label="Labor" value={costing.live.laborCost} />
           <CostField label="Expense" value={costing.live.expenseCost} />
-          <CostField label="Total" value={costing.live.totalCost} emphasize />
+          <CostField
+            label={costing.live.costComplete ? 'Total' : 'Known total'}
+            value={costing.live.totalCost}
+            emphasize
+          />
         </div>
+        {!costing.live.costComplete ? (
+          <p style={styles.error}>
+            {costing.live.unresolvedLineCount} register line
+            {costing.live.unresolvedLineCount === 1 ? '' : 's'} still need cost resolution — this
+            total is not final and margin is not reliable until they are resolved.
+          </p>
+        ) : null}
         {costing.finalized ? (
           <p style={styles.tinyMuted}>
             <span style={styles.badge}>Finalized</span> Frozen at completion:{' '}
