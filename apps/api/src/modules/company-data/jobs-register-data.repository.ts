@@ -30,6 +30,7 @@ import {
   reflectRegisterEntryVoid
 } from './invoice-reflection-utils';
 import { classifyRegisterCosting } from './register-costing-classification';
+import { autoCostStructuredPartLine } from './register-auto-cost';
 
 type RegisterEntryRow = {
   id: string;
@@ -216,6 +217,20 @@ export class JobsRegisterDataRepository {
         },
         queryable
       );
+
+      // Auto-cost a structured truck part at capture time (issue-to-job) when stock allows;
+      // otherwise the line stays in needsResolution for the office. Self-skips when ineligible.
+      await autoCostStructuredPartLine(queryable, {
+        registerEntryId,
+        jobId,
+        kind: input.kind,
+        itemId: input.inventoryItemId,
+        locationId: input.inventoryLocationId,
+        quantity: input.quantity,
+        description: input.description.trim(),
+        actor,
+        occurredAt: timelineTime
+      });
 
       // Reflect into the job's invoice draft in the same transaction. (If the invoice
       // is already posted, the entry above still persists; reflection is skipped and a
