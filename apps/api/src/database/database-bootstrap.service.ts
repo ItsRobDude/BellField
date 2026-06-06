@@ -13,6 +13,7 @@ import {
   seededLocationOwnershipHistory
 } from '../modules/company-data/seed-company-data';
 import { seededEmployees } from '../modules/identity-access/seed-employees';
+import { hashPassword } from '../modules/identity-access/password-hash';
 import { DatabaseService } from './database.service';
 
 @Injectable()
@@ -45,6 +46,8 @@ export class DatabaseBootstrapService implements OnModuleInit {
 
   private async seedEmployees(): Promise<void> {
     for (const employee of seededEmployees) {
+      // Seed passwords are stored hashed (scrypt), never plaintext.
+      const password = await hashPassword(employee.password);
       await this.databaseService.query(
         `
           insert into employees (
@@ -66,7 +69,7 @@ export class DatabaseBootstrapService implements OnModuleInit {
           employee.displayName,
           employee.roleId,
           employee.isActive,
-          employee.password,
+          password,
           employee.permissionOverrides.grantedPermissions,
           employee.permissionOverrides.revokedPermissions
         ]

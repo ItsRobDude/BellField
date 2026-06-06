@@ -118,6 +118,14 @@ export class IdentityAccessRepository {
     );
   }
 
+  /** Update only the stored password (rehash-on-login and admin password reset). */
+  async updateEmployeePassword(employeeId: string, password: string): Promise<void> {
+    await this.databaseService.query(
+      `update employees set password = $2, updated_at = now() where id = $1`,
+      [employeeId, password]
+    );
+  }
+
   async createSession(session: SessionRecord): Promise<void> {
     await this.databaseService.query(
       `
