@@ -110,4 +110,35 @@ describe('OfficeInventorySurface', () => {
     });
     expect(saveButton).not.toBeDisabled();
   });
+
+  it('excludes equipment items from the issue-to-job picker (parts only)', async () => {
+    mockedApi.getOfficeInventoryItems.mockResolvedValue({
+      items: [
+        {
+          id: 'part-1',
+          name: 'Capacitor 45/5',
+          kind: 'part',
+          isActive: true,
+          createdAt: '2026-06-02T00:00:00.000Z',
+          updatedAt: '2026-06-02T00:00:00.000Z'
+        },
+        {
+          id: 'equip-1',
+          name: 'Condenser Unit',
+          kind: 'equipment',
+          isActive: true,
+          createdAt: '2026-06-02T00:00:00.000Z',
+          updatedAt: '2026-06-02T00:00:00.000Z'
+        }
+      ]
+    });
+    renderSurface();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Issue to job' }));
+    const itemSelect = await screen.findByRole('combobox', { name: 'Item' });
+
+    // Issue-to-job posts material cost, so equipment must not be selectable here.
+    expect(within(itemSelect).queryByText('Capacitor 45/5')).not.toBeNull();
+    expect(within(itemSelect).queryByText('Condenser Unit')).toBeNull();
+  });
 });

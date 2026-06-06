@@ -2,6 +2,7 @@ import {
   computeJobCostRollup,
   freezeJobCostSnapshot,
   getCurrentJobCostSnapshot,
+  insertJobCostEventWithin,
   supersedeCurrentJobCostSnapshot
 } from './job-cost-rollup-utils';
 import type { QueryExecutor } from '../../database/database.service';
@@ -26,13 +27,55 @@ function findCall(calls: Array<{ sql: string; params: unknown[] }>, fragment: Re
 
 const INVENTORY = /from inventory_movements/i;
 const EVENTS = /from job_cost_events/i;
+const REGISTER = /from register_entries/i;
 const SNAP_INSERT = /insert into job_cost_snapshots/i;
 const SNAP_UPDATE = /update job_cost_snapshots set superseded_at/i;
 const SNAP_SELECT = /from job_cost_snapshots/i;
 
+describe('insertJobCostEventWithin', () => {
+  const EVENT_INSERT = /insert into job_cost_events/i;
+
+  it('stamps occurred_at with the caller occurredAt (for offline void/replay audit)', async () => {
+    const { queryable, calls } = scriptedQueryable([{ match: EVENT_INSERT, rowCount: 1 }]);
+
+    await insertJobCostEventWithin(queryable, {
+      jobId: 'job-1',
+      kind: 'material',
+      description: 'Reversal of: part',
+      amount: -20,
+      hours: null,
+      ratePerHour: null,
+      actor: { id: 'emp-1', displayName: 'Ivy' },
+      occurredAt: '2026-06-01T00:00:00.000Z'
+    });
+
+    const insert = findCall(calls, EVENT_INSERT);
+    // occurred_at ($12) is the caller's time; created_at ($13) is the server insert time.
+    expect(insert?.params?.[11]).toBe('2026-06-01T00:00:00.000Z');
+    expect(insert?.params?.[12]).not.toBe('2026-06-01T00:00:00.000Z');
+  });
+
+  it('defaults occurred_at to now when no occurredAt is given', async () => {
+    const { queryable, calls } = scriptedQueryable([{ match: EVENT_INSERT, rowCount: 1 }]);
+
+    await insertJobCostEventWithin(queryable, {
+      jobId: 'job-1',
+      kind: 'labor',
+      description: 'Labor',
+      amount: 100,
+      hours: 2,
+      ratePerHour: 50,
+      actor: { id: 'emp-1', displayName: 'Ivy' }
+    });
+
+    const insert = findCall(calls, EVENT_INSERT);
+    expect(insert?.params?.[11]).toBe(insert?.params?.[12]); // occurred_at === created_at
+  });
+});
+
 describe('computeJobCostRollup', () => {
   it('sums inventory material plus labor and expense events', async () => {
-    const { queryable } = scriptedQueryable([
+    const { queryable, calls } = scriptedQueryable([
       { match: INVENTORY, rows: [{ material: 150 }] },
       {
         match: EVENTS,
@@ -40,7 +83,8 @@ describe('computeJobCostRollup', () => {
           { kind: 'labor', total: 200 },
           { kind: 'expense', total: 50 }
         ]
-      }
+      },
+      { match: REGISTER, rows: [{ count: 0 }] }
     ]);
 
     const rollup = await computeJobCostRollup(queryable, 'job-1');
@@ -49,19 +93,67 @@ describe('computeJobCostRollup', () => {
       materialCost: 150,
       laborCost: 200,
       expenseCost: 50,
-      totalCost: 400
+      totalCost: 400,
+      unresolvedLineCount: 0,
+      costComplete: true
     });
+    // returnFromJob (issue reversals) must be part of the material sum, not excluded.
+    const inventory = findCall(calls, INVENTORY);
+    expect(inventory?.sql).toMatch(/returnFromJob/);
   });
 
   it('returns zeros for a job with no cost activity', async () => {
     const { queryable } = scriptedQueryable([
       { match: INVENTORY, rows: [{ material: 0 }] },
-      { match: EVENTS, rows: [] }
+      { match: EVENTS, rows: [] },
+      { match: REGISTER, rows: [{ count: 0 }] }
     ]);
 
     const rollup = await computeJobCostRollup(queryable, 'job-1');
 
-    expect(rollup).toEqual({ materialCost: 0, laborCost: 0, expenseCost: 0, totalCost: 0 });
+    expect(rollup).toEqual({
+      materialCost: 0,
+      laborCost: 0,
+      expenseCost: 0,
+      totalCost: 0,
+      unresolvedLineCount: 0,
+      costComplete: true
+    });
+  });
+
+  it('adds non-stock material cost events into materialCost (not expenseCost)', async () => {
+    const { queryable } = scriptedQueryable([
+      { match: INVENTORY, rows: [{ material: 100 }] },
+      {
+        match: EVENTS,
+        rows: [
+          { kind: 'material', total: 30 },
+          { kind: 'labor', total: 50 }
+        ]
+      },
+      { match: REGISTER, rows: [{ count: 0 }] }
+    ]);
+
+    const rollup = await computeJobCostRollup(queryable, 'job-1');
+
+    expect(rollup.materialCost).toBe(130); // 100 inventory + 30 non-stock material
+    expect(rollup.laborCost).toBe(50);
+    expect(rollup.expenseCost).toBe(0);
+    expect(rollup.totalCost).toBe(180);
+  });
+
+  it('reports unresolved register lines and marks the cost incomplete', async () => {
+    const { queryable } = scriptedQueryable([
+      { match: INVENTORY, rows: [{ material: 45 }] },
+      { match: EVENTS, rows: [] },
+      { match: REGISTER, rows: [{ count: 2 }] }
+    ]);
+
+    const rollup = await computeJobCostRollup(queryable, 'job-1');
+
+    expect(rollup.materialCost).toBe(45);
+    expect(rollup.unresolvedLineCount).toBe(2);
+    expect(rollup.costComplete).toBe(false);
   });
 });
 
@@ -82,6 +174,7 @@ describe('freezeJobCostSnapshot', () => {
       { match: SNAP_UPDATE, rowCount: 1 },
       { match: INVENTORY, rows: [{ material: 150 }] },
       { match: EVENTS, rows: [{ kind: 'labor', total: 200 }] },
+      { match: REGISTER, rows: [{ count: 0 }] },
       { match: SNAP_INSERT, rowCount: 1 }
     ]);
 
@@ -101,6 +194,24 @@ describe('freezeJobCostSnapshot', () => {
     expect(insert?.params[4]).toBe(0); // expense (none)
     expect(insert?.params[5]).toBe(350); // total
     expect(insert?.params[6]).toBe('Olivia Owner');
+  });
+
+  it('refuses to finalize while register lines still need cost resolution', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: SNAP_UPDATE, rowCount: 1 },
+      { match: INVENTORY, rows: [{ material: 150 }] },
+      { match: EVENTS, rows: [] },
+      { match: REGISTER, rows: [{ count: 1 }] },
+      { match: SNAP_INSERT, rowCount: 1 }
+    ]);
+
+    await expect(
+      freezeJobCostSnapshot(queryable, 'job-1', 'Olivia Owner', '2026-06-02T00:00:00.000Z')
+    ).rejects.toThrow(/need cost resolution/i);
+
+    // No snapshot may be superseded or inserted when finalization is blocked.
+    expect(calls.some((c) => SNAP_UPDATE.test(c.sql))).toBe(false);
+    expect(calls.some((c) => SNAP_INSERT.test(c.sql))).toBe(false);
   });
 });
 

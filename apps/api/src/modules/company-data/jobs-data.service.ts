@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import type { ResolveRegisterCostRequest } from '@bellfield/contracts';
 import type {
   AppointmentFinishOutcome,
   AppointmentRecord,
@@ -234,23 +235,32 @@ export class JobsDataService {
     jobId: string,
     input: CreateRegisterEntryInput,
     actor: { id: string; displayName: string },
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord> {
     await this.ensureJobExists(jobId);
-    return this.jobsDataRepository.createRegisterEntry(jobId, input, actor, occurredAt);
+    return this.jobsDataRepository.createRegisterEntry(
+      jobId,
+      input,
+      actor,
+      occurredAt,
+      allowFinalizedReplay
+    );
   }
 
   async updateRegisterEntry(
     registerEntryId: string,
     input: UpdateRegisterEntryInput,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord> {
     const registerEntry = await this.jobsDataRepository.updateRegisterEntry(
       registerEntryId,
       input,
       actorName,
-      occurredAt
+      occurredAt,
+      allowFinalizedReplay
     );
 
     if (!registerEntry) {
@@ -263,13 +273,13 @@ export class JobsDataService {
   async voidRegisterEntry(
     registerEntryId: string,
     reason: string | undefined,
-    actorName: string,
+    actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord> {
     const registerEntry = await this.jobsDataRepository.voidRegisterEntry(
       registerEntryId,
       reason,
-      actorName,
+      actor,
       occurredAt
     );
 
@@ -278,6 +288,20 @@ export class JobsDataService {
     }
 
     return registerEntry;
+  }
+
+  async resolveRegisterEntryCost(
+    registerEntryId: string,
+    resolution: ResolveRegisterCostRequest,
+    actor: { id: string; displayName: string },
+    occurredAt?: string
+  ): Promise<{ jobId: string }> {
+    return this.jobsDataRepository.resolveRegisterEntryCost(
+      registerEntryId,
+      resolution,
+      actor,
+      occurredAt
+    );
   }
 
   async getAppointmentById(appointmentId: string): Promise<AppointmentRecord> {

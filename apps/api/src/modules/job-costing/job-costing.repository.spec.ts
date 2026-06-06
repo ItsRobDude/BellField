@@ -39,8 +39,9 @@ function createRepository() {
             hours: p[5],
             ratePerHour: p[6],
             reversalOfEventId: p[7],
-            actorName: p[9],
-            occurredAt: p[10]
+            sourceRegisterEntryId: p[8],
+            actorName: p[10],
+            occurredAt: p[11]
           }
         ]
       };
@@ -133,6 +134,29 @@ describe('JobCostingRepository.insertExpense', () => {
   });
 });
 
+describe('JobCostingRepository.insertMaterial', () => {
+  it('appends a material event carrying the source register link', async () => {
+    const { repository, calls } = createRepository();
+
+    const event = await repository.insertMaterial({
+      jobId: 'job-1',
+      description: 'Supply-house capacitor',
+      amount: 18.5,
+      actor,
+      sourceRegisterEntryId: 're-9'
+    });
+
+    const insert = calls.find((c) => INSERT.test(c.sql));
+    expect(insert?.params[2]).toBe('material');
+    expect(insert?.params[4]).toBe(18.5);
+    expect(insert?.params[5]).toBeNull(); // no hours
+    expect(insert?.params[6]).toBeNull(); // no rate
+    expect(insert?.params[8]).toBe('re-9'); // source register link
+    expect(event.kind).toBe('material');
+    expect(event.sourceRegisterEntryId).toBe('re-9');
+  });
+});
+
 describe('JobCostingRepository.insertReversal', () => {
   it('writes a labor reversal: negated amount, carried hours/rate, reversal link', async () => {
     const { repository, calls } = createRepository();
@@ -145,18 +169,25 @@ describe('JobCostingRepository.insertReversal', () => {
       hours: 2,
       ratePerHour: 95,
       reversalOfEventId: 'evt-1',
+      sourceRegisterEntryId: 're-7',
       actor
     });
 
     const insert = calls.find((c) => INSERT.test(c.sql));
-    // params: [id, jobId, kind, description, amount, hours, ratePerHour, reversalOfEventId, ...]
+    // params: [id, jobId, kind, description, amount, hours, ratePerHour, reversalOfEventId,
+    //          sourceRegisterEntryId, actorId, actorName, occurredAt]
     expect(insert?.params[2]).toBe('labor');
     expect(insert?.params[4]).toBe(-190);
     expect(insert?.params[5]).toBe(2);
     expect(insert?.params[6]).toBe(95);
     expect(insert?.params[7]).toBe('evt-1');
+    expect(insert?.params[8]).toBe('re-7'); // source register link preserved onto the reversal
+    expect(insert?.params[10]).toBe('Olivia Owner'); // actor_name (after source link)
     expect(event.amount).toBe(-190);
     expect(event.reversalOfEventId).toBe('evt-1');
+    // The returned (read-back) event maps the source link and actor from the right columns.
+    expect(event.sourceRegisterEntryId).toBe('re-7');
+    expect(event.actorName).toBe('Olivia Owner');
   });
 
   it('writes an expense reversal with null labor provenance', async () => {
@@ -205,6 +236,7 @@ describe('JobCostingRepository.listEventsForJob', () => {
         hours: '2.00',
         ratePerHour: '95.00',
         reversalOfEventId: 'evt-1',
+        sourceRegisterEntryId: 're-7',
         actorName: 'Olivia Owner',
         occurredAt: '2026-06-02T00:00:00.000Z'
       }
@@ -215,5 +247,6 @@ describe('JobCostingRepository.listEventsForJob', () => {
     expect(events).toHaveLength(1);
     expect(events[0].amount).toBe(-190);
     expect(events[0].reversalOfEventId).toBe('evt-1');
+    expect(events[0].sourceRegisterEntryId).toBe('re-7');
   });
 });

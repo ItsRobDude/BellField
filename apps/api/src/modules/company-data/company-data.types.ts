@@ -1,6 +1,9 @@
 import type {
   AppointmentFinishOutcome as ContractAppointmentFinishOutcome,
   AppointmentStatus as ContractAppointmentStatus,
+  BillingProjectionState as ContractBillingProjectionState,
+  CostingPolicy as ContractCostingPolicy,
+  CostingStatus as ContractCostingStatus,
   CrmSearchResult as ContractCrmSearchResult,
   EquipmentStatus as ContractEquipmentStatus,
   FieldSyncSource as ContractFieldSyncSource,
@@ -214,6 +217,9 @@ export const appointmentStatuses = [
 export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
 export type FinishedVisitReviewDecision = ContractFinishedVisitReviewDecision;
 export type RegisterEntryKind = ContractRegisterEntryKind;
+export type BillingProjectionState = ContractBillingProjectionState;
+export type CostingPolicy = ContractCostingPolicy;
+export type CostingStatus = ContractCostingStatus;
 export type MediaAttachmentKind = ContractMediaAttachmentKind;
 
 export const appointmentFinishOutcomes = [
@@ -234,6 +240,13 @@ export const registerEntryKinds = [
   'membership',
   'other'
 ] as const satisfies readonly RegisterEntryKind[];
+
+export const billingProjectionStates = [
+  'billable',
+  'noChargeShown',
+  'internalOnly',
+  'notBilled'
+] as const satisfies readonly BillingProjectionState[];
 
 export const mediaAttachmentKinds = [
   'image',
@@ -287,6 +300,7 @@ export type JobTimelineEntry = {
     | 'registerEntryAdded'
     | 'registerEntryEdited'
     | 'registerEntryVoided'
+    | 'registerCostResolved'
     | 'estimateCreated'
     | 'estimateUpdated'
     | 'estimateApproved'
@@ -462,6 +476,11 @@ export type RegisterEntryRecord = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
+  billingProjectionState: BillingProjectionState;
+  costingPolicy?: CostingPolicy;
+  costingStatus: CostingStatus;
   capturedByEmployeeId: string;
   capturedByName: string;
   capturedAt: string;
@@ -481,6 +500,9 @@ export type CreateRegisterEntryInput = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  inventoryItemId?: string;
+  inventoryLocationId?: string;
+  billingProjectionState?: BillingProjectionState;
 };
 
 export type UpdateRegisterEntryInput = Partial<

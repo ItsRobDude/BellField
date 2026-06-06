@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { ResolveRegisterCostRequest } from '@bellfield/contracts';
 import type { QueryExecutor } from '../../database/database.service';
 import type {
   AppointmentRecord,
@@ -226,35 +227,53 @@ export class JobsDataRepository {
     jobId: string,
     input: CreateRegisterEntryInput,
     actor: { id: string; displayName: string },
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord> {
-    return this.registerRepository.createRegisterEntry(jobId, input, actor, occurredAt);
+    return this.registerRepository.createRegisterEntry(
+      jobId,
+      input,
+      actor,
+      occurredAt,
+      allowFinalizedReplay
+    );
   }
 
   async updateRegisterEntry(
     registerEntryId: string,
     input: UpdateRegisterEntryInput,
     actorName: string,
-    occurredAt?: string
+    occurredAt?: string,
+    allowFinalizedReplay = false
   ): Promise<RegisterEntryRecord | null> {
     return this.registerRepository.updateRegisterEntry(
       registerEntryId,
       input,
       actorName,
-      occurredAt
+      occurredAt,
+      allowFinalizedReplay
     );
   }
 
   async voidRegisterEntry(
     registerEntryId: string,
     reason: string | undefined,
-    actorName: string,
+    actor: { id: string; displayName: string },
     occurredAt?: string
   ): Promise<RegisterEntryRecord | null> {
-    return this.registerRepository.voidRegisterEntry(
+    return this.registerRepository.voidRegisterEntry(registerEntryId, reason, actor, occurredAt);
+  }
+
+  async resolveRegisterEntryCost(
+    registerEntryId: string,
+    resolution: ResolveRegisterCostRequest,
+    actor: { id: string; displayName: string },
+    occurredAt?: string
+  ): Promise<{ jobId: string }> {
+    return this.registerRepository.resolveRegisterEntryCost(
       registerEntryId,
-      reason,
-      actorName,
+      resolution,
+      actor,
       occurredAt
     );
   }

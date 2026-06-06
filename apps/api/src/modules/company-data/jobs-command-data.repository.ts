@@ -183,7 +183,15 @@ export class JobsCommandDataRepository {
       // when the job actually exists (previousStatus is set) — a missing row no-ops here and
       // surfaces as not-found from the post-transaction read.
       if (previousStatus !== undefined) {
-        if (status === 'completed' && previousStatus !== 'completed') {
+        // Entering a cost-final phase (completed OR closed) freezes the snapshot AND blocks
+        // finalization while any line still needs cost resolution. `cancelled` is abandonment,
+        // not a cost-complete state, so it is intentionally not guarded here. Coming from a
+        // status that is already cost-final (e.g. completed -> closed) does not re-freeze.
+        const enteringCostFinal =
+          (status === 'completed' || status === 'closed') &&
+          previousStatus !== 'completed' &&
+          previousStatus !== 'closed';
+        if (enteringCostFinal) {
           await freezeJobCostSnapshot(queryable, jobId, actorName, timelineTime);
         } else if (isReopenTransition(previousStatus, status)) {
           await supersedeCurrentJobCostSnapshot(queryable, jobId, timelineTime);

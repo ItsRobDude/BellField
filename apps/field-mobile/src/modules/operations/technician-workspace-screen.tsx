@@ -10,17 +10,24 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAssignedFieldWork } from '@/lib/operations-api';
+import { getAssignedFieldWork, getFieldTruckStock } from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import {
   initializeFieldSyncStore,
   loadAssignedWorkSnapshot,
   loadPendingOperations,
   loadSyncMetadata,
+  loadTruckStockSnapshot,
   saveAssignedWorkSnapshot,
-  saveSyncMetadata
+  saveSyncMetadata,
+  saveTruckStockSnapshot
 } from './field-sync-store';
-import type { AssignedWorkSnapshot, PendingOperation, SyncMetadata } from './field-sync-types';
+import type {
+  AssignedWorkSnapshot,
+  PendingOperation,
+  SyncMetadata,
+  TruckStockSnapshot
+} from './field-sync-types';
 import { applyPendingOperations } from './field-pending-replay';
 import { drainFieldSyncQueue } from './field-sync-drain';
 import { createFieldOperationHandlers } from './field-operation-handlers';
@@ -62,6 +69,25 @@ const defaultSyncMetadata: SyncMetadata = {
   lastSyncError: null
 };
 
+/**
+ * Refresh + persist the technician's truck-stock snapshot and apply it to state so the part
+ * picker can offer structured stock. Non-fatal: a technician with no assigned truck (or a
+ * transient failure) keeps any cached snapshot and can still capture free-text parts, so this
+ * never surfaces an error or blocks assigned-work loading.
+ */
+async function syncTruckStock(
+  input: { sessionToken: string; apiBaseUrl: string },
+  apply: (snapshot: TruckStockSnapshot) => void
+): Promise<void> {
+  try {
+    const snapshot = await getFieldTruckStock(input);
+    await saveTruckStockSnapshot(snapshot);
+    apply(snapshot);
+  } catch {
+    // Swallowed by design — see the doc comment above.
+  }
+}
+
 export function TechnicianWorkspaceScreen({
   apiBaseUrl,
   employee,
@@ -70,6 +96,7 @@ export function TechnicianWorkspaceScreen({
 }: Props) {
   const safeAreaInsets = useSafeAreaInsets();
   const [serverSnapshot, setServerSnapshot] = useState<AssignedWorkSnapshot | null>(null);
+  const [truckStock, setTruckStock] = useState<TruckStockSnapshot | null>(null);
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
   const [syncMetadata, setSyncMetadata] = useState<SyncMetadata>(defaultSyncMetadata);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
@@ -136,15 +163,18 @@ export function TechnicianWorkspaceScreen({
 
       try {
         await initializeFieldSyncStore();
-        const [persistedSnapshot, persistedOperations, persistedMetadata] = await Promise.all([
-          loadAssignedWorkSnapshot(),
-          loadPendingOperations(),
-          loadSyncMetadata()
-        ]);
+        const [persistedSnapshot, persistedOperations, persistedMetadata, persistedTruckStock] =
+          await Promise.all([
+            loadAssignedWorkSnapshot(),
+            loadPendingOperations(),
+            loadSyncMetadata(),
+            loadTruckStockSnapshot()
+          ]);
 
         setServerSnapshot(persistedSnapshot);
         setPendingOperations(persistedOperations);
         setSyncMetadata(persistedMetadata);
+        setTruckStock(persistedTruckStock);
         const nextAssignedWork = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
         const fetchedAt = new Date().toISOString();
         const nextSyncMetadata = buildSuccessfulSyncMetadata(
@@ -160,6 +190,7 @@ export function TechnicianWorkspaceScreen({
         );
         setServerSnapshot(nextAssignedWork);
         setSyncMetadata(nextSyncMetadata);
+        await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
       } catch (error) {
         setErrorMessage(
           error instanceof Error ? error.message : 'Unable to load BellField field storage.'
@@ -193,6 +224,7 @@ export function TechnicianWorkspaceScreen({
       setOfficeChangeMessages(summarizeOfficeAppointmentChanges(serverSnapshot, nextAssignedWork));
       setServerSnapshot(nextAssignedWork);
       setSyncMetadata(nextSyncMetadata);
+      await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh assigned work.');
     } finally {
@@ -467,6 +499,7 @@ export function TechnicianWorkspaceScreen({
               scheduledJobs={scheduledJobs}
               selectedJobId={selectedJobId}
               syncLastSuccessfulAt={syncMetadata.lastSuccessfulSyncAt}
+              truckStockItems={truckStock?.items ?? []}
             />
           ) : null}
 

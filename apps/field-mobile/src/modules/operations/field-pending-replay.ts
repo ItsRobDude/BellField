@@ -395,6 +395,13 @@ function buildLocalRegisterEntry(
     totalAmount: operation.totalAmount,
     partNumber: operation.partNumber,
     inventorySourceLabel: operation.inventorySourceLabel,
+    inventoryItemId: operation.inventoryItemId,
+    inventoryLocationId: operation.inventoryLocationId,
+    // Optimistic local default: billable + uncosted. Even when the tech picked structured truck
+    // stock we cannot know offline whether on-hand was sufficient, so the real costing status
+    // (applied vs needsResolution) only arrives when the server processes this on sync.
+    billingProjectionState: 'billable',
+    costingStatus: 'notCosted',
     capturedByEmployeeId: 'local-device',
     capturedByName: actorName,
     capturedAt: operation.occurredAt,

@@ -74,6 +74,12 @@ export class InventoryLedgerController {
     return this.inventoryService.getOnHand(getBearerToken(auth));
   }
 
+  // Field-only: the calling technician's truck stock for the part-add picker (Slice 1b).
+  @Get('field/truck-stock')
+  async fieldTruckStock(@Headers('authorization') auth: string | undefined) {
+    return this.inventoryService.getFieldTruckStock(getBearerToken(auth));
+  }
+
   @Get('movements')
   async movements(
     @Headers('authorization') auth: string | undefined,

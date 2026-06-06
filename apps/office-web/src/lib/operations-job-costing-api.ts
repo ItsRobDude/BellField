@@ -3,6 +3,7 @@ import type {
   CreateJobLaborRequest,
   JobCostEventResponse,
   JobCostingResponse,
+  ResolveRegisterCostRequest,
   ReverseJobCostEventRequest
 } from '@bellfield/contracts';
 import { requestJson } from './operations-api-base';
@@ -18,6 +19,7 @@ export type {
   JobCostEventResponse,
   CreateJobLaborRequest,
   CreateJobExpenseRequest,
+  ResolveRegisterCostRequest,
   ReverseJobCostEventRequest
 } from '@bellfield/contracts';
 
@@ -61,6 +63,25 @@ export async function postOfficeJobExpense(input: {
     method: 'POST',
     body: JSON.stringify(input.body)
   });
+}
+
+/** Resolve a register line's cost (in needsResolution) — returns the refreshed job costing. */
+export async function resolveOfficeRegisterCost(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  jobId: string;
+  registerEntryId: string;
+  body: ResolveRegisterCostRequest;
+}): Promise<JobCostingResponse> {
+  return requestJson<JobCostingResponse>(
+    `/operations/jobs/${input.jobId}/register-entries/${input.registerEntryId}/resolve-cost`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken,
+      method: 'POST',
+      body: JSON.stringify(input.body)
+    }
+  );
 }
 
 /** Reverse (correct) a labor/expense cost event by posting its negation. */

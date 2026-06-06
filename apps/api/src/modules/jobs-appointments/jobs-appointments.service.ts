@@ -1,7 +1,8 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { AppointmentFinishOutcome, AppointmentStatus, JobStatus } from '@bellfield/contracts';
-import { isReopenTransition } from '../company-data/company-data.types';
+import { isFinalJobStatus, isReopenTransition } from '../company-data/company-data.types';
 import type { JobRecord } from '../company-data/company-data.types';
+import { isCostExpectedRegisterKind } from '../company-data/register-costing-classification';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
@@ -454,7 +455,7 @@ export class JobsAppointmentsService {
       sessionToken,
       'register:create'
     );
-    this.validateRegisterEntryCreate(request);
+    this.validateRegisterEntryNumbers(request);
     const currentJob = await this.jobsDataService.getJobById(jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {
@@ -475,13 +476,23 @@ export class JobsAppointmentsService {
       };
     }
 
-    if (currentJob.status === 'cancelled' && accessCheck.status !== 'preservedReplay') {
-      throw new ConflictException(
-        'Register entries cannot be added to cancelled jobs. Reopen the job before adding new entries.'
-      );
+    // Reopen a finalized job before adding register work: cancelled takes none; completed/closed
+    // takes no cost-bearing line (it would be unresolvable cost). Offline replays are preserved.
+    const blockNewRegisterWork =
+      isFinalJobStatus(currentJob.status) &&
+      accessCheck.status !== 'preservedReplay' &&
+      (currentJob.status === 'cancelled' || isCostExpectedRegisterKind(request.kind));
+    if (blockNewRegisterWork) {
+      throw new ConflictException('Reopen the finalized job before adding this register entry.');
     }
 
-    await this.jobsDataService.createRegisterEntry(jobId, request, actor, request.occurredAt);
+    await this.jobsDataService.createRegisterEntry(
+      jobId,
+      request,
+      actor,
+      request.occurredAt,
+      accessCheck.status === 'preservedReplay'
+    );
 
     if (request.syncSource === 'field-save-queue') {
       await this.jobsDataService.addSyncFlag(
@@ -567,7 +578,8 @@ export class JobsAppointmentsService {
       registerEntryId,
       request,
       actor.displayName,
-      request.occurredAt
+      request.occurredAt,
+      accessCheck.status === 'preservedReplay'
     );
 
     if (request.syncSource === 'field-save-queue') {
@@ -648,7 +660,7 @@ export class JobsAppointmentsService {
     await this.jobsDataService.voidRegisterEntry(
       registerEntryId,
       request.reason,
-      actor.displayName,
+      { id: actor.id, displayName: actor.displayName },
       request.occurredAt
     );
 
@@ -971,21 +983,6 @@ export class JobsAppointmentsService {
     }
   }
 
-  private validateRegisterEntryCreate(request: CreateRegisterEntryRequestDto): void {
-    this.validatePositiveNumber(
-      request.quantity,
-      'Register entry quantity must be greater than zero.'
-    );
-    this.validateNonNegativeNumber(
-      request.unitPrice,
-      'Register entry unit price cannot be negative.'
-    );
-    this.validateNonNegativeNumber(
-      request.totalAmount,
-      'Register entry total amount cannot be negative.'
-    );
-  }
-
   private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {
     const hasEditableField =
       request.appointmentId !== undefined ||
@@ -996,7 +993,10 @@ export class JobsAppointmentsService {
       request.unitPrice !== undefined ||
       request.totalAmount !== undefined ||
       request.partNumber !== undefined ||
-      request.inventorySourceLabel !== undefined;
+      request.inventorySourceLabel !== undefined ||
+      request.inventoryItemId !== undefined ||
+      request.inventoryLocationId !== undefined ||
+      request.billingProjectionState !== undefined;
 
     if (!hasEditableField) {
       throw new ConflictException(
@@ -1004,6 +1004,14 @@ export class JobsAppointmentsService {
       );
     }
 
+    this.validateRegisterEntryNumbers(request);
+  }
+
+  private validateRegisterEntryNumbers(request: {
+    quantity?: number;
+    unitPrice?: number | null;
+    totalAmount?: number;
+  }): void {
     this.validatePositiveNumber(
       request.quantity,
       'Register entry quantity must be greater than zero.'

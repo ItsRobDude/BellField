@@ -26,6 +26,7 @@ function createService() {
     createLocation: jest.fn(),
     updateLocation: jest.fn(),
     getOnHand: jest.fn().mockResolvedValue([]),
+    listTruckStockForEmployee: jest.fn().mockResolvedValue([]),
     recordIssueToJob: jest.fn(),
     getJobStatus: jest.fn().mockResolvedValue('inProgress')
   };
@@ -194,5 +195,45 @@ describe('InventoryService issueToJob', () => {
       ConflictException
     );
     expect(inventoryRepository.recordIssueToJob).not.toHaveBeenCalled();
+  });
+});
+
+describe('InventoryService getFieldTruckStock', () => {
+  it('authorizes the field surface on register:create and returns the caller truck stock', async () => {
+    const { service, identityAccessService, inventoryRepository } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-7',
+      displayName: 'Tia Tech',
+      effectivePermissions: ['register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    inventoryRepository.listTruckStockForEmployee.mockResolvedValue([
+      {
+        itemId: 'item-1',
+        itemName: 'Capacitor 45uF',
+        locationId: 'truck-7',
+        locationName: 'Truck 7',
+        quantityOnHand: 4
+      }
+    ]);
+
+    const result = await service.getFieldTruckStock('token');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'register:create',
+      ['field-mobile']
+    );
+    expect(inventoryRepository.listTruckStockForEmployee).toHaveBeenCalledWith('tech-7');
+    expect(result.items).toHaveLength(1);
+    expect(result.snapshotVersion).toBe(result.serverTime);
+  });
+
+  it('rejects an office session (field surface only)', async () => {
+    const { service, identityAccessService, inventoryRepository } = createService();
+    identityAccessService.getAuthorizedEmployee.mockRejectedValue(new ForbiddenException());
+
+    await expect(service.getFieldTruckStock('token')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(inventoryRepository.listTruckStockForEmployee).not.toHaveBeenCalled();
   });
 });

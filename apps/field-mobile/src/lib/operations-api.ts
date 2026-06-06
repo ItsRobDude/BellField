@@ -9,6 +9,8 @@ import type {
   EquipmentSummary,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  FieldTruckStockItem,
+  FieldTruckStockResponse,
   JobMutationResponse,
   LinkEquipmentReplacementRequest,
   MediaAttachmentKind,
@@ -28,6 +30,8 @@ export type {
   EquipmentMutationResponse,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  FieldTruckStockItem,
+  FieldTruckStockResponse,
   JobMutationResponse,
   MediaAttachmentKind,
   MediaAttachmentResponse,
@@ -79,6 +83,13 @@ export async function getAssignedFieldWork(input: {
   apiBaseUrl?: string;
 }): Promise<FieldAssignedWorkResponse> {
   return requestJson<FieldAssignedWorkResponse>('/operations/jobs/field/assigned-work', input);
+}
+
+export async function getFieldTruckStock(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<FieldTruckStockResponse> {
+  return requestJson<FieldTruckStockResponse>('/operations/inventory/field/truck-stock', input);
 }
 
 export async function updateFieldAppointmentStatus(input: {

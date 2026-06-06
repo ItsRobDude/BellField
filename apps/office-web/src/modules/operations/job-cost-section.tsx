@@ -10,6 +10,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from './job-invoice-shared';
+import { JobCostResolutionPanel } from './job-cost-resolution-panel';
 
 export type JobCostSectionProps = {
   jobId: string;
@@ -28,7 +29,7 @@ type ActiveForm =
   | { kind: 'reverse'; eventId: string; reason: string };
 
 // Job cost tab: the live rollup (material/labor/expense), the finalized snapshot frozen at
-// completion, and the labor/expense event ledger with reversal corrections. Material detail
+// completion, and the labor/expense/material event ledger with reversal corrections. Stock material detail
 // lives on the Inventory surface's movements (filtered by job). Styling reuses
 // officeWorkspaceStyles; gated on jobCosting:view (tab) / create / edit.
 export function JobCostSection({
@@ -168,9 +169,7 @@ export function JobCostSection({
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
       {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
       {jobIsFinal ? (
-        <p style={styles.tinyMuted}>
-          This job is finalized. Reopen it to change job cost (labor, expense, or reversals).
-        </p>
+        <p style={styles.tinyMuted}>This job is finalized. Reopen it to change job cost.</p>
       ) : null}
 
       <div style={styles.panel}>
@@ -179,8 +178,19 @@ export function JobCostSection({
           <CostField label="Material" value={costing.live.materialCost} />
           <CostField label="Labor" value={costing.live.laborCost} />
           <CostField label="Expense" value={costing.live.expenseCost} />
-          <CostField label="Total" value={costing.live.totalCost} emphasize />
+          <CostField
+            label={costing.live.costComplete ? 'Total' : 'Known total'}
+            value={costing.live.totalCost}
+            emphasize
+          />
         </div>
+        {!costing.live.costComplete ? (
+          <p style={styles.error}>
+            {costing.live.unresolvedLineCount} register line
+            {costing.live.unresolvedLineCount === 1 ? '' : 's'} still need cost resolution — this
+            total is not final and margin is not reliable until they are resolved.
+          </p>
+        ) : null}
         {costing.finalized ? (
           <p style={styles.tinyMuted}>
             <span style={styles.badge}>Finalized</span> Frozen at completion:{' '}
@@ -196,6 +206,15 @@ export function JobCostSection({
         )}
       </div>
 
+      <JobCostResolutionPanel
+        jobId={jobId}
+        apiBaseUrl={apiBaseUrl}
+        sessionToken={sessionToken}
+        canEdit={canEdit}
+        jobIsFinal={jobIsFinal}
+        onResolved={() => void load()}
+      />
+
       {activeForm ? (
         <CostForm
           form={activeForm}
@@ -208,11 +227,11 @@ export function JobCostSection({
 
       <div style={styles.panel}>
         <div style={styles.row}>
-          <h3 style={styles.sectionHeading}>Labor &amp; expense events</h3>
+          <h3 style={styles.sectionHeading}>Cost events</h3>
           <span style={styles.badge}>{events.length}</span>
         </div>
         {events.length === 0 ? (
-          <p style={styles.muted}>No labor or expense costs recorded yet.</p>
+          <p style={styles.muted}>No labor, material, or expense costs recorded yet.</p>
         ) : (
           <div style={styles.tableWrap}>
             <table style={styles.table}>
@@ -228,13 +247,19 @@ export function JobCostSection({
               <tbody>
                 {events.map((event) => {
                   const isReversal = Boolean(event.reversalOfEventId);
+                  // A cost from resolving a register line is reversed by voiding that line, not
+                  // here — so it is not directly reversible from the cost ledger.
                   const reversible =
-                    canEdit && !jobIsFinal && !isReversal && !reversedIds.has(event.id);
+                    canEdit &&
+                    !jobIsFinal &&
+                    !isReversal &&
+                    !event.sourceRegisterEntryId &&
+                    !reversedIds.has(event.id);
                   return (
                     <tr key={event.id}>
                       <td style={styles.tableCell}>{event.occurredAt.slice(0, 10)}</td>
                       <td style={styles.tableCell}>
-                        {event.kind === 'labor' ? 'Labor' : 'Expense'}
+                        {eventKindLabel(event.kind)}
                         {isReversal ? ' (reversal)' : ''}
                       </td>
                       <td style={styles.tableCell}>
@@ -362,6 +387,12 @@ function CostForm({
       </div>
     </form>
   );
+}
+
+function eventKindLabel(kind: 'labor' | 'expense' | 'material'): string {
+  if (kind === 'labor') return 'Labor';
+  if (kind === 'material') return 'Material';
+  return 'Expense';
 }
 
 function isPositiveNumber(value: string): boolean {

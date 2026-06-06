@@ -748,7 +748,8 @@ describe('JobsAppointmentsService', () => {
       'job-1',
       expect.objectContaining({ description: 'Contactor' }),
       expect.objectContaining({ id: 'tech-1', displayName: 'Field Tech' }),
-      '2026-04-14T11:00:00.000Z'
+      '2026-04-14T11:00:00.000Z',
+      false // not a preserved replay
     );
     expect(response.syncResult).toEqual({ status: 'applied' });
     expect(response.registerEntries?.[0]?.description).toBe('Contactor');
@@ -839,6 +840,27 @@ describe('JobsAppointmentsService', () => {
     expect(response.syncResult).toEqual({ status: 'applied' });
   });
 
+  it('blocks a cost-bearing register entry on a finalized (completed) job', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('completed'));
+
+    await expect(
+      service.createRegisterEntry('session-token', 'job-1', {
+        kind: 'part',
+        description: 'Late part',
+        quantity: 1,
+        totalAmount: 50
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+  });
+
   it('flags stale field register updates as conflicts', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     const job = createJob('inProgress');
@@ -874,6 +896,31 @@ describe('JobsAppointmentsService', () => {
     });
   });
 
+  it('accepts an update that only changes the billing projection state', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['register:view', 'register:edit'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getRegisterEntryById.mockResolvedValue(createRegisterEntry());
+    jobsDataService.getJobById.mockResolvedValue(createJob('inProgress'));
+    jobsDataService.updateRegisterEntry.mockResolvedValue(
+      createRegisterEntry({ billingProjectionState: 'noChargeShown' })
+    );
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([
+      createRegisterEntry({ billingProjectionState: 'noChargeShown' })
+    ]);
+
+    await service.updateRegisterEntry('session-token', 'register-1', {
+      billingProjectionState: 'noChargeShown'
+    });
+
+    // billingProjectionState alone is an editable field — the update must not be rejected.
+    expect(jobsDataService.updateRegisterEntry).toHaveBeenCalled();
+  });
+
   it('voids register entries through register:edit without deleting history', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
@@ -903,7 +950,7 @@ describe('JobsAppointmentsService', () => {
     expect(jobsDataService.voidRegisterEntry).toHaveBeenCalledWith(
       'register-1',
       'Duplicate line.',
-      'Dispatcher',
+      { id: 'office-1', displayName: 'Dispatcher' },
       '2026-04-14T12:00:00.000Z'
     );
     expect(response.registerEntries?.[0]).toMatchObject({

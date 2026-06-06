@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import type {
+  FieldTruckStockItem,
   InventoryMovement,
   InventoryMovementKind,
   InventoryOnHandRow,
@@ -231,6 +232,55 @@ export class InventoryRepository {
         totalValue
       };
     });
+  }
+
+  /**
+   * Pickable truck stock for one technician: every active PART with positive on-hand on a truck
+   * location assigned to that employee. Drives the field part-add picker; equipment and
+   * zero/negative balances are excluded. Deliberately returns NO cost — the field device never
+   * needs company cost data, and the server recomputes the weighted-average when it issues stock.
+   */
+  async listTruckStockForEmployee(employeeId: string): Promise<FieldTruckStockItem[]> {
+    const result = await this.databaseService.query<{
+      itemId: string;
+      sku: string | null;
+      itemName: string;
+      unitOfMeasure: string | null;
+      locationId: string;
+      locationName: string;
+      quantity: string | number;
+    }>(
+      `select
+         m.item_id as "itemId",
+         it.sku as "sku",
+         it.name as "itemName",
+         it.unit_of_measure as "unitOfMeasure",
+         m.location_id as "locationId",
+         loc.name as "locationName",
+         sum(m.quantity) as "quantity"
+       from inventory_movements m
+       join inventory_items it on it.id = m.item_id
+       join inventory_locations loc on loc.id = m.location_id
+       where m.location_id is not null
+         and loc.kind = 'truck'
+         and loc.assigned_employee_id = $1
+         and loc.is_active = true
+         and it.is_active = true
+         and it.kind = 'part'
+       group by m.item_id, it.sku, it.name, it.unit_of_measure, m.location_id, loc.name
+       having sum(m.quantity) > 0
+       order by it.name asc, loc.name asc`,
+      [employeeId]
+    );
+    return result.rows.map((row) => ({
+      itemId: row.itemId,
+      sku: row.sku ?? undefined,
+      itemName: row.itemName,
+      unitOfMeasure: row.unitOfMeasure ?? undefined,
+      locationId: row.locationId,
+      locationName: row.locationName,
+      quantityOnHand: Math.round(Number(row.quantity) * 10000) / 10000
+    }));
   }
 
   /** Recent movements, optionally filtered to one item or one job. Newest first. */

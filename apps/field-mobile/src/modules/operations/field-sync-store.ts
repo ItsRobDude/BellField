@@ -3,7 +3,8 @@ import type {
   AssignedWorkSnapshot,
   PendingOperation,
   PendingOperationState,
-  SyncMetadata
+  SyncMetadata,
+  TruckStockSnapshot
 } from './field-sync-types';
 
 const databaseName = 'bellfield-field.db';
@@ -84,6 +85,12 @@ export async function initializeFieldSyncStore(): Promise<void> {
       updated_at text not null
     );
 
+    create table if not exists truck_stock_snapshot (
+      id integer primary key check (id = 1),
+      payload_json text not null,
+      updated_at text not null
+    );
+
     create index if not exists pending_operations_entity_key_idx on pending_operations(entity_key);
     create index if not exists pending_operations_state_idx on pending_operations(state);
   `);
@@ -109,6 +116,38 @@ export async function saveAssignedWorkSnapshot(snapshot: AssignedWorkSnapshot): 
   await database.runAsync(
     `
       insert into assigned_work_snapshot (id, payload_json, updated_at)
+      values (1, $payloadJson, $updatedAt)
+      on conflict(id) do update set
+        payload_json = excluded.payload_json,
+        updated_at = excluded.updated_at
+    `,
+    {
+      $payloadJson: JSON.stringify(snapshot),
+      $updatedAt: now
+    }
+  );
+}
+
+export async function loadTruckStockSnapshot(): Promise<TruckStockSnapshot | null> {
+  const database = await getDatabase();
+  const row = await database.getFirstAsync<{ payload_json: string }>(
+    'select payload_json from truck_stock_snapshot where id = 1'
+  );
+
+  if (!row) {
+    return null;
+  }
+
+  return JSON.parse(row.payload_json) as TruckStockSnapshot;
+}
+
+export async function saveTruckStockSnapshot(snapshot: TruckStockSnapshot): Promise<void> {
+  const database = await getDatabase();
+  const now = new Date().toISOString();
+
+  await database.runAsync(
+    `
+      insert into truck_stock_snapshot (id, payload_json, updated_at)
       values (1, $payloadJson, $updatedAt)
       on conflict(id) do update set
         payload_json = excluded.payload_json,

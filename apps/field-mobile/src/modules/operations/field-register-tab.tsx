@@ -1,5 +1,5 @@
 import { Pressable, Text, TextInput, View } from 'react-native';
-import type { RegisterEntryKind } from '@/lib/operations-api';
+import type { FieldTruckStockItem, RegisterEntryKind } from '@/lib/operations-api';
 import { formatAppointmentSchedule } from './field-appointment-display';
 import {
   createRegisterEntryDraft,
@@ -23,6 +23,7 @@ type RegisterTabProps = {
   job: FieldJob;
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
   registerEditDrafts: Record<string, RegisterEntryDraft>;
+  truckStockItems: FieldTruckStockItem[];
   onConfirmVoidRegisterEntry: (entry: FieldRegisterEntry) => void;
   onQueueRegisterEntryCreate: (job: FieldJob) => void;
   onQueueRegisterEntryEdit: (entry: FieldRegisterEntry) => void;
@@ -37,6 +38,7 @@ export function RegisterTab({
   job,
   registerCreateDrafts,
   registerEditDrafts,
+  truckStockItems,
   onConfirmVoidRegisterEntry,
   onQueueRegisterEntryCreate,
   onQueueRegisterEntryEdit,
@@ -170,6 +172,7 @@ export function RegisterTab({
       <RegisterCreateCard
         job={job}
         registerCreateDrafts={registerCreateDrafts}
+        truckStockItems={truckStockItems}
         onQueueRegisterEntryCreate={onQueueRegisterEntryCreate}
         onUpdateRegisterCreateDraft={onUpdateRegisterCreateDraft}
       />
@@ -180,11 +183,13 @@ export function RegisterTab({
 function RegisterCreateCard({
   job,
   registerCreateDrafts,
+  truckStockItems,
   onQueueRegisterEntryCreate,
   onUpdateRegisterCreateDraft
 }: {
   job: FieldJob;
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
+  truckStockItems: FieldTruckStockItem[];
   onQueueRegisterEntryCreate: (job: FieldJob) => void;
   onUpdateRegisterCreateDraft: (jobId: string, patch: Partial<RegisterEntryDraft>) => void;
 }) {
@@ -229,6 +234,75 @@ function RegisterCreateCard({
               <Text style={styles.tagButtonText}>{formatAppointmentSchedule(appointment)}</Text>
             </Pressable>
           ))}
+        </View>
+      ) : null}
+      {createDraft.registerEntryKind === 'part' ? (
+        <View style={styles.block}>
+          <Text style={styles.sectionTitleSmall}>Truck stock</Text>
+          {truckStockItems.length === 0 ? (
+            <Text style={styles.summaryText}>
+              No truck stock cached. Enter the part details manually - the office will resolve its
+              cost.
+            </Text>
+          ) : (
+            <View style={styles.replacementOptionList}>
+              {truckStockItems.map((item) => {
+                const isSelected =
+                  createDraft.inventoryItemId === item.itemId &&
+                  createDraft.inventoryLocationId === item.locationId;
+
+                return (
+                  <Pressable
+                    key={`${item.itemId}:${item.locationId}`}
+                    onPress={() =>
+                      onUpdateRegisterCreateDraft(job.id, {
+                        inventoryItemId: item.itemId,
+                        inventoryLocationId: item.locationId,
+                        description: item.itemName,
+                        partNumber: item.sku ?? '',
+                        unitOfMeasure: item.unitOfMeasure ?? createDraft.unitOfMeasure,
+                        inventorySourceLabel: item.locationName
+                      })
+                    }
+                    style={[
+                      styles.replacementOptionButton,
+                      isSelected ? styles.replacementOptionButtonSelected : null
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.replacementOptionLabel,
+                        isSelected ? styles.replacementOptionLabelSelected : null
+                      ]}
+                    >
+                      {item.itemName}
+                    </Text>
+                    <Text
+                      style={[
+                        styles.summaryText,
+                        isSelected ? styles.replacementOptionDetailSelected : null
+                      ]}
+                    >
+                      {item.quantityOnHand} on hand - {item.locationName}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+              {createDraft.inventoryItemId ? (
+                <Pressable
+                  onPress={() =>
+                    onUpdateRegisterCreateDraft(job.id, {
+                      inventoryItemId: '',
+                      inventoryLocationId: ''
+                    })
+                  }
+                  style={styles.tagButton}
+                >
+                  <Text style={styles.tagButtonText}>Clear truck selection</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          )}
         </View>
       ) : null}
       <TextInput

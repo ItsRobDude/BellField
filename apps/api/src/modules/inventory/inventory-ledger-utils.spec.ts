@@ -1,7 +1,8 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import {
   applyAdjustment,
   applyIssueToJob,
+  applyReturnFromJob,
   applyTransfer,
   getOnHandSnapshot
 } from './inventory-ledger-utils';
@@ -29,6 +30,8 @@ const actor = { id: 'emp-1', displayName: 'Ivy Inventory' };
 const SNAPSHOT = /coalesce\(sum\(quantity\), 0\) as qty/i;
 const INSERT = /insert into inventory_movements/i;
 const LOCK = /pg_advisory_xact_lock/i;
+const ITEM_KIND = /from inventory_items\s+where id = \$1/i;
+const PART_ITEM = { match: ITEM_KIND, rows: [{ kind: 'part', isActive: true }] };
 
 describe('getOnHandSnapshot', () => {
   it('computes quantity, total value, and weighted-average cost', async () => {
@@ -203,6 +206,7 @@ describe('applyTransfer', () => {
 describe('applyIssueToJob', () => {
   it('writes one outbound movement at the location average, carrying the value to the job', async () => {
     const { queryable, calls } = scriptedQueryable([
+      PART_ITEM,
       { match: LOCK, rows: [] },
       { match: SNAPSHOT, rows: [{ qty: 10, value: 125 }] }, // avg 12.5
       { match: INSERT, rowCount: 1 }
@@ -232,6 +236,7 @@ describe('applyIssueToJob', () => {
   it('fully depletes mixed-cost stock with no value residual', async () => {
     // 1 @ $1 + 2 @ $2 = 3 units worth $5. Issuing all 3 removes EXACTLY $5.
     const { queryable, calls } = scriptedQueryable([
+      PART_ITEM,
       { match: LOCK, rows: [] },
       { match: SNAPSHOT, rows: [{ qty: 3, value: 5 }] },
       { match: INSERT, rowCount: 1 }
@@ -253,6 +258,7 @@ describe('applyIssueToJob', () => {
 
   it('rejects an over-issue (more than on hand at the location)', async () => {
     const { queryable, calls } = scriptedQueryable([
+      PART_ITEM,
       { match: LOCK, rows: [] },
       { match: SNAPSHOT, rows: [{ qty: 2, value: 20 }] }
     ]);
@@ -267,6 +273,135 @@ describe('applyIssueToJob', () => {
         occurredAt: '2026-06-02T00:00:00.000Z'
       })
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+
+  it('rejects issuing an equipment-kind item (skips the equipment bridge)', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: ITEM_KIND, rows: [{ kind: 'equipment', isActive: true }] }
+    ]);
+
+    await expect(
+      applyIssueToJob(queryable, {
+        itemId: 'item-1',
+        locationId: 'loc-1',
+        jobId: 'job-1',
+        quantity: 1,
+        actor,
+        occurredAt: '2026-06-02T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // Guard fails fast, before locking stock or writing a movement.
+    expect(findCalls(calls, LOCK)).toHaveLength(0);
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+
+  it('rejects issuing an inactive part', async () => {
+    const { queryable } = scriptedQueryable([
+      { match: ITEM_KIND, rows: [{ kind: 'part', isActive: false }] }
+    ]);
+
+    await expect(
+      applyIssueToJob(queryable, {
+        itemId: 'item-1',
+        locationId: 'loc-1',
+        jobId: 'job-1',
+        quantity: 1,
+        actor,
+        occurredAt: '2026-06-02T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it('rejects issuing a missing item', async () => {
+    const { queryable } = scriptedQueryable([{ match: ITEM_KIND, rows: [] }]);
+
+    await expect(
+      applyIssueToJob(queryable, {
+        itemId: 'ghost',
+        locationId: 'loc-1',
+        jobId: 'job-1',
+        quantity: 1,
+        actor,
+        occurredAt: '2026-06-02T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+});
+
+describe('applyReturnFromJob', () => {
+  const ORIGINAL = /extended_cost as "extendedCost"/i;
+  const EXISTING = /kind = 'returnFromJob'/i;
+  const issuedMovement = {
+    itemId: 'item-1',
+    locationId: 'loc-1',
+    jobId: 'job-1',
+    kind: 'issueToJob',
+    quantity: -4,
+    unitCost: 12.5,
+    extendedCost: -50,
+    sourceRegisterEntryId: 're-3'
+  };
+
+  it('writes a returnFromJob that exactly mirrors the issue it reverses', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: ORIGINAL, rows: [issuedMovement] },
+      { match: EXISTING, rows: [] },
+      { match: LOCK, rows: [] },
+      { match: INSERT, rowCount: 1 }
+    ]);
+
+    const result = await applyReturnFromJob(queryable, {
+      reversalOfMovementId: 'mv-issue-1',
+      actor,
+      occurredAt: '2026-06-03T00:00:00.000Z'
+    });
+
+    const insert = findCalls(calls, INSERT)[0];
+    // params: [id, itemId, kind, quantity, unitCost, extendedCost, locationId, jobId, ...,
+    //          transferGroupId, reversalOfMovementId, ...]
+    expect(insert.params[2]).toBe('returnFromJob');
+    expect(insert.params[3]).toBe(4); // positive quantity back to the location
+    expect(insert.params[4]).toBe(12.5); // unit cost carried from the issue
+    expect(insert.params[5]).toBe(50); // positive value back to the location
+    expect(insert.params[6]).toBe('loc-1');
+    expect(insert.params[7]).toBe('job-1');
+    expect(insert.params[11]).toBe('mv-issue-1'); // reversal_of_movement_id
+    expect(insert.params[12]).toBe('re-3'); // source_register_entry_id carried from the issue
+    expect(result).toEqual({ returnedValue: 50 });
+  });
+
+  it('refuses to return the same issue twice', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      { match: ORIGINAL, rows: [issuedMovement] },
+      { match: EXISTING, rows: [{ id: 'mv-return-1' }] }
+    ]);
+
+    await expect(
+      applyReturnFromJob(queryable, {
+        reversalOfMovementId: 'mv-issue-1',
+        actor,
+        occurredAt: '2026-06-03T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(findCalls(calls, INSERT)).toHaveLength(0);
+  });
+
+  it('rejects reversing a movement that is not an issue-to-job', async () => {
+    const { queryable, calls } = scriptedQueryable([
+      {
+        match: ORIGINAL,
+        rows: [{ ...issuedMovement, kind: 'receiveToJob', quantity: 4, extendedCost: 50 }]
+      }
+    ]);
+
+    await expect(
+      applyReturnFromJob(queryable, {
+        reversalOfMovementId: 'mv-x',
+        actor,
+        occurredAt: '2026-06-03T00:00:00.000Z'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(findCalls(calls, INSERT)).toHaveLength(0);
   });
 });
