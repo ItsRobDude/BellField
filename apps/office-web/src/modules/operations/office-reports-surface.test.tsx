@@ -2,14 +2,17 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ArOpenBalancesReport } from '@bellfield/contracts';
 import * as reportingApi from '@/lib/reporting-api';
-import * as reportingCsv from '@/lib/reporting-csv';
+import * as downloadFile from '@/lib/download-file';
 import { OfficeReportsSurface } from './office-reports-surface';
 
-vi.mock('@/lib/reporting-api', () => ({ getArOpenBalances: vi.fn() }));
-vi.mock('@/lib/reporting-csv', () => ({ toCsv: vi.fn(() => 'csv-body'), downloadCsv: vi.fn() }));
+vi.mock('@/lib/reporting-api', () => ({
+  getArOpenBalances: vi.fn(),
+  downloadArOpenBalancesCsv: vi.fn()
+}));
+vi.mock('@/lib/download-file', () => ({ downloadBlob: vi.fn() }));
 
 const mockedApi = vi.mocked(reportingApi);
-const mockedCsv = vi.mocked(reportingCsv);
+const mockedDownload = vi.mocked(downloadFile);
 
 const report: ArOpenBalancesReport = {
   generatedAt: '2026-06-06T00:00:00.000Z',
@@ -67,12 +70,15 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
     expect(screen.queryByRole('button', { name: 'Export CSV' })).toBeNull();
   });
 
-  it('exports a CSV download when reports:export is present', async () => {
+  it('downloads the server-rendered CSV when reports:export is present', async () => {
+    const blob = new Blob(['csv'], { type: 'text/csv' });
+    mockedApi.downloadArOpenBalancesCsv.mockResolvedValue(blob);
     renderSurface(true);
     await screen.findByText('Acme');
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
-    expect(mockedCsv.downloadCsv).toHaveBeenCalledTimes(1);
-    expect(mockedCsv.downloadCsv.mock.calls[0][0]).toMatch(/^ar-open-balances-2026-06-06/);
+    await waitFor(() => expect(mockedApi.downloadArOpenBalancesCsv).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockedDownload.downloadBlob).toHaveBeenCalledTimes(1));
+    expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(/^ar-open-balances-2026-06-06/);
   });
 
   it('shows the empty state when no jobs owe', async () => {

@@ -76,3 +76,36 @@ describe('ReportingService.getArOpenBalances', () => {
     expect(sql).toContain('p.is_void = false');
   });
 });
+
+describe('ReportingService.exportArOpenBalances', () => {
+  it('renders a CSV with a header row and a stamped filename', async () => {
+    const { service } = createService(
+      [
+        row({
+          jobNumber: '1003',
+          customerName: 'Acme',
+          netBilled: 100,
+          paidTotal: 30,
+          amountDue: 70
+        })
+      ],
+      ['reports:view', 'invoices:view', 'reports:export']
+    );
+    const out = await service.exportArOpenBalances('token');
+    expect(out.filename).toMatch(/^ar-open-balances-\d{4}-\d{2}-\d{2}\.csv$/);
+    const lines = out.csv.split('\n');
+    expect(lines[0]).toBe('Job #,Customer,Net billed,Paid,Amount due');
+    expect(lines[1]).toBe('1003,Acme,100,30,70');
+  });
+
+  it('rejects 403 without reports:export (the permission is enforced server-side)', async () => {
+    const { service, databaseService } = createService([], ['reports:view', 'invoices:view']);
+    await expect(service.exportArOpenBalances('token')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(databaseService.query).not.toHaveBeenCalled();
+  });
+
+  it('rejects 403 without the invoices:view view gate', async () => {
+    const { service } = createService([], ['reports:view', 'reports:export']);
+    await expect(service.exportArOpenBalances('token')).rejects.toBeInstanceOf(ForbiddenException);
+  });
+});

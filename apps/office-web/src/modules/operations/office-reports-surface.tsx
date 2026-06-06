@@ -1,8 +1,12 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
-import { getArOpenBalances, type ArOpenBalancesReport } from '@/lib/reporting-api';
-import { downloadCsv, toCsv, type CsvColumn } from '@/lib/reporting-csv';
+import {
+  downloadArOpenBalancesCsv,
+  getArOpenBalances,
+  type ArOpenBalancesReport
+} from '@/lib/reporting-api';
+import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeReportsSurfaceProps = {
@@ -85,19 +89,14 @@ function ArOpenBalancesReportView({
     };
   }, [apiBaseUrl, sessionToken]);
 
-  function handleExport() {
-    if (!report) return;
-    const columns: CsvColumn<ArOpenBalancesReport['rows'][number]>[] = [
-      { header: 'Job #', value: (r) => r.jobNumber },
-      { header: 'Customer', value: (r) => r.customerName },
-      { header: 'Net billed', value: (r) => r.netBilled },
-      { header: 'Paid', value: (r) => r.paidTotal },
-      { header: 'Amount due', value: (r) => r.amountDue }
-    ];
-    downloadCsv(
-      `ar-open-balances-${report.generatedAt.slice(0, 10)}.csv`,
-      toCsv(columns, report.rows)
-    );
+  async function handleExport() {
+    // The CSV is rendered + gated (reports:export) server-side; we just download the blob.
+    try {
+      const blob = await downloadArOpenBalancesCsv({ apiBaseUrl, sessionToken });
+      downloadBlob(`ar-open-balances-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export the report.');
+    }
   }
 
   return (
@@ -105,7 +104,7 @@ function ArOpenBalancesReportView({
       <div style={styles.row}>
         <h2 style={{ ...styles.heading, fontSize: '1rem' }}>AR / Open Balances</h2>
         {canExport && report ? (
-          <button type="button" style={styles.button} onClick={handleExport}>
+          <button type="button" style={styles.button} onClick={() => void handleExport()}>
             Export CSV
           </button>
         ) : null}
