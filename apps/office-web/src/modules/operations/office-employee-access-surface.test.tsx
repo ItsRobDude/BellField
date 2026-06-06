@@ -8,6 +8,7 @@ import type {
 } from '@bellfield/contracts';
 import * as identityApi from '@/lib/identity-api';
 import { OfficeEmployeeAccessSurface } from './office-employee-access-surface';
+import { OfficeEmployeeCreateForm } from './office-employee-create-form';
 
 vi.mock('@/lib/identity-api', () => ({
   getOfficeEmployees: vi.fn(),
@@ -149,6 +150,7 @@ beforeEach(() => {
   mockedApi.createOfficeEmployee.mockResolvedValue(employee({ id: 'e-new', roleId: 'csr' }));
   mockedApi.resetOfficeEmployeePassword.mockResolvedValue({ revokedSessionCount: 2 });
   mockedApi.revokeOfficeEmployeeSession.mockResolvedValue({ revoked: true });
+  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -222,6 +224,31 @@ describe('OfficeEmployeeAccessSurface — gating', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'New employee' }));
     expect(await screen.findByRole('button', { name: 'Create employee' })).toBeInTheDocument();
   });
+
+  it('hides New employee when the role reference data failed to load', async () => {
+    mockedApi.getOfficeRoles.mockRejectedValue(new Error('roles down'));
+    renderSurface({ canCreate: true, actorRoleId: 'owner' });
+    await screen.findByText('Olivia Owner'); // list still renders
+    expect(screen.queryByRole('button', { name: 'New employee' })).not.toBeInTheDocument();
+  });
+});
+
+describe('OfficeEmployeeCreateForm — defensive guard', () => {
+  it('disables submit and warns when no role options are available', () => {
+    render(
+      <OfficeEmployeeCreateForm
+        roles={[]}
+        actorRoleId="owner"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        onCreated={vi.fn()}
+        onCancel={vi.fn()}
+        onError={vi.fn()}
+      />
+    );
+    expect(screen.getByText(/Role reference data isn't loaded yet/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create employee' })).toBeDisabled();
+  });
 });
 
 describe('OfficeEmployeeAccessSurface — protections', () => {
@@ -280,7 +307,8 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
     await waitFor(() => expect(screen.getByText('Save boom')).toBeInTheDocument());
   });
 
-  it('revokes a device session through the API', async () => {
+  it('revokes a device session after the user confirms', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderSurface({ canConfigure: true, actorId: 'e-owner', actorRoleId: 'owner' });
     await selectEmployee('Tina Tech');
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke session s1' }));
@@ -289,6 +317,14 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
         expect.objectContaining({ employeeId: 'e-tech', sessionId: 's1' })
       );
     });
+  });
+
+  it('does not revoke a session when the user cancels the confirm', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    renderSurface({ canConfigure: true, actorId: 'e-owner', actorRoleId: 'owner' });
+    await selectEmployee('Tina Tech');
+    fireEvent.click(await screen.findByRole('button', { name: 'Revoke session s1' }));
+    expect(mockedApi.revokeOfficeEmployeeSession).not.toHaveBeenCalled();
   });
 
   it('resets a password (min length + confirm) and reports revoked sessions', async () => {

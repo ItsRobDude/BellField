@@ -79,15 +79,11 @@ export function OfficeEmployeeAccessSurface({
     let active = true;
     setIsListLoading(true);
     setErrorMessage(null);
-    Promise.all([
-      getOfficeEmployees({ apiBaseUrl, sessionToken }),
-      getOfficeRoles({ apiBaseUrl, sessionToken })
-    ])
-      .then(([employeeResult, roleResult]) => {
-        if (active) {
-          setEmployees(employeeResult.employees);
-          setRoles(roleResult.roles);
-        }
+    // Load employees and roles independently — a roles failure must not blank the employee list; it
+    // only disables "New employee" (which needs real role options).
+    getOfficeEmployees({ apiBaseUrl, sessionToken })
+      .then((result) => {
+        if (active) setEmployees(result.employees);
       })
       .catch((error) => {
         if (active)
@@ -95,6 +91,17 @@ export function OfficeEmployeeAccessSurface({
       })
       .finally(() => {
         if (active) setIsListLoading(false);
+      });
+    getOfficeRoles({ apiBaseUrl, sessionToken })
+      .then((result) => {
+        if (active) setRoles(result.roles);
+      })
+      .catch((error) => {
+        if (active)
+          setErrorMessage(
+            (previous) =>
+              previous ?? (error instanceof Error ? error.message : 'Unable to load roles.')
+          );
       });
     return () => {
       active = false;
@@ -129,6 +136,10 @@ export function OfficeEmployeeAccessSurface({
     };
   }, [selectedId, apiBaseUrl, sessionToken]);
 
+  // Only offer "New employee" once the role reference data is loaded — the create form needs real
+  // role options and must not silently fall back to a default role.
+  const canStartCreate = canCreate && !isListLoading && roles.length > 0;
+
   // Reload the list (and the open detail) after a mutation so the UI reflects the server state.
   const reload = useCallback(async () => {
     try {
@@ -146,7 +157,7 @@ export function OfficeEmployeeAccessSurface({
     <section style={styles.workspacePanel} aria-label="Employees">
       <div style={styles.row}>
         <h1 style={styles.heading}>Employees</h1>
-        {canCreate && !isCreating ? (
+        {canStartCreate && !isCreating ? (
           <button
             type="button"
             style={styles.primaryButton}
