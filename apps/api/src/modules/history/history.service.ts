@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import type {
   HistoryEntry,
   HistoryQuery,
@@ -75,19 +75,22 @@ function encodeCursor(row: HistoryRow): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
-function decodeCursor(cursor: string): Cursor | null {
+// Reject a malformed cursor rather than silently serving the first page (matches the job-queue
+// cursor contract). A tampered or stale-format cursor is a client error, not "start over".
+function decodeCursor(cursor: string): Cursor {
   try {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<Cursor>;
     if (
-      typeof parsed.o === 'string' &&
-      typeof parsed.r === 'string' &&
-      typeof parsed.s === 'string'
+      typeof parsed.o !== 'string' ||
+      typeof parsed.r !== 'string' ||
+      typeof parsed.s !== 'string' ||
+      Number.isNaN(new Date(parsed.o).getTime())
     ) {
-      return { o: parsed.o, r: parsed.r, s: parsed.s };
+      throw new Error('Invalid cursor payload.');
     }
-    return null;
+    return { o: parsed.o, r: parsed.r, s: parsed.s };
   } catch {
-    return null;
+    throw new BadRequestException('History cursor is invalid.');
   }
 }
 

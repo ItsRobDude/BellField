@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { HistoryService } from './history.service';
 
 type Row = {
@@ -165,6 +165,15 @@ describe('HistoryService', () => {
     expect(params).toEqual(
       expect.arrayContaining(['2026-06-05T00:00:00.000Z', 'registerEntry', 'b'])
     );
+  });
+
+  it('rejects a malformed cursor instead of silently serving page one', async () => {
+    const { service, databaseService } = createService();
+    await expect(
+      service.getHistory('token', { cursor: 'not-a-valid-cursor' })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    // A bad cursor is a client error — we must not fall back to an unpaginated first page.
+    expect(databaseService.query).not.toHaveBeenCalled();
   });
 
   it('clamps an over-large limit to the server maximum', async () => {

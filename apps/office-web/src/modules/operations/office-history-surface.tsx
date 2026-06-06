@@ -174,7 +174,7 @@ export function OfficeHistorySurface({
           </select>
         </label>
         <label style={fieldStyle}>
-          <span style={fieldLabelStyle}>From</span>
+          <span style={fieldLabelStyle}>From (UTC)</span>
           <input
             type="date"
             style={inputStyle}
@@ -183,7 +183,7 @@ export function OfficeHistorySurface({
           />
         </label>
         <label style={fieldStyle}>
-          <span style={fieldLabelStyle}>To</span>
+          <span style={fieldLabelStyle}>To (UTC)</span>
           <input
             type="date"
             style={inputStyle}
@@ -209,7 +209,7 @@ export function OfficeHistorySurface({
                 {entry.jobId && onOpenJob ? (
                   <button
                     type="button"
-                    style={{ ...styles.button, marginLeft: 8, padding: '0 8px' }}
+                    style={{ ...styles.tableLinkButton, marginLeft: 8 }}
                     onClick={() => onOpenJob(entry.jobId as string)}
                   >
                     View job
