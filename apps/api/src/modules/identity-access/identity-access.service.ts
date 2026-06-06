@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { defaultRoleTemplates } from './default-role-templates';
+import { hashPassword, verifyPassword } from './password-hash';
 import { IdentityAccessRepository } from './identity-access.repository';
 import type {
   AuthorizedEmployee,
@@ -32,12 +33,24 @@ export class IdentityAccessService {
     const normalizedEmail = loginRequest.email.trim().toLowerCase();
     const employee = await this.identityAccessRepository.findEmployeeByEmail(normalizedEmail);
 
-    if (!employee || employee.password !== loginRequest.password) {
+    const verification = employee
+      ? await verifyPassword(loginRequest.password, employee.password)
+      : { ok: false, needsRehash: false };
+
+    if (!employee || !verification.ok) {
       throw new UnauthorizedException('Invalid email or password.');
     }
 
     if (!employee.isActive) {
       throw new ForbiddenException('This employee account is inactive.');
+    }
+
+    // Migrate a legacy plaintext password to a hash on first successful login.
+    if (verification.needsRehash) {
+      await this.identityAccessRepository.updateEmployeePassword(
+        employee.id,
+        await hashPassword(loginRequest.password)
+      );
     }
 
     const sessionToken = randomUUID();
