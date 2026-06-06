@@ -82,4 +82,29 @@ describe('SupportService', () => {
     expect(serialized).not.toContain('://'); // no raw connection string anywhere
     expect(serialized).not.toContain('postgres:postgres'); // no default credentials
   });
+
+  it('strips credentials from an explicit credential-bearing DATABASE_URL', async () => {
+    const original = process.env.DATABASE_URL;
+    // A realistic prod-style URL with a distinct username/password to prove they never surface.
+    process.env.DATABASE_URL =
+      'postgresql://svc_user:S3cretPass123@db.internal.example.com:6543/prod_db';
+    try {
+      const { service } = createService();
+      const bundle = await service.getSupportExport('token');
+
+      expect(bundle.config.databaseHost).toBe('db.internal.example.com:6543');
+      expect(bundle.config.databaseName).toBe('prod_db');
+
+      const serialized = JSON.stringify(bundle);
+      expect(serialized).not.toContain('svc_user');
+      expect(serialized).not.toContain('S3cretPass123');
+      expect(serialized).not.toContain('@db.internal'); // no userinfo@host fragment
+    } finally {
+      if (original === undefined) {
+        delete process.env.DATABASE_URL;
+      } else {
+        process.env.DATABASE_URL = original;
+      }
+    }
+  });
 });
