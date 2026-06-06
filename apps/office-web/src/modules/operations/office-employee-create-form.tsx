@@ -61,11 +61,17 @@ export function OfficeEmployeeCreateForm({
   const [isActive, setIsActive] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
 
+  const hasRoleOptions = roles.length > 0;
   const emailValid = /.+@.+\..+/.test(email.trim());
   const tooShort = password.length < 8;
   const mismatch = password !== confirm;
   const submitDisabled =
-    isCreating || !emailValid || displayName.trim().length === 0 || tooShort || mismatch;
+    isCreating ||
+    !hasRoleOptions ||
+    !emailValid ||
+    displayName.trim().length === 0 ||
+    tooShort ||
+    mismatch;
 
   async function handleCreate() {
     onError(null);
@@ -91,6 +97,12 @@ export function OfficeEmployeeCreateForm({
   return (
     <section style={panelStyle} aria-label="Create employee">
       <h2 style={{ ...styles.heading, fontSize: '1.05rem' }}>New employee</h2>
+
+      {!hasRoleOptions ? (
+        <p style={noteStyle}>
+          Role reference data isn&apos;t loaded yet — close and reopen this form to try again.
+        </p>
+      ) : null}
 
       <div style={fieldStyle}>
         <label style={labelStyle} htmlFor="new-employee-email">

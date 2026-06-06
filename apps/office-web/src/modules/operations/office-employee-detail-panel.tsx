@@ -575,6 +575,10 @@ function SessionRevokeButton({
   const [isRevoking, setIsRevoking] = useState(false);
 
   async function handleRevoke() {
+    // Revoking is destructive (the actor can be looking at their own sessions) — confirm first.
+    if (!window.confirm('Revoke this session? The employee will need to sign in again.')) {
+      return;
+    }
     onError(null);
     setIsRevoking(true);
     try {
