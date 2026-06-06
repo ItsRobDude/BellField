@@ -7,8 +7,20 @@ export type CsvColumn<Row> = {
   value: (row: Row) => string | number | null;
 };
 
+// Leading characters a spreadsheet may treat as a formula (CSV / formula injection).
+const FORMULA_LEADERS = /^[=+\-@\t\r]/;
+
 function escapeCell(value: string | number | null): string {
-  const text = value === null || value === undefined ? '' : String(value);
+  if (value === null || value === undefined) {
+    return '';
+  }
+  let text = String(value);
+  // Neutralize formula injection: a *text* cell beginning with = + - @ (or tab/CR) is prefixed with a
+  // single quote so Excel/Sheets render it literally. Only text — numbers (amounts, quantities) must
+  // stay numeric, and a numeric -25 is a value, not a formula.
+  if (typeof value === 'string' && FORMULA_LEADERS.test(text)) {
+    text = `'${text}`;
+  }
   // Quote when the cell contains a comma, quote, or newline; double any embedded quotes.
   if (/[",\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
