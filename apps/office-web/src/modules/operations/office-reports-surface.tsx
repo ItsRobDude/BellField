@@ -3,8 +3,11 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import {
   downloadArOpenBalancesCsv,
+  downloadJobProfitabilityCsv,
   getArOpenBalances,
-  type ArOpenBalancesReport
+  getJobProfitability,
+  type ArOpenBalancesReport,
+  type JobProfitabilityReport
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -12,9 +15,13 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 export type OfficeReportsSurfaceProps = {
   apiBaseUrl: string;
   sessionToken: string;
-  /** reports:export — gates the CSV export button (the data is already view-gated server-side). */
+  /** reports:export — gates the CSV export buttons (also enforced server-side). */
   canExportReports: boolean;
+  /** jobCosting:view — gates the Job Profitability report. */
+  canViewProfitability: boolean;
 };
+
+type ReportKey = 'ar' | 'profitability';
 
 const numberCellStyle: CSSProperties = { ...styles.tableCell, textAlign: 'right' };
 const numberHeadStyle: CSSProperties = { ...styles.tableHeadCell, textAlign: 'right' };
@@ -31,26 +38,89 @@ const totalItemLabel: CSSProperties = {
   color: '#5b6672'
 };
 const totalItemValue: CSSProperties = { fontSize: 18, fontWeight: 700 };
+const tabStripStyle: CSSProperties = { display: 'flex', gap: 6, margin: '8px 0 4px' };
+const tabStyle: CSSProperties = {
+  background: 'transparent',
+  border: '1px solid #cbd2da',
+  borderRadius: 6,
+  padding: '4px 12px',
+  cursor: 'pointer',
+  fontWeight: 600,
+  color: '#33455c'
+};
+const activeTabStyle: CSSProperties = {
+  ...tabStyle,
+  background: '#176b5b',
+  borderColor: '#176b5b',
+  color: '#ffffff'
+};
+const incompleteBadgeStyle: CSSProperties = {
+  display: 'inline-block',
+  marginTop: 2,
+  fontSize: 11,
+  fontWeight: 600,
+  color: '#8a5a00',
+  background: '#fdf2dc',
+  borderRadius: 8,
+  padding: '0 6px'
+};
 
 function money(value: number): string {
   return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
 }
 
-// Top-level Reports surface (M10 slice 3). Fixed, read-only reports — no builder. v1 ships the
-// AR/Open Balances report; Job Profitability and Inventory Valuation tabs are added (gated) in 3B/3C.
+function formatMargin(basisPoints: number | null): string {
+  return basisPoints === null ? '—' : `${(basisPoints / 100).toFixed(1)}%`;
+}
+
+// Top-level Reports surface (M10 slice 3). Fixed, read-only reports — no builder. Tabs appear per the
+// actor's gates: AR/Open Balances always; Job Profitability with jobCosting:view (Inventory in 3C).
 export function OfficeReportsSurface({
   apiBaseUrl,
   sessionToken,
-  canExportReports
+  canExportReports,
+  canViewProfitability
 }: OfficeReportsSurfaceProps) {
+  const [active, setActive] = useState<ReportKey>('ar');
+  const tabs: Array<{ key: ReportKey; label: string }> = [
+    { key: 'ar', label: 'AR / Open Balances' },
+    ...(canViewProfitability
+      ? [{ key: 'profitability' as ReportKey, label: 'Job Profitability' }]
+      : [])
+  ];
+
   return (
     <section style={styles.workspacePanel} aria-label="Reports">
       <h1 style={styles.heading}>Reports</h1>
-      <ArOpenBalancesReportView
-        apiBaseUrl={apiBaseUrl}
-        sessionToken={sessionToken}
-        canExport={canExportReports}
-      />
+      <div style={tabStripStyle} role="tablist">
+        {tabs.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active === tab.key}
+            style={active === tab.key ? activeTabStyle : tabStyle}
+            onClick={() => setActive(tab.key)}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {active === 'ar' ? (
+        <ArOpenBalancesReportView
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canExport={canExportReports}
+        />
+      ) : null}
+      {active === 'profitability' && canViewProfitability ? (
+        <JobProfitabilityReportView
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canExport={canExportReports}
+        />
+      ) : null}
     </section>
   );
 }
@@ -90,7 +160,6 @@ function ArOpenBalancesReportView({
   }, [apiBaseUrl, sessionToken]);
 
   async function handleExport() {
-    // The CSV is rendered + gated (reports:export) server-side; we just download the blob.
     try {
       const blob = await downloadArOpenBalancesCsv({ apiBaseUrl, sessionToken });
       downloadBlob(`ar-open-balances-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
@@ -116,22 +185,10 @@ function ArOpenBalancesReportView({
       {report ? (
         <>
           <div style={totalsStyle}>
-            <div>
-              <div style={totalItemLabel}>Jobs owing</div>
-              <div style={totalItemValue}>{report.totals.jobCount}</div>
-            </div>
-            <div>
-              <div style={totalItemLabel}>Net billed</div>
-              <div style={totalItemValue}>{money(report.totals.netBilled)}</div>
-            </div>
-            <div>
-              <div style={totalItemLabel}>Paid</div>
-              <div style={totalItemValue}>{money(report.totals.paidTotal)}</div>
-            </div>
-            <div>
-              <div style={totalItemLabel}>Amount due</div>
-              <div style={totalItemValue}>{money(report.totals.amountDue)}</div>
-            </div>
+            <TotalItem label="Jobs owing" value={String(report.totals.jobCount)} />
+            <TotalItem label="Net billed" value={money(report.totals.netBilled)} />
+            <TotalItem label="Paid" value={money(report.totals.paidTotal)} />
+            <TotalItem label="Amount due" value={money(report.totals.amountDue)} />
           </div>
 
           {report.rows.length === 0 ? (
@@ -162,6 +219,125 @@ function ArOpenBalancesReportView({
           )}
         </>
       ) : null}
+    </div>
+  );
+}
+
+function JobProfitabilityReportView({
+  apiBaseUrl,
+  sessionToken,
+  canExport
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  canExport: boolean;
+}) {
+  const [report, setReport] = useState<JobProfitabilityReport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setErrorMessage(null);
+    getJobProfitability({ apiBaseUrl, sessionToken })
+      .then((result) => {
+        if (active) setReport(result);
+      })
+      .catch((error) => {
+        if (active) {
+          setErrorMessage(error instanceof Error ? error.message : 'Unable to load report.');
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionToken]);
+
+  async function handleExport() {
+    try {
+      const blob = await downloadJobProfitabilityCsv({ apiBaseUrl, sessionToken });
+      downloadBlob(`job-profitability-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export the report.');
+    }
+  }
+
+  return (
+    <div>
+      <div style={styles.row}>
+        <h2 style={{ ...styles.heading, fontSize: '1rem' }}>Job Profitability</h2>
+        {canExport && report ? (
+          <button type="button" style={styles.button} onClick={() => void handleExport()}>
+            Export CSV
+          </button>
+        ) : null}
+      </div>
+
+      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      {isLoading ? <p style={styles.notice}>Loading…</p> : null}
+
+      {report ? (
+        <>
+          <div style={totalsStyle}>
+            <TotalItem label="Jobs" value={String(report.totals.jobCount)} />
+            <TotalItem label="Revenue" value={money(report.totals.revenue)} />
+            <TotalItem label="Known cost" value={money(report.totals.knownCost)} />
+            <TotalItem label="Known profit" value={money(report.totals.knownProfit)} />
+            <TotalItem label="Cost incomplete" value={String(report.totals.incompleteJobCount)} />
+          </div>
+
+          {report.rows.length === 0 ? (
+            <p style={styles.notice}>No jobs with posted invoices yet.</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeadCell}>Job #</th>
+                  <th style={styles.tableHeadCell}>Customer</th>
+                  <th style={styles.tableHeadCell}>Status</th>
+                  <th style={numberHeadStyle}>Revenue</th>
+                  <th style={numberHeadStyle}>Total cost</th>
+                  <th style={numberHeadStyle}>Profit</th>
+                  <th style={numberHeadStyle}>Margin</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((r) => (
+                  <tr key={r.jobId}>
+                    <td style={styles.tableCell}>
+                      {r.jobNumber}
+                      {!r.costComplete ? (
+                        <span style={incompleteBadgeStyle}>
+                          Cost incomplete ({r.unresolvedLineCount})
+                        </span>
+                      ) : null}
+                    </td>
+                    <td style={styles.tableCell}>{r.customerName}</td>
+                    <td style={styles.tableCell}>{r.status}</td>
+                    <td style={numberCellStyle}>{money(r.revenue)}</td>
+                    <td style={numberCellStyle}>{money(r.totalCost)}</td>
+                    <td style={numberCellStyle}>{money(r.profit)}</td>
+                    <td style={numberCellStyle}>{formatMargin(r.marginBasisPoints)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function TotalItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <div style={totalItemLabel}>{label}</div>
+      <div style={totalItemValue}>{value}</div>
     </div>
   );
 }

@@ -1,8 +1,16 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
-import type { ArOpenBalancesReport, PermissionKey } from '@bellfield/contracts';
+import type {
+  ArOpenBalancesReport,
+  JobProfitabilityReport,
+  PermissionKey
+} from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
-import { queryOpenBalanceRows } from '../bookkeeping/open-balance-query';
+import { queryOpenBalanceRows, queryPostedRevenueByJob } from '../bookkeeping/open-balance-query';
+import {
+  computeJobCostRollup,
+  getCurrentJobCostSnapshot
+} from '../job-costing/job-cost-rollup-utils';
 import { toCsv, type CsvColumn } from './report-csv';
 
 function roundMoney(value: number): number {
@@ -15,6 +23,22 @@ const AR_CSV_COLUMNS: CsvColumn<ArOpenBalancesReport['rows'][number]>[] = [
   { header: 'Net billed', value: (row) => row.netBilled },
   { header: 'Paid', value: (row) => row.paidTotal },
   { header: 'Amount due', value: (row) => row.amountDue }
+];
+
+const PROFITABILITY_CSV_COLUMNS: CsvColumn<JobProfitabilityReport['rows'][number]>[] = [
+  { header: 'Job #', value: (row) => row.jobNumber },
+  { header: 'Customer', value: (row) => row.customerName },
+  { header: 'Status', value: (row) => row.status },
+  { header: 'Revenue', value: (row) => row.revenue },
+  { header: 'Material', value: (row) => row.materialCost },
+  { header: 'Labor', value: (row) => row.laborCost },
+  { header: 'Expense', value: (row) => row.expenseCost },
+  { header: 'Total cost', value: (row) => row.totalCost },
+  { header: 'Profit', value: (row) => row.profit },
+  { header: 'Margin bps', value: (row) => row.marginBasisPoints },
+  { header: 'Cost complete', value: (row) => (row.costComplete ? 'yes' : 'no') },
+  { header: 'Unresolved lines', value: (row) => row.unresolvedLineCount },
+  { header: 'Finalized', value: (row) => (row.isFinalized ? 'yes' : 'no') }
 ];
 
 /** A CSV export plus the suggested download filename. */
@@ -82,6 +106,126 @@ export class ReportingService {
         netBilled: roundMoney(netBilled),
         paidTotal: roundMoney(paidTotal),
         amountDue: roundMoney(amountDue)
+      },
+      rows
+    };
+  }
+
+  /** Job profitability. Gate: reports:view + jobCosting:view. */
+  async getJobProfitability(sessionToken: string): Promise<JobProfitabilityReport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, ['jobCosting:view']);
+    return this.buildJobProfitability();
+  }
+
+  /** Job profitability CSV export. Gate: reports:view + jobCosting:view + reports:export. */
+  async exportJobProfitability(sessionToken: string): Promise<ReportCsvExport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'jobCosting:view',
+      'reports:export'
+    ]);
+    const report = await this.buildJobProfitability();
+    return {
+      filename: `job-profitability-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(PROFITABILITY_CSV_COLUMNS, report.rows)
+    };
+  }
+
+  /**
+   * Build the profitability report (no auth — callers gate first). Population = jobs with ≥1 posted
+   * invoice (revenue from the shared posted-invoice math). Cost is the M9 rollup, or the frozen
+   * snapshot for finalized jobs — never invoice-line unit cost. Per-job loop by design (the rollup is
+   * per-job; we do not duplicate it as batch SQL — see docs §5c.3).
+   */
+  private async buildJobProfitability(): Promise<JobProfitabilityReport> {
+    const revenueRows = await queryPostedRevenueByJob(this.databaseService);
+    const rows: JobProfitabilityReport['rows'] = [];
+
+    for (const revenueRow of revenueRows) {
+      const snapshot = await getCurrentJobCostSnapshot(this.databaseService, revenueRow.jobId);
+      let materialCost: number;
+      let laborCost: number;
+      let expenseCost: number;
+      let totalCost: number;
+      let costComplete: boolean;
+      let unresolvedLineCount: number;
+      let isFinalized: boolean;
+
+      if (snapshot) {
+        // Finalized: cost is frozen and was complete at freeze time.
+        materialCost = snapshot.materialCost;
+        laborCost = snapshot.laborCost;
+        expenseCost = snapshot.expenseCost;
+        totalCost = snapshot.totalCost;
+        costComplete = true;
+        unresolvedLineCount = 0;
+        isFinalized = true;
+      } else {
+        const rollup = await computeJobCostRollup(this.databaseService, revenueRow.jobId);
+        materialCost = rollup.materialCost;
+        laborCost = rollup.laborCost;
+        expenseCost = rollup.expenseCost;
+        totalCost = rollup.totalCost;
+        costComplete = rollup.costComplete;
+        unresolvedLineCount = rollup.unresolvedLineCount;
+        isFinalized = false;
+      }
+
+      const revenue = revenueRow.netBilled;
+      const profit = roundMoney(revenue - totalCost);
+      // Null when there is no revenue base or the cost is still incomplete (a partial margin misleads).
+      const marginBasisPoints =
+        revenue === 0 || !costComplete ? null : Math.round((profit / revenue) * 10000);
+
+      rows.push({
+        jobId: revenueRow.jobId,
+        jobNumber: revenueRow.jobNumber,
+        customerName: revenueRow.customerName,
+        status: revenueRow.status,
+        revenue,
+        materialCost,
+        laborCost,
+        expenseCost,
+        totalCost,
+        profit,
+        marginBasisPoints,
+        costComplete,
+        unresolvedLineCount,
+        isFinalized
+      });
+    }
+
+    let revenue = 0;
+    let knownCost = 0;
+    let knownProfit = 0;
+    let incompleteJobCount = 0;
+    let unresolvedLineCount = 0;
+    for (const row of rows) {
+      revenue += row.revenue;
+      knownCost += row.totalCost;
+      knownProfit += row.profit;
+      if (!row.costComplete) incompleteJobCount += 1;
+      unresolvedLineCount += row.unresolvedLineCount;
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      totals: {
+        jobCount: rows.length,
+        revenue: roundMoney(revenue),
+        knownCost: roundMoney(knownCost),
+        knownProfit: roundMoney(knownProfit),
+        incompleteJobCount,
+        unresolvedLineCount
       },
       rows
     };

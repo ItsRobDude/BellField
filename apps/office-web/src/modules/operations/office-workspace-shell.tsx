@@ -844,7 +844,8 @@ export function OfficeWorkspaceShell({
         reports={{
           apiBaseUrl,
           sessionToken,
-          canExportReports
+          canExportReports,
+          canViewProfitability: canViewJobCosting
         }}
         jobDetail={{
           selectedJobId,
