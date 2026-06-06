@@ -1,4 +1,4 @@
-import type { ArOpenBalancesReport } from '@bellfield/contracts';
+import type { ArOpenBalancesReport, JobProfitabilityReport } from '@bellfield/contracts';
 import { requestBlob, requestJson } from './operations-api-base';
 
 export type {
@@ -24,6 +24,28 @@ export async function downloadArOpenBalancesCsv(input: {
   apiBaseUrl?: string;
 }): Promise<Blob> {
   return requestBlob('/operations/reports/ar-open-balances/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+/** Job profitability. Gate: reports:view + jobCosting:view. */
+export async function getJobProfitability(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<JobProfitabilityReport> {
+  return requestJson<JobProfitabilityReport>('/operations/reports/job-profitability', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+/** Download profitability as CSV. Server-gated: reports:view + jobCosting:view + reports:export. */
+export async function downloadJobProfitabilityCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/job-profitability/export', {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl
   });

@@ -1,18 +1,66 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ArOpenBalancesReport } from '@bellfield/contracts';
+import type { ArOpenBalancesReport, JobProfitabilityReport } from '@bellfield/contracts';
 import * as reportingApi from '@/lib/reporting-api';
 import * as downloadFile from '@/lib/download-file';
 import { OfficeReportsSurface } from './office-reports-surface';
 
 vi.mock('@/lib/reporting-api', () => ({
   getArOpenBalances: vi.fn(),
-  downloadArOpenBalancesCsv: vi.fn()
+  downloadArOpenBalancesCsv: vi.fn(),
+  getJobProfitability: vi.fn(),
+  downloadJobProfitabilityCsv: vi.fn()
 }));
 vi.mock('@/lib/download-file', () => ({ downloadBlob: vi.fn() }));
 
 const mockedApi = vi.mocked(reportingApi);
 const mockedDownload = vi.mocked(downloadFile);
+
+const profitabilityReport: JobProfitabilityReport = {
+  generatedAt: '2026-06-06T00:00:00.000Z',
+  totals: {
+    jobCount: 2,
+    revenue: 300,
+    knownCost: 180,
+    knownProfit: 120,
+    incompleteJobCount: 1,
+    unresolvedLineCount: 2
+  },
+  rows: [
+    {
+      jobId: 'a',
+      jobNumber: '1003',
+      customerName: 'Acme',
+      status: 'completed',
+      revenue: 200,
+      materialCost: 50,
+      laborCost: 60,
+      expenseCost: 10,
+      totalCost: 120,
+      profit: 80,
+      marginBasisPoints: 4000,
+      costComplete: true,
+      unresolvedLineCount: 0,
+      isFinalized: true
+    },
+    {
+      jobId: 'b',
+      jobNumber: '1004',
+      customerName: 'Beta',
+      status: 'inProgress',
+      revenue: 100,
+      materialCost: 30,
+      laborCost: 30,
+      expenseCost: 0,
+      totalCost: 60,
+      profit: 40,
+      marginBasisPoints: null,
+      costComplete: false,
+      unresolvedLineCount: 2,
+      isFinalized: false
+    }
+  ]
+};
 
 const report: ArOpenBalancesReport = {
   generatedAt: '2026-06-06T00:00:00.000Z',
@@ -37,18 +85,20 @@ const report: ArOpenBalancesReport = {
   ]
 };
 
-function renderSurface(canExportReports: boolean) {
+function renderSurface(canExportReports: boolean, canViewProfitability = false) {
   render(
     <OfficeReportsSurface
       apiBaseUrl="http://api.test"
       sessionToken="session-token"
       canExportReports={canExportReports}
+      canViewProfitability={canViewProfitability}
     />
   );
 }
 
 beforeEach(() => {
   mockedApi.getArOpenBalances.mockResolvedValue(report);
+  mockedApi.getJobProfitability.mockResolvedValue(profitabilityReport);
 });
 
 afterEach(() => {
@@ -95,5 +145,33 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
     mockedApi.getArOpenBalances.mockRejectedValue(new Error('Forbidden'));
     renderSurface(true);
     await waitFor(() => expect(screen.getByText('Forbidden')).toBeInTheDocument());
+  });
+});
+
+describe('OfficeReportsSurface (Job Profitability)', () => {
+  it('hides the Job Profitability tab without jobCosting:view', async () => {
+    renderSurface(true, false);
+    await screen.findByText('Acme');
+    expect(screen.queryByRole('tab', { name: 'Job Profitability' })).toBeNull();
+  });
+
+  it('renders profitability rows with an incomplete-cost badge and partial margin', async () => {
+    renderSurface(true, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Job Profitability' }));
+    // Incomplete row shows the badge with its unresolved line count, and a dash for margin.
+    expect(await screen.findByText('Cost incomplete (2)')).toBeInTheDocument();
+    expect(screen.getByText('40.0%')).toBeInTheDocument(); // complete row's margin (4000 bps)
+    expect(screen.getByText('—')).toBeInTheDocument(); // incomplete row's null margin
+  });
+
+  it('downloads the profitability CSV when reports:export is present', async () => {
+    mockedApi.downloadJobProfitabilityCsv.mockResolvedValue(
+      new Blob(['csv'], { type: 'text/csv' })
+    );
+    renderSurface(true, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Job Profitability' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(mockedApi.downloadJobProfitabilityCsv).toHaveBeenCalledTimes(1));
+    expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(/^job-profitability-2026-06-06/);
   });
 });

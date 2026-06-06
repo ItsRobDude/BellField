@@ -1,4 +1,4 @@
-import type { BookkeepingBalanceItem } from '@bellfield/contracts';
+import type { BookkeepingBalanceItem, JobStatus } from '@bellfield/contracts';
 import type { QueryExecutor } from '../../database/database.service';
 
 type OpenBalanceDbRow = {
@@ -10,8 +10,61 @@ type OpenBalanceDbRow = {
   amountDue: string | number;
 };
 
+/** Net billed for a job across posted invoices: main + adjustment add, credit subtracts, drafts and
+ * voids contribute nothing. The single SQL fragment so AR, the worklist, and profitability revenue
+ * can never disagree. Used inside a `group by i.job_id` aggregation. */
+const POSTED_NET_BILLED_SUM = `sum(
+  case
+    when i.status = 'posted' and i.invoice_kind in ('main', 'adjustment') then i.total_amount
+    when i.status = 'posted' and i.invoice_kind = 'credit' then -i.total_amount
+    else 0
+  end
+)`;
+
 function roundMoney(value: string | number): number {
   return Math.round(Number(value) * 100) / 100;
+}
+
+/** Net billed per job for every job with at least one posted invoice (a posted $0 warranty invoice
+ * still qualifies — revenue 0). The revenue population for the job-profitability report. */
+export type PostedRevenueRow = {
+  jobId: string;
+  jobNumber: string;
+  customerName: string;
+  status: JobStatus;
+  netBilled: number;
+};
+
+export async function queryPostedRevenueByJob(
+  queryable: QueryExecutor
+): Promise<PostedRevenueRow[]> {
+  const result = await queryable.query<{
+    jobId: string;
+    jobNumber: string;
+    customerName: string;
+    status: JobStatus;
+    netBilled: string | number;
+  }>(
+    `select
+       j.id as "jobId",
+       j.job_number as "jobNumber",
+       c.name as "customerName",
+       j.status as "status",
+       coalesce(${POSTED_NET_BILLED_SUM}, 0) as "netBilled"
+     from invoices i
+     join jobs j on j.id = i.job_id
+     join customers c on c.id = j.bill_to_customer_id
+     group by j.id, j.job_number, c.name, j.status
+     having count(*) filter (where i.status = 'posted') > 0
+     order by "netBilled" desc`
+  );
+  return result.rows.map((row) => ({
+    jobId: row.jobId,
+    jobNumber: row.jobNumber,
+    customerName: row.customerName,
+    status: row.status,
+    netBilled: roundMoney(row.netBilled)
+  }));
 }
 
 /**
@@ -29,13 +82,7 @@ export async function queryOpenBalanceRows(
     `with billed as (
        select
          i.job_id,
-         sum(
-           case
-             when i.status = 'posted' and i.invoice_kind in ('main', 'adjustment') then i.total_amount
-             when i.status = 'posted' and i.invoice_kind = 'credit' then -i.total_amount
-             else 0
-           end
-         ) as net_billed
+         ${POSTED_NET_BILLED_SUM} as net_billed
        from invoices i
        group by i.job_id
      ),
