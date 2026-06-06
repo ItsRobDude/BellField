@@ -125,7 +125,7 @@ export class IdentityAccessService {
     employeeId: string,
     update: UpdateEmployeeRequestDto
   ): Promise<EmployeeSummary> {
-    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
+    const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
       'office-web'
     ]);
 
@@ -134,6 +134,11 @@ export class IdentityAccessService {
     if (!existingEmployee) {
       throw new NotFoundException('Employee not found.');
     }
+
+    // Owner-protection: only an Owner may modify an Owner (role/active/overrides).
+    this.assertCanActOnTarget(actor.roleId, existingEmployee.roleId);
+
+    const wasActive = existingEmployee.isActive;
 
     if (update.roleId) {
       this.assertRoleExists(update.roleId);
@@ -157,6 +162,11 @@ export class IdentityAccessService {
     }
 
     await this.identityAccessRepository.saveEmployee(existingEmployee);
+
+    // Deactivating an employee revokes all their sessions immediately (locked plan §5d.2).
+    if (wasActive && !existingEmployee.isActive) {
+      await this.identityAccessRepository.revokeAllSessionsForEmployee(employeeId);
+    }
 
     return this.toEmployeeSummary(existingEmployee);
   }
