@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import type { Dispatch, SetStateAction } from 'react';
+import * as Crypto from 'expo-crypto';
 import {
   createFieldEquipment,
   linkFieldEquipmentReplacement,
@@ -127,7 +128,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
     }
 
     const operation: PendingOperation = {
-      id: `${job.id}-register-${Date.now()}`,
+      // Collision-proof idempotency key: this id is sent as the server clientOperationId, so a
+      // random UUID avoids two same-millisecond creates on one job colliding (unlike Date.now()).
+      id: `${job.id}-register-${Crypto.randomUUID()}`,
       kind: 'registerEntryCreate',
       jobId: job.id,
       appointmentId: draft.appointmentId || undefined,
