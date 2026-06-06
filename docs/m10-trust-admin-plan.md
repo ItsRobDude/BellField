@@ -229,14 +229,14 @@ This is the one new permission area M10 introduces (§3's "no new areas unless a
 
 Read-only `UNION ALL` over six sources, each projected to a common shape:
 
-| Source                      | recordType          | actor columns                                  | time          | jobId                   |
-| --------------------------- | ------------------- | ---------------------------------------------- | ------------- | ----------------------- |
-| `job_timeline_entries`      | `jobTimeline`       | `actor_name` (no id)                           | `occurred_at` | `job_id`                |
-| `register_entries`          | `registerEntry`     | `captured_by_employee_id` + `captured_by_name` | `captured_at` | `job_id`                |
-| `inventory_movements`       | `inventoryMovement` | `actor_employee_id` + `actor_name`             | `occurred_at` | `job_id` (nullable)     |
-| `job_cost_events`           | `jobCostEvent`      | `actor_employee_id` + `actor_name`             | `occurred_at` | `job_id`                |
-| `payments`                  | `payment`           | `recorded_by_employee_id` + `recorded_by_name` | `received_at` | null (invoice-scoped)   |
-| `equipment_history_entries` | `equipmentHistory`  | `actor_name` (no id)                           | `timestamp`   | null (equipment-scoped) |
+| Source                      | recordType          | actor columns                                  | time          | jobId                                              |
+| --------------------------- | ------------------- | ---------------------------------------------- | ------------- | -------------------------------------------------- |
+| `job_timeline_entries`      | `jobTimeline`       | `actor_name` (no id)                           | `occurred_at` | `job_id`                                           |
+| `register_entries`          | `registerEntry`     | `captured_by_employee_id` + `captured_by_name` | `captured_at` | `job_id`                                           |
+| `inventory_movements`       | `inventoryMovement` | `actor_employee_id` + `actor_name`             | `occurred_at` | `job_id` (nullable)                                |
+| `job_cost_events`           | `jobCostEvent`      | `actor_employee_id` + `actor_name`             | `occurred_at` | `job_id`                                           |
+| `payments`                  | `payment`           | `recorded_by_employee_id` + `recorded_by_name` | `received_at` | `invoices.job_id` (join `invoice_id` → `invoices`) |
+| `equipment_history_entries` | `equipmentHistory`  | `actor_name` (no id)                           | `occurred_at` | null (equipment-scoped)                            |
 
 ```ts
 type HistoryRecordType =
@@ -264,17 +264,19 @@ interface HistoryResponse {
 ```
 
 - **Filters (query params):** `dateFrom`, `dateTo` (ISO), `actorEmployeeId`, `recordType` (one of the
-  union), `jobId`. A `jobId` filter naturally narrows to the job-scoped sources (timeline / register /
-  job cost / job-linked inventory movements); payment + equipment rows are not job-scoped and drop out
-  of a job-filtered view.
+  union), `jobId`. Payments resolve their job through `invoice_id → invoices.job_id` (a direct,
+  existing relationship the payment-history code already uses), so a `jobId` filter covers timeline,
+  register, job cost, job-linked inventory movements, **and** payments. Only equipment-history rows
+  (equipment-scoped, no job) drop out of a job-filtered view.
 - **Ordering + cursor:** `occurred_at DESC, recordType ASC, source_id DESC`. The cursor encodes that
   tuple (opaque base64). `limit` defaults to e.g. 50, capped (e.g. 200).
 - **Summary:** built server-side per source (e.g. register → "Register entry added: <description>",
   payment → "Payment recorded"). It must stay privacy-appropriate — it reuses fields already visible
   to a permitted office user; it does not invent or expose anything new.
 - **Deferred (follow-up, not v1):** customer/location filters (need record → location → customer
-  joins, and payments join via invoice → job) and any free-text search. v1 ships the five filters
-  above. The plan notes this so we don't silently imply broader coverage.
+  joins that not every source carries directly) and any free-text search. v1 ships the five filters
+  above. (The payment → invoice → job join above is **in** v1 — it is a direct existing relationship,
+  not the deferred customer/location work.)
 
 ### 5b.3 Contracts + office
 
