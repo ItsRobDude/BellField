@@ -52,16 +52,28 @@ export async function insertRegisterEntryWithin(
   } = args;
 
   // Idempotent replay: a field-queued create can re-drain after a committed-but-lost response. If
-  // this client operation already produced a line for this job, return it untouched — re-inserting
-  // would double-bill and (for a structured part) double-issue truck stock. The partial unique
-  // index on client_operation_id is the integrity backstop for a concurrent race past this check.
+  // this client operation already produced a line, return it untouched — re-inserting would
+  // double-bill and (for a structured part) double-issue truck stock. The partial unique index on
+  // client_operation_id is the integrity backstop for a concurrent race past this check. Scope the
+  // replay to the same job AND the same capturing technician (matching the service pre-check and the
+  // 23505 fallback): a key naming a different job or tech is a client bug or probe, not a replay,
+  // even if it commits between the service pre-check and this query.
   if (clientOperationId !== null) {
-    const replay = await queryable.query<{ id: string }>(
-      `select id from register_entries where client_operation_id = $1 and job_id = $2 limit 1`,
-      [clientOperationId, jobId]
+    const replay = await queryable.query<{
+      id: string;
+      jobId: string;
+      capturedByEmployeeId: string;
+    }>(
+      `select id, job_id as "jobId", captured_by_employee_id as "capturedByEmployeeId"
+       from register_entries where client_operation_id = $1 limit 1`,
+      [clientOperationId]
     );
-    if (replay.rows[0]) {
-      markDeduped(replay.rows[0].id);
+    const existing = replay.rows[0];
+    if (existing) {
+      if (existing.jobId !== jobId || existing.capturedByEmployeeId !== actor.id) {
+        throw new ConflictException('This operation id belongs to a different job or technician.');
+      }
+      markDeduped(existing.id);
       return;
     }
   }

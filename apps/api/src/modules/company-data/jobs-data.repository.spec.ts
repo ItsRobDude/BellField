@@ -1026,15 +1026,27 @@ describe('JobsDataRepository', () => {
       jobStatus?: string;
       selfTruckRef?: boolean;
       existingClientOp?: string;
+      existingClientOpJob?: string;
+      existingClientOpTech?: string;
       insertThrows23505?: boolean;
       registerRowOverrides?: Record<string, unknown>;
     } = {}
   ) {
     const queryable = {
       query: jest.fn(async (sql: string, _params?: unknown[]) => {
-        // Idempotency dedup lookup by client_operation_id.
+        // Idempotency dedup lookup by client_operation_id (id + job + capturing tech).
         if (String(sql).includes('where client_operation_id = $1')) {
-          return { rows: options.existingClientOp ? [{ id: options.existingClientOp }] : [] };
+          return {
+            rows: options.existingClientOp
+              ? [
+                  {
+                    id: options.existingClientOp,
+                    jobId: options.existingClientOpJob ?? 'job-1',
+                    capturedByEmployeeId: options.existingClientOpTech ?? 'tech-1'
+                  }
+                ]
+              : []
+          };
         }
         if (String(sql).includes('select status from jobs')) {
           return { rows: [{ status: options.jobStatus ?? 'inProgress' }] };
@@ -1151,6 +1163,35 @@ describe('JobsDataRepository', () => {
     expect(
       queryable.query.mock.calls.some(([sql]) =>
         String(sql).includes('insert into inventory_movements')
+      )
+    ).toBe(false);
+  });
+
+  it('rejects an in-tx replay whose existing line was captured by a different technician', async () => {
+    // The dedup row exists for the same job but a different tech (e.g. it committed between the
+    // service pre-check and this query). It must throw before inserting, not dedupe across techs.
+    const { repository, queryable } = createRepoForCreate({
+      existingClientOp: 'reg-existing',
+      existingClientOpJob: 'job-1',
+      existingClientOpTech: 'tech-OTHER'
+    });
+
+    await expect(
+      repository.createRegisterEntry(
+        'job-1',
+        {
+          kind: 'part',
+          description: 'Part',
+          quantity: 1,
+          totalAmount: 50,
+          clientOperationId: 'op-7'
+        },
+        { id: 'tech-1', displayName: 'Field Tech' }
+      )
+    ).rejects.toThrow(/different job or technician/i);
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into register_entries')
       )
     ).toBe(false);
   });
