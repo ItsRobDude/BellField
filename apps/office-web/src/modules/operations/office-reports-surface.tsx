@@ -56,7 +56,9 @@ const tabStyle: CSSProperties = {
 const activeTabStyle: CSSProperties = {
   ...tabStyle,
   background: '#176b5b',
-  borderColor: '#176b5b',
+  // Override the full `border` shorthand (not borderColor) — mixing shorthand + longhand for the same
+  // property triggers React's "removing a style property during rerender" warning when tabs toggle.
+  border: '1px solid #176b5b',
   color: '#ffffff'
 };
 const incompleteBadgeStyle: CSSProperties = {
