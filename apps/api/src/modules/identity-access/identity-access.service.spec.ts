@@ -1,7 +1,45 @@
-import { ForbiddenException, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
 import { IdentityAccessRepository } from './identity-access.repository';
 import { IdentityAccessService } from './identity-access.service';
 import { hashPassword, isHashed } from './password-hash';
+
+type Role = 'owner' | 'admin' | 'csr';
+
+function adminSessionRepo(opts: { actorRole?: Role; targetRole?: Role } = {}) {
+  const employee = (id: string, roleId: Role) => ({
+    id,
+    email: `${id}@bellfield.local`,
+    displayName: id,
+    roleId,
+    isActive: true,
+    password: 'x',
+    permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+  });
+  const actor = employee('actor-1', opts.actorRole ?? 'admin');
+  const target = employee('target-1', opts.targetRole ?? 'csr');
+  const repo = {
+    findSessionByToken: jest.fn().mockResolvedValue({
+      token: 'tok',
+      id: 's0',
+      employeeId: 'actor-1',
+      surface: 'office-web',
+      issuedAt: '2026-01-01T00:00:00.000Z'
+    }),
+    findEmployeeById: jest.fn((id: string) =>
+      Promise.resolve(id === 'actor-1' ? actor : id === 'target-1' ? target : null)
+    ),
+    listSessionsForEmployee: jest.fn().mockResolvedValue([
+      {
+        id: 'sess-1',
+        surface: 'field-mobile',
+        deviceLabel: 'Tablet',
+        issuedAt: '2026-06-01T00:00:00.000Z'
+      }
+    ]),
+    revokeSessionById: jest.fn().mockResolvedValue(true)
+  };
+  return { repo, actor, target };
+}
 
 describe('IdentityAccessService', () => {
   it('pins technician default permissions to field equipment work without true delete', () => {
@@ -113,5 +151,47 @@ describe('IdentityAccessService', () => {
       service.login({ email: 'owner@bellfield.local', password: 'nope', surface: 'office-web' })
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(repo.createSession).not.toHaveBeenCalled();
+  });
+
+  it('lists an employee session summaries without exposing the bearer token', async () => {
+    const { repo } = adminSessionRepo();
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    const result = await service.listEmployeeSessions('tok', 'target-1');
+    expect(result.sessions).toHaveLength(1);
+    expect(result.sessions[0]).not.toHaveProperty('token');
+    expect(result.sessions[0].id).toBe('sess-1');
+  });
+
+  it('revokes a single session by id', async () => {
+    const { repo } = adminSessionRepo();
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    const result = await service.revokeEmployeeSession('tok', 'target-1', 'sess-1');
+    expect(result).toEqual({ revoked: true });
+    expect(repo.revokeSessionById).toHaveBeenCalledWith('target-1', 'sess-1');
+  });
+
+  it('blocks an admin from revoking an owner session (owner-protection)', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'owner' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(service.revokeEmployeeSession('tok', 'target-1', 'sess-1')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(repo.revokeSessionById).not.toHaveBeenCalled();
+  });
+
+  it('allows an owner to revoke an owner session', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'owner', targetRole: 'owner' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(service.revokeEmployeeSession('tok', 'target-1', 'sess-1')).resolves.toEqual({
+      revoked: true
+    });
+  });
+
+  it('404s session listing for an unknown employee', async () => {
+    const { repo } = adminSessionRepo();
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(service.listEmployeeSessions('tok', 'missing')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
   });
 });

@@ -92,3 +92,21 @@ export interface UpdateEmployeeRequest {
   grantedPermissions?: PermissionKey[];
   revokedPermissions?: PermissionKey[];
 }
+
+/** A device session shown in the admin Employees surface. Deliberately carries NO bearer token. */
+export interface EmployeeSessionSummary {
+  /** Non-secret session id (revoke target) — not the bearer token. */
+  id: string;
+  surface: 'office-web' | 'field-mobile';
+  deviceLabel?: string;
+  issuedAt: string;
+}
+
+export interface EmployeeSessionsResponse {
+  sessions: EmployeeSessionSummary[];
+}
+
+export interface RevokeEmployeeSessionResponse {
+  /** True if a matching session was found and revoked. */
+  revoked: boolean;
+}

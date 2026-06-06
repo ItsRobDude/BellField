@@ -5,6 +5,7 @@ import {
   UnauthorizedException
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import type { EmployeeSessionsResponse, RevokeEmployeeSessionResponse } from '@bellfield/contracts';
 import { defaultRoleTemplates } from './default-role-templates';
 import { hashPassword, verifyPassword } from './password-hash';
 import { IdentityAccessRepository } from './identity-access.repository';
@@ -56,6 +57,7 @@ export class IdentityAccessService {
     const sessionToken = randomUUID();
     await this.identityAccessRepository.createSession({
       token: sessionToken,
+      id: randomUUID(),
       employeeId: employee.id,
       surface: loginRequest.surface,
       deviceLabel: loginRequest.deviceLabel?.trim() || undefined,
@@ -162,6 +164,48 @@ export class IdentityAccessService {
   async getRoleTemplatesForOffice(sessionToken: string): Promise<RoleTemplate[]> {
     await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:view', ['office-web']);
     return this.getRoleTemplates();
+  }
+
+  /** List an employee's device sessions (no bearer tokens). Gate: employeesPermissions:view. */
+  async listEmployeeSessions(
+    sessionToken: string,
+    employeeId: string
+  ): Promise<EmployeeSessionsResponse> {
+    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:view', ['office-web']);
+    const employee = await this.identityAccessRepository.findEmployeeById(employeeId);
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+    const sessions = await this.identityAccessRepository.listSessionsForEmployee(employeeId);
+    return { sessions };
+  }
+
+  /** Revoke one device session by its non-secret id. Gate: employeesPermissions:configure. */
+  async revokeEmployeeSession(
+    sessionToken: string,
+    employeeId: string,
+    sessionId: string
+  ): Promise<RevokeEmployeeSessionResponse> {
+    const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
+      'office-web'
+    ]);
+    const target = await this.identityAccessRepository.findEmployeeById(employeeId);
+    if (!target) {
+      throw new NotFoundException('Employee not found.');
+    }
+    this.assertCanActOnTarget(actor.roleId, target.roleId);
+    const revoked = await this.identityAccessRepository.revokeSessionById(employeeId, sessionId);
+    return { revoked };
+  }
+
+  /** Owner-protection: only an Owner may act on an Owner (reset/deactivate/role/override/revoke). */
+  private assertCanActOnTarget(
+    actorRoleId: EmployeeRecord['roleId'],
+    targetRoleId: EmployeeRecord['roleId']
+  ): void {
+    if (targetRoleId === 'owner' && actorRoleId !== 'owner') {
+      throw new ForbiddenException('Only an owner can manage an owner account.');
+    }
   }
 
   private async getEmployeeFromSession(
