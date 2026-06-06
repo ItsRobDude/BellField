@@ -25,8 +25,10 @@ Most endpoints expect:
 | `POST`  | `/identity/employees/:employeeId/sessions/:sessionId/revoke` | office          | `employeesPermissions:configure` | Revoke one device session by its non-secret id (+ owner-protection).                                                                                                                                     |
 
 Sensitive writes (create / update / password-reset / session-revoke) record a non-secret row in
-`admin_audit_entries` and serialize under a transaction-level advisory lock with an in-transaction
-target re-read, so concurrent admin writes can't clobber each other or leave zero active owners/managers.
+`admin_audit_entries` and serialize under a transaction-level advisory lock. The **actor and target are
+re-read inside the transaction** and every state-dependent guard (actor permission/active,
+owner-protection, elevation, self-lockout, last-owner/authority) is re-run against those fresh rows — so
+a concurrent demotion/deactivation/permission change or a stale update can't slip past or clobber.
 
 ## CRM
 

@@ -28,6 +28,8 @@ function adminSessionRepo(
     otherActiveOwner?: boolean;
     /** Simulate the target as re-read under the lock (e.g. its role changed concurrently). */
     freshTarget?: EmployeeLike;
+    /** Simulate the actor as re-read under the lock (e.g. demoted/deactivated/de-permissioned). */
+    freshActor?: EmployeeLike;
   } = {}
 ) {
   const employee = (id: string, roleId: Role): EmployeeLike => ({
@@ -50,6 +52,7 @@ function adminSessionRepo(
       auditEntries: unknown[];
       revokeSessions: boolean;
     };
+    createAudit?: { action: string; summary: string };
   } = {};
   const repo = {
     findSessionByToken: jest.fn().mockResolvedValue({
@@ -71,15 +74,24 @@ function adminSessionRepo(
       }
     ]),
     findEmployeeByEmail: jest.fn().mockResolvedValue(null),
-    createEmployeeWithAudit: jest.fn().mockResolvedValue(undefined),
-    // Faithfully simulate the locked repo commands: re-read the fresh target from the mock world and
-    // run the service's `prepare` step (which holds owner-protection / self / last-owner / last-authority
-    // + audit), so those guards stay exercised through the mock. `freshTarget` lets a test simulate the
-    // target's role changing under the lock (concurrent write).
+    // Faithfully simulate the locked repo commands: re-read the fresh ACTOR + target from the mock world
+    // and run the service's `prepare` step (which holds actor re-validation, owner-protection, self,
+    // last-owner/authority, elevation + audit), so those guards stay exercised through the mock.
+    // `freshActor`/`freshTarget` let a test simulate either changing under the lock (concurrent write).
+    createEmployeeWithAudit: jest.fn(
+      async (
+        _actorId: string,
+        _employee: unknown,
+        prepare: (current: { actor: unknown }) => { action: string; summary: string }
+      ) => {
+        captured.createAudit = prepare({ actor: opts.freshActor ?? actor });
+      }
+    ),
     runEmployeeUpdate: jest.fn(
       async (
+        _actorId: string,
         employeeId: string,
-        prepare: (current: { target: unknown; employees: unknown[] }) => {
+        prepare: (current: { actor: unknown; target: unknown; employees: unknown[] }) => {
           fields: Record<string, unknown>;
           auditEntries: unknown[];
           revokeSessions: boolean;
@@ -87,7 +99,11 @@ function adminSessionRepo(
       ) => {
         const freshTarget = opts.freshTarget ?? (employeeId === 'actor-1' ? actor : target);
         const employees = [actor, target, ...others];
-        const prepared = prepare({ target: freshTarget, employees });
+        const prepared = prepare({
+          actor: opts.freshActor ?? actor,
+          target: freshTarget,
+          employees
+        });
         captured.prepared = prepared;
         return {
           ...freshTarget,
@@ -98,21 +114,23 @@ function adminSessionRepo(
     ),
     runPasswordReset: jest.fn(
       async (
+        _actorId: string,
         _employeeId: string,
         _passwordHash: string,
-        prepare: (current: { target: unknown }) => unknown
+        prepare: (current: { actor: unknown; target: unknown }) => unknown
       ) => {
-        prepare({ target: opts.freshTarget ?? target });
+        prepare({ actor: opts.freshActor ?? actor, target: opts.freshTarget ?? target });
         return 2;
       }
     ),
     runSessionRevoke: jest.fn(
       async (
+        _actorId: string,
         _employeeId: string,
         _sessionId: string,
-        prepare: (current: { target: unknown }) => unknown
+        prepare: (current: { actor: unknown; target: unknown }) => unknown
       ) => {
-        prepare({ target: opts.freshTarget ?? target });
+        prepare({ actor: opts.freshActor ?? actor, target: opts.freshTarget ?? target });
         return true;
       }
     ),
@@ -249,7 +267,12 @@ describe('IdentityAccessService', () => {
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.revokeEmployeeSession('tok', 'target-1', 'sess-1');
     expect(result).toEqual({ revoked: true });
-    expect(repo.runSessionRevoke).toHaveBeenCalledWith('target-1', 'sess-1', expect.any(Function));
+    expect(repo.runSessionRevoke).toHaveBeenCalledWith(
+      'actor-1',
+      'target-1',
+      'sess-1',
+      expect.any(Function)
+    );
   });
 
   it('blocks an admin from revoking an owner session (owner-protection, in-tx fresh role)', async () => {
@@ -331,13 +354,12 @@ describe('IdentityAccessService', () => {
     expect(captured.prepared?.revokeSessions).toBe(false);
   });
 
-  it('blocks a non-owner from promoting anyone to owner (request guard, before the tx)', async () => {
+  it('blocks a non-owner from promoting anyone to owner (in-tx against fresh actor)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.updateEmployee('tok', 'target-1', { roleId: 'owner' })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.runEmployeeUpdate).not.toHaveBeenCalled();
   });
 
   it('lets an owner promote an employee to owner', async () => {
@@ -348,7 +370,7 @@ describe('IdentityAccessService', () => {
     expect(repo.runEmployeeUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks granting a permission the actor does not hold (request guard, before the tx)', async () => {
+  it('blocks granting a permission the actor does not hold (in-tx against fresh actor)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     // employeesPermissions:create is Owner-only; an Admin must not be able to grant it.
@@ -357,7 +379,6 @@ describe('IdentityAccessService', () => {
         grantedPermissions: ['employeesPermissions:create']
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.runEmployeeUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects an override that both grants and revokes the same permission', async () => {
@@ -458,16 +479,16 @@ describe('IdentityAccessService', () => {
   });
 
   it('creates an employee with a hashed password that is never returned, and audits it', async () => {
-    const { repo } = adminSessionRepo({ actorRole: 'owner' });
+    const { repo, captured } = adminSessionRepo({ actorRole: 'owner' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.createEmployee('tok', newEmployee);
     expect(result).not.toHaveProperty('password');
     expect(result.roleId).toBe('csr');
-    const [createdEmployee, auditEntry] = repo.createEmployeeWithAudit.mock.calls[0];
+    const createdEmployee = repo.createEmployeeWithAudit.mock.calls[0][1] as { password: string };
     expect(isHashed(createdEmployee.password)).toBe(true);
     expect(createdEmployee.password).not.toContain('supersecret123');
-    expect(auditEntry.action).toBe('employee_created');
-    expect(auditEntry.summary).not.toContain('supersecret123');
+    expect(captured.createAudit?.action).toBe('employee_created');
+    expect(captured.createAudit?.summary).not.toContain('supersecret123');
   });
 
   it('rejects a duplicate email case-insensitively', async () => {
@@ -505,7 +526,8 @@ describe('IdentityAccessService', () => {
       password: 'brandnew123'
     });
     expect(result).toEqual({ revokedSessionCount: 2 });
-    const [employeeId, passwordHash] = repo.runPasswordReset.mock.calls[0];
+    const [actorId, employeeId, passwordHash] = repo.runPasswordReset.mock.calls[0];
+    expect(actorId).toBe('actor-1');
     expect(employeeId).toBe('target-1');
     expect(isHashed(passwordHash)).toBe(true);
     expect(passwordHash).not.toContain('brandnew123');
@@ -543,5 +565,79 @@ describe('IdentityAccessService', () => {
     await expect(service.revokeEmployeeSession('tok', 'target-1', 'sess-1')).rejects.toBeInstanceOf(
       ForbiddenException
     );
+  });
+
+  // The actor passes the request-time gate, but under the lock the fresh actor record is different.
+  const freshActor = (over: Partial<EmployeeLike>): EmployeeLike => ({
+    id: 'actor-1',
+    email: 'actor-1@bellfield.local',
+    displayName: 'actor-1',
+    roleId: 'admin',
+    isActive: true,
+    password: 'x',
+    permissionOverrides: { grantedPermissions: [], revokedPermissions: [] },
+    ...over
+  });
+
+  it('rejects an update when the actor lost employeesPermissions:configure before commit', async () => {
+    // Gate actor is admin (has configure); fresh actor under the lock is a csr (does not).
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      freshActor: freshActor({ roleId: 'csr' })
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'target-1', { isActive: false })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects a password reset when the actor lost configure before commit', async () => {
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      freshActor: freshActor({ roleId: 'csr' })
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever123' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects a session revoke when the actor lost configure before commit', async () => {
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      freshActor: freshActor({ roleId: 'csr' })
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(service.revokeEmployeeSession('tok', 'target-1', 'sess-1')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+  });
+
+  it('rejects an update when the actor is inactive under the lock', async () => {
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      freshActor: freshActor({ isActive: false })
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'target-1', { isActive: false })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects creating an owner when the actor was demoted from owner before commit', async () => {
+    // Gate actor is an owner (has :create); fresh actor under the lock is an admin (does not).
+    const { repo } = adminSessionRepo({
+      actorRole: 'owner',
+      freshActor: freshActor({ roleId: 'admin' })
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.createEmployee('tok', {
+        email: 'New.Owner@bellfield.local',
+        displayName: 'New Owner',
+        roleId: 'owner',
+        password: 'supersecret123'
+      })
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 });
