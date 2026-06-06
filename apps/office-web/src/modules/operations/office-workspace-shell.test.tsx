@@ -553,6 +553,31 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(mockedOperationsApi.getOfficeEquipmentWorkspace).not.toHaveBeenCalled();
   });
 
+  it('hides the Employees nav without employeesPermissions:view', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()])); // default employee has no permissions
+    renderShell();
+    await screen.findByRole('region', { name: 'Dispatch board' });
+    expect(screen.queryByRole('button', { name: 'Employees' })).not.toBeInTheDocument();
+  });
+
+  it('shows the Employees nav with employeesPermissions:view', async () => {
+    const viewer: EmployeeSummary = {
+      ...employee,
+      effectivePermissions: ['employeesPermissions:view']
+    };
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee: viewer });
+    render(
+      <OfficeWorkspaceShell
+        apiBaseUrl="http://api.test"
+        initialEmployee={viewer}
+        sessionToken="session-token"
+        onSignOut={vi.fn()}
+      />
+    );
+    expect(await screen.findByRole('button', { name: 'Employees' })).toBeInTheDocument();
+  });
+
   it('switches between Dispatch, Customers, and Jobs from the rail', async () => {
     arrangeWorkspace(buildWorkspace([buildJob()]));
 
