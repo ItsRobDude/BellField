@@ -1,7 +1,9 @@
 import type {
   CurrentSessionResponse,
+  EmployeeAdminDetailResponse,
   EmployeeListResponse,
   EmployeeRoleId,
+  EmployeeSessionSummary,
   EmployeeSummary,
   LoginResponse,
   RoleTemplate,
@@ -9,7 +11,14 @@ import type {
 } from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
 
-export type { EmployeeRoleId, EmployeeSummary, LoginResponse, RoleTemplate };
+export type {
+  EmployeeAdminDetailResponse,
+  EmployeeRoleId,
+  EmployeeSessionSummary,
+  EmployeeSummary,
+  LoginResponse,
+  RoleTemplate
+};
 
 type RoleListResponse = RoleTemplateListResponse;
 
@@ -82,6 +91,20 @@ export async function getOfficeRoles(input: {
   apiBaseUrl?: string;
 }): Promise<RoleListResponse> {
   return requestJson<RoleListResponse>('/identity/roles', {
+    apiBaseUrl: input.apiBaseUrl,
+    headers: {
+      Authorization: `Bearer ${input.sessionToken}`
+    }
+  });
+}
+
+/** Admin detail for one employee: summary (overrides + effective perms) + active device sessions. */
+export async function getEmployeeDetail(input: {
+  employeeId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<EmployeeAdminDetailResponse> {
+  return requestJson<EmployeeAdminDetailResponse>(`/identity/employees/${input.employeeId}`, {
     apiBaseUrl: input.apiBaseUrl,
     headers: {
       Authorization: `Bearer ${input.sessionToken}`

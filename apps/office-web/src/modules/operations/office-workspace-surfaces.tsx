@@ -30,6 +30,10 @@ import {
 import { OfficeSystemSurface, type OfficeSystemSurfaceProps } from './office-system-surface';
 import { OfficeHistorySurface, type OfficeHistorySurfaceProps } from './office-history-surface';
 import { OfficeReportsSurface, type OfficeReportsSurfaceProps } from './office-reports-surface';
+import {
+  OfficeEmployeeAccessSurface,
+  type OfficeEmployeeAccessSurfaceProps
+} from './office-employee-access-surface';
 import type { OfficeView } from './office-workspace-frame';
 
 type OfficeCrmSurfaceProps = {
@@ -63,6 +67,7 @@ type OfficeWorkspaceSurfacesProps = {
   system: OfficeSystemSurfaceProps;
   history: OfficeHistorySurfaceProps;
   reports: OfficeReportsSurfaceProps;
+  employees: OfficeEmployeeAccessSurfaceProps;
 };
 
 export function OfficeWorkspaceSurfaces({
@@ -77,7 +82,8 @@ export function OfficeWorkspaceSurfaces({
   bookkeeping,
   system,
   history,
-  reports
+  reports,
+  employees
 }: OfficeWorkspaceSurfacesProps) {
   return (
     <>
@@ -116,6 +122,8 @@ export function OfficeWorkspaceSurfaces({
       {activeOfficeView === 'system' ? <OfficeSystemSurface {...system} /> : null}
 
       {activeOfficeView === 'reports' ? <OfficeReportsSurface {...reports} /> : null}
+
+      {activeOfficeView === 'employees' ? <OfficeEmployeeAccessSurface {...employees} /> : null}
 
       {activeOfficeView === 'history' ? <OfficeHistorySurface {...history} /> : null}
 
