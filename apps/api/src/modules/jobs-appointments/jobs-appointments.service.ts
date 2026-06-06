@@ -9,6 +9,10 @@ import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import type { AuthorizedEmployee } from '../identity-access/identity-access.types';
 import { getAssignedWorkWindow } from './field-work-window';
+import {
+  validateRegisterEntryNumbers,
+  validateRegisterEntryUpdate
+} from './register-entry-validation';
 import type {
   AddJobNoteRequestDto,
   AcknowledgeFinishedVisitReviewRequestDto,
@@ -455,7 +459,30 @@ export class JobsAppointmentsService {
       sessionToken,
       'register:create'
     );
-    this.validateRegisterEntryNumbers(request);
+
+    // Idempotent replay: a re-drained field create whose client operation already produced a line
+    // returns success with the current job summary — before any finalized-job/permission guard, so
+    // a retry after the job has since closed clears the queued op instead of looping on a 409. The
+    // key is normalized the same way the repository stores it, and the existing line must belong to
+    // THIS route's job (a key naming a different job is a client bug or probe, not this create).
+    const clientOperationId = request.clientOperationId?.trim();
+    if (clientOperationId) {
+      const existing =
+        await this.jobsDataService.findRegisterEntryByClientOperationId(clientOperationId);
+      if (existing) {
+        // Only the original capturing technician on the same route job may replay it. A key naming
+        // a different job or another tech is a client bug or a probe — the format is guessable, so
+        // it is not treated as a secret; reject rather than short-circuit past the access checks.
+        if (existing.jobId !== jobId || existing.capturedByEmployeeId !== actor.id) {
+          throw new ConflictException(
+            'This operation id belongs to a different job or technician.'
+          );
+        }
+        return this.buildRegisterCreateResponse(jobId, actor, request.syncSource);
+      }
+    }
+
+    validateRegisterEntryNumbers(request);
     const currentJob = await this.jobsDataService.getJobById(jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {
@@ -507,17 +534,21 @@ export class JobsAppointmentsService {
       );
     }
 
+    return this.buildRegisterCreateResponse(jobId, actor, request.syncSource);
+  }
+
+  /** Job summary after a register create (or an idempotent replay of one), with the field
+   * sync result attached when the call came from the field save queue. */
+  private async buildRegisterCreateResponse(
+    jobId: string,
+    actor: AuthorizedEmployee,
+    syncSource: CreateRegisterEntryRequestDto['syncSource']
+  ): Promise<JobMutationResponseDto> {
     return {
       ...(await this.toJobSummary(jobId, {
         includeRegisterEntries: this.canViewRegisterEntries(actor)
       })),
-      ...(request.syncSource === 'field-save-queue'
-        ? {
-            syncResult: {
-              status: 'applied'
-            }
-          }
-        : {})
+      ...(syncSource === 'field-save-queue' ? { syncResult: { status: 'applied' as const } } : {})
     };
   }
 
@@ -530,7 +561,7 @@ export class JobsAppointmentsService {
       sessionToken,
       'register:edit'
     );
-    this.validateRegisterEntryUpdate(request);
+    validateRegisterEntryUpdate(request);
     const currentEntry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
     const currentJob = await this.jobsDataService.getJobById(currentEntry.jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(
@@ -980,61 +1011,6 @@ export class JobsAppointmentsService {
 
     if (appointment.jobId !== jobId) {
       throw new ConflictException('Register entry appointment must belong to the same job.');
-    }
-  }
-
-  private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {
-    const hasEditableField =
-      request.appointmentId !== undefined ||
-      request.kind !== undefined ||
-      request.description !== undefined ||
-      request.quantity !== undefined ||
-      request.unitOfMeasure !== undefined ||
-      request.unitPrice !== undefined ||
-      request.totalAmount !== undefined ||
-      request.partNumber !== undefined ||
-      request.inventorySourceLabel !== undefined ||
-      request.inventoryItemId !== undefined ||
-      request.inventoryLocationId !== undefined ||
-      request.billingProjectionState !== undefined;
-
-    if (!hasEditableField) {
-      throw new ConflictException(
-        'Register entry update must include at least one editable field.'
-      );
-    }
-
-    this.validateRegisterEntryNumbers(request);
-  }
-
-  private validateRegisterEntryNumbers(request: {
-    quantity?: number;
-    unitPrice?: number | null;
-    totalAmount?: number;
-  }): void {
-    this.validatePositiveNumber(
-      request.quantity,
-      'Register entry quantity must be greater than zero.'
-    );
-    this.validateNonNegativeNumber(
-      request.unitPrice,
-      'Register entry unit price cannot be negative.'
-    );
-    this.validateNonNegativeNumber(
-      request.totalAmount,
-      'Register entry total amount cannot be negative.'
-    );
-  }
-
-  private validatePositiveNumber(value: number | undefined, message: string): void {
-    if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
-      throw new ConflictException(message);
-    }
-  }
-
-  private validateNonNegativeNumber(value: number | null | undefined, message: string): void {
-    if (value !== undefined && value !== null && (!Number.isFinite(value) || value < 0)) {
-      throw new ConflictException(message);
     }
   }
 

@@ -223,6 +223,12 @@ export class JobsDataRepository {
     return this.registerRepository.getRegisterEntryById(registerEntryId);
   }
 
+  async findRegisterEntryByClientOperationId(
+    clientOperationId: string
+  ): Promise<RegisterEntryRecord | null> {
+    return this.registerRepository.findRegisterEntryByClientOperationId(clientOperationId);
+  }
+
   async createRegisterEntry(
     jobId: string,
     input: CreateRegisterEntryInput,

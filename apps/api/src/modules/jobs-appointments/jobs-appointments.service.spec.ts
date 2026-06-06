@@ -68,6 +68,7 @@ function createService() {
     addJobNote: jest.fn(),
     listRegisterEntriesForJob: jest.fn().mockResolvedValue([]),
     getRegisterEntryById: jest.fn(),
+    findRegisterEntryByClientOperationId: jest.fn().mockResolvedValue(null),
     createRegisterEntry: jest.fn(),
     updateRegisterEntry: jest.fn(),
     voidRegisterEntry: jest.fn()
@@ -753,6 +754,86 @@ describe('JobsAppointmentsService', () => {
     );
     expect(response.syncResult).toEqual({ status: 'applied' });
     expect(response.registerEntries?.[0]?.description).toBe('Contactor');
+  });
+
+  it('short-circuits an idempotent replay without re-creating the line', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('inProgress'));
+    jobsDataService.findRegisterEntryByClientOperationId.mockResolvedValue(createRegisterEntry());
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([createRegisterEntry()]);
+
+    const response = await service.createRegisterEntry('session-token', 'job-1', {
+      kind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      totalAmount: 125,
+      clientOperationId: 'op-7',
+      syncSource: 'field-save-queue'
+    });
+
+    expect(jobsDataService.findRegisterEntryByClientOperationId).toHaveBeenCalledWith('op-7');
+    // The replay returns success with the current job summary and never re-creates the line.
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+    expect(response.syncResult).toEqual({ status: 'applied' });
+  });
+
+  it('rejects a client operation id that belongs to a different job', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    // The key already produced a line on a DIFFERENT job — never leak/return that job's summary.
+    jobsDataService.findRegisterEntryByClientOperationId.mockResolvedValue(
+      createRegisterEntry({ jobId: 'job-OTHER' })
+    );
+
+    await expect(
+      service.createRegisterEntry('session-token', 'job-1', {
+        kind: 'part',
+        description: 'Contactor',
+        quantity: 1,
+        totalAmount: 125,
+        clientOperationId: '  op-7  ', // also exercises trim normalization
+        syncSource: 'field-save-queue'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(jobsDataService.findRegisterEntryByClientOperationId).toHaveBeenCalledWith('op-7');
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+  });
+
+  it('rejects a client operation id captured by a different technician on the same job', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    // Same route job, but the line was captured by another tech — do not short-circuit access.
+    jobsDataService.findRegisterEntryByClientOperationId.mockResolvedValue(
+      createRegisterEntry({ jobId: 'job-1', capturedByEmployeeId: 'tech-OTHER' })
+    );
+
+    await expect(
+      service.createRegisterEntry('session-token', 'job-1', {
+        kind: 'part',
+        description: 'Contactor',
+        quantity: 1,
+        totalAmount: 125,
+        clientOperationId: 'op-7',
+        syncSource: 'field-save-queue'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
   });
 
   it('rejects out-of-scope field register creates without replay provenance', async () => {

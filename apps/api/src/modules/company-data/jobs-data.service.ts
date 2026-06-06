@@ -231,6 +231,12 @@ export class JobsDataService {
     return registerEntry;
   }
 
+  async findRegisterEntryByClientOperationId(
+    clientOperationId: string
+  ): Promise<RegisterEntryRecord | null> {
+    return this.jobsDataRepository.findRegisterEntryByClientOperationId(clientOperationId);
+  }
+
   async createRegisterEntry(
     jobId: string,
     input: CreateRegisterEntryInput,

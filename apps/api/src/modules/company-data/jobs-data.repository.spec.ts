@@ -1021,9 +1021,20 @@ describe('JobsDataRepository', () => {
     expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['job-1', false]);
   });
 
-  function createRepoForCreate(options: { jobStatus?: string; selfTruckRef?: boolean } = {}) {
+  function createRepoForCreate(
+    options: {
+      jobStatus?: string;
+      selfTruckRef?: boolean;
+      existingClientOp?: string;
+      insertThrows23505?: boolean;
+    } = {}
+  ) {
     const queryable = {
       query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        // Idempotency dedup lookup by client_operation_id.
+        if (String(sql).includes('where client_operation_id = $1')) {
+          return { rows: options.existingClientOp ? [{ id: options.existingClientOp }] : [] };
+        }
         if (String(sql).includes('select status from jobs')) {
           return { rows: [{ status: options.jobStatus ?? 'inProgress' }] };
         }
@@ -1046,9 +1057,12 @@ describe('JobsDataRepository', () => {
       query: jest.fn(async (sql: string, _params?: unknown[]) =>
         sql.includes('from register_entries') ? { rows: [createRegisterEntryRow()] } : { rows: [] }
       ),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
-        callback(queryable)
-      )
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => {
+        if (options.insertThrows23505) {
+          throw { code: '23505', constraint: 'register_entries_client_operation_id_key' };
+        }
+        return callback(queryable);
+      })
     };
     return { repository: createJobsDataRepository(databaseService), queryable };
   }
@@ -1087,6 +1101,74 @@ describe('JobsDataRepository', () => {
     );
     expect(timelineCall?.[1]?.[4]).toBe('registerEntryAdded');
     expect(timelineCall?.[1]?.[5]).toBe('Register entry added: Contactor.');
+  });
+
+  it('persists the client operation id on a fresh create', async () => {
+    const { repository, queryable } = createRepoForCreate();
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Part',
+        quantity: 1,
+        totalAmount: 50,
+        clientOperationId: 'op-7'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into register_entries')
+    );
+    expect(insertCall?.[1]?.[21]).toBe('op-7'); // client_operation_id ($22)
+  });
+
+  it('is idempotent: a replay of a known client operation id inserts nothing', async () => {
+    const { repository, queryable } = createRepoForCreate({ existingClientOp: 'reg-existing' });
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Part',
+        quantity: 1,
+        totalAmount: 50,
+        clientOperationId: 'op-7'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    // No insert, no timeline, no auto-cost — the original line and its artifacts stand.
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into register_entries')
+      )
+    ).toBe(false);
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into inventory_movements')
+      )
+    ).toBe(false);
+  });
+
+  it('resolves to the existing line when a concurrent insert loses on the unique index (23505)', async () => {
+    const { repository } = createRepoForCreate({ insertThrows23505: true });
+
+    // The winner's line stands; the loser resolves to it instead of surfacing a raw DB failure.
+    const result = await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Part',
+        quantity: 1,
+        totalAmount: 50,
+        clientOperationId: 'op-7'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    expect(result.id).toBe('register-1');
   });
 
   it('rejects a cost-expected line on a finalized job unless it is a preserved replay', async () => {
