@@ -36,3 +36,18 @@ describe('defaultRoleTemplates jobCosting permissions', () => {
     }
   });
 });
+
+// History/Audit is a cross-record, owner/admin-only trust surface (M10 slice 2). Pin the gate so a
+// future template edit can't silently widen who can read everyone's activity.
+describe('defaultRoleTemplates history permissions', () => {
+  it('grants history:view to owner and admin only', () => {
+    expect(defaultRoleTemplates.owner.permissions).toContain('history:view');
+    expect(defaultRoleTemplates.admin.permissions).toContain('history:view');
+  });
+
+  it('does not grant history:view to any other role', () => {
+    for (const role of ['csr', 'dispatcher', 'bookKeeping', 'technician'] as const) {
+      expect(defaultRoleTemplates[role].permissions).not.toContain('history:view');
+    }
+  });
+});

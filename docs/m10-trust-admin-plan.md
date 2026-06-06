@@ -269,7 +269,8 @@ interface HistoryResponse {
   register, job cost, job-linked inventory movements, **and** payments. Only equipment-history rows
   (equipment-scoped, no job) drop out of a job-filtered view.
 - **Ordering + cursor:** `occurred_at DESC, recordType ASC, source_id DESC`. The cursor encodes that
-  tuple (opaque base64). `limit` defaults to e.g. 50, capped (e.g. 200).
+  tuple (opaque base64). `limit` defaults to e.g. 50, capped (e.g. 200). A malformed/tampered cursor
+  is rejected with `400` (matches the job-queue cursor contract) rather than silently serving page one.
 - **Summary:** built server-side per source (e.g. register → "Register entry added: <description>",
   payment → "Payment recorded"). It must stay privacy-appropriate — it reuses fields already visible
   to a permitted office user; it does not invent or expose anything new.
@@ -282,9 +283,17 @@ interface HistoryResponse {
 
 - Contracts: new `packages/contracts/src/history.ts` (`HistoryEntry`, `HistoryRecordType`,
   `HistoryResponse`) + barrel.
-- Office: a "History" surface (own component) with a filter bar (date range, actor select, record-type
-  select, optional job) and a paginated list; nav gated on `history:view`. Per-domain
-  `history-api.ts` client. No shell bloat.
+- Office: a "History" surface (own component) with a filter bar (record-type select, actor select,
+  date range) and a cursor-paginated list; nav gated on `history:view`. Per-domain `history-api.ts`
+  client. No shell bloat.
+- **`jobId` filter is API-only in office v1.** The API supports `jobId` (used programmatically and by
+  a future job-scoped history view), but the global History surface intentionally exposes no job
+  picker yet — a raw UUID text field would be admin/debug-only ergonomics. A real job selector is a
+  follow-up alongside the deferred customer/location filters.
+- **Date filters are UTC day-bounds in v1.** The day inputs widen to `T00:00:00.000Z` /
+  `T23:59:59.999Z`, while rows display in local time; labels read "From (UTC) / To (UTC)" so operators
+  aren't surprised. Treating them as local-day bounds is a future refinement (not a v1 blocker — these
+  read as UTC audit bounds).
 
 ### 5b.4 Tests + smoke
 
