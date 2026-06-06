@@ -1021,9 +1021,15 @@ describe('JobsDataRepository', () => {
     expect(databaseService.query.mock.calls[0]?.[1]).toEqual(['job-1', false]);
   });
 
-  function createRepoForCreate(options: { jobStatus?: string; selfTruckRef?: boolean } = {}) {
+  function createRepoForCreate(
+    options: { jobStatus?: string; selfTruckRef?: boolean; existingClientOp?: string } = {}
+  ) {
     const queryable = {
       query: jest.fn(async (sql: string, _params?: unknown[]) => {
+        // Idempotency dedup lookup by client_operation_id.
+        if (String(sql).includes('where client_operation_id = $1')) {
+          return { rows: options.existingClientOp ? [{ id: options.existingClientOp }] : [] };
+        }
         if (String(sql).includes('select status from jobs')) {
           return { rows: [{ status: options.jobStatus ?? 'inProgress' }] };
         }
@@ -1087,6 +1093,55 @@ describe('JobsDataRepository', () => {
     );
     expect(timelineCall?.[1]?.[4]).toBe('registerEntryAdded');
     expect(timelineCall?.[1]?.[5]).toBe('Register entry added: Contactor.');
+  });
+
+  it('persists the client operation id on a fresh create', async () => {
+    const { repository, queryable } = createRepoForCreate();
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Part',
+        quantity: 1,
+        totalAmount: 50,
+        clientOperationId: 'op-7'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    const insertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into register_entries')
+    );
+    expect(insertCall?.[1]?.[21]).toBe('op-7'); // client_operation_id ($22)
+  });
+
+  it('is idempotent: a replay of a known client operation id inserts nothing', async () => {
+    const { repository, queryable } = createRepoForCreate({ existingClientOp: 'reg-existing' });
+
+    await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Part',
+        quantity: 1,
+        totalAmount: 50,
+        clientOperationId: 'op-7'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    // No insert, no timeline, no auto-cost — the original line and its artifacts stand.
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into register_entries')
+      )
+    ).toBe(false);
+    expect(
+      queryable.query.mock.calls.some(([sql]) =>
+        String(sql).includes('insert into inventory_movements')
+      )
+    ).toBe(false);
   });
 
   it('rejects a cost-expected line on a finalized job unless it is a preserved replay', async () => {

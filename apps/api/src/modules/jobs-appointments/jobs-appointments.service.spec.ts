@@ -68,6 +68,7 @@ function createService() {
     addJobNote: jest.fn(),
     listRegisterEntriesForJob: jest.fn().mockResolvedValue([]),
     getRegisterEntryById: jest.fn(),
+    findRegisterEntryByClientOperationId: jest.fn().mockResolvedValue(null),
     createRegisterEntry: jest.fn(),
     updateRegisterEntry: jest.fn(),
     voidRegisterEntry: jest.fn()
@@ -753,6 +754,33 @@ describe('JobsAppointmentsService', () => {
     );
     expect(response.syncResult).toEqual({ status: 'applied' });
     expect(response.registerEntries?.[0]?.description).toBe('Contactor');
+  });
+
+  it('short-circuits an idempotent replay without re-creating the line', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('inProgress'));
+    jobsDataService.findRegisterEntryByClientOperationId.mockResolvedValue(createRegisterEntry());
+    jobsDataService.listRegisterEntriesForJob.mockResolvedValue([createRegisterEntry()]);
+
+    const response = await service.createRegisterEntry('session-token', 'job-1', {
+      kind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      totalAmount: 125,
+      clientOperationId: 'op-7',
+      syncSource: 'field-save-queue'
+    });
+
+    expect(jobsDataService.findRegisterEntryByClientOperationId).toHaveBeenCalledWith('op-7');
+    // The replay returns success with the current job summary and never re-creates the line.
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+    expect(response.syncResult).toEqual({ status: 'applied' });
   });
 
   it('rejects out-of-scope field register creates without replay provenance', async () => {

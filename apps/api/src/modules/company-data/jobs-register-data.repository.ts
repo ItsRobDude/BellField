@@ -1,12 +1,11 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { JobCostEventKind, JobStatus, ResolveRegisterCostRequest } from '@bellfield/contracts';
-import { DatabaseService, type QueryExecutor } from '../../database/database.service';
+import type { JobStatus, ResolveRegisterCostRequest } from '@bellfield/contracts';
+import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
-import { applyReturnFromJob } from '../inventory/inventory-ledger-utils';
-import { insertJobCostEventWithin } from '../job-costing/job-cost-rollup-utils';
 import { lockJobForCostWrite } from './job-cost-write-guard';
 import { applyRegisterCostResolution } from './register-cost-resolution';
+import { reverseRegisterCostArtifacts } from './register-cost-reversal';
 import {
   isFinalJobStatus,
   REOPEN_FOR_COST_WRITE_MESSAGE,
@@ -141,6 +140,17 @@ export class JobsRegisterDataRepository {
     return result.rows[0] ? this.toRegisterEntryRecord(result.rows[0]) : null;
   }
 
+  /** The line a prior field-queued create produced for this idempotency key, if any. */
+  async findRegisterEntryByClientOperationId(
+    clientOperationId: string
+  ): Promise<RegisterEntryRecord | null> {
+    const result = await this.databaseService.query<{ id: string }>(
+      `select id from register_entries where client_operation_id = $1 limit 1`,
+      [clientOperationId]
+    );
+    return result.rows[0] ? this.getRegisterEntryById(result.rows[0].id) : null;
+  }
+
   async createRegisterEntry(
     jobId: string,
     input: CreateRegisterEntryInput,
@@ -151,8 +161,26 @@ export class JobsRegisterDataRepository {
     const timelineTime = occurredAt || new Date().toISOString();
     const registerEntryId = randomUUID();
     const costing = classifyRegisterCosting(input.kind);
+    const clientOperationId = input.clientOperationId?.trim() || null;
+    // When a replay short-circuits, this holds the already-created line's id to load and return.
+    let dedupedExistingId: string | null = null;
 
     await this.databaseService.transaction(async (queryable) => {
+      // Idempotent replay: a field-queued create can re-drain after a committed-but-lost response.
+      // If this client operation already produced a line, return it untouched — re-inserting would
+      // double-bill and (for a structured part) double-issue truck stock. The partial unique index
+      // on client_operation_id is the integrity backstop for a concurrent race past this check.
+      if (clientOperationId !== null) {
+        const replay = await queryable.query<{ id: string }>(
+          `select id from register_entries where client_operation_id = $1 limit 1`,
+          [clientOperationId]
+        );
+        if (replay.rows[0]) {
+          dedupedExistingId = replay.rows[0].id;
+          return;
+        }
+      }
+
       // Lock the job row and re-check finality INSIDE the transaction. The service pre-checks
       // status too, but that read races a concurrent completion: without this lock a cost-
       // expected line could land after the finalized cost snapshot froze. Only a preserved field
@@ -211,9 +239,10 @@ export class JobsRegisterDataRepository {
             created_at,
             updated_at,
             inventory_item_id,
-            inventory_location_id
+            inventory_location_id,
+            client_operation_id
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19, $20, $21)
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19, $20, $21, $22)
         `,
         [
           registerEntryId,
@@ -236,7 +265,8 @@ export class JobsRegisterDataRepository {
           timelineTime,
           timelineTime,
           inventoryItemId,
-          inventoryLocationId
+          inventoryLocationId,
+          clientOperationId
         ]
       );
 
@@ -290,7 +320,8 @@ export class JobsRegisterDataRepository {
       );
     });
 
-    const registerEntry = await this.getRegisterEntryById(registerEntryId);
+    // On a deduped replay, load the line the original create produced; otherwise the new one.
+    const registerEntry = await this.getRegisterEntryById(dedupedExistingId ?? registerEntryId);
 
     if (!registerEntry) {
       throw new Error('Created register entry could not be loaded.');
@@ -579,13 +610,12 @@ export class JobsRegisterDataRepository {
 
       if (reverseCost) {
         // Reverse the cost artifacts this line produced so the rollup drops their cost.
-        await this.reverseRegisterCostArtifacts(
-          queryable,
+        await reverseRegisterCostArtifacts(queryable, {
           registerEntryId,
-          existingEntry.jobId,
+          jobId: existingEntry.jobId,
           actor,
-          timelineTime
-        );
+          occurredAt: timelineTime
+        });
       }
 
       // Void the linked invoice line so the bill no longer includes voided work (a posted
@@ -601,70 +631,6 @@ export class JobsRegisterDataRepository {
     });
 
     return this.getRegisterEntryById(registerEntryId);
-  }
-
-  /**
-   * Reverse the cost artifacts a register line produced: a `returnFromJob` per un-returned
-   * `issueToJob`, and a negating event per un-reversed labor/material cost event — all linked
-   * back to the same register line. Idempotent: only artifacts without an existing reversal are
-   * touched, so a re-run (or a void after a partial failure) does not double-reverse.
-   */
-  private async reverseRegisterCostArtifacts(
-    queryable: QueryExecutor,
-    registerEntryId: string,
-    jobId: string,
-    actor: { id: string; displayName: string },
-    occurredAt: string
-  ): Promise<void> {
-    const issues = await queryable.query<{ id: string }>(
-      `select m.id
-       from inventory_movements m
-       where m.source_register_entry_id = $1 and m.kind = 'issueToJob'
-         and not exists (
-           select 1 from inventory_movements r
-           where r.kind = 'returnFromJob' and r.reversal_of_movement_id = m.id
-         )`,
-      [registerEntryId]
-    );
-    for (const issue of issues.rows) {
-      await applyReturnFromJob(queryable, {
-        reversalOfMovementId: issue.id,
-        actor,
-        note: 'Register line voided.',
-        occurredAt
-      });
-    }
-
-    const events = await queryable.query<{
-      id: string;
-      kind: JobCostEventKind;
-      amount: string | number;
-      hours: string | number | null;
-      ratePerHour: string | number | null;
-      description: string;
-    }>(
-      `select e.id, e.kind, e.amount, e.hours, e.rate_per_hour as "ratePerHour", e.description
-       from job_cost_events e
-       where e.source_register_entry_id = $1 and e.reversal_of_event_id is null
-         and not exists (
-           select 1 from job_cost_events r where r.reversal_of_event_id = e.id
-         )`,
-      [registerEntryId]
-    );
-    for (const event of events.rows) {
-      await insertJobCostEventWithin(queryable, {
-        jobId,
-        kind: event.kind,
-        description: `Reversal of: ${event.description}`,
-        amount: -Number(event.amount),
-        hours: event.hours === null ? null : Number(event.hours),
-        ratePerHour: event.ratePerHour === null ? null : Number(event.ratePerHour),
-        reversalOfEventId: event.id,
-        sourceRegisterEntryId: registerEntryId,
-        actor,
-        occurredAt
-      });
-    }
   }
 
   /**

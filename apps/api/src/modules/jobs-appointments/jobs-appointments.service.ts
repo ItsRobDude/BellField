@@ -455,6 +455,19 @@ export class JobsAppointmentsService {
       sessionToken,
       'register:create'
     );
+
+    // Idempotent replay: a re-drained field create whose client operation already produced a line
+    // returns success with the current job summary — before any finalized-job/permission guard, so
+    // a retry after the job has since closed clears the queued op instead of looping on a 409.
+    if (request.clientOperationId) {
+      const existing = await this.jobsDataService.findRegisterEntryByClientOperationId(
+        request.clientOperationId
+      );
+      if (existing) {
+        return this.buildRegisterCreateResponse(existing.jobId, actor, request.syncSource);
+      }
+    }
+
     this.validateRegisterEntryNumbers(request);
     const currentJob = await this.jobsDataService.getJobById(jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
@@ -507,17 +520,21 @@ export class JobsAppointmentsService {
       );
     }
 
+    return this.buildRegisterCreateResponse(jobId, actor, request.syncSource);
+  }
+
+  /** Job summary after a register create (or an idempotent replay of one), with the field
+   * sync result attached when the call came from the field save queue. */
+  private async buildRegisterCreateResponse(
+    jobId: string,
+    actor: AuthorizedEmployee,
+    syncSource: CreateRegisterEntryRequestDto['syncSource']
+  ): Promise<JobMutationResponseDto> {
     return {
       ...(await this.toJobSummary(jobId, {
         includeRegisterEntries: this.canViewRegisterEntries(actor)
       })),
-      ...(request.syncSource === 'field-save-queue'
-        ? {
-            syncResult: {
-              status: 'applied'
-            }
-          }
-        : {})
+      ...(syncSource === 'field-save-queue' ? { syncResult: { status: 'applied' as const } } : {})
     };
   }
 
