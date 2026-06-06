@@ -203,8 +203,11 @@ export class IdentityAccessService {
       }
     }
 
-    // Last-authority guard: the change must not leave zero active employees who can manage employees.
-    await this.assertRetainsEmployeeAuthority(employeeId, existingEmployee);
+    // Post-change invariants over the hypothetical employee list: keep at least one active employee
+    // who can manage employees, and at least one active Owner.
+    const postChangeEmployees = await this.buildPostChangeEmployees(employeeId, existingEmployee);
+    this.assertRetainsEmployeeAuthority(postChangeEmployees);
+    this.assertRetainsActiveOwner(postChangeEmployees);
 
     await this.identityAccessRepository.saveEmployee(existingEmployee);
 
@@ -263,28 +266,43 @@ export class IdentityAccessService {
     }
   }
 
-  /**
-   * Ensure a pending change leaves at least one ACTIVE employee with effective
-   * `employeesPermissions:configure`. Evaluated on the hypothetical post-change world (the target
-   * replaced by its resulting state) across all employees — not a naive role check, since overrides
-   * grant/revoke the authority.
-   */
-  private async assertRetainsEmployeeAuthority(
+  /** The full employee list as it would be AFTER the change (target replaced by its resulting state). */
+  private async buildPostChangeEmployees(
     employeeId: string,
     resultingEmployee: EmployeeRecord
-  ): Promise<void> {
+  ): Promise<EmployeeRecord[]> {
     const employees = await this.identityAccessRepository.listEmployees();
-    const stillHasAuthority = employees.some((employee) => {
-      const effective = employee.id === employeeId ? resultingEmployee : employee;
-      return (
-        effective.isActive &&
-        this.resolveEffectivePermissions(effective).includes('employeesPermissions:configure')
-      );
-    });
+    return employees.map((employee) => (employee.id === employeeId ? resultingEmployee : employee));
+  }
+
+  /**
+   * At least one ACTIVE employee must retain effective `employeesPermissions:configure` — computed
+   * over the post-change world, not a naive role check (overrides grant/revoke the authority).
+   */
+  private assertRetainsEmployeeAuthority(employees: EmployeeRecord[]): void {
+    const stillHasAuthority = employees.some(
+      (employee) =>
+        employee.isActive &&
+        this.resolveEffectivePermissions(employee).includes('employeesPermissions:configure')
+    );
     if (!stillHasAuthority) {
       throw new ConflictException(
         'This change would leave no active employee who can manage employees.'
       );
+    }
+  }
+
+  /**
+   * At least one ACTIVE Owner must remain. Distinct from the authority guard: an Owner self-demoting
+   * to Admin keeps `employeesPermissions:configure` (so the authority guard passes) but would leave
+   * zero Owners, and owner-only actions (managing owners, creating employees) need an Owner.
+   */
+  private assertRetainsActiveOwner(employees: EmployeeRecord[]): void {
+    const hasActiveOwner = employees.some(
+      (employee) => employee.isActive && employee.roleId === 'owner'
+    );
+    if (!hasActiveOwner) {
+      throw new ConflictException('This change would leave no active owner.');
     }
   }
 
