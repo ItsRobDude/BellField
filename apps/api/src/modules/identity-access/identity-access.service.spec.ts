@@ -1,4 +1,9 @@
-import { ForbiddenException, NotFoundException, UnauthorizedException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+  UnauthorizedException
+} from '@nestjs/common';
 import { IdentityAccessRepository } from './identity-access.repository';
 import { IdentityAccessService } from './identity-access.service';
 import { hashPassword, isHashed } from './password-hash';
@@ -38,7 +43,10 @@ function adminSessionRepo(opts: { actorRole?: Role; targetRole?: Role } = {}) {
     ]),
     revokeSessionById: jest.fn().mockResolvedValue(true),
     saveEmployee: jest.fn().mockResolvedValue(undefined),
-    revokeAllSessionsForEmployee: jest.fn().mockResolvedValue(1)
+    revokeAllSessionsForEmployee: jest.fn().mockResolvedValue(1),
+    // Both actor and target exist; the actor (admin/owner) is an active employeesPermissions:configure
+    // holder, so the last-authority guard passes for normal updates.
+    listEmployees: jest.fn().mockResolvedValue([actor, target])
   };
   return { repo, actor, target };
 }
@@ -220,5 +228,65 @@ describe('IdentityAccessService', () => {
     await service.updateEmployee('tok', 'target-1', { roleId: 'dispatcher' });
     expect(repo.saveEmployee).toHaveBeenCalledTimes(1);
     expect(repo.revokeAllSessionsForEmployee).not.toHaveBeenCalled();
+  });
+
+  it('blocks a non-owner from promoting anyone to owner (no escalation via role)', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'target-1', { roleId: 'owner' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('lets an owner promote an employee to owner', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'owner', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    const result = await service.updateEmployee('tok', 'target-1', { roleId: 'owner' });
+    expect(result.roleId).toBe('owner');
+    expect(repo.saveEmployee).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks granting a permission the actor does not hold (no escalation via overrides)', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    // employeesPermissions:create is Owner-only; an Admin must not be able to grant it.
+    await expect(
+      service.updateEmployee('tok', 'target-1', {
+        grantedPermissions: ['employeesPermissions:create']
+      })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('rejects an override that both grants and revokes the same permission', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'target-1', {
+        grantedPermissions: ['inventory:view'],
+        revokedPermissions: ['inventory:view']
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('blocks self-deactivation', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'actor-1', { isActive: false })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('blocks removing your own employee-management authority (self-demotion)', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    // csr has no employeesPermissions:configure → would strip the actor's own authority.
+    await expect(
+      service.updateEmployee('tok', 'actor-1', { roleId: 'csr' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
   });
 });

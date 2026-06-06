@@ -483,8 +483,10 @@ delete`, Admin `view/configure`):
 ### 5d.3 Build order (each its own validated, merged sub-slice)
 
 - **4-0 Password hashing** — migration (password format), scrypt hash/verify, rehash-on-login, seed hashes.
-- **4B Sessions** — migration adds a **non-secret `id`** (uuid) to `sessions` (PK is currently the bearer
-  `token`; never expose it as an identifier). `GET /identity/employees/:id/sessions`,
+- **4B Sessions** — migration adds an **opaque non-secret `id`** to `sessions` (new sessions use an
+  app-side `randomUUID()`; existing rows are backfilled with a built-in `md5(...)` hash — no extension
+  dependency, so the id is a 32-hex string, not necessarily a UUID). The PK is the bearer `token`;
+  never expose it as an identifier. `GET /identity/employees/:id/sessions`,
   `POST /identity/employees/:id/sessions/:sessionId/revoke`; deactivate revokes all. (Sessions have no
   expiry today — acknowledged, out of scope for v1.)
 - **4C Admin writes + hardening** — `POST /identity/employees` (create, `:create` gate),
