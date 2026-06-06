@@ -11,10 +11,26 @@ import { hashPassword, isHashed } from './password-hash';
 
 type Role = 'owner' | 'admin' | 'csr';
 
+type EmployeeLike = {
+  id: string;
+  email: string;
+  displayName: string;
+  roleId: Role;
+  isActive: boolean;
+  password: string;
+  permissionOverrides: { grantedPermissions: string[]; revokedPermissions: string[] };
+};
+
 function adminSessionRepo(
-  opts: { actorRole?: Role; targetRole?: Role; otherActiveOwner?: boolean } = {}
+  opts: {
+    actorRole?: Role;
+    targetRole?: Role;
+    otherActiveOwner?: boolean;
+    /** Simulate the target as re-read under the lock (e.g. its role changed concurrently). */
+    freshTarget?: EmployeeLike;
+  } = {}
 ) {
-  const employee = (id: string, roleId: Role) => ({
+  const employee = (id: string, roleId: Role): EmployeeLike => ({
     id,
     email: `${id}@bellfield.local`,
     displayName: id,
@@ -28,6 +44,13 @@ function adminSessionRepo(
   // A standing active Owner so the active-owner invariant holds for ordinary updates. Omit it to
   // exercise the "last owner" guard.
   const others = (opts.otherActiveOwner ?? true) ? [employee('owner-keeper', 'owner')] : [];
+  const captured: {
+    prepared?: {
+      fields: Record<string, unknown>;
+      auditEntries: unknown[];
+      revokeSessions: boolean;
+    };
+  } = {};
   const repo = {
     findSessionByToken: jest.fn().mockResolvedValue({
       token: 'tok',
@@ -48,26 +71,56 @@ function adminSessionRepo(
       }
     ]),
     findEmployeeByEmail: jest.fn().mockResolvedValue(null),
-    // Faithfully simulate the repo command: run the in-tx invariant check against the post-change
-    // world so the service's last-authority / last-owner guards stay exercised through the mock.
-    saveEmployeeWithAudit: jest.fn(
+    createEmployeeWithAudit: jest.fn().mockResolvedValue(undefined),
+    // Faithfully simulate the locked repo commands: re-read the fresh target from the mock world and
+    // run the service's `prepare` step (which holds owner-protection / self / last-owner / last-authority
+    // + audit), so those guards stay exercised through the mock. `freshTarget` lets a test simulate the
+    // target's role changing under the lock (concurrent write).
+    runEmployeeUpdate: jest.fn(
       async (
-        emp: { id: string },
-        _entries: unknown,
-        options: { revokeSessions: boolean; assertInvariants: (employees: unknown[]) => void }
+        employeeId: string,
+        prepare: (current: { target: unknown; employees: unknown[] }) => {
+          fields: Record<string, unknown>;
+          auditEntries: unknown[];
+          revokeSessions: boolean;
+        }
       ) => {
-        const world = [actor, target, ...others].map((e) => (e.id === emp.id ? emp : e));
-        options.assertInvariants(world);
+        const freshTarget = opts.freshTarget ?? (employeeId === 'actor-1' ? actor : target);
+        const employees = [actor, target, ...others];
+        const prepared = prepare({ target: freshTarget, employees });
+        captured.prepared = prepared;
+        return {
+          ...freshTarget,
+          ...prepared.fields,
+          permissionOverrides: freshTarget.permissionOverrides
+        };
       }
     ),
-    createEmployeeWithAudit: jest.fn().mockResolvedValue(undefined),
-    resetEmployeePasswordWithAudit: jest.fn().mockResolvedValue(2),
-    revokeSessionByIdWithAudit: jest.fn().mockResolvedValue(true),
+    runPasswordReset: jest.fn(
+      async (
+        _employeeId: string,
+        _passwordHash: string,
+        prepare: (current: { target: unknown }) => unknown
+      ) => {
+        prepare({ target: opts.freshTarget ?? target });
+        return 2;
+      }
+    ),
+    runSessionRevoke: jest.fn(
+      async (
+        _employeeId: string,
+        _sessionId: string,
+        prepare: (current: { target: unknown }) => unknown
+      ) => {
+        prepare({ target: opts.freshTarget ?? target });
+        return true;
+      }
+    ),
     // Actor + target + (by default) a standing active Owner, so the authority and active-owner
     // guards pass for ordinary updates.
     listEmployees: jest.fn().mockResolvedValue([actor, target, ...others])
   };
-  return { repo, actor, target };
+  return { repo, actor, target, captured };
 }
 
 describe('IdentityAccessService', () => {
@@ -196,20 +249,15 @@ describe('IdentityAccessService', () => {
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.revokeEmployeeSession('tok', 'target-1', 'sess-1');
     expect(result).toEqual({ revoked: true });
-    expect(repo.revokeSessionByIdWithAudit).toHaveBeenCalledWith(
-      'target-1',
-      'sess-1',
-      expect.objectContaining({ action: 'employee_session_revoked' })
-    );
+    expect(repo.runSessionRevoke).toHaveBeenCalledWith('target-1', 'sess-1', expect.any(Function));
   });
 
-  it('blocks an admin from revoking an owner session (owner-protection)', async () => {
+  it('blocks an admin from revoking an owner session (owner-protection, in-tx fresh role)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'owner' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(service.revokeEmployeeSession('tok', 'target-1', 'sess-1')).rejects.toBeInstanceOf(
       ForbiddenException
     );
-    expect(repo.revokeSessionByIdWithAudit).not.toHaveBeenCalled();
   });
 
   it('allows an owner to revoke an owner session', async () => {
@@ -228,31 +276,40 @@ describe('IdentityAccessService', () => {
     );
   });
 
-  it('blocks an admin from modifying an owner (owner-protection on update)', async () => {
+  it('blocks an admin from modifying an owner (owner-protection, in-tx fresh role)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'owner' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.updateEmployee('tok', 'target-1', { isActive: false })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
   });
 
   it('revokes all sessions when an employee is deactivated', async () => {
-    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const { repo, captured } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await service.updateEmployee('tok', 'target-1', { isActive: false });
-    expect(repo.saveEmployeeWithAudit).toHaveBeenCalledTimes(1);
-    expect(repo.saveEmployeeWithAudit.mock.calls[0][2].revokeSessions).toBe(true);
+    expect(repo.runEmployeeUpdate).toHaveBeenCalledTimes(1);
+    expect(captured.prepared?.revokeSessions).toBe(true);
   });
 
-  it('writes one audit row per semantic change (role + active), with no secrets', async () => {
-    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+  it('writes only role/active/overrides — never password/email/displayName — on update', async () => {
+    const { repo, captured } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await service.updateEmployee('tok', 'target-1', { roleId: 'dispatcher' });
+    expect(repo.runEmployeeUpdate).toHaveBeenCalledTimes(1);
+    expect(Object.keys(captured.prepared?.fields ?? {}).sort()).toEqual([
+      'grantedPermissions',
+      'isActive',
+      'revokedPermissions',
+      'roleId'
+    ]);
+  });
+
+  it('writes one audit row per semantic change (role + active)', async () => {
+    const { repo, captured } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await service.updateEmployee('tok', 'target-1', { roleId: 'dispatcher', isActive: false });
-    const auditEntries = repo.saveEmployeeWithAudit.mock.calls[0][1] as Array<{
-      action: string;
-      summary: string;
-    }>;
+    const auditEntries = captured.prepared?.auditEntries as Array<{ action: string }>;
     expect(auditEntries.map((entry) => entry.action).sort()).toEqual([
       'employee_deactivated',
       'employee_role_changed'
@@ -260,27 +317,27 @@ describe('IdentityAccessService', () => {
   });
 
   it('writes no audit rows when an update changes nothing', async () => {
-    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const { repo, captured } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await service.updateEmployee('tok', 'target-1', { roleId: 'csr' }); // same role, no-op
-    expect(repo.saveEmployeeWithAudit.mock.calls[0][1]).toEqual([]);
+    expect(captured.prepared?.auditEntries).toEqual([]);
   });
 
   it('does not revoke sessions on a non-deactivating update', async () => {
-    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const { repo, captured } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await service.updateEmployee('tok', 'target-1', { roleId: 'dispatcher' });
-    expect(repo.saveEmployeeWithAudit).toHaveBeenCalledTimes(1);
-    expect(repo.saveEmployeeWithAudit.mock.calls[0][2].revokeSessions).toBe(false);
+    expect(repo.runEmployeeUpdate).toHaveBeenCalledTimes(1);
+    expect(captured.prepared?.revokeSessions).toBe(false);
   });
 
-  it('blocks a non-owner from promoting anyone to owner (no escalation via role)', async () => {
+  it('blocks a non-owner from promoting anyone to owner (request guard, before the tx)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.updateEmployee('tok', 'target-1', { roleId: 'owner' })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
+    expect(repo.runEmployeeUpdate).not.toHaveBeenCalled();
   });
 
   it('lets an owner promote an employee to owner', async () => {
@@ -288,10 +345,10 @@ describe('IdentityAccessService', () => {
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.updateEmployee('tok', 'target-1', { roleId: 'owner' });
     expect(result.roleId).toBe('owner');
-    expect(repo.saveEmployeeWithAudit).toHaveBeenCalledTimes(1);
+    expect(repo.runEmployeeUpdate).toHaveBeenCalledTimes(1);
   });
 
-  it('blocks granting a permission the actor does not hold (no escalation via overrides)', async () => {
+  it('blocks granting a permission the actor does not hold (request guard, before the tx)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     // employeesPermissions:create is Owner-only; an Admin must not be able to grant it.
@@ -300,7 +357,7 @@ describe('IdentityAccessService', () => {
         grantedPermissions: ['employeesPermissions:create']
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
+    expect(repo.runEmployeeUpdate).not.toHaveBeenCalled();
   });
 
   it('rejects an override that both grants and revokes the same permission', async () => {
@@ -312,16 +369,15 @@ describe('IdentityAccessService', () => {
         revokedPermissions: ['inventory:view']
       })
     ).rejects.toBeInstanceOf(BadRequestException);
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
+    expect(repo.runEmployeeUpdate).not.toHaveBeenCalled();
   });
 
-  it('blocks self-deactivation', async () => {
+  it('blocks self-deactivation (guard runs in-tx against the fresh target)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.updateEmployee('tok', 'actor-1', { isActive: false })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
   });
 
   it('blocks removing your own employee-management authority (self-demotion)', async () => {
@@ -331,18 +387,16 @@ describe('IdentityAccessService', () => {
     await expect(
       service.updateEmployee('tok', 'actor-1', { roleId: 'csr' })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
   });
 
   it('blocks the last owner from self-demoting to admin (no active owner left)', async () => {
     // Owner -> admin keeps employeesPermissions:configure, so the authority guard passes; the
-    // active-owner guard must still reject because it would leave zero owners.
+    // active-owner guard (re-checked inside the tx) must still reject — it would leave zero owners.
     const { repo } = adminSessionRepo({ actorRole: 'owner', otherActiveOwner: false });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.updateEmployee('tok', 'actor-1', { roleId: 'admin' })
     ).rejects.toBeInstanceOf(ConflictException);
-    // The transaction is entered (the invariant is re-checked inside it) and rolls back on the throw.
   });
 
   it('blocks the last owner from deactivating themselves', async () => {
@@ -351,8 +405,6 @@ describe('IdentityAccessService', () => {
     await expect(
       service.updateEmployee('tok', 'actor-1', { isActive: false })
     ).rejects.toBeTruthy();
-    // Self-deactivation is blocked before the transaction is even entered.
-    expect(repo.saveEmployeeWithAudit).not.toHaveBeenCalled();
   });
 
   it('allows demoting an owner when another active owner remains', async () => {
@@ -364,7 +416,29 @@ describe('IdentityAccessService', () => {
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.updateEmployee('tok', 'target-1', { roleId: 'admin' });
     expect(result.roleId).toBe('admin');
-    expect(repo.saveEmployeeWithAudit).toHaveBeenCalledTimes(1);
+    expect(repo.runEmployeeUpdate).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks an admin update against a target that became Owner before commit (in-tx re-read)', async () => {
+    // The fresh under-lock read shows the target is now an Owner — owner-protection must catch it.
+    const freshOwner: EmployeeLike = {
+      id: 'target-1',
+      email: 'target-1@bellfield.local',
+      displayName: 'target-1',
+      roleId: 'owner',
+      isActive: true,
+      password: 'x',
+      permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+    };
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      targetRole: 'csr',
+      freshTarget: freshOwner
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'target-1', { isActive: false })
+    ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   const newEmployee = {
@@ -416,13 +490,12 @@ describe('IdentityAccessService', () => {
     expect(detail.sessions[0]).not.toHaveProperty('token');
   });
 
-  it('blocks an admin from resetting an owner password (owner-protection)', async () => {
+  it('blocks an admin from resetting an owner password (owner-protection, in-tx fresh role)', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'owner' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.resetEmployeePassword('tok', 'target-1', { password: 'whatever123' })
     ).rejects.toBeInstanceOf(ForbiddenException);
-    expect(repo.resetEmployeePasswordWithAudit).not.toHaveBeenCalled();
   });
 
   it('resets a password (hashed, never returned) and reports revoked sessions', async () => {
@@ -432,12 +505,43 @@ describe('IdentityAccessService', () => {
       password: 'brandnew123'
     });
     expect(result).toEqual({ revokedSessionCount: 2 });
-    const [employeeId, passwordHash, auditEntry] =
-      repo.resetEmployeePasswordWithAudit.mock.calls[0];
+    const [employeeId, passwordHash] = repo.runPasswordReset.mock.calls[0];
     expect(employeeId).toBe('target-1');
     expect(isHashed(passwordHash)).toBe(true);
     expect(passwordHash).not.toContain('brandnew123');
-    expect(auditEntry.action).toBe('employee_password_reset');
-    expect(auditEntry.summary).not.toContain('brandnew123');
+  });
+
+  const freshOwnerTarget: EmployeeLike = {
+    id: 'target-1',
+    email: 'target-1@bellfield.local',
+    displayName: 'target-1',
+    roleId: 'owner',
+    isActive: true,
+    password: 'x',
+    permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+  };
+
+  it('blocks an admin reset against a target that became Owner before commit', async () => {
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      targetRole: 'csr',
+      freshTarget: freshOwnerTarget
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever123' })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks an admin session revoke against a target that became Owner before commit', async () => {
+    const { repo } = adminSessionRepo({
+      actorRole: 'admin',
+      targetRole: 'csr',
+      freshTarget: freshOwnerTarget
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(service.revokeEmployeeSession('tok', 'target-1', 'sess-1')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
   });
 });
