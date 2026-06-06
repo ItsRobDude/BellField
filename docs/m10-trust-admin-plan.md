@@ -407,8 +407,12 @@ totalValue }` company-wide, weighted-average from `inventory_movements.extended_
   shell wiring (mirrors the History slice). No in-surface report builder.
 - Fixed report cards / simple selector: AR/Open Balances always; Job Profitability only with
   `jobCosting:view`; Inventory Valuation only with `inventory:view`.
-- Export buttons render only when `reports:export` is present **and** the user holds that report's view
-  gates.
+- **Export is server-side and server-gated.** Each report has a sibling `GET .../<report>/export`
+  endpoint that returns CSV (`text/csv` + `Content-Disposition`), gated on the report's view
+  permissions **plus `reports:export`** — a user who can view a report still gets a `403` on export
+  without `reports:export`. The office button (gated the same way in the UI) just downloads the blob;
+  the permission is enforced on the server, not UI-only. (Decided in review: `reports:export` is a real
+  permission, so it must be enforced server-side.)
 - Incomplete profitability rows show a visible **"Cost incomplete"** badge with the unresolved line
   count.
 
