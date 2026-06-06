@@ -307,14 +307,124 @@ interface HistoryResponse {
 
 ---
 
+## 5c. Slice 3 — Fixed Reporting (LOCKED)
+
+A fixed **Reports** surface backed by read-only API projections. No report builder, no editable
+report definitions, no new accounting math invented in the UI or the report layer — every number is
+**reused** from an existing, tested calculation.
+
+### 5c.0 Confirmations (locked)
+
+- **Current-state snapshots, not as-of history.** v1 reports reflect the live current state ("what is
+  owed / costed / on hand right now"). No "as of any past date" accounting. Each response carries a
+  `generatedAt` stamp; that is the only time dimension.
+- **No schema changes for v1.** Every projection reads existing tables (`invoices`, `payments`,
+  `jobs`, `customers`, `job_cost_events`, `job_cost_snapshots`, `inventory_movements`,
+  `inventory_items`, `inventory_locations`). No migration.
+- **No "low stock" report.** `inventory_items` has **no** reorder / minimum / maximum / par-level /
+  threshold column (confirmed: columns are `id, sku, name, kind, unit_of_measure, default_unit_cost,
+description, is_active, created_at, updated_at`). Low-stock is deferred until a threshold model
+  exists. **Truck stock** is representable today by filtering `inventory_locations.kind = 'truck'`
+  (kinds: `warehouse | truck | other`) — not a separate field-app concept.
+- **No cost or revenue math is duplicated.** AR + profitability revenue reuse the bookkeeping
+  open-balance CTE; profitability cost reuses the M9 rollup/snapshot; valuation reuses the inventory
+  on-hand projection. The report layer only _aggregates totals_ over rows it did not compute.
+
+### 5c.1 Permission matrix (the gates are NOT redundant)
+
+Primary gate `reports:view` via `getAuthorizedEmployee(token, 'reports:view', ['office-web'])`, then a
+**secondary `effectivePermissions.includes(...)` check** per report (throw `ForbiddenException` if
+missing). Export adds `reports:export`. Derived from `default-role-templates.ts`:
+
+| Capability          | Gate                               | owner | admin | dispatcher | bookKeeping | csr / tech |
+| ------------------- | ---------------------------------- | :---: | :---: | :--------: | :---------: | :--------: |
+| Reports surface     | `reports:view`                     |  ✅   |  ✅   |     ✅     |     ✅      |     ❌     |
+| AR / Open Balances  | `reports:view` + `invoices:view`   |  ✅   |  ✅   |     ✅     |     ✅      |     ❌     |
+| Job Profitability   | `reports:view` + `jobCosting:view` |  ✅   |  ✅   |     ❌     |     ✅      |     ❌     |
+| Inventory Valuation | `reports:view` + `inventory:view`  |  ✅   |  ✅   |     ❌     |     ❌      |     ❌     |
+| Export (any report) | above + `reports:export`           |  ✅   |  ✅   |     ❌     |     ✅      |     ❌     |
+
+So dispatcher sees the surface with only the AR card and no export; bookKeeping gets AR + profitability
+
+- export but not inventory; owner/admin get everything. This matrix is pinned by tests.
+
+### 5c.2 Slice 3A — Reporting foundation + AR/Open Balances
+
+- New: `packages/contracts/src/reporting.ts` (+ barrel), `apps/api/src/modules/reporting/*`
+  (`reporting.module.ts`, `reporting.controller.ts`, `reporting.service.ts`),
+  `apps/office-web/src/lib/reporting-api.ts`, and an `OfficeReportsSurface`.
+- Endpoint: `GET /operations/reports/ar-open-balances` → `ArOpenBalancesReport` (see contract).
+- **Reuse rule:** extract the billed/paid CTE + select currently inlined in
+  `BookkeepingRepository.listOpenBalances(limit)` (`bookkeeping.repository.ts:90`) into a shared,
+  un-limited `listOpenBalanceRows()` method. `listOpenBalances(limit)` keeps its `limit $1` by
+  wrapping it; the report calls the un-limited variant and sums totals. One source of truth for:
+  posted main + adjustment increase billed; posted credit reduces billed; non-void payments reduce
+  amount due; void payments excluded; rows only where `amountDue > 0`; `roundMoney` everywhere.
+- Totals: `jobCount = rows.length`, and column sums of `netBilled` / `paidTotal` / `amountDue`
+  (these are open-AR totals — sums across the `amountDue > 0` rows by definition).
+
+### 5c.3 Slice 3B — Job Profitability
+
+- Endpoint: `GET /operations/reports/job-profitability` → `JobProfitabilityReport`.
+- Gate: `reports:view` + `jobCosting:view`.
+- **Revenue** = posted invoices only (`main + adjustment − credit`) — the same billed CTE as AR,
+  reused, never invoice-line `unitCost`.
+- **Cost** = the M9 rollup/snapshot: per finalized job use `getCurrentJobCostSnapshot`, else
+  `computeJobCostRollup` (`job-cost-rollup-utils.ts`) → `materialCost` / `laborCost` / `expenseCost` /
+  `totalCost` / `unresolvedLineCount` / `costComplete`. `isFinalized` from `isFinalJobStatus(status)`
+  (`completed | closed | cancelled`).
+- `marginBasisPoints`: **`null`** when revenue is 0 **or** `costComplete = false` (v1 prefers null over
+  a misleading partial margin); else `round(profit / revenue * 10000)`. The UI labels incomplete rows.
+- Totals: `jobCount`, summed `revenue` / `knownCost` / `knownProfit`,
+  `incompleteJobCount = count(costComplete === false)`, `unresolvedLineCount = Σ row.unresolvedLineCount`.
+- **DECISION (confirm): row scope = jobs with ≥1 posted invoice.** Revenue recognition defines the
+  population; the billed CTE already yields exactly these jobs. Cost is attached per job. (Alternative:
+  also include not-yet-invoiced jobs that have cost — deferred; it muddies "profitability".)
+- **DECISION (confirm): v1 loops per job for cost (N+1).** `computeJobCostRollup` is per-job and we
+  will NOT duplicate it as batch SQL (drift risk the reviewer flagged). Revenue is one set-based query;
+  cost is a bounded per-job loop over the posted-invoice job set. Reports are on-demand owner/admin and
+  job counts are modest. A shared batch rollup helper is a noted follow-up if it ever gets slow.
+
+### 5c.4 Slice 3C — Inventory Valuation
+
+- Endpoint: `GET /operations/reports/inventory-valuation` → `InventoryValuationReport`.
+- Gate: `reports:view` + `inventory:view`.
+- **Reuse rule:** `InventoryRepository.getOnHand()` (`inventory.repository.ts:195`) already returns
+  exactly `{ itemId, itemName, itemKind, locationId, locationName, quantity, averageUnitCost,
+totalValue }` company-wide, weighted-average from `inventory_movements.extended_cost`, excluding
+  zero balances. The report calls it (or its extracted query) and adds totals — no new cost math.
+- Totals: `rowCount = rows.length`, `totalQuantity = Σ quantity`, `totalValue = Σ totalValue`.
+- Zero balances stay excluded (no product reason to show them). No low-stock. Truck-only is a
+  `location.kind === 'truck'` filter, deferred unless asked.
+
+### 5c.5 Office UI
+
+- Top-level **Reports** nav gated by `reports:view`; logic in `office-reports-surface.tsx`, minimal
+  shell wiring (mirrors the History slice). No in-surface report builder.
+- Fixed report cards / simple selector: AR/Open Balances always; Job Profitability only with
+  `jobCosting:view`; Inventory Valuation only with `inventory:view`.
+- Export buttons render only when `reports:export` is present **and** the user holds that report's view
+  gates.
+- Incomplete profitability rows show a visible **"Cost incomplete"** badge with the unresolved line
+  count.
+
+### 5c.6 Tests + smoke
+
+- API: AR totals across posted main / adjustment / credit / payment / void payment; AR excludes
+  fully-paid & overpaid jobs; profitability revenue drops for credits; profitability uses the rollup
+  and flags incomplete cost; profitability 403 without `jobCosting:view`; valuation matches
+  weighted-average on-hand; valuation 403 without `inventory:view`; export 403 without `reports:export`.
+- Office: Reports nav visible with `reports:view`; profitability card hidden without `jobCosting:view`;
+  inventory card hidden without `inventory:view`; incomplete-cost badge renders; export hidden without
+  `reports:export`.
+- Live + browser smoke against the reseeded ledger.
+
+---
+
 ## 6. Later slices (sketch — locked in their own pass)
 
 - **History / Audit read model:** locked — see §5b.
-- **Fixed Reporting (read-only projections, tested totals):**
-  - Open balance / AR summary (from invoices + payments).
-  - Job profitability summary with **incomplete-cost flags** (reuse the M9 rollup's `costComplete` /
-    `unresolvedLineCount`; never fabricate cost).
-  - Inventory valuation / low-stock / truck-stock snapshot (from `inventory_movements` on-hand).
+- **Fixed Reporting (read-only projections, tested totals):** locked — see §5c.
 - **Owner/Admin controls (identity-access writes):** employee active/inactive review, role/permission
   review, lost-device/session revoke (if the session model supports it), password reset (if auth
   supports it cleanly), admin-only review surface in office.
