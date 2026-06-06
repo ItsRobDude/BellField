@@ -51,6 +51,30 @@ export class IdentityAccessController {
     );
   }
 
+  @Get('employees/:employeeId/sessions')
+  async getEmployeeSessions(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('employeeId') employeeId: string
+  ) {
+    return this.identityAccessService.listEmployeeSessions(
+      this.getBearerToken(authorizationHeader),
+      employeeId
+    );
+  }
+
+  @Post('employees/:employeeId/sessions/:sessionId/revoke')
+  async revokeEmployeeSession(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('employeeId') employeeId: string,
+    @Param('sessionId') sessionId: string
+  ) {
+    return this.identityAccessService.revokeEmployeeSession(
+      this.getBearerToken(authorizationHeader),
+      employeeId,
+      sessionId
+    );
+  }
+
   private getBearerToken(authorizationHeader: string | undefined): string {
     if (!authorizationHeader) {
       return '';

@@ -99,7 +99,10 @@ export type LoginResponseDto = LoginResponse;
 export type UpdateEmployeeRequestDto = UpdateEmployeeRequest;
 
 export type SessionRecord = {
+  /** Bearer token — secret, the auth lookup key. Never surfaced to clients as an identifier. */
   token: string;
+  /** Non-secret id surfaced to the admin UI for listing/revoking sessions. */
+  id: string;
   employeeId: string;
   surface: LoginSurface;
   deviceLabel?: string;

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { EmployeeSessionSummary } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString, toTextArray } from '../../database/database-row.utils';
 import type { EmployeeRecord, SessionRecord } from './identity-access.types';
@@ -16,7 +17,15 @@ type EmployeeRow = {
 
 type SessionRow = {
   token: string;
+  id: string;
   employeeId: string;
+  surface: SessionRecord['surface'];
+  deviceLabel: string | null;
+  issuedAt: string | Date;
+};
+
+type SessionSummaryRow = {
+  id: string;
   surface: SessionRecord['surface'];
   deviceLabel: string | null;
   issuedAt: string | Date;
@@ -129,11 +138,12 @@ export class IdentityAccessRepository {
   async createSession(session: SessionRecord): Promise<void> {
     await this.databaseService.query(
       `
-        insert into sessions (token, employee_id, surface, device_label, issued_at)
-        values ($1, $2, $3, $4, $5)
+        insert into sessions (token, id, employee_id, surface, device_label, issued_at)
+        values ($1, $2, $3, $4, $5, $6)
       `,
       [
         session.token,
+        session.id,
         session.employeeId,
         session.surface,
         session.deviceLabel ?? null,
@@ -147,6 +157,7 @@ export class IdentityAccessRepository {
       `
         select
           token,
+          id,
           employee_id as "employeeId",
           surface,
           device_label as "deviceLabel",
@@ -163,6 +174,42 @@ export class IdentityAccessRepository {
 
   async deleteSession(sessionToken: string): Promise<void> {
     await this.databaseService.query('delete from sessions where token = $1', [sessionToken]);
+  }
+
+  /** Non-secret session summaries for an employee (newest first) — never includes the bearer token. */
+  async listSessionsForEmployee(employeeId: string): Promise<EmployeeSessionSummary[]> {
+    const result = await this.databaseService.query<SessionSummaryRow>(
+      `
+        select id, surface, device_label as "deviceLabel", issued_at as "issuedAt"
+        from sessions
+        where employee_id = $1
+        order by issued_at desc
+      `,
+      [employeeId]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      surface: row.surface,
+      deviceLabel: row.deviceLabel ?? undefined,
+      issuedAt: toIsoString(row.issuedAt)
+    }));
+  }
+
+  /** Revoke a single session by its non-secret id, scoped to its owner. Returns true if one was deleted. */
+  async revokeSessionById(employeeId: string, sessionId: string): Promise<boolean> {
+    const result = await this.databaseService.query(
+      'delete from sessions where id = $1 and employee_id = $2',
+      [sessionId, employeeId]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /** Revoke every session for an employee (used when deactivating). Returns the count removed. */
+  async revokeAllSessionsForEmployee(employeeId: string): Promise<number> {
+    const result = await this.databaseService.query('delete from sessions where employee_id = $1', [
+      employeeId
+    ]);
+    return result.rowCount ?? 0;
   }
 
   private toEmployeeRecord(row: EmployeeRow): EmployeeRecord {
@@ -187,6 +234,7 @@ export class IdentityAccessRepository {
   private toSessionRecord(row: SessionRow): SessionRecord {
     return {
       token: row.token,
+      id: row.id,
       employeeId: row.employeeId,
       surface: row.surface,
       deviceLabel: row.deviceLabel ?? undefined,
