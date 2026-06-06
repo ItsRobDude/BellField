@@ -104,6 +104,7 @@ export function OfficeWorkspaceShell({
   const canViewHistory = employee.effectivePermissions.includes('history:view');
   const canViewReports = employee.effectivePermissions.includes('reports:view');
   const canExportReports = employee.effectivePermissions.includes('reports:export');
+  const canViewEmployees = employee.effectivePermissions.includes('employeesPermissions:view');
   const canViewPurchasing = employee.effectivePermissions.includes('purchasing:view');
   const canCreatePurchasing = employee.effectivePermissions.includes('purchasing:create');
   const canEditPurchasing = employee.effectivePermissions.includes('purchasing:edit');
@@ -779,6 +780,7 @@ export function OfficeWorkspaceShell({
       canViewPurchasing={canViewPurchasing}
       canViewBookkeeping={canViewInvoice}
       canViewReports={canViewReports}
+      canViewEmployees={canViewEmployees}
       canViewSystem={canViewSystem}
       canViewHistory={canViewHistory}
       noticeMessage={noticeMessage}
@@ -847,6 +849,10 @@ export function OfficeWorkspaceShell({
           canExportReports,
           canViewProfitability: canViewJobCosting,
           canViewInventoryValuation: canViewInventory
+        }}
+        employees={{
+          apiBaseUrl,
+          sessionToken
         }}
         jobDetail={{
           selectedJobId,
