@@ -1,4 +1,6 @@
 import {
+  BadRequestException,
+  ConflictException,
   ForbiddenException,
   Injectable,
   NotFoundException,
@@ -135,8 +137,34 @@ export class IdentityAccessService {
       throw new NotFoundException('Employee not found.');
     }
 
-    // Owner-protection: only an Owner may modify an Owner (role/active/overrides).
+    // Owner-protection: only an Owner may modify an existing Owner (role/active/overrides).
     this.assertCanActOnTarget(actor.roleId, existingEmployee.roleId);
+
+    // Elevation guards — evaluate the REQUESTED result, not just the current role.
+    // Promoting anyone (incl. self) to Owner requires an Owner actor.
+    if (update.roleId === 'owner' && actor.roleId !== 'owner') {
+      throw new ForbiddenException('Only an owner can promote an employee to owner.');
+    }
+    // A permission cannot be both granted and revoked.
+    if (update.grantedPermissions && update.revokedPermissions) {
+      const revoked = new Set(update.revokedPermissions);
+      const conflict = update.grantedPermissions.find((key) => revoked.has(key));
+      if (conflict) {
+        throw new BadRequestException(
+          `Permission "${conflict}" cannot be both granted and revoked.`
+        );
+      }
+    }
+    // No privilege escalation via overrides: an actor can only grant permissions it itself holds.
+    if (update.grantedPermissions) {
+      const actorPermissions = new Set(actor.effectivePermissions);
+      const escalated = update.grantedPermissions.find((key) => !actorPermissions.has(key));
+      if (escalated) {
+        throw new ForbiddenException(
+          `You cannot grant a permission you do not hold: ${escalated}.`
+        );
+      }
+    }
 
     const wasActive = existingEmployee.isActive;
 
@@ -160,6 +188,23 @@ export class IdentityAccessService {
         update.revokedPermissions
       );
     }
+
+    // Self-protection: you cannot lock yourself out (deactivate or remove your own management authority).
+    if (employeeId === actor.id) {
+      if (!existingEmployee.isActive) {
+        throw new ForbiddenException('You cannot deactivate your own account.');
+      }
+      if (
+        !this.resolveEffectivePermissions(existingEmployee).includes(
+          'employeesPermissions:configure'
+        )
+      ) {
+        throw new ForbiddenException('You cannot remove your own employee-management authority.');
+      }
+    }
+
+    // Last-authority guard: the change must not leave zero active employees who can manage employees.
+    await this.assertRetainsEmployeeAuthority(employeeId, existingEmployee);
 
     await this.identityAccessRepository.saveEmployee(existingEmployee);
 
@@ -215,6 +260,31 @@ export class IdentityAccessService {
   ): void {
     if (targetRoleId === 'owner' && actorRoleId !== 'owner') {
       throw new ForbiddenException('Only an owner can manage an owner account.');
+    }
+  }
+
+  /**
+   * Ensure a pending change leaves at least one ACTIVE employee with effective
+   * `employeesPermissions:configure`. Evaluated on the hypothetical post-change world (the target
+   * replaced by its resulting state) across all employees — not a naive role check, since overrides
+   * grant/revoke the authority.
+   */
+  private async assertRetainsEmployeeAuthority(
+    employeeId: string,
+    resultingEmployee: EmployeeRecord
+  ): Promise<void> {
+    const employees = await this.identityAccessRepository.listEmployees();
+    const stillHasAuthority = employees.some((employee) => {
+      const effective = employee.id === employeeId ? resultingEmployee : employee;
+      return (
+        effective.isActive &&
+        this.resolveEffectivePermissions(effective).includes('employeesPermissions:configure')
+      );
+    });
+    if (!stillHasAuthority) {
+      throw new ConflictException(
+        'This change would leave no active employee who can manage employees.'
+      );
     }
   }
 
