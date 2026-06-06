@@ -6,6 +6,9 @@ import type {
   EmployeeSessionSummary,
   EmployeeSummary,
   LoginResponse,
+  PermissionKey,
+  ResetEmployeePasswordResponse,
+  RevokeEmployeeSessionResponse,
   RoleTemplate,
   RoleTemplateListResponse
 } from '@bellfield/contracts';
@@ -17,6 +20,9 @@ export type {
   EmployeeSessionSummary,
   EmployeeSummary,
   LoginResponse,
+  PermissionKey,
+  ResetEmployeePasswordResponse,
+  RevokeEmployeeSessionResponse,
   RoleTemplate
 };
 
@@ -117,6 +123,8 @@ export async function updateOfficeEmployee(input: {
   sessionToken: string;
   roleId?: EmployeeRoleId;
   isActive?: boolean;
+  grantedPermissions?: PermissionKey[];
+  revokedPermissions?: PermissionKey[];
   apiBaseUrl?: string;
 }): Promise<EmployeeSummary> {
   return requestJson<EmployeeSummary>(`/identity/employees/${input.employeeId}`, {
@@ -127,7 +135,74 @@ export async function updateOfficeEmployee(input: {
     },
     body: JSON.stringify({
       roleId: input.roleId,
+      isActive: input.isActive,
+      grantedPermissions: input.grantedPermissions,
+      revokedPermissions: input.revokedPermissions
+    })
+  });
+}
+
+/** Create an employee (Owner-only `employeesPermissions:create`). Password is hashed, never returned. */
+export async function createOfficeEmployee(input: {
+  sessionToken: string;
+  email: string;
+  displayName: string;
+  roleId: EmployeeRoleId;
+  password: string;
+  isActive?: boolean;
+  apiBaseUrl?: string;
+}): Promise<EmployeeSummary> {
+  return requestJson<EmployeeSummary>('/identity/employees', {
+    apiBaseUrl: input.apiBaseUrl,
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${input.sessionToken}`
+    },
+    body: JSON.stringify({
+      email: input.email,
+      displayName: input.displayName,
+      roleId: input.roleId,
+      password: input.password,
       isActive: input.isActive
     })
   });
+}
+
+/** Admin password reset: revokes all of the target's sessions; the password is never echoed back. */
+export async function resetOfficeEmployeePassword(input: {
+  employeeId: string;
+  sessionToken: string;
+  password: string;
+  apiBaseUrl?: string;
+}): Promise<ResetEmployeePasswordResponse> {
+  return requestJson<ResetEmployeePasswordResponse>(
+    `/identity/employees/${input.employeeId}/password-reset`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.sessionToken}`
+      },
+      body: JSON.stringify({ password: input.password })
+    }
+  );
+}
+
+/** Revoke one device session of an employee by its non-secret id. */
+export async function revokeOfficeEmployeeSession(input: {
+  employeeId: string;
+  sessionId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<RevokeEmployeeSessionResponse> {
+  return requestJson<RevokeEmployeeSessionResponse>(
+    `/identity/employees/${input.employeeId}/sessions/${input.sessionId}/revoke`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${input.sessionToken}`
+      }
+    }
+  );
 }

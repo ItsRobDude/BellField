@@ -1,17 +1,26 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import {
   getEmployeeDetail,
   getOfficeEmployees,
+  getOfficeRoles,
   type EmployeeAdminDetailResponse,
-  type EmployeeSummary
+  type EmployeeRoleId,
+  type EmployeeSummary,
+  type RoleTemplate
 } from '@/lib/identity-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { OfficeEmployeeDetailPanel } from './office-employee-detail-panel';
+import { OfficeEmployeeCreateForm } from './office-employee-create-form';
 
 export type OfficeEmployeeAccessSurfaceProps = {
   apiBaseUrl: string;
   sessionToken: string;
+  canConfigure: boolean;
+  canCreate: boolean;
+  actorId: string;
+  actorRoleId: EmployeeRoleId;
 };
 
 const layoutStyle: CSSProperties = {
@@ -38,45 +47,6 @@ const listRowActiveStyle: CSSProperties = {
   background: '#eef6f3'
 };
 const listRowSubStyle: CSSProperties = { fontSize: 12, color: '#5b6672', marginTop: 2 };
-const sectionStyle: CSSProperties = { marginTop: 16 };
-const sectionLabelStyle: CSSProperties = {
-  fontSize: 11,
-  textTransform: 'uppercase',
-  color: '#5b6672',
-  fontWeight: 700,
-  marginBottom: 6
-};
-const badgeStyle: CSSProperties = {
-  fontSize: 12,
-  fontWeight: 600,
-  borderRadius: 10,
-  padding: '1px 8px'
-};
-const activeBadge: CSSProperties = { ...badgeStyle, color: '#176b5b', background: '#e3f3ee' };
-const inactiveBadge: CSSProperties = { ...badgeStyle, color: '#8a5a00', background: '#fdf2dc' };
-const chipBase: CSSProperties = {
-  display: 'inline-block',
-  fontSize: 12,
-  borderRadius: 8,
-  padding: '1px 8px',
-  margin: '0 4px 4px 0'
-};
-const grantChip: CSSProperties = { ...chipBase, color: '#176b5b', background: '#e3f3ee' };
-const revokeChip: CSSProperties = { ...chipBase, color: '#b42318', background: '#fbe9e7' };
-const areaGroupStyle: CSSProperties = { marginBottom: 8 };
-const areaNameStyle: CSSProperties = { fontWeight: 600, fontSize: 13 };
-const actionListStyle: CSSProperties = { color: '#33455c', fontSize: 13 };
-
-/** Group `area:action` permission keys by area, returning sorted actions per area. */
-function groupByArea(keys: string[]): Array<{ area: string; actions: string[] }> {
-  const groups = new Map<string, string[]>();
-  for (const key of [...keys].sort()) {
-    const [area, action] = key.split(':');
-    if (!groups.has(area)) groups.set(area, []);
-    groups.get(area)!.push(action ?? key);
-  }
-  return [...groups.entries()].map(([area, actions]) => ({ area, actions }));
-}
 
 function overrideCount(employee: EmployeeSummary): number {
   return (
@@ -85,26 +55,39 @@ function overrideCount(employee: EmployeeSummary): number {
   );
 }
 
-// Top-level Employees surface (M10 slice 4D). Read path: list + detail + effective permissions +
-// overrides (read-only) + device sessions. Gated employeesPermissions:view. Mutations land in 4D-ii.
+// Top-level Employees surface (M10 slice 4D). 4D-i added the read path; 4D-ii adds the mutations
+// (role/active/override save, password reset, session revoke, create) — all gated and with the server
+// authoritative for every guard.
 export function OfficeEmployeeAccessSurface({
   apiBaseUrl,
-  sessionToken
+  sessionToken,
+  canConfigure,
+  canCreate,
+  actorId,
+  actorRoleId
 }: OfficeEmployeeAccessSurfaceProps) {
   const [employees, setEmployees] = useState<EmployeeSummary[]>([]);
+  const [roles, setRoles] = useState<RoleTemplate[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [detail, setDetail] = useState<EmployeeAdminDetailResponse | null>(null);
   const [isListLoading, setIsListLoading] = useState(true);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [isCreating, setIsCreating] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     setIsListLoading(true);
     setErrorMessage(null);
-    getOfficeEmployees({ apiBaseUrl, sessionToken })
-      .then((result) => {
-        if (active) setEmployees(result.employees);
+    Promise.all([
+      getOfficeEmployees({ apiBaseUrl, sessionToken }),
+      getOfficeRoles({ apiBaseUrl, sessionToken })
+    ])
+      .then(([employeeResult, roleResult]) => {
+        if (active) {
+          setEmployees(employeeResult.employees);
+          setRoles(roleResult.roles);
+        }
       })
       .catch((error) => {
         if (active)
@@ -146,9 +129,36 @@ export function OfficeEmployeeAccessSurface({
     };
   }, [selectedId, apiBaseUrl, sessionToken]);
 
+  // Reload the list (and the open detail) after a mutation so the UI reflects the server state.
+  const reload = useCallback(async () => {
+    try {
+      const employeeResult = await getOfficeEmployees({ apiBaseUrl, sessionToken });
+      setEmployees(employeeResult.employees);
+      if (selectedId) {
+        setDetail(await getEmployeeDetail({ employeeId: selectedId, apiBaseUrl, sessionToken }));
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh employees.');
+    }
+  }, [apiBaseUrl, sessionToken, selectedId]);
+
   return (
     <section style={styles.workspacePanel} aria-label="Employees">
-      <h1 style={styles.heading}>Employees</h1>
+      <div style={styles.row}>
+        <h1 style={styles.heading}>Employees</h1>
+        {canCreate && !isCreating ? (
+          <button
+            type="button"
+            style={styles.primaryButton}
+            onClick={() => {
+              setIsCreating(true);
+              setErrorMessage(null);
+            }}
+          >
+            New employee
+          </button>
+        ) : null}
+      </div>
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
 
       <div style={layoutStyle}>
@@ -162,9 +172,14 @@ export function OfficeEmployeeAccessSurface({
               <button
                 key={employee.id}
                 type="button"
-                aria-pressed={employee.id === selectedId}
-                style={employee.id === selectedId ? listRowActiveStyle : listRowStyle}
-                onClick={() => setSelectedId(employee.id)}
+                aria-pressed={employee.id === selectedId && !isCreating}
+                style={
+                  employee.id === selectedId && !isCreating ? listRowActiveStyle : listRowStyle
+                }
+                onClick={() => {
+                  setIsCreating(false);
+                  setSelectedId(employee.id);
+                }}
               >
                 <div style={{ fontWeight: 600 }}>{employee.displayName}</div>
                 <div style={listRowSubStyle}>
@@ -177,93 +192,39 @@ export function OfficeEmployeeAccessSurface({
         </div>
 
         <div>
-          {!selectedId ? (
+          {isCreating ? (
+            <OfficeEmployeeCreateForm
+              roles={roles}
+              actorRoleId={actorRoleId}
+              apiBaseUrl={apiBaseUrl}
+              sessionToken={sessionToken}
+              onError={setErrorMessage}
+              onCancel={() => setIsCreating(false)}
+              onCreated={async (created) => {
+                setIsCreating(false);
+                await reload();
+                setSelectedId(created.id);
+              }}
+            />
+          ) : !selectedId ? (
             <p style={styles.notice}>Select an employee to view their access.</p>
           ) : isDetailLoading ? (
             <p style={styles.notice}>Loading…</p>
           ) : detail ? (
-            <EmployeeDetailView detail={detail} />
+            <OfficeEmployeeDetailPanel
+              detail={detail}
+              roles={roles}
+              canConfigure={canConfigure}
+              actorId={actorId}
+              actorRoleId={actorRoleId}
+              apiBaseUrl={apiBaseUrl}
+              sessionToken={sessionToken}
+              onChanged={reload}
+              onError={setErrorMessage}
+            />
           ) : null}
         </div>
       </div>
     </section>
-  );
-}
-
-function EmployeeDetailView({ detail }: { detail: EmployeeAdminDetailResponse }) {
-  const { employee, sessions } = detail;
-  const granted = [...employee.permissionOverrides.grantedPermissions].sort();
-  const revoked = [...employee.permissionOverrides.revokedPermissions].sort();
-
-  return (
-    <div>
-      <div style={styles.row}>
-        <h2 style={{ ...styles.heading, fontSize: '1.05rem' }}>{employee.displayName}</h2>
-        <span style={employee.isActive ? activeBadge : inactiveBadge}>
-          {employee.isActive ? 'Active' : 'Inactive'}
-        </span>
-      </div>
-      <div style={listRowSubStyle}>
-        {employee.email} · {employee.roleName}
-      </div>
-
-      <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Permission overrides</div>
-        {granted.length === 0 && revoked.length === 0 ? (
-          <p style={styles.notice}>
-            No overrides — this employee uses the {employee.roleName} role.
-          </p>
-        ) : (
-          <div>
-            {granted.map((key) => (
-              <span key={`g:${key}`} style={grantChip}>
-                + {key}
-              </span>
-            ))}
-            {revoked.map((key) => (
-              <span key={`r:${key}`} style={revokeChip}>
-                − {key}
-              </span>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Effective permissions</div>
-        {groupByArea(employee.effectivePermissions).map(({ area, actions }) => (
-          <div key={area} style={areaGroupStyle}>
-            <span style={areaNameStyle}>{area}</span>{' '}
-            <span style={actionListStyle}>{actions.join(', ')}</span>
-          </div>
-        ))}
-      </div>
-
-      <div style={sectionStyle}>
-        <div style={sectionLabelStyle}>Device sessions</div>
-        {sessions.length === 0 ? (
-          <p style={styles.notice}>No active sessions.</p>
-        ) : (
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.tableHeadCell}>Device</th>
-                <th style={styles.tableHeadCell}>Surface</th>
-                <th style={styles.tableHeadCell}>Signed in</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sessions.map((session) => (
-                <tr key={session.id}>
-                  <td style={styles.tableCell}>{session.deviceLabel ?? '—'}</td>
-                  <td style={styles.tableCell}>{session.surface}</td>
-                  <td style={styles.tableCell}>{new Date(session.issuedAt).toLocaleString()}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
   );
 }
