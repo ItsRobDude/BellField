@@ -29,6 +29,7 @@ import {
 } from './office-workspace-jobs-surface';
 import { OfficeSystemSurface, type OfficeSystemSurfaceProps } from './office-system-surface';
 import { OfficeHistorySurface, type OfficeHistorySurfaceProps } from './office-history-surface';
+import { OfficeReportsSurface, type OfficeReportsSurfaceProps } from './office-reports-surface';
 import type { OfficeView } from './office-workspace-frame';
 
 type OfficeCrmSurfaceProps = {
@@ -61,6 +62,7 @@ type OfficeWorkspaceSurfacesProps = {
   bookkeeping: OfficeBookkeepingSurfaceProps;
   system: OfficeSystemSurfaceProps;
   history: OfficeHistorySurfaceProps;
+  reports: OfficeReportsSurfaceProps;
 };
 
 export function OfficeWorkspaceSurfaces({
@@ -74,7 +76,8 @@ export function OfficeWorkspaceSurfaces({
   purchasing,
   bookkeeping,
   system,
-  history
+  history,
+  reports
 }: OfficeWorkspaceSurfacesProps) {
   return (
     <>
@@ -111,6 +114,8 @@ export function OfficeWorkspaceSurfaces({
       {activeOfficeView === 'bookkeeping' ? <OfficeBookkeepingSurface {...bookkeeping} /> : null}
 
       {activeOfficeView === 'system' ? <OfficeSystemSurface {...system} /> : null}
+
+      {activeOfficeView === 'reports' ? <OfficeReportsSurface {...reports} /> : null}
 
       {activeOfficeView === 'history' ? <OfficeHistorySurface {...history} /> : null}
 

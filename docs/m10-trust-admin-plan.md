@@ -377,13 +377,17 @@ So dispatcher sees the surface with only the AR card and no export; bookKeeping 
   a misleading partial margin); else `round(profit / revenue * 10000)`. The UI labels incomplete rows.
 - Totals: `jobCount`, summed `revenue` / `knownCost` / `knownProfit`,
   `incompleteJobCount = count(costComplete === false)`, `unresolvedLineCount = Σ row.unresolvedLineCount`.
-- **DECISION (confirm): row scope = jobs with ≥1 posted invoice.** Revenue recognition defines the
-  population; the billed CTE already yields exactly these jobs. Cost is attached per job. (Alternative:
-  also include not-yet-invoiced jobs that have cost — deferred; it muddies "profitability".)
-- **DECISION (confirm): v1 loops per job for cost (N+1).** `computeJobCostRollup` is per-job and we
-  will NOT duplicate it as batch SQL (drift risk the reviewer flagged). Revenue is one set-based query;
-  cost is a bounded per-job loop over the posted-invoice job set. Reports are on-demand owner/admin and
-  job counts are modest. A shared batch rollup helper is a noted follow-up if it ever gets slow.
+- **DECIDED: row scope = jobs with ≥1 _posted_ invoice (any kind, incl. a posted $0 invoice).**
+  Revenue recognition defines the population. The scope predicate is "has at least one posted invoice",
+  **not** `net_billed > 0` — a warranty / no-charge job with a posted **zero-dollar** invoice still
+  appears (revenue 0, real cost, negative profit, `marginBasisPoints = null`). Costed-but-uninvoiced
+  jobs are **deferred to a separate future WIP / unbilled-cost-exposure report**, never mixed into
+  profitability.
+- **DECIDED: v1 loops per job for cost (N+1), reusing the rollup/snapshot path.** `computeJobCostRollup`
+  / `getCurrentJobCostSnapshot` stay the single source of truth — we will **not** duplicate cost math
+  in reporting SQL. Revenue is one set-based query; cost is a bounded per-job loop over the
+  posted-invoice job set. If report performance ever becomes a real problem, extract a shared batch
+  rollup helper **from the same source logic** rather than writing a second independent calculation.
 
 ### 5c.4 Slice 3C — Inventory Valuation
 
