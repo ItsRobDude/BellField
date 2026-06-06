@@ -474,6 +474,14 @@ delete`, Admin `view/configure`):
 - **Last-authority guard:** a change is refused if it would leave **zero active employees with _effective_
   `employeesPermissions:configure`**. Computed on the hypothetical post-change state across all active
   employees via the same effective-permission resolver — **not** a naive role-id check (overrides matter).
+- **Last-owner guard:** a change is refused if it would leave **zero active employees with `roleId ===
+'owner'`**. Distinct from the authority guard — an Owner self-demoting to Admin keeps
+  `employeesPermissions:configure` (so the authority guard passes) yet would leave no Owner, and
+  owner-only actions (managing owners, creating employees) need one.
+- **Concurrency:** the last-authority and last-owner invariants are re-checked **inside** the write
+  transaction against freshly-read rows, with a transaction-level advisory lock serializing identity
+  admin writes — so two concurrent admin requests can't each pass a pre-check and both commit, leaving
+  zero owners/managers.
 - **Owner-protection** (decision 2 above).
 - **Deactivating an employee revokes all their sessions immediately.**
 - **Override validation:** reject a permission key that appears in both `grantedPermissions` and

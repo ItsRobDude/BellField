@@ -7,22 +7,38 @@ import {
   UnauthorizedException
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { EmployeeSessionsResponse, RevokeEmployeeSessionResponse } from '@bellfield/contracts';
+import type {
+  EmployeeAdminDetailResponse,
+  EmployeeSessionsResponse,
+  ResetEmployeePasswordResponse,
+  RevokeEmployeeSessionResponse
+} from '@bellfield/contracts';
 import { defaultRoleTemplates } from './default-role-templates';
 import { hashPassword, verifyPassword } from './password-hash';
 import { IdentityAccessRepository } from './identity-access.repository';
 import type {
+  AdminAuditAction,
+  AdminAuditEntry,
   AuthorizedEmployee,
+  CreateEmployeeRequestDto,
   EmployeeRecord,
   EmployeeSummary,
   LoginSurface,
   LoginRequestDto,
   LoginResponseDto,
   PermissionKey,
+  ResetEmployeePasswordRequestDto,
   RoleTemplate,
   SessionRecord,
   UpdateEmployeeRequestDto
 } from './identity-access.types';
+
+/** Postgres unique-violation code (duplicate email on create). */
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+  );
+}
 
 @Injectable()
 export class IdentityAccessService {
@@ -166,7 +182,12 @@ export class IdentityAccessService {
       }
     }
 
-    const wasActive = existingEmployee.isActive;
+    const before = {
+      roleId: existingEmployee.roleId,
+      isActive: existingEmployee.isActive,
+      granted: [...existingEmployee.permissionOverrides.grantedPermissions].sort(),
+      revoked: [...existingEmployee.permissionOverrides.revokedPermissions].sort()
+    };
 
     if (update.roleId) {
       this.assertRoleExists(update.roleId);
@@ -203,18 +224,18 @@ export class IdentityAccessService {
       }
     }
 
-    // Post-change invariants over the hypothetical employee list: keep at least one active employee
-    // who can manage employees, and at least one active Owner.
-    const postChangeEmployees = await this.buildPostChangeEmployees(employeeId, existingEmployee);
-    this.assertRetainsEmployeeAuthority(postChangeEmployees);
-    this.assertRetainsActiveOwner(postChangeEmployees);
+    const auditEntries = this.buildUpdateAuditEntries(actor, existingEmployee, before);
+    const revokeSessions = before.isActive && !existingEmployee.isActive;
 
-    await this.identityAccessRepository.saveEmployee(existingEmployee);
-
-    // Deactivating an employee revokes all their sessions immediately (locked plan §5d.2).
-    if (wasActive && !existingEmployee.isActive) {
-      await this.identityAccessRepository.revokeAllSessionsForEmployee(employeeId);
-    }
+    // Persist state + audit (+ session revoke) atomically. The count invariants are re-checked INSIDE
+    // the transaction (under an advisory lock) against freshly-read rows — see saveEmployeeWithAudit.
+    await this.identityAccessRepository.saveEmployeeWithAudit(existingEmployee, auditEntries, {
+      revokeSessions,
+      assertInvariants: (employees) => {
+        this.assertRetainsEmployeeAuthority(employees);
+        this.assertRetainsActiveOwner(employees);
+      }
+    });
 
     return this.toEmployeeSummary(existingEmployee);
   }
@@ -252,8 +273,194 @@ export class IdentityAccessService {
       throw new NotFoundException('Employee not found.');
     }
     this.assertCanActOnTarget(actor.roleId, target.roleId);
-    const revoked = await this.identityAccessRepository.revokeSessionById(employeeId, sessionId);
+    const auditEntry = this.buildAuditEntry(
+      actor,
+      target,
+      'employee_session_revoked',
+      `Revoked device session ${sessionId}.`
+    );
+    const revoked = await this.identityAccessRepository.revokeSessionByIdWithAudit(
+      employeeId,
+      sessionId,
+      auditEntry
+    );
     return { revoked };
+  }
+
+  /** Create an employee (Owner-only `employeesPermissions:create`). Password is hashed, never returned. */
+  async createEmployee(
+    sessionToken: string,
+    request: CreateEmployeeRequestDto
+  ): Promise<EmployeeSummary> {
+    const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:create', [
+      'office-web'
+    ]);
+    this.assertRoleExists(request.roleId);
+    if (request.roleId === 'owner' && actor.roleId !== 'owner') {
+      throw new ForbiddenException('Only an owner can create an owner.');
+    }
+
+    const grantedPermissions = this.uniquePermissionKeys(request.grantedPermissions ?? []);
+    const revokedPermissions = this.uniquePermissionKeys(request.revokedPermissions ?? []);
+    const revokedSet = new Set(revokedPermissions);
+    const conflict = grantedPermissions.find((key) => revokedSet.has(key));
+    if (conflict) {
+      throw new BadRequestException(`Permission "${conflict}" cannot be both granted and revoked.`);
+    }
+    const actorPermissions = new Set(actor.effectivePermissions);
+    const escalated = grantedPermissions.find((key) => !actorPermissions.has(key));
+    if (escalated) {
+      throw new ForbiddenException(`You cannot grant a permission you do not hold: ${escalated}.`);
+    }
+
+    const email = request.email.trim();
+    const existing = await this.identityAccessRepository.findEmployeeByEmail(email.toLowerCase());
+    if (existing) {
+      throw new ConflictException('An employee with this email already exists.');
+    }
+
+    const employee: EmployeeRecord = {
+      id: randomUUID(),
+      email,
+      displayName: request.displayName.trim(),
+      roleId: request.roleId,
+      isActive: request.isActive ?? true,
+      password: await hashPassword(request.password),
+      permissionOverrides: { grantedPermissions, revokedPermissions }
+    };
+    const auditEntry = this.buildAuditEntry(
+      actor,
+      employee,
+      'employee_created',
+      `Created ${employee.roleId} account${employee.isActive ? '' : ' (inactive)'}.`
+    );
+
+    try {
+      await this.identityAccessRepository.createEmployeeWithAudit(employee, auditEntry);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('An employee with this email already exists.');
+      }
+      throw error;
+    }
+
+    return this.toEmployeeSummary(employee);
+  }
+
+  /** Full admin view of one employee + their sessions. Gate: employeesPermissions:view. */
+  async getEmployeeDetail(
+    sessionToken: string,
+    employeeId: string
+  ): Promise<EmployeeAdminDetailResponse> {
+    await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:view', ['office-web']);
+    const employee = await this.identityAccessRepository.findEmployeeById(employeeId);
+    if (!employee) {
+      throw new NotFoundException('Employee not found.');
+    }
+    const sessions = await this.identityAccessRepository.listSessionsForEmployee(employeeId);
+    return { employee: this.toEmployeeSummary(employee), sessions };
+  }
+
+  /** Admin password reset: hash the new value, revoke all of the target's sessions, audit. Gate:
+   * employeesPermissions:configure (+ owner-protection). The password is never returned. */
+  async resetEmployeePassword(
+    sessionToken: string,
+    employeeId: string,
+    request: ResetEmployeePasswordRequestDto
+  ): Promise<ResetEmployeePasswordResponse> {
+    const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
+      'office-web'
+    ]);
+    const target = await this.identityAccessRepository.findEmployeeById(employeeId);
+    if (!target) {
+      throw new NotFoundException('Employee not found.');
+    }
+    this.assertCanActOnTarget(actor.roleId, target.roleId);
+
+    const passwordHash = await hashPassword(request.password);
+    const auditEntry = this.buildAuditEntry(
+      actor,
+      target,
+      'employee_password_reset',
+      'Reset the account password and revoked active sessions.'
+    );
+    const revokedSessionCount = await this.identityAccessRepository.resetEmployeePasswordWithAudit(
+      employeeId,
+      passwordHash,
+      auditEntry
+    );
+    return { revokedSessionCount };
+  }
+
+  /** Build the per-action audit rows for an employee update (role / active / overrides). */
+  private buildUpdateAuditEntries(
+    actor: AuthorizedEmployee,
+    resulting: EmployeeRecord,
+    before: {
+      roleId: EmployeeRecord['roleId'];
+      isActive: boolean;
+      granted: string[];
+      revoked: string[];
+    }
+  ): AdminAuditEntry[] {
+    const entries: AdminAuditEntry[] = [];
+    if (resulting.roleId !== before.roleId) {
+      entries.push(
+        this.buildAuditEntry(
+          actor,
+          resulting,
+          'employee_role_changed',
+          `Role changed from ${before.roleId} to ${resulting.roleId}.`
+        )
+      );
+    }
+    if (resulting.isActive !== before.isActive) {
+      entries.push(
+        this.buildAuditEntry(
+          actor,
+          resulting,
+          resulting.isActive ? 'employee_activated' : 'employee_deactivated',
+          resulting.isActive ? 'Reactivated the account.' : 'Deactivated the account.'
+        )
+      );
+    }
+    const afterGranted = [...resulting.permissionOverrides.grantedPermissions].sort();
+    const afterRevoked = [...resulting.permissionOverrides.revokedPermissions].sort();
+    if (
+      JSON.stringify(afterGranted) !== JSON.stringify(before.granted) ||
+      JSON.stringify(afterRevoked) !== JSON.stringify(before.revoked)
+    ) {
+      entries.push(
+        this.buildAuditEntry(
+          actor,
+          resulting,
+          'employee_overrides_changed',
+          `Updated permission overrides (granted: ${afterGranted.length}, revoked: ${afterRevoked.length}).`
+        )
+      );
+    }
+    return entries;
+  }
+
+  /** Build one non-secret audit row (no passwords/tokens in the summary). */
+  private buildAuditEntry(
+    actor: AuthorizedEmployee,
+    target: { id: string; displayName: string; email: string },
+    action: AdminAuditAction,
+    summary: string
+  ): AdminAuditEntry {
+    return {
+      id: randomUUID(),
+      occurredAt: new Date().toISOString(),
+      actorEmployeeId: actor.id,
+      actorName: actor.displayName,
+      actorEmail: actor.email,
+      targetEmployeeId: target.id,
+      targetName: target.displayName,
+      targetEmail: target.email,
+      action,
+      summary
+    };
   }
 
   /** Owner-protection: only an Owner may act on an Owner (reset/deactivate/role/override/revoke). */
@@ -264,15 +471,6 @@ export class IdentityAccessService {
     if (targetRoleId === 'owner' && actorRoleId !== 'owner') {
       throw new ForbiddenException('Only an owner can manage an owner account.');
     }
-  }
-
-  /** The full employee list as it would be AFTER the change (target replaced by its resulting state). */
-  private async buildPostChangeEmployees(
-    employeeId: string,
-    resultingEmployee: EmployeeRecord
-  ): Promise<EmployeeRecord[]> {
-    const employees = await this.identityAccessRepository.listEmployees();
-    return employees.map((employee) => (employee.id === employeeId ? resultingEmployee : employee));
   }
 
   /**

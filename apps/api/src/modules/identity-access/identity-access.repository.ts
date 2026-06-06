@@ -1,8 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { EmployeeSessionSummary } from '@bellfield/contracts';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString, toTextArray } from '../../database/database-row.utils';
-import type { EmployeeRecord, SessionRecord } from './identity-access.types';
+import type { AdminAuditEntry, EmployeeRecord, SessionRecord } from './identity-access.types';
+
+// Single transaction-level advisory-lock key that serializes identity admin writes which can affect
+// the "at least one active owner / manager" invariants, so two concurrent updates can't both pass an
+// in-transaction recheck and commit a state that leaves zero.
+const IDENTITY_ADMIN_LOCK_KEY = 4_310_010_001;
 
 type EmployeeRow = {
   id: string;
@@ -80,7 +85,11 @@ export class IdentityAccessRepository {
   }
 
   async listEmployees(): Promise<EmployeeRecord[]> {
-    const result = await this.databaseService.query<EmployeeRow>(
+    return this.listEmployeesWithin(this.databaseService);
+  }
+
+  private async listEmployeesWithin(queryable: QueryExecutor): Promise<EmployeeRecord[]> {
+    const result = await queryable.query<EmployeeRow>(
       `
         select
           id,
@@ -100,7 +109,14 @@ export class IdentityAccessRepository {
   }
 
   async saveEmployee(employee: EmployeeRecord): Promise<void> {
-    await this.databaseService.query(
+    await this.saveEmployeeWithin(this.databaseService, employee);
+  }
+
+  private async saveEmployeeWithin(
+    queryable: QueryExecutor,
+    employee: EmployeeRecord
+  ): Promise<void> {
+    await queryable.query(
       `
         update employees
         set
@@ -123,6 +139,58 @@ export class IdentityAccessRepository {
         employee.password,
         employee.permissionOverrides.grantedPermissions,
         employee.permissionOverrides.revokedPermissions
+      ]
+    );
+  }
+
+  private async insertEmployeeWithin(
+    queryable: QueryExecutor,
+    employee: EmployeeRecord
+  ): Promise<void> {
+    await queryable.query(
+      `
+        insert into employees (
+          id, email, display_name, role_id, is_active, password,
+          granted_permissions, revoked_permissions, created_at, updated_at
+        )
+        values ($1, $2, $3, $4, $5, $6, $7::text[], $8::text[], now(), now())
+      `,
+      [
+        employee.id,
+        employee.email,
+        employee.displayName,
+        employee.roleId,
+        employee.isActive,
+        employee.password,
+        employee.permissionOverrides.grantedPermissions,
+        employee.permissionOverrides.revokedPermissions
+      ]
+    );
+  }
+
+  private async insertAuditEntryWithin(
+    queryable: QueryExecutor,
+    entry: AdminAuditEntry
+  ): Promise<void> {
+    await queryable.query(
+      `
+        insert into admin_audit_entries (
+          id, occurred_at, actor_employee_id, actor_name, actor_email,
+          target_employee_id, target_name, target_email, action, summary
+        )
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+      `,
+      [
+        entry.id,
+        entry.occurredAt,
+        entry.actorEmployeeId,
+        entry.actorName,
+        entry.actorEmail,
+        entry.targetEmployeeId,
+        entry.targetName,
+        entry.targetEmail,
+        entry.action,
+        entry.summary
       ]
     );
   }
@@ -197,7 +265,15 @@ export class IdentityAccessRepository {
 
   /** Revoke a single session by its non-secret id, scoped to its owner. Returns true if one was deleted. */
   async revokeSessionById(employeeId: string, sessionId: string): Promise<boolean> {
-    const result = await this.databaseService.query(
+    return this.revokeSessionByIdWithin(this.databaseService, employeeId, sessionId);
+  }
+
+  private async revokeSessionByIdWithin(
+    queryable: QueryExecutor,
+    employeeId: string,
+    sessionId: string
+  ): Promise<boolean> {
+    const result = await queryable.query(
       'delete from sessions where id = $1 and employee_id = $2',
       [sessionId, employeeId]
     );
@@ -206,10 +282,89 @@ export class IdentityAccessRepository {
 
   /** Revoke every session for an employee (used when deactivating). Returns the count removed. */
   async revokeAllSessionsForEmployee(employeeId: string): Promise<number> {
-    const result = await this.databaseService.query('delete from sessions where employee_id = $1', [
+    return this.revokeAllSessionsWithin(this.databaseService, employeeId);
+  }
+
+  private async revokeAllSessionsWithin(
+    queryable: QueryExecutor,
+    employeeId: string
+  ): Promise<number> {
+    const result = await queryable.query('delete from sessions where employee_id = $1', [
       employeeId
     ]);
     return result.rowCount ?? 0;
+  }
+
+  // --- Transactional admin commands (state change + audit, atomic) -----------
+
+  /** Create an employee and record the audit row in one transaction. */
+  async createEmployeeWithAudit(
+    employee: EmployeeRecord,
+    auditEntry: AdminAuditEntry
+  ): Promise<void> {
+    await this.databaseService.transaction(async (queryable) => {
+      await this.insertEmployeeWithin(queryable, employee);
+      await this.insertAuditEntryWithin(queryable, auditEntry);
+    });
+  }
+
+  /**
+   * Persist an employee update with its audit rows (and optional session revoke on deactivation) in
+   * one transaction. Takes a transaction-level advisory lock and re-checks the count invariants
+   * (`assertInvariants`) against freshly-read rows INSIDE the transaction, so concurrent admin writes
+   * can't both pass a pre-check and commit a state that leaves zero owners/managers.
+   */
+  async saveEmployeeWithAudit(
+    employee: EmployeeRecord,
+    auditEntries: AdminAuditEntry[],
+    options: { revokeSessions: boolean; assertInvariants: (employees: EmployeeRecord[]) => void }
+  ): Promise<void> {
+    await this.databaseService.transaction(async (queryable) => {
+      await queryable.query('select pg_advisory_xact_lock($1)', [IDENTITY_ADMIN_LOCK_KEY]);
+      const current = await this.listEmployeesWithin(queryable);
+      const postChange = current.map((row) => (row.id === employee.id ? employee : row));
+      options.assertInvariants(postChange);
+
+      await this.saveEmployeeWithin(queryable, employee);
+      for (const entry of auditEntries) {
+        await this.insertAuditEntryWithin(queryable, entry);
+      }
+      if (options.revokeSessions) {
+        await this.revokeAllSessionsWithin(queryable, employee.id);
+      }
+    });
+  }
+
+  /** Reset a password (hashed), revoke all of the target's sessions, and audit — atomically. */
+  async resetEmployeePasswordWithAudit(
+    employeeId: string,
+    passwordHash: string,
+    auditEntry: AdminAuditEntry
+  ): Promise<number> {
+    return this.databaseService.transaction(async (queryable) => {
+      await queryable.query(
+        `update employees set password = $2, updated_at = now() where id = $1`,
+        [employeeId, passwordHash]
+      );
+      const revokedSessionCount = await this.revokeAllSessionsWithin(queryable, employeeId);
+      await this.insertAuditEntryWithin(queryable, auditEntry);
+      return revokedSessionCount;
+    });
+  }
+
+  /** Revoke one session by id and audit it only if a session was actually removed — atomically. */
+  async revokeSessionByIdWithAudit(
+    employeeId: string,
+    sessionId: string,
+    auditEntry: AdminAuditEntry
+  ): Promise<boolean> {
+    return this.databaseService.transaction(async (queryable) => {
+      const revoked = await this.revokeSessionByIdWithin(queryable, employeeId, sessionId);
+      if (revoked) {
+        await this.insertAuditEntryWithin(queryable, auditEntry);
+      }
+      return revoked;
+    });
   }
 
   private toEmployeeRecord(row: EmployeeRow): EmployeeRecord {
