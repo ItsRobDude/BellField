@@ -1,5 +1,6 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   NotFoundException,
   UnauthorizedException
@@ -10,7 +11,9 @@ import { hashPassword, isHashed } from './password-hash';
 
 type Role = 'owner' | 'admin' | 'csr';
 
-function adminSessionRepo(opts: { actorRole?: Role; targetRole?: Role } = {}) {
+function adminSessionRepo(
+  opts: { actorRole?: Role; targetRole?: Role; otherActiveOwner?: boolean } = {}
+) {
   const employee = (id: string, roleId: Role) => ({
     id,
     email: `${id}@bellfield.local`,
@@ -22,6 +25,9 @@ function adminSessionRepo(opts: { actorRole?: Role; targetRole?: Role } = {}) {
   });
   const actor = employee('actor-1', opts.actorRole ?? 'admin');
   const target = employee('target-1', opts.targetRole ?? 'csr');
+  // A standing active Owner so the active-owner invariant holds for ordinary updates. Omit it to
+  // exercise the "last owner" guard.
+  const others = (opts.otherActiveOwner ?? true) ? [employee('owner-keeper', 'owner')] : [];
   const repo = {
     findSessionByToken: jest.fn().mockResolvedValue({
       token: 'tok',
@@ -44,9 +50,9 @@ function adminSessionRepo(opts: { actorRole?: Role; targetRole?: Role } = {}) {
     revokeSessionById: jest.fn().mockResolvedValue(true),
     saveEmployee: jest.fn().mockResolvedValue(undefined),
     revokeAllSessionsForEmployee: jest.fn().mockResolvedValue(1),
-    // Both actor and target exist; the actor (admin/owner) is an active employeesPermissions:configure
-    // holder, so the last-authority guard passes for normal updates.
-    listEmployees: jest.fn().mockResolvedValue([actor, target])
+    // Actor + target + (by default) a standing active Owner, so the authority and active-owner
+    // guards pass for ordinary updates.
+    listEmployees: jest.fn().mockResolvedValue([actor, target, ...others])
   };
   return { repo, actor, target };
 }
@@ -288,5 +294,37 @@ describe('IdentityAccessService', () => {
       service.updateEmployee('tok', 'actor-1', { roleId: 'csr' })
     ).rejects.toBeInstanceOf(ForbiddenException);
     expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('blocks the last owner from self-demoting to admin (no active owner left)', async () => {
+    // Owner -> admin keeps employeesPermissions:configure, so the authority guard passes; the
+    // active-owner guard must still reject because it would leave zero owners.
+    const { repo } = adminSessionRepo({ actorRole: 'owner', otherActiveOwner: false });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'actor-1', { roleId: 'admin' })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('blocks the last owner from deactivating themselves', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'owner', otherActiveOwner: false });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'actor-1', { isActive: false })
+    ).rejects.toBeTruthy();
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('allows demoting an owner when another active owner remains', async () => {
+    const { repo } = adminSessionRepo({
+      actorRole: 'owner',
+      targetRole: 'owner',
+      otherActiveOwner: false
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    const result = await service.updateEmployee('tok', 'target-1', { roleId: 'admin' });
+    expect(result.roleId).toBe('admin');
+    expect(repo.saveEmployee).toHaveBeenCalledTimes(1);
   });
 });
