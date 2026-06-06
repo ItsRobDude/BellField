@@ -1027,6 +1027,7 @@ describe('JobsDataRepository', () => {
       selfTruckRef?: boolean;
       existingClientOp?: string;
       insertThrows23505?: boolean;
+      registerRowOverrides?: Record<string, unknown>;
     } = {}
   ) {
     const queryable = {
@@ -1055,7 +1056,9 @@ describe('JobsDataRepository', () => {
     };
     const databaseService = {
       query: jest.fn(async (sql: string, _params?: unknown[]) =>
-        sql.includes('from register_entries') ? { rows: [createRegisterEntryRow()] } : { rows: [] }
+        sql.includes('from register_entries')
+          ? { rows: [createRegisterEntryRow(options.registerRowOverrides)] }
+          : { rows: [] }
       ),
       transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => {
         if (options.insertThrows23505) {
@@ -1169,6 +1172,29 @@ describe('JobsDataRepository', () => {
     );
 
     expect(result.id).toBe('register-1');
+  });
+
+  it('rejects the 23505 fallback when the winning line belongs to a different technician', async () => {
+    // Same job, but the winning row was captured by another tech — the race fallback is actor-
+    // scoped like the normal replay path, so it must throw rather than return another tech's line.
+    const { repository } = createRepoForCreate({
+      insertThrows23505: true,
+      registerRowOverrides: { capturedByEmployeeId: 'tech-OTHER' }
+    });
+
+    await expect(
+      repository.createRegisterEntry(
+        'job-1',
+        {
+          kind: 'part',
+          description: 'Part',
+          quantity: 1,
+          totalAmount: 50,
+          clientOperationId: 'op-7'
+        },
+        { id: 'tech-1', displayName: 'Field Tech' }
+      )
+    ).rejects.toThrow(/different job or technician/i);
   });
 
   it('rejects a cost-expected line on a finalized job unless it is a preserved replay', async () => {

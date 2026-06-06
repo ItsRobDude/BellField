@@ -190,11 +190,12 @@ export class JobsRegisterDataRepository {
     } catch (error) {
       // Concurrent identical replay: two drains both passed the check-first above and the partial
       // unique index rejected the loser's insert. The winner's line stands, so resolve to it
-      // (idempotent) instead of surfacing a raw DB failure — unless the key somehow belongs to a
-      // different job, which is a real conflict.
+      // (idempotent) instead of surfacing a raw DB failure — but only when it is the same job AND
+      // the same capturing technician, matching the service's normal-replay scope; anything else is
+      // a real conflict.
       if (clientOperationId !== null && isClientOperationUniqueViolation(error)) {
         const winner = await this.findRegisterEntryByClientOperationId(clientOperationId);
-        if (winner && winner.jobId === jobId) {
+        if (winner && winner.jobId === jobId && winner.capturedByEmployeeId === actor.id) {
           return winner;
         }
         throw new ConflictException('This operation id belongs to a different job or technician.');
