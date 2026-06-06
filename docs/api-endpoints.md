@@ -160,6 +160,17 @@ can be received.
 | `POST`  | `/operations/media/:mediaId/blob?token=...`    | token                 | signed upload token                   | Upload raw `application/octet-stream` bytes and finalize the blob. |
 | `GET`   | `/operations/media/:mediaId/blob?token=...`    | office/field or token | `media:view` or signed download token | Stream stored media bytes.                                         |
 
+## History / Audit (Milestone 10)
+
+Owner/Admin cross-record audit read model. Read-only `UNION ALL` over existing timelines/ledgers; no
+new event-write system. See `docs/m10-trust-admin-plan.md` §5b.
+
+| Method | Path                  | Surface | Permission gate | Purpose                                                                                                                                                                                                                                                                         |
+| ------ | --------------------- | ------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/history` | office  | `history:view`  | Unified activity feed across job timeline, register, inventory, job-cost, payment, and equipment-history rows. Filters: `dateFrom`, `dateTo`, `actorEmployeeId`, `recordType`, `jobId`. Cursor-paginated (`cursor`, `limit`). Payments resolve their job via `invoices.job_id`. |
+
+`history:view` is a dedicated permission area granted to Owner and Admin only.
+
 ## System (Milestone 10)
 
 Owner/Admin trust + support surface. Read-only and privacy-conscious: never returns customer/job

@@ -55,7 +55,8 @@ export const permissionAreas = [
   'reports',
   'employeesPermissions',
   'companySettings',
-  'supportLogsBackups'
+  'supportLogsBackups',
+  'history'
 ] as const satisfies readonly PermissionArea[];
 
 export type PermissionKey = ContractPermissionKey;

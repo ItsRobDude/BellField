@@ -39,7 +39,11 @@ const adminCore = [
   ...permissionKeys('reports', ['view', 'export']),
   ...permissionKeys('employeesPermissions', ['view', 'configure']),
   ...permissionKeys('companySettings', ['view', 'configure']),
-  ...permissionKeys('supportLogsBackups', ['view', 'export'])
+  ...permissionKeys('supportLogsBackups', ['view', 'export']),
+  // Cross-record audit/history surface (M10 slice 2). Owner + Admin only (adminCore is their shared
+  // base) — deliberately not reports:view (too broad) nor supportLogsBackups (off-domain). See
+  // docs/m10-trust-admin-plan.md §5b.
+  ...permissionKeys('history', ['view'])
 ];
 
 const ownerPermissions = [
