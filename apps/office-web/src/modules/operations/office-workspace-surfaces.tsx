@@ -28,6 +28,7 @@ import {
   type OfficeJobsQueueSurfaceProps
 } from './office-workspace-jobs-surface';
 import { OfficeSystemSurface, type OfficeSystemSurfaceProps } from './office-system-surface';
+import { OfficeHistorySurface, type OfficeHistorySurfaceProps } from './office-history-surface';
 import type { OfficeView } from './office-workspace-frame';
 
 type OfficeCrmSurfaceProps = {
@@ -59,6 +60,7 @@ type OfficeWorkspaceSurfacesProps = {
   purchasing: OfficePurchasingSurfaceProps;
   bookkeeping: OfficeBookkeepingSurfaceProps;
   system: OfficeSystemSurfaceProps;
+  history: OfficeHistorySurfaceProps;
 };
 
 export function OfficeWorkspaceSurfaces({
@@ -71,7 +73,8 @@ export function OfficeWorkspaceSurfaces({
   inventory,
   purchasing,
   bookkeeping,
-  system
+  system,
+  history
 }: OfficeWorkspaceSurfacesProps) {
   return (
     <>
@@ -108,6 +111,8 @@ export function OfficeWorkspaceSurfaces({
       {activeOfficeView === 'bookkeeping' ? <OfficeBookkeepingSurface {...bookkeeping} /> : null}
 
       {activeOfficeView === 'system' ? <OfficeSystemSurface {...system} /> : null}
+
+      {activeOfficeView === 'history' ? <OfficeHistorySurface {...history} /> : null}
 
       {activeOfficeView === 'jobDetail' ? <OfficeJobDetailSurface {...jobDetail} /> : null}
     </>

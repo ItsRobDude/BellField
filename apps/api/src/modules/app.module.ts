@@ -17,6 +17,7 @@ import { MediaModule } from './media/media.module';
 import { PurchasingModule } from './purchasing/purchasing.module';
 import { SystemDiagnosticsModule } from './system-diagnostics/system-diagnostics.module';
 import { SupportModule } from './support/support.module';
+import { HistoryModule } from './history/history.module';
 
 @Module({
   imports: [
@@ -37,7 +38,8 @@ import { SupportModule } from './support/support.module';
     MediaModule,
     PurchasingModule,
     SystemDiagnosticsModule,
-    SupportModule
+    SupportModule,
+    HistoryModule
   ]
 })
 export class AppModule {}

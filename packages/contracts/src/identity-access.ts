@@ -34,7 +34,8 @@ export type PermissionArea =
   | 'reports'
   | 'employeesPermissions'
   | 'companySettings'
-  | 'supportLogsBackups';
+  | 'supportLogsBackups'
+  | 'history';
 
 export type PermissionKey = `${PermissionArea}:${PermissionAction}`;
 
