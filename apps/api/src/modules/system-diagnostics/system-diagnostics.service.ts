@@ -110,15 +110,25 @@ export class SystemDiagnosticsService {
   private checkMediaRoot(): SystemDiagnosticsResponse['mediaRoot'] {
     const path = this.mediaConfigService.getMediaRoot();
     const exists = existsSync(path);
+    const probePath = join(path, `.diagnostics-probe-${randomUUID()}`);
+    let wrote = false;
     try {
-      // Round-trip a tiny probe file to prove both write and read access, then clean up.
-      const probePath = join(path, `.diagnostics-probe-${randomUUID()}`);
+      // Round-trip a tiny probe file to prove both write and read access.
       writeFileSync(probePath, 'ok');
+      wrote = true;
       const readable = readFileSync(probePath, 'utf8') === 'ok';
-      unlinkSync(probePath);
       return { path, exists, writable: true, readable };
     } catch {
       return { path, exists, writable: false, readable: false, error: 'Media root not writable.' };
+    } finally {
+      // Always clean up the probe, even if the read above threw after a successful write.
+      if (wrote) {
+        try {
+          unlinkSync(probePath);
+        } catch {
+          // Probe cleanup is best-effort; a leftover dotfile is harmless.
+        }
+      }
     }
   }
 }

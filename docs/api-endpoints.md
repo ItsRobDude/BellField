@@ -160,6 +160,20 @@ can be received.
 | `POST`  | `/operations/media/:mediaId/blob?token=...`    | token                 | signed upload token                   | Upload raw `application/octet-stream` bytes and finalize the blob. |
 | `GET`   | `/operations/media/:mediaId/blob?token=...`    | office/field or token | `media:view` or signed download token | Stream stored media bytes.                                         |
 
+## System (Milestone 10)
+
+Owner/Admin trust + support surface. Read-only and privacy-conscious: never returns customer/job
+data, and never returns secrets (only health, versions, counts, and the presence or non-secret
+values of configuration). See `docs/m10-trust-admin-plan.md`.
+
+| Method | Path                     | Surface | Permission gate             | Purpose                                                                                                                                                                                                              |
+| ------ | ------------------------ | ------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/system/diagnostics`    | office  | `supportLogsBackups:view`   | Readiness snapshot: database reachability + latency, applied-migration count/latest, media-root read/write probe, app version/nodeEnv/serverTime. Best-effort — a failed sub-check reports red rather than erroring. |
+| `GET`  | `/system/support-export` | office  | `supportLogsBackups:export` | Downloadable JSON support bundle: the diagnostics snapshot plus a non-secret config summary (nodeEnv, port, DB host/name without credentials, media root path, max bytes, token-secret presence flag).               |
+
+`supportLogsBackups:view`/`:export` belong to Owner and Admin in the default role templates;
+`:configure` is Owner-only.
+
 ## Notes
 
 - Register and media voids preserve history; true media blob deletion is not part of the current endpoint surface.
