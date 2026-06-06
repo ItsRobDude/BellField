@@ -810,6 +810,32 @@ describe('JobsAppointmentsService', () => {
     expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
   });
 
+  it('rejects a client operation id captured by a different technician on the same job', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['register:view', 'register:create'],
+      sessionSurface: 'field-mobile'
+    });
+    // Same route job, but the line was captured by another tech — do not short-circuit access.
+    jobsDataService.findRegisterEntryByClientOperationId.mockResolvedValue(
+      createRegisterEntry({ jobId: 'job-1', capturedByEmployeeId: 'tech-OTHER' })
+    );
+
+    await expect(
+      service.createRegisterEntry('session-token', 'job-1', {
+        kind: 'part',
+        description: 'Contactor',
+        quantity: 1,
+        totalAmount: 125,
+        clientOperationId: 'op-7',
+        syncSource: 'field-save-queue'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(jobsDataService.createRegisterEntry).not.toHaveBeenCalled();
+  });
+
   it('rejects out-of-scope field register creates without replay provenance', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     const job = createJob('inProgress');

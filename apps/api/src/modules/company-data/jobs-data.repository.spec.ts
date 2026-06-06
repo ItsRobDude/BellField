@@ -1022,7 +1022,12 @@ describe('JobsDataRepository', () => {
   });
 
   function createRepoForCreate(
-    options: { jobStatus?: string; selfTruckRef?: boolean; existingClientOp?: string } = {}
+    options: {
+      jobStatus?: string;
+      selfTruckRef?: boolean;
+      existingClientOp?: string;
+      insertThrows23505?: boolean;
+    } = {}
   ) {
     const queryable = {
       query: jest.fn(async (sql: string, _params?: unknown[]) => {
@@ -1052,9 +1057,12 @@ describe('JobsDataRepository', () => {
       query: jest.fn(async (sql: string, _params?: unknown[]) =>
         sql.includes('from register_entries') ? { rows: [createRegisterEntryRow()] } : { rows: [] }
       ),
-      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
-        callback(queryable)
-      )
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) => {
+        if (options.insertThrows23505) {
+          throw { code: '23505', constraint: 'register_entries_client_operation_id_key' };
+        }
+        return callback(queryable);
+      })
     };
     return { repository: createJobsDataRepository(databaseService), queryable };
   }
@@ -1142,6 +1150,25 @@ describe('JobsDataRepository', () => {
         String(sql).includes('insert into inventory_movements')
       )
     ).toBe(false);
+  });
+
+  it('resolves to the existing line when a concurrent insert loses on the unique index (23505)', async () => {
+    const { repository } = createRepoForCreate({ insertThrows23505: true });
+
+    // The winner's line stands; the loser resolves to it instead of surfacing a raw DB failure.
+    const result = await repository.createRegisterEntry(
+      'job-1',
+      {
+        kind: 'part',
+        description: 'Part',
+        quantity: 1,
+        totalAmount: 50,
+        clientOperationId: 'op-7'
+      },
+      { id: 'tech-1', displayName: 'Field Tech' }
+    );
+
+    expect(result.id).toBe('register-1');
   });
 
   it('rejects a cost-expected line on a finalized job unless it is a preserved replay', async () => {

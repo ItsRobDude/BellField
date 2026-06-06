@@ -9,6 +9,10 @@ import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import type { AuthorizedEmployee } from '../identity-access/identity-access.types';
 import { getAssignedWorkWindow } from './field-work-window';
+import {
+  validateRegisterEntryNumbers,
+  validateRegisterEntryUpdate
+} from './register-entry-validation';
 import type {
   AddJobNoteRequestDto,
   AcknowledgeFinishedVisitReviewRequestDto,
@@ -466,14 +470,19 @@ export class JobsAppointmentsService {
       const existing =
         await this.jobsDataService.findRegisterEntryByClientOperationId(clientOperationId);
       if (existing) {
-        if (existing.jobId !== jobId) {
-          throw new ConflictException('This operation id belongs to a different job.');
+        // Only the original capturing technician on the same route job may replay it. A key naming
+        // a different job or another tech is a client bug or a probe — the format is guessable, so
+        // it is not treated as a secret; reject rather than short-circuit past the access checks.
+        if (existing.jobId !== jobId || existing.capturedByEmployeeId !== actor.id) {
+          throw new ConflictException(
+            'This operation id belongs to a different job or technician.'
+          );
         }
         return this.buildRegisterCreateResponse(jobId, actor, request.syncSource);
       }
     }
 
-    this.validateRegisterEntryNumbers(request);
+    validateRegisterEntryNumbers(request);
     const currentJob = await this.jobsDataService.getJobById(jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(jobId, request.appointmentId);
     const accessCheck = await this.evaluateFieldJobMutationAccess(actor, jobId, {
@@ -552,7 +561,7 @@ export class JobsAppointmentsService {
       sessionToken,
       'register:edit'
     );
-    this.validateRegisterEntryUpdate(request);
+    validateRegisterEntryUpdate(request);
     const currentEntry = await this.jobsDataService.getRegisterEntryById(registerEntryId);
     const currentJob = await this.jobsDataService.getJobById(currentEntry.jobId);
     await this.ensureRegisterEntryAppointmentBelongsToJob(
@@ -1002,61 +1011,6 @@ export class JobsAppointmentsService {
 
     if (appointment.jobId !== jobId) {
       throw new ConflictException('Register entry appointment must belong to the same job.');
-    }
-  }
-
-  private validateRegisterEntryUpdate(request: UpdateRegisterEntryRequestDto): void {
-    const hasEditableField =
-      request.appointmentId !== undefined ||
-      request.kind !== undefined ||
-      request.description !== undefined ||
-      request.quantity !== undefined ||
-      request.unitOfMeasure !== undefined ||
-      request.unitPrice !== undefined ||
-      request.totalAmount !== undefined ||
-      request.partNumber !== undefined ||
-      request.inventorySourceLabel !== undefined ||
-      request.inventoryItemId !== undefined ||
-      request.inventoryLocationId !== undefined ||
-      request.billingProjectionState !== undefined;
-
-    if (!hasEditableField) {
-      throw new ConflictException(
-        'Register entry update must include at least one editable field.'
-      );
-    }
-
-    this.validateRegisterEntryNumbers(request);
-  }
-
-  private validateRegisterEntryNumbers(request: {
-    quantity?: number;
-    unitPrice?: number | null;
-    totalAmount?: number;
-  }): void {
-    this.validatePositiveNumber(
-      request.quantity,
-      'Register entry quantity must be greater than zero.'
-    );
-    this.validateNonNegativeNumber(
-      request.unitPrice,
-      'Register entry unit price cannot be negative.'
-    );
-    this.validateNonNegativeNumber(
-      request.totalAmount,
-      'Register entry total amount cannot be negative.'
-    );
-  }
-
-  private validatePositiveNumber(value: number | undefined, message: string): void {
-    if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
-      throw new ConflictException(message);
-    }
-  }
-
-  private validateNonNegativeNumber(value: number | null | undefined, message: string): void {
-    if (value !== undefined && value !== null && (!Number.isFinite(value) || value < 0)) {
-      throw new ConflictException(message);
     }
   }
 
