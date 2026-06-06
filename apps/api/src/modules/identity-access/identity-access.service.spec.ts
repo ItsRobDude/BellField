@@ -36,7 +36,9 @@ function adminSessionRepo(opts: { actorRole?: Role; targetRole?: Role } = {}) {
         issuedAt: '2026-06-01T00:00:00.000Z'
       }
     ]),
-    revokeSessionById: jest.fn().mockResolvedValue(true)
+    revokeSessionById: jest.fn().mockResolvedValue(true),
+    saveEmployee: jest.fn().mockResolvedValue(undefined),
+    revokeAllSessionsForEmployee: jest.fn().mockResolvedValue(1)
   };
   return { repo, actor, target };
 }
@@ -193,5 +195,30 @@ describe('IdentityAccessService', () => {
     await expect(service.listEmployeeSessions('tok', 'missing')).rejects.toBeInstanceOf(
       NotFoundException
     );
+  });
+
+  it('blocks an admin from modifying an owner (owner-protection on update)', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'owner' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await expect(
+      service.updateEmployee('tok', 'target-1', { isActive: false })
+    ).rejects.toBeInstanceOf(ForbiddenException);
+    expect(repo.saveEmployee).not.toHaveBeenCalled();
+  });
+
+  it('revokes all sessions when an employee is deactivated', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await service.updateEmployee('tok', 'target-1', { isActive: false });
+    expect(repo.saveEmployee).toHaveBeenCalledTimes(1);
+    expect(repo.revokeAllSessionsForEmployee).toHaveBeenCalledWith('target-1');
+  });
+
+  it('does not revoke sessions on a non-deactivating update', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await service.updateEmployee('tok', 'target-1', { roleId: 'dispatcher' });
+    expect(repo.saveEmployee).toHaveBeenCalledTimes(1);
+    expect(repo.revokeAllSessionsForEmployee).not.toHaveBeenCalled();
   });
 });
