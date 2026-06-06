@@ -245,6 +245,27 @@ describe('IdentityAccessService', () => {
     expect(repo.saveEmployeeWithAudit.mock.calls[0][2].revokeSessions).toBe(true);
   });
 
+  it('writes one audit row per semantic change (role + active), with no secrets', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await service.updateEmployee('tok', 'target-1', { roleId: 'dispatcher', isActive: false });
+    const auditEntries = repo.saveEmployeeWithAudit.mock.calls[0][1] as Array<{
+      action: string;
+      summary: string;
+    }>;
+    expect(auditEntries.map((entry) => entry.action).sort()).toEqual([
+      'employee_deactivated',
+      'employee_role_changed'
+    ]);
+  });
+
+  it('writes no audit rows when an update changes nothing', async () => {
+    const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await service.updateEmployee('tok', 'target-1', { roleId: 'csr' }); // same role, no-op
+    expect(repo.saveEmployeeWithAudit.mock.calls[0][1]).toEqual([]);
+  });
+
   it('does not revoke sessions on a non-deactivating update', async () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
