@@ -3,6 +3,7 @@ import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import type { InvoiceKind } from '@bellfield/contracts';
 import type { BookkeepingBalanceItemDto, BookkeepingInvoiceItemDto } from './bookkeeping.types';
+import { queryOpenBalanceRows } from './open-balance-query';
 
 type InvoiceItemRow = {
   invoiceId: string;
@@ -13,15 +14,6 @@ type InvoiceItemRow = {
   total: string | number;
   postedAt: string | Date | null;
   updatedAt: string | Date;
-};
-
-type BalanceItemRow = {
-  jobId: string;
-  jobNumber: string;
-  customerName: string;
-  netBilled: string | number;
-  paidTotal: string | number;
-  amountDue: string | number;
 };
 
 @Injectable()
@@ -88,51 +80,9 @@ export class BookkeepingRepository {
    * Highest balance first.
    */
   async listOpenBalances(limit: number): Promise<BookkeepingBalanceItemDto[]> {
-    const result = await this.databaseService.query<BalanceItemRow>(
-      `with billed as (
-         select
-           i.job_id,
-           sum(
-             case
-               when i.status = 'posted' and i.invoice_kind in ('main', 'adjustment') then i.total_amount
-               when i.status = 'posted' and i.invoice_kind = 'credit' then -i.total_amount
-               else 0
-             end
-           ) as net_billed
-         from invoices i
-         group by i.job_id
-       ),
-       paid as (
-         select inv.job_id, coalesce(sum(p.amount), 0) as paid_total
-         from payments p
-         join invoices inv on inv.id = p.invoice_id
-         where p.is_void = false
-         group by inv.job_id
-       )
-       select
-         j.id as "jobId",
-         j.job_number as "jobNumber",
-         c.name as "customerName",
-         coalesce(b.net_billed, 0) as "netBilled",
-         coalesce(pd.paid_total, 0) as "paidTotal",
-         coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) as "amountDue"
-       from billed b
-       join jobs j on j.id = b.job_id
-       join customers c on c.id = j.bill_to_customer_id
-       left join paid pd on pd.job_id = b.job_id
-       where coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) > 0
-       order by "amountDue" desc
-       limit $1`,
-      [limit]
-    );
-    return result.rows.map((row) => ({
-      jobId: row.jobId,
-      jobNumber: row.jobNumber,
-      customerName: row.customerName,
-      netBilled: roundMoney(row.netBilled),
-      paidTotal: roundMoney(row.paidTotal),
-      amountDue: roundMoney(row.amountDue)
-    }));
+    // The open-balance math lives in a shared helper so the AR/open-balance report reuses the exact
+    // same calculation (single source of truth — see open-balance-query.ts).
+    return queryOpenBalanceRows(this.databaseService, limit);
   }
 }
 

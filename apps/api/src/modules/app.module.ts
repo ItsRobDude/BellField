@@ -18,6 +18,7 @@ import { PurchasingModule } from './purchasing/purchasing.module';
 import { SystemDiagnosticsModule } from './system-diagnostics/system-diagnostics.module';
 import { SupportModule } from './support/support.module';
 import { HistoryModule } from './history/history.module';
+import { ReportingModule } from './reporting/reporting.module';
 
 @Module({
   imports: [
@@ -39,7 +40,8 @@ import { HistoryModule } from './history/history.module';
     PurchasingModule,
     SystemDiagnosticsModule,
     SupportModule,
-    HistoryModule
+    HistoryModule,
+    ReportingModule
   ]
 })
 export class AppModule {}
