@@ -60,13 +60,13 @@ Permission keys are `area:action` over 18 areas × 8 actions
 (`packages/contracts/src/identity-access.ts`). Reuse what exists — **no new permission areas** for
 M10 unless a slice genuinely needs one.
 
-| Surface / capability             | Gate (existing key)                                                                       | Who has it (default roles)                                                                     |
-| -------------------------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| System diagnostics (read status) | `supportLogsBackups:view`                                                                 | Owner, Admin                                                                                   |
-| Support export (download bundle) | `supportLogsBackups:export`                                                               | Owner, Admin                                                                                   |
-| Reports surface (read reports)   | `reports:view`                                                                            | Owner, Admin, Dispatcher, BookKeeping (+ export: `reports:export` → Owner, Admin, BookKeeping) |
-| History surface (read audit)     | `reports:view` (reuse; audit is a read concern) — revisit if a dedicated key is warranted | Owner, Admin, Dispatcher, BookKeeping                                                          |
-| Employee/role/device admin       | `employeesPermissions:view` / `:configure`                                                | Owner (full: + create/edit/delete), Admin (view/configure)                                     |
+| Surface / capability             | Gate (existing key)                           | Who has it (default roles)                                                                     |
+| -------------------------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| System diagnostics (read status) | `supportLogsBackups:view`                     | Owner, Admin                                                                                   |
+| Support export (download bundle) | `supportLogsBackups:export`                   | Owner, Admin                                                                                   |
+| Reports surface (read reports)   | `reports:view`                                | Owner, Admin, Dispatcher, BookKeeping (+ export: `reports:export` → Owner, Admin, BookKeeping) |
+| History surface (read audit)     | `history:view` (NEW dedicated area — see §5b) | Owner, Admin only                                                                              |
+| Employee/role/device admin       | `employeesPermissions:view` / `:configure`    | Owner (full: + create/edit/delete), Admin (view/configure)                                     |
 
 In the default templates, `supportLogsBackups:view` and `:export` belong to **adminCore** (Owner +
 Admin); only `:configure` is **Owner-only**. So the System/Support surfaces gate on `view`/`export`
@@ -202,13 +202,103 @@ New `apps/office-web/src/lib/system-diagnostics-api.ts`:
 
 ---
 
+## 5b. Slice 2 — History / Audit read model (LOCKED)
+
+A read-only, cross-record "who changed what" view for owners/admins. Pure projection over existing
+ledgers/timelines — **no new event-write system**.
+
+### 5b.1 Permission — a dedicated `history` area (NEW)
+
+The global audit surface gets its **own** permission area, not a reused one:
+
+- Add `history` to the `PermissionArea` list (contracts `identity-access.ts` + the api types). Only
+  `history:view` is meaningful for this read-only surface (the other actions exist by the area×action
+  model but go unused, like `reports:configure`).
+- Grant `history:view` to **Owner and Admin only** (add to `ownerPermissions` and `adminCore` in
+  `default-role-templates.ts`). Deliberately **not** `reports:view` (that also grants Dispatcher /
+  BookKeeping, and this surface exposes cross-domain actor/change history including financial/cost
+  events) and **not** `supportLogsBackups:view` (record audit is not system diagnostics/backups).
+- Domain-local history stays visible through normal domain views; only the **global** audit surface
+  is gated by `history:view`.
+
+This is the one new permission area M10 introduces (§3's "no new areas unless a slice needs one").
+
+### 5b.2 API — `history` module
+
+`GET /operations/history` — gated `history:view`, surface `office-web`. Cursor-paginated.
+
+Read-only `UNION ALL` over six sources, each projected to a common shape:
+
+| Source                      | recordType          | actor columns                                  | time          | jobId                   |
+| --------------------------- | ------------------- | ---------------------------------------------- | ------------- | ----------------------- |
+| `job_timeline_entries`      | `jobTimeline`       | `actor_name` (no id)                           | `occurred_at` | `job_id`                |
+| `register_entries`          | `registerEntry`     | `captured_by_employee_id` + `captured_by_name` | `captured_at` | `job_id`                |
+| `inventory_movements`       | `inventoryMovement` | `actor_employee_id` + `actor_name`             | `occurred_at` | `job_id` (nullable)     |
+| `job_cost_events`           | `jobCostEvent`      | `actor_employee_id` + `actor_name`             | `occurred_at` | `job_id`                |
+| `payments`                  | `payment`           | `recorded_by_employee_id` + `recorded_by_name` | `received_at` | null (invoice-scoped)   |
+| `equipment_history_entries` | `equipmentHistory`  | `actor_name` (no id)                           | `timestamp`   | null (equipment-scoped) |
+
+```ts
+type HistoryRecordType =
+  | 'jobTimeline'
+  | 'registerEntry'
+  | 'inventoryMovement'
+  | 'jobCostEvent'
+  | 'payment'
+  | 'equipmentHistory';
+
+interface HistoryEntry {
+  recordType: HistoryRecordType;
+  sourceId: string;
+  occurredAt: string;
+  actorEmployeeId: string | null; // null where the source only stored a name
+  actorName: string | null;
+  summary: string; // human-readable, derived server-side
+  jobId: string | null;
+}
+
+interface HistoryResponse {
+  entries: HistoryEntry[];
+  nextCursor: string | null;
+}
+```
+
+- **Filters (query params):** `dateFrom`, `dateTo` (ISO), `actorEmployeeId`, `recordType` (one of the
+  union), `jobId`. A `jobId` filter naturally narrows to the job-scoped sources (timeline / register /
+  job cost / job-linked inventory movements); payment + equipment rows are not job-scoped and drop out
+  of a job-filtered view.
+- **Ordering + cursor:** `occurred_at DESC, recordType ASC, source_id DESC`. The cursor encodes that
+  tuple (opaque base64). `limit` defaults to e.g. 50, capped (e.g. 200).
+- **Summary:** built server-side per source (e.g. register → "Register entry added: <description>",
+  payment → "Payment recorded"). It must stay privacy-appropriate — it reuses fields already visible
+  to a permitted office user; it does not invent or expose anything new.
+- **Deferred (follow-up, not v1):** customer/location filters (need record → location → customer
+  joins, and payments join via invoice → job) and any free-text search. v1 ships the five filters
+  above. The plan notes this so we don't silently imply broader coverage.
+
+### 5b.3 Contracts + office
+
+- Contracts: new `packages/contracts/src/history.ts` (`HistoryEntry`, `HistoryRecordType`,
+  `HistoryResponse`) + barrel.
+- Office: a "History" surface (own component) with a filter bar (date range, actor select, record-type
+  select, optional job) and a paginated list; nav gated on `history:view`. Per-domain
+  `history-api.ts` client. No shell bloat.
+
+### 5b.4 Tests + smoke
+
+- API: the union maps each source's actor/time/jobId correctly; filters apply (date, actor,
+  recordType, jobId); cursor pagination returns a stable next page; `history:view` gate (Owner/Admin
+  200, Dispatcher/BookKeeping/Technician 403).
+- Office: History surface renders entries from a mocked response; filter changes refetch.
+- Live + browser smoke against real ledger rows.
+- Migration: none (read-only over existing tables); the permission-area change is data/templates, but
+  confirm existing employees' effective permissions resolve (owner/admin gain `history:view`).
+
+---
+
 ## 6. Later slices (sketch — locked in their own pass)
 
-- **History / Audit read model:** `GET /history` read-only union over `job_timeline_entries`,
-  `register_entries`, `inventory_movements`, `job_cost_events`, `payments`,
-  `equipment_history_entries` (all carry actor + timestamp). Filters: date range, actor, record
-  type, job/customer/location. Cursor pagination. No new universal event-write system unless the
-  existing sources can't support the view.
+- **History / Audit read model:** locked — see §5b.
 - **Fixed Reporting (read-only projections, tested totals):**
   - Open balance / AR summary (from invoices + payments).
   - Job profitability summary with **incomplete-cost flags** (reuse the M9 rollup's `costComplete` /
