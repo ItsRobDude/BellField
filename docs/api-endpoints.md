@@ -11,13 +11,22 @@ Most endpoints expect:
 
 ## Identity
 
-| Method  | Path                              | Surface         | Permission gate                  | Purpose                                                    |
-| ------- | --------------------------------- | --------------- | -------------------------------- | ---------------------------------------------------------- |
-| `POST`  | `/identity/auth/login`            | office or field | none                             | Create a session for an employee and selected surface.     |
-| `GET`   | `/identity/auth/me`               | office or field | active session                   | Return current employee summary and effective permissions. |
-| `GET`   | `/identity/roles`                 | office          | `employeesPermissions:view`      | List default role templates.                               |
-| `GET`   | `/identity/employees`             | office          | `employeesPermissions:view`      | List employee summaries.                                   |
-| `PATCH` | `/identity/employees/:employeeId` | office          | `employeesPermissions:configure` | Update role, active state, or permission overrides.        |
+| Method  | Path                                                         | Surface         | Permission gate                  | Purpose                                                                                                                                                                                                  |
+| ------- | ------------------------------------------------------------ | --------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`  | `/identity/auth/login`                                       | office or field | none                             | Create a session for an employee and selected surface.                                                                                                                                                   |
+| `GET`   | `/identity/auth/me`                                          | office or field | active session                   | Return current employee summary and effective permissions.                                                                                                                                               |
+| `GET`   | `/identity/roles`                                            | office          | `employeesPermissions:view`      | List default role templates.                                                                                                                                                                             |
+| `GET`   | `/identity/employees`                                        | office          | `employeesPermissions:view`      | List employee summaries.                                                                                                                                                                                 |
+| `POST`  | `/identity/employees`                                        | office          | `employeesPermissions:create`    | Create an employee (Owner-only). Server-generated id, hashed password (never returned), case-insensitive duplicate-email rejection.                                                                      |
+| `GET`   | `/identity/employees/:employeeId`                            | office          | `employeesPermissions:view`      | Admin detail: employee summary (overrides + effective perms) + active sessions (no bearer token).                                                                                                        |
+| `PATCH` | `/identity/employees/:employeeId`                            | office          | `employeesPermissions:configure` | Update role, active state, or permission overrides. Guards (owner-protection, elevation, self-lockout, last-owner/authority) + audit run inside a locked transaction; writes only role/active/overrides. |
+| `POST`  | `/identity/employees/:employeeId/password-reset`             | office          | `employeesPermissions:configure` | Admin password reset (+ owner-protection). Hashes the new value, revokes all the target's sessions, returns `{ revokedSessionCount }`; never echoes the password.                                        |
+| `GET`   | `/identity/employees/:employeeId/sessions`                   | office          | `employeesPermissions:view`      | List the employee's device sessions (id/surface/device/issuedAt — never the bearer token).                                                                                                               |
+| `POST`  | `/identity/employees/:employeeId/sessions/:sessionId/revoke` | office          | `employeesPermissions:configure` | Revoke one device session by its non-secret id (+ owner-protection).                                                                                                                                     |
+
+Sensitive writes (create / update / password-reset / session-revoke) record a non-secret row in
+`admin_audit_entries` and serialize under a transaction-level advisory lock with an in-transaction
+target re-read, so concurrent admin writes can't clobber each other or leave zero active owners/managers.
 
 ## CRM
 

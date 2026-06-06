@@ -147,21 +147,13 @@ export class IdentityAccessService {
       'office-web'
     ]);
 
-    const existingEmployee = await this.identityAccessRepository.findEmployeeById(employeeId);
-
-    if (!existingEmployee) {
-      throw new NotFoundException('Employee not found.');
+    // Request/actor-only guards (independent of the target's current state) run up front.
+    if (update.roleId) {
+      this.assertRoleExists(update.roleId);
     }
-
-    // Owner-protection: only an Owner may modify an existing Owner (role/active/overrides).
-    this.assertCanActOnTarget(actor.roleId, existingEmployee.roleId);
-
-    // Elevation guards — evaluate the REQUESTED result, not just the current role.
-    // Promoting anyone (incl. self) to Owner requires an Owner actor.
     if (update.roleId === 'owner' && actor.roleId !== 'owner') {
       throw new ForbiddenException('Only an owner can promote an employee to owner.');
     }
-    // A permission cannot be both granted and revoked.
     if (update.grantedPermissions && update.revokedPermissions) {
       const revoked = new Set(update.revokedPermissions);
       const conflict = update.grantedPermissions.find((key) => revoked.has(key));
@@ -171,7 +163,6 @@ export class IdentityAccessService {
         );
       }
     }
-    // No privilege escalation via overrides: an actor can only grant permissions it itself holds.
     if (update.grantedPermissions) {
       const actorPermissions = new Set(actor.effectivePermissions);
       const escalated = update.grantedPermissions.find((key) => !actorPermissions.has(key));
@@ -182,62 +173,68 @@ export class IdentityAccessService {
       }
     }
 
-    const before = {
-      roleId: existingEmployee.roleId,
-      isActive: existingEmployee.isActive,
-      granted: [...existingEmployee.permissionOverrides.grantedPermissions].sort(),
-      revoked: [...existingEmployee.permissionOverrides.revokedPermissions].sort()
-    };
+    // Everything state-dependent runs INSIDE the locked transaction against the freshly-read target:
+    // owner-protection, self-protection, the last-owner/authority invariants, and the audit delta. Only
+    // role/active/overrides are written, so a concurrent password reset / profile edit is never clobbered.
+    const updated = await this.identityAccessRepository.runEmployeeUpdate(
+      employeeId,
+      ({ target, employees }) => {
+        this.assertCanActOnTarget(actor.roleId, target.roleId);
 
-    if (update.roleId) {
-      this.assertRoleExists(update.roleId);
-      existingEmployee.roleId = update.roleId;
-    }
+        const resulting: EmployeeRecord = {
+          ...target,
+          roleId: update.roleId ?? target.roleId,
+          isActive: typeof update.isActive === 'boolean' ? update.isActive : target.isActive,
+          permissionOverrides: {
+            grantedPermissions: update.grantedPermissions
+              ? this.uniquePermissionKeys(update.grantedPermissions)
+              : target.permissionOverrides.grantedPermissions,
+            revokedPermissions: update.revokedPermissions
+              ? this.uniquePermissionKeys(update.revokedPermissions)
+              : target.permissionOverrides.revokedPermissions
+          }
+        };
 
-    if (typeof update.isActive === 'boolean') {
-      existingEmployee.isActive = update.isActive;
-    }
+        if (employeeId === actor.id) {
+          if (!resulting.isActive) {
+            throw new ForbiddenException('You cannot deactivate your own account.');
+          }
+          if (
+            !this.resolveEffectivePermissions(resulting).includes('employeesPermissions:configure')
+          ) {
+            throw new ForbiddenException(
+              'You cannot remove your own employee-management authority.'
+            );
+          }
+        }
 
-    if (update.grantedPermissions) {
-      existingEmployee.permissionOverrides.grantedPermissions = this.uniquePermissionKeys(
-        update.grantedPermissions
-      );
-    }
+        const world = employees.map((employee) =>
+          employee.id === employeeId ? resulting : employee
+        );
+        this.assertRetainsEmployeeAuthority(world);
+        this.assertRetainsActiveOwner(world);
 
-    if (update.revokedPermissions) {
-      existingEmployee.permissionOverrides.revokedPermissions = this.uniquePermissionKeys(
-        update.revokedPermissions
-      );
-    }
+        const before = {
+          roleId: target.roleId,
+          isActive: target.isActive,
+          granted: [...target.permissionOverrides.grantedPermissions].sort(),
+          revoked: [...target.permissionOverrides.revokedPermissions].sort()
+        };
 
-    // Self-protection: you cannot lock yourself out (deactivate or remove your own management authority).
-    if (employeeId === actor.id) {
-      if (!existingEmployee.isActive) {
-        throw new ForbiddenException('You cannot deactivate your own account.');
+        return {
+          fields: {
+            roleId: resulting.roleId,
+            isActive: resulting.isActive,
+            grantedPermissions: resulting.permissionOverrides.grantedPermissions,
+            revokedPermissions: resulting.permissionOverrides.revokedPermissions
+          },
+          auditEntries: this.buildUpdateAuditEntries(actor, resulting, before),
+          revokeSessions: target.isActive && !resulting.isActive
+        };
       }
-      if (
-        !this.resolveEffectivePermissions(existingEmployee).includes(
-          'employeesPermissions:configure'
-        )
-      ) {
-        throw new ForbiddenException('You cannot remove your own employee-management authority.');
-      }
-    }
+    );
 
-    const auditEntries = this.buildUpdateAuditEntries(actor, existingEmployee, before);
-    const revokeSessions = before.isActive && !existingEmployee.isActive;
-
-    // Persist state + audit (+ session revoke) atomically. The count invariants are re-checked INSIDE
-    // the transaction (under an advisory lock) against freshly-read rows — see saveEmployeeWithAudit.
-    await this.identityAccessRepository.saveEmployeeWithAudit(existingEmployee, auditEntries, {
-      revokeSessions,
-      assertInvariants: (employees) => {
-        this.assertRetainsEmployeeAuthority(employees);
-        this.assertRetainsActiveOwner(employees);
-      }
-    });
-
-    return this.toEmployeeSummary(existingEmployee);
+    return this.toEmployeeSummary(updated);
   }
 
   async getRoleTemplatesForOffice(sessionToken: string): Promise<RoleTemplate[]> {
@@ -268,21 +265,19 @@ export class IdentityAccessService {
     const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
       'office-web'
     ]);
-    const target = await this.identityAccessRepository.findEmployeeById(employeeId);
-    if (!target) {
-      throw new NotFoundException('Employee not found.');
-    }
-    this.assertCanActOnTarget(actor.roleId, target.roleId);
-    const auditEntry = this.buildAuditEntry(
-      actor,
-      target,
-      'employee_session_revoked',
-      `Revoked device session ${sessionId}.`
-    );
-    const revoked = await this.identityAccessRepository.revokeSessionByIdWithAudit(
+    // Owner-protection runs inside the locked transaction against the freshly-read target role.
+    const revoked = await this.identityAccessRepository.runSessionRevoke(
       employeeId,
       sessionId,
-      auditEntry
+      ({ target }) => {
+        this.assertCanActOnTarget(actor.roleId, target.roleId);
+        return this.buildAuditEntry(
+          actor,
+          target,
+          'employee_session_revoked',
+          `Revoked device session ${sessionId}.`
+        );
+      }
     );
     return { revoked };
   }
@@ -371,23 +366,20 @@ export class IdentityAccessService {
     const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
       'office-web'
     ]);
-    const target = await this.identityAccessRepository.findEmployeeById(employeeId);
-    if (!target) {
-      throw new NotFoundException('Employee not found.');
-    }
-    this.assertCanActOnTarget(actor.roleId, target.roleId);
-
     const passwordHash = await hashPassword(request.password);
-    const auditEntry = this.buildAuditEntry(
-      actor,
-      target,
-      'employee_password_reset',
-      'Reset the account password and revoked active sessions.'
-    );
-    const revokedSessionCount = await this.identityAccessRepository.resetEmployeePasswordWithAudit(
+    // Owner-protection runs inside the locked transaction against the freshly-read target role.
+    const revokedSessionCount = await this.identityAccessRepository.runPasswordReset(
       employeeId,
       passwordHash,
-      auditEntry
+      ({ target }) => {
+        this.assertCanActOnTarget(actor.roleId, target.roleId);
+        return this.buildAuditEntry(
+          actor,
+          target,
+          'employee_password_reset',
+          'Reset the account password and revoked active sessions.'
+        );
+      }
     );
     return { revokedSessionCount };
   }
