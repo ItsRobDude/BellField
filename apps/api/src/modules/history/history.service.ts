@@ -51,7 +51,16 @@ type HistoryRow = {
   jobId: string | null;
 };
 
-type Cursor = { o: string; r: string; s: string };
+const HISTORY_RECORD_TYPES = new Set<HistoryRecordType>([
+  'jobTimeline',
+  'registerEntry',
+  'inventoryMovement',
+  'jobCostEvent',
+  'payment',
+  'equipmentHistory'
+]);
+
+type Cursor = { o: string; r: HistoryRecordType; s: string };
 
 function buildSummary(recordType: HistoryRecordType, detail: string): string {
   switch (recordType) {
@@ -82,13 +91,15 @@ function decodeCursor(cursor: string): Cursor {
     const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<Cursor>;
     if (
       typeof parsed.o !== 'string' ||
+      Number.isNaN(new Date(parsed.o).getTime()) ||
       typeof parsed.r !== 'string' ||
+      !HISTORY_RECORD_TYPES.has(parsed.r as HistoryRecordType) ||
       typeof parsed.s !== 'string' ||
-      Number.isNaN(new Date(parsed.o).getTime())
+      parsed.s.trim().length === 0
     ) {
       throw new Error('Invalid cursor payload.');
     }
-    return { o: parsed.o, r: parsed.r, s: parsed.s };
+    return { o: parsed.o, r: parsed.r as HistoryRecordType, s: parsed.s };
   } catch {
     throw new BadRequestException('History cursor is invalid.');
   }

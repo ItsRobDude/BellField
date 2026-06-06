@@ -176,6 +176,23 @@ describe('HistoryService', () => {
     expect(databaseService.query).not.toHaveBeenCalled();
   });
 
+  it('rejects a syntactically valid cursor with a bad recordType or empty sourceId', async () => {
+    const encode = (payload: unknown) =>
+      Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
+    const cases = [
+      { o: '2026-06-05T00:00:00.000Z', r: 'notARealType', s: 'src-1' }, // r not in the union
+      { o: '2026-06-05T00:00:00.000Z', r: 'payment', s: '   ' }, // blank source id
+      { o: 'not-a-date', r: 'payment', s: 'src-1' } // unparseable timestamp
+    ];
+    for (const payload of cases) {
+      const { service, databaseService } = createService();
+      await expect(service.getHistory('token', { cursor: encode(payload) })).rejects.toBeInstanceOf(
+        BadRequestException
+      );
+      expect(databaseService.query).not.toHaveBeenCalled();
+    }
+  });
+
   it('clamps an over-large limit to the server maximum', async () => {
     const { service, databaseService } = createService();
     await service.getHistory('token', { limit: 5000 });
