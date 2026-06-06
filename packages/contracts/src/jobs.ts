@@ -299,6 +299,12 @@ export interface CreateRegisterEntryRequest {
   inventoryLocationId?: string;
   /** How the line projects onto the customer invoice. Defaults to `billable`. */
   billingProjectionState?: BillingProjectionState;
+  /**
+   * Stable client-generated idempotency key for a field-queued create. A re-drained create
+   * carrying a key that already produced a line returns that existing line instead of inserting
+   * a duplicate (which would double-bill and double-issue stock). Office creates omit it.
+   */
+  clientOperationId?: string;
   occurredAt?: string;
   baseUpdatedAt?: string;
   syncSource?: FieldSyncSource;

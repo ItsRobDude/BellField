@@ -330,6 +330,12 @@ export class CreateRegisterEntryRequestBodyDto implements CreateRegisterEntryReq
   billingProjectionState?: BillingProjectionState;
 
   @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(128)
+  clientOperationId?: string;
+
+  @IsOptional()
   @IsISO8601()
   occurredAt?: string;
 

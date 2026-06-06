@@ -503,6 +503,7 @@ export type CreateRegisterEntryInput = {
   inventoryItemId?: string;
   inventoryLocationId?: string;
   billingProjectionState?: BillingProjectionState;
+  clientOperationId?: string;
 };
 
 export type UpdateRegisterEntryInput = Partial<
