@@ -1,4 +1,5 @@
 import type {
+  CreateEmployeeRequest,
   EmployeeRoleId as ContractEmployeeRoleId,
   EmployeePermissionOverrides as ContractEmployeePermissionOverrides,
   EmployeeSummary as ContractEmployeeSummary,
@@ -7,6 +8,7 @@ import type {
   PermissionAction as ContractPermissionAction,
   PermissionArea as ContractPermissionArea,
   PermissionKey as ContractPermissionKey,
+  ResetEmployeePasswordRequest,
   RoleTemplate as ContractRoleTemplate,
   UpdateEmployeeRequest
 } from '@bellfield/contracts';
@@ -97,6 +99,37 @@ export type LoginRequestDto = LoginRequest;
 export type LoginResponseDto = LoginResponse;
 
 export type UpdateEmployeeRequestDto = UpdateEmployeeRequest;
+
+export type CreateEmployeeRequestDto = CreateEmployeeRequest;
+
+export type ResetEmployeePasswordRequestDto = ResetEmployeePasswordRequest;
+
+/** Sensitive identity-access admin actions recorded in admin_audit_entries (matches the SQL CHECK). */
+export const adminAuditActions = [
+  'employee_created',
+  'employee_role_changed',
+  'employee_activated',
+  'employee_deactivated',
+  'employee_overrides_changed',
+  'employee_password_reset',
+  'employee_session_revoked'
+] as const;
+
+export type AdminAuditAction = (typeof adminAuditActions)[number];
+
+/** One append-only audit row. Carries non-secret context only (no passwords/tokens/bodies). */
+export type AdminAuditEntry = {
+  id: string;
+  occurredAt: string;
+  actorEmployeeId: string;
+  actorName: string;
+  actorEmail: string;
+  targetEmployeeId: string;
+  targetName: string;
+  targetEmail: string;
+  action: AdminAuditAction;
+  summary: string;
+};
 
 export type SessionRecord = {
   /** Bearer token — secret, the auth lookup key. Never surfaced to clients as an identifier. */

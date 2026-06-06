@@ -110,3 +110,33 @@ export interface RevokeEmployeeSessionResponse {
   /** True if a matching session was found and revoked. */
   revoked: boolean;
 }
+
+/** Create a new employee (Owner-only, `employeesPermissions:create`). The server generates the id. */
+export interface CreateEmployeeRequest {
+  email: string;
+  displayName: string;
+  roleId: EmployeeRoleId;
+  /** Initial password (stored hashed; never returned). */
+  password: string;
+  /** Defaults to active when omitted. */
+  isActive?: boolean;
+  grantedPermissions?: PermissionKey[];
+  revokedPermissions?: PermissionKey[];
+}
+
+/** Admin-set password reset. The admin supplies the new value; it is never echoed back. */
+export interface ResetEmployeePasswordRequest {
+  password: string;
+}
+
+export interface ResetEmployeePasswordResponse {
+  /** Sessions revoked as part of the reset (a reset always clears the target's sessions). */
+  revokedSessionCount: number;
+}
+
+/** Full admin view of one employee: the summary (which carries overrides + effective permissions)
+ * plus their active device sessions. */
+export interface EmployeeAdminDetailResponse {
+  employee: EmployeeSummary;
+  sessions: EmployeeSessionSummary[];
+}
