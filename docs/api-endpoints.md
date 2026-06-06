@@ -171,6 +171,27 @@ new event-write system. See `docs/m10-trust-admin-plan.md` §5b.
 
 `history:view` is a dedicated permission area granted to Owner and Admin only.
 
+## Reports (Milestone 10)
+
+Fixed, read-only business reports as SQL projections. No report builder. Every figure reuses an
+existing tested calculation (bookkeeping open-balance CTE, M9 job-cost rollup/snapshot, inventory
+on-hand) — the report layer only aggregates totals. Primary gate `reports:view` plus a report-specific
+secondary gate; CSV export adds `reports:export` (enforced server-side, not UI-only). See
+`docs/m10-trust-admin-plan.md` §5c.
+
+| Method | Path                                             | Surface | Permission gate                    | Purpose                                                                                                       |
+| ------ | ------------------------------------------------ | ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/reports/ar-open-balances`           | office  | `reports:view` + `invoices:view`   | Jobs with an open balance: net billed (posted main+adjustment−credit) − non-void payments, where > 0.         |
+| `GET`  | `/operations/reports/ar-open-balances/export`    | office  | above + `reports:export`           | The AR report as a downloadable CSV.                                                                          |
+| `GET`  | `/operations/reports/job-profitability`          | office  | `reports:view` + `jobCosting:view` | Per-job revenue (posted invoices) vs cost (rollup/snapshot); incomplete-cost flags; null margin when partial. |
+| `GET`  | `/operations/reports/job-profitability/export`   | office  | above + `reports:export`           | The profitability report as a downloadable CSV.                                                               |
+| `GET`  | `/operations/reports/inventory-valuation`        | office  | `reports:view` + `inventory:view`  | On-hand per item+location at weighted-average cost; zero balances excluded.                                   |
+| `GET`  | `/operations/reports/inventory-valuation/export` | office  | above + `reports:export`           | The valuation report as a downloadable CSV.                                                                   |
+
+`reports:view` → Owner, Admin, Dispatcher, BookKeeping; `reports:export` → Owner, Admin, BookKeeping. The
+secondary gates make the surface per-report: e.g. Dispatcher sees only AR (no `jobCosting:view`/
+`inventory:view`/`reports:export`).
+
 ## System (Milestone 10)
 
 Owner/Admin trust + support surface. Read-only and privacy-conscious: never returns customer/job
