@@ -172,8 +172,8 @@ export class JobsRegisterDataRepository {
       // on client_operation_id is the integrity backstop for a concurrent race past this check.
       if (clientOperationId !== null) {
         const replay = await queryable.query<{ id: string }>(
-          `select id from register_entries where client_operation_id = $1 limit 1`,
-          [clientOperationId]
+          `select id from register_entries where client_operation_id = $1 and job_id = $2 limit 1`,
+          [clientOperationId, jobId]
         );
         if (replay.rows[0]) {
           dedupedExistingId = replay.rows[0].id;

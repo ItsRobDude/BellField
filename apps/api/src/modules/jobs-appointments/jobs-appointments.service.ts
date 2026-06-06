@@ -458,13 +458,18 @@ export class JobsAppointmentsService {
 
     // Idempotent replay: a re-drained field create whose client operation already produced a line
     // returns success with the current job summary — before any finalized-job/permission guard, so
-    // a retry after the job has since closed clears the queued op instead of looping on a 409.
-    if (request.clientOperationId) {
-      const existing = await this.jobsDataService.findRegisterEntryByClientOperationId(
-        request.clientOperationId
-      );
+    // a retry after the job has since closed clears the queued op instead of looping on a 409. The
+    // key is normalized the same way the repository stores it, and the existing line must belong to
+    // THIS route's job (a key naming a different job is a client bug or probe, not this create).
+    const clientOperationId = request.clientOperationId?.trim();
+    if (clientOperationId) {
+      const existing =
+        await this.jobsDataService.findRegisterEntryByClientOperationId(clientOperationId);
       if (existing) {
-        return this.buildRegisterCreateResponse(existing.jobId, actor, request.syncSource);
+        if (existing.jobId !== jobId) {
+          throw new ConflictException('This operation id belongs to a different job.');
+        }
+        return this.buildRegisterCreateResponse(jobId, actor, request.syncSource);
       }
     }
 
