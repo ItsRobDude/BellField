@@ -119,8 +119,10 @@ export function OfficeEmployeeAccessSurface({
   }, [apiBaseUrl, sessionToken]);
 
   useEffect(() => {
+    // Clear any previously-shown detail immediately so a stale employee can never linger while the
+    // new one loads — or if its load fails.
+    setDetail(null);
     if (!selectedId) {
-      setDetail(null);
       return;
     }
     let active = true;
@@ -131,8 +133,10 @@ export function OfficeEmployeeAccessSurface({
         if (active) setDetail(result);
       })
       .catch((error) => {
-        if (active)
+        if (active) {
+          setDetail(null);
           setErrorMessage(error instanceof Error ? error.message : 'Unable to load employee.');
+        }
       })
       .finally(() => {
         if (active) setIsDetailLoading(false);
@@ -148,7 +152,7 @@ export function OfficeEmployeeAccessSurface({
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
 
       <div style={layoutStyle}>
-        <div style={listStyle} role="list">
+        <div style={listStyle}>
           {isListLoading ? (
             <p style={styles.notice}>Loading…</p>
           ) : employees.length === 0 ? (
@@ -158,7 +162,6 @@ export function OfficeEmployeeAccessSurface({
               <button
                 key={employee.id}
                 type="button"
-                role="listitem"
                 aria-pressed={employee.id === selectedId}
                 style={employee.id === selectedId ? listRowActiveStyle : listRowStyle}
                 onClick={() => setSelectedId(employee.id)}

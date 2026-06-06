@@ -96,4 +96,18 @@ describe('OfficeEmployeeAccessSurface (read path)', () => {
     renderSurface();
     await waitFor(() => expect(screen.getByText('Forbidden')).toBeInTheDocument());
   });
+
+  it('clears the previous detail when the next selected employee fails to load', async () => {
+    mockedApi.getEmployeeDetail
+      .mockResolvedValueOnce(techDetail) // Tina loads
+      .mockRejectedValueOnce(new Error('Detail boom')); // Olivia fails
+    renderSurface();
+    fireEvent.click(await screen.findByText('Tina Tech'));
+    expect(await screen.findByText(/tina@bellfield\.local/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Olivia Owner'));
+    await waitFor(() => expect(screen.getByText('Detail boom')).toBeInTheDocument());
+    // Tina's detail must not linger behind the error.
+    expect(screen.queryByText(/tina@bellfield\.local/)).toBeNull();
+  });
 });
