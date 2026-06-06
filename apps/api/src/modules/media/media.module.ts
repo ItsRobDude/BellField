@@ -10,6 +10,7 @@ import { MediaTokenService } from './media-token.service';
 @Module({
   imports: [CompanyDataModule, IdentityAccessModule],
   controllers: [MediaController],
-  providers: [MediaConfigService, MediaStorageService, MediaTokenService, MediaService]
+  providers: [MediaConfigService, MediaStorageService, MediaTokenService, MediaService],
+  exports: [MediaConfigService]
 })
 export class MediaModule {}
