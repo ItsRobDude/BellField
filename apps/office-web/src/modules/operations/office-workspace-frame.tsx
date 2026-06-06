@@ -12,6 +12,7 @@ export type OfficeView =
   | 'inventory'
   | 'purchasing'
   | 'bookkeeping'
+  | 'system'
   | 'jobDetail';
 
 type OfficeWorkspaceFrameProps = {
@@ -26,6 +27,7 @@ type OfficeWorkspaceFrameProps = {
   canViewInventory: boolean;
   canViewPurchasing: boolean;
   canViewBookkeeping: boolean;
+  canViewSystem: boolean;
   noticeMessage: string | null;
   onOpenJobIntake: () => void;
   onRefresh: () => void;
@@ -45,6 +47,7 @@ export function OfficeWorkspaceFrame({
   canViewInventory,
   canViewPurchasing,
   canViewBookkeeping,
+  canViewSystem,
   noticeMessage,
   onOpenJobIntake,
   onRefresh,
@@ -93,6 +96,13 @@ export function OfficeWorkspaceFrame({
               label="Bookkeeping"
               active={activeView === 'bookkeeping'}
               onClick={() => onViewChange('bookkeeping')}
+            />
+          ) : null}
+          {canViewSystem ? (
+            <NavButton
+              label="System"
+              active={activeView === 'system'}
+              onClick={() => onViewChange('system')}
             />
           ) : null}
         </aside>

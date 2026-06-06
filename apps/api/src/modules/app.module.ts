@@ -15,6 +15,8 @@ import { JobQueueModule } from './job-queue/job-queue.module';
 import { JobsAppointmentsModule } from './jobs-appointments/jobs-appointments.module';
 import { MediaModule } from './media/media.module';
 import { PurchasingModule } from './purchasing/purchasing.module';
+import { SystemDiagnosticsModule } from './system-diagnostics/system-diagnostics.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -33,7 +35,9 @@ import { PurchasingModule } from './purchasing/purchasing.module';
     JobQueueModule,
     JobsAppointmentsModule,
     MediaModule,
-    PurchasingModule
+    PurchasingModule,
+    SystemDiagnosticsModule,
+    SupportModule
   ]
 })
 export class AppModule {}
