@@ -147,12 +147,9 @@ export class IdentityAccessService {
       'office-web'
     ]);
 
-    // Request/actor-only guards (independent of the target's current state) run up front.
+    // Request-only guards (independent of any mutable employee state) run up front.
     if (update.roleId) {
       this.assertRoleExists(update.roleId);
-    }
-    if (update.roleId === 'owner' && actor.roleId !== 'owner') {
-      throw new ForbiddenException('Only an owner can promote an employee to owner.');
     }
     if (update.grantedPermissions && update.revokedPermissions) {
       const revoked = new Set(update.revokedPermissions);
@@ -163,23 +160,29 @@ export class IdentityAccessService {
         );
       }
     }
-    if (update.grantedPermissions) {
-      const actorPermissions = new Set(actor.effectivePermissions);
-      const escalated = update.grantedPermissions.find((key) => !actorPermissions.has(key));
-      if (escalated) {
-        throw new ForbiddenException(
-          `You cannot grant a permission you do not hold: ${escalated}.`
-        );
-      }
-    }
 
-    // Everything state-dependent runs INSIDE the locked transaction against the freshly-read target:
-    // owner-protection, self-protection, the last-owner/authority invariants, and the audit delta. Only
-    // role/active/overrides are written, so a concurrent password reset / profile edit is never clobbered.
+    // Everything state-dependent runs INSIDE the locked transaction against the freshly-read ACTOR and
+    // target: actor permission/active re-check, owner-protection, elevation, self-protection, the
+    // last-owner/authority invariants, and the audit delta. Only role/active/overrides are written, so a
+    // concurrent password reset / profile edit is never clobbered.
     const updated = await this.identityAccessRepository.runEmployeeUpdate(
+      actor.id,
       employeeId,
-      ({ target, employees }) => {
-        this.assertCanActOnTarget(actor.roleId, target.roleId);
+      ({ actor: freshActor, target, employees }) => {
+        this.assertActorCan(freshActor, 'employeesPermissions:configure');
+        this.assertCanActOnTarget(freshActor.roleId, target.roleId);
+        if (update.roleId === 'owner' && freshActor.roleId !== 'owner') {
+          throw new ForbiddenException('Only an owner can promote an employee to owner.');
+        }
+        if (update.grantedPermissions) {
+          const actorPermissions = new Set(this.resolveEffectivePermissions(freshActor));
+          const escalated = update.grantedPermissions.find((key) => !actorPermissions.has(key));
+          if (escalated) {
+            throw new ForbiddenException(
+              `You cannot grant a permission you do not hold: ${escalated}.`
+            );
+          }
+        }
 
         const resulting: EmployeeRecord = {
           ...target,
@@ -195,7 +198,7 @@ export class IdentityAccessService {
           }
         };
 
-        if (employeeId === actor.id) {
+        if (employeeId === freshActor.id) {
           if (!resulting.isActive) {
             throw new ForbiddenException('You cannot deactivate your own account.');
           }
@@ -228,7 +231,7 @@ export class IdentityAccessService {
             grantedPermissions: resulting.permissionOverrides.grantedPermissions,
             revokedPermissions: resulting.permissionOverrides.revokedPermissions
           },
-          auditEntries: this.buildUpdateAuditEntries(actor, resulting, before),
+          auditEntries: this.buildUpdateAuditEntries(freshActor, resulting, before),
           revokeSessions: target.isActive && !resulting.isActive
         };
       }
@@ -265,14 +268,16 @@ export class IdentityAccessService {
     const actor = await this.getAuthorizedEmployee(sessionToken, 'employeesPermissions:configure', [
       'office-web'
     ]);
-    // Owner-protection runs inside the locked transaction against the freshly-read target role.
+    // Actor re-validation + owner-protection run inside the locked transaction against fresh rows.
     const revoked = await this.identityAccessRepository.runSessionRevoke(
+      actor.id,
       employeeId,
       sessionId,
-      ({ target }) => {
-        this.assertCanActOnTarget(actor.roleId, target.roleId);
+      ({ actor: freshActor, target }) => {
+        this.assertActorCan(freshActor, 'employeesPermissions:configure');
+        this.assertCanActOnTarget(freshActor.roleId, target.roleId);
         return this.buildAuditEntry(
-          actor,
+          freshActor,
           target,
           'employee_session_revoked',
           `Revoked device session ${sessionId}.`
@@ -291,9 +296,6 @@ export class IdentityAccessService {
       'office-web'
     ]);
     this.assertRoleExists(request.roleId);
-    if (request.roleId === 'owner' && actor.roleId !== 'owner') {
-      throw new ForbiddenException('Only an owner can create an owner.');
-    }
 
     const grantedPermissions = this.uniquePermissionKeys(request.grantedPermissions ?? []);
     const revokedPermissions = this.uniquePermissionKeys(request.revokedPermissions ?? []);
@@ -301,11 +303,6 @@ export class IdentityAccessService {
     const conflict = grantedPermissions.find((key) => revokedSet.has(key));
     if (conflict) {
       throw new BadRequestException(`Permission "${conflict}" cannot be both granted and revoked.`);
-    }
-    const actorPermissions = new Set(actor.effectivePermissions);
-    const escalated = grantedPermissions.find((key) => !actorPermissions.has(key));
-    if (escalated) {
-      throw new ForbiddenException(`You cannot grant a permission you do not hold: ${escalated}.`);
     }
 
     const email = request.email.trim();
@@ -323,15 +320,33 @@ export class IdentityAccessService {
       password: await hashPassword(request.password),
       permissionOverrides: { grantedPermissions, revokedPermissions }
     };
-    const auditEntry = this.buildAuditEntry(
-      actor,
-      employee,
-      'employee_created',
-      `Created ${employee.roleId} account${employee.isActive ? '' : ' (inactive)'}.`
-    );
 
     try {
-      await this.identityAccessRepository.createEmployeeWithAudit(employee, auditEntry);
+      // Actor re-validation (active + create perm), owner-creation, and no-escalation run inside the
+      // locked transaction against the freshly-read actor; the audit row uses that fresh actor.
+      await this.identityAccessRepository.createEmployeeWithAudit(
+        actor.id,
+        employee,
+        ({ actor: freshActor }) => {
+          this.assertActorCan(freshActor, 'employeesPermissions:create');
+          if (employee.roleId === 'owner' && freshActor.roleId !== 'owner') {
+            throw new ForbiddenException('Only an owner can create an owner.');
+          }
+          const actorPermissions = new Set(this.resolveEffectivePermissions(freshActor));
+          const escalated = grantedPermissions.find((key) => !actorPermissions.has(key));
+          if (escalated) {
+            throw new ForbiddenException(
+              `You cannot grant a permission you do not hold: ${escalated}.`
+            );
+          }
+          return this.buildAuditEntry(
+            freshActor,
+            employee,
+            'employee_created',
+            `Created ${employee.roleId} account${employee.isActive ? '' : ' (inactive)'}.`
+          );
+        }
+      );
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new ConflictException('An employee with this email already exists.');
@@ -367,14 +382,16 @@ export class IdentityAccessService {
       'office-web'
     ]);
     const passwordHash = await hashPassword(request.password);
-    // Owner-protection runs inside the locked transaction against the freshly-read target role.
+    // Actor re-validation + owner-protection run inside the locked transaction against fresh rows.
     const revokedSessionCount = await this.identityAccessRepository.runPasswordReset(
+      actor.id,
       employeeId,
       passwordHash,
-      ({ target }) => {
-        this.assertCanActOnTarget(actor.roleId, target.roleId);
+      ({ actor: freshActor, target }) => {
+        this.assertActorCan(freshActor, 'employeesPermissions:configure');
+        this.assertCanActOnTarget(freshActor.roleId, target.roleId);
         return this.buildAuditEntry(
-          actor,
+          freshActor,
           target,
           'employee_password_reset',
           'Reset the account password and revoked active sessions.'
@@ -384,9 +401,19 @@ export class IdentityAccessService {
     return { revokedSessionCount };
   }
 
+  /** Re-validate the fresh (under-lock) actor: still active and still holding the gate permission. */
+  private assertActorCan(actor: EmployeeRecord, permissionKey: PermissionKey): void {
+    if (!actor.isActive) {
+      throw new ForbiddenException('Your account is inactive.');
+    }
+    if (!this.resolveEffectivePermissions(actor).includes(permissionKey)) {
+      throw new ForbiddenException('You no longer have permission to perform this action.');
+    }
+  }
+
   /** Build the per-action audit rows for an employee update (role / active / overrides). */
   private buildUpdateAuditEntries(
-    actor: AuthorizedEmployee,
+    actor: { id: string; displayName: string; email: string },
     resulting: EmployeeRecord,
     before: {
       roleId: EmployeeRecord['roleId'];
@@ -436,7 +463,7 @@ export class IdentityAccessService {
 
   /** Build one non-secret audit row (no passwords/tokens in the summary). */
   private buildAuditEntry(
-    actor: AuthorizedEmployee,
+    actor: { id: string; displayName: string; email: string },
     target: { id: string; displayName: string; email: string },
     action: AdminAuditAction,
     summary: string

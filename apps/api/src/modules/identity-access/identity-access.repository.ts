@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import type { EmployeeSessionSummary } from '@bellfield/contracts';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import { toIsoString, toTextArray } from '../../database/database-row.utils';
@@ -306,40 +306,63 @@ export class IdentityAccessRepository {
 
   // --- Transactional admin commands (state change + audit, atomic) -----------
 
-  /** Create an employee and record the audit row in one locked transaction. */
+  /** Re-read the actor under the lock; absent (deleted) is a hard stop. */
+  private async loadActorWithin(
+    queryable: QueryExecutor,
+    actorId: string
+  ): Promise<EmployeeRecord> {
+    const actor = await this.findEmployeeByIdWithin(queryable, actorId);
+    if (!actor) {
+      throw new ForbiddenException('Your account no longer exists.');
+    }
+    return actor;
+  }
+
+  /**
+   * Create an employee in one locked transaction. Re-reads the CURRENT actor under the lock and lets
+   * `prepare` re-validate them (active + create permission + role/elevation) against fresh rows before
+   * inserting, then records the returned audit row.
+   */
   async createEmployeeWithAudit(
+    actorId: string,
     employee: EmployeeRecord,
-    auditEntry: AdminAuditEntry
+    prepare: (current: { actor: EmployeeRecord }) => AdminAuditEntry
   ): Promise<void> {
     await this.databaseService.transaction(async (queryable) => {
       await this.acquireIdentityAdminLock(queryable);
+      const actor = await this.loadActorWithin(queryable, actorId);
+      const auditEntry = prepare({ actor });
       await this.insertEmployeeWithin(queryable, employee);
       await this.insertAuditEntryWithin(queryable, auditEntry);
     });
   }
 
   /**
-   * Apply an employee update atomically. Under the advisory lock, re-reads the CURRENT target and
-   * employee list, then hands them to the service's `prepare` step which re-runs every state-dependent
-   * guard (owner-protection, self-protection, last-owner/authority) against fresh rows and returns the
-   * fields to write + audit rows + whether to revoke sessions. Only role/active/overrides are written,
-   * so a concurrent password reset or profile change can't be clobbered. Returns the persisted record.
+   * Apply an employee update atomically. Under the advisory lock, re-reads the CURRENT actor, target,
+   * and employee list, then hands them to the service's `prepare` step which re-runs every
+   * state-dependent guard (actor permission/active, owner-protection, elevation, self-protection,
+   * last-owner/authority) against fresh rows and returns the fields to write + audit rows + whether to
+   * revoke sessions. Only role/active/overrides are written, so a concurrent password reset or profile
+   * change can't be clobbered. Returns the persisted record.
    */
   async runEmployeeUpdate(
+    actorId: string,
     employeeId: string,
     prepare: (current: {
+      actor: EmployeeRecord;
       target: EmployeeRecord;
       employees: EmployeeRecord[];
     }) => PreparedEmployeeUpdate
   ): Promise<EmployeeRecord> {
     return this.databaseService.transaction(async (queryable) => {
       await this.acquireIdentityAdminLock(queryable);
+      const actor = await this.loadActorWithin(queryable, actorId);
       const target = await this.findEmployeeByIdWithin(queryable, employeeId);
       if (!target) {
         throw new NotFoundException('Employee not found.');
       }
       const employees = await this.listEmployeesWithin(queryable);
-      const { fields, auditEntries, revokeSessions } = prepare({ target, employees });
+      const { fields, auditEntries, revokeSessions } = prepare({ actor, target, employees });
 
       await this.updateEmployeeFieldsWithin(queryable, employeeId, fields);
       for (const entry of auditEntries) {
@@ -354,21 +377,24 @@ export class IdentityAccessRepository {
   }
 
   /**
-   * Reset a password under the lock: re-read the CURRENT target, let `prepare` re-run owner-protection
-   * against the fresh role and return the audit row, then write the hash + revoke all sessions + audit.
+   * Reset a password under the lock: re-read the CURRENT actor + target, let `prepare` re-validate the
+   * actor and owner-protection against fresh rows and return the audit row, then write the hash +
+   * revoke all sessions + audit.
    */
   async runPasswordReset(
+    actorId: string,
     employeeId: string,
     passwordHash: string,
-    prepare: (current: { target: EmployeeRecord }) => AdminAuditEntry
+    prepare: (current: { actor: EmployeeRecord; target: EmployeeRecord }) => AdminAuditEntry
   ): Promise<number> {
     return this.databaseService.transaction(async (queryable) => {
       await this.acquireIdentityAdminLock(queryable);
+      const actor = await this.loadActorWithin(queryable, actorId);
       const target = await this.findEmployeeByIdWithin(queryable, employeeId);
       if (!target) {
         throw new NotFoundException('Employee not found.');
       }
-      const auditEntry = prepare({ target });
+      const auditEntry = prepare({ actor, target });
       await queryable.query(
         `update employees set password = $2, updated_at = now() where id = $1`,
         [employeeId, passwordHash]
@@ -380,21 +406,24 @@ export class IdentityAccessRepository {
   }
 
   /**
-   * Revoke one session under the lock: re-read the CURRENT target, let `prepare` re-run owner-protection
-   * against the fresh role and return the audit row, then revoke (audit only if a row was removed).
+   * Revoke one session under the lock: re-read the CURRENT actor + target, let `prepare` re-validate
+   * the actor and owner-protection against fresh rows and return the audit row, then revoke (audit only
+   * if a row was removed).
    */
   async runSessionRevoke(
+    actorId: string,
     employeeId: string,
     sessionId: string,
-    prepare: (current: { target: EmployeeRecord }) => AdminAuditEntry
+    prepare: (current: { actor: EmployeeRecord; target: EmployeeRecord }) => AdminAuditEntry
   ): Promise<boolean> {
     return this.databaseService.transaction(async (queryable) => {
       await this.acquireIdentityAdminLock(queryable);
+      const actor = await this.loadActorWithin(queryable, actorId);
       const target = await this.findEmployeeByIdWithin(queryable, employeeId);
       if (!target) {
         throw new NotFoundException('Employee not found.');
       }
-      const auditEntry = prepare({ target });
+      const auditEntry = prepare({ actor, target });
       const revoked = await this.revokeSessionByIdWithin(queryable, employeeId, sessionId);
       if (revoked) {
         await this.insertAuditEntryWithin(queryable, auditEntry);
