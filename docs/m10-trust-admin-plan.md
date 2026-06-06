@@ -432,13 +432,93 @@ totalValue }` company-wide, weighted-average from `inventory_movements.extended_
 
 ---
 
+## 5d. Slice 4 — Employees / Access (LOCKED)
+
+Owner/Admin **writes** for the people who use BellField — they live in **identity-access** (the domain
+that already owns employees/roles/sessions), surfaced as a top-level office **"Employees"** tab.
+
+### 5d.0 Confirmations (locked)
+
+- **Surface = "Employees"** (concrete; not a generic "Admin" junk drawer). Gated `employeesPermissions:view`.
+- **Role templates stay read-only in v1.** Per-employee permission **overrides** are editable. Custom
+  role-template editing and company-settings editing are **deferred**.
+- **Real backend writes:** create employee, active/inactive, role, permission overrides, password reset,
+  session revoke — each its own gated endpoint. No UI-only safety theater; the server enforces every guard.
+- **Gates** (existing `employeesPermissions` area; default roles give Owner `view/configure/create/edit/
+delete`, Admin `view/configure`):
+  - View employees / detail / sessions → `employeesPermissions:view`
+  - Update role / active / overrides, password reset, session revoke → `employeesPermissions:configure`
+  - Create employee → `employeesPermissions:create` (**Owner-only** by default)
+
+### 5d.1 Decisions (resolved in review)
+
+1. **Password hashing lands first, as its own slice (4-0), before any admin control.** Login is currently
+   a plaintext compare and the seed stores plaintext — building password reset on that is wrong. Use Node
+   `crypto.scrypt` (no new package): store `scrypt$<salt>$<hash>`; verify hashed when the stored value has
+   that format, else legacy plaintext compare **and rehash on successful login** (organic migration). The
+   seed/bootstrap hashes on insert. Passwords are **never returned** by any endpoint.
+2. **Owner-protection: only an Owner may act on an Owner.** Reset / deactivate / role-change / override /
+   session-revoke targeting an Owner requires the actor to be an Owner. Prevents an Admin from resetting an
+   Owner's password (or demoting/deactivating them) to escalate. Admins manage non-owners.
+3. **Minimal audit in v1.** Each sensitive admin write (create, role change, active toggle, override change,
+   password reset, session revoke) appends a row to a new `admin_audit_entries` table (actor, target,
+   action, occurredAt, non-secret summary). This milestone is about trust — these writes must leave a
+   trace. History can union it in a later pass; v1 just records it (no new read surface required yet).
+4. **Password reset = admin supplies the new value;** the API never echoes it. No self-service change and
+   **no `mustChangeOnNextLogin`** in v1 (deferred).
+
+### 5d.2 Hardening rules (server-enforced, the strict part)
+
+- **No self-deactivation;** no self-demotion / self-removal of `employeesPermissions:configure` (actor
+  cannot strip their own management authority).
+- **Last-authority guard:** a change is refused if it would leave **zero active employees with _effective_
+  `employeesPermissions:configure`**. Computed on the hypothetical post-change state across all active
+  employees via the same effective-permission resolver — **not** a naive role-id check (overrides matter).
+- **Owner-protection** (decision 2 above).
+- **Deactivating an employee revokes all their sessions immediately.**
+- **Override validation:** reject a permission key that appears in both `grantedPermissions` and
+  `revokedPermissions`; reject keys that are not real `area:action` permissions.
+- **Password reset** sets a new (hashed) password and returns only success — never the value.
+
+### 5d.3 Build order (each its own validated, merged sub-slice)
+
+- **4-0 Password hashing** — migration (password format), scrypt hash/verify, rehash-on-login, seed hashes.
+- **4B Sessions** — migration adds a **non-secret `id`** (uuid) to `sessions` (PK is currently the bearer
+  `token`; never expose it as an identifier). `GET /identity/employees/:id/sessions`,
+  `POST /identity/employees/:id/sessions/:sessionId/revoke`; deactivate revokes all. (Sessions have no
+  expiry today — acknowledged, out of scope for v1.)
+- **4C Admin writes + hardening** — `POST /identity/employees` (create, `:create` gate),
+  `GET /identity/employees/:id` (detail), `POST /identity/employees/:id/password-reset` (`:configure`);
+  harden the existing `PATCH`; all the §5d.2 guards; the `admin_audit_entries` writes.
+- **4D Office "Employees" surface** — `OfficeEmployeeAccessSurface`, nav gated `employeesPermissions:view`;
+  list (active/inactive, role, override count) + detail (profile, role, active toggle, effective perms) +
+  overrides (grouped by area/action) + sessions (device/surface/issued, revoke) + password (hidden until
+  "Reset password") + create form (only with `:create`). Uses `identity-api.ts`, minimal shell wiring.
+  Self-destructive controls disabled; server errors surfaced. No buttons for deferred controls.
+
+### 5d.4 Contracts (identity-access.ts)
+
+`CreateEmployeeRequest`, `ResetEmployeePasswordRequest`, `EmployeeSessionSummary` (id, deviceLabel,
+surface, issuedAt — **no token**), `EmployeeAdminDetailResponse` (summary + sessions + override detail),
+`RevokeEmployeeSessionResponse`.
+
+### 5d.5 Tests + smoke
+
+- API: create gate + duplicate email; update role/active/overrides; self-lockout + last-authority +
+  owner-protection guards; deactivate revokes sessions; reset changes login and never returns the password;
+  revoke removes only the selected session; field session rejected on office-only admin endpoints; legacy
+  plaintext login still works and rehashes; override granted/revoked conflict rejected.
+- Office: nav hidden without `:view`; view-only can inspect not mutate; configure can save; create form
+  hidden without `:create`; reset + revoke call the right APIs; self-destructive controls disabled.
+- Browser smoke as Owner, Admin, and a non-admin.
+
+---
+
 ## 6. Later slices (sketch — locked in their own pass)
 
 - **History / Audit read model:** locked — see §5b.
 - **Fixed Reporting (read-only projections, tested totals):** locked — see §5c.
-- **Owner/Admin controls (identity-access writes):** employee active/inactive review, role/permission
-  review, lost-device/session revoke (if the session model supports it), password reset (if auth
-  supports it cleanly), admin-only review surface in office.
+- **Employees / Access (identity-access writes):** locked — see §5d.
 - **Delete / Archive hardening:** shared server-side confirmation patterns for destructive actions —
   explicit confirm token/phrase where appropriate, optional reason on sensitive void/delete/archive,
   a timeline/history entry for the action. No UI-only safety theater.
