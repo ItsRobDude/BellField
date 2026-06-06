@@ -369,10 +369,13 @@ So dispatcher sees the surface with only the AR card and no export; bookKeeping 
 - Gate: `reports:view` + `jobCosting:view`.
 - **Revenue** = posted invoices only (`main + adjustment − credit`) — the same billed CTE as AR,
   reused, never invoice-line `unitCost`.
-- **Cost** = the M9 rollup/snapshot: per finalized job use `getCurrentJobCostSnapshot`, else
-  `computeJobCostRollup` (`job-cost-rollup-utils.ts`) → `materialCost` / `laborCost` / `expenseCost` /
-  `totalCost` / `unresolvedLineCount` / `costComplete`. `isFinalized` from `isFinalJobStatus(status)`
-  (`completed | closed | cancelled`).
+- **Cost** = the M9 rollup/snapshot: if a current frozen snapshot exists use `getCurrentJobCostSnapshot`
+  (cost is frozen and was complete at freeze time), else `computeJobCostRollup`
+  (`job-cost-rollup-utils.ts`) → `materialCost` / `laborCost` / `expenseCost` / `totalCost` /
+  `unresolvedLineCount` / `costComplete`. **`isFinalized` means the cost came from a current frozen
+  snapshot** (`getCurrentJobCostSnapshot(jobId) !== null`), i.e. read rather than recomputed live — not
+  a function of `status`. (A reopened job supersedes its snapshot, so it correctly reverts to the live
+  rollup with `isFinalized = false`.)
 - `marginBasisPoints`: **`null`** when revenue is 0 **or** `costComplete = false` (v1 prefers null over
   a misleading partial margin); else `round(profit / revenue * 10000)`. The UI labels incomplete rows.
 - Totals: `jobCount`, summed `revenue` / `knownCost` / `knownProfit`,
