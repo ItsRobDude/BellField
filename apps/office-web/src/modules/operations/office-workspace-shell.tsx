@@ -105,6 +105,10 @@ export function OfficeWorkspaceShell({
   const canViewReports = employee.effectivePermissions.includes('reports:view');
   const canExportReports = employee.effectivePermissions.includes('reports:export');
   const canViewEmployees = employee.effectivePermissions.includes('employeesPermissions:view');
+  const canConfigureEmployees = employee.effectivePermissions.includes(
+    'employeesPermissions:configure'
+  );
+  const canCreateEmployees = employee.effectivePermissions.includes('employeesPermissions:create');
   const canViewPurchasing = employee.effectivePermissions.includes('purchasing:view');
   const canCreatePurchasing = employee.effectivePermissions.includes('purchasing:create');
   const canEditPurchasing = employee.effectivePermissions.includes('purchasing:edit');
@@ -852,7 +856,11 @@ export function OfficeWorkspaceShell({
         }}
         employees={{
           apiBaseUrl,
-          sessionToken
+          sessionToken,
+          canConfigure: canConfigureEmployees,
+          canCreate: canCreateEmployees,
+          actorId: employee.id,
+          actorRoleId: employee.roleId
         }}
         jobDetail={{
           selectedJobId,
