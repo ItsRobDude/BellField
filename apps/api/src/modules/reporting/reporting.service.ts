@@ -1,6 +1,7 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import type {
   ArOpenBalancesReport,
+  InventoryValuationReport,
   JobProfitabilityReport,
   PermissionKey
 } from '@bellfield/contracts';
@@ -11,10 +12,15 @@ import {
   computeJobCostRollup,
   getCurrentJobCostSnapshot
 } from '../job-costing/job-cost-rollup-utils';
+import { queryInventoryOnHand } from '../inventory/inventory-onhand-query';
 import { toCsv, type CsvColumn } from './report-csv';
 
 function roundMoney(value: number): number {
   return Math.round(value * 100) / 100;
+}
+
+function roundQuantity(value: number): number {
+  return Math.round(value * 10000) / 10000;
 }
 
 const AR_CSV_COLUMNS: CsvColumn<ArOpenBalancesReport['rows'][number]>[] = [
@@ -39,6 +45,15 @@ const PROFITABILITY_CSV_COLUMNS: CsvColumn<JobProfitabilityReport['rows'][number
   { header: 'Cost complete', value: (row) => (row.costComplete ? 'yes' : 'no') },
   { header: 'Unresolved lines', value: (row) => row.unresolvedLineCount },
   { header: 'Finalized', value: (row) => (row.isFinalized ? 'yes' : 'no') }
+];
+
+const INVENTORY_CSV_COLUMNS: CsvColumn<InventoryValuationReport['rows'][number]>[] = [
+  { header: 'Item', value: (row) => row.itemName },
+  { header: 'Kind', value: (row) => row.itemKind },
+  { header: 'Location', value: (row) => row.locationName },
+  { header: 'Quantity', value: (row) => row.quantity },
+  { header: 'Avg unit cost', value: (row) => row.averageUnitCost },
+  { header: 'Total value', value: (row) => row.totalValue }
 ];
 
 /** A CSV export plus the suggested download filename. */
@@ -226,6 +241,58 @@ export class ReportingService {
         knownProfit: roundMoney(knownProfit),
         incompleteJobCount,
         unresolvedLineCount
+      },
+      rows
+    };
+  }
+
+  /** Inventory valuation (on-hand at weighted-average cost). Gate: reports:view + inventory:view. */
+  async getInventoryValuation(sessionToken: string): Promise<InventoryValuationReport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, ['inventory:view']);
+    return this.buildInventoryValuation();
+  }
+
+  /** Inventory valuation CSV export. Gate: reports:view + inventory:view + reports:export. */
+  async exportInventoryValuation(sessionToken: string): Promise<ReportCsvExport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'inventory:view',
+      'reports:export'
+    ]);
+    const report = await this.buildInventoryValuation();
+    return {
+      filename: `inventory-valuation-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(INVENTORY_CSV_COLUMNS, report.rows)
+    };
+  }
+
+  /** Build the valuation report (no auth — callers gate first). Reuses the shared on-hand projection
+   * (weighted-average, zero balances excluded) — no new inventory math. */
+  private async buildInventoryValuation(): Promise<InventoryValuationReport> {
+    const rows = await queryInventoryOnHand(this.databaseService);
+
+    let totalQuantity = 0;
+    let totalValue = 0;
+    for (const row of rows) {
+      totalQuantity += row.quantity;
+      totalValue += row.totalValue;
+    }
+
+    return {
+      generatedAt: new Date().toISOString(),
+      totals: {
+        rowCount: rows.length,
+        totalQuantity: roundQuantity(totalQuantity),
+        totalValue: roundMoney(totalValue)
       },
       rows
     };

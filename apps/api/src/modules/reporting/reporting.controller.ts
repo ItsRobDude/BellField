@@ -45,4 +45,22 @@ export class ReportingController {
     response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     return csv;
   }
+
+  @Get('inventory-valuation')
+  async getInventoryValuation(@Headers('authorization') auth: string | undefined) {
+    return this.reportingService.getInventoryValuation(getBearerToken(auth));
+  }
+
+  @Get('inventory-valuation/export')
+  async exportInventoryValuation(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportInventoryValuation(
+      getBearerToken(auth)
+    );
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
 }

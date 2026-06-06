@@ -288,3 +288,82 @@ describe('ReportingService.exportJobProfitability', () => {
     expect(lines[1]).toBe('1003,Acme,inProgress,200,40,60,0,100,100,5000,yes,0,no');
   });
 });
+
+type OnHandDbRow = {
+  itemId: string;
+  itemName: string;
+  itemKind: string;
+  locationId: string;
+  locationName: string;
+  quantity: number;
+  totalValue: number;
+};
+
+function createInventoryService(
+  rows: OnHandDbRow[] = [],
+  perms: string[] = ['reports:view', 'inventory:view']
+) {
+  const databaseService = { query: jest.fn().mockResolvedValue({ rows }) };
+  const identityAccessService = {
+    getAuthorizedEmployee: jest.fn().mockResolvedValue({
+      id: 'owner-1',
+      effectivePermissions: perms,
+      sessionSurface: 'office-web'
+    })
+  };
+  return {
+    service: new ReportingService(databaseService as never, identityAccessService as never),
+    databaseService
+  };
+}
+
+const onHandRow = (over: Partial<OnHandDbRow> = {}): OnHandDbRow => ({
+  itemId: 'i1',
+  itemName: 'Capacitor',
+  itemKind: 'part',
+  locationId: 'l1',
+  locationName: 'Warehouse',
+  quantity: 10,
+  totalValue: 200,
+  ...over
+});
+
+describe('ReportingService.getInventoryValuation', () => {
+  it('rejects 403 without inventory:view and never queries', async () => {
+    const { service, databaseService } = createInventoryService([], ['reports:view']);
+    await expect(service.getInventoryValuation('token')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(databaseService.query).not.toHaveBeenCalled();
+  });
+
+  it('computes weighted-average unit cost per row and sums totals', async () => {
+    const { service } = createInventoryService([
+      onHandRow({ itemId: 'i1', quantity: 10, totalValue: 200 }),
+      onHandRow({ itemId: 'i2', itemName: 'Filter', quantity: 5, totalValue: 50 })
+    ]);
+    const report = await service.getInventoryValuation('token');
+    expect(report.rows[0].averageUnitCost).toBe(20); // 200 / 10
+    expect(report.rows[1].averageUnitCost).toBe(10); // 50 / 5
+    expect(report.totals).toEqual({ rowCount: 2, totalQuantity: 15, totalValue: 250 });
+  });
+});
+
+describe('ReportingService.exportInventoryValuation', () => {
+  it('rejects 403 without reports:export', async () => {
+    const { service } = createInventoryService([], ['reports:view', 'inventory:view']);
+    await expect(service.exportInventoryValuation('token')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+  });
+
+  it('renders a CSV with header + row when fully permitted', async () => {
+    const { service } = createInventoryService(
+      [onHandRow({ quantity: 10, totalValue: 200 })],
+      ['reports:view', 'inventory:view', 'reports:export']
+    );
+    const out = await service.exportInventoryValuation('token');
+    expect(out.filename).toMatch(/^inventory-valuation-\d{4}-\d{2}-\d{2}\.csv$/);
+    const lines = out.csv.split('\n');
+    expect(lines[0]).toBe('Item,Kind,Location,Quantity,Avg unit cost,Total value');
+    expect(lines[1]).toBe('Capacitor,part,Warehouse,10,20,200');
+  });
+});
