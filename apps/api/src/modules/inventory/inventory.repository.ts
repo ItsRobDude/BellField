@@ -236,8 +236,9 @@ export class InventoryRepository {
 
   /**
    * Pickable truck stock for one technician: every active PART with positive on-hand on a truck
-   * location assigned to that employee, with its weighted-average unit cost. Drives the field
-   * part-add picker; equipment and zero/negative balances are excluded.
+   * location assigned to that employee. Drives the field part-add picker; equipment and
+   * zero/negative balances are excluded. Deliberately returns NO cost — the field device never
+   * needs company cost data, and the server recomputes the weighted-average when it issues stock.
    */
   async listTruckStockForEmployee(employeeId: string): Promise<FieldTruckStockItem[]> {
     const result = await this.databaseService.query<{
@@ -248,7 +249,6 @@ export class InventoryRepository {
       locationId: string;
       locationName: string;
       quantity: string | number;
-      totalValue: string | number;
     }>(
       `select
          m.item_id as "itemId",
@@ -257,8 +257,7 @@ export class InventoryRepository {
          it.unit_of_measure as "unitOfMeasure",
          m.location_id as "locationId",
          loc.name as "locationName",
-         sum(m.quantity) as "quantity",
-         sum(m.extended_cost) as "totalValue"
+         sum(m.quantity) as "quantity"
        from inventory_movements m
        join inventory_items it on it.id = m.item_id
        join inventory_locations loc on loc.id = m.location_id
@@ -273,20 +272,15 @@ export class InventoryRepository {
        order by it.name asc, loc.name asc`,
       [employeeId]
     );
-    return result.rows.map((row) => {
-      const quantity = Math.round(Number(row.quantity) * 10000) / 10000;
-      const totalValue = roundMoney(Number(row.totalValue));
-      return {
-        itemId: row.itemId,
-        sku: row.sku ?? undefined,
-        itemName: row.itemName,
-        unitOfMeasure: row.unitOfMeasure ?? undefined,
-        locationId: row.locationId,
-        locationName: row.locationName,
-        quantityOnHand: quantity,
-        averageUnitCost: quantity > 0 ? roundMoney(totalValue / quantity) : 0
-      };
-    });
+    return result.rows.map((row) => ({
+      itemId: row.itemId,
+      sku: row.sku ?? undefined,
+      itemName: row.itemName,
+      unitOfMeasure: row.unitOfMeasure ?? undefined,
+      locationId: row.locationId,
+      locationName: row.locationName,
+      quantityOnHand: Math.round(Number(row.quantity) * 10000) / 10000
+    }));
   }
 
   /** Recent movements, optionally filtered to one item or one job. Newest first. */

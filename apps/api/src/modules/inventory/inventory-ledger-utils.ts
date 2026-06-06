@@ -270,6 +270,19 @@ export async function applyIssueToJob(
     sourceRegisterEntryId?: string | null;
   }
 ): Promise<{ unitCost: number; issuedValue: number }> {
+  // Only an active PART may be issued to a job as material cost. Issuing an equipment-kind item
+  // this way would post plain material cost and skip the equipment bridge (losing asset history),
+  // so guard it at the shared issue path — the register-line kind check upstream does not prove
+  // the selected inventory item is a part.
+  const itemResult = await queryable.query<{ kind: string; isActive: boolean }>(
+    `select kind, is_active as "isActive" from inventory_items where id = $1`,
+    [input.itemId]
+  );
+  const item = itemResult.rows[0];
+  if (!item || !item.isActive || item.kind !== 'part') {
+    throw new BadRequestException('Only active part items can be issued to a job.');
+  }
+
   await lockItemLocation(queryable, input.itemId, input.locationId);
   const snapshot = await getOnHandSnapshot(queryable, input.itemId, input.locationId);
   if (snapshot.quantity < input.quantity) {

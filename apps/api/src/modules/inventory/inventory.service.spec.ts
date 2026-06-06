@@ -213,8 +213,7 @@ describe('InventoryService getFieldTruckStock', () => {
         itemName: 'Capacitor 45uF',
         locationId: 'truck-7',
         locationName: 'Truck 7',
-        quantityOnHand: 4,
-        averageUnitCost: 26.5
+        quantityOnHand: 4
       }
     ]);
 

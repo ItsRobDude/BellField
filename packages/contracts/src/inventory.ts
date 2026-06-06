@@ -129,9 +129,11 @@ export interface InventoryOnHandResponse {
 }
 
 /**
- * One pickable part on a technician's truck: a structured (item, truck-location) pair with
- * its current on-hand quantity and weighted-average cost. Drives the field part-add picker
- * (Slice 1b) so a captured part can carry structured inventory refs the server auto-costs.
+ * One pickable part on a technician's truck: a structured (item, truck-location) pair with its
+ * current on-hand quantity. Drives the field part-add picker (Slice 1b) so a captured part can
+ * carry structured inventory refs the server auto-costs. Deliberately carries NO cost: the field
+ * device never needs company cost data, and the server recomputes the weighted-average when it
+ * issues the stock to the job.
  */
 export interface FieldTruckStockItem {
   itemId: string;
@@ -141,7 +143,6 @@ export interface FieldTruckStockItem {
   locationId: string;
   locationName: string;
   quantityOnHand: number;
-  averageUnitCost: number;
 }
 
 /**

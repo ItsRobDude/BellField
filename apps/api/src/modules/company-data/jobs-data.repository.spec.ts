@@ -1031,6 +1031,10 @@ describe('JobsDataRepository', () => {
         if (String(sql).includes('inventory_items it, inventory_locations loc')) {
           return { rows: options.selfTruckRef ? [{ ok: 1 }] : [] };
         }
+        // applyIssueToJob part-only guard (the item is an active part).
+        if (String(sql).includes('from inventory_items') && String(sql).includes('where id = $1')) {
+          return { rows: [{ kind: 'part', isActive: true }] };
+        }
         // On-hand snapshot for auto-cost (enough on hand).
         if (String(sql).includes('coalesce(sum(quantity)')) {
           return { rows: [{ qty: 10, value: 200 }] };

@@ -283,8 +283,7 @@ function RegisterCreateCard({
                         isSelected ? styles.replacementOptionDetailSelected : null
                       ]}
                     >
-                      {item.quantityOnHand} on hand - avg {formatCurrency(item.averageUnitCost)} -{' '}
-                      {item.locationName}
+                      {item.quantityOnHand} on hand - {item.locationName}
                     </Text>
                   </Pressable>
                 );

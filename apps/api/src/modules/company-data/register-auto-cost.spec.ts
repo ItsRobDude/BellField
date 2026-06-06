@@ -45,6 +45,7 @@ describe('autoCostStructuredPartLine', () => {
   it('issues from truck stock and flips the line to applied when on hand is sufficient', async () => {
     const { queryable, calls } = scriptedQueryable([
       { match: JOB_STATUS, rows: [{ status: 'inProgress' }] },
+      { match: /from inventory_items\s+where id = \$1/i, rows: [{ kind: 'part', isActive: true }] },
       { match: LOCK, rows: [] },
       { match: SNAPSHOT, rows: [{ qty: 5, value: 50 }] },
       { match: MOVEMENT_INSERT, rowCount: 1 },

@@ -125,7 +125,9 @@ export function JobCostResolutionPanel({
           getOfficeInventoryItems({ sessionToken, apiBaseUrl }),
           getOfficeInventoryLocations({ sessionToken, apiBaseUrl })
         ]);
-        setItems(itemResult.items.filter((i) => i.isActive));
+        // Only active PARTS can be issued to a job as tracked material (the backend enforces this
+        // too); equipment items go through the equipment bridge, not issue-to-job.
+        setItems(itemResult.items.filter((i) => i.isActive && i.kind === 'part'));
         setLocations(locationResult.locations.filter((l) => l.isActive));
       } catch {
         // Pickers are best-effort; non-stock / labor / zero-cost still work without them.

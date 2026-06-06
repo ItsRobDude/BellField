@@ -11,6 +11,10 @@ function scriptedRepository(jobStatus: string | null = 'inProgress') {
       if (JOB_LOCK.test(sql)) {
         return { rows: jobStatus ? [{ status: jobStatus }] : [] };
       }
+      // applyIssueToJob part-only guard: the issued item is an active part.
+      if (/from inventory_items\s+where id = \$1/i.test(sql)) {
+        return { rows: [{ kind: 'part', isActive: true }] };
+      }
       if (/pg_advisory_xact_lock/i.test(sql)) {
         return { rows: [], rowCount: 1 };
       }
@@ -83,7 +87,7 @@ describe('InventoryRepository.listTruckStockForEmployee', () => {
     return { repository: new InventoryRepository(databaseService), calls };
   }
 
-  it('scopes the query to the employee and maps qty + weighted-average cost', async () => {
+  it('scopes the query to the employee and maps qty without exposing cost', async () => {
     const { repository, calls } = scriptedTruckStock([
       {
         itemId: 'item-1',
@@ -92,8 +96,7 @@ describe('InventoryRepository.listTruckStockForEmployee', () => {
         unitOfMeasure: 'each',
         locationId: 'truck-1',
         locationName: 'Truck 1',
-        quantity: '4',
-        totalValue: '106'
+        quantity: '4'
       }
     ]);
 
@@ -103,6 +106,8 @@ describe('InventoryRepository.listTruckStockForEmployee', () => {
     expect(calls[0].sql).toMatch(/loc\.kind = 'truck'/);
     expect(calls[0].sql).toMatch(/it\.kind = 'part'/);
     expect(calls[0].sql).toMatch(/having sum\(m\.quantity\) > 0/);
+    // The field device must never receive company cost data.
+    expect(calls[0].sql).not.toMatch(/extended_cost/);
     expect(items).toEqual([
       {
         itemId: 'item-1',
@@ -111,10 +116,10 @@ describe('InventoryRepository.listTruckStockForEmployee', () => {
         unitOfMeasure: 'each',
         locationId: 'truck-1',
         locationName: 'Truck 1',
-        quantityOnHand: 4,
-        averageUnitCost: 26.5
+        quantityOnHand: 4
       }
     ]);
+    expect(items[0]).not.toHaveProperty('averageUnitCost');
   });
 
   it('maps null sku/unit to undefined', async () => {
@@ -126,8 +131,7 @@ describe('InventoryRepository.listTruckStockForEmployee', () => {
         unitOfMeasure: null,
         locationId: 'truck-1',
         locationName: 'Truck 1',
-        quantity: '2',
-        totalValue: '5'
+        quantity: '2'
       }
     ]);
 
@@ -135,6 +139,6 @@ describe('InventoryRepository.listTruckStockForEmployee', () => {
 
     expect(item.sku).toBeUndefined();
     expect(item.unitOfMeasure).toBeUndefined();
-    expect(item.averageUnitCost).toBe(2.5);
+    expect(item.quantityOnHand).toBe(2);
   });
 });

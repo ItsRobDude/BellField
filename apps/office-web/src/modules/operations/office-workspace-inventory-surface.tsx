@@ -129,6 +129,10 @@ export function OfficeInventorySurface({
   }, [apiBaseUrl, jobs, sessionToken]);
 
   const activeItems = items.filter((item) => item.isActive);
+  // Issue-to-job posts plain material cost, so only active PARTS are eligible (the backend
+  // enforces this); equipment moves through the equipment bridge. Adjust/transfer keep all
+  // active stock items.
+  const activePartItems = activeItems.filter((item) => item.kind === 'part');
   const activeLocations = locations.filter((location) => location.isActive);
   // Only one form is open at a time; lock the other triggers so an in-progress draft can't be
   // silently replaced (mirrors the invoice-corrections single-editor guard).
@@ -249,6 +253,7 @@ export function OfficeInventorySurface({
   }
 
   const firstItemId = activeItems[0]?.id ?? '';
+  const firstPartItemId = activePartItems[0]?.id ?? '';
   const firstLocationId = activeLocations[0]?.id ?? '';
 
   return (
@@ -300,13 +305,16 @@ export function OfficeInventorySurface({
                 type="button"
                 style={styles.button}
                 disabled={
-                  isSaving || formOpen || activeItems.length === 0 || activeLocations.length === 0
+                  isSaving ||
+                  formOpen ||
+                  activePartItems.length === 0 ||
+                  activeLocations.length === 0
                 }
                 onClick={() => {
                   void ensureJobs();
                   setActiveForm({
                     kind: 'issue',
-                    itemId: firstItemId,
+                    itemId: firstPartItemId,
                     locationId: firstLocationId,
                     jobId: '',
                     quantity: '',
@@ -359,7 +367,7 @@ export function OfficeInventorySurface({
       {activeForm ? (
         <InventoryForm
           form={activeForm}
-          items={activeItems}
+          items={activeForm.kind === 'issue' ? activePartItems : activeItems}
           locations={activeLocations}
           jobs={jobs}
           isSaving={isSaving}
