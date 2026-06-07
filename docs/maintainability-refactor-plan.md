@@ -54,7 +54,6 @@ Current oversized baseline:
 
 | Lines | File                                                                  | Refactor direction                                                                          |
 | ----: | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-|  1355 | `apps/office-web/src/modules/operations/crm-panel.tsx`                | Split customer/location/contact sections and search/detail state.                           |
 |  1181 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts` | Split job commands, appointment commands, status transitions, and closeout/follow-up rules. |
 |  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`   | Split workspace state/actions by surface and keep shell as orchestration.                   |
 |   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`         | First appointments split completed; continue splitting remaining tab sections when touched. |
@@ -200,6 +199,31 @@ Validation:
   assigned-work load, queue (note + appointment status), manual + background sync drain,
   conflict preservation + discard, and the sign-out guard, with the money-path ops verified
   server-side. See the 2026-06-04 entry in [field-mobile-smoke.md](./field-mobile-smoke.md).
+
+### Slice 6 - CRM Panel Split
+
+Purpose:
+
+- complete Phase 3 of the CRM/job-intake correction plan before deeper CRM UI changes
+- keep CRM root/create behavior contextual
+- remove `crm-panel.tsx` from the oversized baseline
+
+Status: shipped. `crm-panel.tsx` went from the 1355-line baseline to under the 800-line guard.
+
+Implementation shape:
+
+- extracted search, detail routing, customer detail, location detail, contact detail, contact-method
+  editing, owner-transfer rendering, activity rendering, and shared CRM form helpers
+- kept existing backend contracts and owner-transfer semantics unchanged
+- surfaced contact-method actions only inside selected customer/location/contact contexts
+- left Phase 4 ownership-transfer redesign, Phase 5 operational pages, Phase 6 job-to-CRM
+  navigation, and Phase 7 shell cleanup out of this slice
+
+Validation:
+
+- office-web CRM tests
+- office-web typecheck/lint/build
+- `pnpm check:file-size` (CRM panel off the baseline)
 
 ---
 

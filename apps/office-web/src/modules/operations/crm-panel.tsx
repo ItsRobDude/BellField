@@ -1,10 +1,9 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ContactDetail,
   ContactLink,
-  ContactUpdateScope,
   CrmSearchResult,
   CrmWorkspaceResponse,
   CustomerDetail,
@@ -21,17 +20,25 @@ import {
   getOfficeLocationDetail,
   linkOfficeContact,
   reassignOfficeLocationOwner,
-  searchOfficeCrm,
   updateOfficeContact,
   updateOfficeContactLink,
   updateOfficeCustomer,
   updateOfficeLocation
 } from '@/lib/operations-api';
 import { CrmContactCreatePanel } from './crm-contact-create-panel';
-import { CrmCustomerLocationsSection } from './crm-customer-locations-section';
 import { CrmCustomerCreatePanel } from './crm-customer-create-panel';
+import { CrmDetailRouter } from './crm-detail-router';
+import {
+  collectCrmDuplicateWarnings,
+  createContactLinkDrafts,
+  createEmptyContactForm,
+  createEmptyCustomerForm,
+  createEmptyLocationForm,
+  locationNeedsPhoneEmailConfirmation,
+  splitCommaValues
+} from './crm-form-helpers';
 import { CrmLocationCreatePanel } from './crm-location-create-panel';
-import { CrmLocationOwnerSection } from './crm-location-owner-section';
+import { CrmSearchSurface } from './crm-search-surface';
 import type {
   ContactFormState,
   ContactLinkDraft,
@@ -40,10 +47,8 @@ import type {
   LocationDetailTab,
   LocationFormState
 } from './crm-panel-types';
-import { RecordContactsSection } from './crm-record-contacts-section';
-import { CrmSearchPanel } from './crm-search-panel';
-import { LocationEquipmentSection } from './location-equipment-section';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { useCrmSearch } from './use-crm-search';
 
 type Props = {
   apiBaseUrl: string;
@@ -52,15 +57,6 @@ type Props = {
   canReplaceRemoveEquipment?: boolean;
   canDeleteEquipment?: boolean;
 };
-
-const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'equipment', label: 'Equipment' },
-  { key: 'contacts', label: 'Contacts' },
-  { key: 'history', label: 'History' }
-];
-
-const crmSearchDebounceMs = 250;
 
 export function CrmPanel({
   apiBaseUrl,
@@ -74,12 +70,10 @@ export function CrmPanel({
   const [returnModeAfterContactForm, setReturnModeAfterContactForm] =
     useState<CrmPanelMode>('search');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<CrmSearchResult[]>([]);
   const [selectedCustomer, setSelectedCustomer] = useState<CustomerDetail | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<LocationDetail | null>(null);
   const [selectedContact, setSelectedContact] = useState<ContactDetail | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isSearching, setIsSearching] = useState(false);
   const [customerForm, setCustomerForm] = useState<CustomerFormState>(createEmptyCustomerForm());
   const [locationForm, setLocationForm] = useState<LocationFormState>(createEmptyLocationForm());
   const [contactForm, setContactForm] = useState<ContactFormState>(createEmptyContactForm());
@@ -99,7 +93,13 @@ export function CrmPanel({
   const [crmNoticeMessage, setCrmNoticeMessage] = useState<string | null>(null);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
   const [selectedLocationTab, setSelectedLocationTab] = useState<LocationDetailTab>('overview');
-  const searchRequestIdRef = useRef(0);
+  const { isSearching, searchResults } = useCrmSearch({
+    apiBaseUrl,
+    mode,
+    onErrorMessage,
+    searchQuery,
+    sessionToken
+  });
 
   useEffect(() => {
     void refreshWorkspace();
@@ -110,50 +110,6 @@ export function CrmPanel({
       setLinkDrafts({});
     }
   }, [selectedCustomer, selectedLocation, selectedContact]);
-
-  useEffect(() => {
-    const requestId = searchRequestIdRef.current + 1;
-    searchRequestIdRef.current = requestId;
-    const query = searchQuery.trim();
-
-    if (mode !== 'search' || query.length < 2) {
-      setSearchResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    setIsSearching(true);
-    const timeoutId = window.setTimeout(() => {
-      void (async () => {
-        try {
-          const response = await searchOfficeCrm({ sessionToken, apiBaseUrl, query });
-
-          if (searchRequestIdRef.current !== requestId) {
-            return;
-          }
-
-          setSearchResults(response.results);
-        } catch (error) {
-          if (searchRequestIdRef.current !== requestId) {
-            return;
-          }
-
-          onErrorMessage(
-            error instanceof Error
-              ? error.message
-              : 'Unable to search customers, locations, and contacts.'
-          );
-          setSearchResults([]);
-        } finally {
-          if (searchRequestIdRef.current === requestId) {
-            setIsSearching(false);
-          }
-        }
-      })();
-    }, crmSearchDebounceMs);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [apiBaseUrl, mode, onErrorMessage, searchQuery, sessionToken]);
 
   async function refreshWorkspace() {
     setIsRefreshing(true);
@@ -306,10 +262,12 @@ export function CrmPanel({
     onErrorMessage(null);
 
     if (!forceConfirm) {
-      const duplicateResults = await collectDuplicateWarnings(
-        `${customerForm.name} ${customerForm.phone} ${customerForm.billingAddressLine1} ${customerForm.billingCity}`,
-        'customer'
-      );
+      const duplicateResults = await collectCrmDuplicateWarnings({
+        sessionToken,
+        apiBaseUrl,
+        query: `${customerForm.name} ${customerForm.phone} ${customerForm.billingAddressLine1} ${customerForm.billingCity}`,
+        kind: 'customer'
+      });
 
       if (duplicateResults.length > 0) {
         setCustomerDuplicateWarnings(duplicateResults);
@@ -392,10 +350,12 @@ export function CrmPanel({
     }
 
     if (!options.confirmDuplicate) {
-      const duplicateResults = await collectDuplicateWarnings(
-        `${locationForm.name} ${locationForm.phone} ${locationForm.addressLine1} ${locationForm.city}`,
-        'location'
-      );
+      const duplicateResults = await collectCrmDuplicateWarnings({
+        sessionToken,
+        apiBaseUrl,
+        query: `${locationForm.name} ${locationForm.phone} ${locationForm.addressLine1} ${locationForm.city}`,
+        kind: 'location'
+      });
 
       if (duplicateResults.length > 0) {
         setLocationDuplicateWarnings(duplicateResults);
@@ -687,25 +647,6 @@ export function CrmPanel({
     }
   }
 
-  async function collectDuplicateWarnings(query: string, kind: 'customer' | 'location') {
-    if (!query.trim()) {
-      return [];
-    }
-
-    const response = await searchOfficeCrm({ sessionToken, apiBaseUrl, query });
-    return response.results
-      .filter((result) => result.kind === kind)
-      .map((result) => ({
-        id: result.id,
-        kind,
-        title: result.title,
-        subtitle: result.subtitle,
-        matchReasons: ['Likely duplicate based on search'],
-        isActive: result.isActive,
-        hasDoNotServiceFlag: result.badges.includes('DNU')
-      }));
-  }
-
   function hydrateCustomerForm(customer: CustomerDetail) {
     setSelectedCustomer(customer);
     hydrateLinkDrafts(customer.contacts);
@@ -721,20 +662,7 @@ export function CrmPanel({
   }
 
   function hydrateLinkDrafts(links: ContactLink[]) {
-    setLinkDrafts(
-      Object.fromEntries(
-        links.map((link) => [
-          link.id,
-          {
-            phone: link.phone ?? '',
-            email: link.email ?? '',
-            fax: link.fax ?? '',
-            tags: link.tags.join(', '),
-            scope: 'link' as ContactUpdateScope
-          }
-        ])
-      )
-    );
+    setLinkDrafts(createContactLinkDrafts(links));
   }
 
   function handleLinkDraftChange(contactId: string, draft: ContactLinkDraft) {
@@ -751,12 +679,6 @@ export function CrmPanel({
       ? selectedCustomer.name
       : (activeCustomerOptions.find((customer) => customer.id === locationForm.customerId)?.name ??
         'Selected customer');
-  const selectedDetailHeading = selectedCustomer
-    ? 'Customer'
-    : selectedLocation
-      ? 'Location'
-      : 'Contact';
-
   return (
     <section style={styles.card}>
       <div style={styles.row}>
@@ -772,7 +694,7 @@ export function CrmPanel({
       {crmNoticeMessage ? <p style={styles.notice}>{crmNoticeMessage}</p> : null}
 
       {mode === 'search' ? (
-        <CrmSearchPanel
+        <CrmSearchSurface
           isSearching={isSearching}
           onNewCustomer={openNewCustomerForm}
           onSearchQueryChange={setSearchQuery}
@@ -828,527 +750,49 @@ export function CrmPanel({
 
       {(mode === 'customerDetail' || mode === 'locationDetail' || mode === 'contactDetail') &&
       (selectedCustomer || selectedLocation || selectedContact) ? (
-        <div style={styles.panel}>
-          <div style={styles.row}>
-            <h3 style={styles.subheading}>{selectedDetailHeading}</h3>
-            <div style={styles.inlineActionBar}>
-              {selectedCustomer ? (
-                <button
-                  type="button"
-                  onClick={() => openNewLocationFormForCustomer(selectedCustomer)}
-                  style={styles.button}
-                >
-                  Add location
-                </button>
-              ) : null}
-              {selectedCustomer || selectedLocation ? (
-                <button type="button" onClick={openNewContactForm} style={styles.button}>
-                  New contact
-                </button>
-              ) : null}
-              <button type="button" onClick={returnToSearch} style={styles.button}>
-                Back
-              </button>
-            </div>
-          </div>
-          {selectedCustomer ? (
-            <div style={styles.list}>
-              <div style={styles.row}>
-                <div>
-                  <strong>{selectedCustomer.name}</strong>
-                  <div style={styles.badgeRow}>
-                    {!selectedCustomer.isActive ? <span style={styles.badge}>Inactive</span> : null}
-                    {selectedCustomer.flags.some((flag) =>
-                      flag.toLowerCase().includes('do not service')
-                    ) ? (
-                      <span style={styles.dangerBadge}>DNU</span>
-                    ) : null}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveCustomer()}
-                  style={styles.primaryButton}
-                >
-                  Save customer
-                </button>
-              </div>
-              <div style={styles.formRow}>
-                <input
-                  value={selectedCustomer.name}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, name: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <select
-                  value={selectedCustomer.accountType}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, accountType: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                >
-                  <option value="residential">Residential</option>
-                  <option value="company">Company</option>
-                  <option value="propertyManager">Property manager</option>
-                  <option value="landlord">Landlord</option>
-                </select>
-                <input
-                  value={selectedCustomer.billingAddressLine1}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, billingAddressLine1: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.billingCity}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, billingCity: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.billingState}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, billingState: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.billingPostalCode}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, billingPostalCode: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.phone ?? ''}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, phone: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.email ?? ''}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, email: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.fax ?? ''}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, fax: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedCustomer.flags.join(', ')}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current
-                        ? { ...current, flags: splitCommaValues(event.target.value) }
-                        : current
-                    )
-                  }
-                  style={styles.input}
-                />
-              </div>
-              <label style={styles.inlineLabel}>
-                <input
-                  type="checkbox"
-                  checked={selectedCustomer.isActive}
-                  onChange={(event) =>
-                    setSelectedCustomer((current) =>
-                      current ? { ...current, isActive: event.target.checked } : current
-                    )
-                  }
-                />
-                Customer is active
-              </label>
-              <RecordContactsSection
-                title="Customer contacts"
-                contacts={selectedCustomer.contacts}
-                activeContactOptions={activeContactOptions}
-                existingContactId={existingContactId}
-                setExistingContactId={setExistingContactId}
-                linkDrafts={linkDrafts}
-                onLinkDraftChange={handleLinkDraftChange}
-                onLinkExisting={() => void handleLinkExistingContact()}
-                onSaveLink={(link) => void handleSaveContactLink(link)}
-                onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
-                onArchiveLink={(linkId, isActive) =>
-                  void handleArchiveContactLink(linkId, isActive)
-                }
-              />
-              <CrmCustomerLocationsSection
-                locations={selectedCustomer.locations}
-                onAddLocation={() => openNewLocationFormForCustomer(selectedCustomer)}
-                onOpenLocation={(locationId) => void openLocationDetail(locationId)}
-              />
-            </div>
-          ) : null}
-
-          {selectedLocation ? (
-            <div style={styles.list}>
-              <div style={styles.row}>
-                <div>
-                  <strong>{selectedLocation.name}</strong>
-                  <div style={styles.tinyMuted}>
-                    {selectedLocation.customerName} - {selectedLocation.addressLine1},{' '}
-                    {selectedLocation.city}
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveLocation()}
-                  style={styles.primaryButton}
-                >
-                  Save location
-                </button>
-              </div>
-              <div style={styles.tabList} role="tablist" aria-label="Location sections">
-                {locationDetailTabs.map((tab) => (
-                  <button
-                    key={tab.key}
-                    type="button"
-                    role="tab"
-                    aria-selected={selectedLocationTab === tab.key}
-                    onClick={() => setSelectedLocationTab(tab.key)}
-                    style={
-                      selectedLocationTab === tab.key ? styles.activeTabButton : styles.tabButton
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                ))}
-              </div>
-              {selectedLocationTab === 'overview' ? (
-                <>
-                  <div style={styles.formRow}>
-                    <input
-                      value={selectedLocation.name}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, name: event.target.value } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.addressLine1}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, addressLine1: event.target.value } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.city}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, city: event.target.value } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.state}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, state: event.target.value } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.postalCode}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, postalCode: event.target.value } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.phone ?? ''}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, phone: event.target.value || undefined } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.email ?? ''}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, email: event.target.value || undefined } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                    <input
-                      value={selectedLocation.fax ?? ''}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, fax: event.target.value || undefined } : current
-                        )
-                      }
-                      style={styles.input}
-                    />
-                  </div>
-                  {saveLocationMissingContactConfirmation ? (
-                    <div style={styles.subpanel}>
-                      <strong>Location has no phone or email</strong>
-                      <div style={styles.tinyMuted}>
-                        This location has no phone or email. Is that okay?
-                      </div>
-                      {selectedLocation.fax?.trim() ? (
-                        <div style={styles.tinyMuted}>
-                          Fax will be saved, but phone and email are still missing.
-                        </div>
-                      ) : null}
-                      <div style={styles.row}>
-                        <button
-                          type="button"
-                          onClick={() => void handleSaveLocation()}
-                          style={styles.primaryButton}
-                        >
-                          Save without phone or email
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setSaveLocationMissingContactConfirmation(false)}
-                          style={styles.button}
-                        >
-                          Keep editing
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                  <label style={styles.inlineLabel}>
-                    <input
-                      type="checkbox"
-                      checked={selectedLocation.isActive}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current ? { ...current, isActive: event.target.checked } : current
-                        )
-                      }
-                    />
-                    Location is active
-                  </label>
-                  <CrmLocationOwnerSection
-                    activeCustomerOptions={activeCustomerOptions}
-                    reassignCustomerId={reassignCustomerId}
-                    reassignNote={reassignNote}
-                    onReassignCustomerChange={setReassignCustomerId}
-                    onReassignNoteChange={setReassignNote}
-                    onSubmit={() => void handleReassignLocation()}
-                  />
-                </>
-              ) : null}
-
-              {selectedLocationTab === 'equipment' ? (
-                <LocationEquipmentSection
-                  key={selectedLocation.id}
-                  apiBaseUrl={apiBaseUrl}
-                  sessionToken={sessionToken}
-                  location={{ id: selectedLocation.id, name: selectedLocation.name }}
-                  canReplaceRemove={canReplaceRemoveEquipment}
-                  canDelete={canDeleteEquipment}
-                  onErrorMessage={onErrorMessage}
-                />
-              ) : null}
-
-              {selectedLocationTab === 'contacts' ? (
-                <RecordContactsSection
-                  title="Location contacts"
-                  contacts={selectedLocation.contacts}
-                  activeContactOptions={activeContactOptions}
-                  existingContactId={existingContactId}
-                  setExistingContactId={setExistingContactId}
-                  linkDrafts={linkDrafts}
-                  onLinkDraftChange={handleLinkDraftChange}
-                  onLinkExisting={() => void handleLinkExistingContact()}
-                  onSaveLink={(link) => void handleSaveContactLink(link)}
-                  onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
-                  onArchiveLink={(linkId, isActive) =>
-                    void handleArchiveContactLink(linkId, isActive)
-                  }
-                />
-              ) : null}
-
-              {selectedLocationTab === 'history' ? (
-                <div style={styles.subpanel}>
-                  <strong>Ownership history</strong>
-                  {selectedLocation.ownershipHistory.length > 0 ? (
-                    selectedLocation.ownershipHistory.map((entry) => (
-                      <div key={entry.id} style={styles.tinyMuted}>
-                        {entry.customerName}: {entry.startedAt.slice(0, 10)}
-                        {entry.endedAt ? ` to ${entry.endedAt.slice(0, 10)}` : ' to present'}
-                        {entry.note ? ` - ${entry.note}` : ''}
-                      </div>
-                    ))
-                  ) : (
-                    <p style={styles.muted}>No ownership history yet.</p>
-                  )}
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {selectedContact ? (
-            <div style={styles.list}>
-              <div style={styles.row}>
-                <div>
-                  <strong>{selectedContact.displayName}</strong>
-                  {!selectedContact.isActive ? <span style={styles.badge}>Inactive</span> : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleSaveSharedContact()}
-                  style={styles.primaryButton}
-                >
-                  Save contact
-                </button>
-              </div>
-              <div style={styles.formRow}>
-                <input
-                  value={selectedContact.displayName}
-                  onChange={(event) =>
-                    setSelectedContact((current) =>
-                      current ? { ...current, displayName: event.target.value } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedContact.phone ?? ''}
-                  onChange={(event) =>
-                    setSelectedContact((current) =>
-                      current ? { ...current, phone: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedContact.email ?? ''}
-                  onChange={(event) =>
-                    setSelectedContact((current) =>
-                      current ? { ...current, email: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedContact.fax ?? ''}
-                  onChange={(event) =>
-                    setSelectedContact((current) =>
-                      current ? { ...current, fax: event.target.value || undefined } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-                <input
-                  value={selectedContact.tags.join(', ')}
-                  onChange={(event) =>
-                    setSelectedContact((current) =>
-                      current ? { ...current, tags: splitCommaValues(event.target.value) } : current
-                    )
-                  }
-                  style={styles.input}
-                />
-              </div>
-              <div style={styles.subpanel}>
-                <strong>Linked records</strong>
-                {selectedContact.linkedRecords.map((link) => (
-                  <div key={link.id} style={styles.tinyMuted}>
-                    {link.linkedRecord.kind}: {link.linkedRecord.name} -{' '}
-                    {link.linkedRecord.subtitle}
-                    {link.endDate ? ` (end-dated ${link.endDate})` : ''}
-                    {!link.isActive ? ' (inactive)' : ''}
-                  </div>
-                ))}
-              </div>
-            </div>
-          ) : null}
-        </div>
+        <CrmDetailRouter
+          activeContactOptions={activeContactOptions}
+          activeCustomerOptions={activeCustomerOptions}
+          apiBaseUrl={apiBaseUrl}
+          canDeleteEquipment={canDeleteEquipment}
+          canReplaceRemoveEquipment={canReplaceRemoveEquipment}
+          existingContactId={existingContactId}
+          linkDrafts={linkDrafts}
+          reassignCustomerId={reassignCustomerId}
+          reassignNote={reassignNote}
+          saveLocationMissingContactConfirmation={saveLocationMissingContactConfirmation}
+          selectedContact={selectedContact}
+          selectedCustomer={selectedCustomer}
+          selectedLocation={selectedLocation}
+          selectedLocationTab={selectedLocationTab}
+          sessionToken={sessionToken}
+          onAddLocation={openNewLocationFormForCustomer}
+          onArchiveLink={(linkId, isActive) => void handleArchiveContactLink(linkId, isActive)}
+          onBack={returnToSearch}
+          onCancelMissingContactConfirmation={() =>
+            setSaveLocationMissingContactConfirmation(false)
+          }
+          onChangeContact={(contact) => setSelectedContact(contact)}
+          onChangeCustomer={(customer) => setSelectedCustomer(customer)}
+          onChangeLocation={(location) => setSelectedLocation(location)}
+          onEndDateLink={(linkId) => void handleEndDateContactLink(linkId)}
+          onErrorMessage={onErrorMessage}
+          onLinkDraftChange={handleLinkDraftChange}
+          onLinkExisting={() => void handleLinkExistingContact()}
+          onNewContact={openNewContactForm}
+          onOpenLocation={(locationId) => void openLocationDetail(locationId)}
+          onRefreshSelectedRecord={reloadSelectedRecord}
+          onReassignCustomerChange={setReassignCustomerId}
+          onReassignLocation={() => void handleReassignLocation()}
+          onReassignNoteChange={setReassignNote}
+          onSaveContact={() => void handleSaveSharedContact()}
+          onSaveCustomer={() => void handleSaveCustomer()}
+          onSaveLink={(link) => void handleSaveContactLink(link)}
+          onSaveLocation={() => void handleSaveLocation()}
+          onSelectedLocationTabChange={setSelectedLocationTab}
+          setExistingContactId={setExistingContactId}
+        />
       ) : null}
     </section>
   );
-}
-
-function createEmptyCustomerForm(): CustomerFormState {
-  return {
-    name: '',
-    accountType: 'residential',
-    billingAddressLine1: '',
-    billingCity: '',
-    billingState: '',
-    billingPostalCode: '',
-    phone: '',
-    email: '',
-    fax: '',
-    flags: ''
-  };
-}
-
-function createEmptyLocationForm(customerId = ''): LocationFormState {
-  return {
-    customerId,
-    name: '',
-    addressLine1: '',
-    city: '',
-    state: '',
-    postalCode: '',
-    phone: '',
-    email: '',
-    fax: '',
-    alternateBillToCustomerIds: []
-  };
-}
-
-function createEmptyContactForm(): ContactFormState {
-  return {
-    displayName: '',
-    phone: '',
-    email: '',
-    fax: '',
-    tags: ''
-  };
-}
-
-function locationNeedsPhoneEmailConfirmation(
-  phone: string | undefined,
-  email: string | undefined
-): boolean {
-  return !phone?.trim() && !email?.trim();
-}
-
-function splitCommaValues(value: string): string[] {
-  return value
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0);
 }

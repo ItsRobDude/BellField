@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ContactDetail,
   ContactMutationResponse,
   CrmSearchResult,
   CustomerDetail,
@@ -57,6 +58,15 @@ const customerResult: CrmSearchResult = {
   isActive: true
 };
 
+const contactResult: CrmSearchResult = {
+  id: 'contact-1',
+  kind: 'contact',
+  title: 'Sam Service',
+  subtitle: '360-555-0188',
+  badges: [],
+  isActive: true
+};
+
 const customerDetail: CustomerDetail = {
   id: 'customer-1',
   name: 'Acme',
@@ -90,7 +100,7 @@ const createdLocation: LocationDetail = {
   ownershipHistory: []
 };
 
-const createdContact = {
+const createdContact: ContactDetail = {
   id: 'contact-1',
   displayName: 'Sam Service',
   phone: '360-555-0188',
@@ -168,6 +178,7 @@ describe('CrmPanel', () => {
     expect(screen.getByRole('button', { name: 'New customer' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New location' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New contact' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add contact method' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create customer' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create location' })).not.toBeInTheDocument();
   });
@@ -201,6 +212,7 @@ describe('CrmPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
 
     expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
     expect(
       screen.queryByLabelText('Customer, location, or contact search')
     ).not.toBeInTheDocument();
@@ -555,5 +567,73 @@ describe('CrmPanel', () => {
         ([input]) => new URL(String(input)).pathname === '/operations/equipment'
       )
     ).toBe(true);
+  });
+
+  it('shows contact-method actions on locations before switching tabs', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [duplicateLocation]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-existing') {
+        return jsonResponse(createdLocation);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+      target: { value: 'Main Shop' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
+  });
+
+  it('keeps standalone contact detail from exposing location or contact create actions', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [contactResult]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/contacts/contact-1') {
+        return jsonResponse(createdContact);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+      target: { value: 'Sam' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Sam Service/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Contact' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add location' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New contact' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
   });
 });

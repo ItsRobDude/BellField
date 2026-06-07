@@ -3,7 +3,7 @@
 import type { CrmSearchResult } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
-type CrmSearchPanelProps = {
+type CrmSearchSurfaceProps = {
   isSearching: boolean;
   onNewCustomer: () => void;
   onSearchQueryChange: (query: string) => void;
@@ -12,14 +12,14 @@ type CrmSearchPanelProps = {
   searchResults: CrmSearchResult[];
 };
 
-export function CrmSearchPanel({
+export function CrmSearchSurface({
   isSearching,
   onNewCustomer,
   onSearchQueryChange,
   onSelectResult,
   searchQuery,
   searchResults
-}: CrmSearchPanelProps) {
+}: CrmSearchSurfaceProps) {
   return (
     <div style={styles.panel}>
       <div style={styles.row}>

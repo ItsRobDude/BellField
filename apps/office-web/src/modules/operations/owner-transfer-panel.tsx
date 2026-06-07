@@ -3,7 +3,7 @@
 import type { CrmWorkspaceResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
-type CrmLocationOwnerSectionProps = {
+type OwnerTransferPanelProps = {
   activeCustomerOptions: CrmWorkspaceResponse['customers'];
   reassignCustomerId: string;
   reassignNote: string;
@@ -12,14 +12,14 @@ type CrmLocationOwnerSectionProps = {
   onSubmit: () => void;
 };
 
-export function CrmLocationOwnerSection({
+export function OwnerTransferPanel({
   activeCustomerOptions,
   reassignCustomerId,
   reassignNote,
   onReassignCustomerChange,
   onReassignNoteChange,
   onSubmit
-}: CrmLocationOwnerSectionProps) {
+}: OwnerTransferPanelProps) {
   return (
     <div style={styles.subpanel}>
       <strong>Reassign owner</strong>

@@ -4,11 +4,11 @@ This is the controlling plan for the customer, location, contact-method, and New
 
 ## Stop Rule
 
-The current implementation pass is limited to **Phase 0, Phase 1, and Phase 2**.
+The current implementation state is complete through **Phase 3**.
 
-Do not implement Phase 3 or later work from this document unless the user explicitly authorizes that next phase.
+Do not implement Phase 4 or later work from this document unless the user explicitly authorizes that next phase.
 
-If a later-phase behavior already exists because of earlier drift, document it as already present and do not expand it further during the Phase 0-2 pass.
+If a later-phase behavior already exists because of earlier drift, document it as already present and do not expand it further before its phase is explicitly authorized.
 
 ## Phase 0: Lock Product Rules
 
@@ -91,7 +91,7 @@ This fixes the call-booking flow fully.
 
 Do this before heavy CRM UI change.
 
-Do not continue this phase during the Phase 0-2 pass.
+Status: implemented.
 
 ### Split `crm-panel.tsx` Into
 
@@ -120,7 +120,7 @@ Do not continue this phase during the Phase 0-2 pass.
 
 Backend and UI, not just a button.
 
-Do not implement during the Phase 0-2 pass.
+Do not implement until Phase 4 is explicitly authorized.
 
 ### Contracts
 
@@ -158,7 +158,7 @@ Do not implement during the Phase 0-2 pass.
 
 Make CRM useful for service work.
 
-Do not implement during the Phase 0-2 pass.
+Do not implement until Phase 5 is explicitly authorized.
 
 ### Backend
 
@@ -193,7 +193,7 @@ For customer detail, include jobs where customer is owner or bill-to.
 
 Connect operational records.
 
-Do not implement during the Phase 0-2 pass.
+Do not implement until Phase 6 is explicitly authorized.
 
 ### Office
 
@@ -212,7 +212,7 @@ Do not implement during the Phase 0-2 pass.
 
 Do this after the workflow pieces are right.
 
-Do not implement during the Phase 0-2 pass.
+Do not implement until Phase 7 is explicitly authorized.
 
 - Remove large top bar.
 - Add compact bottom-left account initials menu with account/sign out.
@@ -220,7 +220,7 @@ Do not implement during the Phase 0-2 pass.
 - Move New Job out of top bar into an operational quick action.
 - Do not overhaul sidebar just to avoid ServiceTitan similarity. Improve it only where it serves BellField: clearer grouping, less bulk, maybe icons later.
 
-## Current Phase 0-2 Checkpoint
+## Current Phase 0-3 Checkpoint
 
 This checkpoint records the current repo state so implementation and review do not drift across phase names.
 
@@ -239,7 +239,7 @@ Remaining Phase 0 note:
 
 ### Phase 1 Status
 
-Status: implemented for the current Phase 0-2 pass.
+Status: implemented.
 
 - The implementation uses one polymorphic `crm_contact_methods` table instead of three separate tables. It keeps exactly one owner reference active by owner kind, which satisfies the phase intent without duplicating nearly identical tables.
 - Existing customer, location, and contact phone/email/fax values are backfilled into active primary contact-method rows.
@@ -257,7 +257,7 @@ Phase 1 implementation notes:
 
 ### Phase 2 Status
 
-Status: implemented for the current Phase 0-2 pass.
+Status: implemented.
 
 - `CreateJobRequest.locationId` remains required at submit.
 - `billToCustomerId` remains optional and job-only; the backend defaults to the location owner when omitted.
@@ -276,9 +276,33 @@ Phase 2 validation note:
 
 ### Existing Out-of-Phase Work Already Present
 
-The current checkout already contains two Phase 3 behavior corrections from earlier drift:
+No Phase 4+ behavior is intentionally implemented in this checkpoint.
 
-- CRM root no longer exposes root New location or root New contact actions.
-- Add location/contact creation is more contextual than before.
+### Phase 3 Status
 
-Do not expand this into the full Phase 3 refactor during the Phase 0-2 pass. The full `crm-panel.tsx` split and ownership-transfer redesign remain later-phase work.
+Status: implemented.
+
+- `crm-panel.tsx` is now orchestration under the 800-line file-size guard.
+- The CRM root exposes only New customer.
+- Add location is visible only inside selected customer context.
+- New contact remains contextual to selected customer/location context, not the CRM root.
+- Contact-method actions are visible only inside selected customer/location/contact detail.
+- The Phase 3 split exists in focused files:
+  - `crm-search-surface`
+  - `crm-detail-router`
+  - `customer-detail-surface`
+  - `location-detail-surface`
+  - `contact-detail-surface`
+  - `contact-methods-editor`
+  - `owner-transfer-panel`
+  - `record-activity-section`
+  - `crm-form-helpers`
+  - `use-crm-search`
+
+Phase 3 boundary notes:
+
+- The owner-transfer UI was renamed/extracted but not redesigned. The no-dropdown search/create
+  ownership transfer belongs to Phase 4.
+- Location/customer Jobs, Invoices, and Activity service records belong to Phase 5.
+- Job detail links to CRM pages belong to Phase 6.
+- Top-bar/sidebar cleanup belongs to Phase 7.
