@@ -181,16 +181,20 @@ describe('DispatchBoardPanel', () => {
     const unassignedRegion = screen.getByRole('region', { name: /Unassigned appointments/i });
     const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
     const samRegion = screen.getByRole('region', { name: /Appointments for Sam Tech/i });
+    const taylorLane = taylorRegion.children[1]?.children[0];
 
     expect(within(unassignedRegion).getByText('#1002')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('#1001')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('Main Shop')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('123 Main, Blaine, WA')).toBeInTheDocument();
+    expect(taylorRegion).toHaveStyle({ minHeight: '4.85rem' });
+    expect(taylorRegion.children[0]).toHaveStyle({ minHeight: '4.85rem' });
+    expect(taylorLane).toHaveStyle({ minHeight: '4.85rem' });
     expect(
       within(taylorRegion).getByRole('button', {
         name: 'Job 1001, Main Shop, 123 Main, Blaine, WA, Scheduled'
       })
-    ).toHaveStyle({ minHeight: '2.85rem', minWidth: '11rem' });
+    ).toHaveStyle({ height: '100%', minHeight: '3.8rem', minWidth: '11rem' });
     expect(within(taylorRegion).queryByText('1')).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText('No cooling')).not.toBeInTheDocument();
     expect(

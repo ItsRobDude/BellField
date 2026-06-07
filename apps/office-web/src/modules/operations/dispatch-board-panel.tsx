@@ -297,6 +297,9 @@ const refreshControlStyle: CSSProperties = {
 const timelineLabelWidth = '8.5rem';
 const timelineLaneMinWidth = '96rem';
 const timelineColumnGap = '0.75rem';
+const timelineRowMinHeight = '4.85rem';
+const timelineCardMinHeight = '3.8rem';
+const timelineCardTextLineHeight = '1.1rem';
 
 const dispatchTimelineViewportStyle: CSSProperties = {
   marginTop: '0.75rem',
@@ -352,18 +355,21 @@ const timelineRowStyle: CSSProperties = {
   display: 'grid',
   gap: timelineColumnGap,
   gridTemplateColumns: `${timelineLabelWidth} minmax(${timelineLaneMinWidth}, 1fr)`,
+  minHeight: timelineRowMinHeight,
   minWidth: 0
 };
 
 const timelineRowLabelStyle: CSSProperties = {
-  alignContent: 'start',
+  alignContent: 'center',
   background: '#fbfcfa',
   border: '1px solid #dfe6df',
   borderRadius: 8,
+  boxSizing: 'border-box',
   display: 'grid',
   gap: '0.15rem',
   justifyItems: 'start',
   left: 0,
+  minHeight: timelineRowMinHeight,
   padding: '0.55rem 0.65rem',
   position: 'sticky',
   zIndex: 2
@@ -377,40 +383,48 @@ const timelineRowSublabelStyle: CSSProperties = {
 };
 
 const timelineLaneCellStyle: CSSProperties = {
+  display: 'grid',
   minWidth: 0
 };
 
 const timelineLaneStyle: CSSProperties = {
-  alignItems: 'start',
+  alignItems: 'stretch',
   background: '#ffffff',
   border: '1px solid #dfe6df',
   borderRadius: 8,
+  boxSizing: 'border-box',
   display: 'grid',
   gap: '0.3rem',
+  gridAutoRows: `minmax(${timelineCardMinHeight}, 1fr)`,
   gridTemplateColumns: timelineGridTemplateColumns,
-  minHeight: '4.1rem',
+  height: '100%',
+  minHeight: timelineRowMinHeight,
   minWidth: timelineLaneMinWidth,
-  padding: '0.3rem',
+  padding: '0.35rem',
   width: '100%'
 };
 
 const timelineCardStyle: CSSProperties = {
   alignItems: 'stretch',
+  alignSelf: 'stretch',
   background: '#e8f6f8',
   border: '1px solid #8bd1de',
   borderRadius: 6,
+  boxSizing: 'border-box',
   color: '#12212b',
   display: 'flex',
   gap: '0.35rem',
-  minHeight: '2.85rem',
+  height: '100%',
+  minHeight: timelineCardMinHeight,
   minWidth: '11rem',
   overflow: 'hidden',
-  padding: '0.3rem 0.5rem',
+  padding: '0 0.55rem 0 0',
   whiteSpace: 'nowrap'
 };
 
 function getTimelineCardRailStyle(card: DispatchAppointmentCard): CSSProperties {
   return {
+    alignSelf: 'stretch',
     background: card.needsOfficeReview ? '#d92d20' : getAppointmentStatusColor(card.status),
     borderRadius: 999,
     flex: '0 0 0.25rem'
@@ -437,45 +451,58 @@ function getAppointmentStatusColor(status: DispatchAppointmentCard['status']): s
 
 const timelineCardBodyStyle: CSSProperties = {
   alignContent: 'center',
+  boxSizing: 'border-box',
   display: 'grid',
-  gap: '0.18rem',
-  minWidth: 0
+  gap: '0.25rem',
+  gridTemplateRows: `${timelineCardTextLineHeight} ${timelineCardTextLineHeight}`,
+  height: '100%',
+  minWidth: 0,
+  padding: '0.45rem 0'
 };
 
 const timelineCardTitleRowStyle: CSSProperties = {
   alignItems: 'center',
   display: 'flex',
   gap: '0.35rem',
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
   minWidth: 0
 };
 
 const timelineJobChipStyle: CSSProperties = {
+  alignItems: 'center',
   background: '#ffffff',
   borderRadius: 4,
   color: '#176b5b',
+  display: 'inline-flex',
   flex: '0 0 auto',
   fontSize: '0.68rem',
   fontWeight: 800,
-  lineHeight: 1,
-  padding: '0.15rem 0.3rem'
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
+  padding: '0 0.3rem'
 };
 
 const timelineReviewChipStyle: CSSProperties = {
+  alignItems: 'center',
   background: '#fde7e5',
   borderRadius: 4,
   color: '#b42318',
+  display: 'inline-flex',
   flex: '0 0 auto',
   fontSize: '0.68rem',
   fontWeight: 800,
-  lineHeight: 1,
-  padding: '0.15rem 0.3rem'
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
+  padding: '0 0.3rem'
 };
 
 const timelineCardLocationStyle: CSSProperties = {
   display: 'block',
   flex: '1 1 auto',
   fontSize: '0.78rem',
-  lineHeight: 1.2,
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
 };
@@ -485,7 +512,8 @@ const timelineCardAddressStyle: CSSProperties = {
   display: 'block',
   maxWidth: '100%',
   fontSize: '0.72rem',
-  lineHeight: 1.2,
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
 };
