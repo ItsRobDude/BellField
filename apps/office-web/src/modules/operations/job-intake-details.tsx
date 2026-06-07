@@ -120,34 +120,37 @@ export function JobDetailsStep({
 }) {
   return (
     <>
-      <div style={styles.formGridCompact}>
-        <SelectField
-          label="Type"
-          value={jobType}
-          options={jobTypeOptions}
-          onChange={onJobTypeChange}
-        />
-        <SelectField
-          label="Category"
-          value={jobCategory}
-          options={jobCategoryOptions}
-          onChange={onJobCategoryChange}
-        />
-        <SelectField
-          label="Origin"
-          value={jobOrigin}
-          options={jobOriginOptions}
-          onChange={onJobOriginChange}
-        />
-        <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
-          <span>Problem summary</span>
-          <textarea
-            aria-label="Job problem summary"
-            value={jobSummary}
-            onChange={(event) => onJobSummaryChange(event.target.value)}
-            style={styles.textarea}
+      <div style={styles.formSection}>
+        <h2 style={styles.sectionHeading}>Call and work details</h2>
+        <div style={styles.formGridCompact}>
+          <SelectField
+            label="Type"
+            value={jobType}
+            options={jobTypeOptions}
+            onChange={onJobTypeChange}
           />
-        </label>
+          <SelectField
+            label="Category"
+            value={jobCategory}
+            options={jobCategoryOptions}
+            onChange={onJobCategoryChange}
+          />
+          <SelectField
+            label="Origin"
+            value={jobOrigin}
+            options={jobOriginOptions}
+            onChange={onJobOriginChange}
+          />
+          <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
+            <span>Problem summary</span>
+            <textarea
+              aria-label="Job problem summary"
+              value={jobSummary}
+              onChange={(event) => onJobSummaryChange(event.target.value)}
+              style={styles.textarea}
+            />
+          </label>
+        </div>
       </div>
 
       <div style={styles.formSection}>

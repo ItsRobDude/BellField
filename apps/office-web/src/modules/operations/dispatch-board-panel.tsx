@@ -113,6 +113,7 @@ export function DispatchBoardPanel({
           <div style={dispatchBoardStyle}>
             <DispatchTimelineRow
               label="Unassigned"
+              sublabel="Needs assignment"
               ariaLabel="Unassigned appointments"
               cards={model.unassignedQueue}
               onOpenJobDetail={onOpenJobDetail}
@@ -121,6 +122,7 @@ export function DispatchBoardPanel({
               <DispatchTimelineRow
                 key={row.technicianId}
                 label={row.technicianName}
+                sublabel={formatTechnicianRowSublabel(row.roleId)}
                 ariaLabel={`Appointments for ${row.technicianName}`}
                 cards={row.cards}
                 onOpenJobDetail={onOpenJobDetail}
@@ -135,6 +137,7 @@ export function DispatchBoardPanel({
 
 type DispatchTimelineRowProps = {
   label: string;
+  sublabel: string;
   ariaLabel: string;
   cards: DispatchAppointmentCard[];
   onOpenJobDetail?: DispatchBoardPanelProps['onOpenJobDetail'];
@@ -142,6 +145,7 @@ type DispatchTimelineRowProps = {
 
 function DispatchTimelineRow({
   label,
+  sublabel,
   ariaLabel,
   cards,
   onOpenJobDetail
@@ -150,6 +154,7 @@ function DispatchTimelineRow({
     <section style={timelineRowStyle} aria-label={ariaLabel}>
       <div style={timelineRowLabelStyle}>
         <strong>{label}</strong>
+        <span style={timelineRowSublabelStyle}>{sublabel}</span>
       </div>
       <div style={timelineLaneCellStyle}>
         <div style={timelineLaneStyle}>
@@ -188,12 +193,10 @@ function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchC
     >
       <span aria-hidden="true" style={getTimelineCardRailStyle(card)} />
       <div style={timelineCardBodyStyle}>
-        <div style={timelineCardMetaRowStyle}>
-          <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
-          {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
-        </div>
+        <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
         <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
         <span style={timelineCardAddressStyle}>{address}</span>
+        {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
       </div>
     </button>
   );
@@ -203,6 +206,10 @@ function formatDispatchCardAddress(card: DispatchAppointmentCard): string {
   const cityState = [card.locationCity, card.locationState].filter(Boolean).join(', ');
 
   return [card.locationAddressLine1, cityState].filter(Boolean).join(', ');
+}
+
+function formatTechnicianRowSublabel(roleId: string): string {
+  return roleId === 'technician' ? 'Technician' : roleId;
 }
 
 function getTimelineCardPlacementStyle(
@@ -348,16 +355,23 @@ const timelineRowStyle: CSSProperties = {
 
 const timelineRowLabelStyle: CSSProperties = {
   alignContent: 'start',
-  background: '#ffffff',
+  background: '#fbfcfa',
   border: '1px solid #dfe6df',
   borderRadius: 8,
   display: 'grid',
-  gap: '0.35rem',
+  gap: '0.15rem',
   justifyItems: 'start',
   left: 0,
-  padding: '0.55rem 0.7rem',
+  padding: '0.55rem 0.65rem',
   position: 'sticky',
   zIndex: 2
+};
+
+const timelineRowSublabelStyle: CSSProperties = {
+  color: '#64748b',
+  fontSize: '0.72rem',
+  fontWeight: 700,
+  lineHeight: 1.2
 };
 
 const timelineLaneCellStyle: CSSProperties = {
@@ -370,26 +384,26 @@ const timelineLaneStyle: CSSProperties = {
   border: '1px solid #dfe6df',
   borderRadius: 8,
   display: 'grid',
-  gap: '0.35rem',
+  gap: '0.3rem',
   gridTemplateColumns: timelineGridTemplateColumns,
-  minHeight: '4.25rem',
+  minHeight: '3.85rem',
   minWidth: timelineLaneMinWidth,
-  padding: '0.35rem',
+  padding: '0.3rem',
   width: '100%'
 };
 
 const timelineCardStyle: CSSProperties = {
   alignItems: 'stretch',
-  background: '#e9f7fb',
-  border: '1px solid #80cfe3',
+  background: '#e8f6f8',
+  border: '1px solid #8bd1de',
   borderRadius: 6,
   color: '#12212b',
   display: 'flex',
-  gap: '0.4rem',
-  minHeight: '2.45rem',
+  gap: '0.35rem',
+  minHeight: '2rem',
   minWidth: '8rem',
   overflow: 'hidden',
-  padding: '0.25rem 0.45rem',
+  padding: '0.22rem 0.4rem',
   whiteSpace: 'nowrap'
 };
 
@@ -420,15 +434,9 @@ function getAppointmentStatusColor(status: DispatchAppointmentCard['status']): s
 }
 
 const timelineCardBodyStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.1rem',
-  minWidth: 0
-};
-
-const timelineCardMetaRowStyle: CSSProperties = {
   alignItems: 'center',
   display: 'flex',
-  gap: '0.25rem',
+  gap: '0.35rem',
   minWidth: 0
 };
 
@@ -456,6 +464,7 @@ const timelineReviewChipStyle: CSSProperties = {
 
 const timelineCardLocationStyle: CSSProperties = {
   display: 'block',
+  flex: '0 1 auto',
   fontSize: '0.78rem',
   lineHeight: 1.2,
   overflow: 'hidden',
@@ -465,6 +474,7 @@ const timelineCardLocationStyle: CSSProperties = {
 const timelineCardAddressStyle: CSSProperties = {
   color: '#475569',
   display: 'block',
+  flex: '1 1 8rem',
   fontSize: '0.72rem',
   lineHeight: 1.2,
   overflow: 'hidden',

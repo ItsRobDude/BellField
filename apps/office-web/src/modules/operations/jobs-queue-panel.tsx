@@ -1,7 +1,9 @@
 'use client';
 
+import type { CSSProperties } from 'react';
 import type { JobsQueueKey, JobsQueueResponse } from '@/lib/operations-api';
 import { formatAppointmentScheduleDisplay } from './appointment-schedule-format';
+import { jobStatusLabels } from './job-overview-section';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type JobsQueuePanelProps = {
@@ -80,19 +82,20 @@ function QueueColumn({
             <button
               key={job.id}
               type="button"
-              style={styles.cardButton}
+              style={{ ...styles.cardButton, ...queueJobCardStyle }}
               onClick={() => onOpenJobDetail(job.id)}
             >
-              <div style={styles.row}>
+              <div style={queueJobHeaderStyle}>
                 <strong>Job {job.jobNumber}</strong>
                 <span style={job.needsOfficeReview ? styles.dangerBadge : styles.badge}>
-                  {job.status}
+                  {jobStatusLabels[job.status]}
                 </span>
               </div>
-              <span>{job.summary}</span>
-              <span style={styles.tinyMuted}>
-                {job.locationName} - {nextAppointmentLabel(job)}
-              </span>
+              <span style={queueSummaryStyle}>{job.summary}</span>
+              <div style={queueFactsStyle}>
+                <QueueFact label="Location" value={job.locationName} />
+                <QueueFact label="Next" value={nextAppointmentLabel(job)} />
+              </div>
             </button>
           ))}
           {section.nextCursor && onLoadMoreQueue ? (
@@ -110,8 +113,57 @@ function QueueColumn({
   );
 }
 
+function QueueFact({ label, value }: { label: string; value: string }) {
+  return (
+    <span style={queueFactStyle}>
+      <span style={styles.tinyMuted}>{label}</span>
+      <strong style={queueFactValueStyle}>{value}</strong>
+    </span>
+  );
+}
+
 function nextAppointmentLabel(job: JobsQueueItem): string {
   return job.nextAppointment
     ? formatAppointmentScheduleDisplay(job.nextAppointment)
     : 'No appointment';
 }
+
+const queueJobCardStyle: CSSProperties = {
+  gap: '0.55rem',
+  padding: '0.7rem'
+};
+
+const queueJobHeaderStyle: CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  gap: '0.5rem',
+  justifyContent: 'space-between',
+  minWidth: 0
+};
+
+const queueSummaryStyle: CSSProperties = {
+  color: '#1f2933',
+  display: '-webkit-box',
+  fontSize: '0.9rem',
+  lineHeight: 1.35,
+  overflow: 'hidden',
+  WebkitBoxOrient: 'vertical',
+  WebkitLineClamp: 2
+};
+
+const queueFactsStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.35rem'
+};
+
+const queueFactStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.1rem',
+  minWidth: 0
+};
+
+const queueFactValueStyle: CSSProperties = {
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
+};
