@@ -15,14 +15,11 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type CrmDetailRouterProps = {
   activeContactOptions: CrmWorkspaceResponse['contacts'];
-  activeCustomerOptions: CrmWorkspaceResponse['customers'];
   apiBaseUrl: string;
   canDeleteEquipment: boolean;
   canReplaceRemoveEquipment: boolean;
   existingContactId: string;
   linkDrafts: Record<string, ContactLinkDraft>;
-  reassignCustomerId: string;
-  reassignNote: string;
   saveLocationMissingContactConfirmation: boolean;
   selectedContact: ContactDetail | null;
   selectedCustomer: CustomerDetail | null;
@@ -40,12 +37,10 @@ type CrmDetailRouterProps = {
   onErrorMessage: (message: string | null) => void;
   onLinkDraftChange: (contactId: string, draft: ContactLinkDraft) => void;
   onLinkExisting: () => void;
+  onLocationTransferred: (location: LocationDetail) => Promise<void> | void;
   onNewContact: () => void;
   onOpenLocation: (locationId: string) => void;
   onRefreshSelectedRecord: () => Promise<void> | void;
-  onReassignCustomerChange: (customerId: string) => void;
-  onReassignLocation: () => void;
-  onReassignNoteChange: (note: string) => void;
   onSaveContact: () => void;
   onSaveCustomer: () => void;
   onSaveLink: (link: ContactLink) => void;
@@ -56,14 +51,11 @@ type CrmDetailRouterProps = {
 
 export function CrmDetailRouter({
   activeContactOptions,
-  activeCustomerOptions,
   apiBaseUrl,
   canDeleteEquipment,
   canReplaceRemoveEquipment,
   existingContactId,
   linkDrafts,
-  reassignCustomerId,
-  reassignNote,
   saveLocationMissingContactConfirmation,
   selectedContact,
   selectedCustomer,
@@ -81,12 +73,10 @@ export function CrmDetailRouter({
   onErrorMessage,
   onLinkDraftChange,
   onLinkExisting,
+  onLocationTransferred,
   onNewContact,
   onOpenLocation,
   onRefreshSelectedRecord,
-  onReassignCustomerChange,
-  onReassignLocation,
-  onReassignNoteChange,
   onSaveContact,
   onSaveCustomer,
   onSaveLink,
@@ -148,15 +138,12 @@ export function CrmDetailRouter({
       {selectedLocation ? (
         <LocationDetailSurface
           activeContactOptions={activeContactOptions}
-          activeCustomerOptions={activeCustomerOptions}
           apiBaseUrl={apiBaseUrl}
           canDeleteEquipment={canDeleteEquipment}
           canReplaceRemoveEquipment={canReplaceRemoveEquipment}
           existingContactId={existingContactId}
           linkDrafts={linkDrafts}
           location={selectedLocation}
-          reassignCustomerId={reassignCustomerId}
-          reassignNote={reassignNote}
           saveLocationMissingContactConfirmation={saveLocationMissingContactConfirmation}
           selectedLocationTab={selectedLocationTab}
           sessionToken={sessionToken}
@@ -167,10 +154,8 @@ export function CrmDetailRouter({
           onErrorMessage={onErrorMessage}
           onLinkDraftChange={onLinkDraftChange}
           onLinkExisting={onLinkExisting}
+          onLocationTransferred={onLocationTransferred}
           onRefreshSelectedRecord={onRefreshSelectedRecord}
-          onReassignCustomerChange={onReassignCustomerChange}
-          onReassignLocation={onReassignLocation}
-          onReassignNoteChange={onReassignNoteChange}
           onSaveLink={onSaveLink}
           onSaveLocation={onSaveLocation}
           onSelectedLocationTabChange={onSelectedLocationTabChange}

@@ -278,6 +278,10 @@ export class ReassignLocationOwnerRequestBodyDto implements ReassignLocationOwne
   @MinLength(1)
   customerId!: string;
 
+  @IsString()
+  @Matches(isoDatePattern)
+  effectiveDate!: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)

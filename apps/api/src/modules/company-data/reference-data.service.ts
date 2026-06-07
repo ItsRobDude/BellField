@@ -247,11 +247,13 @@ export class ReferenceDataService {
   async reassignLocationOwner(
     locationId: string,
     customerId: string,
+    effectiveDate: string,
     note?: string
   ): Promise<LocationDetail> {
     const updatedLocation = await this.referenceDataRepository.reassignLocationOwner(
       locationId,
       customerId,
+      effectiveDate,
       note
     );
 

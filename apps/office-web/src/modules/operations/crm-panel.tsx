@@ -19,7 +19,6 @@ import {
   getOfficeCustomerDetail,
   getOfficeLocationDetail,
   linkOfficeContact,
-  reassignOfficeLocationOwner,
   updateOfficeContact,
   updateOfficeContactLink,
   updateOfficeCustomer,
@@ -78,8 +77,6 @@ export function CrmPanel({
   const [locationForm, setLocationForm] = useState<LocationFormState>(createEmptyLocationForm());
   const [contactForm, setContactForm] = useState<ContactFormState>(createEmptyContactForm());
   const [existingContactId, setExistingContactId] = useState('');
-  const [reassignCustomerId, setReassignCustomerId] = useState('');
-  const [reassignNote, setReassignNote] = useState('');
   const [customerDuplicateWarnings, setCustomerDuplicateWarnings] = useState<DuplicateCandidate[]>(
     []
   );
@@ -138,8 +135,6 @@ export function CrmPanel({
     setSelectedLocation(null);
     setSelectedContact(null);
     setSelectedLocationTab('overview');
-    setReassignCustomerId('');
-    setReassignNote('');
   }
 
   function returnToSearch() {
@@ -204,7 +199,6 @@ export function CrmPanel({
         setSelectedCustomer(customer);
         setSelectedLocation(null);
         setSelectedContact(null);
-        setReassignCustomerId('');
         hydrateCustomerForm(customer);
         setMode('customerDetail');
       } else if (result.kind === 'location') {
@@ -216,7 +210,6 @@ export function CrmPanel({
         setSelectedCustomer(null);
         setSelectedLocation(location);
         setSelectedContact(null);
-        setReassignCustomerId(location.customerId);
         hydrateLocationForm(location);
         hydrateLinkDrafts(location.contacts);
         setMode('locationDetail');
@@ -249,7 +242,6 @@ export function CrmPanel({
       setSelectedCustomer(null);
       setSelectedLocation(location);
       setSelectedContact(null);
-      setReassignCustomerId(location.customerId);
       hydrateLocationForm(location);
       hydrateLinkDrafts(location.contacts);
       setMode('locationDetail');
@@ -387,7 +379,6 @@ export function CrmPanel({
       hydrateLocationForm(response.location);
       hydrateLinkDrafts(response.location.contacts);
       setLocationForm(createEmptyLocationForm(locationForm.customerId));
-      setReassignCustomerId(response.location.customerId);
       setMode('locationDetail');
       await refreshWorkspace();
     } catch (error) {
@@ -431,30 +422,6 @@ export function CrmPanel({
       await refreshWorkspace();
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to save location.');
-    }
-  }
-
-  async function handleReassignLocation() {
-    if (!selectedLocation || !reassignCustomerId) {
-      return;
-    }
-
-    try {
-      const response = await reassignOfficeLocationOwner({
-        locationId: selectedLocation.id,
-        sessionToken,
-        apiBaseUrl,
-        customerId: reassignCustomerId,
-        note: reassignNote || undefined
-      });
-      setSelectedLocation(response.location);
-      setReassignCustomerId(response.location.customerId);
-      setReassignNote('');
-      await refreshWorkspace();
-    } catch (error) {
-      onErrorMessage(
-        error instanceof Error ? error.message : 'Unable to reassign location ownership.'
-      );
     }
   }
 
@@ -647,6 +614,12 @@ export function CrmPanel({
     }
   }
 
+  async function handleLocationTransferred(location: LocationDetail) {
+    setSelectedLocation(location);
+    hydrateLinkDrafts(location.contacts);
+    await refreshWorkspace();
+  }
+
   function hydrateCustomerForm(customer: CustomerDetail) {
     setSelectedCustomer(customer);
     hydrateLinkDrafts(customer.contacts);
@@ -752,14 +725,11 @@ export function CrmPanel({
       (selectedCustomer || selectedLocation || selectedContact) ? (
         <CrmDetailRouter
           activeContactOptions={activeContactOptions}
-          activeCustomerOptions={activeCustomerOptions}
           apiBaseUrl={apiBaseUrl}
           canDeleteEquipment={canDeleteEquipment}
           canReplaceRemoveEquipment={canReplaceRemoveEquipment}
           existingContactId={existingContactId}
           linkDrafts={linkDrafts}
-          reassignCustomerId={reassignCustomerId}
-          reassignNote={reassignNote}
           saveLocationMissingContactConfirmation={saveLocationMissingContactConfirmation}
           selectedContact={selectedContact}
           selectedCustomer={selectedCustomer}
@@ -779,12 +749,10 @@ export function CrmPanel({
           onErrorMessage={onErrorMessage}
           onLinkDraftChange={handleLinkDraftChange}
           onLinkExisting={() => void handleLinkExistingContact()}
+          onLocationTransferred={(location) => void handleLocationTransferred(location)}
           onNewContact={openNewContactForm}
           onOpenLocation={(locationId) => void openLocationDetail(locationId)}
           onRefreshSelectedRecord={reloadSelectedRecord}
-          onReassignCustomerChange={setReassignCustomerId}
-          onReassignLocation={() => void handleReassignLocation()}
-          onReassignNoteChange={setReassignNote}
           onSaveContact={() => void handleSaveSharedContact()}
           onSaveCustomer={() => void handleSaveCustomer()}
           onSaveLink={(link) => void handleSaveContactLink(link)}

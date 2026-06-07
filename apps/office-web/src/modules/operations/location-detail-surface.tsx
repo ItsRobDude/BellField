@@ -11,15 +11,12 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type LocationDetailSurfaceProps = {
   activeContactOptions: CrmWorkspaceResponse['contacts'];
-  activeCustomerOptions: CrmWorkspaceResponse['customers'];
   apiBaseUrl: string;
   canDeleteEquipment: boolean;
   canReplaceRemoveEquipment: boolean;
   existingContactId: string;
   linkDrafts: Record<string, ContactLinkDraft>;
   location: LocationDetail;
-  reassignCustomerId: string;
-  reassignNote: string;
   saveLocationMissingContactConfirmation: boolean;
   selectedLocationTab: LocationDetailTab;
   sessionToken: string;
@@ -30,10 +27,8 @@ type LocationDetailSurfaceProps = {
   onErrorMessage: (message: string | null) => void;
   onLinkDraftChange: (contactId: string, draft: ContactLinkDraft) => void;
   onLinkExisting: () => void;
+  onLocationTransferred: (location: LocationDetail) => Promise<void> | void;
   onRefreshSelectedRecord: () => Promise<void> | void;
-  onReassignCustomerChange: (customerId: string) => void;
-  onReassignLocation: () => void;
-  onReassignNoteChange: (note: string) => void;
   onSaveLink: (link: ContactLink) => void;
   onSaveLocation: () => void;
   onSelectedLocationTabChange: (tab: LocationDetailTab) => void;
@@ -49,15 +44,12 @@ const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
 
 export function LocationDetailSurface({
   activeContactOptions,
-  activeCustomerOptions,
   apiBaseUrl,
   canDeleteEquipment,
   canReplaceRemoveEquipment,
   existingContactId,
   linkDrafts,
   location,
-  reassignCustomerId,
-  reassignNote,
   saveLocationMissingContactConfirmation,
   selectedLocationTab,
   sessionToken,
@@ -68,10 +60,8 @@ export function LocationDetailSurface({
   onErrorMessage,
   onLinkDraftChange,
   onLinkExisting,
+  onLocationTransferred,
   onRefreshSelectedRecord,
-  onReassignCustomerChange,
-  onReassignLocation,
-  onReassignNoteChange,
   onSaveLink,
   onSaveLocation,
   onSelectedLocationTabChange,
@@ -200,12 +190,10 @@ export function LocationDetailSurface({
             onSaved={onRefreshSelectedRecord}
           />
           <OwnerTransferPanel
-            activeCustomerOptions={activeCustomerOptions}
-            reassignCustomerId={reassignCustomerId}
-            reassignNote={reassignNote}
-            onReassignCustomerChange={onReassignCustomerChange}
-            onReassignNoteChange={onReassignNoteChange}
-            onSubmit={onReassignLocation}
+            apiBaseUrl={apiBaseUrl}
+            location={location}
+            sessionToken={sessionToken}
+            onTransferred={onLocationTransferred}
           />
         </>
       ) : null}

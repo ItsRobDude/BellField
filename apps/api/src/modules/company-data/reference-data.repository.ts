@@ -616,6 +616,7 @@ export class ReferenceDataRepository {
   async reassignLocationOwner(
     locationId: string,
     customerId: string,
+    effectiveDate: string,
     note?: string
   ): Promise<LocationRecord | null> {
     const currentLocation = await this.readRepository.getLocationById(locationId);
@@ -624,24 +625,24 @@ export class ReferenceDataRepository {
       return null;
     }
 
-    const changedAt = new Date().toISOString();
+    const ownershipStartedAt = `${effectiveDate}T00:00:00.000Z`;
 
     await this.databaseService.transaction(async (queryable) => {
-      await this.closeActiveOwnershipEntry(locationId, changedAt, queryable);
+      await this.closeActiveOwnershipEntry(locationId, ownershipStartedAt, queryable);
       await queryable.query(
         `
           update locations
-          set customer_id = $2, updated_at = $3
+          set customer_id = $2, updated_at = now()
           where id = $1
         `,
-        [locationId, customerId, changedAt]
+        [locationId, customerId]
       );
       await queryable.query(
         `
           insert into location_ownership_history (id, location_id, customer_id, started_at, ended_at, note)
           values ($1, $2, $3, $4, null, $5)
         `,
-        [randomUUID(), locationId, customerId, changedAt, note ?? null]
+        [randomUUID(), locationId, customerId, ownershipStartedAt, note ?? null]
       );
     });
 

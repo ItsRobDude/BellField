@@ -199,6 +199,7 @@ export type UpdateLocationRequest = Partial<
 
 export interface ReassignLocationOwnerRequest {
   customerId: string;
+  effectiveDate: string;
   note?: string;
 }
 

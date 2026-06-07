@@ -58,6 +58,19 @@ const customerResult: CrmSearchResult = {
   isActive: true
 };
 
+const newOwnerResult: CrmSearchResult = {
+  id: 'customer-2',
+  kind: 'customer',
+  title: 'North End Homes',
+  subtitle: '12 Cedar Lane, Everett',
+  badges: [],
+  addressLine1: '12 Cedar Lane',
+  city: 'Everett',
+  state: 'WA',
+  postalCode: '98201',
+  isActive: true
+};
+
 const contactResult: CrmSearchResult = {
   id: 'contact-1',
   kind: 'contact',
@@ -83,6 +96,22 @@ const customerDetail: CustomerDetail = {
   locations: []
 };
 
+const newOwnerDetail: CustomerDetail = {
+  id: 'customer-2',
+  name: 'North End Homes',
+  accountType: 'landlord',
+  billingAddressLine1: '12 Cedar Lane',
+  billingCity: 'Everett',
+  billingState: 'WA',
+  billingPostalCode: '98201',
+  phone: '360-555-0190',
+  isActive: true,
+  flags: [],
+  contactMethods: [],
+  contacts: [],
+  locations: []
+};
+
 const createdLocation: LocationDetail = {
   id: 'location-1',
   name: 'Main Shop',
@@ -98,6 +127,27 @@ const createdLocation: LocationDetail = {
   contacts: [],
   alternateBillToCustomerIds: [],
   ownershipHistory: []
+};
+
+const transferredLocation: LocationDetail = {
+  ...createdLocation,
+  customerId: 'customer-2',
+  customerName: 'North End Homes',
+  ownershipHistory: [
+    {
+      id: 'history-1',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      startedAt: '2026-01-01T00:00:00.000Z',
+      endedAt: `${todayDateString()}T00:00:00.000Z`
+    },
+    {
+      id: 'history-2',
+      customerId: 'customer-2',
+      customerName: 'North End Homes',
+      startedAt: `${todayDateString()}T00:00:00.000Z`
+    }
+  ]
 };
 
 const createdContact: ContactDetail = {
@@ -600,6 +650,141 @@ describe('CrmPanel', () => {
 
     expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reassign owner' })).not.toBeInTheDocument();
+  });
+
+  it('transfers location ownership through customer search with an effective date', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        const query = url.searchParams.get('q') ?? '';
+        return jsonResponse({
+          query,
+          results: query.toLowerCase().includes('north') ? [newOwnerResult] : [duplicateLocation]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-existing' && !options?.method) {
+        return jsonResponse(createdLocation);
+      }
+
+      if (
+        url.pathname === '/operations/crm/locations/location-1/reassign-owner' &&
+        options?.method === 'POST'
+      ) {
+        return jsonResponse({ location: transferredLocation });
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+      target: { value: 'Main Shop' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Transfer ownership' }));
+    expect(screen.getByText('Current customer: Acme')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Search customers'), {
+      target: { value: 'North' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Search' }));
+    fireEvent.click(await screen.findByRole('button', { name: /North End Homes/ }));
+    fireEvent.change(screen.getByLabelText('Note'), { target: { value: 'Sold' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm transfer' }));
+
+    await waitFor(() => {
+      const transferCall = fetchMock.mock.calls.find(([input, options]) => {
+        const url = new URL(String(input));
+        return (
+          url.pathname === '/operations/crm/locations/location-1/reassign-owner' &&
+          (options as RequestInit | undefined)?.method === 'POST'
+        );
+      });
+      expect(transferCall).toBeDefined();
+      expect(JSON.parse(String((transferCall?.[1] as RequestInit).body))).toEqual({
+        customerId: 'customer-2',
+        effectiveDate: todayDateString(),
+        note: 'Sold'
+      });
+    });
+    expect(await screen.findByText('Current customer')).toBeInTheDocument();
+    expect(screen.getByText('North End Homes')).toBeInTheDocument();
+  });
+
+  it('creates and selects a new customer inside the transfer flow', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        const query = url.searchParams.get('q') ?? '';
+        return jsonResponse({
+          query,
+          results: query.toLowerCase().includes('main') ? [duplicateLocation] : []
+        });
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-existing' && !options?.method) {
+        return jsonResponse(createdLocation);
+      }
+
+      if (url.pathname === '/operations/crm/customers' && options?.method === 'POST') {
+        return jsonResponse({ customer: newOwnerDetail });
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+      target: { value: 'Main Shop' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Transfer ownership' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
+
+    fireEvent.change(screen.getByPlaceholderText('Customer name'), {
+      target: { value: 'North End Homes' }
+    });
+    fireEvent.change(screen.getByPlaceholderText('Billing address'), {
+      target: { value: '12 Cedar Lane' }
+    });
+    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: 'Everett' } });
+    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: 'WA' } });
+    fireEvent.change(screen.getByPlaceholderText('Postal code'), {
+      target: { value: '98201' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create and select customer' }));
+
+    await waitFor(() => {
+      const createCall = fetchMock.mock.calls.find(([input, options]) => {
+        const url = new URL(String(input));
+        return (
+          url.pathname === '/operations/crm/customers' &&
+          (options as RequestInit | undefined)?.method === 'POST'
+        );
+      });
+      expect(createCall).toBeDefined();
+    });
+    expect(
+      await screen.findByText(
+        `Main Shop will transfer from Acme to North End Homes effective ${todayDateString()}.`
+      )
+    ).toBeInTheDocument();
   });
 
   it('keeps standalone contact detail from exposing location or contact create actions', async () => {
@@ -637,3 +822,7 @@ describe('CrmPanel', () => {
     expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
   });
 });
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}

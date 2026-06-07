@@ -4,9 +4,9 @@ This is the controlling plan for the customer, location, contact-method, and New
 
 ## Stop Rule
 
-The current implementation state is complete through **Phase 3**.
+The current implementation state is complete through **Phase 4**.
 
-Do not implement Phase 4 or later work from this document unless the user explicitly authorizes that next phase.
+Do not implement Phase 5 or later work from this document unless the user explicitly authorizes that next phase.
 
 If a later-phase behavior already exists because of earlier drift, document it as already present and do not expand it further before its phase is explicitly authorized.
 
@@ -120,7 +120,7 @@ Status: implemented.
 
 Backend and UI, not just a button.
 
-Do not implement until Phase 4 is explicitly authorized.
+Status: implemented.
 
 ### Contracts
 
@@ -220,7 +220,7 @@ Do not implement until Phase 7 is explicitly authorized.
 - Move New Job out of top bar into an operational quick action.
 - Do not overhaul sidebar just to avoid ServiceTitan similarity. Improve it only where it serves BellField: clearer grouping, less bulk, maybe icons later.
 
-## Current Phase 0-3 Checkpoint
+## Current Phase 0-4 Checkpoint
 
 This checkpoint records the current repo state so implementation and review do not drift across phase names.
 
@@ -274,10 +274,6 @@ Phase 2 validation note:
 
 - A browser smoke of the New Job intake path is still useful before release-level signoff, but the Phase 2 automated behavior checklist is covered.
 
-### Existing Out-of-Phase Work Already Present
-
-No Phase 4+ behavior is intentionally implemented in this checkpoint.
-
 ### Phase 3 Status
 
 Status: implemented.
@@ -301,8 +297,23 @@ Status: implemented.
 
 Phase 3 boundary notes:
 
-- The owner-transfer UI was renamed/extracted but not redesigned. The no-dropdown search/create
-  ownership transfer belongs to Phase 4.
 - Location/customer Jobs, Invoices, and Activity service records belong to Phase 5.
 - Job detail links to CRM pages belong to Phase 6.
 - Top-bar/sidebar cleanup belongs to Phase 7.
+
+### Phase 4 Status
+
+Status: implemented.
+
+- `ReassignLocationOwnerRequest` now requires an explicit `effectiveDate` and accepts an optional note.
+- The backend rejects future effective dates for v1, inactive target customers, and same-owner transfers.
+- Ownership transfer closes the prior active ownership history row at the effective date, inserts the new owner history row at the same effective date, and updates the location's current customer for today/past transfers.
+- Ownership transfer does not rewrite jobs or invoice snapshots.
+- The location UI no longer exposes an always-present owner dropdown.
+- Transfer ownership is an explicit action that opens customer search/create, effective date, note, and review confirmation.
+- The UI posts the selected customer and effective date through the ownership-transfer endpoint and refreshes the selected location after success.
+- Regression coverage exists for backend validation, repository history updates, no root owner dropdown, customer search transfer, and creating/selecting a customer inside the transfer flow.
+
+### Existing Out-of-Phase Work Already Present
+
+No Phase 5+ behavior is intentionally implemented in this checkpoint.

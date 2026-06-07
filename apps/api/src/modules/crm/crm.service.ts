@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable
+} from '@nestjs/common';
 import type {
   ContactMutationResponse,
   ContactMethodMutationResponse,
@@ -7,6 +12,7 @@ import type {
   CrmWorkspaceResponse,
   CustomerMutationResponse,
   DuplicateCandidate,
+  LocationDetail,
   LocationMutationResponse
 } from '@bellfield/contracts';
 import { ReferenceDataService } from '../company-data/reference-data.service';
@@ -27,6 +33,7 @@ import type {
 
 const crmSearchLimit = 25;
 const duplicateCandidateLimit = 25;
+const isoDatePattern = /^\d{4}-\d{2}-\d{2}$/;
 
 @Injectable()
 export class CrmService {
@@ -271,10 +278,30 @@ export class CrmService {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', [
       'office-web'
     ]);
-    await this.referenceDataService.getCustomerById(request.customerId);
+    const effectiveDate = normalizeDateOnly(request.effectiveDate);
+    if (effectiveDate > todayDateString()) {
+      throw new BadRequestException('Future ownership transfer dates are not supported yet.');
+    }
+
+    const [targetCustomer, currentLocation] = await Promise.all([
+      this.referenceDataService.getCustomerById(request.customerId),
+      this.referenceDataService.getLocationDetail(locationId)
+    ]);
+
+    if (!targetCustomer.isActive) {
+      throw new ConflictException('Target customer account is inactive.');
+    }
+
+    if (currentLocation.customerId === targetCustomer.id) {
+      throw new ConflictException('Location is already owned by this customer.');
+    }
+
+    assertEffectiveDateWithinCurrentOwnership(currentLocation, effectiveDate);
+
     const location = await this.referenceDataService.reassignLocationOwner(
       locationId,
-      request.customerId,
+      targetCustomer.id,
+      effectiveDate,
       request.note?.trim()
     );
     return { location };
@@ -668,6 +695,39 @@ function ensureLocationContactConfirmation(
 function trimOptional(value: string | undefined): string | undefined {
   const trimmed = value?.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function normalizeDateOnly(value: string): string {
+  const trimmed = value.trim();
+
+  if (!isoDatePattern.test(trimmed)) {
+    throw new BadRequestException('Effective date must use YYYY-MM-DD format.');
+  }
+
+  const parsed = new Date(`${trimmed}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== trimmed) {
+    throw new BadRequestException('Effective date must be a real calendar date.');
+  }
+
+  return trimmed;
+}
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function assertEffectiveDateWithinCurrentOwnership(
+  location: LocationDetail,
+  effectiveDate: string
+): void {
+  const activeOwnership = location.ownershipHistory.find((entry) => !entry.endedAt);
+  const activeStartDate = activeOwnership?.startedAt.slice(0, 10);
+
+  if (activeStartDate && effectiveDate < activeStartDate) {
+    throw new BadRequestException(
+      'Effective date cannot be before the current ownership start date.'
+    );
+  }
 }
 
 function normalize(value: string | undefined): string {

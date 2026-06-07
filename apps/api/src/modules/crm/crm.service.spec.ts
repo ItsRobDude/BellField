@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import { CrmService } from './crm.service';
 
 function createService() {
@@ -179,6 +179,41 @@ function createService() {
       contacts: [],
       alternateBillToCustomerIds: [],
       ownershipHistory: []
+    }),
+    reassignLocationOwner: jest.fn().mockResolvedValue({
+      id: 'location-1',
+      name: 'Acme Shop',
+      customerId: 'customer-2',
+      customerName: 'North End Homes',
+      addressLine1: '100 Main Street',
+      city: 'Seattle',
+      state: 'WA',
+      postalCode: '98101',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      contactMethods: [],
+      contacts: [],
+      alternateBillToCustomerIds: [],
+      ownershipHistory: [
+        {
+          id: 'history-1',
+          locationId: 'location-1',
+          customerId: 'customer-1',
+          customerName: 'Acme Heating',
+          startedAt: '2026-01-01T00:00:00.000Z',
+          endedAt: '2026-06-06T00:00:00.000Z'
+        },
+        {
+          id: 'history-2',
+          locationId: 'location-1',
+          customerId: 'customer-2',
+          customerName: 'North End Homes',
+          startedAt: '2026-06-06T00:00:00.000Z',
+          note: 'Sold'
+        }
+      ]
     }),
     getContactById: jest.fn().mockResolvedValue({
       id: 'contact-1',
@@ -645,6 +680,156 @@ describe('CrmService', () => {
     });
   });
 
+  it('transfers location ownership with an explicit effective date', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.getCustomerById.mockResolvedValueOnce({
+      id: 'customer-2',
+      name: 'North End Homes',
+      accountType: 'landlord',
+      billingAddressLine1: '12 Cedar Lane',
+      billingCity: 'Everett',
+      billingState: 'WA',
+      billingPostalCode: '98201',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      flags: []
+    });
+
+    await service.reassignLocationOwner('session-token', 'location-1', {
+      customerId: 'customer-2',
+      effectiveDate: todayDateString(),
+      note: ' Sold '
+    });
+
+    expect(referenceDataService.reassignLocationOwner).toHaveBeenCalledWith(
+      'location-1',
+      'customer-2',
+      todayDateString(),
+      'Sold'
+    );
+  });
+
+  it('rejects ownership transfer to the current owner', async () => {
+    const { service, referenceDataService } = createService();
+
+    await expect(
+      service.reassignLocationOwner('session-token', 'location-1', {
+        customerId: 'customer-1',
+        effectiveDate: todayDateString()
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
+  });
+
+  it('rejects ownership transfer to an inactive customer', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.getCustomerById.mockResolvedValueOnce({
+      id: 'customer-2',
+      name: 'Inactive Owner',
+      accountType: 'landlord',
+      billingAddressLine1: '12 Cedar Lane',
+      billingCity: 'Everett',
+      billingState: 'WA',
+      billingPostalCode: '98201',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: false,
+      flags: []
+    });
+
+    await expect(
+      service.reassignLocationOwner('session-token', 'location-1', {
+        customerId: 'customer-2',
+        effectiveDate: todayDateString()
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
+  });
+
+  it('rejects future ownership transfer dates for v1', async () => {
+    const { service, referenceDataService } = createService();
+
+    await expect(
+      service.reassignLocationOwner('session-token', 'location-1', {
+        customerId: 'customer-2',
+        effectiveDate: futureDateString()
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-calendar ownership transfer dates', async () => {
+    const { service, referenceDataService } = createService();
+
+    await expect(
+      service.reassignLocationOwner('session-token', 'location-1', {
+        customerId: 'customer-2',
+        effectiveDate: '2026-02-31'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
+  });
+
+  it('rejects ownership transfer dates before the current owner started', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.getCustomerById.mockResolvedValueOnce({
+      id: 'customer-2',
+      name: 'North End Homes',
+      accountType: 'landlord',
+      billingAddressLine1: '12 Cedar Lane',
+      billingCity: 'Everett',
+      billingState: 'WA',
+      billingPostalCode: '98201',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      flags: []
+    });
+    referenceDataService.getLocationDetail.mockResolvedValueOnce({
+      id: 'location-1',
+      name: 'Acme Shop',
+      customerId: 'customer-1',
+      customerName: 'Acme Heating',
+      addressLine1: '100 Main Street',
+      city: 'Seattle',
+      state: 'WA',
+      postalCode: '98101',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      contactMethods: [],
+      contacts: [],
+      alternateBillToCustomerIds: [],
+      ownershipHistory: [
+        {
+          id: 'history-1',
+          locationId: 'location-1',
+          customerId: 'customer-1',
+          customerName: 'Acme Heating',
+          startedAt: '2026-06-01T00:00:00.000Z'
+        }
+      ]
+    });
+
+    await expect(
+      service.reassignLocationOwner('session-token', 'location-1', {
+        customerId: 'customer-2',
+        effectiveDate: '2026-05-31'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
+  });
+
   it('requires confirmation before updating a location to have no phone or email', async () => {
     const { service, referenceDataService } = createService();
 
@@ -733,3 +918,11 @@ describe('CrmService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
   });
 });
+
+function todayDateString(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function futureDateString(): string {
+  return new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}

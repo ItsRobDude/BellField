@@ -310,4 +310,73 @@ describe('ReferenceDataRepository', () => {
       })
     );
   });
+
+  it('transfers location ownership by closing old history and inserting the new owner at the effective date', async () => {
+    let locationReadCount = 0;
+    const queryable = {
+      query: jest.fn(async (_sql: string, _params?: unknown[]) => ({ rows: [] }))
+    };
+    const databaseService = {
+      query: jest.fn(async (sql: string) => {
+        if (sql.includes('from locations')) {
+          locationReadCount += 1;
+          return {
+            rows: [
+              {
+                id: 'location-1',
+                name: 'Acme Shop',
+                customerId: locationReadCount === 1 ? 'customer-1' : 'customer-2',
+                addressLine1: '100 Main Street',
+                city: 'Seattle',
+                state: 'WA',
+                postalCode: '98101',
+                phone: null,
+                email: null,
+                fax: null,
+                isActive: true,
+                alternateBillToCustomerIds: []
+              }
+            ]
+          };
+        }
+
+        return { rows: [] };
+      }),
+      transaction: jest.fn(async (callback: (executor: typeof queryable) => Promise<void>) =>
+        callback(queryable)
+      )
+    };
+    const repository = createReferenceDataRepository(databaseService);
+
+    const location = await repository.reassignLocationOwner(
+      'location-1',
+      'customer-2',
+      '2026-06-06',
+      'Sold'
+    );
+
+    expect(location).toEqual(expect.objectContaining({ customerId: 'customer-2' }));
+    expect(databaseService.transaction).toHaveBeenCalledTimes(1);
+
+    const closeCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update location_ownership_history')
+    );
+    expect(closeCall?.[1]).toEqual(['location-1', '2026-06-06T00:00:00.000Z']);
+
+    const updateLocationCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('update locations')
+    );
+    expect(updateLocationCall?.[1]).toEqual(['location-1', 'customer-2']);
+
+    const insertHistoryCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into location_ownership_history')
+    );
+    expect(insertHistoryCall?.[1]).toEqual([
+      expect.any(String),
+      'location-1',
+      'customer-2',
+      '2026-06-06T00:00:00.000Z',
+      'Sold'
+    ]);
+  });
 });
