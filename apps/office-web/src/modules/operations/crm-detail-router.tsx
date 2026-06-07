@@ -8,7 +8,7 @@ import type {
   LocationDetail
 } from '@/lib/operations-api';
 import { ContactDetailSurface } from './contact-detail-surface';
-import type { ContactLinkDraft, LocationDetailTab } from './crm-panel-types';
+import type { ContactLinkDraft, CustomerDetailTab, LocationDetailTab } from './crm-panel-types';
 import { CustomerDetailSurface } from './customer-detail-surface';
 import { LocationDetailSurface } from './location-detail-surface';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -23,6 +23,7 @@ type CrmDetailRouterProps = {
   saveLocationMissingContactConfirmation: boolean;
   selectedContact: ContactDetail | null;
   selectedCustomer: CustomerDetail | null;
+  selectedCustomerTab: CustomerDetailTab;
   selectedLocation: LocationDetail | null;
   selectedLocationTab: LocationDetailTab;
   sessionToken: string;
@@ -44,6 +45,7 @@ type CrmDetailRouterProps = {
   onSaveContact: () => void;
   onSaveCustomer: () => void;
   onSaveLink: (link: ContactLink) => void;
+  onSelectedCustomerTabChange: (tab: CustomerDetailTab) => void;
   onSaveLocation: () => void;
   onSelectedLocationTabChange: (tab: LocationDetailTab) => void;
   setExistingContactId: (contactId: string) => void;
@@ -59,6 +61,7 @@ export function CrmDetailRouter({
   saveLocationMissingContactConfirmation,
   selectedContact,
   selectedCustomer,
+  selectedCustomerTab,
   selectedLocation,
   selectedLocationTab,
   sessionToken,
@@ -80,6 +83,7 @@ export function CrmDetailRouter({
   onSaveContact,
   onSaveCustomer,
   onSaveLink,
+  onSelectedCustomerTabChange,
   onSaveLocation,
   onSelectedLocationTabChange,
   setExistingContactId
@@ -121,6 +125,7 @@ export function CrmDetailRouter({
           customer={selectedCustomer}
           existingContactId={existingContactId}
           linkDrafts={linkDrafts}
+          selectedCustomerTab={selectedCustomerTab}
           sessionToken={sessionToken}
           onAddLocation={() => onAddLocation(selectedCustomer)}
           onArchiveLink={onArchiveLink}
@@ -132,6 +137,7 @@ export function CrmDetailRouter({
           onRefreshSelectedRecord={onRefreshSelectedRecord}
           onSaveCustomer={onSaveCustomer}
           onSaveLink={onSaveLink}
+          onSelectedCustomerTabChange={onSelectedCustomerTabChange}
           setExistingContactId={setExistingContactId}
         />
       ) : null}

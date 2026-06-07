@@ -1,3 +1,8 @@
+import type { EquipmentStatus } from './equipment.js';
+import type { EstimateStatus } from './estimates.js';
+import type { InvoiceKind, InvoiceStatus } from './invoices-payments.js';
+import type { AppointmentStatus, JobStatus } from './jobs.js';
+
 export interface CustomerAccountSummary {
   id: string;
   name: string;
@@ -97,6 +102,112 @@ export interface OwnershipHistoryEntry {
   note?: string;
 }
 
+export interface CrmOperationalSummary {
+  openJobCount: number;
+  lastServiceAt?: string;
+  equipmentCount: number;
+  appointmentCount: number;
+  invoiceCount: number;
+  estimateCount: number;
+}
+
+export interface CrmOperationalAppointmentSummary {
+  id: string;
+  jobId: string;
+  jobNumber: string;
+  scheduledDate?: string;
+  scheduledStartTime?: string;
+  scheduledEndTime?: string;
+  timeWindowLabel?: string;
+  technicianName?: string;
+  status: AppointmentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmOperationalJobSummary {
+  id: string;
+  jobNumber: string;
+  locationId: string;
+  locationName: string;
+  billToCustomerId: string;
+  billToCustomerName: string;
+  jobType: string;
+  category: string;
+  origin: string;
+  summary: string;
+  status: JobStatus;
+  workOrderNumber?: string;
+  appointmentCount: number;
+  nextAppointment?: CrmOperationalAppointmentSummary;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmOperationalInvoiceSummary {
+  id: string;
+  jobId: string;
+  jobNumber: string;
+  invoiceKind: InvoiceKind;
+  status: InvoiceStatus;
+  total: number;
+  costComplete: boolean;
+  postedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmOperationalEstimateSummary {
+  id: string;
+  jobId: string;
+  jobNumber: string;
+  status: EstimateStatus;
+  title: string;
+  total: number;
+  costComplete: boolean;
+  validUntil?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CrmOperationalEquipmentSummary {
+  id: string;
+  locationId?: string;
+  locationName?: string;
+  equipmentType: string;
+  brand: string;
+  model: string;
+  serialNumber?: string;
+  status: EquipmentStatus;
+  installDate?: string;
+  updatedAt: string;
+}
+
+export type CrmActivityEntryKind = 'ownership' | 'contact' | 'job' | 'appointment' | 'equipment';
+
+export interface CrmActivityEntry {
+  id: string;
+  kind: CrmActivityEntryKind;
+  occurredAt: string;
+  title: string;
+  detail?: string;
+  jobId?: string;
+  jobNumber?: string;
+  locationId?: string;
+  locationName?: string;
+  actorName?: string;
+}
+
+export interface CrmOperationalContext {
+  summary: CrmOperationalSummary;
+  jobs: CrmOperationalJobSummary[];
+  appointments: CrmOperationalAppointmentSummary[];
+  invoices: CrmOperationalInvoiceSummary[];
+  estimates: CrmOperationalEstimateSummary[];
+  equipment: CrmOperationalEquipmentSummary[];
+  activity: CrmActivityEntry[];
+}
+
 export interface DuplicateCandidate {
   id: string;
   kind: 'customer' | 'location';
@@ -111,11 +222,13 @@ export interface CustomerDetail extends CustomerAccountSummary {
   contactMethods: ContactMethodSummary[];
   contacts: ContactLink[];
   locations: CustomerLocationListItem[];
+  operational: CrmOperationalContext;
 }
 
 export interface LocationDetail extends LocationSummary {
   contactMethods: ContactMethodSummary[];
   ownershipHistory: OwnershipHistoryEntry[];
+  operational: CrmOperationalContext;
 }
 
 export interface ContactDetail extends ContactSummary {

@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentSummary,
+  CrmOperationalContext,
   CrmSearchResult,
   CustomerDetail,
   DispatchBoardResponse,
@@ -182,6 +183,24 @@ function buildMediaAttachment(
   };
 }
 
+function emptyOperationalContext(): CrmOperationalContext {
+  return {
+    summary: {
+      openJobCount: 0,
+      equipmentCount: 0,
+      appointmentCount: 0,
+      invoiceCount: 0,
+      estimateCount: 0
+    },
+    jobs: [],
+    appointments: [],
+    invoices: [],
+    estimates: [],
+    equipment: [],
+    activity: []
+  };
+}
+
 function buildWorkspace(jobs: JobSummary[]): JobsWorkspaceResponse {
   return {
     customers: [
@@ -233,6 +252,7 @@ function buildLocationDetail(
     ...resolvedLocation,
     contactMethods: [],
     ownershipHistory: [],
+    operational: emptyOperationalContext(),
     ...overrides
   };
 }
@@ -264,6 +284,7 @@ function buildCustomerDetail(
         postalCode: location.postalCode,
         isActive: location.isActive
       })),
+    operational: emptyOperationalContext(),
     ...overrides
   };
 }
@@ -935,7 +956,8 @@ describe('OfficeWorkspaceShell IA', () => {
       contactMethods: [],
       contacts: [],
       alternateBillToCustomerIds: [],
-      ownershipHistory: []
+      ownershipHistory: [],
+      operational: emptyOperationalContext()
     };
     arrangeWorkspace(workspace);
     mockedOperationsApi.searchOfficeCrm.mockResolvedValue({

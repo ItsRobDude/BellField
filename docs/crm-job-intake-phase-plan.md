@@ -4,9 +4,9 @@ This is the controlling plan for the customer, location, contact-method, and New
 
 ## Stop Rule
 
-The current implementation state is complete through **Phase 4**.
+The current implementation state is complete through **Phase 5**.
 
-Do not implement Phase 5 or later work from this document unless the user explicitly authorizes that next phase.
+Do not implement Phase 6 or later work from this document unless the user explicitly authorizes that next phase.
 
 If a later-phase behavior already exists because of earlier drift, document it as already present and do not expand it further before its phase is explicitly authorized.
 
@@ -158,7 +158,7 @@ Status: implemented.
 
 Make CRM useful for service work.
 
-Do not implement until Phase 5 is explicitly authorized.
+Status: implemented.
 
 ### Backend
 
@@ -220,7 +220,7 @@ Do not implement until Phase 7 is explicitly authorized.
 - Move New Job out of top bar into an operational quick action.
 - Do not overhaul sidebar just to avoid ServiceTitan similarity. Improve it only where it serves BellField: clearer grouping, less bulk, maybe icons later.
 
-## Current Phase 0-4 Checkpoint
+## Current Phase 0-5 Checkpoint
 
 This checkpoint records the current repo state so implementation and review do not drift across phase names.
 
@@ -288,12 +288,11 @@ Status: implemented.
   - `crm-detail-router`
   - `customer-detail-surface`
   - `location-detail-surface`
-  - `contact-detail-surface`
-  - `contact-methods-editor`
-  - `owner-transfer-panel`
-  - `record-activity-section`
-  - `crm-form-helpers`
-  - `use-crm-search`
+- `contact-detail-surface`
+- `contact-methods-editor`
+- `owner-transfer-panel`
+- `crm-form-helpers`
+- `use-crm-search`
 
 Phase 3 boundary notes:
 
@@ -314,6 +313,19 @@ Status: implemented.
 - The UI posts the selected customer and effective date through the ownership-transfer endpoint and refreshes the selected location after success.
 - Regression coverage exists for backend validation, repository history updates, no root owner dropdown, customer search transfer, and creating/selecting a customer inside the transfer flow.
 
+### Phase 5 Status
+
+Status: implemented.
+
+- Customer and location detail responses now include a scoped operational context with summary counts, recent jobs, appointments, invoices, estimates, equipment, and mixed activity entries.
+- Location operational context includes jobs for the selected location.
+- Customer operational context includes jobs where the customer is the current location owner or the job bill-to customer.
+- Customer detail now has Overview, Locations, Contacts, Jobs, Invoices, and Activity tabs.
+- Location detail now has Overview, Contacts, Equipment, Jobs, Invoices, and Activity tabs.
+- Activity is fed by operational activity entries instead of the old ownership-only history component.
+- Overview shows main methods, open jobs, last service, and equipment count. Location ownership remains in the existing ownership panel so the overview does not repeat the current customer label.
+- Regression coverage proves customer service context, location jobs/appointments, mixed activity entries, ownership activity visibility, and inactive/historical ownership context remain available.
+
 ### Existing Out-of-Phase Work Already Present
 
-No Phase 5+ behavior is intentionally implemented in this checkpoint.
+No Phase 6+ behavior is intentionally implemented in this checkpoint.

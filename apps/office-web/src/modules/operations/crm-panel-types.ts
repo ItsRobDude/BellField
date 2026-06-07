@@ -51,4 +51,18 @@ export type CrmPanelMode =
   | 'locationDetail'
   | 'contactDetail';
 
-export type LocationDetailTab = 'overview' | 'equipment' | 'contacts' | 'history';
+export type CustomerDetailTab =
+  | 'overview'
+  | 'locations'
+  | 'contacts'
+  | 'jobs'
+  | 'invoices'
+  | 'activity';
+
+export type LocationDetailTab =
+  | 'overview'
+  | 'contacts'
+  | 'equipment'
+  | 'jobs'
+  | 'invoices'
+  | 'activity';

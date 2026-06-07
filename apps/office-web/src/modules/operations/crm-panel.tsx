@@ -42,6 +42,7 @@ import type {
   ContactFormState,
   ContactLinkDraft,
   CrmPanelMode,
+  CustomerDetailTab,
   CustomerFormState,
   LocationDetailTab,
   LocationFormState
@@ -89,6 +90,7 @@ export function CrmPanel({
     useState(false);
   const [crmNoticeMessage, setCrmNoticeMessage] = useState<string | null>(null);
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
+  const [selectedCustomerTab, setSelectedCustomerTab] = useState<CustomerDetailTab>('overview');
   const [selectedLocationTab, setSelectedLocationTab] = useState<LocationDetailTab>('overview');
   const { isSearching, searchResults } = useCrmSearch({
     apiBaseUrl,
@@ -134,6 +136,7 @@ export function CrmPanel({
     setSelectedCustomer(null);
     setSelectedLocation(null);
     setSelectedContact(null);
+    setSelectedCustomerTab('overview');
     setSelectedLocationTab('overview');
   }
 
@@ -622,6 +625,7 @@ export function CrmPanel({
 
   function hydrateCustomerForm(customer: CustomerDetail) {
     setSelectedCustomer(customer);
+    setSelectedCustomerTab('overview');
     hydrateLinkDrafts(customer.contacts);
   }
 
@@ -733,6 +737,7 @@ export function CrmPanel({
           saveLocationMissingContactConfirmation={saveLocationMissingContactConfirmation}
           selectedContact={selectedContact}
           selectedCustomer={selectedCustomer}
+          selectedCustomerTab={selectedCustomerTab}
           selectedLocation={selectedLocation}
           selectedLocationTab={selectedLocationTab}
           sessionToken={sessionToken}
@@ -757,6 +762,7 @@ export function CrmPanel({
           onSaveCustomer={() => void handleSaveCustomer()}
           onSaveLink={(link) => void handleSaveContactLink(link)}
           onSaveLocation={() => void handleSaveLocation()}
+          onSelectedCustomerTabChange={setSelectedCustomerTab}
           onSelectedLocationTabChange={setSelectedLocationTab}
           setExistingContactId={setExistingContactId}
         />

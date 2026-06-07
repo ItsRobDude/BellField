@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { CrmOperationalDataRepository } from './crm-operational-data.repository';
 import { EquipmentDataRepository } from './equipment-data.repository';
 import { EquipmentDataService } from './equipment-data.service';
 import { JobsCommandDataRepository } from './jobs-command-data.repository';
@@ -19,6 +20,7 @@ import { ReferenceReadDataRepository } from './reference-read-data.repository';
     ReferenceContactMethodsReadRepository,
     ReferenceReadDataRepository,
     ReferenceDataRepository,
+    CrmOperationalDataRepository,
     ReferenceDataService,
     EquipmentDataRepository,
     EquipmentDataService,

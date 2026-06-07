@@ -3,9 +3,14 @@
 import type { ContactLink, CrmWorkspaceResponse, LocationDetail } from '@/lib/operations-api';
 import { ContactMethodsEditor } from './contact-methods-editor';
 import type { ContactLinkDraft, LocationDetailTab } from './crm-panel-types';
+import {
+  CrmActivitySection,
+  CrmInvoicesSection,
+  CrmJobsSection,
+  CrmOperationalOverview
+} from './crm-operational-sections';
 import { LocationEquipmentSection } from './location-equipment-section';
 import { OwnerTransferPanel } from './owner-transfer-panel';
-import { RecordActivitySection } from './record-activity-section';
 import { RecordContactsSection } from './crm-record-contacts-section';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -37,9 +42,11 @@ type LocationDetailSurfaceProps = {
 
 const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
-  { key: 'equipment', label: 'Equipment' },
   { key: 'contacts', label: 'Contacts' },
-  { key: 'history', label: 'History' }
+  { key: 'equipment', label: 'Equipment' },
+  { key: 'jobs', label: 'Jobs' },
+  { key: 'invoices', label: 'Invoices' },
+  { key: 'activity', label: 'Activity' }
 ];
 
 export function LocationDetailSurface({
@@ -96,6 +103,10 @@ export function LocationDetailSurface({
       </div>
       {selectedLocationTab === 'overview' ? (
         <>
+          <CrmOperationalOverview
+            operational={location.operational}
+            contactMethods={location.contactMethods}
+          />
           <div style={styles.formRow}>
             <input
               value={location.name}
@@ -226,8 +237,16 @@ export function LocationDetailSurface({
         />
       ) : null}
 
-      {selectedLocationTab === 'history' ? (
-        <RecordActivitySection ownershipHistory={location.ownershipHistory} />
+      {selectedLocationTab === 'jobs' ? (
+        <CrmJobsSection operational={location.operational} />
+      ) : null}
+
+      {selectedLocationTab === 'invoices' ? (
+        <CrmInvoicesSection operational={location.operational} />
+      ) : null}
+
+      {selectedLocationTab === 'activity' ? (
+        <CrmActivitySection activity={location.operational.activity} />
       ) : null}
     </div>
   );

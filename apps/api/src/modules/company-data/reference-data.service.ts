@@ -25,11 +25,15 @@ import type {
   LocationDuplicateLookupInput,
   LocationRecord
 } from './company-data.types';
+import { CrmOperationalDataRepository } from './crm-operational-data.repository';
 import { ReferenceDataRepository } from './reference-data.repository';
 
 @Injectable()
 export class ReferenceDataService {
-  constructor(private readonly referenceDataRepository: ReferenceDataRepository) {}
+  constructor(
+    private readonly referenceDataRepository: ReferenceDataRepository,
+    private readonly crmOperationalDataRepository: CrmOperationalDataRepository
+  ) {}
 
   async listCustomers(includeInactive = false): Promise<CustomerAccountRecord[]> {
     return this.referenceDataRepository.listCustomers(includeInactive);
@@ -101,10 +105,11 @@ export class ReferenceDataService {
 
   async getCustomerDetail(customerId: string): Promise<CustomerDetail> {
     const customer = await this.getCustomerById(customerId);
-    const [links, locations, contactMethods] = await Promise.all([
+    const [links, locations, contactMethods, operational] = await Promise.all([
       this.referenceDataRepository.listCustomerContactLinks(customerId, true),
       this.referenceDataRepository.listLocationsForCustomer(customerId, true),
-      this.referenceDataRepository.listCustomerContactMethods(customerId, true)
+      this.referenceDataRepository.listCustomerContactMethods(customerId, true),
+      this.crmOperationalDataRepository.getCustomerOperationalContext(customerId)
     ]);
 
     return {
@@ -120,17 +125,19 @@ export class ReferenceDataService {
           })
         )
       ),
-      locations: locations.map((location) => this.toCustomerLocationListItem(location))
+      locations: locations.map((location) => this.toCustomerLocationListItem(location)),
+      operational
     };
   }
 
   async getLocationDetail(locationId: string): Promise<LocationDetail> {
     const location = await this.getLocationById(locationId);
     const customer = await this.getCustomerById(location.customerId);
-    const [links, ownershipHistory, contactMethods] = await Promise.all([
+    const [links, ownershipHistory, contactMethods, operational] = await Promise.all([
       this.referenceDataRepository.listLocationContactLinks(locationId, true),
       this.referenceDataRepository.listOwnershipHistory(locationId),
-      this.referenceDataRepository.listLocationContactMethods(locationId, true)
+      this.referenceDataRepository.listLocationContactMethods(locationId, true),
+      this.crmOperationalDataRepository.getLocationOperationalContext(locationId)
     ]);
 
     return {
@@ -160,7 +167,8 @@ export class ReferenceDataService {
       alternateBillToCustomerIds: [...location.alternateBillToCustomerIds],
       ownershipHistory: await Promise.all(
         ownershipHistory.map((entry) => this.toOwnershipHistoryEntry(entry))
-      )
+      ),
+      operational
     };
   }
 

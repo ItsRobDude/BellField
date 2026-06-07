@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ContactDetail,
   ContactMutationResponse,
+  CrmOperationalContext,
   CrmSearchResult,
   CustomerDetail,
   CustomerMutationResponse,
@@ -80,6 +81,24 @@ const contactResult: CrmSearchResult = {
   isActive: true
 };
 
+function emptyOperationalContext(): CrmOperationalContext {
+  return {
+    summary: {
+      openJobCount: 0,
+      equipmentCount: 0,
+      appointmentCount: 0,
+      invoiceCount: 0,
+      estimateCount: 0
+    },
+    jobs: [],
+    appointments: [],
+    invoices: [],
+    estimates: [],
+    equipment: [],
+    activity: []
+  };
+}
+
 const customerDetail: CustomerDetail = {
   id: 'customer-1',
   name: 'Acme',
@@ -93,7 +112,8 @@ const customerDetail: CustomerDetail = {
   flags: [],
   contactMethods: [],
   contacts: [],
-  locations: []
+  locations: [],
+  operational: emptyOperationalContext()
 };
 
 const newOwnerDetail: CustomerDetail = {
@@ -109,7 +129,8 @@ const newOwnerDetail: CustomerDetail = {
   flags: [],
   contactMethods: [],
   contacts: [],
-  locations: []
+  locations: [],
+  operational: emptyOperationalContext()
 };
 
 const createdLocation: LocationDetail = {
@@ -126,7 +147,8 @@ const createdLocation: LocationDetail = {
   contactMethods: [],
   contacts: [],
   alternateBillToCustomerIds: [],
-  ownershipHistory: []
+  ownershipHistory: [],
+  operational: emptyOperationalContext()
 };
 
 const transferredLocation: LocationDetail = {
@@ -273,6 +295,284 @@ describe('CrmPanel', () => {
       await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
+  });
+
+  it('shows customer service context across jobs, invoices, and activity tabs', async () => {
+    const detailWithServiceContext: CustomerDetail = {
+      ...customerDetail,
+      operational: {
+        ...emptyOperationalContext(),
+        summary: {
+          openJobCount: 1,
+          lastServiceAt: '2026-06-01',
+          equipmentCount: 2,
+          appointmentCount: 1,
+          invoiceCount: 1,
+          estimateCount: 1
+        },
+        jobs: [
+          {
+            id: 'job-1',
+            jobNumber: '1001',
+            locationId: 'location-1',
+            locationName: 'Main Shop',
+            billToCustomerId: 'customer-1',
+            billToCustomerName: 'Acme',
+            jobType: 'Service',
+            category: 'General',
+            origin: 'Inbound phone call',
+            summary: 'No cooling',
+            status: 'scheduled',
+            appointmentCount: 1,
+            nextAppointment: {
+              id: 'appointment-1',
+              jobId: 'job-1',
+              jobNumber: '1001',
+              scheduledDate: '2026-06-03',
+              scheduledStartTime: '13:00',
+              scheduledEndTime: '15:00',
+              technicianName: 'Taylor Tech',
+              status: 'confirmed',
+              createdAt: '2026-06-01T10:00:00.000Z',
+              updatedAt: '2026-06-01T10:00:00.000Z'
+            },
+            createdAt: '2026-06-01T09:00:00.000Z',
+            updatedAt: '2026-06-01T10:00:00.000Z'
+          }
+        ],
+        appointments: [],
+        invoices: [
+          {
+            id: 'invoice-1',
+            jobId: 'job-1',
+            jobNumber: '1001',
+            invoiceKind: 'main',
+            status: 'draft',
+            total: 125,
+            costComplete: true,
+            createdAt: '2026-06-01T10:00:00.000Z',
+            updatedAt: '2026-06-01T10:00:00.000Z'
+          }
+        ],
+        estimates: [
+          {
+            id: 'estimate-1',
+            jobId: 'job-1',
+            jobNumber: '1001',
+            status: 'pending',
+            title: 'Replace capacitor',
+            total: 225,
+            costComplete: false,
+            createdAt: '2026-06-01T10:00:00.000Z',
+            updatedAt: '2026-06-01T10:00:00.000Z'
+          }
+        ],
+        equipment: [],
+        activity: [
+          {
+            id: 'contact-link-1',
+            kind: 'contact',
+            occurredAt: '2026-06-01T11:00:00.000Z',
+            title: 'Contact linked: Casey Parker',
+            detail: 'Primary phone',
+            locationId: 'location-1',
+            locationName: 'Main Shop'
+          },
+          {
+            id: 'timeline-1',
+            kind: 'job',
+            occurredAt: '2026-06-01T10:00:00.000Z',
+            title: 'Job scheduled.',
+            detail: 'Job 1001',
+            jobId: 'job-1',
+            jobNumber: '1001',
+            locationId: 'location-1',
+            locationName: 'Main Shop',
+            actorName: 'Olivia Owner'
+          }
+        ]
+      }
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({ query: url.searchParams.get('q') ?? '', results: [customerResult] });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(detailWithServiceContext);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
+
+    expect(await screen.findByText('Open jobs')).toBeInTheDocument();
+    expect(screen.getByText('Last service')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Jobs' }));
+    expect(screen.getByText('1001')).toBeInTheDocument();
+    expect(screen.getByText('No cooling')).toBeInTheDocument();
+    expect(screen.getByText(/Taylor Tech/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Invoices' }));
+    expect(screen.getByText('$125.00')).toBeInTheDocument();
+    expect(screen.getByText('Replace capacitor')).toBeInTheDocument();
+    expect(screen.getByText('Cost incomplete')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+    expect(screen.getByText('Contact linked: Casey Parker')).toBeInTheDocument();
+    expect(screen.getByText('Job scheduled.')).toBeInTheDocument();
+  });
+
+  it('shows location jobs and mixed activity while preserving ownership history', async () => {
+    const locationWithServiceContext: LocationDetail = {
+      ...createdLocation,
+      ownershipHistory: [
+        {
+          id: 'history-1',
+          customerId: 'customer-1',
+          customerName: 'Acme',
+          startedAt: '2026-01-01T00:00:00.000Z'
+        }
+      ],
+      operational: {
+        ...emptyOperationalContext(),
+        summary: {
+          openJobCount: 1,
+          lastServiceAt: '2026-06-01',
+          equipmentCount: 1,
+          appointmentCount: 1,
+          invoiceCount: 0,
+          estimateCount: 0
+        },
+        jobs: [
+          {
+            id: 'job-1',
+            jobNumber: '1001',
+            locationId: 'location-1',
+            locationName: 'Main Shop',
+            billToCustomerId: 'customer-1',
+            billToCustomerName: 'Acme',
+            jobType: 'Service',
+            category: 'General',
+            origin: 'Inbound phone call',
+            summary: 'No cooling',
+            status: 'scheduled',
+            appointmentCount: 1,
+            nextAppointment: {
+              id: 'appointment-1',
+              jobId: 'job-1',
+              jobNumber: '1001',
+              scheduledDate: '2026-06-03',
+              scheduledStartTime: '13:00',
+              scheduledEndTime: '15:00',
+              technicianName: 'Taylor Tech',
+              status: 'confirmed',
+              createdAt: '2026-06-01T10:00:00.000Z',
+              updatedAt: '2026-06-01T10:00:00.000Z'
+            },
+            createdAt: '2026-06-01T09:00:00.000Z',
+            updatedAt: '2026-06-01T10:00:00.000Z'
+          }
+        ],
+        appointments: [],
+        invoices: [],
+        estimates: [],
+        equipment: [
+          {
+            id: 'equipment-1',
+            locationId: 'location-1',
+            locationName: 'Main Shop',
+            equipmentType: 'Condenser',
+            brand: 'Carrier',
+            model: 'ABC',
+            serialNumber: 'SN1',
+            status: 'active',
+            updatedAt: '2026-06-01T10:00:00.000Z'
+          }
+        ],
+        activity: [
+          {
+            id: 'history-1',
+            kind: 'ownership',
+            occurredAt: '2026-01-01T00:00:00.000Z',
+            title: 'Owner: Acme',
+            detail: 'Started 2026-01-01',
+            locationId: 'location-1',
+            locationName: 'Main Shop'
+          },
+          {
+            id: 'contact-link-1',
+            kind: 'contact',
+            occurredAt: '2026-06-01T11:00:00.000Z',
+            title: 'Contact linked: Casey Parker',
+            detail: 'Primary phone',
+            locationId: 'location-1',
+            locationName: 'Main Shop'
+          },
+          {
+            id: 'timeline-1',
+            kind: 'job',
+            occurredAt: '2026-06-01T10:00:00.000Z',
+            title: 'Job scheduled.',
+            detail: 'Job 1001',
+            jobId: 'job-1',
+            jobNumber: '1001',
+            locationId: 'location-1',
+            locationName: 'Main Shop'
+          }
+        ]
+      }
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [duplicateLocation]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-existing') {
+        return jsonResponse(locationWithServiceContext);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
+      target: { value: 'Main' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+
+    expect(await screen.findByText('Current customer')).toBeInTheDocument();
+    expect(screen.getByText('1 active / pending')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Jobs' }));
+    expect(screen.getByText('1001')).toBeInTheDocument();
+    expect(screen.getByText(/Taylor Tech/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
+    expect(screen.getByText('Owner: Acme')).toBeInTheDocument();
+    expect(screen.getByText('Contact linked: Casey Parker')).toBeInTheDocument();
+    expect(screen.getByText('Job scheduled.')).toBeInTheDocument();
   });
 
   it('switches from search to a focused customer form and back', async () => {
