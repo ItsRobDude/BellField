@@ -348,6 +348,89 @@ describe('DispatchBoardPanel', () => {
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
   });
 
+  it('opens dispatch card actions from right-click and keyboard context menu triggers', () => {
+    const onOpenJobDetail = vi.fn();
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+    const onAppointmentStatusUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onOpenJobDetail={onOpenJobDetail}
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+        onAppointmentStatusUpdate={onAppointmentStatusUpdate}
+      />
+    );
+
+    const cardButton = screen.getByLabelText(/Job 1001, Main Shop/i);
+    fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
+
+    let menu = screen.getByRole('menu', { name: 'Dispatch actions for job 1001' });
+    expect(within(menu).getByRole('menuitem', { name: 'Open overview' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Open appointments' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Edit schedule' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Assign / reassign' })).toBeInTheDocument();
+    expect(within(menu).getByRole('menuitem', { name: 'Copy address' })).toBeInTheDocument();
+    expect(
+      within(menu).getByRole('menuitem', { name: 'Scheduled is the current status' })
+    ).toBeDisabled();
+
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open appointments' }));
+    expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1', 'appointments');
+    expect(
+      screen.queryByRole('menu', { name: 'Dispatch actions for job 1001' })
+    ).not.toBeInTheDocument();
+
+    fireEvent.keyDown(cardButton, { key: 'F10', shiftKey: true });
+    menu = screen.getByRole('menu', { name: 'Dispatch actions for job 1001' });
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Change status to Dispatched' }));
+
+    expect(onAppointmentStatusUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', 'dispatched');
+    expect(
+      screen.queryByRole('menu', { name: 'Dispatch actions for job 1001' })
+    ).not.toBeInTheDocument();
+  });
+
+  it('opens schedule editing from dispatch card actions and closes the menu on escape', () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const cardButton = screen.getByLabelText(/Job 1001, Main Shop/i);
+    fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(
+      screen.queryByRole('menu', { name: 'Dispatch actions for job 1001' })
+    ).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
+    expect(screen.getByRole('menu', { name: 'Dispatch actions for job 1001' })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(
+      screen.queryByRole('menu', { name: 'Dispatch actions for job 1001' })
+    ).not.toBeInTheDocument();
+
+    fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
+    const menu = screen.getByRole('menu', { name: 'Dispatch actions for job 1001' });
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Edit schedule' }));
+
+    expect(screen.getByRole('dialog', { name: 'Edit schedule for job 1001' })).toBeInTheDocument();
+    expect(
+      screen.queryByRole('menu', { name: 'Dispatch actions for job 1001' })
+    ).not.toBeInTheDocument();
+  });
+
   it('edits appointment scheduling from a compact dispatch popover', async () => {
     const onOpenJobDetail = vi.fn();
     const onAppointmentScheduleUpdate = vi.fn(async () => undefined);

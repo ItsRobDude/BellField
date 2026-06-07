@@ -1,6 +1,6 @@
 'use client';
 
-import type { DispatchBoardResponse } from '@/lib/operations-api';
+import type { AppointmentStatus, DispatchBoardResponse } from '@/lib/operations-api';
 import {
   OfficeBookkeepingSurface,
   type OfficeBookkeepingSurfaceProps
@@ -61,6 +61,11 @@ type OfficeDispatchSurfaceProps = {
     appointmentId: string,
     draft: DispatchScheduleDraft
   ) => Promise<void>;
+  onAppointmentStatusUpdate: (
+    jobId: string,
+    appointmentId: string,
+    status: AppointmentStatus
+  ) => Promise<void>;
 };
 
 type OfficeWorkspaceSurfacesProps = {
@@ -103,8 +108,11 @@ export function OfficeWorkspaceSurfaces({
           dispatchBoard={dispatch.dispatchBoard}
           viewDate={dispatch.dispatchViewDate}
           onViewDateChange={dispatch.onDispatchViewDateChange}
-          onOpenJobDetail={(jobId, appointmentId) => dispatch.onOpenJobDetail(jobId, appointmentId)}
+          onOpenJobDetail={(jobId, appointmentId, initialTab) =>
+            dispatch.onOpenJobDetail(jobId, appointmentId, initialTab)
+          }
           onAppointmentScheduleUpdate={dispatch.onAppointmentScheduleUpdate}
+          onAppointmentStatusUpdate={dispatch.onAppointmentStatusUpdate}
           isRefreshing={dispatch.isDispatchRefreshing}
           lastRefreshedAt={dispatch.lastDispatchRefreshedAt}
           onRefresh={dispatch.onDispatchRefresh}

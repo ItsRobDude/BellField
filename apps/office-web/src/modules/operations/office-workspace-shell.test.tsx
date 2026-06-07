@@ -777,6 +777,29 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
   });
 
+  it('updates appointment status from the dispatch card actions menu', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.contextMenu(await screen.findByLabelText(/Job 1001, Main Shop/i), {
+      clientX: 120,
+      clientY: 140
+    });
+    const menu = await screen.findByRole('menu', { name: 'Dispatch actions for job 1001' });
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Change status to Dispatched' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentStatus).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        status: 'dispatched',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test'
+      });
+    });
+    expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
+  });
+
   it('opens job location and customer records in CRM and returns to the job', async () => {
     arrangeWorkspace(buildWorkspace([buildJob()]));
 

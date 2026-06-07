@@ -614,9 +614,11 @@ export function OfficeWorkspaceShell({
     }
   }
 
-  async function handleAppointmentStatusChange(appointmentId: string, status: AppointmentStatus) {
-    const jobId = getJobIdForAppointment(appointmentId);
-
+  async function persistAppointmentStatus(
+    appointmentId: string,
+    status: AppointmentStatus,
+    jobId?: string | null
+  ) {
     try {
       setNoticeMessage(null);
       await updateOfficeAppointmentStatus({ appointmentId, status, sessionToken, apiBaseUrl });
@@ -639,6 +641,18 @@ export function OfficeWorkspaceShell({
         error instanceof Error ? error.message : 'Unable to update appointment status.'
       );
     }
+  }
+
+  async function handleAppointmentStatusChange(appointmentId: string, status: AppointmentStatus) {
+    await persistAppointmentStatus(appointmentId, status, getJobIdForAppointment(appointmentId));
+  }
+
+  async function handleDispatchAppointmentStatusUpdate(
+    jobId: string,
+    appointmentId: string,
+    status: AppointmentStatus
+  ) {
+    await persistAppointmentStatus(appointmentId, status, jobId);
   }
 
   function handleAppointmentDraftChange(jobId: string, patch: Partial<AppointmentDraft>) {
@@ -853,7 +867,8 @@ export function OfficeWorkspaceShell({
           onDispatchViewDateChange: handleDispatchViewDateChange,
           onDispatchRefresh: handleDispatchRefresh,
           onOpenJobDetail: handleOpenJobDetail,
-          onAppointmentScheduleUpdate: handleDispatchAppointmentScheduleUpdate
+          onAppointmentScheduleUpdate: handleDispatchAppointmentScheduleUpdate,
+          onAppointmentStatusUpdate: handleDispatchAppointmentStatusUpdate
         }}
         jobIntake={jobIntakeWorkflow.surfaceProps}
         jobs={{
