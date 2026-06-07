@@ -193,10 +193,12 @@ function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchC
     >
       <span aria-hidden="true" style={getTimelineCardRailStyle(card)} />
       <div style={timelineCardBodyStyle}>
-        <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
-        <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
+        <div style={timelineCardTitleRowStyle}>
+          <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
+          <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
+          {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
+        </div>
         <span style={timelineCardAddressStyle}>{address}</span>
-        {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
       </div>
     </button>
   );
@@ -293,7 +295,7 @@ const refreshControlStyle: CSSProperties = {
 };
 
 const timelineLabelWidth = '8.5rem';
-const timelineLaneMinWidth = '58rem';
+const timelineLaneMinWidth = '96rem';
 const timelineColumnGap = '0.75rem';
 
 const dispatchTimelineViewportStyle: CSSProperties = {
@@ -386,7 +388,7 @@ const timelineLaneStyle: CSSProperties = {
   display: 'grid',
   gap: '0.3rem',
   gridTemplateColumns: timelineGridTemplateColumns,
-  minHeight: '3.85rem',
+  minHeight: '4.1rem',
   minWidth: timelineLaneMinWidth,
   padding: '0.3rem',
   width: '100%'
@@ -400,10 +402,10 @@ const timelineCardStyle: CSSProperties = {
   color: '#12212b',
   display: 'flex',
   gap: '0.35rem',
-  minHeight: '2rem',
-  minWidth: '8rem',
+  minHeight: '2.85rem',
+  minWidth: '11rem',
   overflow: 'hidden',
-  padding: '0.22rem 0.4rem',
+  padding: '0.3rem 0.5rem',
   whiteSpace: 'nowrap'
 };
 
@@ -434,6 +436,13 @@ function getAppointmentStatusColor(status: DispatchAppointmentCard['status']): s
 }
 
 const timelineCardBodyStyle: CSSProperties = {
+  alignContent: 'center',
+  display: 'grid',
+  gap: '0.18rem',
+  minWidth: 0
+};
+
+const timelineCardTitleRowStyle: CSSProperties = {
   alignItems: 'center',
   display: 'flex',
   gap: '0.35rem',
@@ -464,7 +473,7 @@ const timelineReviewChipStyle: CSSProperties = {
 
 const timelineCardLocationStyle: CSSProperties = {
   display: 'block',
-  flex: '0 1 auto',
+  flex: '1 1 auto',
   fontSize: '0.78rem',
   lineHeight: 1.2,
   overflow: 'hidden',
@@ -474,7 +483,7 @@ const timelineCardLocationStyle: CSSProperties = {
 const timelineCardAddressStyle: CSSProperties = {
   color: '#475569',
   display: 'block',
-  flex: '1 1 8rem',
+  maxWidth: '100%',
   fontSize: '0.72rem',
   lineHeight: 1.2,
   overflow: 'hidden',

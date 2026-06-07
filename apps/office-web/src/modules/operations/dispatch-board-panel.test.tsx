@@ -186,6 +186,11 @@ describe('DispatchBoardPanel', () => {
     expect(within(taylorRegion).getByText('#1001')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('Main Shop')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('123 Main, Blaine, WA')).toBeInTheDocument();
+    expect(
+      within(taylorRegion).getByRole('button', {
+        name: 'Job 1001, Main Shop, 123 Main, Blaine, WA, Scheduled'
+      })
+    ).toHaveStyle({ minHeight: '2.85rem', minWidth: '11rem' });
     expect(within(taylorRegion).queryByText('1')).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText('No cooling')).not.toBeInTheDocument();
     expect(
