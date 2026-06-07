@@ -195,6 +195,7 @@ export function JobDetailPanel({
         <div style={{ flex: '1 1 10rem', minWidth: 0 }}>
           <h1 style={styles.compactTitle}>Job {job.jobNumber}</h1>
           <p style={styles.muted}>{job.summary}</p>
+          <p style={jobHeaderMetaStyle}>{buildJobHeaderMeta(job)}</p>
         </div>
         <div style={styles.badgeRow}>
           <span style={styles.badge}>{jobStatusLabels[job.status]}</span>
@@ -730,6 +731,16 @@ function renderTimeline(job: JobSummary, timelineHasMore: boolean, timelineLimit
   );
 }
 
+function buildJobHeaderMeta(job: JobSummary): string {
+  return [
+    job.locationName,
+    `Bill to ${job.billToCustomerName}`,
+    [job.jobType, job.category].filter(Boolean).join(' / ')
+  ]
+    .filter(Boolean)
+    .join(' - ');
+}
+
 function TextField({
   label,
   ariaLabel,
@@ -801,4 +812,11 @@ const fieldLabelStyle: CSSProperties = {
   gap: '0.25rem',
   fontSize: '0.85rem',
   fontWeight: 700
+};
+
+const jobHeaderMetaStyle: CSSProperties = {
+  color: '#64748b',
+  fontSize: '0.82rem',
+  fontWeight: 700,
+  margin: '0.2rem 0 0'
 };

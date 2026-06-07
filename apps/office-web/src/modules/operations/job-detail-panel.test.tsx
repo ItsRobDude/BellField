@@ -312,8 +312,8 @@ describe('JobDetailPanel', () => {
       }
     });
 
-    expect(screen.getByRole('heading', { name: 'Service Location' })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Bill To' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Where' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Who pays' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open location Main Shop' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open customer Acme' }));
 
@@ -324,7 +324,11 @@ describe('JobDetailPanel', () => {
   it('renders operational overview context at a glance', () => {
     renderDetail();
 
-    expect(screen.getByRole('heading', { name: 'Job Summary / Office Notes' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.getByText('What')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Where' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Who pays' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'When' })).toBeInTheDocument();
     expect(screen.getAllByText('No cooling').length).toBeGreaterThan(0);
     expect(screen.getByText('123 Main, Blaine, WA 98230')).toBeInTheDocument();
     expect(screen.getByText('555-0100')).toBeInTheDocument();

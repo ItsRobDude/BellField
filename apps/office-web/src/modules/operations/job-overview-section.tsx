@@ -68,56 +68,64 @@ export function JobOverviewSection({
   const activeAppointmentCount = job.appointments.filter(
     (appointment) => appointment.status !== 'cancelled'
   ).length;
+  const statusToneStyle = job.needsOfficeReview ? styles.dangerBadge : styles.badge;
 
   return (
     <div style={overviewStackStyle}>
-      <section style={styles.panel} aria-label="Job overview summary">
-        <div style={overviewHeaderStyle}>
+      <section
+        style={{ ...styles.panel, ...overviewHeroPanelStyle }}
+        aria-label="Job overview summary"
+      >
+        <div style={overviewHeroGridStyle}>
           <div style={overviewTitleBlockStyle}>
             <h2 style={sectionHeadingStyle}>Overview</h2>
+            <span style={sectionKickerStyle}>What</span>
+            <p style={summaryTextStyle}>{job.summary}</p>
+            <div style={overviewFactsStyle}>
+              <FactPill label="Type" value={job.jobType} />
+              <FactPill label="Category" value={job.category} />
+              <FactPill label="Origin" value={job.origin} />
+              {job.workOrderNumber ? (
+                <FactPill label="Work order" value={job.workOrderNumber} />
+              ) : null}
+            </div>
+          </div>
+          <div style={overviewStatusPanelStyle} aria-label="Job status controls">
             <div style={styles.badgeRow}>
-              <span style={styles.badge}>{jobStatusLabels[job.status]}</span>
+              <span style={statusToneStyle}>{jobStatusLabels[job.status]}</span>
               {job.needsScheduling ? (
                 <span style={styles.dangerBadge}>Needs scheduling</span>
               ) : null}
               {job.needsOfficeReview ? <span style={styles.dangerBadge}>Review needed</span> : null}
             </div>
-          </div>
-          <div style={overviewFactsStyle}>
-            <FactPill label="Type" value={job.jobType} />
-            <FactPill label="Category" value={job.category} />
-            <FactPill label="Origin" value={job.origin} />
-            {job.workOrderNumber ? (
-              <FactPill label="Work order" value={job.workOrderNumber} />
-            ) : null}
+            <label style={fieldLabelStyle}>
+              <span>Job status</span>
+              <select
+                value={job.status}
+                onChange={(event) =>
+                  onJobStatusReviewRequested(
+                    job.id,
+                    job.status,
+                    event.target.value as JobStatus,
+                    job.summary
+                  )
+                }
+                style={styles.input}
+              >
+                {jobStatusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {jobStatusLabels[status]}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
-        <label style={fieldLabelStyle}>
-          <span>Status</span>
-          <select
-            value={job.status}
-            onChange={(event) =>
-              onJobStatusReviewRequested(
-                job.id,
-                job.status,
-                event.target.value as JobStatus,
-                job.summary
-              )
-            }
-            style={styles.input}
-          >
-            {jobStatusOptions.map((status) => (
-              <option key={status} value={status}>
-                {jobStatusLabels[status]}
-              </option>
-            ))}
-          </select>
-        </label>
       </section>
 
-      <div style={styles.detailGrid}>
-        <section style={styles.panel} aria-label="Service Location">
-          <h2 style={sectionHeadingStyle}>Service Location</h2>
+      <div style={overviewAtAGlanceGridStyle}>
+        <section style={styles.panel} aria-label="Where">
+          <h2 style={sectionHeadingStyle}>Where</h2>
           <LinkedRecord
             actionLabel={`Open location ${location.name}`}
             label="Location"
@@ -131,8 +139,8 @@ export function JobOverviewSection({
           />
         </section>
 
-        <section style={styles.panel} aria-label="Bill To">
-          <h2 style={sectionHeadingStyle}>Bill To</h2>
+        <section style={styles.panel} aria-label="Who pays">
+          <h2 style={sectionHeadingStyle}>Who pays</h2>
           <LinkedRecord
             actionLabel={`Open customer ${billToCustomer.name}`}
             label="Customer"
@@ -148,25 +156,14 @@ export function JobOverviewSection({
             rows={buildCustomerContactRows(billToCustomer)}
           />
         </section>
-      </div>
 
-      <div style={overviewMainGridStyle}>
-        <section style={styles.panel} aria-label="Job Summary">
-          <h2 style={sectionHeadingStyle}>Job Summary / Office Notes</h2>
-          <p style={summaryTextStyle}>{job.summary}</p>
-          <div style={styles.formGridCompact}>
-            <DetailLine label="Call type" value={job.origin} />
-            <DetailLine label="Job type" value={job.jobType} />
-            <DetailLine label="Category" value={job.category} />
-          </div>
-        </section>
-
-        <section style={styles.panel} aria-label="Focused Appointment">
-          <h2 style={sectionHeadingStyle}>
+        <section style={styles.panel} aria-label="When">
+          <h2 style={sectionHeadingStyle}>When</h2>
+          <span style={sectionKickerStyle}>
             {focusedAppointmentId && focusedAppointment
-              ? 'Focused Appointment'
-              : 'Next Appointment'}
-          </h2>
+              ? 'Focused appointment'
+              : 'Next appointment'}
+          </span>
           {focusedAppointment ? (
             <>
               <DetailLine
@@ -202,29 +199,29 @@ export function JobOverviewSection({
             </>
           )}
         </section>
-      </div>
 
-      <section style={styles.panel} aria-label="Work at a glance">
-        <h2 style={sectionHeadingStyle}>Work at a glance</h2>
-        <div style={overviewFactsStyle}>
-          <OverviewAction
-            label="Appointments"
-            value={String(activeAppointmentCount)}
-            onClick={() => onSelectTab('appointments')}
-          />
-          <OverviewAction
-            label="Captured lines"
-            value={String(registerEntryCount)}
-            onClick={() => onSelectTab('captured')}
-          />
-          <OverviewAction
-            label="Media"
-            value={String(mediaAttachmentCount)}
-            onClick={() => onSelectTab('media')}
-          />
-          <FactPill label="Equipment on site" value={String(equipmentCount)} />
-        </div>
-      </section>
+        <section style={styles.panel} aria-label="Work at a glance">
+          <h2 style={sectionHeadingStyle}>Work at a glance</h2>
+          <div style={overviewFactsStyle}>
+            <OverviewAction
+              label="Appointments"
+              value={String(activeAppointmentCount)}
+              onClick={() => onSelectTab('appointments')}
+            />
+            <OverviewAction
+              label="Captured lines"
+              value={String(registerEntryCount)}
+              onClick={() => onSelectTab('captured')}
+            />
+            <OverviewAction
+              label="Media"
+              value={String(mediaAttachmentCount)}
+              onClick={() => onSelectTab('media')}
+            />
+            <FactPill label="Equipment on site" value={String(equipmentCount)} />
+          </div>
+        </section>
+      </div>
     </div>
   );
 }
@@ -259,7 +256,7 @@ function DetailLine({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <div style={styles.tinyMuted}>{label}</div>
-      <strong>{value}</strong>
+      <strong>{value || 'Not recorded'}</strong>
     </div>
   );
 }
@@ -300,14 +297,20 @@ function ContactList({ emptyLabel, rows }: { emptyLabel: string; rows: ContactRo
     return <p style={styles.muted}>{emptyLabel}</p>;
   }
 
+  const visibleRows = rows.slice(0, 4);
+  const hiddenCount = rows.length - visibleRows.length;
+
   return (
     <div style={contactListStyle}>
-      {rows.map((row) => (
+      {visibleRows.map((row) => (
         <div key={`${row.label}-${row.value}`} style={contactRowStyle}>
           <span style={styles.tinyMuted}>{row.label}</span>
           <strong>{row.value}</strong>
         </div>
       ))}
+      {hiddenCount > 0 ? (
+        <span style={styles.tinyMuted}>+{hiddenCount} more contact methods</span>
+      ) : null}
     </div>
   );
 }
@@ -394,15 +397,31 @@ const overviewStackStyle: CSSProperties = {
   gap: '1rem'
 };
 
-const overviewHeaderStyle: CSSProperties = {
+const overviewHeroPanelStyle: CSSProperties = {
+  background: '#fbfcfa'
+};
+
+const overviewHeroGridStyle: CSSProperties = {
   display: 'grid',
-  gap: '0.85rem',
+  gap: '1rem',
   gridTemplateColumns: 'repeat(auto-fit, minmax(16rem, 1fr))'
 };
 
 const overviewTitleBlockStyle: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: '0.55rem',
+  minWidth: 0
+};
+
+const overviewStatusPanelStyle: CSSProperties = {
+  alignContent: 'start',
+  background: '#ffffff',
+  border: '1px solid #dfe6df',
+  borderRadius: 8,
   display: 'grid',
-  gap: '0.5rem'
+  gap: '0.75rem',
+  padding: '0.75rem'
 };
 
 const overviewFactsStyle: CSSProperties = {
@@ -411,7 +430,7 @@ const overviewFactsStyle: CSSProperties = {
   gap: '0.5rem'
 };
 
-const overviewMainGridStyle: CSSProperties = {
+const overviewAtAGlanceGridStyle: CSSProperties = {
   display: 'grid',
   gap: '1rem',
   gridTemplateColumns: 'repeat(auto-fit, minmax(18rem, 1fr))'
@@ -420,6 +439,13 @@ const overviewMainGridStyle: CSSProperties = {
 const sectionHeadingStyle: CSSProperties = {
   fontSize: '1rem',
   margin: 0
+};
+
+const sectionKickerStyle: CSSProperties = {
+  color: '#64748b',
+  fontSize: '0.72rem',
+  fontWeight: 800,
+  textTransform: 'uppercase'
 };
 
 const summaryTextStyle: CSSProperties = {
