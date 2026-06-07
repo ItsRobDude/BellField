@@ -215,11 +215,25 @@ export class EquipmentService {
       );
     }
 
+    if (oldEquipment.status === 'removed') {
+      throw new ConflictException('Removed equipment cannot be replaced again.');
+    }
+
+    if (oldEquipment.status === 'pendingInstall') {
+      throw new ConflictException('Pending install equipment cannot be replaced.');
+    }
+
     if (
       oldEquipment.replacedByEquipmentId &&
       oldEquipment.replacedByEquipmentId !== replacementEquipment.id
     ) {
       throw new ConflictException('This equipment already has a linked replacement.');
+    }
+
+    if (replacementEquipment.status !== 'pendingInstall') {
+      throw new ConflictException(
+        'Replacement equipment must be pending install before it can replace another unit.'
+      );
     }
 
     if (
@@ -228,6 +242,12 @@ export class EquipmentService {
     ) {
       throw new ConflictException(
         'The replacement equipment is already linked to another old unit.'
+      );
+    }
+
+    if (replacementEquipment.replacedByEquipmentId) {
+      throw new ConflictException(
+        'Equipment that has already been replaced cannot be used as a replacement.'
       );
     }
 

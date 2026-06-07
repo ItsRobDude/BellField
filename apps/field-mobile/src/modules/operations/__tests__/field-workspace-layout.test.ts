@@ -368,7 +368,15 @@ describe('field workspace layout helpers', () => {
         equipmentType: 'Furnace',
         locationId: 'location-1',
         model: 'S9X1',
-        serialNumber: 'NEW-1'
+        serialNumber: 'NEW-1',
+        status: 'pendingInstall'
+      }),
+      buildEquipment({
+        id: 'equipment-active-furnace',
+        equipmentType: 'Furnace',
+        locationId: 'location-1',
+        model: 'ActiveFurnace',
+        status: 'active'
       }),
       buildEquipment({
         id: 'equipment-other-location',
@@ -379,11 +387,30 @@ describe('field workspace layout helpers', () => {
 
     expect(options).toEqual([
       {
-        detail: 'Serial: NEW-1 - Location: Attic platform',
+        detail: 'Serial: NEW-1 - Location: Attic platform - Status: pendingInstall',
         id: 'equipment-new',
         label: 'Furnace: Trane S9X1'
       }
     ]);
     expect(options[0]?.label).not.toContain('equipment-new');
+  });
+
+  it('does not offer replacements for pending-install source equipment', () => {
+    const sourceEquipment = buildEquipment({
+      id: 'equipment-pending-source',
+      locationId: 'location-1',
+      status: 'pendingInstall'
+    });
+
+    const options = buildReplacementEquipmentOptions(sourceEquipment, [
+      sourceEquipment,
+      buildEquipment({
+        id: 'equipment-pending-candidate',
+        locationId: 'location-1',
+        status: 'pendingInstall'
+      })
+    ]);
+
+    expect(options).toEqual([]);
   });
 });

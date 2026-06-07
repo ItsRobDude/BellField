@@ -105,4 +105,99 @@ describe('EquipmentPanel', () => {
       })
     );
   });
+
+  it('only offers pending-install equipment after the replacement action is opened', () => {
+    const onLinkReplacement = vi.fn(async () => undefined);
+    const activeFurnace: EquipmentSummary = {
+      ...equipmentRecord,
+      id: 'equipment-furnace',
+      equipmentType: 'Gas Furnace',
+      model: '58SB0A',
+      serialNumber: 'FURNACE-1',
+      status: 'active'
+    };
+    const pendingReplacement: EquipmentSummary = {
+      ...equipmentRecord,
+      id: 'equipment-pending',
+      equipmentType: 'Heat Pump',
+      brand: 'Trane',
+      model: 'XR16',
+      serialNumber: 'PENDING-1',
+      status: 'pendingInstall'
+    };
+
+    render(
+      <EquipmentPanel
+        locations={[location]}
+        equipment={[equipmentRecord, activeFurnace, pendingReplacement]}
+        suggestedEquipmentTypes={['Condenser']}
+        selectedEquipmentId="equipment-1"
+        selectedEquipmentDetail={equipmentDetail}
+        showInactiveEquipment={false}
+        canReplaceRemove
+        canDelete={false}
+        onSelectEquipment={vi.fn(async () => undefined)}
+        onShowInactiveChange={vi.fn()}
+        onCreateEquipment={vi.fn(async () => undefined)}
+        onRecordUpdate={vi.fn(async () => undefined)}
+        onLinkReplacement={onLinkReplacement}
+        onDeleteEquipment={vi.fn(async () => undefined)}
+      />
+    );
+
+    expect(screen.queryByText('Choose pending replacement unit')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace this equipment' }));
+
+    expect(screen.getByText(/Choose a pending replacement asset/)).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Gas Furnace/ })).not.toBeInTheDocument();
+
+    const pendingOption = screen.getByRole('option', { name: /Heat Pump - Trane XR16/ });
+    const replacementSelect = pendingOption.closest('select');
+    expect(replacementSelect).toBeInstanceOf(HTMLSelectElement);
+
+    fireEvent.change(replacementSelect as HTMLSelectElement, {
+      target: { value: 'equipment-pending' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm replacement' }));
+
+    expect(onLinkReplacement).toHaveBeenCalledWith('equipment-1', 'equipment-pending');
+  });
+
+  it('shows an empty replacement state when no pending replacement equipment exists', () => {
+    const activeFurnace: EquipmentSummary = {
+      ...equipmentRecord,
+      id: 'equipment-furnace',
+      equipmentType: 'Gas Furnace',
+      model: '58SB0A',
+      serialNumber: 'FURNACE-1',
+      status: 'active'
+    };
+
+    render(
+      <EquipmentPanel
+        locations={[location]}
+        equipment={[equipmentRecord, activeFurnace]}
+        suggestedEquipmentTypes={['Condenser']}
+        selectedEquipmentId="equipment-1"
+        selectedEquipmentDetail={equipmentDetail}
+        showInactiveEquipment={false}
+        canReplaceRemove
+        canDelete={false}
+        onSelectEquipment={vi.fn(async () => undefined)}
+        onShowInactiveChange={vi.fn()}
+        onCreateEquipment={vi.fn(async () => undefined)}
+        onRecordUpdate={vi.fn(async () => undefined)}
+        onLinkReplacement={vi.fn(async () => undefined)}
+        onDeleteEquipment={vi.fn(async () => undefined)}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Replace this equipment' }));
+
+    expect(
+      screen.getByText(/No pending replacement equipment is available for this location/)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /Gas Furnace/ })).not.toBeInTheDocument();
+  });
 });

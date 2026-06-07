@@ -362,6 +362,19 @@ Important rule:
 - pending install equipment should be visible where the company needs it
 - moving equipment from pending install to active should preserve the record's continuity rather than creating a fake replacement record
 
+### Replacement-link behavior
+
+BellField should treat a replacement link as the moment an existing unit is replaced by a new
+asset that is already pending install at the same placement.
+
+Important rules:
+
+- active or inactive equipment may be marked replaced
+- pending install equipment should not be the old unit being replaced
+- only pending install equipment at the same placement should be offered as the replacement
+- confirming the replacement should mark the old equipment removed and mark the replacement active in the same trusted backend operation
+- unrelated active equipment at the same location should not be offered as a replacement candidate
+
 ---
 
 ## 6. Job Rules

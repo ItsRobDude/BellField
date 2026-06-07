@@ -198,6 +198,11 @@ describe('EquipmentDataService', () => {
       { status: 'removed' },
       expect.anything()
     );
+    expect(equipmentDataRepository.updateEquipment).toHaveBeenCalledWith(
+      replacementEquipment.id,
+      { status: 'active' },
+      expect.anything()
+    );
     expect(equipmentDataRepository.linkReplacement).toHaveBeenCalledWith(
       replacementEquipment.id,
       oldEquipment.id,
@@ -215,7 +220,7 @@ describe('EquipmentDataService', () => {
       expect.objectContaining({
         equipmentId: replacementEquipment.id,
         kind: 'replacementLinkChanged',
-        message: 'Linked as the replacement for Carrier 24ABC6 (OLD-100).'
+        message: 'Linked as the replacement for Carrier 24ABC6 (OLD-100) and marked active.'
       }),
       expect.anything()
     );

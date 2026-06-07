@@ -1,8 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type { EquipmentDetail, EquipmentStatus, EquipmentSummary } from '@/lib/operations-api';
+import {
+  canStartEquipmentReplacement,
+  EquipmentReplacementPanel
+} from './equipment-replacement-panel';
 
 export type EquipmentCreateDraft = {
   placementKind: 'location' | 'inventory';
@@ -83,7 +87,6 @@ export function EquipmentPanel({
     createDefaultCreateDraft(locationScope?.locationId ?? locations[0]?.id)
   );
   const [detailDraft, setDetailDraft] = useState<EquipmentEditDraft | null>(null);
-  const [replacementEquipmentId, setReplacementEquipmentId] = useState('');
   const isLocationScoped = Boolean(locationScope);
   const scopedLocationId = locationScope?.locationId;
 
@@ -105,21 +108,12 @@ export function EquipmentPanel({
 
   useEffect(() => {
     setDetailDraft(selectedEquipmentDetail ? createDetailDraft(selectedEquipmentDetail) : null);
-    setReplacementEquipmentId('');
   }, [selectedEquipmentDetail]);
 
-  const replacementOptions = useMemo(() => {
-    if (!selectedEquipmentDetail) {
-      return [];
-    }
-
-    return equipment.filter(
-      (record) =>
-        record.id !== selectedEquipmentDetail.id &&
-        record.locationId === selectedEquipmentDetail.locationId &&
-        record.inventoryLocationLabel === selectedEquipmentDetail.inventoryLocationLabel
-    );
-  }, [equipment, selectedEquipmentDetail]);
+  const canStartReplacement =
+    canReplaceRemove && selectedEquipmentDetail
+      ? canStartEquipmentReplacement(selectedEquipmentDetail)
+      : false;
 
   return (
     <section style={styles.card}>
@@ -610,33 +604,12 @@ export function EquipmentPanel({
                 ) : null}
               </div>
 
-              {canReplaceRemove ? (
-                <div style={styles.subpanel}>
-                  <h4 style={styles.subheading}>Replacement link</h4>
-                  <select
-                    value={replacementEquipmentId}
-                    onChange={(event) => setReplacementEquipmentId(event.target.value)}
-                    style={styles.input}
-                  >
-                    <option value="">Select replacement equipment</option>
-                    {replacementOptions.map((record) => (
-                      <option key={record.id} value={record.id}>
-                        {record.equipmentType} - {record.brand} {record.model}{' '}
-                        {record.serialNumber ? `(${record.serialNumber})` : ''}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      replacementEquipmentId &&
-                      void onLinkReplacement(selectedEquipmentDetail.id, replacementEquipmentId)
-                    }
-                    style={styles.button}
-                  >
-                    Link replacement and mark old unit removed
-                  </button>
-                </div>
+              {canStartReplacement ? (
+                <EquipmentReplacementPanel
+                  equipment={equipment}
+                  selectedEquipment={selectedEquipmentDetail}
+                  onLinkReplacement={onLinkReplacement}
+                />
               ) : null}
 
               <div style={styles.subpanel}>

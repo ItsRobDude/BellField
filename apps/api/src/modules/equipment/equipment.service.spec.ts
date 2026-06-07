@@ -1,4 +1,4 @@
-import { ForbiddenException } from '@nestjs/common';
+import { ConflictException, ForbiddenException } from '@nestjs/common';
 import { EquipmentService } from './equipment.service';
 
 function createEquipmentRecord(overrides: Record<string, unknown> = {}) {
@@ -159,5 +159,102 @@ describe('EquipmentService', () => {
         replacementEquipmentId: 'equipment-2'
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('rejects active equipment as a replacement candidate', async () => {
+    const { service, identityAccessService, equipmentDataService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'dispatcher-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['equipment:edit', 'equipment:configure'],
+      sessionSurface: 'office-web'
+    });
+    equipmentDataService.getEquipmentById
+      .mockResolvedValueOnce(createEquipmentRecord({ id: 'old-equipment' }))
+      .mockResolvedValueOnce(
+        createEquipmentRecord({
+          id: 'active-furnace',
+          equipmentType: 'Gas Furnace',
+          status: 'active'
+        })
+      );
+
+    await expect(
+      service.linkEquipmentReplacement('session-token', 'old-equipment', {
+        replacementEquipmentId: 'active-furnace'
+      })
+    ).rejects.toThrow(ConflictException);
+    expect(equipmentDataService.linkReplacement).not.toHaveBeenCalled();
+  });
+
+  it('rejects replacement when the old equipment is already removed', async () => {
+    const { service, identityAccessService, equipmentDataService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'dispatcher-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['equipment:edit', 'equipment:configure'],
+      sessionSurface: 'office-web'
+    });
+    equipmentDataService.getEquipmentById
+      .mockResolvedValueOnce(createEquipmentRecord({ id: 'old-equipment', status: 'removed' }))
+      .mockResolvedValueOnce(
+        createEquipmentRecord({ id: 'pending-replacement', status: 'pendingInstall' })
+      );
+
+    await expect(
+      service.linkEquipmentReplacement('session-token', 'old-equipment', {
+        replacementEquipmentId: 'pending-replacement'
+      })
+    ).rejects.toThrow(ConflictException);
+    expect(equipmentDataService.linkReplacement).not.toHaveBeenCalled();
+  });
+
+  it('rejects replacement when the old equipment is still pending install', async () => {
+    const { service, identityAccessService, equipmentDataService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'dispatcher-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['equipment:edit', 'equipment:configure'],
+      sessionSurface: 'office-web'
+    });
+    equipmentDataService.getEquipmentById
+      .mockResolvedValueOnce(
+        createEquipmentRecord({ id: 'old-pending-equipment', status: 'pendingInstall' })
+      )
+      .mockResolvedValueOnce(
+        createEquipmentRecord({ id: 'pending-replacement', status: 'pendingInstall' })
+      );
+
+    await expect(
+      service.linkEquipmentReplacement('session-token', 'old-pending-equipment', {
+        replacementEquipmentId: 'pending-replacement'
+      })
+    ).rejects.toThrow(ConflictException);
+    expect(equipmentDataService.linkReplacement).not.toHaveBeenCalled();
+  });
+
+  it('links pending-install equipment as the replacement', async () => {
+    const { service, identityAccessService, equipmentDataService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'dispatcher-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['equipment:edit', 'equipment:configure'],
+      sessionSurface: 'office-web'
+    });
+    equipmentDataService.getEquipmentById
+      .mockResolvedValueOnce(createEquipmentRecord({ id: 'old-equipment' }))
+      .mockResolvedValueOnce(
+        createEquipmentRecord({ id: 'pending-replacement', status: 'pendingInstall' })
+      );
+
+    await service.linkEquipmentReplacement('session-token', 'old-equipment', {
+      replacementEquipmentId: 'pending-replacement'
+    });
+
+    expect(equipmentDataService.linkReplacement).toHaveBeenCalledWith(
+      'old-equipment',
+      'pending-replacement',
+      'Dispatcher'
+    );
   });
 });

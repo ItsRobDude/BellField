@@ -180,10 +180,21 @@ export function buildReplacementEquipmentOptions(
   record: FieldEquipmentRecord,
   equipment: FieldEquipmentRecord[]
 ): FieldReplacementEquipmentOption[] {
+  if (
+    record.status === 'removed' ||
+    record.status === 'pendingInstall' ||
+    record.replacedByEquipmentId
+  ) {
+    return [];
+  }
+
   return equipment
     .filter(
       (candidate) =>
         candidate.id !== record.id &&
+        candidate.status === 'pendingInstall' &&
+        !candidate.replacesEquipmentId &&
+        !candidate.replacedByEquipmentId &&
         candidate.locationId === record.locationId &&
         candidate.inventoryLocationLabel === record.inventoryLocationLabel
     )

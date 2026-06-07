@@ -149,6 +149,11 @@ export class EquipmentDataService {
         { status: 'removed' },
         queryable
       );
+      await this.equipmentDataRepository.updateEquipment(
+        replacementEquipment.id,
+        { status: 'active' },
+        queryable
+      );
       await this.equipmentDataRepository.linkReplacement(
         replacementEquipment.id,
         oldEquipment.id,
@@ -174,7 +179,7 @@ export class EquipmentDataService {
           occurredAt: new Date().toISOString(),
           actorName,
           kind: 'replacementLinkChanged',
-          message: `Linked as the replacement for ${formatEquipmentLabel(oldEquipment)}.`
+          message: `Linked as the replacement for ${formatEquipmentLabel(oldEquipment)} and marked active.`
         },
         queryable
       );
