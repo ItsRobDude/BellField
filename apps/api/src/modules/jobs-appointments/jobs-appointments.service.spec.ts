@@ -45,7 +45,8 @@ function createService() {
       fax: undefined,
       isActive: true,
       flags: []
-    })
+    }),
+    reassignLocationOwner: jest.fn()
   };
   const equipmentDataService = {
     listEquipment: jest.fn().mockResolvedValue([])
@@ -63,6 +64,7 @@ function createService() {
     updateAppointmentSchedule: jest.fn(),
     getAppointmentById: jest.fn(),
     updateAppointmentStatus: jest.fn(),
+    createJob: jest.fn().mockResolvedValue(createJob('scheduled')),
     addSyncFlag: jest.fn(),
     listAssignedJobsForEmployee: jest.fn().mockResolvedValue([]),
     addJobNote: jest.fn(),
@@ -162,6 +164,53 @@ describe('JobsAppointmentsService', () => {
     expect(response).toEqual({
       technicians: [{ id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' }]
     });
+  });
+
+  it('uses a job-only bill-to override without reassigning the location owner', async () => {
+    const { service, referenceDataService, jobsDataService, identityAccessService } =
+      createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:create'],
+      sessionSurface: 'office-web'
+    });
+    referenceDataService.getCustomerById.mockResolvedValueOnce({
+      id: 'customer-2',
+      name: 'Property Manager',
+      accountType: 'propertyManager',
+      billingAddressLine1: '500 Billing Way',
+      billingCity: 'Blaine',
+      billingState: 'WA',
+      billingPostalCode: '98230',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      flags: []
+    });
+
+    await service.createJob('session-token', {
+      locationId: 'location-1',
+      billToCustomerId: 'customer-2',
+      jobType: 'Service',
+      category: 'General',
+      origin: 'Inbound phone call',
+      summary: 'No heat'
+    });
+
+    expect(referenceDataService.getLocationById).toHaveBeenCalledWith('location-1');
+    expect(referenceDataService.getCustomerById).toHaveBeenCalledWith('customer-2');
+    expect(jobsDataService.createJob).toHaveBeenCalledWith(
+      expect.objectContaining({
+        locationId: 'location-1',
+        billToCustomerId: 'customer-2'
+      }),
+      'Dispatcher',
+      'customer-2',
+      'Main Shop'
+    );
+    expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
   });
 
   it('keeps finished appointments in office review until they are acknowledged', async () => {

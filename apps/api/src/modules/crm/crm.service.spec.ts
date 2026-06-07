@@ -326,6 +326,68 @@ describe('CrmService', () => {
     expect(referenceDataService.createCustomer).not.toHaveBeenCalled();
   });
 
+  it('blocks duplicate customer creation by secondary contact-method phone', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.findCustomerDuplicateCandidates.mockResolvedValueOnce([
+      {
+        id: 'customer-1',
+        name: 'Acme Heating',
+        accountType: 'company',
+        billingAddressLine1: '100 Main Street',
+        billingCity: 'Seattle',
+        billingState: 'WA',
+        billingPostalCode: '98101',
+        phone: undefined,
+        email: undefined,
+        fax: undefined,
+        isActive: true,
+        flags: []
+      }
+    ]);
+    referenceDataService.getCustomerDetail.mockResolvedValueOnce({
+      id: 'customer-1',
+      name: 'Acme Heating',
+      accountType: 'company',
+      billingAddressLine1: '100 Main Street',
+      billingCity: 'Seattle',
+      billingState: 'WA',
+      billingPostalCode: '98101',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      flags: [],
+      contactMethods: [
+        {
+          id: 'method-2',
+          ownerKind: 'customer',
+          ownerId: 'customer-1',
+          kind: 'phone',
+          label: 'Dispatch',
+          value: '(555) 222-3333',
+          isPrimary: false,
+          isActive: true
+        }
+      ],
+      contacts: [],
+      locations: []
+    });
+
+    await expect(
+      service.createCustomer('session-token', {
+        name: 'North End Homes',
+        accountType: 'landlord',
+        billingAddressLine1: '12 Cedar Lane',
+        billingCity: 'Everett',
+        billingState: 'WA',
+        billingPostalCode: '98201',
+        phone: '(555) 222-3333'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    expect(referenceDataService.createCustomer).not.toHaveBeenCalled();
+  });
+
   it('blocks duplicate location creation through targeted candidate lookup', async () => {
     const { service, referenceDataService } = createService();
     referenceDataService.findLocationDuplicateCandidates.mockResolvedValueOnce([
@@ -368,6 +430,71 @@ describe('CrmService', () => {
     });
     expect(referenceDataService.listLocations).not.toHaveBeenCalled();
     expect(referenceDataService.getCustomerById).toHaveBeenCalledTimes(1);
+    expect(referenceDataService.createLocation).not.toHaveBeenCalled();
+  });
+
+  it('blocks duplicate location creation by secondary contact-method phone', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.findLocationDuplicateCandidates.mockResolvedValueOnce([
+      {
+        id: 'location-1',
+        name: 'Acme Shop',
+        customerId: 'customer-1',
+        customerName: 'Acme Heating',
+        customerFlags: [],
+        addressLine1: '100 Main Street',
+        city: 'Seattle',
+        state: 'WA',
+        postalCode: '98101',
+        phone: undefined,
+        email: undefined,
+        fax: undefined,
+        isActive: true,
+        alternateBillToCustomerIds: []
+      }
+    ]);
+    referenceDataService.getLocationDetail.mockResolvedValueOnce({
+      id: 'location-1',
+      name: 'Acme Shop',
+      customerId: 'customer-1',
+      customerName: 'Acme Heating',
+      addressLine1: '100 Main Street',
+      city: 'Seattle',
+      state: 'WA',
+      postalCode: '98101',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      contactMethods: [
+        {
+          id: 'method-2',
+          ownerKind: 'location',
+          ownerId: 'location-1',
+          kind: 'phone',
+          label: 'Back office',
+          value: '(555) 222-3333',
+          isPrimary: false,
+          isActive: true
+        }
+      ],
+      contacts: [],
+      alternateBillToCustomerIds: [],
+      ownershipHistory: []
+    });
+
+    await expect(
+      service.createLocation('session-token', {
+        customerId: 'customer-1',
+        name: 'North End Rental',
+        addressLine1: '12 Cedar Lane',
+        city: 'Everett',
+        state: 'WA',
+        postalCode: '98201',
+        phone: '(555) 222-3333'
+      })
+    ).rejects.toBeInstanceOf(ConflictException);
+
     expect(referenceDataService.createLocation).not.toHaveBeenCalled();
   });
 
@@ -503,6 +630,21 @@ describe('CrmService', () => {
     });
   });
 
+  it('archives a contact method through an inactive update', async () => {
+    const { service, referenceDataService } = createService();
+
+    await service.updateContactMethod('session-token', 'method-1', {
+      isActive: false
+    });
+
+    expect(referenceDataService.updateContactMethod).toHaveBeenCalledWith('method-1', {
+      label: undefined,
+      value: undefined,
+      isPrimary: undefined,
+      isActive: false
+    });
+  });
+
   it('requires confirmation before updating a location to have no phone or email', async () => {
     const { service, referenceDataService } = createService();
 
@@ -516,6 +658,50 @@ describe('CrmService', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(referenceDataService.updateLocation).not.toHaveBeenCalled();
+  });
+
+  it('does not require missing-contact confirmation when active location methods include phone or email', async () => {
+    const { service, referenceDataService } = createService();
+    referenceDataService.getLocationDetail.mockResolvedValueOnce({
+      id: 'location-1',
+      name: 'Acme Shop',
+      customerId: 'customer-1',
+      customerName: 'Acme Heating',
+      addressLine1: '100 Main Street',
+      city: 'Seattle',
+      state: 'WA',
+      postalCode: '98101',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      contactMethods: [
+        {
+          id: 'method-2',
+          ownerKind: 'location',
+          ownerId: 'location-1',
+          kind: 'email',
+          label: 'Dispatch',
+          value: 'dispatch@acme.local',
+          isPrimary: false,
+          isActive: true
+        }
+      ],
+      contacts: [],
+      alternateBillToCustomerIds: [],
+      ownershipHistory: []
+    });
+
+    await service.updateLocation('session-token', 'location-1', {
+      fax: '(555) 333-4444'
+    });
+
+    expect(referenceDataService.updateLocation).toHaveBeenCalledWith(
+      'location-1',
+      expect.objectContaining({
+        fax: '(555) 333-4444'
+      })
+    );
   });
 
   it('allows contact creation without a contact method', async () => {

@@ -224,10 +224,12 @@ export class CrmService {
       'office-web'
     ]);
     const current = await this.referenceDataService.getLocationById(locationId);
+    const currentDetail = await this.referenceDataService.getLocationDetail(locationId);
     ensureLocationContactConfirmation(
       request.phone ?? current.phone,
       request.email ?? current.email,
-      request.confirmMissingContactInfo
+      request.confirmMissingContactInfo,
+      hasActivePhoneOrEmailMethod(currentDetail.contactMethods)
     );
     if (request.alternateBillToCustomerIds?.length) {
       await Promise.all(
@@ -648,9 +650,15 @@ export class CrmService {
 function ensureLocationContactConfirmation(
   phone: string | undefined,
   email: string | undefined,
-  confirmMissingContactInfo: boolean | undefined
+  confirmMissingContactInfo: boolean | undefined,
+  hasActiveContactMethod = false
 ): void {
-  if (!trimOptional(phone) && !trimOptional(email) && !confirmMissingContactInfo) {
+  if (
+    !trimOptional(phone) &&
+    !trimOptional(email) &&
+    !hasActiveContactMethod &&
+    !confirmMissingContactInfo
+  ) {
     throw new ConflictException(
       'Locations without phone or email need office confirmation before saving.'
     );
@@ -679,6 +687,12 @@ function contactMethodsContainPhone(
       method.isActive &&
       (method.kind === 'phone' || method.kind === 'fax') &&
       normalizePhone(method.value) === normalizedPhone
+  );
+}
+
+function hasActivePhoneOrEmailMethod(contactMethods: ContactMethodSummary[]): boolean {
+  return contactMethods.some(
+    (method) => method.isActive && (method.kind === 'phone' || method.kind === 'email')
   );
 }
 

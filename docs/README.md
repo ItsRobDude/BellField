@@ -216,6 +216,16 @@ Read when: a source file is approaching the file-size guard, a feature needs to 
 
 Does not own: product behavior, workflow semantics, or package-boundary rules.
 
+### [crm-job-intake-phase-plan.md](./crm-job-intake-phase-plan.md)
+
+Audience: contributors working on the customer/location/contact-method and New Job intake correction lane.
+
+Purpose: the controlling phase plan for CRM contact methods, job intake rebuild, later CRM refactor, ownership transfer, operational customer/location pages, job-detail navigation, and shell cleanup.
+
+Read when: continuing this lane, reviewing whether Phase 0-2 is complete, or deciding whether Phase 3+ work is allowed.
+
+Does not own: general product rules or screen behavior outside this correction lane. It also does not authorize later phases by itself; follow its stop rule.
+
 ## Current-State and Handoff Docs
 
 ### [whats-shipped.md](./whats-shipped.md)
@@ -311,6 +321,7 @@ For deployment or hosting changes:
 For planning what belongs in scope:
 
 - `milestone-implementation-plan.md`
+- `crm-job-intake-phase-plan.md` for the CRM/contact-method/New Job intake correction lane and its stop rule
 - `whats-shipped.md` for current repo status
 - `maintainability-refactor-plan.md` for cleanup that repairs weak structure without adding product scope
 

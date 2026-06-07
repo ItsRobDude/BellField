@@ -46,6 +46,7 @@ describe('ReferenceDataRepository', () => {
     expect(sql).toContain('customer_matches');
     expect(sql).toContain('location_matches');
     expect(sql).toContain('contact_matches');
+    expect(sql).toContain('from crm_contact_methods method');
     expect(sql).toContain('limit $4');
     expect(sql).not.toContain('select * from customers');
     expect(results).toEqual([
@@ -137,6 +138,8 @@ describe('ReferenceDataRepository', () => {
     ]);
     expect(sql).toContain('regexp_replace(lower(name)');
     expect(sql).toContain('regexp_replace(coalesce(phone');
+    expect(sql).toContain('from crm_contact_methods method');
+    expect(sql).toContain("method.owner_kind = 'customer'");
     expect(sql).toContain('regexp_replace(');
     expect(sql).not.toContain('select * from customers');
     expect(candidates).toEqual([
@@ -193,6 +196,8 @@ describe('ReferenceDataRepository', () => {
     expect(sql).toContain('inner join customers customer');
     expect(sql).toContain('regexp_replace(lower(location.name)');
     expect(sql).toContain('regexp_replace(coalesce(location.phone');
+    expect(sql).toContain('from crm_contact_methods method');
+    expect(sql).toContain("method.owner_kind = 'location'");
     expect(sql).not.toContain('select * from locations');
     expect(candidates).toEqual([
       expect.objectContaining({
