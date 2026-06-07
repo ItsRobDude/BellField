@@ -492,6 +492,110 @@ describe('DispatchBoardPanel', () => {
     ).not.toBeInTheDocument();
   });
 
+  it('resizes a timed dispatch card duration from the right edge', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const resizeHandle = screen.getByRole('button', { name: 'Resize job 1001 duration' });
+    fireEvent.pointerDown(resizeHandle, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 220 });
+
+    expect(screen.getByText('8:00 AM - 11:15 AM')).toBeInTheDocument();
+
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+        scheduledDate: '2026-05-22',
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '11:15',
+        timeWindowLabel: '8:00 AM - 11:15 AM',
+        technicianId: 'tech-1'
+      });
+    });
+  });
+
+  it('does not save a resize when the expected end time did not change', () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const resizeHandle = screen.getByRole('button', { name: 'Resize job 1001 duration' });
+    fireEvent.pointerDown(resizeHandle, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerUp(window);
+
+    expect(onAppointmentScheduleUpdate).not.toHaveBeenCalled();
+  });
+
+  it('resizes a card with a structured start and no expected end time', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({
+            appointmentId: 'appt-tech1',
+            scheduledEndTime: undefined
+          })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const resizeHandle = screen.getByRole('button', { name: 'Resize job 1001 duration' });
+    fireEvent.pointerDown(resizeHandle, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 148 });
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+        scheduledDate: '2026-05-22',
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00',
+        timeWindowLabel: '8:00 AM - 10:00 AM',
+        technicianId: 'tech-1'
+      });
+    });
+  });
+
+  it('does not show resize controls for untimed dispatch cards', () => {
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({
+            appointmentId: 'appt-tech1',
+            scheduledStartTime: undefined,
+            scheduledEndTime: undefined
+          })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={async () => undefined}
+      />
+    );
+
+    expect(
+      screen.queryByRole('button', { name: 'Resize job 1001 duration' })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows review status without crowding cards with equipment details', () => {
     const dispatchBoard = buildDispatchBoard([
       buildDispatchAppointment({

@@ -1,10 +1,16 @@
 'use client';
 
-import { useRef, type CSSProperties } from 'react';
+import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent
+} from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
 import { appointmentStatusLabels } from './job-work-types';
-import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { DispatchSchedulePopover } from './dispatch-schedule-popover';
 import type { DispatchScheduleDraft, DispatchScheduleEditorState } from './dispatch-schedule-types';
 import {
   timelineCardMinHeight,
@@ -19,6 +25,13 @@ import {
   timelineSlotMinutes,
   timelineStartMinutes
 } from './dispatch-timeline-layout';
+import {
+  buildDispatchResizeDraft,
+  clampDispatchResizeEndMinutes,
+  formatDispatchResizePreview,
+  getDispatchResizeBaseEndMinutes,
+  parseDispatchTimeToMinutes
+} from './dispatch-timeline-time';
 
 export type DispatchContextMenuPosition = {
   x: number;
@@ -38,9 +51,21 @@ type DispatchTimelineRowProps = {
     card: DispatchAppointmentCard,
     position: DispatchContextMenuPosition
   ) => void;
+  onScheduleResize?: (card: DispatchAppointmentCard, draft: DispatchScheduleDraft) => Promise<void>;
   onScheduleDraftChange: (patch: Partial<DispatchScheduleDraft>) => void;
   onScheduleEditorCancel: () => void;
   onScheduleEditorSave: () => void;
+};
+
+type DispatchResizeState = {
+  appointmentId: string;
+  startMinutes: number;
+  baseEndMinutes: number;
+  previewEndMinutes: number;
+  pointerStartX: number;
+  slotWidth: number;
+  mode: 'dragging' | 'saving' | 'error';
+  errorMessage: string | null;
 };
 
 export function DispatchTimelineRow({
@@ -53,10 +78,143 @@ export function DispatchTimelineRow({
   onOpenJobDetail,
   onOpenScheduleEditor,
   onOpenContextMenu,
+  onScheduleResize,
   onScheduleDraftChange,
   onScheduleEditorCancel,
   onScheduleEditorSave
 }: DispatchTimelineRowProps) {
+  const [resizeState, setResizeState] = useState<DispatchResizeState | null>(null);
+  const resizeStateRef = useRef<DispatchResizeState | null>(null);
+
+  useEffect(() => {
+    resizeStateRef.current = resizeState;
+  }, [resizeState]);
+
+  useEffect(() => {
+    if (!resizeState || resizeState.mode !== 'dragging') {
+      return;
+    }
+
+    function handlePointerMove(event: PointerEvent) {
+      setResizeState((current) => {
+        if (!current || current.mode !== 'dragging') {
+          return current;
+        }
+
+        const slotDelta = Math.round((event.clientX - current.pointerStartX) / current.slotWidth);
+        const previewEndMinutes = clampDispatchResizeEndMinutes(
+          current.startMinutes,
+          current.baseEndMinutes + slotDelta * timelineSlotMinutes,
+          timelineEndMinutes
+        );
+
+        return {
+          ...current,
+          previewEndMinutes
+        };
+      });
+    }
+
+    function handlePointerUp() {
+      const current = resizeStateRef.current;
+
+      if (current) {
+        void commitResize(current);
+      }
+    }
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp, { once: true });
+
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [resizeState?.appointmentId, resizeState?.mode]);
+
+  function handleResizeStart(
+    card: DispatchAppointmentCard,
+    event: ReactPointerEvent<HTMLButtonElement>,
+    cardFrameElement: HTMLDivElement | null
+  ) {
+    if (!onScheduleResize) {
+      return;
+    }
+
+    const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
+
+    if (!card.scheduledDate || startMinutes === null || startMinutes >= timelineEndMinutes) {
+      return;
+    }
+
+    const endMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
+    const baseEndMinutes = getDispatchResizeBaseEndMinutes(
+      startMinutes,
+      endMinutes,
+      timelineEndMinutes
+    );
+
+    event.preventDefault();
+    event.stopPropagation();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+
+    setResizeState({
+      appointmentId: card.appointmentId,
+      startMinutes,
+      baseEndMinutes,
+      previewEndMinutes: baseEndMinutes,
+      pointerStartX: event.clientX,
+      slotWidth: getTimelineSlotWidth(cardFrameElement),
+      mode: 'dragging',
+      errorMessage: null
+    });
+  }
+
+  async function commitResize(state: DispatchResizeState) {
+    if (!onScheduleResize) {
+      setResizeState(null);
+      return;
+    }
+
+    const card = cards.find((candidate) => candidate.appointmentId === state.appointmentId);
+
+    if (!card) {
+      setResizeState(null);
+      return;
+    }
+
+    const currentEndMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
+    const didResize =
+      currentEndMinutes === null
+        ? state.previewEndMinutes !== state.baseEndMinutes
+        : state.previewEndMinutes !== currentEndMinutes;
+
+    if (!didResize) {
+      setResizeState(null);
+      return;
+    }
+
+    setResizeState((current) =>
+      current?.appointmentId === state.appointmentId ? { ...current, mode: 'saving' } : current
+    );
+
+    try {
+      await onScheduleResize(card, buildDispatchResizeDraft(card, state.previewEndMinutes));
+      setResizeState(null);
+    } catch (error) {
+      setResizeState((current) =>
+        current?.appointmentId === state.appointmentId
+          ? {
+              ...current,
+              mode: 'error',
+              errorMessage:
+                error instanceof Error ? error.message : 'Unable to update appointment duration.'
+            }
+          : current
+      );
+    }
+  }
+
   return (
     <section style={timelineRowStyle} aria-label={ariaLabel}>
       <div style={timelineRowLabelStyle}>
@@ -75,11 +233,19 @@ export function DispatchTimelineRow({
                   ? activeScheduleEditor
                   : null
               }
-              placementStyle={getTimelineCardPlacementStyle(card, index)}
+              resizeState={resizeState?.appointmentId === card.appointmentId ? resizeState : null}
+              placementStyle={getTimelineCardPlacementStyle(
+                card,
+                index,
+                resizeState?.appointmentId === card.appointmentId
+                  ? resizeState.previewEndMinutes
+                  : undefined
+              )}
               technicians={technicians}
               onOpenJobDetail={() => onOpenJobDetail?.(card.jobId, card.appointmentId)}
               onOpenScheduleEditor={onOpenScheduleEditor}
               onOpenContextMenu={onOpenContextMenu}
+              onResizeStart={onScheduleResize ? handleResizeStart : undefined}
               onScheduleDraftChange={onScheduleDraftChange}
               onScheduleEditorCancel={onScheduleEditorCancel}
               onScheduleEditorSave={onScheduleEditorSave}
@@ -94,6 +260,7 @@ export function DispatchTimelineRow({
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
   activeScheduleEditor: DispatchScheduleEditorState | null;
+  resizeState: DispatchResizeState | null;
   placementStyle?: CSSProperties;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail: () => void;
@@ -101,6 +268,11 @@ type DispatchCardButtonProps = {
   onOpenContextMenu?: (
     card: DispatchAppointmentCard,
     position: DispatchContextMenuPosition
+  ) => void;
+  onResizeStart?: (
+    card: DispatchAppointmentCard,
+    event: ReactPointerEvent<HTMLButtonElement>,
+    cardFrameElement: HTMLDivElement | null
   ) => void;
   onScheduleDraftChange: (patch: Partial<DispatchScheduleDraft>) => void;
   onScheduleEditorCancel: () => void;
@@ -110,11 +282,13 @@ type DispatchCardButtonProps = {
 function DispatchCardButton({
   card,
   activeScheduleEditor,
+  resizeState,
   placementStyle,
   technicians,
   onOpenJobDetail,
   onOpenScheduleEditor,
   onOpenContextMenu,
+  onResizeStart,
   onScheduleDraftChange,
   onScheduleEditorCancel,
   onScheduleEditorSave
@@ -123,11 +297,20 @@ function DispatchCardButton({
   const address = formatDispatchCardAddress(card);
   const statusLabel = appointmentStatusLabels[card.status];
   const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
+  const canResize = Boolean(
+    onResizeStart &&
+      card.scheduledDate &&
+      parseDispatchTimeToMinutes(card.scheduledStartTime) !== null
+  );
 
   return (
     <div
       ref={cardFrameRef}
-      style={{ ...timelineCardFrameStyle, ...placementStyle }}
+      style={{
+        ...timelineCardFrameStyle,
+        ...(resizeState ? timelineCardResizingStyle : null),
+        ...placementStyle
+      }}
       onContextMenu={(event) => {
         if (!onOpenContextMenu) {
           return;
@@ -184,6 +367,27 @@ function DispatchCardButton({
           Edit
         </button>
       ) : null}
+      {resizeState ? (
+        <span role="status" style={resizeStatusStyle}>
+          {resizeState.mode === 'saving'
+            ? 'Saving...'
+            : (resizeState.errorMessage ??
+              formatDispatchResizePreview(resizeState.startMinutes, resizeState.previewEndMinutes))}
+        </span>
+      ) : null}
+      {canResize ? (
+        <button
+          type="button"
+          aria-label={`Resize job ${card.jobNumber} duration`}
+          title="Drag to change expected end time"
+          style={timelineResizeHandleStyle}
+          onPointerDown={(event) => onResizeStart?.(card, event, cardFrameRef.current)}
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+          }}
+        />
+      ) : null}
       {activeScheduleEditor ? (
         <DispatchSchedulePopover
           card={card}
@@ -196,119 +400,6 @@ function DispatchCardButton({
           onSave={onScheduleEditorSave}
         />
       ) : null}
-    </div>
-  );
-}
-
-function DispatchSchedulePopover({
-  card,
-  draft,
-  errorMessage,
-  isSaving,
-  technicians,
-  onCancel,
-  onChange,
-  onSave
-}: {
-  card: DispatchAppointmentCard;
-  draft: DispatchScheduleDraft;
-  errorMessage: string | null;
-  isSaving: boolean;
-  technicians: DispatchBoardResponse['technicians'];
-  onCancel: () => void;
-  onChange: (patch: Partial<DispatchScheduleDraft>) => void;
-  onSave: () => void;
-}) {
-  return (
-    <div
-      role="dialog"
-      aria-label={`Edit schedule for job ${card.jobNumber}`}
-      style={dispatchSchedulePopoverStyle}
-      onClick={(event) => event.stopPropagation()}
-    >
-      <div style={styles.row}>
-        <strong>Schedule</strong>
-        <span style={styles.tinyMuted}>Job {card.jobNumber}</span>
-      </div>
-      <div style={dispatchScheduleFormGridStyle}>
-        <label style={fieldLabelStyle}>
-          <span>Date</span>
-          <input
-            aria-label="Dispatch appointment date"
-            type="date"
-            value={draft.scheduledDate}
-            onChange={(event) =>
-              onChange({
-                scheduledDate: event.target.value,
-                ...(event.target.value ? {} : { scheduledStartTime: '', scheduledEndTime: '' })
-              })
-            }
-            style={styles.input}
-          />
-        </label>
-        <label style={fieldLabelStyle}>
-          <span>Start</span>
-          <input
-            aria-label="Dispatch appointment start time"
-            type="text"
-            placeholder="HH:MM"
-            pattern="[0-2][0-9]:[0-5][0-9]"
-            title="Use 24-hour HH:MM, for example 13:45."
-            value={draft.scheduledStartTime}
-            disabled={!draft.scheduledDate}
-            onChange={(event) => onChange({ scheduledStartTime: event.target.value })}
-            style={styles.input}
-          />
-        </label>
-        <label style={fieldLabelStyle}>
-          <span>End</span>
-          <input
-            aria-label="Dispatch appointment end time"
-            type="text"
-            placeholder="HH:MM"
-            pattern="[0-2][0-9]:[0-5][0-9]"
-            title="Use 24-hour HH:MM, for example 15:45."
-            value={draft.scheduledEndTime}
-            disabled={!draft.scheduledDate}
-            onChange={(event) => onChange({ scheduledEndTime: event.target.value })}
-            style={styles.input}
-          />
-        </label>
-        <label style={fieldLabelStyle}>
-          <span>Window</span>
-          <input
-            aria-label="Dispatch appointment time window"
-            value={draft.timeWindowLabel}
-            onChange={(event) => onChange({ timeWindowLabel: event.target.value })}
-            style={styles.input}
-          />
-        </label>
-        <label style={{ ...fieldLabelStyle, ...dispatchScheduleFullWidthStyle }}>
-          <span>Technician</span>
-          <select
-            aria-label="Dispatch appointment technician"
-            value={draft.technicianId}
-            onChange={(event) => onChange({ technicianId: event.target.value })}
-            style={styles.input}
-          >
-            <option value="">Unassigned</option>
-            {technicians.map((technician) => (
-              <option key={technician.id} value={technician.id}>
-                {technician.displayName}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-      {errorMessage ? <p style={dispatchScheduleErrorStyle}>{errorMessage}</p> : null}
-      <div style={styles.inlineActionBar}>
-        <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onSave}>
-          {isSaving ? 'Saving...' : 'Save schedule'}
-        </button>
-        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
     </div>
   );
 }
@@ -338,10 +429,11 @@ export function formatTechnicianRowSublabel(roleId: string): string {
 
 function getTimelineCardPlacementStyle(
   card: DispatchAppointmentCard,
-  index: number
+  index: number,
+  previewEndMinutes?: number
 ): CSSProperties {
-  const startMinutes = parseTimeToMinutes(card.scheduledStartTime);
-  const endMinutes = parseTimeToMinutes(card.scheduledEndTime);
+  const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
+  const endMinutes = previewEndMinutes ?? parseDispatchTimeToMinutes(card.scheduledEndTime);
 
   if (startMinutes === null) {
     return {
@@ -366,23 +458,21 @@ function getTimelineCardPlacementStyle(
   };
 }
 
-function parseTimeToMinutes(value?: string): number | null {
-  if (!value) {
-    return null;
+function getTimelineSlotWidth(cardFrameElement: HTMLDivElement | null): number {
+  const laneElement = cardFrameElement?.parentElement;
+  const laneRect = laneElement?.getBoundingClientRect();
+
+  if (!laneRect?.width) {
+    return 24;
   }
 
-  const match = /^(\d{2}):(\d{2})$/.exec(value);
-  if (!match) {
-    return null;
-  }
+  const rootFontSize = Number.parseFloat(
+    window.getComputedStyle(document.documentElement).fontSize
+  );
+  const untimedColumnWidth = (Number.isFinite(rootFontSize) ? rootFontSize : 16) * 12;
+  const timeAreaWidth = Math.max(1, laneRect.width - untimedColumnWidth);
 
-  const hours = Number(match[1]);
-  const minutes = Number(match[2]);
-  if (!Number.isInteger(hours) || !Number.isInteger(minutes) || hours > 23 || minutes > 59) {
-    return null;
-  }
-
-  return hours * 60 + minutes;
+  return Math.max(1, timeAreaWidth / timelineSlotCount);
 }
 
 const timelineRowStyle: CSSProperties = {
@@ -458,6 +548,11 @@ const timelineCardFrameStyle: CSSProperties = {
   whiteSpace: 'nowrap'
 };
 
+const timelineCardResizingStyle: CSSProperties = {
+  boxShadow: '0 0 0 2px rgba(23, 107, 91, 0.18)',
+  outline: '1px solid #176b5b'
+};
+
 const timelineCardMainButtonStyle: CSSProperties = {
   alignItems: 'stretch',
   background: 'transparent',
@@ -489,6 +584,37 @@ const timelineCardEditButtonStyle: CSSProperties = {
   lineHeight: 1,
   marginRight: '0.35rem',
   padding: '0 0.35rem'
+};
+
+const timelineResizeHandleStyle: CSSProperties = {
+  alignSelf: 'stretch',
+  background: 'linear-gradient(90deg, transparent, rgba(23, 107, 91, 0.18))',
+  border: 0,
+  borderBottomRightRadius: 5,
+  borderTopRightRadius: 5,
+  bottom: 0,
+  cursor: 'ew-resize',
+  padding: 0,
+  position: 'absolute',
+  right: 0,
+  top: 0,
+  width: '0.55rem',
+  zIndex: 3
+};
+
+const resizeStatusStyle: CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #cbd8d6',
+  borderRadius: 4,
+  bottom: 'calc(100% + 0.2rem)',
+  boxShadow: '0 8px 18px rgba(15, 23, 42, 0.14)',
+  color: '#12212b',
+  fontSize: '0.72rem',
+  fontWeight: 800,
+  left: '0.45rem',
+  padding: '0.18rem 0.35rem',
+  position: 'absolute',
+  zIndex: 6
 };
 
 function getTimelineCardRailStyle(card: DispatchAppointmentCard): CSSProperties {
@@ -585,45 +711,6 @@ const timelineCardAddressStyle: CSSProperties = {
   lineHeight: timelineCardTextLineHeight,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
-};
-
-const dispatchSchedulePopoverStyle: CSSProperties = {
-  background: '#ffffff',
-  border: '1px solid #cbd8d6',
-  borderRadius: 8,
-  boxShadow: '0 12px 28px rgba(15, 23, 42, 0.18)',
-  display: 'grid',
-  gap: '0.75rem',
-  left: 0,
-  padding: '0.85rem',
-  position: 'absolute',
-  top: 'calc(100% + 0.4rem)',
-  width: '24rem',
-  zIndex: 20
-};
-
-const dispatchScheduleFormGridStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.6rem',
-  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))'
-};
-
-const dispatchScheduleFullWidthStyle: CSSProperties = {
-  gridColumn: '1 / -1'
-};
-
-const dispatchScheduleErrorStyle: CSSProperties = {
-  color: '#b42318',
-  fontSize: '0.85rem',
-  fontWeight: 700,
-  margin: 0
-};
-
-const fieldLabelStyle: CSSProperties = {
-  display: 'grid',
-  gap: '0.25rem',
-  fontSize: '0.8rem',
-  fontWeight: 700
 };
 
 const emptyTimelineStyle: CSSProperties = {

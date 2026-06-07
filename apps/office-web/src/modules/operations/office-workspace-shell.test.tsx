@@ -800,6 +800,35 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
   });
 
+  it('updates appointment duration from the dispatch resize handle', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    const resizeHandle = await screen.findByRole('button', {
+      name: 'Resize job 1001 duration'
+    });
+    fireEvent.pointerDown(resizeHandle, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 196 });
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith(
+        expect.objectContaining({
+          appointmentId: 'appointment-1',
+          sessionToken: 'session-token',
+          apiBaseUrl: 'http://api.test',
+          scheduledDate: expect.any(String),
+          scheduledStartTime: '08:00',
+          scheduledEndTime: '11:00',
+          timeWindowLabel: '8:00 AM - 11:00 AM',
+          technicianId: 'tech-1'
+        })
+      );
+    });
+    expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
+  });
+
   it('opens job location and customer records in CRM and returns to the job', async () => {
     arrangeWorkspace(buildWorkspace([buildJob()]));
 
