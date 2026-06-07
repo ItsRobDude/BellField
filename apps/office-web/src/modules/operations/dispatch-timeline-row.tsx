@@ -11,6 +11,7 @@ import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
 import {
   DispatchCardButton,
+  type DispatchAssignmentState,
   type DispatchContextMenuPosition,
   type DispatchMoveState,
   type DispatchResizeState,
@@ -31,6 +32,7 @@ import {
 } from './dispatch-timeline-layout';
 import {
   buildDispatchMoveDraft,
+  buildDispatchReassignmentDraft,
   buildDispatchResizeDraft,
   clampDispatchMoveStartMinutes,
   clampDispatchResizeEndMinutes,
@@ -42,10 +44,17 @@ import {
 export { formatDispatchCardAddress } from './dispatch-timeline-card';
 export type { DispatchContextMenuPosition } from './dispatch-timeline-card';
 
+export type DispatchAssignmentTarget = {
+  technicianId: string;
+  label: string;
+};
+
 type DispatchTimelineRowProps = {
   label: string;
   sublabel: string;
   ariaLabel: string;
+  assignmentTarget: DispatchAssignmentTarget;
+  activeAssignmentTargetId: string | null;
   cards: DispatchAppointmentCard[];
   activeScheduleEditor: DispatchScheduleEditorState | null;
   technicians: DispatchBoardResponse['technicians'];
@@ -56,17 +65,21 @@ type DispatchTimelineRowProps = {
     position: DispatchContextMenuPosition
   ) => void;
   onScheduleUpdate?: (card: DispatchAppointmentCard, draft: DispatchScheduleDraft) => Promise<void>;
+  onAssignmentTargetPreviewChange: (target: DispatchAssignmentTarget | null) => void;
   onScheduleDraftChange: (patch: Partial<DispatchScheduleDraft>) => void;
   onScheduleEditorCancel: () => void;
   onScheduleEditorSave: () => void;
 };
 
 const dispatchMoveThresholdPixels = 6;
+const dispatchAssignmentThresholdPixels = 16;
 
 export function DispatchTimelineRow({
   label,
   sublabel,
   ariaLabel,
+  assignmentTarget,
+  activeAssignmentTargetId,
   cards,
   activeScheduleEditor,
   technicians,
@@ -74,6 +87,7 @@ export function DispatchTimelineRow({
   onOpenScheduleEditor,
   onOpenContextMenu,
   onScheduleUpdate,
+  onAssignmentTargetPreviewChange,
   onScheduleDraftChange,
   onScheduleEditorCancel,
   onScheduleEditorSave
@@ -81,10 +95,17 @@ export function DispatchTimelineRow({
   const [dragState, setDragState] = useState<DispatchTimelineDragState | null>(null);
   const dragStateRef = useRef<DispatchTimelineDragState | null>(null);
   const suppressNextOpenRef = useRef(false);
+  const isAssignmentTargetActive =
+    activeAssignmentTargetId !== null && activeAssignmentTargetId === assignmentTarget.technicianId;
 
   useEffect(() => {
     dragStateRef.current = dragState;
   }, [dragState]);
+
+  function setActiveDragState(state: DispatchTimelineDragState | null) {
+    dragStateRef.current = state;
+    setDragState(state);
+  }
 
   useEffect(() => {
     if (!dragState || dragState.mode !== 'dragging') {
@@ -92,58 +113,38 @@ export function DispatchTimelineRow({
     }
 
     function handlePointerMove(event: PointerEvent) {
-      setDragState((current) => {
-        if (!current || current.mode !== 'dragging') {
-          return current;
-        }
+      const current = dragStateRef.current;
 
-        const slotDelta = Math.round((event.clientX - current.pointerStartX) / current.slotWidth);
-        if (current.kind === 'move') {
-          const durationMinutes = current.baseEndMinutes - current.baseStartMinutes;
-          const hasMoved =
-            current.hasMoved ||
-            Math.abs(event.clientX - current.pointerStartX) >= dispatchMoveThresholdPixels;
+      if (!current || current.mode !== 'dragging') {
+        return;
+      }
 
-          if (!hasMoved) {
-            return current;
-          }
+      const next = getNextDragState(current, event);
 
-          const previewStartMinutes = clampDispatchMoveStartMinutes(
-            current.baseStartMinutes + slotDelta * timelineSlotMinutes,
-            durationMinutes,
-            timelineStartMinutes,
-            timelineEndMinutes
-          );
+      if (next !== current) {
+        dragStateRef.current = next;
+        setDragState(next);
+      }
 
-          return {
-            ...current,
-            hasMoved,
-            previewStartMinutes,
-            previewEndMinutes: previewStartMinutes + durationMinutes
-          };
-        }
-
-        const previewEndMinutes = clampDispatchResizeEndMinutes(
-          current.startMinutes,
-          current.baseEndMinutes + slotDelta * timelineSlotMinutes,
-          timelineEndMinutes
-        );
-
-        return {
-          ...current,
-          previewEndMinutes
-        };
-      });
+      onAssignmentTargetPreviewChange(
+        next.kind === 'assignment' && next.targetTechnicianId !== null
+          ? { technicianId: next.targetTechnicianId, label: next.targetLabel ?? 'Unassigned' }
+          : null
+      );
     }
 
     function handlePointerUp() {
       const current = dragStateRef.current;
 
       if (current) {
-        if (current.kind === 'move' && current.hasMoved) {
+        if (
+          (current.kind === 'move' && current.hasMoved) ||
+          (current.kind === 'assignment' && current.hasMoved)
+        ) {
           suppressNextOpenRef.current = true;
         }
 
+        onAssignmentTargetPreviewChange(null);
         void commitTimelineDrag(current);
       }
     }
@@ -154,8 +155,9 @@ export function DispatchTimelineRow({
     return () => {
       window.removeEventListener('pointermove', handlePointerMove);
       window.removeEventListener('pointerup', handlePointerUp);
+      onAssignmentTargetPreviewChange(null);
     };
-  }, [dragState?.appointmentId, dragState?.mode]);
+  }, [dragState?.appointmentId, dragState?.mode, onAssignmentTargetPreviewChange]);
 
   function handleOpenCardDetail(card: DispatchAppointmentCard) {
     if (suppressNextOpenRef.current) {
@@ -192,20 +194,21 @@ export function DispatchTimelineRow({
     event.stopPropagation();
     event.currentTarget.setPointerCapture?.(event.pointerId);
 
-    setDragState({
+    setActiveDragState({
       kind: 'resize',
       appointmentId: card.appointmentId,
       startMinutes,
       baseEndMinutes,
       previewEndMinutes: baseEndMinutes,
       pointerStartX: event.clientX,
+      pointerStartY: event.clientY,
       slotWidth: getTimelineSlotWidth(cardFrameElement),
       mode: 'dragging',
       errorMessage: null
     });
   }
 
-  function handleMoveStart(
+  function handleCardDragStart(
     card: DispatchAppointmentCard,
     event: ReactPointerEvent<HTMLButtonElement>,
     cardFrameElement: HTMLDivElement | null
@@ -215,40 +218,147 @@ export function DispatchTimelineRow({
     }
 
     const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
-
-    if (!card.scheduledDate || startMinutes === null || startMinutes >= timelineEndMinutes) {
-      return;
-    }
-
     const endMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
-    const durationMinutes = getDispatchMoveDurationMinutes(
-      startMinutes,
-      endMinutes,
-      timelineEndMinutes
-    );
-
-    if (durationMinutes <= 0) {
-      return;
-    }
+    const canTimeMove =
+      Boolean(card.scheduledDate) && startMinutes !== null && startMinutes < timelineEndMinutes;
+    const durationMinutes = canTimeMove
+      ? getDispatchMoveDurationMinutes(startMinutes, endMinutes, timelineEndMinutes)
+      : 0;
 
     event.currentTarget.setPointerCapture?.(event.pointerId);
 
-    setDragState({
-      kind: 'move',
+    setActiveDragState({
+      kind: 'pending',
       appointmentId: card.appointmentId,
-      baseStartMinutes: startMinutes,
-      baseEndMinutes: startMinutes + durationMinutes,
-      previewStartMinutes: startMinutes,
-      previewEndMinutes: startMinutes + durationMinutes,
+      sourceTechnicianId: card.technicianId ?? '',
+      canTimeMove: canTimeMove && durationMinutes > 0,
+      baseStartMinutes: canTimeMove && durationMinutes > 0 ? startMinutes : null,
+      baseEndMinutes: canTimeMove && durationMinutes > 0 ? startMinutes + durationMinutes : null,
       pointerStartX: event.clientX,
+      pointerStartY: event.clientY,
       slotWidth: getTimelineSlotWidth(cardFrameElement),
       mode: 'dragging',
-      errorMessage: null,
-      hasMoved: false
+      errorMessage: null
     });
   }
 
+  function getNextDragState(
+    current: DispatchTimelineDragState,
+    event: PointerEvent
+  ): DispatchTimelineDragState {
+    const deltaX = event.clientX - current.pointerStartX;
+    const deltaY = event.clientY - current.pointerStartY;
+    const absoluteDeltaX = Math.abs(deltaX);
+    const absoluteDeltaY = Math.abs(deltaY);
+
+    if (current.kind === 'pending') {
+      if (
+        current.canTimeMove &&
+        absoluteDeltaX >= dispatchMoveThresholdPixels &&
+        absoluteDeltaX > absoluteDeltaY &&
+        current.baseStartMinutes !== null &&
+        current.baseEndMinutes !== null
+      ) {
+        return getMovedDragState(
+          {
+            ...current,
+            kind: 'move',
+            baseStartMinutes: current.baseStartMinutes,
+            baseEndMinutes: current.baseEndMinutes,
+            previewStartMinutes: current.baseStartMinutes,
+            previewEndMinutes: current.baseEndMinutes,
+            hasMoved: true
+          },
+          event.clientX
+        );
+      }
+
+      if (absoluteDeltaY >= dispatchAssignmentThresholdPixels && absoluteDeltaY > absoluteDeltaX) {
+        const target = getAssignmentTargetAtPoint(
+          event.clientX,
+          event.clientY,
+          current.sourceTechnicianId
+        );
+
+        return {
+          ...current,
+          kind: 'assignment',
+          targetTechnicianId: target?.technicianId ?? null,
+          targetLabel: target?.label ?? null,
+          hasMoved: true
+        };
+      }
+
+      return current;
+    }
+
+    if (current.kind === 'move') {
+      const hasMoved =
+        current.hasMoved ||
+        Math.abs(event.clientX - current.pointerStartX) >= dispatchMoveThresholdPixels;
+
+      if (!hasMoved) {
+        return current;
+      }
+
+      return getMovedDragState({ ...current, hasMoved }, event.clientX);
+    }
+
+    if (current.kind === 'assignment') {
+      const target = getAssignmentTargetAtPoint(
+        event.clientX,
+        event.clientY,
+        current.sourceTechnicianId
+      );
+
+      return {
+        ...current,
+        targetTechnicianId: target?.technicianId ?? null,
+        targetLabel: target?.label ?? null
+      };
+    }
+
+    const slotDelta = Math.round((event.clientX - current.pointerStartX) / current.slotWidth);
+    const previewEndMinutes = clampDispatchResizeEndMinutes(
+      current.startMinutes,
+      current.baseEndMinutes + slotDelta * timelineSlotMinutes,
+      timelineEndMinutes
+    );
+
+    return {
+      ...current,
+      previewEndMinutes
+    };
+  }
+
+  function getMovedDragState(state: DispatchMoveState, clientX: number): DispatchMoveState {
+    const slotDelta = Math.round((clientX - state.pointerStartX) / state.slotWidth);
+    const durationMinutes = state.baseEndMinutes - state.baseStartMinutes;
+    const previewStartMinutes = clampDispatchMoveStartMinutes(
+      state.baseStartMinutes + slotDelta * timelineSlotMinutes,
+      durationMinutes,
+      timelineStartMinutes,
+      timelineEndMinutes
+    );
+
+    return {
+      ...state,
+      previewStartMinutes,
+      previewEndMinutes: previewStartMinutes + durationMinutes
+    };
+  }
+
   async function commitTimelineDrag(state: DispatchTimelineDragState) {
+    if (state.kind === 'pending') {
+      setDragState(null);
+      return;
+    }
+
+    if (state.kind === 'assignment') {
+      await commitAssignment(state);
+      return;
+    }
+
     if (state.kind === 'move') {
       await commitMove(state);
       return;
@@ -349,14 +459,68 @@ export function DispatchTimelineRow({
     }
   }
 
+  async function commitAssignment(state: DispatchAssignmentState) {
+    if (!onScheduleUpdate) {
+      setDragState(null);
+      return;
+    }
+
+    const card = cards.find((candidate) => candidate.appointmentId === state.appointmentId);
+
+    if (!card || state.targetTechnicianId === null) {
+      setDragState(null);
+      return;
+    }
+
+    if (state.targetTechnicianId === state.sourceTechnicianId) {
+      setDragState(null);
+      return;
+    }
+
+    setDragState((current) =>
+      current?.appointmentId === state.appointmentId ? { ...current, mode: 'saving' } : current
+    );
+
+    try {
+      await onScheduleUpdate(card, buildDispatchReassignmentDraft(card, state.targetTechnicianId));
+      setDragState(null);
+    } catch (error) {
+      setDragState((current) =>
+        current?.appointmentId === state.appointmentId
+          ? {
+              ...current,
+              mode: 'error',
+              errorMessage:
+                error instanceof Error ? error.message : 'Unable to update appointment assignment.'
+            }
+          : current
+      );
+    }
+  }
+
   return (
-    <section style={timelineRowStyle} aria-label={ariaLabel}>
-      <div style={timelineRowLabelStyle}>
+    <section
+      style={timelineRowStyle}
+      aria-label={ariaLabel}
+      data-dispatch-assignment-target-id={assignmentTarget.technicianId}
+      data-dispatch-assignment-target-label={assignmentTarget.label}
+    >
+      <div
+        style={{
+          ...timelineRowLabelStyle,
+          ...(isAssignmentTargetActive ? timelineAssignmentTargetStyle : null)
+        }}
+      >
         <strong>{label}</strong>
         <span style={timelineRowSublabelStyle}>{sublabel}</span>
       </div>
       <div style={timelineLaneCellStyle}>
-        <div style={timelineLaneStyle}>
+        <div
+          style={{
+            ...timelineLaneStyle,
+            ...(isAssignmentTargetActive ? timelineAssignmentTargetStyle : null)
+          }}
+        >
           {cards.length === 0 ? <span style={emptyTimelineStyle}>None</span> : null}
           {cards.map((card, index) => (
             <DispatchCardButton
@@ -379,7 +543,7 @@ export function DispatchTimelineRow({
               onOpenJobDetail={() => handleOpenCardDetail(card)}
               onOpenScheduleEditor={onOpenScheduleEditor}
               onOpenContextMenu={onOpenContextMenu}
-              onMoveStart={onScheduleUpdate ? handleMoveStart : undefined}
+              onDragStart={onScheduleUpdate ? handleCardDragStart : undefined}
               onResizeStart={onScheduleUpdate ? handleResizeStart : undefined}
               onScheduleDraftChange={onScheduleDraftChange}
               onScheduleEditorCancel={onScheduleEditorCancel}
@@ -440,10 +604,12 @@ function getTimelineCardPlacementStyle(
   };
 }
 
-function getDragPlacementPreview(dragState: DispatchTimelineDragState): {
-  startMinutes?: number;
-  endMinutes?: number;
-} {
+function getDragPlacementPreview(dragState: DispatchTimelineDragState):
+  | {
+      startMinutes?: number;
+      endMinutes?: number;
+    }
+  | undefined {
   if (dragState.kind === 'move') {
     return {
       startMinutes: dragState.previewStartMinutes,
@@ -451,9 +617,13 @@ function getDragPlacementPreview(dragState: DispatchTimelineDragState): {
     };
   }
 
-  return {
-    endMinutes: dragState.previewEndMinutes
-  };
+  if (dragState.kind === 'resize') {
+    return {
+      endMinutes: dragState.previewEndMinutes
+    };
+  }
+
+  return undefined;
 }
 
 function getTimelineSlotWidth(cardFrameElement: HTMLDivElement | null): number {
@@ -471,6 +641,36 @@ function getTimelineSlotWidth(cardFrameElement: HTMLDivElement | null): number {
   const timeAreaWidth = Math.max(1, laneRect.width - untimedColumnWidth);
 
   return Math.max(1, timeAreaWidth / timelineSlotCount);
+}
+
+function getAssignmentTargetAtPoint(
+  clientX: number,
+  clientY: number,
+  sourceTechnicianId: string
+): DispatchAssignmentTarget | null {
+  if (typeof document === 'undefined' || typeof document.elementFromPoint !== 'function') {
+    return null;
+  }
+
+  const element = document.elementFromPoint(clientX, clientY);
+  const targetElement = element?.closest<HTMLElement>('[data-dispatch-assignment-target-id]');
+
+  if (!targetElement) {
+    return null;
+  }
+
+  const technicianId = targetElement.dataset.dispatchAssignmentTargetId ?? '';
+
+  if (technicianId === sourceTechnicianId) {
+    return null;
+  }
+
+  return {
+    technicianId,
+    label:
+      targetElement.dataset.dispatchAssignmentTargetLabel ??
+      (technicianId ? 'Technician' : 'Unassigned')
+  };
 }
 
 const timelineRowStyle: CSSProperties = {
@@ -525,6 +725,12 @@ const timelineLaneStyle: CSSProperties = {
   minWidth: timelineLaneMinWidth,
   padding: '0.35rem',
   width: '100%'
+};
+
+const timelineAssignmentTargetStyle: CSSProperties = {
+  background: '#eefaf5',
+  borderColor: '#176b5b',
+  boxShadow: '0 0 0 2px rgba(23, 107, 91, 0.16)'
 };
 
 const emptyTimelineStyle: CSSProperties = {

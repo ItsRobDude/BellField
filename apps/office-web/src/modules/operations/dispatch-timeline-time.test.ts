@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { DispatchAppointmentSummary, JobStatus } from '@/lib/operations-api';
 import {
   buildDispatchMoveDraft,
+  buildDispatchReassignmentDraft,
   buildDispatchResizeDraft,
   clampDispatchMoveStartMinutes,
   clampDispatchResizeEndMinutes,
@@ -110,5 +111,27 @@ describe('dispatch timeline time helpers', () => {
         11 * 60 + 15
       ).timeWindowLabel
     ).toBe('Customer asked for first call');
+  });
+
+  it('builds a reassignment draft while preserving schedule details exactly', () => {
+    expect(
+      buildDispatchReassignmentDraft(
+        buildAppointment({
+          scheduledDate: '2026-05-24',
+          scheduledStartTime: undefined,
+          scheduledEndTime: undefined,
+          timeWindowLabel: 'First call'
+        }),
+        'tech-2'
+      )
+    ).toEqual({
+      scheduledDate: '2026-05-24',
+      scheduledStartTime: '',
+      scheduledEndTime: '',
+      timeWindowLabel: 'First call',
+      technicianId: 'tech-2'
+    });
+
+    expect(buildDispatchReassignmentDraft(buildAppointment(), '').technicianId).toBe('');
   });
 });

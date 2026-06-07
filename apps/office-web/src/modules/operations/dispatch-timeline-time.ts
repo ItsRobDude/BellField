@@ -144,6 +144,19 @@ export function buildDispatchMoveDraft(
   };
 }
 
+export function buildDispatchReassignmentDraft(
+  card: DispatchAppointmentCard,
+  technicianId: string
+): DispatchScheduleDraft {
+  return {
+    scheduledDate: card.scheduledDate ?? '',
+    scheduledStartTime: card.scheduledStartTime ?? '',
+    scheduledEndTime: card.scheduledEndTime ?? '',
+    timeWindowLabel: card.timeWindowLabel ?? '',
+    technicianId
+  };
+}
+
 function formatDispatchPreviewTime(value: number): string {
   const hours = Math.floor(value / 60);
   const minutes = value % 60;

@@ -18,6 +18,7 @@ import {
   formatDispatchCardAddress,
   formatTechnicianRowSublabel,
   timelineLaneCellStyle,
+  type DispatchAssignmentTarget,
   type DispatchContextMenuPosition
 } from './dispatch-timeline-row';
 import {
@@ -76,6 +77,8 @@ export function DispatchBoardPanel({
   const [scheduleEditor, setScheduleEditor] = useState<DispatchScheduleEditorState | null>(null);
   const [contextMenu, setContextMenu] = useState<DispatchContextMenuState | null>(null);
   const [contextMessage, setContextMessage] = useState<string | null>(null);
+  const [assignmentTargetPreview, setAssignmentTargetPreview] =
+    useState<DispatchAssignmentTarget | null>(null);
   const contextMenuRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -180,6 +183,7 @@ export function DispatchBoardPanel({
   ) {
     setScheduleEditor(null);
     setContextMessage(null);
+    setAssignmentTargetPreview(null);
     setContextMenu({
       appointmentId: card.appointmentId,
       position
@@ -283,6 +287,8 @@ export function DispatchBoardPanel({
               label="Unassigned"
               sublabel="Needs assignment"
               ariaLabel="Unassigned appointments"
+              assignmentTarget={{ technicianId: '', label: 'Unassigned' }}
+              activeAssignmentTargetId={assignmentTargetPreview?.technicianId ?? null}
               cards={model.unassignedQueue}
               activeScheduleEditor={scheduleEditor}
               technicians={dispatchBoard.technicians}
@@ -294,6 +300,7 @@ export function DispatchBoardPanel({
               onScheduleUpdate={
                 onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
               }
+              onAssignmentTargetPreviewChange={setAssignmentTargetPreview}
               onScheduleDraftChange={handleScheduleDraftChange}
               onScheduleEditorCancel={() => setScheduleEditor(null)}
               onScheduleEditorSave={handleSaveScheduleEditor}
@@ -304,6 +311,8 @@ export function DispatchBoardPanel({
                 label={row.technicianName}
                 sublabel={formatTechnicianRowSublabel(row.roleId)}
                 ariaLabel={`Appointments for ${row.technicianName}`}
+                assignmentTarget={{ technicianId: row.technicianId, label: row.technicianName }}
+                activeAssignmentTargetId={assignmentTargetPreview?.technicianId ?? null}
                 cards={row.cards}
                 activeScheduleEditor={scheduleEditor}
                 technicians={dispatchBoard.technicians}
@@ -315,6 +324,7 @@ export function DispatchBoardPanel({
                 onScheduleUpdate={
                   onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
                 }
+                onAssignmentTargetPreviewChange={setAssignmentTargetPreview}
                 onScheduleDraftChange={handleScheduleDraftChange}
                 onScheduleEditorCancel={() => setScheduleEditor(null)}
                 onScheduleEditorSave={handleSaveScheduleEditor}

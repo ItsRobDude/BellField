@@ -108,6 +108,27 @@ function getTodayDateInputValue(date = new Date()): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+function stubElementFromPoint(element: Element | null): () => void {
+  const originalElementFromPoint = document.elementFromPoint;
+
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: vi.fn(() => element)
+  });
+
+  return () => {
+    if (originalElementFromPoint) {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint
+      });
+      return;
+    }
+
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  };
+}
+
 function buildAppointment(overrides: Partial<AppointmentSummary> = {}): AppointmentSummary {
   return {
     id: 'appointment-1',
@@ -854,6 +875,44 @@ describe('OfficeWorkspaceShell IA', () => {
       );
     });
     expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
+  });
+
+  it('updates appointment technician from dispatch row reassignment', async () => {
+    const workspace = buildWorkspace([buildJob()]);
+    workspace.technicians.push({ id: 'tech-2', displayName: 'Jamie Tech', roleId: 'technician' });
+    arrangeWorkspace(workspace);
+
+    renderShell();
+
+    const jamieRow = await screen.findByRole('region', {
+      name: 'Appointments for Jamie Tech'
+    });
+    const restoreElementFromPoint = stubElementFromPoint(jamieRow);
+
+    try {
+      const cardButton = await screen.findByLabelText(/Job 1001, Main Shop/i);
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 100, clientY: 132 });
+      fireEvent.pointerUp(window);
+
+      await waitFor(() => {
+        expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith(
+          expect.objectContaining({
+            appointmentId: 'appointment-1',
+            sessionToken: 'session-token',
+            apiBaseUrl: 'http://api.test',
+            scheduledDate: expect.any(String),
+            scheduledStartTime: '08:00',
+            scheduledEndTime: '10:00',
+            timeWindowLabel: undefined,
+            technicianId: 'tech-2'
+          })
+        );
+      });
+      expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
+    } finally {
+      restoreElementFromPoint();
+    }
   });
 
   it('opens job location and customer records in CRM and returns to the job', async () => {

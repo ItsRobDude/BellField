@@ -57,6 +57,27 @@ function buildDispatchBoard(appointments: DispatchAppointmentSummary[]): Dispatc
   };
 }
 
+function stubElementFromPoint(element: Element | null): () => void {
+  const originalElementFromPoint = document.elementFromPoint;
+
+  Object.defineProperty(document, 'elementFromPoint', {
+    configurable: true,
+    value: vi.fn(() => element)
+  });
+
+  return () => {
+    if (originalElementFromPoint) {
+      Object.defineProperty(document, 'elementFromPoint', {
+        configurable: true,
+        value: originalElementFromPoint
+      });
+      return;
+    }
+
+    Reflect.deleteProperty(document, 'elementFromPoint');
+  };
+}
+
 describe('buildDispatchBoardModel', () => {
   it('groups assigned appointments under technician rows and lists unassigned ones in the queue', () => {
     const dispatchBoard = buildDispatchBoard([
@@ -582,6 +603,167 @@ describe('DispatchBoardPanel', () => {
 
     expect(onAppointmentScheduleUpdate).not.toHaveBeenCalled();
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
+  });
+
+  it('reassigns a timed dispatch card to another technician row', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const samRow = screen.getByRole('region', { name: 'Appointments for Sam Tech' });
+    const restoreElementFromPoint = stubElementFromPoint(samRow);
+
+    try {
+      const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 102, clientY: 130 });
+
+      expect(screen.getByText('Assign to Sam Tech')).toBeInTheDocument();
+
+      fireEvent.pointerUp(window);
+
+      await waitFor(() => {
+        expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+          scheduledDate: '2026-05-22',
+          scheduledStartTime: '08:00',
+          scheduledEndTime: '10:00',
+          timeWindowLabel: '',
+          technicianId: 'tech-2'
+        });
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('reassigns an assigned card to the unassigned row', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1', timeWindowLabel: 'First call' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const unassignedRow = screen.getByRole('region', { name: 'Unassigned appointments' });
+    const restoreElementFromPoint = stubElementFromPoint(unassignedRow);
+
+    try {
+      const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 100, clientY: 132 });
+
+      expect(screen.getByText('Move to Unassigned')).toBeInTheDocument();
+
+      fireEvent.pointerUp(window);
+
+      await waitFor(() => {
+        expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+          scheduledDate: '2026-05-22',
+          scheduledStartTime: '08:00',
+          scheduledEndTime: '10:00',
+          timeWindowLabel: 'First call',
+          technicianId: ''
+        });
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('reassigns an untimed unassigned card to a technician row', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({
+            appointmentId: 'appt-unassigned',
+            scheduledStartTime: undefined,
+            scheduledEndTime: undefined,
+            technicianId: undefined,
+            technicianName: undefined
+          })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const samRow = screen.getByRole('region', { name: 'Appointments for Sam Tech' });
+    const restoreElementFromPoint = stubElementFromPoint(samRow);
+
+    try {
+      const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 98, clientY: 136 });
+      fireEvent.pointerUp(window);
+
+      await waitFor(() => {
+        expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-unassigned', {
+          scheduledDate: '2026-05-22',
+          scheduledStartTime: '',
+          scheduledEndTime: '',
+          timeWindowLabel: '',
+          technicianId: 'tech-2'
+        });
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('does not save reassignment when dropped on the same row or no row', () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const taylorRow = screen.getByRole('region', { name: 'Appointments for Taylor Tech' });
+    const restoreElementFromPoint = stubElementFromPoint(taylorRow);
+
+    try {
+      const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 100, clientY: 136 });
+      fireEvent.pointerUp(window);
+
+      expect(onAppointmentScheduleUpdate).not.toHaveBeenCalled();
+    } finally {
+      restoreElementFromPoint();
+    }
+
+    const restoreNoTargetElementFromPoint = stubElementFromPoint(null);
+
+    try {
+      const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 2 });
+      fireEvent.pointerMove(window, { clientX: 100, clientY: 136 });
+      fireEvent.pointerUp(window);
+
+      expect(onAppointmentScheduleUpdate).not.toHaveBeenCalled();
+    } finally {
+      restoreNoTargetElementFromPoint();
+    }
   });
 
   it('does not save a resize when the expected end time did not change', () => {

@@ -21,9 +21,18 @@ export type DispatchContextMenuPosition = {
 export type DispatchDragBaseState = {
   appointmentId: string;
   pointerStartX: number;
+  pointerStartY: number;
   slotWidth: number;
   mode: 'dragging' | 'saving' | 'error';
   errorMessage: string | null;
+};
+
+export type DispatchPendingDragState = DispatchDragBaseState & {
+  kind: 'pending';
+  sourceTechnicianId: string;
+  canTimeMove: boolean;
+  baseStartMinutes: number | null;
+  baseEndMinutes: number | null;
 };
 
 export type DispatchResizeState = DispatchDragBaseState & {
@@ -42,7 +51,19 @@ export type DispatchMoveState = DispatchDragBaseState & {
   hasMoved: boolean;
 };
 
-export type DispatchTimelineDragState = DispatchResizeState | DispatchMoveState;
+export type DispatchAssignmentState = DispatchDragBaseState & {
+  kind: 'assignment';
+  sourceTechnicianId: string;
+  targetTechnicianId: string | null;
+  targetLabel: string | null;
+  hasMoved: boolean;
+};
+
+export type DispatchTimelineDragState =
+  | DispatchPendingDragState
+  | DispatchResizeState
+  | DispatchMoveState
+  | DispatchAssignmentState;
 
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
@@ -56,7 +77,7 @@ type DispatchCardButtonProps = {
     card: DispatchAppointmentCard,
     position: DispatchContextMenuPosition
   ) => void;
-  onMoveStart?: (
+  onDragStart?: (
     card: DispatchAppointmentCard,
     event: ReactPointerEvent<HTMLButtonElement>,
     cardFrameElement: HTMLDivElement | null
@@ -80,7 +101,7 @@ export function DispatchCardButton({
   onOpenJobDetail,
   onOpenScheduleEditor,
   onOpenContextMenu,
-  onMoveStart,
+  onDragStart,
   onResizeStart,
   onScheduleDraftChange,
   onScheduleEditorCancel,
@@ -95,11 +116,8 @@ export function DispatchCardButton({
       card.scheduledDate &&
       parseDispatchTimeToMinutes(card.scheduledStartTime) !== null
   );
-  const canMove = Boolean(
-    onMoveStart &&
-      card.scheduledDate &&
-      parseDispatchTimeToMinutes(card.scheduledStartTime) !== null
-  );
+  const canDrag = Boolean(onDragStart);
+  const dragStatusText = dragState ? formatDispatchDragPreview(dragState) : null;
 
   return (
     <div
@@ -122,7 +140,7 @@ export function DispatchCardButton({
       <button
         type="button"
         onClick={onOpenJobDetail}
-        onPointerDown={(event) => onMoveStart?.(card, event, cardFrameRef.current)}
+        onPointerDown={(event) => onDragStart?.(card, event, cardFrameRef.current)}
         onKeyDown={(event) => {
           if (!onOpenContextMenu) {
             return;
@@ -143,7 +161,7 @@ export function DispatchCardButton({
         aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}`}
         style={{
           ...timelineCardMainButtonStyle,
-          ...(canMove ? timelineCardMoveButtonStyle : null),
+          ...(canDrag ? timelineCardMoveButtonStyle : null),
           ...(dragState?.kind === 'move' && dragState.mode === 'dragging'
             ? timelineCardMovingButtonStyle
             : null)
@@ -172,11 +190,9 @@ export function DispatchCardButton({
           Edit
         </button>
       ) : null}
-      {dragState ? (
+      {dragStatusText ? (
         <span role="status" style={dragStatusStyle}>
-          {dragState.mode === 'saving'
-            ? 'Saving...'
-            : (dragState.errorMessage ?? formatDispatchDragPreview(dragState))}
+          {dragStatusText}
         </span>
       ) : null}
       {canResize ? (
@@ -215,6 +231,28 @@ export function formatDispatchCardAddress(card: DispatchAppointmentCard): string
 }
 
 function formatDispatchDragPreview(dragState: DispatchTimelineDragState): string {
+  if (dragState.mode === 'saving') {
+    return 'Saving...';
+  }
+
+  if (dragState.errorMessage) {
+    return dragState.errorMessage;
+  }
+
+  if (dragState.kind === 'pending') {
+    return '';
+  }
+
+  if (dragState.kind === 'assignment') {
+    if (!dragState.targetLabel) {
+      return 'Drop on another row to assign';
+    }
+
+    return dragState.targetTechnicianId
+      ? `Assign to ${dragState.targetLabel}`
+      : 'Move to Unassigned';
+  }
+
   if (dragState.kind === 'move') {
     return formatDispatchMovePreview(dragState.previewStartMinutes, dragState.previewEndMinutes);
   }
