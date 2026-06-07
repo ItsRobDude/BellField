@@ -10,6 +10,7 @@ import {
   formatFieldJobCardScheduleLabel,
   getPendingOperationsForJob,
   resolveSelectedFieldJob,
+  selectFieldTimelineAppointment,
   shouldReturnToFieldHome,
   sortFieldJobsBySchedule,
   summarizeJobQueueBadge
@@ -187,6 +188,29 @@ describe('field workspace layout helpers', () => {
       '1002',
       '1001'
     ]);
+  });
+
+  it('selects the current technician appointment for field overview timing', () => {
+    const job = buildJob({
+      appointments: [
+        buildAppointment({
+          id: 'appointment-other',
+          jobId: 'job-1',
+          scheduledDate: '2026-05-24',
+          scheduledStartTime: '07:00',
+          technicianId: 'employee-2'
+        }),
+        buildAppointment({
+          id: 'appointment-current',
+          jobId: 'job-1',
+          scheduledDate: '2026-05-24',
+          scheduledStartTime: '15:00',
+          technicianId: 'employee-1'
+        })
+      ]
+    });
+
+    expect(selectFieldTimelineAppointment(job, 'employee-1')?.id).toBe('appointment-current');
   });
 
   it('formats schedule labels from structured times, arrival windows, and unscheduled jobs', () => {

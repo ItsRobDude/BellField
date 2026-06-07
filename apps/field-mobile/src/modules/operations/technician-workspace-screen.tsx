@@ -135,6 +135,10 @@ export function TechnicianWorkspaceScreen({
     () => new Map((assignedWork?.locations ?? []).map((location) => [location.id, location])),
     [assignedWork]
   );
+  const customerLookup = useMemo(
+    () => new Map((assignedWork?.customers ?? []).map((customer) => [customer.id, customer])),
+    [assignedWork]
+  );
 
   const syncHealth = useMemo(
     () => summarizeSyncHealth(syncMetadata, pendingOperations),
@@ -479,6 +483,7 @@ export function TechnicianWorkspaceScreen({
               assignedEquipment={assignedWork?.equipment ?? []}
               canReplaceRemoveEquipment={canReplaceRemoveEquipment}
               currentEmployeeId={employee.id}
+              customerLookup={customerLookup}
               locationLookup={locationLookup}
               onChangeDetailTab={setActiveDetailTab}
               onCommitFinishReview={queueAppointmentFinishReview}

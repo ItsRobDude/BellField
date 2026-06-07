@@ -6,6 +6,7 @@ import type {
   FieldTruckStockItem
 } from '@/lib/operations-api';
 import { EquipmentTab } from './field-equipment-tab';
+import { FieldJobOverviewSection } from './field-job-overview-section';
 import { JobSyncTab } from './field-job-sync-tab';
 import {
   formatAppointmentSchedule,
@@ -44,6 +45,7 @@ import {
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
 import type {
   FieldAppointment,
+  FieldCustomer,
   FieldEquipmentRecord,
   FieldJob,
   FieldLocation,
@@ -66,6 +68,7 @@ type FieldJobFeedProps = {
   assignedEquipment: FieldEquipmentRecord[];
   canReplaceRemoveEquipment: boolean;
   currentEmployeeId: string;
+  customerLookup: Map<string, FieldCustomer>;
   locationLookup: Map<string, FieldLocation>;
   pendingOperations: PendingOperation[];
   scheduledJobs: FieldJob[];
@@ -105,6 +108,7 @@ export function FieldJobFeed({
   assignedEquipment,
   canReplaceRemoveEquipment,
   currentEmployeeId,
+  customerLookup,
   locationLookup,
   pendingOperations,
   scheduledJobs,
@@ -369,6 +373,7 @@ export function FieldJobFeed({
     <>
       {scheduledJobs.map((job) => {
         const location = locationLookup.get(job.locationId);
+        const customer = customerLookup.get(job.billToCustomerId);
         const equipment = assignedEquipment.filter(
           (record) => record.locationId === job.locationId
         );
@@ -420,10 +425,6 @@ export function FieldJobFeed({
             {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
             <Text style={styles.summaryText}>{cardMetadata.locationLine}</Text>
             <Text style={styles.summaryText}>Bill to: {job.billToCustomerName}</Text>
-            <Text style={styles.summaryText}>
-              Contacts:{' '}
-              {location?.contacts.map((contact) => contact.displayName).join(', ') || 'None'}
-            </Text>
 
             <ScrollView
               horizontal
@@ -645,30 +646,36 @@ export function FieldJobFeed({
               : null}
 
             {activeDetailTab === 'overview' ? (
-              <View style={styles.block}>
-                <Text style={styles.sectionTitleSmall}>Save note locally</Text>
-                <Text style={styles.summaryText}>
-                  This note stays on-device until Sync Now applies it on the server.
-                </Text>
-                <TextInput
-                  value={noteDrafts[job.id] ?? ''}
-                  onChangeText={(value) =>
-                    setNoteDrafts((current) => ({ ...current, [job.id]: value }))
-                  }
-                  multiline
-                  placeholder="Add visit notes that should queue until sync."
-                  style={styles.input}
+              <>
+                <FieldJobOverviewSection
+                  currentEmployeeId={currentEmployeeId}
+                  customer={customer}
+                  job={job}
+                  location={location}
                 />
-                <Pressable onPress={() => void queueJobNote(job.id)} style={styles.secondaryButton}>
-                  <Text style={styles.secondaryButtonText}>Save note locally</Text>
-                </Pressable>
 
-                <View style={styles.reviewCard}>
-                  <Text style={styles.sectionTitleSmall}>Media</Text>
+                <View style={styles.block}>
+                  <Text style={styles.sectionTitleSmall}>Capture</Text>
                   <Text style={styles.summaryText}>
-                    Photos and videos are copied into BellField storage before they enter the sync
-                    queue.
+                    Notes, photos, and videos stay on-device until Sync Now applies them on the
+                    server.
                   </Text>
+                  <TextInput
+                    value={noteDrafts[job.id] ?? ''}
+                    onChangeText={(value) =>
+                      setNoteDrafts((current) => ({ ...current, [job.id]: value }))
+                    }
+                    multiline
+                    placeholder="Add visit notes that should queue until sync."
+                    style={styles.input}
+                  />
+                  <Pressable
+                    onPress={() => void queueJobNote(job.id)}
+                    style={styles.secondaryButton}
+                  >
+                    <Text style={styles.secondaryButtonText}>Save note locally</Text>
+                  </Pressable>
+
                   <TextInput
                     value={mediaCaptionDrafts[jobMediaCaptionKey] ?? ''}
                     onChangeText={(value) =>
@@ -695,7 +702,7 @@ export function FieldJobFeed({
                     </Pressable>
                   </View>
                 </View>
-              </View>
+              </>
             ) : null}
 
             {activeDetailTab === 'register' ? (

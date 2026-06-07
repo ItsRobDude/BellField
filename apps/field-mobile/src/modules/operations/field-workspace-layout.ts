@@ -57,8 +57,8 @@ export function shouldReturnToFieldHome(jobs: FieldJob[], selectedJobId: string 
 
 export function sortFieldJobsBySchedule(jobs: FieldJob[], currentEmployeeId: string): FieldJob[] {
   return [...jobs].sort((left, right) => {
-    const leftAppointment = selectTimelineAppointment(left, currentEmployeeId);
-    const rightAppointment = selectTimelineAppointment(right, currentEmployeeId);
+    const leftAppointment = selectFieldTimelineAppointment(left, currentEmployeeId);
+    const rightAppointment = selectFieldTimelineAppointment(right, currentEmployeeId);
     const scheduleCompare = buildAppointmentSortKey(leftAppointment).localeCompare(
       buildAppointmentSortKey(rightAppointment)
     );
@@ -75,7 +75,7 @@ export function sortFieldJobsBySchedule(jobs: FieldJob[], currentEmployeeId: str
 }
 
 export function formatFieldJobCardScheduleLabel(job: FieldJob, currentEmployeeId: string): string {
-  const appointment = selectTimelineAppointment(job, currentEmployeeId);
+  const appointment = selectFieldTimelineAppointment(job, currentEmployeeId);
 
   if (!appointment) {
     return 'Unscheduled';
@@ -223,7 +223,7 @@ function formatReplacementEquipmentDetail(record: FieldEquipmentRecord): string 
   return detailParts.join(' - ');
 }
 
-function selectTimelineAppointment(
+export function selectFieldTimelineAppointment(
   job: FieldJob,
   currentEmployeeId: string
 ): FieldAppointment | undefined {
