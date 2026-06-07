@@ -24,6 +24,7 @@ import { JobEstimatesSection } from './job-estimates-section';
 import { JobInvoiceSection } from './job-invoice-section';
 import { JobCostSection } from './job-cost-section';
 import { JobAppointmentsSection } from './job-appointments-section';
+import { JobOverviewSection, jobStatusLabels } from './job-overview-section';
 import type { InvoicePaymentPermissions } from './job-invoice-shared';
 
 type JobDetailPanelProps = {
@@ -51,6 +52,8 @@ type JobDetailPanelProps = {
   appointmentEditDrafts: Record<string, AppointmentEditDraft>;
   capturedWork?: CapturedWorkDetails;
   onBack: () => void;
+  onOpenCustomer: (customerId: string, sourceJobId: string) => void;
+  onOpenLocation: (locationId: string, sourceJobId: string) => void;
   onLoadCapturedWork: (jobId: string) => Promise<void>;
   onJobStatusReviewRequested: (
     jobId: string,
@@ -84,26 +87,6 @@ type JobDetailPanelProps = {
   onVoidMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
   onOpenMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
 };
-
-const jobStatusLabels: Record<JobStatus, string> = {
-  new: 'New',
-  scheduled: 'Scheduled',
-  inProgress: 'In progress',
-  waitingOnParts: 'Waiting on parts',
-  completed: 'Completed',
-  closed: 'Closed',
-  cancelled: 'Cancelled'
-};
-
-const jobStatusOptions: JobStatus[] = [
-  'new',
-  'scheduled',
-  'inProgress',
-  'waitingOnParts',
-  'completed',
-  'closed',
-  'cancelled'
-];
 
 // Final phases: job cost is locked (reopen to revise). Mirrors the API's finalJobStatuses.
 const finalJobStatusValues: JobStatus[] = ['completed', 'closed', 'cancelled'];
@@ -152,6 +135,8 @@ export function JobDetailPanel({
   appointmentEditDrafts,
   capturedWork,
   onBack,
+  onOpenCustomer,
+  onOpenLocation,
   onLoadCapturedWork,
   onJobStatusReviewRequested,
   onConfirmJobStatusChange,
@@ -256,12 +241,14 @@ export function JobDetailPanel({
         </div>
       ) : null}
 
-      {activeTab === 'overview'
-        ? renderOverview({
-            job,
-            onJobStatusReviewRequested
-          })
-        : null}
+      {activeTab === 'overview' ? (
+        <JobOverviewSection
+          job={job}
+          onOpenCustomer={onOpenCustomer}
+          onOpenLocation={onOpenLocation}
+          onJobStatusReviewRequested={onJobStatusReviewRequested}
+        />
+      ) : null}
       {activeTab === 'appointments' ? (
         <JobAppointmentsSection
           job={job}
@@ -333,54 +320,6 @@ export function JobDetailPanel({
         : null}
       {activeTab === 'timeline' ? renderTimeline(job, timelineHasMore, timelineLimit) : null}
     </section>
-  );
-}
-
-function renderOverview({
-  job,
-  onJobStatusReviewRequested
-}: {
-  job: JobSummary;
-  onJobStatusReviewRequested: JobDetailPanelProps['onJobStatusReviewRequested'];
-}) {
-  return (
-    <div style={styles.detailGrid}>
-      <section style={styles.panel}>
-        <div style={styles.formGridCompact}>
-          <DetailField label="Location" value={job.locationName} />
-          <DetailField label="Bill to" value={job.billToCustomerName} />
-          <DetailField label="Type" value={job.jobType} />
-          <DetailField label="Category" value={job.category} />
-          <DetailField label="Origin" value={job.origin} />
-          {job.workOrderNumber ? (
-            <DetailField label="Work order" value={job.workOrderNumber} />
-          ) : null}
-        </div>
-      </section>
-      <section style={styles.panel}>
-        <label style={fieldLabelStyle}>
-          <span>Status</span>
-          <select
-            value={job.status}
-            onChange={(event) =>
-              onJobStatusReviewRequested(
-                job.id,
-                job.status,
-                event.target.value as JobStatus,
-                job.summary
-              )
-            }
-            style={styles.input}
-          >
-            {jobStatusOptions.map((status) => (
-              <option key={status} value={status}>
-                {jobStatusLabels[status]}
-              </option>
-            ))}
-          </select>
-        </label>
-      </section>
-    </div>
   );
 }
 
@@ -769,15 +708,6 @@ function renderTimeline(job: JobSummary, timelineHasMore: boolean, timelineLimit
       </ol>
       {timelineHasMore ? <p style={styles.tinyMuted}>Latest {timelineLimit} shown.</p> : null}
     </>
-  );
-}
-
-function DetailField({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <div style={styles.tinyMuted}>{label}</div>
-      <strong>{value}</strong>
-    </div>
   );
 }
 

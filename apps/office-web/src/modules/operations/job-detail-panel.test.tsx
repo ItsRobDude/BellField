@@ -189,6 +189,8 @@ function renderDetail(
     appointmentEditDrafts: {},
     capturedWork: input.capturedWork,
     onBack: vi.fn(),
+    onOpenCustomer: vi.fn(),
+    onOpenLocation: vi.fn(),
     onLoadCapturedWork: vi.fn(async () => undefined),
     onJobStatusReviewRequested: vi.fn(),
     onConfirmJobStatusChange: vi.fn(async () => undefined),
@@ -229,6 +231,25 @@ describe('JobDetailPanel', () => {
     expect(
       screen.queryByRole('heading', { name: 'Jobs and appointments' })
     ).not.toBeInTheDocument();
+  });
+
+  it('opens service location and customer records from the overview', () => {
+    const onOpenLocation = vi.fn();
+    const onOpenCustomer = vi.fn();
+
+    renderDetail({
+      handlers: {
+        onOpenLocation,
+        onOpenCustomer
+      }
+    });
+
+    expect(screen.queryByText('Bill to')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Open location Main Shop' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open customer Acme' }));
+
+    expect(onOpenLocation).toHaveBeenCalledWith('location-1', 'job-1');
+    expect(onOpenCustomer).toHaveBeenCalledWith('customer-1', 'job-1');
   });
 
   it('edits appointment schedule and status from the appointments tab', () => {
@@ -476,6 +497,8 @@ function renderProps(
     appointmentDrafts: {},
     appointmentEditDrafts: {},
     onBack: vi.fn(),
+    onOpenCustomer: vi.fn(),
+    onOpenLocation: vi.fn(),
     onLoadCapturedWork: vi.fn(async () => undefined),
     onJobStatusReviewRequested: vi.fn(),
     onConfirmJobStatusChange: vi.fn(async () => undefined),

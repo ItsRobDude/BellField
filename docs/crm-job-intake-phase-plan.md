@@ -193,14 +193,14 @@ For customer detail, include jobs where customer is owner or bill-to.
 
 Connect operational records.
 
-Do not implement until Phase 6 is explicitly authorized.
+Status: implemented.
 
 ### Office
 
-- In job overview, Location becomes a button/link to that location page.
-- Customer/Bill-to becomes a button/link to that customer page.
+- In job overview, Location is a button/link to that location page.
+- In job overview, Customer is a button/link to the job's customer account.
 - Shell passes a CRM navigation target into CRM surface.
-- Back path returns to the job.
+- Back path returns to the source job.
 
 ### Tests
 
@@ -220,7 +220,7 @@ Do not implement until Phase 7 is explicitly authorized.
 - Move New Job out of top bar into an operational quick action.
 - Do not overhaul sidebar just to avoid ServiceTitan similarity. Improve it only where it serves BellField: clearer grouping, less bulk, maybe icons later.
 
-## Current Phase 0-5 Checkpoint
+## Current Phase 0-6 Checkpoint
 
 This checkpoint records the current repo state so implementation and review do not drift across phase names.
 
@@ -326,6 +326,16 @@ Status: implemented.
 - Overview shows main methods, open jobs, last service, and equipment count. Location ownership remains in the existing ownership panel so the overview does not repeat the current customer label.
 - Regression coverage proves customer service context, location jobs/appointments, mixed activity entries, ownership activity visibility, and inactive/historical ownership context remain available.
 
+### Phase 6 Status
+
+Status: implemented.
+
+- Job overview Location opens the exact service location in the CRM surface.
+- Job overview Customer opens the exact job customer account in the CRM surface.
+- CRM receives a typed navigation target from the shell instead of relying on search text.
+- CRM Back returns to the source job detail context when CRM was opened from a job.
+- Regression coverage exists for the job overview link buttons, shell navigation target handoff, CRM target loading, and return-to-job behavior.
+
 ### Existing Out-of-Phase Work Already Present
 
-No Phase 6+ behavior is intentionally implemented in this checkpoint.
+No Phase 7+ behavior is intentionally implemented in this checkpoint.

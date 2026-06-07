@@ -193,11 +193,19 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderCrmPanel(fetchMock: ReturnType<typeof vi.fn>) {
+function renderCrmPanel(
+  fetchMock: ReturnType<typeof vi.fn>,
+  props: Partial<Parameters<typeof CrmPanel>[0]> = {}
+) {
   vi.stubGlobal('fetch', fetchMock);
 
   render(
-    <CrmPanel apiBaseUrl="http://api.test" sessionToken="session-token" onErrorMessage={vi.fn()} />
+    <CrmPanel
+      apiBaseUrl="http://api.test"
+      sessionToken="session-token"
+      onErrorMessage={vi.fn()}
+      {...props}
+    />
   );
 }
 
@@ -295,6 +303,38 @@ describe('CrmPanel', () => {
       await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
+  });
+
+  it('loads an exact navigation target and can return to the source job', async () => {
+    const onBackToJob = vi.fn();
+    const onNavigationTargetConsumed = vi.fn();
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-1') {
+        return jsonResponse(createdLocation);
+      }
+
+      return jsonResponse({});
+    });
+
+    renderCrmPanel(fetchMock, {
+      navigationTarget: { kind: 'location', locationId: 'location-1', returnToJobId: 'job-1' },
+      onNavigationTargetConsumed,
+      onBackToJob
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    expect(await screen.findByText('Main Shop')).toBeInTheDocument();
+    expect(onNavigationTargetConsumed).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(onBackToJob).toHaveBeenCalledWith('job-1');
   });
 
   it('shows customer service context across jobs, invoices, and activity tabs', async () => {

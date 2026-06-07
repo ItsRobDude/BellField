@@ -27,6 +27,7 @@ import {
 import { CrmContactCreatePanel } from './crm-contact-create-panel';
 import { CrmCustomerCreatePanel } from './crm-customer-create-panel';
 import { CrmDetailRouter } from './crm-detail-router';
+import { CrmPanelHeader } from './crm-panel-header';
 import {
   collectCrmDuplicateWarnings,
   createContactLinkDrafts,
@@ -41,6 +42,7 @@ import { CrmSearchSurface } from './crm-search-surface';
 import type {
   ContactFormState,
   ContactLinkDraft,
+  CrmNavigationTarget,
   CrmPanelMode,
   CustomerDetailTab,
   CustomerFormState,
@@ -48,6 +50,7 @@ import type {
   LocationFormState
 } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { useCrmNavigationTarget } from './use-crm-navigation-target';
 import { useCrmSearch } from './use-crm-search';
 
 type Props = {
@@ -56,6 +59,9 @@ type Props = {
   onErrorMessage: (message: string | null) => void;
   canReplaceRemoveEquipment?: boolean;
   canDeleteEquipment?: boolean;
+  navigationTarget?: CrmNavigationTarget | null;
+  onNavigationTargetConsumed?: () => void;
+  onBackToJob?: (jobId: string) => void;
 };
 
 export function CrmPanel({
@@ -63,7 +69,10 @@ export function CrmPanel({
   sessionToken,
   onErrorMessage,
   canReplaceRemoveEquipment = false,
-  canDeleteEquipment = false
+  canDeleteEquipment = false,
+  navigationTarget = null,
+  onNavigationTargetConsumed,
+  onBackToJob
 }: Props) {
   const [workspace, setWorkspace] = useState<CrmWorkspaceResponse | null>(null);
   const [mode, setMode] = useState<CrmPanelMode>('search');
@@ -92,6 +101,7 @@ export function CrmPanel({
   const [linkDrafts, setLinkDrafts] = useState<Record<string, ContactLinkDraft>>({});
   const [selectedCustomerTab, setSelectedCustomerTab] = useState<CustomerDetailTab>('overview');
   const [selectedLocationTab, setSelectedLocationTab] = useState<LocationDetailTab>('overview');
+  const [returnToJobId, setReturnToJobId] = useState<string | null>(null);
   const { isSearching, searchResults } = useCrmSearch({
     apiBaseUrl,
     mode,
@@ -103,6 +113,14 @@ export function CrmPanel({
   useEffect(() => {
     void refreshWorkspace();
   }, []);
+
+  useCrmNavigationTarget({
+    navigationTarget,
+    onNavigationTargetConsumed,
+    onOpenCustomer: openCustomerDetail,
+    onOpenLocation: openLocationDetail,
+    onReturnToJobChange: setReturnToJobId
+  });
 
   useEffect(() => {
     if (!selectedCustomer && !selectedLocation && !selectedContact) {
@@ -142,7 +160,19 @@ export function CrmPanel({
 
   function returnToSearch() {
     clearSelectedRecords();
+    setReturnToJobId(null);
     setMode('search');
+  }
+
+  function handleDetailBack() {
+    if (returnToJobId && onBackToJob) {
+      const jobId = returnToJobId;
+      setReturnToJobId(null);
+      onBackToJob(jobId);
+      return;
+    }
+
+    returnToSearch();
   }
 
   function openNewCustomerForm() {
@@ -191,45 +221,50 @@ export function CrmPanel({
 
   async function selectResult(result: CrmSearchResult) {
     onErrorMessage(null);
+    setReturnToJobId(null);
+
+    if (result.kind === 'customer') {
+      await openCustomerDetail(result.id);
+      return;
+    }
+
+    if (result.kind === 'location') {
+      await openLocationDetail(result.id);
+      return;
+    }
 
     try {
-      if (result.kind === 'customer') {
-        const customer = await getOfficeCustomerDetail({
-          sessionToken,
-          apiBaseUrl,
-          customerId: result.id
-        });
-        setSelectedCustomer(customer);
-        setSelectedLocation(null);
-        setSelectedContact(null);
-        hydrateCustomerForm(customer);
-        setMode('customerDetail');
-      } else if (result.kind === 'location') {
-        const location = await getOfficeLocationDetail({
-          sessionToken,
-          apiBaseUrl,
-          locationId: result.id
-        });
-        setSelectedCustomer(null);
-        setSelectedLocation(location);
-        setSelectedContact(null);
-        hydrateLocationForm(location);
-        hydrateLinkDrafts(location.contacts);
-        setMode('locationDetail');
-      } else {
-        const contact = await getOfficeContactDetail({
-          sessionToken,
-          apiBaseUrl,
-          contactId: result.id
-        });
-        setSelectedCustomer(null);
-        setSelectedLocation(null);
-        setSelectedContact(contact);
-        hydrateContactForm(contact);
-        setMode('contactDetail');
-      }
+      const contact = await getOfficeContactDetail({
+        sessionToken,
+        apiBaseUrl,
+        contactId: result.id
+      });
+      setSelectedCustomer(null);
+      setSelectedLocation(null);
+      setSelectedContact(contact);
+      hydrateContactForm(contact);
+      setMode('contactDetail');
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to load CRM detail.');
+    }
+  }
+
+  async function openCustomerDetail(customerId: string) {
+    onErrorMessage(null);
+
+    try {
+      const customer = await getOfficeCustomerDetail({
+        sessionToken,
+        apiBaseUrl,
+        customerId
+      });
+      setSelectedCustomer(customer);
+      setSelectedLocation(null);
+      setSelectedContact(null);
+      hydrateCustomerForm(customer);
+      setMode('customerDetail');
+    } catch (error) {
+      onErrorMessage(error instanceof Error ? error.message : 'Unable to load customer detail.');
     }
   }
 
@@ -658,15 +693,7 @@ export function CrmPanel({
         'Selected customer');
   return (
     <section style={styles.card}>
-      <div style={styles.row}>
-        <div>
-          <h2 style={styles.heading}>Customers</h2>
-          <p style={styles.muted}>Search, review, and maintain customer records.</p>
-        </div>
-        <button type="button" onClick={() => void refreshWorkspace()} style={styles.button}>
-          {isRefreshing ? 'Refreshing...' : 'Refresh customers'}
-        </button>
-      </div>
+      <CrmPanelHeader isRefreshing={isRefreshing} onRefresh={() => void refreshWorkspace()} />
 
       {crmNoticeMessage ? <p style={styles.notice}>{crmNoticeMessage}</p> : null}
 
@@ -743,7 +770,7 @@ export function CrmPanel({
           sessionToken={sessionToken}
           onAddLocation={openNewLocationFormForCustomer}
           onArchiveLink={(linkId, isActive) => void handleArchiveContactLink(linkId, isActive)}
-          onBack={returnToSearch}
+          onBack={handleDetailBack}
           onCancelMissingContactConfirmation={() =>
             setSaveLocationMissingContactConfirmation(false)
           }

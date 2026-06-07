@@ -35,6 +35,7 @@ import {
   type PendingJobStatusChange,
   type RegisterEntryEditDraft
 } from './job-work-types';
+import type { CrmNavigationTarget } from './crm-panel-types';
 import { OfficeWorkspaceFrame, type OfficeView } from './office-workspace-frame';
 import {
   buildCapturedWorkDetails,
@@ -88,6 +89,7 @@ export function OfficeWorkspaceShell({
   const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
   const [activeOfficeView, setActiveOfficeView] = useState<OfficeView>('dispatch');
   const [jobIntakeReturnView, setJobIntakeReturnView] = useState<OfficeView>('dispatch');
+  const [crmNavigationTarget, setCrmNavigationTarget] = useState<CrmNavigationTarget | null>(null);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
   const [focusedAppointmentId, setFocusedAppointmentId] = useState<string | null>(null);
   const [jobDetailInitialTab, setJobDetailInitialTab] = useState<JobDetailTab>('overview');
@@ -742,11 +744,30 @@ export function OfficeWorkspaceShell({
     appointmentId?: string,
     initialTab: JobDetailTab = 'overview'
   ) {
+    setCrmNavigationTarget(null);
     setSelectedJobId(jobId);
     setFocusedAppointmentId(appointmentId ?? null);
     setJobDetailInitialTab(appointmentId ? 'appointments' : initialTab);
     setActiveOfficeView('jobDetail');
     void loadJobDetail(jobId);
+  }
+
+  function handleOfficeViewChange(nextView: OfficeView) {
+    if (nextView !== 'customers') {
+      setCrmNavigationTarget(null);
+    }
+
+    setActiveOfficeView(nextView);
+  }
+
+  function handleOpenCustomerFromJob(customerId: string, sourceJobId: string) {
+    setCrmNavigationTarget({ kind: 'customer', customerId, returnToJobId: sourceJobId });
+    setActiveOfficeView('customers');
+  }
+
+  function handleOpenLocationFromJob(locationId: string, sourceJobId: string) {
+    setCrmNavigationTarget({ kind: 'location', locationId, returnToJobId: sourceJobId });
+    setActiveOfficeView('customers');
   }
 
   function handleDispatchViewDateChange(nextDate: string) {
@@ -791,7 +812,7 @@ export function OfficeWorkspaceShell({
       onOpenJobIntake={() => void handleOpenJobIntake()}
       onRefresh={() => void refreshAllWorkspace()}
       onSignOut={onSignOut}
-      onViewChange={setActiveOfficeView}
+      onViewChange={handleOfficeViewChange}
     >
       <OfficeWorkspaceSurfaces
         activeOfficeView={activeOfficeView}
@@ -800,7 +821,10 @@ export function OfficeWorkspaceShell({
           sessionToken,
           canReplaceRemoveEquipment,
           canDeleteEquipment,
-          onErrorMessage: setErrorMessage
+          navigationTarget: crmNavigationTarget,
+          onErrorMessage: setErrorMessage,
+          onNavigationTargetConsumed: () => setCrmNavigationTarget(null),
+          onBackToJob: (jobId) => handleOpenJobDetail(jobId)
         }}
         dispatch={{
           dispatchBoard,
@@ -892,6 +916,8 @@ export function OfficeWorkspaceShell({
           appointmentEditDrafts,
           capturedWorkByJobId,
           onJobDetailBack: () => setActiveOfficeView('dispatch'),
+          onOpenCustomer: handleOpenCustomerFromJob,
+          onOpenLocation: handleOpenLocationFromJob,
           onLoadCapturedWork: loadCapturedWork,
           onJobStatusReviewRequested: handleJobStatusReviewRequested,
           onConfirmJobStatusChange: confirmJobStatusChange,

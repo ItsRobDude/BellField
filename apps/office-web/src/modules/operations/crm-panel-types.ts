@@ -51,6 +51,18 @@ export type CrmPanelMode =
   | 'locationDetail'
   | 'contactDetail';
 
+export type CrmNavigationTarget =
+  | {
+      kind: 'customer';
+      customerId: string;
+      returnToJobId?: string;
+    }
+  | {
+      kind: 'location';
+      locationId: string;
+      returnToJobId?: string;
+    };
+
 export type CustomerDetailTab =
   | 'overview'
   | 'locations'

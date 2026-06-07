@@ -40,6 +40,8 @@ export type OfficeJobDetailSurfaceProps = {
   appointmentEditDrafts: Record<string, AppointmentEditDraft>;
   capturedWorkByJobId: Record<string, CapturedWorkDetails>;
   onJobDetailBack: () => void;
+  onOpenCustomer: (customerId: string, sourceJobId: string) => void;
+  onOpenLocation: (locationId: string, sourceJobId: string) => void;
   onLoadCapturedWork: (jobId: string) => Promise<void>;
   onJobStatusReviewRequested: (
     jobId: string,
@@ -99,6 +101,8 @@ export function OfficeJobDetailSurface({
   appointmentEditDrafts,
   capturedWorkByJobId,
   onJobDetailBack,
+  onOpenCustomer,
+  onOpenLocation,
   onLoadCapturedWork,
   onJobStatusReviewRequested,
   onConfirmJobStatusChange,
@@ -150,6 +154,8 @@ export function OfficeJobDetailSurface({
         appointmentEditDrafts={appointmentEditDrafts}
         capturedWork={capturedWorkByJobId[selectedJob.id]}
         onBack={onJobDetailBack}
+        onOpenCustomer={onOpenCustomer}
+        onOpenLocation={onOpenLocation}
         onLoadCapturedWork={onLoadCapturedWork}
         onJobStatusReviewRequested={onJobStatusReviewRequested}
         onConfirmJobStatusChange={onConfirmJobStatusChange}

@@ -19,6 +19,7 @@ import * as operationsApi from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import * as identityApi from '@/lib/identity-api';
 import { OfficeWorkspaceShell } from './office-workspace-shell';
+import type { CrmNavigationTarget } from './crm-panel-types';
 
 vi.mock('@/lib/operations-api', () => ({
   acknowledgeOfficeFinishedVisitReview: vi.fn(),
@@ -55,8 +56,30 @@ vi.mock('@/lib/identity-api', () => ({
   getCurrentOfficeSession: vi.fn()
 }));
 
+type MockCrmPanelProps = {
+  navigationTarget?: CrmNavigationTarget | null;
+  onBackToJob?: (jobId: string) => void;
+};
+
 vi.mock('./crm-panel', () => ({
-  CrmPanel: () => <section aria-label="CRM panel mock">CRM panel mock</section>
+  CrmPanel: ({ navigationTarget, onBackToJob }: MockCrmPanelProps) => (
+    <section aria-label="CRM panel mock">
+      CRM panel mock
+      {navigationTarget ? (
+        <p>
+          CRM target: {navigationTarget.kind}{' '}
+          {navigationTarget.kind === 'customer'
+            ? navigationTarget.customerId
+            : navigationTarget.locationId}
+        </p>
+      ) : null}
+      {navigationTarget?.returnToJobId ? (
+        <button type="button" onClick={() => onBackToJob?.(navigationTarget.returnToJobId ?? '')}>
+          Back to source job
+        </button>
+      ) : null}
+    </section>
+  )
 }));
 
 const mockedOperationsApi = vi.mocked(operationsApi);
@@ -655,6 +678,30 @@ describe('OfficeWorkspaceShell IA', () => {
       apiBaseUrl: 'http://api.test'
     });
     expect(screen.getByLabelText('Appointment end time')).toHaveValue('10:00');
+  });
+
+  it('opens job location and customer records in CRM and returns to the job', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Appointment 1001 for Acme/i));
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open location Main Shop' }));
+
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+    expect(screen.getByText('CRM target: location location-1')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Job 1001 detail' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to source job' }));
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open customer Acme' }));
+
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+    expect(screen.getByText('CRM target: customer customer-1')).toBeInTheDocument();
   });
 
   it('opens job detail from the jobs queue', async () => {
