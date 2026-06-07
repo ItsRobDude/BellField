@@ -732,6 +732,51 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(screen.getByLabelText('Appointment end time')).toHaveValue('10:00');
   });
 
+  it('updates appointment scheduling from the dispatch quick schedule popover', async () => {
+    const scheduledDate = '2026-05-23';
+    const workspace = buildWorkspace([buildJob()]);
+    workspace.technicians.push({ id: 'tech-2', displayName: 'Jamie Tech', roleId: 'technician' });
+    arrangeWorkspace(workspace);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit schedule for job 1001' }));
+    const scheduleDialog = await screen.findByRole('dialog', {
+      name: 'Edit schedule for job 1001'
+    });
+
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment date'), {
+      target: { value: scheduledDate }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment start time'), {
+      target: { value: '09:30' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment end time'), {
+      target: { value: '11:45' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment time window'), {
+      target: { value: '9:30 AM - 11:45 AM' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment technician'), {
+      target: { value: 'tech-2' }
+    });
+    fireEvent.click(within(scheduleDialog).getByRole('button', { name: 'Save schedule' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.updateOfficeAppointmentSchedule).toHaveBeenCalledWith({
+        appointmentId: 'appointment-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        scheduledDate,
+        scheduledStartTime: '09:30',
+        scheduledEndTime: '11:45',
+        timeWindowLabel: '9:30 AM - 11:45 AM',
+        technicianId: 'tech-2'
+      });
+    });
+    expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
+  });
+
   it('opens job location and customer records in CRM and returns to the job', async () => {
     arrangeWorkspace(buildWorkspace([buildJob()]));
 

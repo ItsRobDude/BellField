@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, type CSSProperties } from 'react';
+import { useEffect, useMemo, useState, type CSSProperties } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -37,9 +37,21 @@ type DispatchBoardPanelProps = {
   viewDate?: string;
   onViewDateChange?: (date: string) => void;
   onOpenJobDetail?: (jobId: string, appointmentId?: string) => void;
+  onAppointmentScheduleUpdate?: (
+    jobId: string,
+    appointmentId: string,
+    draft: DispatchScheduleDraft
+  ) => Promise<void>;
   isRefreshing?: boolean;
   lastRefreshedAt?: string | null;
   onRefresh?: () => Promise<void>;
+};
+
+type DispatchScheduleEditorState = {
+  appointmentId: string;
+  draft: DispatchScheduleDraft;
+  errorMessage: string | null;
+  isSaving: boolean;
 };
 
 export function DispatchBoardPanel({
@@ -47,6 +59,7 @@ export function DispatchBoardPanel({
   viewDate,
   onViewDateChange,
   onOpenJobDetail,
+  onAppointmentScheduleUpdate,
   isRefreshing = false,
   lastRefreshedAt,
   onRefresh
@@ -58,6 +71,68 @@ export function DispatchBoardPanel({
   );
   const totalCardCount = model.cardLookup.size;
   const unassignedCount = model.unassignedQueue.length;
+  const [scheduleEditor, setScheduleEditor] = useState<DispatchScheduleEditorState | null>(null);
+
+  useEffect(() => {
+    if (scheduleEditor && !model.cardLookup.has(scheduleEditor.appointmentId)) {
+      setScheduleEditor(null);
+    }
+  }, [model.cardLookup, scheduleEditor]);
+
+  function handleOpenScheduleEditor(card: DispatchAppointmentCard) {
+    setScheduleEditor({
+      appointmentId: card.appointmentId,
+      draft: createDispatchScheduleDraft(card, effectiveViewDate),
+      errorMessage: null,
+      isSaving: false
+    });
+  }
+
+  function handleScheduleDraftChange(patch: Partial<DispatchScheduleDraft>) {
+    setScheduleEditor((current) =>
+      current
+        ? {
+            ...current,
+            draft: {
+              ...current.draft,
+              ...patch
+            },
+            errorMessage: null
+          }
+        : current
+    );
+  }
+
+  async function handleSaveScheduleEditor() {
+    if (!scheduleEditor || !onAppointmentScheduleUpdate) {
+      return;
+    }
+
+    const card = model.cardLookup.get(scheduleEditor.appointmentId);
+
+    if (!card) {
+      setScheduleEditor(null);
+      return;
+    }
+
+    setScheduleEditor((current) => (current ? { ...current, isSaving: true } : current));
+
+    try {
+      await onAppointmentScheduleUpdate(card.jobId, card.appointmentId, scheduleEditor.draft);
+      setScheduleEditor(null);
+    } catch (error) {
+      setScheduleEditor((current) =>
+        current
+          ? {
+              ...current,
+              errorMessage:
+                error instanceof Error ? error.message : 'Unable to update appointment scheduling.',
+              isSaving: false
+            }
+          : current
+      );
+    }
+  }
 
   return (
     <section style={styles.workspacePanel} aria-label="Dispatch board">
@@ -116,7 +191,15 @@ export function DispatchBoardPanel({
               sublabel="Needs assignment"
               ariaLabel="Unassigned appointments"
               cards={model.unassignedQueue}
+              activeScheduleEditor={scheduleEditor}
+              technicians={dispatchBoard.technicians}
               onOpenJobDetail={onOpenJobDetail}
+              onOpenScheduleEditor={
+                onAppointmentScheduleUpdate ? handleOpenScheduleEditor : undefined
+              }
+              onScheduleDraftChange={handleScheduleDraftChange}
+              onScheduleEditorCancel={() => setScheduleEditor(null)}
+              onScheduleEditorSave={handleSaveScheduleEditor}
             />
             {model.technicianRows.map((row) => (
               <DispatchTimelineRow
@@ -125,7 +208,15 @@ export function DispatchBoardPanel({
                 sublabel={formatTechnicianRowSublabel(row.roleId)}
                 ariaLabel={`Appointments for ${row.technicianName}`}
                 cards={row.cards}
+                activeScheduleEditor={scheduleEditor}
+                technicians={dispatchBoard.technicians}
                 onOpenJobDetail={onOpenJobDetail}
+                onOpenScheduleEditor={
+                  onAppointmentScheduleUpdate ? handleOpenScheduleEditor : undefined
+                }
+                onScheduleDraftChange={handleScheduleDraftChange}
+                onScheduleEditorCancel={() => setScheduleEditor(null)}
+                onScheduleEditorSave={handleSaveScheduleEditor}
               />
             ))}
           </div>
@@ -140,7 +231,13 @@ type DispatchTimelineRowProps = {
   sublabel: string;
   ariaLabel: string;
   cards: DispatchAppointmentCard[];
+  activeScheduleEditor: DispatchScheduleEditorState | null;
+  technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail?: DispatchBoardPanelProps['onOpenJobDetail'];
+  onOpenScheduleEditor?: (card: DispatchAppointmentCard) => void;
+  onScheduleDraftChange: (patch: Partial<DispatchScheduleDraft>) => void;
+  onScheduleEditorCancel: () => void;
+  onScheduleEditorSave: () => void;
 };
 
 function DispatchTimelineRow({
@@ -148,7 +245,13 @@ function DispatchTimelineRow({
   sublabel,
   ariaLabel,
   cards,
-  onOpenJobDetail
+  activeScheduleEditor,
+  technicians,
+  onOpenJobDetail,
+  onOpenScheduleEditor,
+  onScheduleDraftChange,
+  onScheduleEditorCancel,
+  onScheduleEditorSave
 }: DispatchTimelineRowProps) {
   return (
     <section style={timelineRowStyle} aria-label={ariaLabel}>
@@ -163,8 +266,18 @@ function DispatchTimelineRow({
             <DispatchCardButton
               key={card.appointmentId}
               card={card}
+              activeScheduleEditor={
+                activeScheduleEditor?.appointmentId === card.appointmentId
+                  ? activeScheduleEditor
+                  : null
+              }
               placementStyle={getTimelineCardPlacementStyle(card, index)}
+              technicians={technicians}
               onOpenJobDetail={() => onOpenJobDetail?.(card.jobId, card.appointmentId)}
+              onOpenScheduleEditor={onOpenScheduleEditor}
+              onScheduleDraftChange={onScheduleDraftChange}
+              onScheduleEditorCancel={onScheduleEditorCancel}
+              onScheduleEditorSave={onScheduleEditorSave}
             />
           ))}
         </div>
@@ -175,32 +288,188 @@ function DispatchTimelineRow({
 
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
+  activeScheduleEditor: DispatchScheduleEditorState | null;
   placementStyle?: CSSProperties;
+  technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail: () => void;
+  onOpenScheduleEditor?: (card: DispatchAppointmentCard) => void;
+  onScheduleDraftChange: (patch: Partial<DispatchScheduleDraft>) => void;
+  onScheduleEditorCancel: () => void;
+  onScheduleEditorSave: () => void;
 };
 
-function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchCardButtonProps) {
+function DispatchCardButton({
+  card,
+  activeScheduleEditor,
+  placementStyle,
+  technicians,
+  onOpenJobDetail,
+  onOpenScheduleEditor,
+  onScheduleDraftChange,
+  onScheduleEditorCancel,
+  onScheduleEditorSave
+}: DispatchCardButtonProps) {
   const address = formatDispatchCardAddress(card);
   const statusLabel = appointmentStatusLabels[card.status];
   const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
 
   return (
-    <button
-      type="button"
-      onClick={onOpenJobDetail}
-      aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}`}
-      style={{ ...styles.cardButton, ...timelineCardStyle, ...placementStyle }}
-    >
-      <span aria-hidden="true" style={getTimelineCardRailStyle(card)} />
-      <div style={timelineCardBodyStyle}>
-        <div style={timelineCardTitleRowStyle}>
-          <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
-          <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
-          {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
+    <div style={{ ...timelineCardFrameStyle, ...placementStyle }}>
+      <button
+        type="button"
+        onClick={onOpenJobDetail}
+        aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}`}
+        style={timelineCardMainButtonStyle}
+      >
+        <span aria-hidden="true" style={getTimelineCardRailStyle(card)} />
+        <div style={timelineCardBodyStyle}>
+          <div style={timelineCardTitleRowStyle}>
+            <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
+            <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
+            {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
+          </div>
+          <span style={timelineCardAddressStyle}>{address}</span>
         </div>
-        <span style={timelineCardAddressStyle}>{address}</span>
+      </button>
+      {onOpenScheduleEditor ? (
+        <button
+          type="button"
+          aria-label={`Edit schedule for job ${card.jobNumber}`}
+          onClick={(event) => {
+            event.stopPropagation();
+            onOpenScheduleEditor(card);
+          }}
+          style={timelineCardEditButtonStyle}
+        >
+          Edit
+        </button>
+      ) : null}
+      {activeScheduleEditor ? (
+        <DispatchSchedulePopover
+          card={card}
+          draft={activeScheduleEditor.draft}
+          errorMessage={activeScheduleEditor.errorMessage}
+          isSaving={activeScheduleEditor.isSaving}
+          technicians={technicians}
+          onCancel={onScheduleEditorCancel}
+          onChange={onScheduleDraftChange}
+          onSave={onScheduleEditorSave}
+        />
+      ) : null}
+    </div>
+  );
+}
+
+function DispatchSchedulePopover({
+  card,
+  draft,
+  errorMessage,
+  isSaving,
+  technicians,
+  onCancel,
+  onChange,
+  onSave
+}: {
+  card: DispatchAppointmentCard;
+  draft: DispatchScheduleDraft;
+  errorMessage: string | null;
+  isSaving: boolean;
+  technicians: DispatchBoardResponse['technicians'];
+  onCancel: () => void;
+  onChange: (patch: Partial<DispatchScheduleDraft>) => void;
+  onSave: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-label={`Edit schedule for job ${card.jobNumber}`}
+      style={dispatchSchedulePopoverStyle}
+      onClick={(event) => event.stopPropagation()}
+    >
+      <div style={styles.row}>
+        <strong>Schedule</strong>
+        <span style={styles.tinyMuted}>Job {card.jobNumber}</span>
       </div>
-    </button>
+      <div style={dispatchScheduleFormGridStyle}>
+        <label style={fieldLabelStyle}>
+          <span>Date</span>
+          <input
+            aria-label="Dispatch appointment date"
+            type="date"
+            value={draft.scheduledDate}
+            onChange={(event) =>
+              onChange({
+                scheduledDate: event.target.value,
+                ...(event.target.value ? {} : { scheduledStartTime: '', scheduledEndTime: '' })
+              })
+            }
+            style={styles.input}
+          />
+        </label>
+        <label style={fieldLabelStyle}>
+          <span>Start</span>
+          <input
+            aria-label="Dispatch appointment start time"
+            type="text"
+            placeholder="HH:MM"
+            pattern="[0-2][0-9]:[0-5][0-9]"
+            title="Use 24-hour HH:MM, for example 13:45."
+            value={draft.scheduledStartTime}
+            disabled={!draft.scheduledDate}
+            onChange={(event) => onChange({ scheduledStartTime: event.target.value })}
+            style={styles.input}
+          />
+        </label>
+        <label style={fieldLabelStyle}>
+          <span>End</span>
+          <input
+            aria-label="Dispatch appointment end time"
+            type="text"
+            placeholder="HH:MM"
+            pattern="[0-2][0-9]:[0-5][0-9]"
+            title="Use 24-hour HH:MM, for example 15:45."
+            value={draft.scheduledEndTime}
+            disabled={!draft.scheduledDate}
+            onChange={(event) => onChange({ scheduledEndTime: event.target.value })}
+            style={styles.input}
+          />
+        </label>
+        <label style={fieldLabelStyle}>
+          <span>Window</span>
+          <input
+            aria-label="Dispatch appointment time window"
+            value={draft.timeWindowLabel}
+            onChange={(event) => onChange({ timeWindowLabel: event.target.value })}
+            style={styles.input}
+          />
+        </label>
+        <label style={{ ...fieldLabelStyle, ...dispatchScheduleFullWidthStyle }}>
+          <span>Technician</span>
+          <select
+            aria-label="Dispatch appointment technician"
+            value={draft.technicianId}
+            onChange={(event) => onChange({ technicianId: event.target.value })}
+            style={styles.input}
+          >
+            <option value="">Unassigned</option>
+            {technicians.map((technician) => (
+              <option key={technician.id} value={technician.id}>
+                {technician.displayName}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      {errorMessage ? <p style={dispatchScheduleErrorStyle}>{errorMessage}</p> : null}
+      <div style={styles.inlineActionBar}>
+        <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onSave}>
+          {isSaving ? 'Saving...' : 'Save schedule'}
+        </button>
+        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -208,6 +477,19 @@ function formatDispatchCardAddress(card: DispatchAppointmentCard): string {
   const cityState = [card.locationCity, card.locationState].filter(Boolean).join(', ');
 
   return [card.locationAddressLine1, cityState].filter(Boolean).join(', ');
+}
+
+function createDispatchScheduleDraft(
+  card: DispatchAppointmentCard,
+  fallbackScheduledDate: string
+): DispatchScheduleDraft {
+  return {
+    scheduledDate: card.scheduledDate ?? fallbackScheduledDate,
+    scheduledStartTime: card.scheduledStartTime ?? '',
+    scheduledEndTime: card.scheduledEndTime ?? '',
+    timeWindowLabel: card.timeWindowLabel ?? '',
+    technicianId: card.technicianId ?? ''
+  };
 }
 
 function formatTechnicianRowSublabel(roleId: string): string {
@@ -404,7 +686,7 @@ const timelineLaneStyle: CSSProperties = {
   width: '100%'
 };
 
-const timelineCardStyle: CSSProperties = {
+const timelineCardFrameStyle: CSSProperties = {
   alignItems: 'stretch',
   alignSelf: 'stretch',
   background: '#e8f6f8',
@@ -417,9 +699,43 @@ const timelineCardStyle: CSSProperties = {
   height: '100%',
   minHeight: timelineCardMinHeight,
   minWidth: '11rem',
-  overflow: 'hidden',
-  padding: '0 0.55rem 0 0',
+  overflow: 'visible',
+  padding: 0,
+  position: 'relative',
   whiteSpace: 'nowrap'
+};
+
+const timelineCardMainButtonStyle: CSSProperties = {
+  alignItems: 'stretch',
+  background: 'transparent',
+  border: 0,
+  color: 'inherit',
+  cursor: 'pointer',
+  display: 'flex',
+  flex: '1 1 auto',
+  gap: '0.35rem',
+  height: '100%',
+  minHeight: timelineCardMinHeight,
+  minWidth: '11rem',
+  overflow: 'hidden',
+  padding: '0 0 0 0',
+  textAlign: 'left'
+};
+
+const timelineCardEditButtonStyle: CSSProperties = {
+  alignSelf: 'center',
+  background: '#ffffff',
+  border: '1px solid #cbe3e8',
+  borderRadius: 4,
+  color: '#176b5b',
+  cursor: 'pointer',
+  flex: '0 0 auto',
+  fontSize: '0.68rem',
+  fontWeight: 800,
+  height: '1.45rem',
+  lineHeight: 1,
+  marginRight: '0.35rem',
+  padding: '0 0.35rem'
 };
 
 function getTimelineCardRailStyle(card: DispatchAppointmentCard): CSSProperties {
@@ -516,6 +832,45 @@ const timelineCardAddressStyle: CSSProperties = {
   lineHeight: timelineCardTextLineHeight,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
+};
+
+const dispatchSchedulePopoverStyle: CSSProperties = {
+  background: '#ffffff',
+  border: '1px solid #cbd8d6',
+  borderRadius: 8,
+  boxShadow: '0 12px 28px rgba(15, 23, 42, 0.18)',
+  display: 'grid',
+  gap: '0.75rem',
+  left: 0,
+  padding: '0.85rem',
+  position: 'absolute',
+  top: 'calc(100% + 0.4rem)',
+  width: '24rem',
+  zIndex: 20
+};
+
+const dispatchScheduleFormGridStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.6rem',
+  gridTemplateColumns: 'repeat(2, minmax(0, 1fr))'
+};
+
+const dispatchScheduleFullWidthStyle: CSSProperties = {
+  gridColumn: '1 / -1'
+};
+
+const dispatchScheduleErrorStyle: CSSProperties = {
+  color: '#b42318',
+  fontSize: '0.85rem',
+  fontWeight: 700,
+  margin: 0
+};
+
+const fieldLabelStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.25rem',
+  fontSize: '0.8rem',
+  fontWeight: 700
 };
 
 const emptyTimelineStyle: CSSProperties = {

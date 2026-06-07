@@ -659,15 +659,11 @@ export function OfficeWorkspaceShell({
     }));
   }
 
-  async function handleSaveAppointmentSchedule(appointmentId: string) {
-    const draft = appointmentEditDrafts[appointmentId];
-
-    if (!draft) {
-      return;
-    }
-
-    const jobId = getJobIdForAppointment(appointmentId);
-
+  async function persistAppointmentSchedule(
+    appointmentId: string,
+    draft: AppointmentEditDraft,
+    jobId?: string | null
+  ) {
     try {
       setNoticeMessage(null);
       await updateOfficeAppointmentSchedule({
@@ -689,10 +685,33 @@ export function OfficeWorkspaceShell({
       await refreshOpenJobDetail(jobId);
       setNoticeMessage('Appointment updated.');
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to update appointment scheduling.'
-      );
+      const message =
+        error instanceof Error ? error.message : 'Unable to update appointment scheduling.';
+      setErrorMessage(message);
+      throw new Error(message);
     }
+  }
+
+  async function handleSaveAppointmentSchedule(appointmentId: string) {
+    const draft = appointmentEditDrafts[appointmentId];
+
+    if (!draft) {
+      return;
+    }
+
+    try {
+      await persistAppointmentSchedule(appointmentId, draft, getJobIdForAppointment(appointmentId));
+    } catch {
+      // persistAppointmentSchedule has already surfaced the user-facing error.
+    }
+  }
+
+  async function handleDispatchAppointmentScheduleUpdate(
+    jobId: string,
+    appointmentId: string,
+    draft: AppointmentEditDraft
+  ) {
+    await persistAppointmentSchedule(appointmentId, draft, jobId);
   }
 
   async function handleAddAppointment(jobId: string) {
@@ -833,7 +852,8 @@ export function OfficeWorkspaceShell({
           lastDispatchRefreshedAt,
           onDispatchViewDateChange: handleDispatchViewDateChange,
           onDispatchRefresh: handleDispatchRefresh,
-          onOpenJobDetail: handleOpenJobDetail
+          onOpenJobDetail: handleOpenJobDetail,
+          onAppointmentScheduleUpdate: handleDispatchAppointmentScheduleUpdate
         }}
         jobIntake={jobIntakeWorkflow.surfaceProps}
         jobs={{

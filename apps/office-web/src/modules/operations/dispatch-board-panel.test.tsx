@@ -348,6 +348,67 @@ describe('DispatchBoardPanel', () => {
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
   });
 
+  it('edits appointment scheduling from a compact dispatch popover', async () => {
+    const onOpenJobDetail = vi.fn();
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onOpenJobDetail={onOpenJobDetail}
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit schedule for job 1001' }));
+
+    expect(onOpenJobDetail).not.toHaveBeenCalled();
+
+    const scheduleDialog = screen.getByRole('dialog', { name: 'Edit schedule for job 1001' });
+    expect(within(scheduleDialog).getByLabelText('Dispatch appointment date')).toHaveValue(
+      '2026-05-22'
+    );
+    expect(within(scheduleDialog).getByLabelText('Dispatch appointment start time')).toHaveValue(
+      '08:00'
+    );
+    expect(within(scheduleDialog).getByLabelText('Dispatch appointment end time')).toHaveValue(
+      '10:00'
+    );
+
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment date'), {
+      target: { value: '2026-05-23' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment start time'), {
+      target: { value: '09:15' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment end time'), {
+      target: { value: '12:30' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment time window'), {
+      target: { value: '9:15 AM - 12:30 PM' }
+    });
+    fireEvent.change(within(scheduleDialog).getByLabelText('Dispatch appointment technician'), {
+      target: { value: 'tech-2' }
+    });
+    fireEvent.click(within(scheduleDialog).getByRole('button', { name: 'Save schedule' }));
+
+    await waitFor(() => {
+      expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+        scheduledDate: '2026-05-23',
+        scheduledStartTime: '09:15',
+        scheduledEndTime: '12:30',
+        timeWindowLabel: '9:15 AM - 12:30 PM',
+        technicianId: 'tech-2'
+      });
+    });
+    expect(
+      screen.queryByRole('dialog', { name: 'Edit schedule for job 1001' })
+    ).not.toBeInTheDocument();
+  });
+
   it('shows review status without crowding cards with equipment details', () => {
     const dispatchBoard = buildDispatchBoard([
       buildDispatchAppointment({

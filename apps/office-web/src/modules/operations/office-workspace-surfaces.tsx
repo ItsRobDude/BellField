@@ -6,7 +6,7 @@ import {
   type OfficeBookkeepingSurfaceProps
 } from './office-workspace-bookkeeping-surface';
 import { CrmPanel } from './crm-panel';
-import { DispatchBoardPanel } from './dispatch-board-panel';
+import { DispatchBoardPanel, type DispatchScheduleDraft } from './dispatch-board-panel';
 import {
   OfficeInventorySurface,
   type OfficeInventorySurfaceProps
@@ -56,6 +56,11 @@ type OfficeDispatchSurfaceProps = {
   onDispatchViewDateChange: (date: string) => void;
   onDispatchRefresh: () => Promise<void>;
   onOpenJobDetail: OfficeJobsQueueSurfaceProps['onOpenJobDetail'];
+  onAppointmentScheduleUpdate: (
+    jobId: string,
+    appointmentId: string,
+    draft: DispatchScheduleDraft
+  ) => Promise<void>;
 };
 
 type OfficeWorkspaceSurfacesProps = {
@@ -99,6 +104,7 @@ export function OfficeWorkspaceSurfaces({
           viewDate={dispatch.dispatchViewDate}
           onViewDateChange={dispatch.onDispatchViewDateChange}
           onOpenJobDetail={(jobId, appointmentId) => dispatch.onOpenJobDetail(jobId, appointmentId)}
+          onAppointmentScheduleUpdate={dispatch.onAppointmentScheduleUpdate}
           isRefreshing={dispatch.isDispatchRefreshing}
           lastRefreshedAt={dispatch.lastDispatchRefreshedAt}
           onRefresh={dispatch.onDispatchRefresh}
