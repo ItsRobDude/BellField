@@ -47,6 +47,16 @@ export function getDispatchResizeBaseEndMinutes(
   return Math.min(baseEndMinutes, timelineEndMinutes);
 }
 
+export function getDispatchMoveDurationMinutes(
+  startMinutes: number,
+  endMinutes: number | null,
+  timelineEndMinutes: number
+): number {
+  return (
+    getDispatchResizeBaseEndMinutes(startMinutes, endMinutes, timelineEndMinutes) - startMinutes
+  );
+}
+
 export function clampDispatchResizeEndMinutes(
   startMinutes: number,
   endMinutes: number,
@@ -60,8 +70,25 @@ export function clampDispatchResizeEndMinutes(
   return Math.max(minimumEndMinutes, Math.min(endMinutes, timelineEndMinutes));
 }
 
+export function clampDispatchMoveStartMinutes(
+  startMinutes: number,
+  durationMinutes: number,
+  timelineStartMinutes: number,
+  timelineEndMinutes: number
+): number {
+  const visibleTimelineDuration = Math.max(0, timelineEndMinutes - timelineStartMinutes);
+  const clampedDuration = Math.max(1, Math.min(durationMinutes, visibleTimelineDuration));
+  const latestStartMinutes = Math.max(timelineStartMinutes, timelineEndMinutes - clampedDuration);
+
+  return Math.max(timelineStartMinutes, Math.min(startMinutes, latestStartMinutes));
+}
+
 export function formatDispatchResizePreview(startMinutes: number, endMinutes: number): string {
   return `${formatDispatchPreviewTime(startMinutes)} - ${formatDispatchPreviewTime(endMinutes)}`;
+}
+
+export function formatDispatchMovePreview(startMinutes: number, endMinutes: number): string {
+  return formatDispatchResizePreview(startMinutes, endMinutes);
 }
 
 export function buildDispatchResizeDraft(
@@ -83,6 +110,32 @@ export function buildDispatchResizeDraft(
     scheduledDate: card.scheduledDate ?? '',
     scheduledStartTime: card.scheduledStartTime ?? '',
     scheduledEndTime: resizedEndTime,
+    timeWindowLabel:
+      !currentWindowLabel || currentWindowLabel === oldStructuredWindow
+        ? nextStructuredWindow
+        : currentWindowLabel,
+    technicianId: card.technicianId ?? ''
+  };
+}
+
+export function buildDispatchMoveDraft(
+  card: DispatchAppointmentCard,
+  movedStartMinutes: number,
+  movedEndMinutes: number
+): DispatchScheduleDraft {
+  const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
+  const currentEndMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
+  const currentWindowLabel = card.timeWindowLabel?.trim() ?? '';
+  const oldStructuredWindow =
+    startMinutes !== null && currentEndMinutes !== null
+      ? formatDispatchMovePreview(startMinutes, currentEndMinutes)
+      : '';
+  const nextStructuredWindow = formatDispatchMovePreview(movedStartMinutes, movedEndMinutes);
+
+  return {
+    scheduledDate: card.scheduledDate ?? '',
+    scheduledStartTime: formatDispatchMinutesAsTime(movedStartMinutes),
+    scheduledEndTime: formatDispatchMinutesAsTime(movedEndMinutes),
     timeWindowLabel:
       !currentWindowLabel || currentWindowLabel === oldStructuredWindow
         ? nextStructuredWindow

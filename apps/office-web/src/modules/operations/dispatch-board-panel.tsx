@@ -213,7 +213,10 @@ export function DispatchBoardPanel({
     void onAppointmentStatusUpdate?.(card.jobId, card.appointmentId, status);
   }
 
-  async function handleScheduleResize(card: DispatchAppointmentCard, draft: DispatchScheduleDraft) {
+  async function handleTimelineScheduleUpdate(
+    card: DispatchAppointmentCard,
+    draft: DispatchScheduleDraft
+  ) {
     await onAppointmentScheduleUpdate?.(card.jobId, card.appointmentId, draft);
   }
 
@@ -288,7 +291,9 @@ export function DispatchBoardPanel({
                 onAppointmentScheduleUpdate ? handleOpenScheduleEditor : undefined
               }
               onOpenContextMenu={handleOpenContextMenu}
-              onScheduleResize={onAppointmentScheduleUpdate ? handleScheduleResize : undefined}
+              onScheduleUpdate={
+                onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
+              }
               onScheduleDraftChange={handleScheduleDraftChange}
               onScheduleEditorCancel={() => setScheduleEditor(null)}
               onScheduleEditorSave={handleSaveScheduleEditor}
@@ -307,7 +312,9 @@ export function DispatchBoardPanel({
                   onAppointmentScheduleUpdate ? handleOpenScheduleEditor : undefined
                 }
                 onOpenContextMenu={handleOpenContextMenu}
-                onScheduleResize={onAppointmentScheduleUpdate ? handleScheduleResize : undefined}
+                onScheduleUpdate={
+                  onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
+                }
                 onScheduleDraftChange={handleScheduleDraftChange}
                 onScheduleEditorCancel={() => setScheduleEditor(null)}
                 onScheduleEditorSave={handleSaveScheduleEditor}

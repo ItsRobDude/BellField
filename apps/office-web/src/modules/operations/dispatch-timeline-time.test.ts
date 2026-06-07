@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import type { DispatchAppointmentSummary, JobStatus } from '@/lib/operations-api';
 import {
+  buildDispatchMoveDraft,
   buildDispatchResizeDraft,
+  clampDispatchMoveStartMinutes,
   clampDispatchResizeEndMinutes,
   formatDispatchMinutesAsTime,
+  formatDispatchMovePreview,
   formatDispatchResizePreview,
+  getDispatchMoveDurationMinutes,
   getDispatchResizeBaseEndMinutes,
   parseDispatchTimeToMinutes,
   snapDispatchMinutes
@@ -62,6 +66,13 @@ describe('dispatch timeline time helpers', () => {
     expect(getDispatchResizeBaseEndMinutes(17 * 60, null, 18 * 60)).toBe(18 * 60);
   });
 
+  it('preserves duration and clamps moved appointments inside the visible day', () => {
+    expect(getDispatchMoveDurationMinutes(8 * 60, 10 * 60, 18 * 60)).toBe(120);
+    expect(getDispatchMoveDurationMinutes(8 * 60, null, 18 * 60)).toBe(90);
+    expect(clampDispatchMoveStartMinutes(6 * 60 + 30, 120, 7 * 60, 18 * 60)).toBe(7 * 60);
+    expect(clampDispatchMoveStartMinutes(17 * 60 + 30, 120, 7 * 60, 18 * 60)).toBe(16 * 60);
+  });
+
   it('builds a resized draft while preserving free-form windows', () => {
     expect(formatDispatchResizePreview(8 * 60, 11 * 60 + 15)).toBe('8:00 AM - 11:15 AM');
 
@@ -76,6 +87,26 @@ describe('dispatch timeline time helpers', () => {
     expect(
       buildDispatchResizeDraft(
         buildAppointment({ timeWindowLabel: 'Customer asked for first call' }),
+        11 * 60 + 15
+      ).timeWindowLabel
+    ).toBe('Customer asked for first call');
+  });
+
+  it('builds a moved draft while preserving appointment duration and custom windows', () => {
+    expect(formatDispatchMovePreview(9 * 60 + 15, 11 * 60 + 15)).toBe('9:15 AM - 11:15 AM');
+
+    expect(buildDispatchMoveDraft(buildAppointment(), 9 * 60 + 15, 11 * 60 + 15)).toEqual({
+      scheduledDate: '2026-05-22',
+      scheduledStartTime: '09:15',
+      scheduledEndTime: '11:15',
+      timeWindowLabel: '9:15 AM - 11:15 AM',
+      technicianId: 'tech-1'
+    });
+
+    expect(
+      buildDispatchMoveDraft(
+        buildAppointment({ timeWindowLabel: 'Customer asked for first call' }),
+        9 * 60 + 15,
         11 * 60 + 15
       ).timeWindowLabel
     ).toBe('Customer asked for first call');

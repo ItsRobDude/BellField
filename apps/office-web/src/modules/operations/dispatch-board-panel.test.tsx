@@ -524,6 +524,66 @@ describe('DispatchBoardPanel', () => {
     });
   });
 
+  it('moves a timed dispatch card horizontally while preserving duration', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+    const onOpenJobDetail = vi.fn();
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+        onOpenJobDetail={onOpenJobDetail}
+      />
+    );
+
+    const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+    fireEvent.pointerDown(cardButton, { clientX: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 196 });
+
+    expect(screen.getByText('9:00 AM - 11:00 AM')).toBeInTheDocument();
+
+    fireEvent.pointerUp(window);
+    fireEvent.click(cardButton);
+
+    await waitFor(() => {
+      expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+        scheduledDate: '2026-05-22',
+        scheduledStartTime: '09:00',
+        scheduledEndTime: '11:00',
+        timeWindowLabel: '9:00 AM - 11:00 AM',
+        technicianId: 'tech-1'
+      });
+    });
+    expect(onOpenJobDetail).not.toHaveBeenCalled();
+  });
+
+  it('keeps normal card open behavior when pointer movement does not become a drag', () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+    const onOpenJobDetail = vi.fn();
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+        onOpenJobDetail={onOpenJobDetail}
+      />
+    );
+
+    const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+    fireEvent.pointerDown(cardButton, { clientX: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerUp(window);
+    fireEvent.click(cardButton);
+
+    expect(onAppointmentScheduleUpdate).not.toHaveBeenCalled();
+    expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
+  });
+
   it('does not save a resize when the expected end time did not change', () => {
     const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
 
