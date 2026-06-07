@@ -4,9 +4,9 @@ This is the controlling plan for the customer, location, contact-method, and New
 
 ## Stop Rule
 
-The current implementation state is complete through **Phase 5**.
+The current implementation state is complete through **Phase 7**.
 
-Do not implement Phase 6 or later work from this document unless the user explicitly authorizes that next phase.
+Do not extend this lane beyond the documented Phase 7 work unless the user explicitly authorizes the next plan.
 
 If a later-phase behavior already exists because of earlier drift, document it as already present and do not expand it further before its phase is explicitly authorized.
 
@@ -214,13 +214,23 @@ Do this after the workflow pieces are right.
 
 Do not implement until Phase 7 is explicitly authorized.
 
+Status: implemented.
+
 - Remove large top bar.
 - Add compact bottom-left account initials menu with account/sign out.
 - Move refresh to contextual surfaces or a small icon control.
 - Move New Job out of top bar into an operational quick action.
 - Do not overhaul sidebar just to avoid ServiceTitan similarity. Improve it only where it serves BellField: clearer grouping, less bulk, maybe icons later.
 
-## Current Phase 0-6 Checkpoint
+### Implementation Notes
+
+- The old large office header is removed from the workspace frame.
+- New Job lives as an operational rail action, not in a persistent top bar.
+- Refresh remains contextual on surfaces and is also available from the compact account menu as Refresh workspace.
+- Account/sign out lives in a click-to-toggle initials menu at the bottom of the rail.
+- Sidebar overhaul is intentionally deferred; Phase 7 only removes the oversized header and relocates global actions.
+
+## Current Phase 0-7 Checkpoint
 
 This checkpoint records the current repo state so implementation and review do not drift across phase names.
 
@@ -336,6 +346,16 @@ Status: implemented.
 - CRM Back returns to the source job detail context when CRM was opened from a job.
 - Regression coverage exists for the job overview link buttons, shell navigation target handoff, CRM target loading, and return-to-job behavior.
 
+### Phase 7 Status
+
+Status: implemented.
+
+- The office workspace no longer renders the large top bar with persistent employee identity, New Job, Refresh, and Sign out controls.
+- The rail contains the operational New Job action.
+- The bottom-left rail account initials button opens a click-to-toggle account menu with account identity, Refresh workspace, and Sign out.
+- The account menu closes on navigation, New Job, refresh, and sign out.
+- Shell regression coverage proves the menu is hidden until toggled, sign out runs from the menu, and Refresh workspace triggers a workspace refresh.
+
 ### Existing Out-of-Phase Work Already Present
 
-No Phase 7+ behavior is intentionally implemented in this checkpoint.
+No post-Phase 7 behavior is intentionally implemented in this checkpoint.

@@ -19,8 +19,10 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     display: 'flex',
     flexDirection: 'column',
     gap: '0.5rem',
+    justifyContent: 'space-between',
     padding: '0.55rem'
   },
+  railNav: { display: 'grid', gap: '0.5rem' },
   railBrand: { fontSize: '1rem', fontWeight: 800, margin: '0 0 0.75rem' },
   railButton: {
     background: 'transparent',
@@ -45,15 +47,51 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     textAlign: 'left'
   },
   workArea: { alignContent: 'start', display: 'grid', gap: '1rem', minWidth: 0, padding: '1rem' },
-  topBar: {
+  accountDock: {
+    display: 'grid',
+    gap: '0.5rem',
+    justifyItems: 'start',
+    position: 'relative'
+  },
+  accountButton: {
     alignItems: 'center',
+    background: '#0f1e21',
+    border: '1px solid #3a686d',
+    borderRadius: 999,
+    color: '#ffffff',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    fontSize: '0.85rem',
+    fontWeight: 900,
+    height: '2rem',
+    justifyContent: 'center',
+    width: '2rem'
+  },
+  accountMenu: {
     background: '#ffffff',
     border: '1px solid #dfe6df',
     borderRadius: 8,
-    display: 'flex',
-    gap: '0.75rem',
-    justifyContent: 'space-between',
-    padding: '0.75rem 1rem'
+    bottom: '2.5rem',
+    boxShadow: '0 0.65rem 1.5rem rgba(15, 30, 33, 0.22)',
+    color: '#1f2933',
+    display: 'grid',
+    gap: '0.5rem',
+    left: 0,
+    minWidth: '14rem',
+    padding: '0.75rem',
+    position: 'absolute',
+    zIndex: 5
+  },
+  accountMenuButton: {
+    background: '#ffffff',
+    border: '1px solid #dfe6df',
+    borderRadius: 8,
+    color: '#1f2933',
+    cursor: 'pointer',
+    fontSize: '0.9rem',
+    fontWeight: 800,
+    padding: '0.55rem 0.7rem',
+    textAlign: 'left'
   },
   workspacePanel: {
     background: '#ffffff',

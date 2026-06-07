@@ -542,13 +542,19 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   });
 }
 
-function renderShell() {
+function renderShell({
+  initialEmployee = employee,
+  onSignOut = vi.fn()
+}: {
+  initialEmployee?: EmployeeSummary;
+  onSignOut?: () => void;
+} = {}) {
   render(
     <OfficeWorkspaceShell
       apiBaseUrl="http://api.test"
-      initialEmployee={employee}
+      initialEmployee={initialEmployee}
       sessionToken="session-token"
-      onSignOut={vi.fn()}
+      onSignOut={onSignOut}
     />
   );
 }
@@ -597,6 +603,48 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(screen.queryByRole('region', { name: 'Jobs queue' })).not.toBeInTheDocument();
     expect(mockedOperationsApi.getOfficeJobIntakeContext).not.toHaveBeenCalled();
     expect(mockedOperationsApi.getOfficeEquipmentWorkspace).not.toHaveBeenCalled();
+  });
+
+  it('uses a compact toggle account menu instead of the old top bar actions', async () => {
+    const onSignOut = vi.fn();
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell({ onSignOut });
+
+    await screen.findByRole('region', { name: 'Dispatch board' });
+    expect(screen.queryByText('office@example.com')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign out' })).not.toBeInTheDocument();
+
+    const accountButton = screen.getByRole('button', { name: 'Account menu for Office User' });
+    expect(accountButton).toHaveTextContent('OU');
+    expect(screen.queryByRole('menu', { name: 'Account menu' })).not.toBeInTheDocument();
+
+    fireEvent.click(accountButton);
+    expect(screen.getByRole('menu', { name: 'Account menu' })).toBeInTheDocument();
+    expect(screen.getByText('office@example.com')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }));
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('menu', { name: 'Account menu' })).not.toBeInTheDocument();
+  });
+
+  it('runs workspace refresh from the compact account menu and closes the menu', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    await screen.findByRole('region', { name: 'Dispatch board' });
+    const initialSessionCallCount = mockedIdentityApi.getCurrentOfficeSession.mock.calls.length;
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu for Office User' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh workspace' }));
+
+    await waitFor(() => {
+      expect(mockedIdentityApi.getCurrentOfficeSession.mock.calls.length).toBeGreaterThan(
+        initialSessionCallCount
+      );
+    });
+    expect(screen.queryByRole('menu', { name: 'Account menu' })).not.toBeInTheDocument();
   });
 
   it('hides the Employees nav without employeesPermissions:view', async () => {
