@@ -186,6 +186,7 @@ describe('DispatchBoardPanel', () => {
     expect(within(taylorRegion).getByText('#1001')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('Main Shop')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('123 Main, Blaine, WA')).toBeInTheDocument();
+    expect(within(taylorRegion).queryByText('1')).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText('No cooling')).not.toBeInTheDocument();
     expect(
       unassignedRegion.compareDocumentPosition(taylorRegion) & Node.DOCUMENT_POSITION_FOLLOWING

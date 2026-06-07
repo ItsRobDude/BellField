@@ -115,7 +115,6 @@ export function DispatchBoardPanel({
               label="Unassigned"
               ariaLabel="Unassigned appointments"
               cards={model.unassignedQueue}
-              badgeStyle={unassignedCount > 0 ? styles.dangerBadge : styles.badge}
               onOpenJobDetail={onOpenJobDetail}
             />
             {model.technicianRows.map((row) => (
@@ -124,7 +123,6 @@ export function DispatchBoardPanel({
                 label={row.technicianName}
                 ariaLabel={`Appointments for ${row.technicianName}`}
                 cards={row.cards}
-                badgeStyle={styles.badge}
                 onOpenJobDetail={onOpenJobDetail}
               />
             ))}
@@ -139,7 +137,6 @@ type DispatchTimelineRowProps = {
   label: string;
   ariaLabel: string;
   cards: DispatchAppointmentCard[];
-  badgeStyle: CSSProperties;
   onOpenJobDetail?: DispatchBoardPanelProps['onOpenJobDetail'];
 };
 
@@ -147,14 +144,12 @@ function DispatchTimelineRow({
   label,
   ariaLabel,
   cards,
-  badgeStyle,
   onOpenJobDetail
 }: DispatchTimelineRowProps) {
   return (
     <section style={timelineRowStyle} aria-label={ariaLabel}>
       <div style={timelineRowLabelStyle}>
         <strong>{label}</strong>
-        <span style={badgeStyle}>{cards.length}</span>
       </div>
       <div style={timelineLaneCellStyle}>
         <div style={timelineLaneStyle}>
