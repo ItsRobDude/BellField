@@ -139,7 +139,7 @@ describe('JobsQueuePanel', () => {
     fireEvent.click(screen.getByRole('button', { name: /Job 1001/i }));
     fireEvent.click(screen.getByRole('button', { name: 'New job' }));
 
-    expect(onOpenJobDetail).toHaveBeenCalledWith('job-review', 'appt-review');
+    expect(onOpenJobDetail).toHaveBeenCalledWith('job-review');
     expect(onNewJob).toHaveBeenCalled();
   });
 

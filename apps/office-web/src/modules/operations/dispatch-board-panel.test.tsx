@@ -182,8 +182,11 @@ describe('DispatchBoardPanel', () => {
     const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
     const samRegion = screen.getByRole('region', { name: /Appointments for Sam Tech/i });
 
-    expect(within(unassignedRegion).getByText(/Job 1002/)).toBeInTheDocument();
-    expect(within(taylorRegion).getByText(/Job 1001/)).toBeInTheDocument();
+    expect(within(unassignedRegion).getByText('#1002')).toBeInTheDocument();
+    expect(within(taylorRegion).getByText('#1001')).toBeInTheDocument();
+    expect(within(taylorRegion).getByText('Main Shop')).toBeInTheDocument();
+    expect(within(taylorRegion).getByText('123 Main, Blaine, WA')).toBeInTheDocument();
+    expect(within(taylorRegion).queryByText('No cooling')).not.toBeInTheDocument();
     expect(
       unassignedRegion.compareDocumentPosition(taylorRegion) & Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy();
@@ -330,12 +333,12 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText(/Appointment 1001 for Acme/i));
+    fireEvent.click(screen.getByLabelText(/Job 1001, Main Shop/i));
 
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
   });
 
-  it('shows review and equipment glance when supplied by the dispatch feed', () => {
+  it('shows review status without crowding cards with equipment details', () => {
     const dispatchBoard = buildDispatchBoard([
       buildDispatchAppointment({
         status: 'finished',
@@ -368,6 +371,7 @@ describe('DispatchBoardPanel', () => {
     render(<DispatchBoardPanel dispatchBoard={dispatchBoard} viewDate="2026-05-22" />);
 
     expect(screen.getByText('Review')).toBeInTheDocument();
-    expect(screen.getByText(/Condenser Carrier ABC, Furnace Trane XYZ \+2/)).toBeInTheDocument();
+    expect(screen.queryByText(/Condenser Carrier ABC/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Furnace Trane XYZ/)).not.toBeInTheDocument();
   });
 });

@@ -747,7 +747,7 @@ export function OfficeWorkspaceShell({
     setCrmNavigationTarget(null);
     setSelectedJobId(jobId);
     setFocusedAppointmentId(appointmentId ?? null);
-    setJobDetailInitialTab(appointmentId ? 'appointments' : initialTab);
+    setJobDetailInitialTab(initialTab);
     setActiveOfficeView('jobDetail');
     void loadJobDetail(jobId);
   }

@@ -81,7 +81,7 @@ function QueueColumn({
               key={job.id}
               type="button"
               style={styles.cardButton}
-              onClick={() => onOpenJobDetail(job.id, job.nextAppointment?.id)}
+              onClick={() => onOpenJobDetail(job.id)}
             >
               <div style={styles.row}>
                 <strong>Job {job.jobNumber}</strong>

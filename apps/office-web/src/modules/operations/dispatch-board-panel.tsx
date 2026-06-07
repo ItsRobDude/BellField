@@ -9,7 +9,6 @@ import {
   type DispatchBoardModel
 } from './dispatch-board-data';
 import { DispatchDatePicker, getDateInputValue } from './dispatch-date-picker';
-import { formatAppointmentScheduleDisplay } from './appointment-schedule-format';
 import { appointmentStatusLabels } from './job-work-types';
 
 export type DispatchScheduleDraft = {
@@ -181,39 +180,34 @@ type DispatchCardButtonProps = {
 };
 
 function DispatchCardButton({ card, placementStyle, onOpenJobDetail }: DispatchCardButtonProps) {
+  const address = formatDispatchCardAddress(card);
+  const statusLabel = appointmentStatusLabels[card.status];
+  const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
+
   return (
     <button
       type="button"
       onClick={onOpenJobDetail}
-      aria-label={`Appointment ${card.jobNumber} for ${card.customerName}`}
+      aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}`}
       style={{ ...styles.cardButton, ...timelineCardStyle, ...placementStyle }}
     >
-      <div style={styles.row}>
-        <strong>Job {card.jobNumber}</strong>
-        <span style={styles.tinyMuted}>{formatAppointmentScheduleDisplay(card)}</span>
-      </div>
-      <span>{card.jobSummary}</span>
-      <span style={styles.tinyMuted}>
-        {card.customerName} - {card.locationName}
-      </span>
-      {card.equipmentCount > 0 ? (
-        <span style={styles.tinyMuted}>{formatEquipmentGlance(card)}</span>
-      ) : null}
-      <div style={styles.badgeRow}>
-        <span style={styles.badge}>{appointmentStatusLabels[card.status]}</span>
-        {card.needsOfficeReview ? <span style={styles.dangerBadge}>Review</span> : null}
+      <span aria-hidden="true" style={getTimelineCardRailStyle(card)} />
+      <div style={timelineCardBodyStyle}>
+        <div style={timelineCardMetaRowStyle}>
+          <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
+          {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
+        </div>
+        <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
+        <span style={timelineCardAddressStyle}>{address}</span>
       </div>
     </button>
   );
 }
 
-function formatEquipmentGlance(card: DispatchAppointmentCard): string {
-  const labels = card.equipment.map((equipment) =>
-    `${equipment.equipmentType} ${equipment.brand} ${equipment.model}`.trim()
-  );
-  const hiddenCount = card.equipmentCount - card.equipment.length;
+function formatDispatchCardAddress(card: DispatchAppointmentCard): string {
+  const cityState = [card.locationCity, card.locationState].filter(Boolean).join(', ');
 
-  return hiddenCount > 0 ? `${labels.join(', ')} +${hiddenCount}` : labels.join(', ');
+  return [card.locationAddressLine1, cityState].filter(Boolean).join(', ');
 }
 
 function getTimelineCardPlacementStyle(
@@ -308,14 +302,14 @@ const dispatchTimelineViewportStyle: CSSProperties = {
 
 const dispatchTimelineContentStyle: CSSProperties = {
   display: 'grid',
-  gap: '0.85rem',
+  gap: '0.5rem',
   minWidth: `calc(${timelineLabelWidth} + ${timelineColumnGap} + ${timelineLaneMinWidth})`,
   width: '100%'
 };
 
 const dispatchBoardStyle: CSSProperties = {
   display: 'grid',
-  gap: '0.85rem'
+  gap: '0.45rem'
 };
 
 const timelineGridTemplateColumns = `repeat(${timelineSlotCount}, minmax(1rem, 1fr)) minmax(11rem, 12rem)`;
@@ -363,10 +357,10 @@ const timelineRowLabelStyle: CSSProperties = {
   border: '1px solid #dfe6df',
   borderRadius: 8,
   display: 'grid',
-  gap: '0.5rem',
+  gap: '0.35rem',
   justifyItems: 'start',
   left: 0,
-  padding: '0.8rem',
+  padding: '0.55rem 0.7rem',
   position: 'sticky',
   zIndex: 2
 };
@@ -381,16 +375,105 @@ const timelineLaneStyle: CSSProperties = {
   border: '1px solid #dfe6df',
   borderRadius: 8,
   display: 'grid',
-  gap: '0.5rem',
+  gap: '0.35rem',
   gridTemplateColumns: timelineGridTemplateColumns,
-  minHeight: '6.5rem',
+  minHeight: '4.25rem',
   minWidth: timelineLaneMinWidth,
-  padding: '0.75rem',
+  padding: '0.35rem',
   width: '100%'
 };
 
 const timelineCardStyle: CSSProperties = {
-  minWidth: '10rem'
+  alignItems: 'stretch',
+  background: '#e9f7fb',
+  border: '1px solid #80cfe3',
+  borderRadius: 6,
+  color: '#12212b',
+  display: 'flex',
+  gap: '0.4rem',
+  minHeight: '2.45rem',
+  minWidth: '8rem',
+  overflow: 'hidden',
+  padding: '0.25rem 0.45rem',
+  whiteSpace: 'nowrap'
+};
+
+function getTimelineCardRailStyle(card: DispatchAppointmentCard): CSSProperties {
+  return {
+    background: card.needsOfficeReview ? '#d92d20' : getAppointmentStatusColor(card.status),
+    borderRadius: 999,
+    flex: '0 0 0.25rem'
+  };
+}
+
+function getAppointmentStatusColor(status: DispatchAppointmentCard['status']): string {
+  switch (status) {
+    case 'confirmed':
+    case 'dispatched':
+    case 'onTheWay':
+      return '#2563eb';
+    case 'arrived':
+    case 'working':
+      return '#176b5b';
+    case 'finished':
+      return '#64748b';
+    case 'noAnswer':
+      return '#b45309';
+    default:
+      return '#0ea5c4';
+  }
+}
+
+const timelineCardBodyStyle: CSSProperties = {
+  display: 'grid',
+  gap: '0.1rem',
+  minWidth: 0
+};
+
+const timelineCardMetaRowStyle: CSSProperties = {
+  alignItems: 'center',
+  display: 'flex',
+  gap: '0.25rem',
+  minWidth: 0
+};
+
+const timelineJobChipStyle: CSSProperties = {
+  background: '#ffffff',
+  borderRadius: 4,
+  color: '#176b5b',
+  flex: '0 0 auto',
+  fontSize: '0.68rem',
+  fontWeight: 800,
+  lineHeight: 1,
+  padding: '0.15rem 0.3rem'
+};
+
+const timelineReviewChipStyle: CSSProperties = {
+  background: '#fde7e5',
+  borderRadius: 4,
+  color: '#b42318',
+  flex: '0 0 auto',
+  fontSize: '0.68rem',
+  fontWeight: 800,
+  lineHeight: 1,
+  padding: '0.15rem 0.3rem'
+};
+
+const timelineCardLocationStyle: CSSProperties = {
+  display: 'block',
+  fontSize: '0.78rem',
+  lineHeight: 1.2,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis'
+};
+
+const timelineCardAddressStyle: CSSProperties = {
+  color: '#475569',
+  display: 'block',
+  fontSize: '0.72rem',
+  lineHeight: 1.2,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis'
 };
 
 const emptyTimelineStyle: CSSProperties = {

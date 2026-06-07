@@ -2,8 +2,10 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   AppointmentSummary,
+  CustomerAccountSummary,
   JobSummary,
   JobsWorkspaceResponse,
+  LocationSummary,
   MediaAttachmentSummary,
   RegisterEntrySummary
 } from '@/lib/operations-api';
@@ -70,6 +72,67 @@ function buildWorkspace(job = buildJob()): JobsWorkspaceResponse {
     locations: [],
     technicians: [{ id: 'tech-1', displayName: 'Taylor Tech', roleId: 'technician' }],
     jobs: [job]
+  };
+}
+
+function buildLocation(overrides: Partial<LocationSummary> = {}): LocationSummary {
+  return {
+    id: 'location-1',
+    name: 'Main Shop',
+    customerId: 'customer-1',
+    customerName: 'Acme',
+    addressLine1: '123 Main',
+    city: 'Blaine',
+    state: 'WA',
+    postalCode: '98230',
+    phone: '555-0100',
+    email: 'shop@example.com',
+    isActive: true,
+    contacts: [
+      {
+        id: 'contact-link-1',
+        contactId: 'contact-1',
+        displayName: 'Casey Contact',
+        phone: '555-0111',
+        email: 'casey@example.com',
+        tags: [],
+        isActive: true,
+        hasOverrides: false,
+        sharedContact: {
+          id: 'contact-1',
+          displayName: 'Casey Contact',
+          phone: '555-0111',
+          email: 'casey@example.com',
+          tags: [],
+          isActive: true
+        },
+        linkedRecord: {
+          id: 'location-1',
+          kind: 'location',
+          name: 'Main Shop',
+          subtitle: 'Acme'
+        }
+      }
+    ],
+    alternateBillToCustomerIds: [],
+    ...overrides
+  };
+}
+
+function buildCustomer(overrides: Partial<CustomerAccountSummary> = {}): CustomerAccountSummary {
+  return {
+    id: 'customer-1',
+    name: 'Acme',
+    accountType: 'company',
+    billingAddressLine1: '456 Billing',
+    billingCity: 'Blaine',
+    billingState: 'WA',
+    billingPostalCode: '98230',
+    phone: '555-0200',
+    email: 'billing@example.com',
+    isActive: true,
+    flags: [],
+    ...overrides
   };
 }
 
@@ -169,6 +232,8 @@ function renderDetail(
   const props: Parameters<typeof JobDetailPanel>[0] = {
     technicians: buildWorkspace(job).technicians,
     job,
+    location: buildLocation(),
+    billToCustomer: buildCustomer(),
     apiBaseUrl: 'http://localhost',
     sessionToken: 'test-token',
     canCreateEstimate: true,
@@ -184,6 +249,9 @@ function renderDetail(
     paymentPermissions: { canView: true, canRecord: true, canVoid: true },
     initialTab: input.initialTab,
     focusedAppointmentId: input.focusedAppointmentId,
+    equipmentCount: 2,
+    registerEntryCount: input.capturedWork?.registerEntries.length ?? 1,
+    mediaAttachmentCount: input.capturedWork?.mediaAttachments.length ?? 1,
     pendingJobStatusChange: null,
     appointmentDrafts: {},
     appointmentEditDrafts: {},
@@ -244,12 +312,26 @@ describe('JobDetailPanel', () => {
       }
     });
 
-    expect(screen.queryByText('Bill to')).not.toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Service Location' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Bill To' })).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Open location Main Shop' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open customer Acme' }));
 
     expect(onOpenLocation).toHaveBeenCalledWith('location-1', 'job-1');
     expect(onOpenCustomer).toHaveBeenCalledWith('customer-1', 'job-1');
+  });
+
+  it('renders operational overview context at a glance', () => {
+    renderDetail();
+
+    expect(screen.getByRole('heading', { name: 'Job Summary / Office Notes' })).toBeInTheDocument();
+    expect(screen.getAllByText('No cooling').length).toBeGreaterThan(0);
+    expect(screen.getByText('123 Main, Blaine, WA 98230')).toBeInTheDocument();
+    expect(screen.getByText('555-0100')).toBeInTheDocument();
+    expect(screen.getByText('Casey Contact phone')).toBeInTheDocument();
+    expect(screen.getByText('456 Billing, Blaine, WA 98230')).toBeInTheDocument();
+    expect(screen.getByText('2026-05-22 - 8:00 AM - 10:00 AM')).toBeInTheDocument();
+    expect(screen.getByText('Equipment on site')).toBeInTheDocument();
   });
 
   it('edits appointment schedule and status from the appointments tab', () => {
@@ -480,6 +562,8 @@ function renderProps(
   return {
     technicians: buildWorkspace(job).technicians,
     job,
+    location: buildLocation(),
+    billToCustomer: buildCustomer(),
     apiBaseUrl: 'http://localhost',
     sessionToken: 'test-token',
     canCreateEstimate: true,
@@ -493,6 +577,9 @@ function renderProps(
     canCreateJobCosting: true,
     canEditJobCosting: true,
     paymentPermissions: { canView: true, canRecord: true, canVoid: true },
+    equipmentCount: 2,
+    registerEntryCount: overrides.capturedWork?.registerEntries.length ?? 1,
+    mediaAttachmentCount: overrides.capturedWork?.mediaAttachments.length ?? 1,
     pendingJobStatusChange: null,
     appointmentDrafts: {},
     appointmentEditDrafts: {},

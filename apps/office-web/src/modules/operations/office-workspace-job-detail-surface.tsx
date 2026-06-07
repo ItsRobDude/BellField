@@ -132,6 +132,8 @@ export function OfficeJobDetailSurface({
         key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
         technicians={selectedJobDetail.technicians}
         job={selectedJob}
+        location={selectedJobDetail.location}
+        billToCustomer={selectedJobDetail.billToCustomer}
         apiBaseUrl={apiBaseUrl}
         sessionToken={sessionToken}
         canCreateEstimate={canCreateEstimate}
@@ -149,6 +151,9 @@ export function OfficeJobDetailSurface({
         focusedAppointmentId={focusedAppointmentId}
         timelineHasMore={selectedJobDetail.timelineHasMore}
         timelineLimit={selectedJobDetail.timelineLimit}
+        equipmentCount={selectedJobDetail.equipment.length}
+        registerEntryCount={selectedJobDetail.registerEntries.length}
+        mediaAttachmentCount={selectedJobDetail.mediaAttachments.length}
         pendingJobStatusChange={pendingJobStatusChange}
         appointmentDrafts={appointmentDrafts}
         appointmentEditDrafts={appointmentEditDrafts}

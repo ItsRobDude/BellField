@@ -3,9 +3,11 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import type {
   AppointmentStatus,
+  CustomerAccountSummary,
   JobSummary,
   JobStatus,
   JobsWorkspaceResponse,
+  LocationSummary,
   MediaAttachmentSummary,
   RegisterEntryKind,
   RegisterEntrySummary
@@ -30,6 +32,8 @@ import type { InvoicePaymentPermissions } from './job-invoice-shared';
 type JobDetailPanelProps = {
   technicians: JobsWorkspaceResponse['technicians'];
   job: JobSummary;
+  location: LocationSummary;
+  billToCustomer: CustomerAccountSummary;
   apiBaseUrl: string;
   sessionToken: string;
   canCreateEstimate: boolean;
@@ -47,6 +51,9 @@ type JobDetailPanelProps = {
   focusedAppointmentId?: string | null;
   timelineHasMore?: boolean;
   timelineLimit?: number;
+  equipmentCount: number;
+  registerEntryCount: number;
+  mediaAttachmentCount: number;
   pendingJobStatusChange: PendingJobStatusChange | null;
   appointmentDrafts: Record<string, AppointmentDraft>;
   appointmentEditDrafts: Record<string, AppointmentEditDraft>;
@@ -113,6 +120,8 @@ const tabs: Array<{ id: JobDetailTab; label: string }> = [
 export function JobDetailPanel({
   technicians,
   job,
+  location,
+  billToCustomer,
   apiBaseUrl,
   sessionToken,
   canCreateEstimate,
@@ -130,6 +139,9 @@ export function JobDetailPanel({
   focusedAppointmentId,
   timelineHasMore = false,
   timelineLimit = 50,
+  equipmentCount,
+  registerEntryCount,
+  mediaAttachmentCount,
   pendingJobStatusChange,
   appointmentDrafts,
   appointmentEditDrafts,
@@ -244,6 +256,13 @@ export function JobDetailPanel({
       {activeTab === 'overview' ? (
         <JobOverviewSection
           job={job}
+          location={location}
+          billToCustomer={billToCustomer}
+          equipmentCount={equipmentCount}
+          registerEntryCount={registerEntryCount}
+          mediaAttachmentCount={mediaAttachmentCount}
+          focusedAppointmentId={focusedAppointmentId}
+          onSelectTab={setActiveTab}
           onOpenCustomer={onOpenCustomer}
           onOpenLocation={onOpenLocation}
           onJobStatusReviewRequested={onJobStatusReviewRequested}
