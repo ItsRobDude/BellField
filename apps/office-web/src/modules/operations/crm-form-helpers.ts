@@ -1,4 +1,4 @@
-import type { ContactLink, DuplicateCandidate } from '@/lib/operations-api';
+import type { ContactLink, ContactMethodSummary, DuplicateCandidate } from '@/lib/operations-api';
 import { searchOfficeCrm } from '@/lib/operations-api';
 import type {
   ContactFormState,
@@ -49,9 +49,19 @@ export function createEmptyContactForm(): ContactFormState {
 
 export function locationNeedsPhoneEmailConfirmation(
   phone: string | undefined,
-  email: string | undefined
+  email: string | undefined,
+  hasActiveContactMethod = false
 ): boolean {
-  return !phone?.trim() && !email?.trim();
+  return !phone?.trim() && !email?.trim() && !hasActiveContactMethod;
+}
+
+export function hasActivePhoneOrEmailMethod(contactMethods: ContactMethodSummary[]): boolean {
+  return contactMethods.some(
+    (method) =>
+      method.isActive &&
+      (method.kind === 'phone' || method.kind === 'email') &&
+      method.value.trim().length > 0
+  );
 }
 
 export function splitCommaValues(value: string): string[] {

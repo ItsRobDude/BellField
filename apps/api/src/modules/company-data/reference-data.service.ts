@@ -328,7 +328,11 @@ export class ReferenceDataService {
     input: Omit<ContactMethodRecord, 'id'>
   ): Promise<ContactMethodMutationResponse> {
     const contactMethod = await this.referenceDataRepository.createContactMethod(input);
-    await this.syncPrimaryContactMethodToLegacy(contactMethod);
+    await this.syncContactMethodKindToLegacy(
+      contactMethod.ownerKind,
+      contactMethod.ownerId,
+      contactMethod.kind
+    );
     return {
       contactMethod: this.toContactMethodSummary(contactMethod)
     };
@@ -347,7 +351,11 @@ export class ReferenceDataService {
       throw new NotFoundException('Contact method not found.');
     }
 
-    await this.syncPrimaryContactMethodToLegacy(contactMethod);
+    await this.syncContactMethodKindToLegacy(
+      contactMethod.ownerKind,
+      contactMethod.ownerId,
+      contactMethod.kind
+    );
     return {
       contactMethod: this.toContactMethodSummary(contactMethod)
     };
@@ -483,24 +491,21 @@ export class ReferenceDataService {
     }
   }
 
-  private async syncPrimaryContactMethodToLegacy(method: ContactMethodRecord): Promise<void> {
-    if (!method.isPrimary || !method.isActive) {
-      return;
-    }
+  private async syncContactMethodKindToLegacy(
+    ownerKind: ContactMethodOwnerKind,
+    ownerId: string,
+    kind: ContactMethodKind
+  ): Promise<void> {
+    const activePrimary = (await this.listContactMethods(ownerKind, ownerId, true)).find(
+      (method) => method.kind === kind && method.isPrimary && method.isActive
+    );
 
-    const patch = { [method.kind]: method.value };
-
-    if (method.ownerKind === 'customer') {
-      await this.referenceDataRepository.updateCustomer(method.ownerId, patch);
-      return;
-    }
-
-    if (method.ownerKind === 'location') {
-      await this.referenceDataRepository.updateLocation(method.ownerId, patch);
-      return;
-    }
-
-    await this.referenceDataRepository.updateContact(method.ownerId, patch);
+    await this.referenceDataRepository.updateLegacyContactValue(
+      ownerKind,
+      ownerId,
+      kind,
+      activePrimary?.value ?? null
+    );
   }
 
   private async listContactMethods(

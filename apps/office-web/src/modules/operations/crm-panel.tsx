@@ -34,6 +34,7 @@ import {
   createEmptyContactForm,
   createEmptyCustomerForm,
   createEmptyLocationForm,
+  hasActivePhoneOrEmailMethod,
   locationNeedsPhoneEmailConfirmation,
   splitCommaValues
 } from './crm-form-helpers';
@@ -138,10 +139,6 @@ export function CrmPanel({
 
       if (!locationForm.customerId && nextWorkspace.customers[0]) {
         setLocationForm((current) => ({ ...current, customerId: nextWorkspace.customers[0].id }));
-      }
-
-      if (!existingContactId && nextWorkspace.contacts[0]) {
-        setExistingContactId(nextWorkspace.contacts[0].id);
       }
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to load customer records.');
@@ -350,9 +347,6 @@ export function CrmPanel({
         billingCity: selectedCustomer.billingCity,
         billingState: selectedCustomer.billingState,
         billingPostalCode: selectedCustomer.billingPostalCode,
-        phone: selectedCustomer.phone,
-        email: selectedCustomer.email,
-        fax: selectedCustomer.fax,
         isActive: selectedCustomer.isActive,
         flags: [...selectedCustomer.flags],
         confirmDuplicate: true
@@ -431,7 +425,11 @@ export function CrmPanel({
 
     if (
       !saveLocationMissingContactConfirmation &&
-      locationNeedsPhoneEmailConfirmation(selectedLocation.phone, selectedLocation.email)
+      locationNeedsPhoneEmailConfirmation(
+        selectedLocation.phone,
+        selectedLocation.email,
+        hasActivePhoneOrEmailMethod(selectedLocation.contactMethods)
+      )
     ) {
       setSaveLocationMissingContactConfirmation(true);
       return;
@@ -447,9 +445,6 @@ export function CrmPanel({
         city: selectedLocation.city,
         state: selectedLocation.state,
         postalCode: selectedLocation.postalCode,
-        phone: selectedLocation.phone,
-        email: selectedLocation.email,
-        fax: selectedLocation.fax,
         isActive: selectedLocation.isActive,
         confirmDuplicate: true,
         confirmMissingContactInfo: saveLocationMissingContactConfirmation
@@ -517,9 +512,6 @@ export function CrmPanel({
         sessionToken,
         apiBaseUrl,
         displayName: selectedContact.displayName,
-        phone: selectedContact.phone,
-        email: selectedContact.email,
-        fax: selectedContact.fax,
         tags: [...selectedContact.tags],
         scope: 'global'
       });
@@ -550,6 +542,7 @@ export function CrmPanel({
         customerId: selectedCustomer?.id,
         locationId: selectedLocation?.id
       });
+      setExistingContactId('');
       await reloadSelectedRecord();
       await refreshWorkspace();
       setCrmNoticeMessage(
@@ -783,6 +776,7 @@ export function CrmPanel({
           onLinkExisting={() => void handleLinkExistingContact()}
           onLocationTransferred={(location) => void handleLocationTransferred(location)}
           onNewContact={openNewContactForm}
+          onOpenCustomer={(customerId) => void openCustomerDetail(customerId)}
           onOpenLocation={(locationId) => void openLocationDetail(locationId)}
           onRefreshSelectedRecord={reloadSelectedRecord}
           onSaveContact={() => void handleSaveSharedContact()}

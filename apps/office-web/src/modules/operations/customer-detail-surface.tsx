@@ -39,7 +39,7 @@ type CustomerDetailSurfaceProps = {
 const customerDetailTabs: Array<{ key: CustomerDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'locations', label: 'Locations' },
-  { key: 'contacts', label: 'Contacts' },
+  { key: 'contacts', label: 'People' },
   { key: 'jobs', label: 'Jobs' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'activity', label: 'Activity' }
@@ -149,27 +149,6 @@ export function CustomerDetailSurface({
               style={styles.input}
             />
             <input
-              value={customer.phone ?? ''}
-              onChange={(event) =>
-                onChangeCustomer({ ...customer, phone: event.target.value || undefined })
-              }
-              style={styles.input}
-            />
-            <input
-              value={customer.email ?? ''}
-              onChange={(event) =>
-                onChangeCustomer({ ...customer, email: event.target.value || undefined })
-              }
-              style={styles.input}
-            />
-            <input
-              value={customer.fax ?? ''}
-              onChange={(event) =>
-                onChangeCustomer({ ...customer, fax: event.target.value || undefined })
-              }
-              style={styles.input}
-            />
-            <input
               value={customer.flags.join(', ')}
               onChange={(event) =>
                 onChangeCustomer({ ...customer, flags: splitCommaValues(event.target.value) })
@@ -206,7 +185,7 @@ export function CustomerDetailSurface({
       ) : null}
       {selectedCustomerTab === 'contacts' ? (
         <RecordContactsSection
-          title="Customer contacts"
+          title="Customer people"
           contacts={customer.contacts}
           activeContactOptions={activeContactOptions}
           existingContactId={existingContactId}

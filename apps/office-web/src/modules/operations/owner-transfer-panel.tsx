@@ -24,6 +24,7 @@ type OwnerTransferPanelProps = {
   apiBaseUrl: string;
   location: LocationDetail;
   sessionToken: string;
+  onOpenCustomer: (customerId: string) => void;
   onTransferred: (location: LocationDetail) => Promise<void> | void;
 };
 
@@ -38,6 +39,7 @@ export function OwnerTransferPanel({
   apiBaseUrl,
   location,
   sessionToken,
+  onOpenCustomer,
   onTransferred
 }: OwnerTransferPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
@@ -169,9 +171,18 @@ export function OwnerTransferPanel({
             <strong>Current customer</strong>
             <div style={styles.tinyMuted}>{location.customerName}</div>
           </div>
-          <button type="button" onClick={() => setIsOpen(true)} style={styles.button}>
-            Transfer ownership
-          </button>
+          <div style={styles.inlineActionBar}>
+            <button
+              type="button"
+              onClick={() => onOpenCustomer(location.customerId)}
+              style={styles.button}
+            >
+              Open customer
+            </button>
+            <button type="button" onClick={() => setIsOpen(true)} style={styles.button}>
+              Transfer ownership
+            </button>
+          </div>
         </div>
       </div>
     );

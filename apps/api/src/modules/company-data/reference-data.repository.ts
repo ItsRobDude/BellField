@@ -564,6 +564,26 @@ export class ReferenceDataRepository {
     return this.contactMethodReadRepository.getContactMethodById(contactMethodId);
   }
 
+  async updateLegacyContactValue(
+    ownerKind: ContactMethodRecord['ownerKind'],
+    ownerId: string,
+    kind: ContactMethodRecord['kind'],
+    value: string | null
+  ): Promise<void> {
+    const columnName = kind === 'phone' ? 'phone' : kind === 'email' ? 'email' : 'fax';
+    const tableName =
+      ownerKind === 'customer' ? 'customers' : ownerKind === 'location' ? 'locations' : 'contacts';
+
+    await this.databaseService.query(
+      `
+        update ${tableName}
+        set ${columnName} = $2, updated_at = now()
+        where id = $1
+      `,
+      [ownerId, value]
+    );
+  }
+
   async addOwnershipHistoryEntry(
     input: Omit<OwnershipHistoryRecord, 'id'>
   ): Promise<OwnershipHistoryRecord> {

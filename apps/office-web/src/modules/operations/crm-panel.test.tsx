@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
   ContactDetail,
+  ContactMethodMutationResponse,
   ContactMutationResponse,
   CrmOperationalContext,
   CrmSearchResult,
@@ -29,6 +30,19 @@ const workspace: CrmWorkspaceResponse = {
   ],
   contacts: [],
   locations: []
+};
+
+const workspaceWithContact: CrmWorkspaceResponse = {
+  ...workspace,
+  contacts: [
+    {
+      id: 'contact-1',
+      displayName: 'Sam Service',
+      phone: '360-555-0188',
+      tags: [],
+      isActive: true
+    }
+  ]
 };
 
 const duplicateLocation: CrmSearchResult = {
@@ -210,8 +224,8 @@ function renderCrmPanel(
 }
 
 async function openNewLocationForm() {
-  await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-  fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+  await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
+  fireEvent.change(screen.getByLabelText('Customer, location, or person search'), {
     target: { value: 'Acme' }
   });
   fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
@@ -252,13 +266,13 @@ describe('CrmPanel', () => {
     renderCrmPanel(fetchMock);
 
     expect(
-      await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
+      await screen.findByRole('heading', { name: 'Find customers, locations, and people' })
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
+    expect(screen.getByLabelText('Customer, location, or person search')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New customer' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New location' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New contact' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Add contact method' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Add phone' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create customer' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create location' })).not.toBeInTheDocument();
   });
@@ -286,23 +300,82 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
       target: { value: 'Acme' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
 
     expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText('Customer, location, or contact search')
-    ).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add phone' })).toBeInTheDocument();
+    expect(screen.queryByLabelText('Customer, location, or person search')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
+      await screen.findByRole('heading', { name: 'Find customers, locations, and people' })
     ).toBeInTheDocument();
-    expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
+    expect(screen.getByLabelText('Customer, location, or person search')).toBeInTheDocument();
+  });
+
+  it('opens location detail from the customer locations tab', async () => {
+    const customerWithLocation: CustomerDetail = {
+      ...customerDetail,
+      locations: [
+        {
+          id: 'location-1',
+          name: 'Main Shop',
+          addressLine1: '123 Main',
+          city: 'Blaine',
+          state: 'WA',
+          postalCode: '98230',
+          isActive: true
+        }
+      ]
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [customerResult]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerWithLocation);
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-1') {
+        return jsonResponse(createdLocation);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
+    expect(await screen.findByRole('tab', { name: 'People' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Contacts' })).not.toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('tab', { name: 'Locations' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+
+    expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    expect(screen.getByText('Main Shop')).toBeInTheDocument();
+    expect(screen.getByRole('tab', { name: 'People' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Contacts' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open customer' }));
+
+    expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+    expect(screen.getByText('Acme')).toBeInTheDocument();
   });
 
   it('loads an exact navigation target and can return to the source job', async () => {
@@ -452,7 +525,7 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
       target: { value: 'Acme' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
@@ -597,7 +670,7 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
       target: { value: 'Main' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
@@ -621,18 +694,16 @@ describe('CrmPanel', () => {
     );
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
     fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
 
     expect(await screen.findByRole('heading', { name: 'Create customer' })).toBeInTheDocument();
-    expect(
-      screen.queryByLabelText('Customer, location, or contact search')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Customer, location, or person search')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(
-      await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
+      await screen.findByRole('heading', { name: 'Find customers, locations, and people' })
     ).toBeInTheDocument();
   });
 
@@ -657,9 +728,7 @@ describe('CrmPanel', () => {
     renderCrmPanel(fetchMock);
 
     await openNewLocationForm();
-    expect(
-      screen.queryByLabelText('Customer, location, or contact search')
-    ).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Customer, location, or person search')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
@@ -688,7 +757,7 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
     fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
     await screen.findByRole('heading', { name: 'Create customer' });
     fireEvent.change(screen.getByPlaceholderText('Customer name'), {
@@ -752,7 +821,7 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    fireEvent.change(await screen.findByLabelText('Customer, location, or contact search'), {
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
       target: { value: 'Acme' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
@@ -798,6 +867,149 @@ describe('CrmPanel', () => {
       });
     });
     expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+  });
+
+  it('links an existing contact through contextual search instead of a dropdown', async () => {
+    const createResponse: ContactMutationResponse = { contact: createdContact };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspaceWithContact);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [customerResult]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerDetail);
+      }
+
+      if (url.pathname === '/operations/crm/contact-links' && options?.method === 'POST') {
+        return jsonResponse(createResponse);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
+    fireEvent.click(await screen.findByRole('tab', { name: 'People' }));
+
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Customer people existing person search'), {
+      target: { value: 'Sam' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Sam Service/ }));
+    expect(screen.getByText('Selected: Sam Service')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Link existing person' }));
+
+    await waitFor(() => {
+      const linkCall = fetchMock.mock.calls.find(([input, options]) => {
+        const url = new URL(String(input));
+        return (
+          url.pathname === '/operations/crm/contact-links' &&
+          (options as RequestInit | undefined)?.method === 'POST'
+        );
+      });
+      expect(linkCall).toBeDefined();
+      expect(JSON.parse(String((linkCall?.[1] as RequestInit).body))).toMatchObject({
+        contactId: 'contact-1',
+        customerId: 'customer-1'
+      });
+    });
+  });
+
+  it('edits an existing contact method from customer detail', async () => {
+    const customerDetailWithMethod: CustomerDetail = {
+      ...customerDetail,
+      contactMethods: [
+        {
+          id: 'contact-method-1',
+          ownerKind: 'customer',
+          ownerId: 'customer-1',
+          kind: 'phone',
+          label: 'Primary',
+          value: '360-555-0100',
+          isPrimary: true,
+          isActive: true
+        }
+      ]
+    };
+    const updateResponse: ContactMethodMutationResponse = {
+      contactMethod: {
+        ...customerDetailWithMethod.contactMethods[0],
+        label: 'After hours',
+        value: '360-555-0199'
+      }
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({
+          query: url.searchParams.get('q') ?? '',
+          results: [customerResult]
+        });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerDetailWithMethod);
+      }
+
+      if (
+        url.pathname === '/operations/crm/contact-methods/contact-method-1' &&
+        options?.method === 'PATCH'
+      ) {
+        return jsonResponse(updateResponse);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock);
+
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
+    expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+
+    fireEvent.change(screen.getAllByDisplayValue('Primary')[0], {
+      target: { value: 'After hours' }
+    });
+    fireEvent.change(screen.getByDisplayValue('360-555-0100'), {
+      target: { value: '360-555-0199' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save method' }));
+
+    await waitFor(() => {
+      const updateCall = fetchMock.mock.calls.find(([input, options]) => {
+        const url = new URL(String(input));
+        return (
+          url.pathname === '/operations/crm/contact-methods/contact-method-1' &&
+          (options as RequestInit | undefined)?.method === 'PATCH'
+        );
+      });
+      expect(updateCall).toBeDefined();
+      expect(JSON.parse(String((updateCall?.[1] as RequestInit).body))).toEqual({
+        label: 'After hours',
+        value: '360-555-0199',
+        isPrimary: true,
+        isActive: true
+      });
+    });
   });
 
   it('requires confirmation for fax-only locations before creating', async () => {
@@ -939,8 +1151,8 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or person search'), {
       target: { value: 'Main Shop' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
@@ -982,14 +1194,14 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or person search'), {
       target: { value: 'Main Shop' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
 
     expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add phone' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Reassign owner' })).not.toBeInTheDocument();
   });
 
@@ -1024,8 +1236,8 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or person search'), {
       target: { value: 'Main Shop' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
@@ -1089,8 +1301,8 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or person search'), {
       target: { value: 'Main Shop' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
@@ -1150,8 +1362,8 @@ describe('CrmPanel', () => {
     });
     renderCrmPanel(fetchMock);
 
-    await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-    fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+    await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
+    fireEvent.change(screen.getByLabelText('Customer, location, or person search'), {
       target: { value: 'Sam' }
     });
     fireEvent.click(await screen.findByRole('button', { name: /Sam Service/ }));
@@ -1159,7 +1371,7 @@ describe('CrmPanel', () => {
     expect(await screen.findByRole('heading', { name: 'Contact' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add location' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'New contact' })).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Add contact method' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add phone' })).toBeInTheDocument();
   });
 });
 

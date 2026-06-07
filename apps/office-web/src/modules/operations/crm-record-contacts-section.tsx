@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import type { ContactLink, ContactUpdateScope, CrmWorkspaceResponse } from '@/lib/operations-api';
 import type { ContactLinkDraft } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -31,23 +32,84 @@ export function RecordContactsSection({
   onEndDateLink,
   onArchiveLink
 }: RecordContactsSectionProps) {
+  const [contactSearchQuery, setContactSearchQuery] = useState('');
+  const selectedContact = activeContactOptions.find((contact) => contact.id === existingContactId);
+  const matchingContacts = useMemo(() => {
+    const query = contactSearchQuery.trim().toLowerCase();
+
+    if (query.length < 2) {
+      return [];
+    }
+
+    return activeContactOptions
+      .filter((contact) =>
+        [
+          contact.displayName,
+          contact.phone ?? '',
+          contact.email ?? '',
+          contact.fax ?? '',
+          contact.tags.join(' ')
+        ]
+          .join(' ')
+          .toLowerCase()
+          .includes(query)
+      )
+      .slice(0, 8);
+  }, [activeContactOptions, contactSearchQuery]);
+
   return (
     <div style={styles.subpanel}>
       <strong>{title}</strong>
       <div style={styles.formRow}>
-        <select
-          value={existingContactId}
-          onChange={(event) => setExistingContactId(event.target.value)}
-          style={styles.input}
-        >
-          {activeContactOptions.map((contact) => (
-            <option key={contact.id} value={contact.id}>
-              {contact.displayName}
-            </option>
+        <label style={styles.fieldLabel}>
+          <span>Find existing person</span>
+          <input
+            aria-label={`${title} existing person search`}
+            value={contactSearchQuery}
+            onChange={(event) => {
+              setContactSearchQuery(event.target.value);
+              setExistingContactId('');
+            }}
+            placeholder="Search by name, phone, or email"
+            style={styles.input}
+          />
+        </label>
+      </div>
+      {contactSearchQuery.trim().length > 0 && contactSearchQuery.trim().length < 2 ? (
+        <p style={styles.tinyMuted}>Type at least 2 characters.</p>
+      ) : null}
+      {matchingContacts.length > 0 ? (
+        <div style={styles.listCompact}>
+          {matchingContacts.map((contact) => (
+            <button
+              key={contact.id}
+              type="button"
+              onClick={() => setExistingContactId(contact.id)}
+              style={styles.cardButton}
+              aria-pressed={existingContactId === contact.id}
+            >
+              <strong>{contact.displayName}</strong>
+              <span style={styles.tinyMuted}>
+                {[contact.phone, contact.email].filter(Boolean).join(' · ') || 'No phone/email'}
+              </span>
+            </button>
           ))}
-        </select>
-        <button type="button" onClick={onLinkExisting} style={styles.button}>
-          Link existing contact
+        </div>
+      ) : null}
+      {contactSearchQuery.trim().length >= 2 && matchingContacts.length === 0 ? (
+        <p style={styles.tinyMuted}>No matching people.</p>
+      ) : null}
+      <div style={styles.inlineActionBar}>
+        <span style={styles.tinyMuted}>
+          {selectedContact ? `Selected: ${selectedContact.displayName}` : 'No person selected'}
+        </span>
+        <button
+          type="button"
+          onClick={onLinkExisting}
+          style={styles.button}
+          disabled={!selectedContact}
+        >
+          Link existing person
         </button>
       </div>
       {contacts.map((contact) => {
@@ -122,7 +184,7 @@ export function RecordContactsSection({
             </div>
             <div style={styles.row}>
               <button type="button" onClick={() => onSaveLink(contact)} style={styles.button}>
-                Save contact update
+                Save person update
               </button>
               <button type="button" onClick={() => onEndDateLink(contact.id)} style={styles.button}>
                 End-date today

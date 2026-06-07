@@ -23,7 +23,7 @@ export function CrmSearchSurface({
   return (
     <div style={styles.panel}>
       <div style={styles.row}>
-        <h3 style={styles.subheading}>Find customers, locations, and contacts</h3>
+        <h3 style={styles.subheading}>Find customers, locations, and people</h3>
         <div style={styles.inlineActionBar}>
           <button type="button" onClick={onNewCustomer} style={styles.primaryButton}>
             New customer
@@ -33,7 +33,7 @@ export function CrmSearchSurface({
       <label style={styles.fieldLabel}>
         <span>Search</span>
         <input
-          aria-label="Customer, location, or contact search"
+          aria-label="Customer, location, or person search"
           value={searchQuery}
           onChange={(event) => onSearchQueryChange(event.target.value)}
           placeholder="Search by name, address, phone"

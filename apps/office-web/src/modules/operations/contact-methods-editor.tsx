@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type {
   ContactMethodKind,
   ContactMethodOwnerKind,
@@ -23,11 +23,74 @@ type ContactMethodsEditorProps = {
   onSaved: () => Promise<void> | void;
 };
 
-const contactMethodKinds: Array<{ value: ContactMethodKind; label: string }> = [
-  { value: 'phone', label: 'Phone' },
-  { value: 'email', label: 'Email' },
-  { value: 'fax', label: 'Fax' }
+type ContactMethodDraft = {
+  label: string;
+  value: string;
+  isPrimary: boolean;
+  isActive: boolean;
+};
+
+type ContactMethodKindUi = {
+  value: ContactMethodKind;
+  label: string;
+  valueLabel: string;
+  placeholder: string;
+  inputType: 'email' | 'tel';
+  inputMode: 'email' | 'tel';
+  autoComplete: string;
+  addButtonLabel: string;
+};
+
+const contactMethodKinds: ContactMethodKindUi[] = [
+  {
+    value: 'phone',
+    label: 'Phone',
+    valueLabel: 'Phone number',
+    placeholder: '(555) 123-4567',
+    inputType: 'tel',
+    inputMode: 'tel',
+    autoComplete: 'tel',
+    addButtonLabel: 'Add phone'
+  },
+  {
+    value: 'email',
+    label: 'Email',
+    valueLabel: 'Email address',
+    placeholder: 'name@example.com',
+    inputType: 'email',
+    inputMode: 'email',
+    autoComplete: 'email',
+    addButtonLabel: 'Add email'
+  },
+  {
+    value: 'fax',
+    label: 'Fax',
+    valueLabel: 'Fax number',
+    placeholder: '(555) 123-4567',
+    inputType: 'tel',
+    inputMode: 'tel',
+    autoComplete: 'off',
+    addButtonLabel: 'Add fax'
+  }
 ];
+
+function getContactMethodKindUi(kind: ContactMethodKind): ContactMethodKindUi {
+  return contactMethodKinds.find((option) => option.value === kind) ?? contactMethodKinds[0];
+}
+
+function validateContactMethodValue(kind: ContactMethodKind, value: string): string | null {
+  if (kind === 'email') {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value) ? null : 'Enter a valid email address.';
+  }
+
+  const digitCount = value.replace(/\D/g, '').length;
+
+  if (digitCount < 7) {
+    return kind === 'fax' ? 'Enter a valid fax number.' : 'Enter a valid phone number.';
+  }
+
+  return null;
+}
 
 export function ContactMethodsEditor({
   apiBaseUrl,
@@ -43,6 +106,24 @@ export function ContactMethodsEditor({
   const [isPrimary, setIsPrimary] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [drafts, setDrafts] = useState<Record<string, ContactMethodDraft>>({});
+  const selectedKindUi = getContactMethodKindUi(kind);
+
+  useEffect(() => {
+    setDrafts(
+      Object.fromEntries(
+        contactMethods.map((method) => [
+          method.id,
+          {
+            label: method.label,
+            value: method.value,
+            isPrimary: method.isPrimary,
+            isActive: method.isActive
+          }
+        ])
+      )
+    );
+  }, [contactMethods]);
 
   async function handleCreateContactMethod() {
     const trimmedLabel = label.trim();
@@ -50,6 +131,13 @@ export function ContactMethodsEditor({
 
     if (!trimmedLabel || !trimmedValue) {
       setErrorMessage('Label and value are required.');
+      return;
+    }
+
+    const valueError = validateContactMethodValue(kind, trimmedValue);
+
+    if (valueError) {
+      setErrorMessage(valueError);
       return;
     }
 
@@ -84,7 +172,28 @@ export function ContactMethodsEditor({
     }
   }
 
-  async function handleSetActive(contactMethodId: string, isActive: boolean) {
+  async function handleUpdateContactMethod(contactMethodId: string, methodKind: ContactMethodKind) {
+    const draft = drafts[contactMethodId];
+
+    if (!draft) {
+      return;
+    }
+
+    const trimmedLabel = draft.label.trim();
+    const trimmedValue = draft.value.trim();
+
+    if (!trimmedLabel || !trimmedValue) {
+      setErrorMessage('Label and value are required.');
+      return;
+    }
+
+    const valueError = validateContactMethodValue(methodKind, trimmedValue);
+
+    if (valueError) {
+      setErrorMessage(valueError);
+      return;
+    }
+
     setIsSaving(true);
     setErrorMessage(null);
 
@@ -93,7 +202,10 @@ export function ContactMethodsEditor({
         sessionToken,
         apiBaseUrl,
         contactMethodId,
-        isActive
+        label: trimmedLabel,
+        value: trimmedValue,
+        isPrimary: draft.isPrimary,
+        isActive: draft.isActive
       });
       await onSaved();
     } catch (error) {
@@ -103,55 +215,130 @@ export function ContactMethodsEditor({
     }
   }
 
+  function updateMethodDraft(contactMethodId: string, patch: Partial<ContactMethodDraft>) {
+    setDrafts((current) => {
+      const currentDraft = current[contactMethodId];
+
+      if (!currentDraft) {
+        return current;
+      }
+
+      return {
+        ...current,
+        [contactMethodId]: { ...currentDraft, ...patch }
+      };
+    });
+  }
+
   return (
     <div style={styles.subpanel}>
       <strong>Contact methods</strong>
       {contactMethods.length > 0 ? (
         <div style={styles.list}>
-          {contactMethods.map((method) => (
-            <div key={method.id} style={styles.panel}>
-              <div style={styles.row}>
-                <div>
-                  <strong>
-                    {method.label}: {method.value}
-                  </strong>
-                  <div style={styles.tinyMuted}>
-                    {method.kind}
-                    {method.isPrimary ? ' - primary' : ''}
-                    {!method.isActive ? ' - inactive' : ''}
+          {contactMethods.map((method) => {
+            const draft = drafts[method.id] ?? {
+              label: method.label,
+              value: method.value,
+              isPrimary: method.isPrimary,
+              isActive: method.isActive
+            };
+            const methodKindUi = getContactMethodKindUi(method.kind);
+
+            return (
+              <div key={method.id} style={styles.panel}>
+                <div style={styles.row}>
+                  <div>
+                    <strong>
+                      {method.label}: {method.value}
+                    </strong>
+                    <div style={styles.tinyMuted}>
+                      {method.kind}
+                      {method.isPrimary ? ' - primary' : ''}
+                      {!method.isActive ? ' - inactive' : ''}
+                    </div>
                   </div>
+                  <label style={styles.inlineLabel}>
+                    <input
+                      type="checkbox"
+                      checked={draft.isActive}
+                      onChange={(event) =>
+                        updateMethodDraft(method.id, { isActive: event.target.checked })
+                      }
+                    />
+                    Active
+                  </label>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => void handleSetActive(method.id, !method.isActive)}
-                  style={styles.button}
-                  disabled={isSaving}
-                >
-                  {method.isActive ? 'Archive method' : 'Reactivate method'}
-                </button>
+                <div style={styles.formRow}>
+                  <label style={styles.fieldLabel}>
+                    <span>Name</span>
+                    <input
+                      value={draft.label}
+                      onChange={(event) =>
+                        updateMethodDraft(method.id, { label: event.target.value })
+                      }
+                      style={styles.input}
+                    />
+                  </label>
+                  <label style={styles.fieldLabel}>
+                    <span>{methodKindUi.valueLabel}</span>
+                    <input
+                      type={methodKindUi.inputType}
+                      inputMode={methodKindUi.inputMode}
+                      autoComplete={methodKindUi.autoComplete}
+                      value={draft.value}
+                      onChange={(event) =>
+                        updateMethodDraft(method.id, { value: event.target.value })
+                      }
+                      placeholder={methodKindUi.placeholder}
+                      style={styles.input}
+                    />
+                  </label>
+                </div>
+                <div style={styles.inlineActionBar}>
+                  <label style={styles.inlineLabel}>
+                    <input
+                      type="checkbox"
+                      checked={draft.isPrimary}
+                      onChange={(event) =>
+                        updateMethodDraft(method.id, { isPrimary: event.target.checked })
+                      }
+                    />
+                    Primary
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => void handleUpdateContactMethod(method.id, method.kind)}
+                    style={styles.button}
+                    disabled={isSaving}
+                  >
+                    Save method
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <p style={styles.tinyMuted}>No contact methods recorded.</p>
       )}
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      <div style={styles.formRow}>
-        <label style={styles.fieldLabel}>
-          <span>Type</span>
-          <select
-            value={kind}
-            onChange={(event) => setKind(event.target.value as ContactMethodKind)}
-            style={styles.input}
+      <div style={styles.inlineActionBar} aria-label="Contact method type">
+        {contactMethodKinds.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            onClick={() => {
+              setKind(option.value);
+              setErrorMessage(null);
+            }}
+            style={option.value === kind ? styles.primaryButton : styles.button}
+            aria-pressed={option.value === kind}
           >
-            {contactMethodKinds.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <div style={styles.formRow}>
         <label style={styles.fieldLabel}>
           <span>Name</span>
           <input
@@ -162,11 +349,14 @@ export function ContactMethodsEditor({
           />
         </label>
         <label style={styles.fieldLabel}>
-          <span>Number or email</span>
+          <span>{selectedKindUi.valueLabel}</span>
           <input
+            type={selectedKindUi.inputType}
+            inputMode={selectedKindUi.inputMode}
+            autoComplete={selectedKindUi.autoComplete}
             value={value}
             onChange={(event) => setValue(event.target.value)}
-            placeholder="Contact value"
+            placeholder={selectedKindUi.placeholder}
             style={styles.input}
           />
         </label>
@@ -185,7 +375,7 @@ export function ContactMethodsEditor({
         style={styles.button}
         disabled={isSaving}
       >
-        Add contact method
+        {selectedKindUi.addButtonLabel}
       </button>
     </div>
   );

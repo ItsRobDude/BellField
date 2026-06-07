@@ -56,7 +56,7 @@ export function useCrmSearch({
           onErrorMessage(
             error instanceof Error
               ? error.message
-              : 'Unable to search customers, locations, and contacts.'
+              : 'Unable to search customers, locations, and people.'
           );
           setSearchResults([]);
         } finally {

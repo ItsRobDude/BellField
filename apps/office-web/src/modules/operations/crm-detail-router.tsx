@@ -40,6 +40,7 @@ type CrmDetailRouterProps = {
   onLinkExisting: () => void;
   onLocationTransferred: (location: LocationDetail) => Promise<void> | void;
   onNewContact: () => void;
+  onOpenCustomer: (customerId: string) => void;
   onOpenLocation: (locationId: string) => void;
   onRefreshSelectedRecord: () => Promise<void> | void;
   onSaveContact: () => void;
@@ -78,6 +79,7 @@ export function CrmDetailRouter({
   onLinkExisting,
   onLocationTransferred,
   onNewContact,
+  onOpenCustomer,
   onOpenLocation,
   onRefreshSelectedRecord,
   onSaveContact,
@@ -161,6 +163,7 @@ export function CrmDetailRouter({
           onLinkDraftChange={onLinkDraftChange}
           onLinkExisting={onLinkExisting}
           onLocationTransferred={onLocationTransferred}
+          onOpenCustomer={onOpenCustomer}
           onRefreshSelectedRecord={onRefreshSelectedRecord}
           onSaveLink={onSaveLink}
           onSaveLocation={onSaveLocation}

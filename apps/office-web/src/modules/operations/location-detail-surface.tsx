@@ -33,6 +33,7 @@ type LocationDetailSurfaceProps = {
   onLinkDraftChange: (contactId: string, draft: ContactLinkDraft) => void;
   onLinkExisting: () => void;
   onLocationTransferred: (location: LocationDetail) => Promise<void> | void;
+  onOpenCustomer: (customerId: string) => void;
   onRefreshSelectedRecord: () => Promise<void> | void;
   onSaveLink: (link: ContactLink) => void;
   onSaveLocation: () => void;
@@ -42,7 +43,7 @@ type LocationDetailSurfaceProps = {
 
 const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
-  { key: 'contacts', label: 'Contacts' },
+  { key: 'contacts', label: 'People' },
   { key: 'equipment', label: 'Equipment' },
   { key: 'jobs', label: 'Jobs' },
   { key: 'invoices', label: 'Invoices' },
@@ -68,6 +69,7 @@ export function LocationDetailSurface({
   onLinkDraftChange,
   onLinkExisting,
   onLocationTransferred,
+  onOpenCustomer,
   onRefreshSelectedRecord,
   onSaveLink,
   onSaveLocation,
@@ -137,27 +139,6 @@ export function LocationDetailSurface({
               }
               style={styles.input}
             />
-            <input
-              value={location.phone ?? ''}
-              onChange={(event) =>
-                onChangeLocation({ ...location, phone: event.target.value || undefined })
-              }
-              style={styles.input}
-            />
-            <input
-              value={location.email ?? ''}
-              onChange={(event) =>
-                onChangeLocation({ ...location, email: event.target.value || undefined })
-              }
-              style={styles.input}
-            />
-            <input
-              value={location.fax ?? ''}
-              onChange={(event) =>
-                onChangeLocation({ ...location, fax: event.target.value || undefined })
-              }
-              style={styles.input}
-            />
           </div>
           {saveLocationMissingContactConfirmation ? (
             <div style={styles.subpanel}>
@@ -204,6 +185,7 @@ export function LocationDetailSurface({
             apiBaseUrl={apiBaseUrl}
             location={location}
             sessionToken={sessionToken}
+            onOpenCustomer={onOpenCustomer}
             onTransferred={onLocationTransferred}
           />
         </>
@@ -223,7 +205,7 @@ export function LocationDetailSurface({
 
       {selectedLocationTab === 'contacts' ? (
         <RecordContactsSection
-          title="Location contacts"
+          title="Location people"
           contacts={location.contacts}
           activeContactOptions={activeContactOptions}
           existingContactId={existingContactId}

@@ -131,7 +131,7 @@ The account screen should include these tabs:
 
 - Overview
 - Locations
-- Contacts
+- People
 - Jobs
 - Estimates
 - Invoices
@@ -184,7 +184,7 @@ The layout should make the most important location information immediately visib
 The location screen should include:
 
 - Overview
-- Contacts
+- People
 - Equipment
 - Jobs
 - Estimates

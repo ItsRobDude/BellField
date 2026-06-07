@@ -40,27 +40,6 @@ export function ContactDetailSurface({
           style={styles.input}
         />
         <input
-          value={contact.phone ?? ''}
-          onChange={(event) =>
-            onChangeContact({ ...contact, phone: event.target.value || undefined })
-          }
-          style={styles.input}
-        />
-        <input
-          value={contact.email ?? ''}
-          onChange={(event) =>
-            onChangeContact({ ...contact, email: event.target.value || undefined })
-          }
-          style={styles.input}
-        />
-        <input
-          value={contact.fax ?? ''}
-          onChange={(event) =>
-            onChangeContact({ ...contact, fax: event.target.value || undefined })
-          }
-          style={styles.input}
-        />
-        <input
           value={contact.tags.join(', ')}
           onChange={(event) =>
             onChangeContact({ ...contact, tags: splitCommaValues(event.target.value) })
