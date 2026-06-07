@@ -40,6 +40,22 @@ export interface LocationSummary {
   alternateBillToCustomerIds: string[];
 }
 
+export type ContactMethodOwnerKind = 'customer' | 'location' | 'contact';
+
+export type ContactMethodKind = 'phone' | 'email' | 'fax';
+
+export interface ContactMethodSummary {
+  id: string;
+  ownerKind: ContactMethodOwnerKind;
+  ownerId: string;
+  kind: ContactMethodKind;
+  label: string;
+  value: string;
+  isPrimary: boolean;
+  isActive: boolean;
+  endedAt?: string;
+}
+
 export interface CustomerLocationListItem {
   id: string;
   name: string;
@@ -92,15 +108,18 @@ export interface DuplicateCandidate {
 }
 
 export interface CustomerDetail extends CustomerAccountSummary {
+  contactMethods: ContactMethodSummary[];
   contacts: ContactLink[];
   locations: CustomerLocationListItem[];
 }
 
 export interface LocationDetail extends LocationSummary {
+  contactMethods: ContactMethodSummary[];
   ownershipHistory: OwnershipHistoryEntry[];
 }
 
 export interface ContactDetail extends ContactSummary {
+  contactMethods: ContactMethodSummary[];
   linkedRecords: ContactLink[];
 }
 
@@ -186,6 +205,24 @@ export interface ReassignLocationOwnerRequest {
 export interface LocationMutationResponse {
   location: LocationDetail;
   duplicateWarnings?: DuplicateCandidate[];
+}
+
+export interface CreateContactMethodRequest {
+  kind: ContactMethodKind;
+  label: string;
+  value: string;
+  isPrimary?: boolean;
+}
+
+export interface UpdateContactMethodRequest {
+  label?: string;
+  value?: string;
+  isPrimary?: boolean;
+  isActive?: boolean;
+}
+
+export interface ContactMethodMutationResponse {
+  contactMethod: ContactMethodSummary;
 }
 
 export interface CreateContactRequest {

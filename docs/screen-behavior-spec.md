@@ -53,6 +53,11 @@ BellField should not force a search bar onto every screen.
 
 Search may appear where appropriate, but it should not always be pinned across the entire office app.
 
+Global command buttons should not create oversized chrome that follows the user everywhere.
+Actions such as New Job, Refresh, and Sign out should live where they make operational sense:
+New Job as an operational quick action, refresh as a contextual/small control, and account/sign-out
+behind a compact account menu.
+
 ### Searchable items
 
 When search is available, it should support searching by:
@@ -150,6 +155,7 @@ Milestone 2 account screens should make these actions straightforward:
 - create or edit the customer record
 - mark the account inactive
 - review active locations
+- review and edit customer-owned phone and email methods as simple rows
 - link or review shared contacts
 - refresh an already-linked shared contact without interrupting the workflow
 - jump into the current location or contact context without needing a separate admin-only workflow first
@@ -199,6 +205,11 @@ Without clicking around too much, the location overview should show:
 - useful filter-related information where appropriate
 
 The goal is that staff can understand the location quickly without digging through multiple screens.
+
+Location contact information should be editable as plain contact-method rows on the location, not
+only through linked-person dropdowns.
+Ownership transfer should not be an always-visible form; it should be an explicit action that opens
+a focused search/create flow for the new owner/customer.
 
 ### Location reassignment visibility
 
@@ -277,8 +288,8 @@ At the top of the job page, without much scrolling, BellField should show:
 
 - job number
 - job status
-- location
-- bill-to customer
+- location, with a direct path to the location page
+- bill-to customer, with a direct path to the customer page
 - job type/category/business unit
 - assigned technician(s)
 - appointment date/time where relevant

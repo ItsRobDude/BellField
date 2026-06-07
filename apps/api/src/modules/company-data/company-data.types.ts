@@ -2,6 +2,8 @@ import type {
   AppointmentFinishOutcome as ContractAppointmentFinishOutcome,
   AppointmentStatus as ContractAppointmentStatus,
   BillingProjectionState as ContractBillingProjectionState,
+  ContactMethodKind as ContractContactMethodKind,
+  ContactMethodOwnerKind as ContractContactMethodOwnerKind,
   CostingPolicy as ContractCostingPolicy,
   CostingStatus as ContractCostingStatus,
   CrmSearchResult as ContractCrmSearchResult,
@@ -51,6 +53,18 @@ export type ContactLinkRecord = {
   tags: string[];
   isActive: boolean;
   endDate?: string;
+};
+
+export type ContactMethodRecord = {
+  id: string;
+  ownerKind: ContractContactMethodOwnerKind;
+  ownerId: string;
+  kind: ContractContactMethodKind;
+  label: string;
+  value: string;
+  isPrimary: boolean;
+  isActive: boolean;
+  endedAt?: string;
 };
 
 export type OwnershipHistoryRecord = {

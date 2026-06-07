@@ -1,7 +1,7 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
-import type { CrmWorkspaceResponse, DuplicateCandidate } from '@/lib/operations-api';
+import type { DuplicateCandidate } from '@/lib/operations-api';
 import type { LocationFormState } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -11,10 +11,10 @@ type CreateLocationOptions = {
 };
 
 type CrmLocationCreatePanelProps = {
-  activeCustomerOptions: CrmWorkspaceResponse['customers'];
   duplicateWarnings: DuplicateCandidate[];
   locationForm: LocationFormState;
   missingContactConfirmation: boolean;
+  ownerCustomerName: string;
   onBack: () => void;
   onCancelMissingContactConfirmation: () => void;
   onChangeLocationForm: Dispatch<SetStateAction<LocationFormState>>;
@@ -23,10 +23,10 @@ type CrmLocationCreatePanelProps = {
 };
 
 export function CrmLocationCreatePanel({
-  activeCustomerOptions,
   duplicateWarnings,
   locationForm,
   missingContactConfirmation,
+  ownerCustomerName,
   onBack,
   onCancelMissingContactConfirmation,
   onChangeLocationForm,
@@ -41,20 +41,11 @@ export function CrmLocationCreatePanel({
           Back
         </button>
       </div>
+      <div style={styles.subpanel}>
+        <strong>Owner</strong>
+        <div style={styles.tinyMuted}>{ownerCustomerName}</div>
+      </div>
       <div style={styles.formRow}>
-        <select
-          value={locationForm.customerId}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, customerId: event.target.value }))
-          }
-          style={styles.input}
-        >
-          {activeCustomerOptions.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
         <input
           value={locationForm.name}
           onChange={(event) => {
@@ -125,28 +116,6 @@ export function CrmLocationCreatePanel({
           style={styles.input}
         />
       </div>
-      <label style={styles.inlineLabel}>
-        <span>Alternate bill-to customers</span>
-        <select
-          multiple
-          value={locationForm.alternateBillToCustomerIds}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({
-              ...current,
-              alternateBillToCustomerIds: Array.from(event.target.selectedOptions).map(
-                (option) => option.value
-              )
-            }))
-          }
-          style={styles.input}
-        >
-          {activeCustomerOptions.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
-      </label>
       {duplicateWarnings.length > 0 ? (
         <div style={styles.subpanel}>
           <strong>Possible duplicate location</strong>

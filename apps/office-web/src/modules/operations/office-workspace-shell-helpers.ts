@@ -8,7 +8,6 @@ import type {
   RegisterEntrySummary
 } from '@/lib/operations-api';
 import type {
-  JobIntakeBillToOption,
   JobIntakeCustomerLocationOption,
   JobIntakeSelectedLocation
 } from './job-intake-panel';
@@ -40,19 +39,6 @@ export function toActiveCustomerLocationOptions(
       state: location.state,
       postalCode: location.postalCode
     }));
-}
-
-export function dedupeBillToOptions(options: JobIntakeBillToOption[]): JobIntakeBillToOption[] {
-  const seen = new Set<string>();
-
-  return options.filter((option) => {
-    if (seen.has(option.id)) {
-      return false;
-    }
-
-    seen.add(option.id);
-    return true;
-  });
 }
 
 export function getJobStatusReviewMessage(

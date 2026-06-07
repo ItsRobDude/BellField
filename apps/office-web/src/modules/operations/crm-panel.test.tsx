@@ -68,6 +68,7 @@ const customerDetail: CustomerDetail = {
   phone: '360-555-0100',
   isActive: true,
   flags: [],
+  contactMethods: [],
   contacts: [],
   locations: []
 };
@@ -83,6 +84,7 @@ const createdLocation: LocationDetail = {
   postalCode: '98230',
   phone: '360-555-0100',
   isActive: true,
+  contactMethods: [],
   contacts: [],
   alternateBillToCustomerIds: [],
   ownershipHistory: []
@@ -94,6 +96,7 @@ const createdContact = {
   phone: '360-555-0188',
   tags: [],
   isActive: true,
+  contactMethods: [],
   linkedRecords: []
 };
 
@@ -118,7 +121,12 @@ function renderCrmPanel(fetchMock: ReturnType<typeof vi.fn>) {
 
 async function openNewLocationForm() {
   await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' });
-  fireEvent.click(screen.getByRole('button', { name: 'New location' }));
+  fireEvent.change(screen.getByLabelText('Customer, location, or contact search'), {
+    target: { value: 'Acme' }
+  });
+  fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
+  expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+  fireEvent.click(screen.getAllByRole('button', { name: 'Add location' })[0]);
   await screen.findByRole('heading', { name: 'Create location' });
 }
 
@@ -158,7 +166,8 @@ describe('CrmPanel', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('Customer, location, or contact search')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'New customer' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New location' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New location' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'New contact' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create customer' })).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Create location' })).not.toBeInTheDocument();
   });
@@ -225,10 +234,24 @@ describe('CrmPanel', () => {
     ).toBeInTheDocument();
   });
 
-  it('switches from search to a focused location form and back', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _options?: RequestInit) =>
-      jsonResponse(workspace)
-    );
+  it('opens location creation from a selected customer and returns to that customer', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({ query: url.searchParams.get('q') ?? '', results: [customerResult] });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerDetail);
+      }
+
+      return jsonResponse({});
+    });
     renderCrmPanel(fetchMock);
 
     await openNewLocationForm();
@@ -238,9 +261,8 @@ describe('CrmPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
-    expect(
-      await screen.findByRole('heading', { name: 'Find customers, locations, and contacts' })
-    ).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: 'Add location' }).length).toBeGreaterThan(0);
   });
 
   it('creates customers through the existing customer API', async () => {
@@ -377,9 +399,23 @@ describe('CrmPanel', () => {
   });
 
   it('requires confirmation for fax-only locations before creating', async () => {
-    const fetchMock = vi.fn(async (_input: RequestInfo | URL, _options?: RequestInit) =>
-      jsonResponse(workspace)
-    );
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({ query: url.searchParams.get('q') ?? '', results: [customerResult] });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerDetail);
+      }
+
+      return jsonResponse({});
+    });
     renderCrmPanel(fetchMock);
 
     await openNewLocationForm();
@@ -408,10 +444,15 @@ describe('CrmPanel', () => {
       }
 
       if (url.pathname === '/operations/crm/search') {
+        const query = url.searchParams.get('q') ?? '';
         return jsonResponse({
-          query: url.searchParams.get('q') ?? '',
-          results: [duplicateLocation]
+          query,
+          results: query.toLowerCase().includes('acme') ? [customerResult] : [duplicateLocation]
         });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerDetail);
       }
 
       if (url.pathname === '/operations/crm/locations' && options?.method === 'POST') {

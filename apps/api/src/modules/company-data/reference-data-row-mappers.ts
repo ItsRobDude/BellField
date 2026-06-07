@@ -1,6 +1,7 @@
 import { toIsoString, toOptionalDateString, toTextArray } from '../../database/database-row.utils';
 import type {
   ContactLinkRecord,
+  ContactMethodRecord,
   ContactRecord,
   CrmSearchRecord,
   CustomerAccountRecord,
@@ -67,6 +68,18 @@ export type ContactLinkRow = {
   endDate: string | Date | null;
 };
 
+export type ContactMethodRow = {
+  id: string;
+  ownerKind: ContactMethodRecord['ownerKind'];
+  ownerId: string;
+  kind: ContactMethodRecord['kind'];
+  label: string | null;
+  value: string;
+  isPrimary: boolean;
+  isActive: boolean;
+  endedAt: string | Date | null;
+};
+
 export type OwnershipHistoryRow = {
   id: string;
   locationId: string;
@@ -102,6 +115,10 @@ export type UpdateContactInput = Partial<Omit<ContactRecord, 'id'>>;
 export type CreateContactLinkInput = Omit<ContactLinkRecord, 'id'>;
 export type UpdateContactLinkInput = Partial<
   Omit<ContactLinkRecord, 'id' | 'contactId' | 'linkedRecordId' | 'linkedRecordKind'>
+>;
+export type CreateContactMethodInput = Omit<ContactMethodRecord, 'id'>;
+export type UpdateContactMethodInput = Partial<
+  Omit<ContactMethodRecord, 'id' | 'ownerKind' | 'ownerId' | 'kind'>
 >;
 
 export function toCustomerRecord(row: CustomerRow): CustomerAccountRecord {
@@ -185,6 +202,20 @@ export function toContactLinkRecord(
     tags: toTextArray(row.tags),
     isActive: row.isActive,
     endDate: toOptionalDateString(row.endDate)
+  };
+}
+
+export function toContactMethodRecord(row: ContactMethodRow): ContactMethodRecord {
+  return {
+    id: row.id,
+    ownerKind: row.ownerKind,
+    ownerId: row.ownerId,
+    kind: row.kind,
+    label: row.label ?? '',
+    value: row.value,
+    isPrimary: row.isPrimary,
+    isActive: row.isActive,
+    endedAt: toOptionalDateString(row.endedAt)
   };
 }
 

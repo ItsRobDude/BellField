@@ -231,6 +231,7 @@ function buildLocationDetail(
 
   return {
     ...resolvedLocation,
+    contactMethods: [],
     ownershipHistory: [],
     ...overrides
   };
@@ -250,6 +251,7 @@ function buildCustomerDetail(
 
   return {
     ...resolvedCustomer,
+    contactMethods: [],
     contacts: [],
     locations: workspace.locations
       .filter((location) => location.customerId === resolvedCustomer.id)
@@ -609,8 +611,8 @@ describe('OfficeWorkspaceShell IA', () => {
     fireEvent.click(screen.getByRole('button', { name: 'New job' }));
     expect(await screen.findByRole('region', { name: 'New job' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'CRM panel mock' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Job type')).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Job problem summary')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Job type')).toBeInTheDocument();
+    expect(screen.getByLabelText('Job problem summary')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create job' })).toBeDisabled();
 
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
@@ -719,8 +721,9 @@ describe('OfficeWorkspaceShell IA', () => {
 
     await selectJobIntakeLocationBySearch('Main');
     expect(await screen.findByText('123 Main, Blaine, WA, 98230')).toBeInTheDocument();
-    expect(screen.getByText('Owner: Acme')).toBeInTheDocument();
-    expect(screen.getByLabelText('Bill to')).toHaveValue('customer-1');
+    expect(screen.getByText('Location owner: Acme')).toBeInTheDocument();
+    expect(screen.getByText('Acme (location owner)')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Bill to')).not.toBeInTheDocument();
 
     fireEvent.change(screen.getByLabelText('Job type'), { target: { value: 'Maintenance' } });
     fireEvent.change(screen.getByLabelText('Job category'), { target: { value: 'Warranty' } });
@@ -742,7 +745,6 @@ describe('OfficeWorkspaceShell IA', () => {
         sessionToken: 'session-token',
         apiBaseUrl: 'http://api.test',
         locationId: 'location-1',
-        billToCustomerId: 'customer-1',
         jobType: 'Maintenance',
         category: 'Warranty',
         origin: 'Email',
@@ -755,6 +757,9 @@ describe('OfficeWorkspaceShell IA', () => {
       });
     });
     expect(await screen.findByText('Job created.')).toBeInTheDocument();
+    expect(mockedOperationsApi.createOfficeJob.mock.calls[0]?.[0]).not.toHaveProperty(
+      'billToCustomerId'
+    );
   });
 
   it('keeps blank customer arrival window out of the create-job payload', async () => {
@@ -824,7 +829,7 @@ describe('OfficeWorkspaceShell IA', () => {
       });
     });
     expect(await screen.findByText('123 Main, Blaine, WA, 98230')).toBeInTheDocument();
-    expect(screen.getByText('Owner: Acme')).toBeInTheDocument();
+    expect(screen.getByText('Location owner: Acme')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create job' })).not.toBeDisabled();
   });
 
@@ -865,7 +870,8 @@ describe('OfficeWorkspaceShell IA', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add location' })).toBeInTheDocument();
     expect(screen.queryByText(/Open Customers/i)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText('Job type')).not.toBeInTheDocument();
+    expect(screen.getByLabelText('Job type')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create job' })).toBeDisabled();
   });
 
   it('warns on inline duplicate customer creation before continuing to location creation', async () => {
@@ -926,6 +932,7 @@ describe('OfficeWorkspaceShell IA', () => {
       state: 'WA',
       postalCode: '98230',
       isActive: true,
+      contactMethods: [],
       contacts: [],
       alternateBillToCustomerIds: [],
       ownershipHistory: []
@@ -989,7 +996,7 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(screen.getByRole('button', { name: 'Create job' })).not.toBeDisabled();
   });
 
-  it('shows alternate bill-to customers after the selected location loads them', async () => {
+  it('uses customer search for a job-only customer override', async () => {
     const workspace = buildWorkspace([buildJob()]);
     workspace.customers.push({
       id: 'customer-2',
@@ -1008,16 +1015,43 @@ describe('OfficeWorkspaceShell IA', () => {
       throw new Error('Test workspace needs a location.');
     }
 
-    location.alternateBillToCustomerIds = ['customer-2'];
     arrangeWorkspace(workspace);
+    mockedOperationsApi.searchOfficeCrm
+      .mockResolvedValueOnce({
+        query: 'Main',
+        results: [buildLocationSearchResult(workspace)]
+      })
+      .mockResolvedValueOnce({
+        query: 'Morgan',
+        results: [buildCustomerSearchResult(workspace, 'customer-2')]
+      });
 
     renderShell();
 
     fireEvent.click(await screen.findByRole('button', { name: 'New job' }));
     await selectJobIntakeLocationBySearch('Main');
 
-    expect(screen.getByLabelText('Bill to')).toHaveValue('customer-1');
-    expect(screen.getByRole('option', { name: 'Morgan Property Management' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Change customer for this job' }));
+    fireEvent.change(await screen.findByLabelText('Job customer search'), {
+      target: { value: 'Morgan' }
+    });
+    const customerResults = await screen.findByLabelText('Job customer search results');
+    fireEvent.click(
+      within(customerResults).getByRole('button', { name: /Morgan Property Management/ })
+    );
+
+    expect(await screen.findByText('Morgan Property Management')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Use location owner' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create job' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.createOfficeJob).toHaveBeenCalledWith(
+        expect.objectContaining({
+          locationId: 'location-1',
+          billToCustomerId: 'customer-2'
+        })
+      );
+    });
   });
 
   it('saves appointment schedule and status changes from job detail through existing API helpers', async () => {

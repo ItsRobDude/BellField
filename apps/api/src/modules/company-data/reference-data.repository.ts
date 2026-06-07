@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import type {
   ContactLinkRecord,
+  ContactMethodRecord,
   ContactRecord,
   CrmSearchRecord,
   CustomerDuplicateLookupInput,
@@ -16,19 +17,25 @@ import {
   nullIfUndefined,
   type CreateContactInput,
   type CreateContactLinkInput,
+  type CreateContactMethodInput,
   type CreateCustomerInput,
   type CreateLocationInput,
   type UpdateContactInput,
   type UpdateContactLinkInput,
+  type UpdateContactMethodInput,
   type UpdateCustomerInput,
   type UpdateLocationInput
 } from './reference-data-row-mappers';
+import { ReferenceContactLinksReadRepository } from './reference-contact-links-read.repository';
+import { ReferenceContactMethodsReadRepository } from './reference-contact-methods-read.repository';
 import { ReferenceReadDataRepository } from './reference-read-data.repository';
 
 @Injectable()
 export class ReferenceDataRepository {
   constructor(
     private readonly readRepository: ReferenceReadDataRepository,
+    private readonly contactLinkReadRepository: ReferenceContactLinksReadRepository,
+    private readonly contactMethodReadRepository: ReferenceContactMethodsReadRepository,
     private readonly databaseService: DatabaseService
   ) {}
 
@@ -83,25 +90,53 @@ export class ReferenceDataRepository {
     customerId: string,
     includeInactive = true
   ): Promise<ContactLinkRecord[]> {
-    return this.readRepository.listCustomerContactLinks(customerId, includeInactive);
+    return this.contactLinkReadRepository.listCustomerContactLinks(customerId, includeInactive);
+  }
+
+  async listCustomerContactMethods(
+    customerId: string,
+    includeInactive = true
+  ): Promise<ContactMethodRecord[]> {
+    return this.contactMethodReadRepository.listCustomerContactMethods(customerId, includeInactive);
   }
 
   async listLocationContactLinks(
     locationId: string,
     includeInactive = true
   ): Promise<ContactLinkRecord[]> {
-    return this.readRepository.listLocationContactLinks(locationId, includeInactive);
+    return this.contactLinkReadRepository.listLocationContactLinks(locationId, includeInactive);
+  }
+
+  async listLocationContactMethods(
+    locationId: string,
+    includeInactive = true
+  ): Promise<ContactMethodRecord[]> {
+    return this.contactMethodReadRepository.listLocationContactMethods(locationId, includeInactive);
   }
 
   async listContactLinksForContact(
     contactId: string,
     includeInactive = true
   ): Promise<ContactLinkRecord[]> {
-    return this.readRepository.listContactLinksForContact(contactId, includeInactive);
+    return this.contactLinkReadRepository.listContactLinksForContact(contactId, includeInactive);
+  }
+
+  async listContactMethodsForContact(
+    contactId: string,
+    includeInactive = true
+  ): Promise<ContactMethodRecord[]> {
+    return this.contactMethodReadRepository.listContactMethodsForContact(
+      contactId,
+      includeInactive
+    );
   }
 
   async getContactLinkById(linkId: string): Promise<ContactLinkRecord | null> {
-    return this.readRepository.getContactLinkById(linkId);
+    return this.contactLinkReadRepository.getContactLinkById(linkId);
+  }
+
+  async getContactMethodById(contactMethodId: string): Promise<ContactMethodRecord | null> {
+    return this.contactMethodReadRepository.getContactMethodById(contactMethodId);
   }
 
   async listOwnershipHistory(locationId: string): Promise<OwnershipHistoryRecord[]> {
@@ -382,7 +417,7 @@ export class ReferenceDataRepository {
       throw new Error('Contact link upsert did not return an id.');
     }
 
-    const existingLink = await this.readRepository.getContactLinkById(linkId);
+    const existingLink = await this.contactLinkReadRepository.getContactLinkById(linkId);
     if (!existingLink) {
       throw new Error('Contact link could not be loaded after upsert.');
     }
@@ -394,7 +429,7 @@ export class ReferenceDataRepository {
     linkId: string,
     input: UpdateContactLinkInput
   ): Promise<ContactLinkRecord | null> {
-    const current = await this.readRepository.getContactLinkById(linkId);
+    const current = await this.contactLinkReadRepository.getContactLinkById(linkId);
 
     if (!current) {
       return null;
@@ -427,7 +462,106 @@ export class ReferenceDataRepository {
       ]
     );
 
-    return this.readRepository.getContactLinkById(linkId);
+    return this.contactLinkReadRepository.getContactLinkById(linkId);
+  }
+
+  async createContactMethod(input: CreateContactMethodInput): Promise<ContactMethodRecord> {
+    const id = randomUUID();
+    await this.databaseService.transaction(async (queryable) => {
+      if (input.isPrimary && input.isActive) {
+        await this.clearPrimaryContactMethod(input, queryable);
+      }
+
+      await queryable.query(
+        `
+          insert into crm_contact_methods (
+            id,
+            owner_kind,
+            customer_id,
+            location_id,
+            contact_id,
+            kind,
+            label,
+            value,
+            is_primary,
+            is_active,
+            ended_at
+          )
+          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        `,
+        [
+          id,
+          input.ownerKind,
+          input.ownerKind === 'customer' ? input.ownerId : null,
+          input.ownerKind === 'location' ? input.ownerId : null,
+          input.ownerKind === 'contact' ? input.ownerId : null,
+          input.kind,
+          input.label,
+          input.value,
+          input.isPrimary,
+          input.isActive,
+          input.endedAt ?? null
+        ]
+      );
+    });
+
+    const method = await this.contactMethodReadRepository.getContactMethodById(id);
+    if (!method) {
+      throw new Error('Contact method could not be loaded after insert.');
+    }
+
+    return method;
+  }
+
+  async updateContactMethod(
+    contactMethodId: string,
+    input: UpdateContactMethodInput
+  ): Promise<ContactMethodRecord | null> {
+    const current = await this.contactMethodReadRepository.getContactMethodById(contactMethodId);
+
+    if (!current) {
+      return null;
+    }
+
+    const nextIsActive = input.isActive ?? current.isActive;
+    const next: ContactMethodRecord = {
+      ...current,
+      ...input,
+      isActive: nextIsActive,
+      endedAt: nextIsActive
+        ? undefined
+        : (input.endedAt ?? current.endedAt ?? new Date().toISOString().slice(0, 10))
+    };
+
+    await this.databaseService.transaction(async (queryable) => {
+      if (next.isPrimary && next.isActive) {
+        await this.clearPrimaryContactMethod(next, queryable, contactMethodId);
+      }
+
+      await queryable.query(
+        `
+          update crm_contact_methods
+          set
+            label = $2,
+            value = $3,
+            is_primary = $4,
+            is_active = $5,
+            ended_at = $6,
+            updated_at = now()
+          where id = $1
+        `,
+        [
+          contactMethodId,
+          next.label,
+          next.value,
+          next.isPrimary,
+          next.isActive,
+          next.endedAt ?? null
+        ]
+      );
+    });
+
+    return this.contactMethodReadRepository.getContactMethodById(contactMethodId);
   }
 
   async addOwnershipHistoryEntry(
@@ -451,6 +585,32 @@ export class ReferenceDataRepository {
 
     const [entry] = await this.readRepository.listOwnershipHistory(input.locationId);
     return entry;
+  }
+
+  private async clearPrimaryContactMethod(
+    input: Pick<ContactMethodRecord, 'ownerKind' | 'ownerId' | 'kind'>,
+    queryable: QueryExecutor,
+    excludedContactMethodId?: string
+  ): Promise<void> {
+    const ownerColumn =
+      input.ownerKind === 'customer'
+        ? 'customer_id'
+        : input.ownerKind === 'location'
+          ? 'location_id'
+          : 'contact_id';
+    await queryable.query(
+      `
+        update crm_contact_methods
+        set is_primary = false, updated_at = now()
+        where owner_kind = $1
+          and ${ownerColumn} = $2
+          and kind = $3
+          and is_primary = true
+          and is_active = true
+          and ($4::text is null or id <> $4)
+      `,
+      [input.ownerKind, input.ownerId, input.kind, excludedContactMethodId ?? null]
+    );
   }
 
   async reassignLocationOwner(

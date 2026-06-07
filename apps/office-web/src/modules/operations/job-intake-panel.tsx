@@ -18,7 +18,11 @@ import {
   splitCommaValues
 } from './job-intake-form-helpers';
 import { JobDetailsStep, SelectedLocationCard } from './job-intake-details';
-import { ServiceLocationStep, type IntakeMode } from './job-intake-quick-create';
+import {
+  CustomerQuickCreateForm,
+  ServiceLocationStep,
+  type IntakeMode
+} from './job-intake-quick-create';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type JobIntakeSelectedLocation = {
@@ -33,11 +37,6 @@ export type JobIntakeSelectedLocation = {
 };
 
 export type JobIntakeSelectedCustomer = {
-  id: string;
-  name: string;
-};
-
-export type JobIntakeBillToOption = {
   id: string;
   name: string;
 };
@@ -69,9 +68,10 @@ type JobIntakePanelProps = {
   selectedCustomer: JobIntakeSelectedCustomer | null;
   customerLocationOptions: JobIntakeCustomerLocationOption[];
   customerLocationMessage: string | null;
-  billToOptions: JobIntakeBillToOption[];
-  billToWarning: string | null;
-  jobBillToCustomerId: string;
+  jobCustomerOverride: JobIntakeSelectedCustomer | null;
+  jobCustomerSearchQuery: string;
+  jobCustomerSearchResults: CrmSearchResult[];
+  isJobCustomerSearchLoading: boolean;
   jobType: string;
   jobCategory: string;
   jobOrigin: string;
@@ -85,9 +85,12 @@ type JobIntakePanelProps = {
   onSelectLocationSearchResult: (result: CrmSearchResult) => void;
   onSelectCustomerLocation: (locationId: string) => void;
   onCreateCustomer: (input: CreateCustomerRequest) => Promise<JobIntakeCreateCustomerResult>;
+  onCreateJobCustomer: (input: CreateCustomerRequest) => Promise<JobIntakeCreateCustomerResult>;
   onCreateLocation: (input: CreateLocationRequest) => Promise<JobIntakeCreateLocationResult>;
   onClearSelectedLocation: () => void;
-  onJobBillToCustomerChange: (customerId: string) => void;
+  onClearJobCustomerOverride: () => void;
+  onJobCustomerSearchQueryChange: (query: string) => void;
+  onSelectJobCustomerSearchResult: (result: CrmSearchResult) => void;
   onJobTypeChange: (value: string) => void;
   onJobCategoryChange: (value: string) => void;
   onJobOriginChange: (value: string) => void;
@@ -110,9 +113,10 @@ export function JobIntakePanel({
   selectedCustomer,
   customerLocationOptions,
   customerLocationMessage,
-  billToOptions,
-  billToWarning,
-  jobBillToCustomerId,
+  jobCustomerOverride,
+  jobCustomerSearchQuery,
+  jobCustomerSearchResults,
+  isJobCustomerSearchLoading,
   jobType,
   jobCategory,
   jobOrigin,
@@ -126,9 +130,12 @@ export function JobIntakePanel({
   onSelectLocationSearchResult,
   onSelectCustomerLocation,
   onCreateCustomer,
+  onCreateJobCustomer,
   onCreateLocation,
   onClearSelectedLocation,
-  onJobBillToCustomerChange,
+  onClearJobCustomerOverride,
+  onJobCustomerSearchQueryChange,
+  onSelectJobCustomerSearchResult,
   onJobTypeChange,
   onJobCategoryChange,
   onJobOriginChange,
@@ -142,17 +149,26 @@ export function JobIntakePanel({
   onClose
 }: JobIntakePanelProps) {
   const [intakeMode, setIntakeMode] = useState<IntakeMode>('search');
+  const [jobCustomerMode, setJobCustomerMode] = useState<'closed' | 'search' | 'newCustomer'>(
+    'closed'
+  );
   const [customerForm, setCustomerForm] = useState<CustomerFormState>(createEmptyCustomerForm());
+  const [jobCustomerForm, setJobCustomerForm] =
+    useState<CustomerFormState>(createEmptyCustomerForm());
   const [locationForm, setLocationForm] = useState<LocationFormState>(createEmptyLocationForm());
   const [customerDuplicateWarnings, setCustomerDuplicateWarnings] = useState<DuplicateCandidate[]>(
     []
   );
+  const [jobCustomerDuplicateWarnings, setJobCustomerDuplicateWarnings] = useState<
+    DuplicateCandidate[]
+  >([]);
   const [locationDuplicateWarnings, setLocationDuplicateWarnings] = useState<DuplicateCandidate[]>(
     []
   );
   const [locationMissingContactConfirmation, setLocationMissingContactConfirmation] =
     useState(false);
   const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [isCreatingJobCustomer, setIsCreatingJobCustomer] = useState(false);
   const [isCreatingLocation, setIsCreatingLocation] = useState(false);
   const [createMessage, setCreateMessage] = useState<string | null>(null);
 
@@ -175,6 +191,16 @@ export function JobIntakePanel({
     setLocationMissingContactConfirmation(false);
     setCreateMessage(null);
   }, [selectedLocation]);
+
+  useEffect(() => {
+    if (!jobCustomerOverride) {
+      return;
+    }
+
+    setJobCustomerMode('closed');
+    setJobCustomerDuplicateWarnings([]);
+    setJobCustomerForm(createEmptyCustomerForm());
+  }, [jobCustomerOverride]);
 
   const visibleLocationSearchResults = locationSearchResults.filter(
     (result) => result.kind === 'location' || result.kind === 'customer'
@@ -217,6 +243,39 @@ export function JobIntakePanel({
     }
   }
 
+  async function submitJobCustomer(confirmDuplicate = false) {
+    setIsCreatingJobCustomer(true);
+    setCreateMessage(null);
+
+    try {
+      const result = await onCreateJobCustomer({
+        name: jobCustomerForm.name.trim(),
+        accountType: jobCustomerForm.accountType,
+        billingAddressLine1: jobCustomerForm.billingAddressLine1.trim(),
+        billingCity: jobCustomerForm.billingCity.trim(),
+        billingState: jobCustomerForm.billingState.trim(),
+        billingPostalCode: jobCustomerForm.billingPostalCode.trim(),
+        phone: optionalString(jobCustomerForm.phone),
+        email: optionalString(jobCustomerForm.email),
+        fax: optionalString(jobCustomerForm.fax),
+        flags: splitCommaValues(jobCustomerForm.flags),
+        confirmDuplicate
+      });
+
+      if (result.status === 'duplicate') {
+        setJobCustomerDuplicateWarnings(result.duplicateWarnings);
+        return;
+      }
+
+      setJobCustomerForm(createEmptyCustomerForm());
+      setJobCustomerDuplicateWarnings([]);
+      setJobCustomerMode('closed');
+      setCreateMessage(`Customer ${result.customer.name} selected for this job.`);
+    } finally {
+      setIsCreatingJobCustomer(false);
+    }
+  }
+
   async function submitLocation(
     options: {
       confirmDuplicate?: boolean;
@@ -241,7 +300,6 @@ export function JobIntakePanel({
         phone: optionalString(locationForm.phone),
         email: optionalString(locationForm.email),
         fax: optionalString(locationForm.fax),
-        alternateBillToCustomerIds: locationForm.alternateBillToCustomerIds,
         confirmDuplicate: options.confirmDuplicate,
         confirmMissingContactInfo: options.confirmMissingContactInfo
       });
@@ -271,7 +329,7 @@ export function JobIntakePanel({
         <div>
           <h1 style={styles.compactTitle}>New job</h1>
           <p style={styles.tinyMuted}>
-            Search or create a service location before entering job details.
+            Start the call, then search or create the customer and site.
           </p>
         </div>
         <button type="button" style={styles.button} onClick={onClose}>
@@ -279,7 +337,49 @@ export function JobIntakePanel({
         </button>
       </div>
 
-      {!selectedLocation ? (
+      {selectedLocation ? (
+        <>
+          <SelectedLocationCard
+            jobCustomerOverride={jobCustomerOverride}
+            selectedLocation={selectedLocation}
+            onClearJobCustomerOverride={onClearJobCustomerOverride}
+            onClearSelectedLocation={onClearSelectedLocation}
+            onOpenJobCustomerOverride={() => {
+              setJobCustomerMode('search');
+              setJobCustomerDuplicateWarnings([]);
+              setJobCustomerForm(createEmptyCustomerForm());
+            }}
+          />
+          {jobCustomerMode !== 'closed' ? (
+            <JobCustomerOverridePanel
+              duplicateWarnings={jobCustomerDuplicateWarnings}
+              isCreatingCustomer={isCreatingJobCustomer}
+              isSearching={isJobCustomerSearchLoading}
+              mode={jobCustomerMode}
+              searchQuery={jobCustomerSearchQuery}
+              searchResults={jobCustomerSearchResults.filter(
+                (result) => result.kind === 'customer'
+              )}
+              customerForm={jobCustomerForm}
+              onCancel={() => {
+                setJobCustomerMode('closed');
+                setJobCustomerDuplicateWarnings([]);
+                setJobCustomerForm(createEmptyCustomerForm());
+              }}
+              onChangeCustomerForm={setJobCustomerForm}
+              onNewCustomer={() => {
+                setJobCustomerMode('newCustomer');
+                setJobCustomerDuplicateWarnings([]);
+                setJobCustomerForm(createEmptyCustomerForm());
+              }}
+              onSearchQueryChange={onJobCustomerSearchQueryChange}
+              onSelectCustomer={onSelectJobCustomerSearchResult}
+              onSubmitCustomer={() => void submitJobCustomer()}
+              onSubmitCustomerAnyway={() => void submitJobCustomer(true)}
+            />
+          ) : null}
+        </>
+      ) : (
         <ServiceLocationStep
           createMessage={createMessage}
           customerDuplicateWarnings={customerDuplicateWarnings}
@@ -340,42 +440,31 @@ export function JobIntakePanel({
             })
           }
         />
-      ) : (
-        <>
-          <SelectedLocationCard
-            billToOptions={billToOptions}
-            billToWarning={billToWarning}
-            jobBillToCustomerId={jobBillToCustomerId}
-            selectedLocation={selectedLocation}
-            onClearSelectedLocation={onClearSelectedLocation}
-            onJobBillToCustomerChange={onJobBillToCustomerChange}
-          />
-          <JobDetailsStep
-            intakeContext={intakeContext}
-            jobCategory={jobCategory}
-            jobDate={jobDate}
-            jobEndTime={jobEndTime}
-            jobOrigin={jobOrigin}
-            jobStartTime={jobStartTime}
-            jobSummary={jobSummary}
-            jobTechnicianId={jobTechnicianId}
-            jobType={jobType}
-            jobWindow={jobWindow}
-            onJobCategoryChange={onJobCategoryChange}
-            onJobDateChange={onJobDateChange}
-            onJobEndTimeChange={onJobEndTimeChange}
-            onJobOriginChange={onJobOriginChange}
-            onJobStartTimeChange={onJobStartTimeChange}
-            onJobSummaryChange={onJobSummaryChange}
-            onJobTechnicianChange={onJobTechnicianChange}
-            onJobTypeChange={onJobTypeChange}
-            onJobWindowChange={onJobWindowChange}
-          />
-        </>
       )}
 
+      <JobDetailsStep
+        intakeContext={intakeContext}
+        jobCategory={jobCategory}
+        jobDate={jobDate}
+        jobEndTime={jobEndTime}
+        jobOrigin={jobOrigin}
+        jobStartTime={jobStartTime}
+        jobSummary={jobSummary}
+        jobTechnicianId={jobTechnicianId}
+        jobType={jobType}
+        jobWindow={jobWindow}
+        onJobCategoryChange={onJobCategoryChange}
+        onJobDateChange={onJobDateChange}
+        onJobEndTimeChange={onJobEndTimeChange}
+        onJobOriginChange={onJobOriginChange}
+        onJobStartTimeChange={onJobStartTimeChange}
+        onJobSummaryChange={onJobSummaryChange}
+        onJobTechnicianChange={onJobTechnicianChange}
+        onJobTypeChange={onJobTypeChange}
+        onJobWindowChange={onJobWindowChange}
+      />
       {!selectedLocation ? (
-        <p style={styles.tinyMuted}>Select or create a service location to unlock job details.</p>
+        <p style={styles.tinyMuted}>Select or create a service location before creating the job.</p>
       ) : null}
       <button
         type="button"
@@ -386,5 +475,100 @@ export function JobIntakePanel({
         Create job
       </button>
     </section>
+  );
+}
+
+function JobCustomerOverridePanel({
+  customerForm,
+  duplicateWarnings,
+  isCreatingCustomer,
+  isSearching,
+  mode,
+  searchQuery,
+  searchResults,
+  onCancel,
+  onChangeCustomerForm,
+  onNewCustomer,
+  onSearchQueryChange,
+  onSelectCustomer,
+  onSubmitCustomer,
+  onSubmitCustomerAnyway
+}: {
+  customerForm: CustomerFormState;
+  duplicateWarnings: DuplicateCandidate[];
+  isCreatingCustomer: boolean;
+  isSearching: boolean;
+  mode: 'search' | 'newCustomer';
+  searchQuery: string;
+  searchResults: CrmSearchResult[];
+  onCancel: () => void;
+  onChangeCustomerForm: (updater: (current: CustomerFormState) => CustomerFormState) => void;
+  onNewCustomer: () => void;
+  onSearchQueryChange: (query: string) => void;
+  onSelectCustomer: (result: CrmSearchResult) => void;
+  onSubmitCustomer: () => void;
+  onSubmitCustomerAnyway: () => void;
+}) {
+  return (
+    <div aria-label="Change customer for this job" role="group" style={styles.subpanel}>
+      <div style={styles.row}>
+        <div>
+          <h2 style={styles.sectionHeading}>Change customer for this job</h2>
+          <p style={styles.tinyMuted}>
+            This affects this job only. It does not reassign the location.
+          </p>
+        </div>
+        <button type="button" style={styles.button} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+
+      {mode === 'search' ? (
+        <>
+          <div style={styles.inlineActionBar}>
+            <label style={{ ...styles.fieldLabel, flex: '1 1 16rem' }}>
+              <span>Customer search</span>
+              <input
+                aria-label="Job customer search"
+                value={searchQuery}
+                onChange={(event) => onSearchQueryChange(event.target.value)}
+                placeholder="Search by customer, phone, or email"
+                style={styles.input}
+              />
+            </label>
+            <button type="button" style={styles.button} onClick={onNewCustomer}>
+              New customer
+            </button>
+          </div>
+          {isSearching ? <p style={styles.tinyMuted}>Searching...</p> : null}
+          {searchResults.length > 0 ? (
+            <div aria-label="Job customer search results" role="group" style={styles.listCompact}>
+              {searchResults.map((result) => (
+                <button
+                  key={`job-customer:${result.id}`}
+                  type="button"
+                  style={styles.cardButton}
+                  onClick={() => onSelectCustomer(result)}
+                >
+                  <span style={styles.fieldText}>Customer</span>
+                  <strong>{result.title}</strong>
+                  <span style={styles.tinyMuted}>{result.subtitle}</span>
+                </button>
+              ))}
+            </div>
+          ) : null}
+        </>
+      ) : (
+        <CustomerQuickCreateForm
+          duplicateWarnings={duplicateWarnings}
+          form={customerForm}
+          isSubmitting={isCreatingCustomer}
+          onCancel={onCancel}
+          onChange={onChangeCustomerForm}
+          onSubmit={onSubmitCustomer}
+          onSubmitAnyway={onSubmitCustomerAnyway}
+        />
+      )}
+    </div>
   );
 }

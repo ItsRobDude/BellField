@@ -68,6 +68,8 @@ A customer account can have:
 - multiple service locations
 - multiple billing contacts
 - multiple regular contacts
+- multiple phone numbers and email addresses with plain labels such as "main", "billing",
+  "owner mobile", or "after-hours"
 
 ### Customer edit and inactive behavior
 
@@ -106,6 +108,8 @@ However:
 
 - a job for that location may be billed to or assigned to a different customer on a job-by-job basis
 - the primary location owner/customer should be the default when creating a new job
+- changing the bill-to customer for one job must never reassign the location or change the
+  location's default owner/customer
 
 ### Location reassignment
 
@@ -139,6 +143,11 @@ When creating a new location under a customer account:
 BellField should strongly encourage contact information for a location, even if it is not always strictly present at creation.
 Fax is optional supporting data, but fax alone should not bypass the phone/email warning.
 
+After creation, a location may have multiple phone numbers and email addresses.
+Each contact method should be editable as a simple value plus label row.
+BellField should not force users through a people/contact dropdown just to add a backup number or
+email address for the location itself.
+
 ### Location edit behavior
 
 Office users should be able to edit a location's:
@@ -146,12 +155,14 @@ Office users should be able to edit a location's:
 - display name
 - service address
 - current owner/customer
+- current location contact methods
 - current contact links
-- allowed alternate bill-to choices
 
 Important rule:
 
 - editing current location data must not erase the location's older ownership/contact story
+- job-level bill-to changes belong on the job and should not be modeled as a location-level list of
+  alternate bill-to customers
 
 ### Location search behavior
 
@@ -183,6 +194,7 @@ Contacts should support at minimum:
 - phone number
 - email
 - fax
+- multiple active phone numbers or emails over time where the real-world contact requires it
 
 ### Contact tags
 

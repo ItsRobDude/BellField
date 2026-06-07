@@ -101,12 +101,22 @@ When office staff create a job, BellField should allow them to enter:
 - optional time-window label
 - technician assignment
 
+The New Job screen should behave like call intake, not like a forced location-first wizard.
+Office staff should be able to start typing the problem summary, job type/category/origin, and
+optional schedule while they are still searching for or creating the customer and service location.
+BellField should keep the final Create Job action disabled until a service location exists, because
+the backend job record still requires `locationId`.
+
 ### Bill-to and work order behavior
 
 During job creation:
 
 - the location's current owner/customer should be the default bill-to
 - the office may override the bill-to to another allowed customer for that job
+- the office should change that job bill-to through search/create, not by choosing from a permanent
+  location-level alternate bill-to dropdown
+- if no override is selected, the create request should omit `billToCustomerId` and let the backend
+  use the location's current owner/customer
 - the work order number should be optional operational reference data, not a replacement for the BellField job number
 - if no work order number is provided, BellField should leave it blank and avoid showing a placeholder reference
 

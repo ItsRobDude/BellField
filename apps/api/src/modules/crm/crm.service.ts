@@ -1,6 +1,8 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type {
   ContactMutationResponse,
+  ContactMethodMutationResponse,
+  ContactMethodSummary,
   CrmSearchResponse,
   CrmWorkspaceResponse,
   CustomerMutationResponse,
@@ -14,7 +16,9 @@ import type {
   CreateCustomerRequestDto,
   CreateLocationRequestDto,
   LinkContactRequestDto,
+  CreateContactMethodRequestDto,
   ReassignLocationOwnerRequestDto,
+  UpdateContactMethodRequestDto,
   UpdateContactLinkRequestDto,
   UpdateContactRequestDto,
   UpdateCustomerRequestDto,
@@ -274,6 +278,89 @@ export class CrmService {
     return { location };
   }
 
+  async createCustomerContactMethod(
+    sessionToken: string,
+    customerId: string,
+    request: CreateContactMethodRequestDto
+  ): Promise<ContactMethodMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:edit', [
+      'office-web'
+    ]);
+    await this.referenceDataService.getCustomerById(customerId);
+    return this.referenceDataService.createContactMethod({
+      ownerKind: 'customer',
+      ownerId: customerId,
+      kind: request.kind,
+      label: request.label.trim(),
+      value: request.value.trim(),
+      isPrimary: request.isPrimary ?? false,
+      isActive: true
+    });
+  }
+
+  async createLocationContactMethod(
+    sessionToken: string,
+    locationId: string,
+    request: CreateContactMethodRequestDto
+  ): Promise<ContactMethodMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', [
+      'office-web'
+    ]);
+    await this.referenceDataService.getLocationById(locationId);
+    return this.referenceDataService.createContactMethod({
+      ownerKind: 'location',
+      ownerId: locationId,
+      kind: request.kind,
+      label: request.label.trim(),
+      value: request.value.trim(),
+      isPrimary: request.isPrimary ?? false,
+      isActive: true
+    });
+  }
+
+  async createContactContactMethod(
+    sessionToken: string,
+    contactId: string,
+    request: CreateContactMethodRequestDto
+  ): Promise<ContactMethodMutationResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'contacts:edit', [
+      'office-web'
+    ]);
+    await this.referenceDataService.getContactById(contactId);
+    return this.referenceDataService.createContactMethod({
+      ownerKind: 'contact',
+      ownerId: contactId,
+      kind: request.kind,
+      label: request.label.trim(),
+      value: request.value.trim(),
+      isPrimary: request.isPrimary ?? false,
+      isActive: true
+    });
+  }
+
+  async updateContactMethod(
+    sessionToken: string,
+    contactMethodId: string,
+    request: UpdateContactMethodRequestDto
+  ): Promise<ContactMethodMutationResponse> {
+    const contactMethod = await this.referenceDataService.getContactMethodById(contactMethodId);
+    const permission =
+      contactMethod.ownerKind === 'customer'
+        ? 'customers:edit'
+        : contactMethod.ownerKind === 'location'
+          ? 'locations:edit'
+          : 'contacts:edit';
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, permission, [
+      'office-web'
+    ]);
+    return this.referenceDataService.updateContactMethod(contactMethodId, {
+      label: request.label?.trim(),
+      value: request.value?.trim(),
+      isPrimary: request.isPrimary,
+      isActive: request.isActive
+    });
+  }
+
   async createContact(
     sessionToken: string,
     request: CreateContactRequestDto
@@ -409,14 +496,31 @@ export class CrmService {
       limit: duplicateCandidateLimit
     });
 
-    return customers.flatMap((customer) => {
+    const contactMethodsByCustomerId = new Map(
+      await Promise.all(
+        customers.map(
+          async (customer) =>
+            [
+              customer.id,
+              (await this.referenceDataService.getCustomerDetail(customer.id)).contactMethods
+            ] as const
+        )
+      )
+    );
+
+    const candidates = customers.map((customer) => {
       const matchReasons: string[] = [];
+      const contactMethods = contactMethodsByCustomerId.get(customer.id) ?? [];
 
       if (normalizedName && normalize(customer.name) === normalizedName) {
         matchReasons.push('Same customer name');
       }
 
-      if (normalizedPhone && normalizePhone(customer.phone) === normalizedPhone) {
+      if (
+        normalizedPhone &&
+        (normalizePhone(customer.phone) === normalizedPhone ||
+          contactMethodsContainPhone(contactMethods, normalizedPhone))
+      ) {
         matchReasons.push('Same phone number');
       }
 
@@ -429,21 +533,23 @@ export class CrmService {
       }
 
       if (matchReasons.length === 0) {
-        return [];
+        return null;
       }
 
-      return [
-        {
-          id: customer.id,
-          kind: 'customer' as const,
-          title: customer.name,
-          subtitle: `${customer.billingAddressLine1}, ${customer.billingCity}, ${customer.billingState} ${customer.billingPostalCode}`,
-          matchReasons,
-          isActive: customer.isActive,
-          hasDoNotServiceFlag: hasDoNotService(customer.flags)
-        } satisfies DuplicateCandidate
-      ];
+      return {
+        id: customer.id,
+        kind: 'customer' as const,
+        title: customer.name,
+        subtitle: `${customer.billingAddressLine1}, ${customer.billingCity}, ${customer.billingState} ${customer.billingPostalCode}`,
+        matchReasons,
+        isActive: customer.isActive,
+        hasDoNotServiceFlag: hasDoNotService(customer.flags)
+      } satisfies DuplicateCandidate;
     });
+
+    return candidates.filter(
+      (candidate): candidate is Exclude<(typeof candidates)[number], null> => candidate !== null
+    );
   }
 
   private async findLocationDuplicates(
@@ -470,14 +576,31 @@ export class CrmService {
       limit: duplicateCandidateLimit
     });
 
+    const contactMethodsByLocationId = new Map(
+      await Promise.all(
+        locations.map(
+          async (location) =>
+            [
+              location.id,
+              (await this.referenceDataService.getLocationDetail(location.id)).contactMethods
+            ] as const
+        )
+      )
+    );
+
     const candidates = locations.map((location) => {
       const matchReasons: string[] = [];
+      const contactMethods = contactMethodsByLocationId.get(location.id) ?? [];
 
       if (normalizedName && normalize(location.name) === normalizedName) {
         matchReasons.push('Same location name');
       }
 
-      if (normalizedPhone && normalizePhone(location.phone) === normalizedPhone) {
+      if (
+        normalizedPhone &&
+        (normalizePhone(location.phone) === normalizedPhone ||
+          contactMethodsContainPhone(contactMethods, normalizedPhone))
+      ) {
         matchReasons.push('Same phone number');
       }
 
@@ -545,6 +668,18 @@ function normalize(value: string | undefined): string {
 
 function normalizePhone(value: string | undefined): string {
   return value?.replace(/\D/g, '') ?? '';
+}
+
+function contactMethodsContainPhone(
+  contactMethods: ContactMethodSummary[],
+  normalizedPhone: string
+): boolean {
+  return contactMethods.some(
+    (method) =>
+      method.isActive &&
+      (method.kind === 'phone' || method.kind === 'fax') &&
+      normalizePhone(method.value) === normalizedPhone
+  );
 }
 
 function hasDoNotService(flags: string[]): boolean {

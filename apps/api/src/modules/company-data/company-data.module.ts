@@ -7,12 +7,16 @@ import { JobsDataService } from './jobs-data.service';
 import { JobsMediaDataRepository } from './jobs-media-data.repository';
 import { JobsReadDataRepository } from './jobs-read-data.repository';
 import { JobsRegisterDataRepository } from './jobs-register-data.repository';
+import { ReferenceContactLinksReadRepository } from './reference-contact-links-read.repository';
+import { ReferenceContactMethodsReadRepository } from './reference-contact-methods-read.repository';
 import { ReferenceDataRepository } from './reference-data.repository';
 import { ReferenceDataService } from './reference-data.service';
 import { ReferenceReadDataRepository } from './reference-read-data.repository';
 
 @Module({
   providers: [
+    ReferenceContactLinksReadRepository,
+    ReferenceContactMethodsReadRepository,
     ReferenceReadDataRepository,
     ReferenceDataRepository,
     ReferenceDataService,

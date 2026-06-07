@@ -97,6 +97,7 @@ A customer account should support:
 - flags such as Do Not Service
 - multiple service locations
 - multiple contacts
+- multiple active/inactive contact methods such as phone numbers and email addresses
 - multiple billing contacts
 
 ### Customer history rule
@@ -147,6 +148,7 @@ Important rule:
 
 - the primary location owner/customer is the default
 - but the job may override it on a case-by-case basis
+- a job-level bill-to override must not mutate the location's owner/customer relationship
 
 ### Ownership change rule
 
@@ -207,6 +209,12 @@ Contacts should support at minimum:
 - email
 - fax
 - optional tags such as Primary or Billing
+
+Phone numbers and email addresses should be modeled as contact-method rows where practical rather
+than as a single hard-coded field per record.
+Customer accounts, service locations, and shared contacts may each have their own contact methods.
+This lets a location have a main office number, after-hours number, or backup email without forcing
+those values through a person/contact dropdown.
 
 ### Contact update rule
 

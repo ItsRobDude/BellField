@@ -2,7 +2,6 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { toTextArray } from '../../database/database-row.utils';
 import type {
-  ContactLinkRecord,
   ContactRecord,
   CrmSearchRecord,
   CustomerAccountRecord,
@@ -14,13 +13,11 @@ import type {
 } from './company-data.types';
 import {
   escapeLikePrefix,
-  toContactLinkRecord,
   toContactRecord,
   toCrmSearchRecord,
   toCustomerRecord,
   toLocationRecord,
   toOwnershipHistoryRecord,
-  type ContactLinkRow,
   type ContactRow,
   type CrmSearchRow,
   type CustomerRow,
@@ -104,6 +101,32 @@ export class ReferenceReadDataRepository {
               case when lower(customer.name) = $1 then 100 when lower(customer.name) like $2 || '%' escape '\' then 80 else 0 end +
               case when lower(coalesce(customer.email, '')) like $2 || '%' escape '\' then 55 else 0 end +
               case when $3 <> '' and regexp_replace(coalesce(customer.phone, ''), '[^0-9]', '', 'g') like $3 || '%' then 60 else 0 end +
+              case
+                when exists (
+                  select 1
+                  from crm_contact_methods method
+                  where method.owner_kind = 'customer'
+                    and method.customer_id = customer.id
+                    and method.is_active = true
+                    and method.kind = 'email'
+                    and lower(method.value) like $2 || '%' escape '\'
+                )
+                then 55
+                else 0
+              end +
+              case
+                when $3 <> '' and exists (
+                  select 1
+                  from crm_contact_methods method
+                  where method.owner_kind = 'customer'
+                    and method.customer_id = customer.id
+                    and method.is_active = true
+                    and method.kind in ('phone', 'fax')
+                    and regexp_replace(method.value, '[^0-9]', '', 'g') like $3 || '%'
+                )
+                then 60
+                else 0
+              end +
               case when lower(customer.billing_address_line1) like $2 || '%' escape '\' then 35 else 0 end +
               case when lower(customer.billing_city) like $2 || '%' escape '\' then 20 else 0 end +
               case when lower(customer.billing_postal_code) like $2 || '%' escape '\' then 25 else 0 end +
@@ -124,6 +147,17 @@ export class ReferenceReadDataRepository {
              or lower(customer.billing_city) like $2 || '%' escape '\'
              or lower(customer.billing_postal_code) like $2 || '%' escape '\'
              or ($3 <> '' and regexp_replace(coalesce(customer.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+             or exists (
+               select 1
+               from crm_contact_methods method
+               where method.owner_kind = 'customer'
+                 and method.customer_id = customer.id
+                 and method.is_active = true
+                 and (
+                   lower(method.value) like $2 || '%' escape '\'
+                   or ($3 <> '' and method.kind in ('phone', 'fax') and regexp_replace(method.value, '[^0-9]', '', 'g') like $3 || '%')
+                 )
+             )
              or exists (
                select 1
                from unnest(customer.flags) flag
@@ -156,6 +190,31 @@ export class ReferenceReadDataRepository {
               case
                 when exists (
                   select 1
+                  from crm_contact_methods method
+                  where method.owner_kind = 'location'
+                    and method.location_id = location.id
+                    and method.is_active = true
+                    and lower(method.value) like $2 || '%' escape '\'
+                )
+                then 35
+                else 0
+              end +
+              case
+                when $3 <> '' and exists (
+                  select 1
+                  from crm_contact_methods method
+                  where method.owner_kind = 'location'
+                    and method.location_id = location.id
+                    and method.is_active = true
+                    and method.kind in ('phone', 'fax')
+                    and regexp_replace(method.value, '[^0-9]', '', 'g') like $3 || '%'
+                )
+                then 55
+                else 0
+              end +
+              case
+                when exists (
+                  select 1
                   from location_contact_links link
                   inner join contacts contact on contact.id = link.contact_id
                   where link.location_id = location.id
@@ -180,6 +239,17 @@ export class ReferenceReadDataRepository {
              or lower(customer.name) like $2 || '%' escape '\'
              or lower(coalesce(location.email, '')) like $2 || '%' escape '\'
              or ($3 <> '' and regexp_replace(coalesce(location.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+             or exists (
+               select 1
+               from crm_contact_methods method
+               where method.owner_kind = 'location'
+                 and method.location_id = location.id
+                 and method.is_active = true
+                 and (
+                   lower(method.value) like $2 || '%' escape '\'
+                   or ($3 <> '' and method.kind in ('phone', 'fax') and regexp_replace(method.value, '[^0-9]', '', 'g') like $3 || '%')
+                 )
+             )
              or exists (
                select 1
                from location_contact_links link
@@ -216,6 +286,31 @@ export class ReferenceReadDataRepository {
               case
                 when exists (
                   select 1
+                  from crm_contact_methods method
+                  where method.owner_kind = 'contact'
+                    and method.contact_id = contact.id
+                    and method.is_active = true
+                    and lower(method.value) like $2 || '%' escape '\'
+                )
+                then 40
+                else 0
+              end +
+              case
+                when $3 <> '' and exists (
+                  select 1
+                  from crm_contact_methods method
+                  where method.owner_kind = 'contact'
+                    and method.contact_id = contact.id
+                    and method.is_active = true
+                    and method.kind in ('phone', 'fax')
+                    and regexp_replace(method.value, '[^0-9]', '', 'g') like $3 || '%'
+                )
+                then 55
+                else 0
+              end +
+              case
+                when exists (
+                  select 1
                   from unnest(contact.tags) tag
                   where lower(tag) like $2 || '%' escape '\'
                 )
@@ -227,6 +322,17 @@ export class ReferenceReadDataRepository {
           where lower(contact.display_name) like $2 || '%' escape '\'
              or lower(coalesce(contact.email, '')) like $2 || '%' escape '\'
              or ($3 <> '' and regexp_replace(coalesce(contact.phone, ''), '[^0-9]', '', 'g') like $3 || '%')
+             or exists (
+               select 1
+               from crm_contact_methods method
+               where method.owner_kind = 'contact'
+                 and method.contact_id = contact.id
+                 and method.is_active = true
+                 and (
+                   lower(method.value) like $2 || '%' escape '\'
+                   or ($3 <> '' and method.kind in ('phone', 'fax') and regexp_replace(method.value, '[^0-9]', '', 'g') like $3 || '%')
+                 )
+             )
              or exists (
                select 1
                from unnest(contact.tags) tag
@@ -278,6 +384,18 @@ export class ReferenceReadDataRepository {
           and (
             ($1::text <> '' and regexp_replace(lower(name), '[^a-z0-9]', '', 'g') = $1)
             or ($2::text <> '' and regexp_replace(coalesce(phone, ''), '[^0-9]', '', 'g') = $2)
+            or (
+              $2::text <> ''
+              and exists (
+                select 1
+                from crm_contact_methods method
+                where method.owner_kind = 'customer'
+                  and method.customer_id = customers.id
+                  and method.is_active = true
+                  and method.kind in ('phone', 'fax')
+                  and regexp_replace(method.value, '[^0-9]', '', 'g') = $2
+              )
+            )
             or (
               $3::text <> ''
               and regexp_replace(
@@ -333,6 +451,18 @@ export class ReferenceReadDataRepository {
           and (
             ($1::text <> '' and regexp_replace(lower(location.name), '[^a-z0-9]', '', 'g') = $1)
             or ($2::text <> '' and regexp_replace(coalesce(location.phone, ''), '[^0-9]', '', 'g') = $2)
+            or (
+              $2::text <> ''
+              and exists (
+                select 1
+                from crm_contact_methods method
+                where method.owner_kind = 'location'
+                  and method.location_id = location.id
+                  and method.is_active = true
+                  and method.kind in ('phone', 'fax')
+                  and regexp_replace(method.value, '[^0-9]', '', 'g') = $2
+              )
+            )
             or (
               $3::text <> ''
               and regexp_replace(
@@ -508,169 +638,6 @@ export class ReferenceReadDataRepository {
     );
 
     return result.rows[0] ? toLocationRecord(result.rows[0]) : null;
-  }
-
-  async listCustomerContactLinks(
-    customerId: string,
-    includeInactive = true
-  ): Promise<ContactLinkRecord[]> {
-    const result = await this.databaseService.query<ContactLinkRow>(
-      `
-        select
-          id,
-          contact_id as "contactId",
-          phone_override as "phone",
-          email_override as "email",
-          fax_override as "fax",
-          tags,
-          is_active as "isActive",
-          end_date as "endDate"
-        from customer_contact_links
-        where customer_id = $1
-          ${includeInactive ? '' : 'and is_active = true and end_date is null'}
-        order by created_at asc
-      `,
-      [customerId]
-    );
-
-    return result.rows.map((row) => toContactLinkRecord(row, customerId, 'customer'));
-  }
-
-  async listLocationContactLinks(
-    locationId: string,
-    includeInactive = true
-  ): Promise<ContactLinkRecord[]> {
-    const result = await this.databaseService.query<ContactLinkRow>(
-      `
-        select
-          id,
-          contact_id as "contactId",
-          phone_override as "phone",
-          email_override as "email",
-          fax_override as "fax",
-          tags,
-          is_active as "isActive",
-          end_date as "endDate"
-        from location_contact_links
-        where location_id = $1
-          ${includeInactive ? '' : 'and is_active = true and end_date is null'}
-        order by created_at asc
-      `,
-      [locationId]
-    );
-
-    return result.rows.map((row) => toContactLinkRecord(row, locationId, 'location'));
-  }
-
-  async listContactLinksForContact(
-    contactId: string,
-    includeInactive = true
-  ): Promise<ContactLinkRecord[]> {
-    const [customerLinks, locationLinks] = await Promise.all([
-      this.databaseService.query<ContactLinkRow & { linkedRecordId: string }>(
-        `
-          select
-            id,
-            contact_id as "contactId",
-            customer_id as "linkedRecordId",
-            phone_override as "phone",
-            email_override as "email",
-            fax_override as "fax",
-            tags,
-            is_active as "isActive",
-            end_date as "endDate"
-          from customer_contact_links
-          where contact_id = $1
-            ${includeInactive ? '' : 'and is_active = true and end_date is null'}
-          order by created_at asc
-        `,
-        [contactId]
-      ),
-      this.databaseService.query<ContactLinkRow & { linkedRecordId: string }>(
-        `
-          select
-            id,
-            contact_id as "contactId",
-            location_id as "linkedRecordId",
-            phone_override as "phone",
-            email_override as "email",
-            fax_override as "fax",
-            tags,
-            is_active as "isActive",
-            end_date as "endDate"
-          from location_contact_links
-          where contact_id = $1
-            ${includeInactive ? '' : 'and is_active = true and end_date is null'}
-          order by created_at asc
-        `,
-        [contactId]
-      )
-    ]);
-
-    return [
-      ...customerLinks.rows.map((row) => toContactLinkRecord(row, row.linkedRecordId, 'customer')),
-      ...locationLinks.rows.map((row) => toContactLinkRecord(row, row.linkedRecordId, 'location'))
-    ];
-  }
-
-  async getContactLinkById(linkId: string): Promise<ContactLinkRecord | null> {
-    const customerResult = await this.databaseService.query<
-      ContactLinkRow & { linkedRecordId: string }
-    >(
-      `
-        select
-          id,
-          contact_id as "contactId",
-          customer_id as "linkedRecordId",
-          phone_override as "phone",
-          email_override as "email",
-          fax_override as "fax",
-          tags,
-          is_active as "isActive",
-          end_date as "endDate"
-        from customer_contact_links
-        where id = $1
-        limit 1
-      `,
-      [linkId]
-    );
-
-    if (customerResult.rows[0]) {
-      return toContactLinkRecord(
-        customerResult.rows[0],
-        customerResult.rows[0].linkedRecordId,
-        'customer'
-      );
-    }
-
-    const locationResult = await this.databaseService.query<
-      ContactLinkRow & { linkedRecordId: string }
-    >(
-      `
-        select
-          id,
-          contact_id as "contactId",
-          location_id as "linkedRecordId",
-          phone_override as "phone",
-          email_override as "email",
-          fax_override as "fax",
-          tags,
-          is_active as "isActive",
-          end_date as "endDate"
-        from location_contact_links
-        where id = $1
-        limit 1
-      `,
-      [linkId]
-    );
-
-    return locationResult.rows[0]
-      ? toContactLinkRecord(
-          locationResult.rows[0],
-          locationResult.rows[0].linkedRecordId,
-          'location'
-        )
-      : null;
   }
 
   async listOwnershipHistory(locationId: string): Promise<OwnershipHistoryRecord[]> {

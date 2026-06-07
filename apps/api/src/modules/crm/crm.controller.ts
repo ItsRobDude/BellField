@@ -1,11 +1,13 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post, Query } from '@nestjs/common';
 import {
+  CreateContactMethodRequestBodyDto,
   CreateContactRequestBodyDto,
   CreateCustomerRequestBodyDto,
   CreateLocationRequestBodyDto,
   LinkContactRequestBodyDto,
   ReassignLocationOwnerRequestBodyDto,
   UpdateContactLinkRequestBodyDto,
+  UpdateContactMethodRequestBodyDto,
   UpdateContactRequestBodyDto,
   UpdateCustomerRequestBodyDto,
   UpdateLocationRequestBodyDto
@@ -58,6 +60,19 @@ export class CrmController {
     );
   }
 
+  @Post('customers/:customerId/contact-methods')
+  async createCustomerContactMethod(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('customerId') customerId: string,
+    @Body() request: CreateContactMethodRequestBodyDto
+  ) {
+    return this.crmService.createCustomerContactMethod(
+      this.getBearerToken(authorizationHeader),
+      customerId,
+      request
+    );
+  }
+
   @Get('locations/:locationId')
   async getLocationDetail(
     @Headers('authorization') authorizationHeader: string | undefined,
@@ -100,6 +115,19 @@ export class CrmController {
     );
   }
 
+  @Post('locations/:locationId/contact-methods')
+  async createLocationContactMethod(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('locationId') locationId: string,
+    @Body() request: CreateContactMethodRequestBodyDto
+  ) {
+    return this.crmService.createLocationContactMethod(
+      this.getBearerToken(authorizationHeader),
+      locationId,
+      request
+    );
+  }
+
   @Get('contacts/:contactId')
   async getContactDetail(
     @Headers('authorization') authorizationHeader: string | undefined,
@@ -125,6 +153,32 @@ export class CrmController {
     return this.crmService.updateContact(
       this.getBearerToken(authorizationHeader),
       contactId,
+      request
+    );
+  }
+
+  @Post('contacts/:contactId/contact-methods')
+  async createContactContactMethod(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('contactId') contactId: string,
+    @Body() request: CreateContactMethodRequestBodyDto
+  ) {
+    return this.crmService.createContactContactMethod(
+      this.getBearerToken(authorizationHeader),
+      contactId,
+      request
+    );
+  }
+
+  @Patch('contact-methods/:contactMethodId')
+  async updateContactMethod(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('contactMethodId') contactMethodId: string,
+    @Body() request: UpdateContactMethodRequestBodyDto
+  ) {
+    return this.crmService.updateContactMethod(
+      this.getBearerToken(authorizationHeader),
+      contactMethodId,
       request
     );
   }

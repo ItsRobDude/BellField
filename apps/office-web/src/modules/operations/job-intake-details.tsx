@@ -1,7 +1,7 @@
 'use client';
 
 import type { JobIntakeContextResponse } from '@/lib/operations-api';
-import type { JobIntakeBillToOption, JobIntakeSelectedLocation } from './job-intake-panel';
+import type { JobIntakeSelectedCustomer, JobIntakeSelectedLocation } from './job-intake-panel';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const jobTypeOptions = ['Service', 'Maintenance', 'Install', 'Estimate', 'Callback'];
@@ -31,19 +31,17 @@ const arrivalWindowOptions = [
 ];
 
 export function SelectedLocationCard({
-  billToOptions,
-  billToWarning,
-  jobBillToCustomerId,
+  jobCustomerOverride,
   selectedLocation,
   onClearSelectedLocation,
-  onJobBillToCustomerChange
+  onClearJobCustomerOverride,
+  onOpenJobCustomerOverride
 }: {
-  billToOptions: JobIntakeBillToOption[];
-  billToWarning: string | null;
-  jobBillToCustomerId: string;
+  jobCustomerOverride: JobIntakeSelectedCustomer | null;
   selectedLocation: JobIntakeSelectedLocation;
   onClearSelectedLocation: () => void;
-  onJobBillToCustomerChange: (customerId: string) => void;
+  onClearJobCustomerOverride: () => void;
+  onOpenJobCustomerOverride: () => void;
 }) {
   return (
     <div aria-label="Selected job location" role="group" style={styles.subpanel}>
@@ -51,27 +49,30 @@ export function SelectedLocationCard({
         <div>
           <strong>{selectedLocation.name}</strong>
           <p style={styles.tinyMuted}>{formatAddress(selectedLocation)}</p>
-          <p style={styles.tinyMuted}>Owner: {selectedLocation.customerName}</p>
+          <p style={styles.tinyMuted}>Location owner: {selectedLocation.customerName}</p>
         </div>
         <button type="button" style={styles.button} onClick={onClearSelectedLocation}>
           Change location
         </button>
       </div>
-      <label style={styles.fieldLabel}>
-        <span>Bill to</span>
-        <select
-          value={jobBillToCustomerId}
-          onChange={(event) => onJobBillToCustomerChange(event.target.value)}
-          style={styles.input}
-        >
-          {billToOptions.map((customer) => (
-            <option key={customer.id} value={customer.id}>
-              {customer.name}
-            </option>
-          ))}
-        </select>
-        {billToWarning ? <span style={styles.tinyMuted}>{billToWarning}</span> : null}
-      </label>
+      <div style={styles.inlineActionBar}>
+        <div>
+          <span style={styles.fieldText}>Customer for this job</span>
+          <p style={styles.tinyMuted}>
+            {jobCustomerOverride
+              ? jobCustomerOverride.name
+              : `${selectedLocation.customerName} (location owner)`}
+          </p>
+        </div>
+        <button type="button" style={styles.button} onClick={onOpenJobCustomerOverride}>
+          Change customer for this job
+        </button>
+        {jobCustomerOverride ? (
+          <button type="button" style={styles.button} onClick={onClearJobCustomerOverride}>
+            Use location owner
+          </button>
+        ) : null}
+      </div>
     </div>
   );
 }

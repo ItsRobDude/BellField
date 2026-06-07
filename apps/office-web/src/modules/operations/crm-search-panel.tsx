@@ -5,9 +5,7 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type CrmSearchPanelProps = {
   isSearching: boolean;
-  onNewContact: () => void;
   onNewCustomer: () => void;
-  onNewLocation: () => void;
   onSearchQueryChange: (query: string) => void;
   onSelectResult: (result: CrmSearchResult) => void;
   searchQuery: string;
@@ -16,9 +14,7 @@ type CrmSearchPanelProps = {
 
 export function CrmSearchPanel({
   isSearching,
-  onNewContact,
   onNewCustomer,
-  onNewLocation,
   onSearchQueryChange,
   onSelectResult,
   searchQuery,
@@ -31,12 +27,6 @@ export function CrmSearchPanel({
         <div style={styles.inlineActionBar}>
           <button type="button" onClick={onNewCustomer} style={styles.primaryButton}>
             New customer
-          </button>
-          <button type="button" onClick={onNewLocation} style={styles.button}>
-            New location
-          </button>
-          <button type="button" onClick={onNewContact} style={styles.button}>
-            New contact
           </button>
         </div>
       </div>

@@ -10,12 +10,10 @@ import {
   type CreateCustomerRequest,
   type CreateLocationRequest,
   type CrmSearchResult,
-  type CustomerDetail,
   type DuplicateCandidate,
   type JobIntakeContextResponse
 } from '@/lib/operations-api';
 import type {
-  JobIntakeBillToOption,
   JobIntakeCreateCustomerResult,
   JobIntakeCreateLocationResult,
   JobIntakeCustomerLocationOption,
@@ -24,7 +22,6 @@ import type {
 } from './job-intake-panel';
 import type { OfficeJobIntakeSurfaceProps } from './office-workspace-job-intake-surface';
 import {
-  dedupeBillToOptions,
   toActiveCustomerLocationOptions,
   toJobIntakeSelectedLocation
 } from './office-workspace-shell-helpers';
@@ -66,9 +63,12 @@ export function useJobIntakeWorkflow({
     JobIntakeCustomerLocationOption[]
   >([]);
   const [customerLocationMessage, setCustomerLocationMessage] = useState<string | null>(null);
-  const [jobBillToOptions, setJobBillToOptions] = useState<JobIntakeBillToOption[]>([]);
-  const [jobBillToWarning, setJobBillToWarning] = useState<string | null>(null);
-  const [jobBillToCustomerId, setJobBillToCustomerId] = useState('');
+  const [jobCustomerOverride, setJobCustomerOverride] = useState<JobIntakeSelectedCustomer | null>(
+    null
+  );
+  const [jobCustomerSearchQuery, setJobCustomerSearchQuery] = useState('');
+  const [jobCustomerSearchResults, setJobCustomerSearchResults] = useState<CrmSearchResult[]>([]);
+  const [isJobCustomerSearchLoading, setIsJobCustomerSearchLoading] = useState(false);
   const [jobType, setJobType] = useState('Service');
   const [jobCategory, setJobCategory] = useState('General');
   const [jobOrigin, setJobOrigin] = useState('Inbound phone call');
@@ -80,6 +80,7 @@ export function useJobIntakeWorkflow({
   const [jobWindow, setJobWindow] = useState('');
   const loadInFlightRef = useRef(false);
   const searchRequestRef = useRef(0);
+  const jobCustomerSearchRequestRef = useRef(0);
 
   const loadContext = useCallback(
     async (force = false): Promise<JobIntakeContextResponse | null> => {
@@ -166,13 +167,67 @@ export function useJobIntakeWorkflow({
     sessionToken
   ]);
 
+  useEffect(() => {
+    const requestId = jobCustomerSearchRequestRef.current + 1;
+    jobCustomerSearchRequestRef.current = requestId;
+    const trimmedQuery = jobCustomerSearchQuery.trim();
+
+    if (!isOpen || !selectedJobLocation || trimmedQuery.length < 2) {
+      setJobCustomerSearchResults([]);
+      setIsJobCustomerSearchLoading(false);
+      return;
+    }
+
+    setIsJobCustomerSearchLoading(true);
+    const timeoutId = window.setTimeout(() => {
+      void (async () => {
+        try {
+          const response = await searchOfficeCrm({
+            sessionToken,
+            apiBaseUrl,
+            query: trimmedQuery
+          });
+
+          if (jobCustomerSearchRequestRef.current !== requestId) {
+            return;
+          }
+
+          setJobCustomerSearchResults(
+            response.results.filter((result) => result.kind === 'customer')
+          );
+        } catch (error) {
+          if (jobCustomerSearchRequestRef.current !== requestId) {
+            return;
+          }
+
+          setJobCustomerSearchResults([]);
+          onErrorMessage(error instanceof Error ? error.message : 'Unable to search customers.');
+        } finally {
+          if (jobCustomerSearchRequestRef.current === requestId) {
+            setIsJobCustomerSearchLoading(false);
+          }
+        }
+      })();
+    }, jobIntakeSearchDebounceMs);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    apiBaseUrl,
+    isOpen,
+    jobCustomerSearchQuery,
+    onErrorMessage,
+    selectedJobLocation,
+    sessionToken
+  ]);
+
   function clearLocationSelection() {
     setJobLocationId('');
     setSelectedJobLocation(null);
     setSelectedJobCustomer(null);
-    setJobBillToCustomerId('');
-    setJobBillToOptions([]);
-    setJobBillToWarning(null);
+    setJobCustomerOverride(null);
+    setJobCustomerSearchQuery('');
+    setJobCustomerSearchResults([]);
+    setIsJobCustomerSearchLoading(false);
     setJobLocationSearchQuery('');
     setJobLocationSearchResults([]);
     setIsJobLocationSearchLoading(false);
@@ -184,41 +239,14 @@ export function useJobIntakeWorkflow({
     try {
       onErrorMessage(null);
       const location = await getOfficeLocationDetail({ sessionToken, apiBaseUrl, locationId });
-      const ownerBillToOption = {
-        id: location.customerId,
-        name: location.customerName
-      };
-      const alternateIds = location.alternateBillToCustomerIds.filter(
-        (customerId) => customerId !== location.customerId
-      );
-      const alternateResults = await Promise.allSettled(
-        alternateIds.map((customerId) =>
-          getOfficeCustomerDetail({ sessionToken, apiBaseUrl, customerId })
-        )
-      );
-      const alternateBillToOptions = alternateResults
-        .filter(
-          (result): result is PromiseFulfilledResult<CustomerDetail> =>
-            result.status === 'fulfilled'
-        )
-        .map((result) => ({
-          id: result.value.id,
-          name: result.value.name
-        }));
-      const failedAlternateCount = alternateResults.filter(
-        (result) => result.status === 'rejected'
-      ).length;
 
       setSelectedJobLocation(toJobIntakeSelectedLocation(location));
       setSelectedJobCustomer(null);
       setJobLocationId(location.id);
-      setJobBillToOptions(dedupeBillToOptions([ownerBillToOption, ...alternateBillToOptions]));
-      setJobBillToCustomerId(ownerBillToOption.id);
-      setJobBillToWarning(
-        failedAlternateCount > 0
-          ? 'Some alternate bill-to customers could not be loaded. The location owner remains available.'
-          : null
-      );
+      setJobCustomerOverride(null);
+      setJobCustomerSearchQuery('');
+      setJobCustomerSearchResults([]);
+      setIsJobCustomerSearchLoading(false);
       setJobLocationSearchQuery('');
       setJobLocationSearchResults([]);
       setIsJobLocationSearchLoading(false);
@@ -310,9 +338,10 @@ export function useJobIntakeWorkflow({
       setJobLocationId('');
       setSelectedJobLocation(null);
       setSelectedJobCustomer({ id: response.customer.id, name: response.customer.name });
-      setJobBillToCustomerId('');
-      setJobBillToOptions([]);
-      setJobBillToWarning(null);
+      setJobCustomerOverride(null);
+      setJobCustomerSearchQuery('');
+      setJobCustomerSearchResults([]);
+      setIsJobCustomerSearchLoading(false);
       setJobLocationSearchQuery('');
       setJobLocationSearchResults([]);
       setIsJobLocationSearchLoading(false);
@@ -328,6 +357,52 @@ export function useJobIntakeWorkflow({
       onErrorMessage(error instanceof Error ? error.message : 'Unable to create customer.');
       throw error;
     }
+  }
+
+  async function handleCreateJobCustomer(
+    input: CreateCustomerRequest
+  ): Promise<JobIntakeCreateCustomerResult> {
+    try {
+      onErrorMessage(null);
+
+      if (!input.confirmDuplicate) {
+        const duplicateWarnings = await collectDuplicateWarnings(
+          buildCustomerDuplicateQuery(input),
+          'customer'
+        );
+
+        if (duplicateWarnings.length > 0) {
+          return { status: 'duplicate', duplicateWarnings };
+        }
+      }
+
+      const response = await createOfficeCustomer({
+        ...input,
+        sessionToken,
+        apiBaseUrl
+      });
+
+      setJobCustomerOverride({ id: response.customer.id, name: response.customer.name });
+      setJobCustomerSearchQuery('');
+      setJobCustomerSearchResults([]);
+      setIsJobCustomerSearchLoading(false);
+
+      return { status: 'created', customer: response.customer };
+    } catch (error) {
+      onErrorMessage(error instanceof Error ? error.message : 'Unable to create customer.');
+      throw error;
+    }
+  }
+
+  function handleSelectJobCustomerSearchResult(result: CrmSearchResult) {
+    if (result.kind !== 'customer') {
+      return;
+    }
+
+    setJobCustomerOverride({ id: result.id, name: result.title });
+    setJobCustomerSearchQuery('');
+    setJobCustomerSearchResults([]);
+    setIsJobCustomerSearchLoading(false);
   }
 
   async function handleCreateLocation(
@@ -377,7 +452,7 @@ export function useJobIntakeWorkflow({
         sessionToken,
         apiBaseUrl,
         locationId: jobLocationId,
-        billToCustomerId: jobBillToCustomerId || undefined,
+        ...(jobCustomerOverride ? { billToCustomerId: jobCustomerOverride.id } : {}),
         jobType,
         category: jobCategory,
         origin: jobOrigin,
@@ -397,6 +472,10 @@ export function useJobIntakeWorkflow({
       setJobEndTime('');
       setJobWindow('');
       setJobTechnicianId('');
+      setJobCustomerOverride(null);
+      setJobCustomerSearchQuery('');
+      setJobCustomerSearchResults([]);
+      setIsJobCustomerSearchLoading(false);
       clearLocationSelection();
       onClose();
       onNoticeMessage('Job created.');
@@ -425,9 +504,10 @@ export function useJobIntakeWorkflow({
     selectedCustomer: selectedJobCustomer,
     customerLocationOptions,
     customerLocationMessage,
-    billToOptions: jobBillToOptions,
-    billToWarning: jobBillToWarning,
-    jobBillToCustomerId,
+    jobCustomerOverride,
+    jobCustomerSearchQuery,
+    jobCustomerSearchResults,
+    isJobCustomerSearchLoading,
     jobType,
     jobCategory,
     jobOrigin,
@@ -441,9 +521,12 @@ export function useJobIntakeWorkflow({
     onSelectLocationSearchResult: (result) => void handleSelectSearchResult(result),
     onSelectCustomerLocation: (locationId) => void handleLoadLocation(locationId),
     onCreateCustomer: handleCreateCustomer,
+    onCreateJobCustomer: handleCreateJobCustomer,
     onCreateLocation: handleCreateLocation,
     onClearSelectedLocation: clearLocationSelection,
-    onJobBillToCustomerChange: setJobBillToCustomerId,
+    onClearJobCustomerOverride: () => setJobCustomerOverride(null),
+    onJobCustomerSearchQueryChange: setJobCustomerSearchQuery,
+    onSelectJobCustomerSearchResult: handleSelectJobCustomerSearchResult,
     onJobTypeChange: setJobType,
     onJobCategoryChange: setJobCategory,
     onJobOriginChange: setJobOrigin,

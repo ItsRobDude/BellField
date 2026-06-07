@@ -1,9 +1,13 @@
 import { ReferenceDataRepository } from './reference-data.repository';
+import { ReferenceContactLinksReadRepository } from './reference-contact-links-read.repository';
+import { ReferenceContactMethodsReadRepository } from './reference-contact-methods-read.repository';
 import { ReferenceReadDataRepository } from './reference-read-data.repository';
 
 function createReferenceDataRepository(databaseService: unknown): ReferenceDataRepository {
   return new ReferenceDataRepository(
     new ReferenceReadDataRepository(databaseService as never),
+    new ReferenceContactLinksReadRepository(databaseService as never),
+    new ReferenceContactMethodsReadRepository(databaseService as never),
     databaseService as never
   );
 }

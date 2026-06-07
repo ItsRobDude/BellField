@@ -2,6 +2,10 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type {
   ContactDetail,
   ContactLink,
+  ContactMethodMutationResponse,
+  ContactMethodSummary,
+  ContactMethodKind,
+  ContactMethodOwnerKind,
   ContactMutationResponse,
   ContactSummary,
   CustomerDetail,
@@ -12,6 +16,7 @@ import type {
 } from '@bellfield/contracts';
 import type {
   ContactLinkRecord,
+  ContactMethodRecord,
   ContactRecord,
   CrmSearchRecord,
   CustomerDuplicateLookupInput,
@@ -84,15 +89,27 @@ export class ReferenceDataService {
     return contact;
   }
 
+  async getContactMethodById(contactMethodId: string): Promise<ContactMethodRecord> {
+    const contactMethod = await this.referenceDataRepository.getContactMethodById(contactMethodId);
+
+    if (!contactMethod) {
+      throw new NotFoundException('Contact method not found.');
+    }
+
+    return contactMethod;
+  }
+
   async getCustomerDetail(customerId: string): Promise<CustomerDetail> {
     const customer = await this.getCustomerById(customerId);
-    const [links, locations] = await Promise.all([
+    const [links, locations, contactMethods] = await Promise.all([
       this.referenceDataRepository.listCustomerContactLinks(customerId, true),
-      this.referenceDataRepository.listLocationsForCustomer(customerId, true)
+      this.referenceDataRepository.listLocationsForCustomer(customerId, true),
+      this.referenceDataRepository.listCustomerContactMethods(customerId, true)
     ]);
 
     return {
       ...customer,
+      contactMethods: contactMethods.map((method) => this.toContactMethodSummary(method)),
       contacts: await Promise.all(
         links.map((link) =>
           this.toContactLinkSummary(link, {
@@ -110,9 +127,10 @@ export class ReferenceDataService {
   async getLocationDetail(locationId: string): Promise<LocationDetail> {
     const location = await this.getLocationById(locationId);
     const customer = await this.getCustomerById(location.customerId);
-    const [links, ownershipHistory] = await Promise.all([
+    const [links, ownershipHistory, contactMethods] = await Promise.all([
       this.referenceDataRepository.listLocationContactLinks(locationId, true),
-      this.referenceDataRepository.listOwnershipHistory(locationId)
+      this.referenceDataRepository.listOwnershipHistory(locationId),
+      this.referenceDataRepository.listLocationContactMethods(locationId, true)
     ]);
 
     return {
@@ -128,6 +146,7 @@ export class ReferenceDataService {
       email: location.email,
       fax: location.fax,
       isActive: location.isActive,
+      contactMethods: contactMethods.map((method) => this.toContactMethodSummary(method)),
       contacts: await Promise.all(
         links.map((link) =>
           this.toContactLinkSummary(link, {
@@ -147,10 +166,14 @@ export class ReferenceDataService {
 
   async getContactDetail(contactId: string): Promise<ContactDetail> {
     const contact = await this.getContactById(contactId);
-    const links = await this.referenceDataRepository.listContactLinksForContact(contactId, true);
+    const [links, contactMethods] = await Promise.all([
+      this.referenceDataRepository.listContactLinksForContact(contactId, true),
+      this.referenceDataRepository.listContactMethodsForContact(contactId, true)
+    ]);
 
     return {
       ...contact,
+      contactMethods: contactMethods.map((method) => this.toContactMethodSummary(method)),
       linkedRecords: await Promise.all(
         links.map(async (link) => {
           const linkedRecord = await this.toLinkedRecordSummary(link);
@@ -162,6 +185,11 @@ export class ReferenceDataService {
 
   async createCustomer(customer: Omit<CustomerAccountRecord, 'id'>): Promise<CustomerDetail> {
     const createdCustomer = await this.referenceDataRepository.createCustomer(customer);
+    await this.syncLegacyContactMethods('customer', createdCustomer.id, {
+      phone: createdCustomer.phone,
+      email: createdCustomer.email,
+      fax: createdCustomer.fax
+    });
     return this.getCustomerDetail(createdCustomer.id);
   }
 
@@ -175,6 +203,11 @@ export class ReferenceDataService {
       throw new NotFoundException('Customer account not found.');
     }
 
+    await this.syncLegacyContactMethods('customer', updatedCustomer.id, {
+      phone: updatedCustomer.phone,
+      email: updatedCustomer.email,
+      fax: updatedCustomer.fax
+    });
     return this.getCustomerDetail(updatedCustomer.id);
   }
 
@@ -184,6 +217,11 @@ export class ReferenceDataService {
       locationId: createdLocation.id,
       customerId: createdLocation.customerId,
       startedAt: new Date().toISOString()
+    });
+    await this.syncLegacyContactMethods('location', createdLocation.id, {
+      phone: createdLocation.phone,
+      email: createdLocation.email,
+      fax: createdLocation.fax
     });
     return this.getLocationDetail(createdLocation.id);
   }
@@ -198,6 +236,11 @@ export class ReferenceDataService {
       throw new NotFoundException('Location not found.');
     }
 
+    await this.syncLegacyContactMethods('location', updatedLocation.id, {
+      phone: updatedLocation.phone,
+      email: updatedLocation.email,
+      fax: updatedLocation.fax
+    });
     return this.getLocationDetail(updatedLocation.id);
   }
 
@@ -221,6 +264,11 @@ export class ReferenceDataService {
 
   async createContact(contact: Omit<ContactRecord, 'id'>): Promise<ContactDetail> {
     const createdContact = await this.referenceDataRepository.createContact(contact);
+    await this.syncLegacyContactMethods('contact', createdContact.id, {
+      phone: createdContact.phone,
+      email: createdContact.email,
+      fax: createdContact.fax
+    });
     return this.getContactDetail(createdContact.id);
   }
 
@@ -234,6 +282,11 @@ export class ReferenceDataService {
       throw new NotFoundException('Contact not found.');
     }
 
+    await this.syncLegacyContactMethods('contact', updatedContact.id, {
+      phone: updatedContact.phone,
+      email: updatedContact.email,
+      fax: updatedContact.fax
+    });
     return this.getContactDetail(updatedContact.id);
   }
 
@@ -258,6 +311,35 @@ export class ReferenceDataService {
 
     return {
       contact: await this.getContactDetail(updatedLink.contactId)
+    };
+  }
+
+  async createContactMethod(
+    input: Omit<ContactMethodRecord, 'id'>
+  ): Promise<ContactMethodMutationResponse> {
+    const contactMethod = await this.referenceDataRepository.createContactMethod(input);
+    await this.syncPrimaryContactMethodToLegacy(contactMethod);
+    return {
+      contactMethod: this.toContactMethodSummary(contactMethod)
+    };
+  }
+
+  async updateContactMethod(
+    contactMethodId: string,
+    input: Partial<Omit<ContactMethodRecord, 'id' | 'ownerKind' | 'ownerId' | 'kind'>>
+  ): Promise<ContactMethodMutationResponse> {
+    const contactMethod = await this.referenceDataRepository.updateContactMethod(
+      contactMethodId,
+      input
+    );
+
+    if (!contactMethod) {
+      throw new NotFoundException('Contact method not found.');
+    }
+
+    await this.syncPrimaryContactMethodToLegacy(contactMethod);
+    return {
+      contactMethod: this.toContactMethodSummary(contactMethod)
     };
   }
 
@@ -332,6 +414,99 @@ export class ReferenceDataService {
       tags: [...contact.tags],
       isActive: contact.isActive
     };
+  }
+
+  private toContactMethodSummary(method: ContactMethodRecord): ContactMethodSummary {
+    return {
+      id: method.id,
+      ownerKind: method.ownerKind,
+      ownerId: method.ownerId,
+      kind: method.kind,
+      label: method.label,
+      value: method.value,
+      isPrimary: method.isPrimary,
+      isActive: method.isActive,
+      endedAt: method.endedAt
+    };
+  }
+
+  private async syncLegacyContactMethods(
+    ownerKind: ContactMethodOwnerKind,
+    ownerId: string,
+    values: { phone?: string; email?: string; fax?: string }
+  ): Promise<void> {
+    const existingMethods = await this.listContactMethods(ownerKind, ownerId, true);
+    const methodValues: Array<{ kind: ContactMethodKind; value?: string; label: string }> = [
+      { kind: 'phone', value: values.phone, label: 'Main' },
+      { kind: 'email', value: values.email, label: 'Main' },
+      { kind: 'fax', value: values.fax, label: 'Fax' }
+    ];
+
+    for (const methodValue of methodValues) {
+      if (!methodValue.value) {
+        continue;
+      }
+
+      const existingMethod = existingMethods.find(
+        (method) => method.kind === methodValue.kind && method.isPrimary
+      );
+
+      if (existingMethod) {
+        await this.referenceDataRepository.updateContactMethod(existingMethod.id, {
+          label: methodValue.label,
+          value: methodValue.value,
+          isPrimary: true,
+          isActive: true
+        });
+        continue;
+      }
+
+      await this.referenceDataRepository.createContactMethod({
+        ownerKind,
+        ownerId,
+        kind: methodValue.kind,
+        label: methodValue.label,
+        value: methodValue.value,
+        isPrimary: true,
+        isActive: true
+      });
+    }
+  }
+
+  private async syncPrimaryContactMethodToLegacy(method: ContactMethodRecord): Promise<void> {
+    if (!method.isPrimary || !method.isActive) {
+      return;
+    }
+
+    const patch = { [method.kind]: method.value };
+
+    if (method.ownerKind === 'customer') {
+      await this.referenceDataRepository.updateCustomer(method.ownerId, patch);
+      return;
+    }
+
+    if (method.ownerKind === 'location') {
+      await this.referenceDataRepository.updateLocation(method.ownerId, patch);
+      return;
+    }
+
+    await this.referenceDataRepository.updateContact(method.ownerId, patch);
+  }
+
+  private async listContactMethods(
+    ownerKind: ContactMethodOwnerKind,
+    ownerId: string,
+    includeInactive: boolean
+  ): Promise<ContactMethodRecord[]> {
+    if (ownerKind === 'customer') {
+      return this.referenceDataRepository.listCustomerContactMethods(ownerId, includeInactive);
+    }
+
+    if (ownerKind === 'location') {
+      return this.referenceDataRepository.listLocationContactMethods(ownerId, includeInactive);
+    }
+
+    return this.referenceDataRepository.listContactMethodsForContact(ownerId, includeInactive);
   }
 
   private toCustomerLocationListItem(location: LocationRecord): CustomerLocationListItem {

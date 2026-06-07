@@ -176,7 +176,7 @@ export function ServiceLocationStep({
   );
 }
 
-function CustomerQuickCreateForm({
+export function CustomerQuickCreateForm({
   duplicateWarnings,
   form,
   isSubmitting,

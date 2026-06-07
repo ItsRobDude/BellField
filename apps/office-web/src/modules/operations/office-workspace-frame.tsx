@@ -86,6 +86,11 @@ export function OfficeWorkspaceFrame({
             active={activeView === 'jobs'}
             onClick={() => onViewChange('jobs')}
           />
+          <RailActionButton
+            label={isJobIntakeLoading ? 'Loading...' : 'New job'}
+            disabled={isJobIntakeLoading}
+            onClick={onOpenJobIntake}
+          />
           {canViewInventory ? (
             <NavButton
               label="Inventory"
@@ -144,14 +149,6 @@ export function OfficeWorkspaceFrame({
               <p style={styles.tinyMuted}>{employee.email}</p>
             </div>
             <div style={styles.row}>
-              <button
-                type="button"
-                onClick={onOpenJobIntake}
-                disabled={isJobIntakeLoading}
-                style={styles.primaryButton}
-              >
-                {isJobIntakeLoading ? 'Loading...' : 'New job'}
-              </button>
               <button type="button" onClick={onRefresh} style={styles.button}>
                 {isRefreshBusy ? 'Refreshing...' : 'Refresh'}
               </button>
@@ -168,6 +165,27 @@ export function OfficeWorkspaceFrame({
         </div>
       </div>
     </main>
+  );
+}
+
+function RailActionButton({
+  label,
+  disabled,
+  onClick
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      style={disabled ? { ...styles.railButton, opacity: 0.65 } : styles.railButton}
+      onClick={onClick}
+    >
+      {label}
+    </button>
   );
 }
 

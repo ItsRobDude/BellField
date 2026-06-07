@@ -12,11 +12,13 @@ import {
 } from 'class-validator';
 import type {
   CreateContactRequestDto,
+  CreateContactMethodRequestDto,
   CreateCustomerRequestDto,
   CreateLocationRequestDto,
   LinkContactRequestDto,
   ReassignLocationOwnerRequestDto,
   UpdateContactLinkRequestDto,
+  UpdateContactMethodRequestDto,
   UpdateContactRequestDto,
   UpdateCustomerRequestDto,
   UpdateLocationRequestDto
@@ -280,6 +282,48 @@ export class ReassignLocationOwnerRequestBodyDto implements ReassignLocationOwne
   @IsString()
   @MaxLength(500)
   note?: string;
+}
+
+export class CreateContactMethodRequestBodyDto implements CreateContactMethodRequestDto {
+  @IsString()
+  @IsIn(['phone', 'email', 'fax'])
+  kind!: 'phone' | 'email' | 'fax';
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  label!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(180)
+  value!: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+}
+
+export class UpdateContactMethodRequestBodyDto implements UpdateContactMethodRequestDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  label?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(180)
+  value?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  isPrimary?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
 }
 
 export class CreateContactRequestBodyDto implements CreateContactRequestDto {

@@ -105,6 +105,40 @@ function createService() {
       tags: [],
       isActive: true
     }),
+    createContactMethod: jest.fn().mockResolvedValue({
+      contactMethod: {
+        id: 'method-1',
+        ownerKind: 'location',
+        ownerId: 'location-1',
+        kind: 'phone',
+        label: 'After-hours',
+        value: '(555) 222-3333',
+        isPrimary: false,
+        isActive: true
+      }
+    }),
+    updateContactMethod: jest.fn().mockResolvedValue({
+      contactMethod: {
+        id: 'method-1',
+        ownerKind: 'location',
+        ownerId: 'location-1',
+        kind: 'phone',
+        label: 'Main',
+        value: '(555) 222-3333',
+        isPrimary: true,
+        isActive: true
+      }
+    }),
+    getContactMethodById: jest.fn().mockResolvedValue({
+      id: 'method-1',
+      ownerKind: 'location',
+      ownerId: 'location-1',
+      kind: 'phone',
+      label: 'After-hours',
+      value: '(555) 222-3333',
+      isPrimary: false,
+      isActive: true
+    }),
     updateContact: jest.fn().mockResolvedValue({
       id: 'contact-1',
       displayName: 'Site Contact',
@@ -128,6 +162,24 @@ function createService() {
       isActive: true,
       alternateBillToCustomerIds: []
     }),
+    getLocationDetail: jest.fn().mockResolvedValue({
+      id: 'location-1',
+      name: 'Acme Shop',
+      customerId: 'customer-1',
+      customerName: 'Acme Heating',
+      addressLine1: '100 Main Street',
+      city: 'Seattle',
+      state: 'WA',
+      postalCode: '98101',
+      phone: undefined,
+      email: undefined,
+      fax: undefined,
+      isActive: true,
+      contactMethods: [],
+      contacts: [],
+      alternateBillToCustomerIds: [],
+      ownershipHistory: []
+    }),
     getContactById: jest.fn().mockResolvedValue({
       id: 'contact-1',
       displayName: 'Site Contact',
@@ -150,6 +202,23 @@ function createService() {
       fax: undefined,
       isActive: true,
       flags: []
+    }),
+    getCustomerDetail: jest.fn().mockResolvedValue({
+      id: 'customer-1',
+      name: 'Acme Heating',
+      accountType: 'company',
+      billingAddressLine1: '100 Main Street',
+      billingCity: 'Seattle',
+      billingState: 'WA',
+      billingPostalCode: '98101',
+      phone: '(555) 111-2222',
+      email: 'office@acme.local',
+      fax: undefined,
+      isActive: true,
+      flags: [],
+      contactMethods: [],
+      contacts: [],
+      locations: []
     })
   };
 
@@ -384,6 +453,54 @@ describe('CrmService', () => {
         fax: '(555) 333-4444'
       })
     );
+  });
+
+  it('creates a location contact method behind the location edit permission', async () => {
+    const { service, referenceDataService, identityAccessService } = createService();
+
+    await service.createLocationContactMethod('session-token', 'location-1', {
+      kind: 'phone',
+      label: 'After-hours',
+      value: '(555) 222-3333'
+    });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'locations:edit',
+      ['office-web']
+    );
+    expect(referenceDataService.getLocationById).toHaveBeenCalledWith('location-1');
+    expect(referenceDataService.createContactMethod).toHaveBeenCalledWith({
+      ownerKind: 'location',
+      ownerId: 'location-1',
+      kind: 'phone',
+      label: 'After-hours',
+      value: '(555) 222-3333',
+      isPrimary: false,
+      isActive: true
+    });
+  });
+
+  it('uses the contact method owner kind to choose the update permission', async () => {
+    const { service, referenceDataService, identityAccessService } = createService();
+
+    await service.updateContactMethod('session-token', 'method-1', {
+      label: 'Main',
+      isPrimary: true
+    });
+
+    expect(referenceDataService.getContactMethodById).toHaveBeenCalledWith('method-1');
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'locations:edit',
+      ['office-web']
+    );
+    expect(referenceDataService.updateContactMethod).toHaveBeenCalledWith('method-1', {
+      label: 'Main',
+      value: undefined,
+      isPrimary: true,
+      isActive: undefined
+    });
   });
 
   it('requires confirmation before updating a location to have no phone or email', async () => {

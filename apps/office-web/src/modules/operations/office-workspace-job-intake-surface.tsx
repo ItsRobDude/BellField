@@ -8,7 +8,6 @@ import type {
 } from '@/lib/operations-api';
 import {
   JobIntakePanel,
-  type JobIntakeBillToOption,
   type JobIntakeCreateCustomerResult,
   type JobIntakeCreateLocationResult,
   type JobIntakeCustomerLocationOption,
@@ -26,9 +25,10 @@ export type OfficeJobIntakeSurfaceProps = {
   selectedCustomer: JobIntakeSelectedCustomer | null;
   customerLocationOptions: JobIntakeCustomerLocationOption[];
   customerLocationMessage: string | null;
-  billToOptions: JobIntakeBillToOption[];
-  billToWarning: string | null;
-  jobBillToCustomerId: string;
+  jobCustomerOverride: JobIntakeSelectedCustomer | null;
+  jobCustomerSearchQuery: string;
+  jobCustomerSearchResults: CrmSearchResult[];
+  isJobCustomerSearchLoading: boolean;
   jobType: string;
   jobCategory: string;
   jobOrigin: string;
@@ -42,9 +42,12 @@ export type OfficeJobIntakeSurfaceProps = {
   onSelectLocationSearchResult: (result: CrmSearchResult) => void;
   onSelectCustomerLocation: (locationId: string) => void;
   onCreateCustomer: JobIntakePanelCreateCustomerHandler;
+  onCreateJobCustomer: JobIntakePanelCreateCustomerHandler;
   onCreateLocation: JobIntakePanelCreateLocationHandler;
   onClearSelectedLocation: () => void;
-  onJobBillToCustomerChange: (customerId: string) => void;
+  onClearJobCustomerOverride: () => void;
+  onJobCustomerSearchQueryChange: (query: string) => void;
+  onSelectJobCustomerSearchResult: (result: CrmSearchResult) => void;
   onJobTypeChange: (value: string) => void;
   onJobCategoryChange: (value: string) => void;
   onJobOriginChange: (value: string) => void;
@@ -68,9 +71,10 @@ export function OfficeJobIntakeSurface({
   selectedCustomer,
   customerLocationOptions,
   customerLocationMessage,
-  billToOptions,
-  billToWarning,
-  jobBillToCustomerId,
+  jobCustomerOverride,
+  jobCustomerSearchQuery,
+  jobCustomerSearchResults,
+  isJobCustomerSearchLoading,
   jobType,
   jobCategory,
   jobOrigin,
@@ -84,9 +88,12 @@ export function OfficeJobIntakeSurface({
   onSelectLocationSearchResult,
   onSelectCustomerLocation,
   onCreateCustomer,
+  onCreateJobCustomer,
   onCreateLocation,
   onClearSelectedLocation,
-  onJobBillToCustomerChange,
+  onClearJobCustomerOverride,
+  onJobCustomerSearchQueryChange,
+  onSelectJobCustomerSearchResult,
   onJobTypeChange,
   onJobCategoryChange,
   onJobOriginChange,
@@ -113,9 +120,10 @@ export function OfficeJobIntakeSurface({
       selectedCustomer={selectedCustomer}
       customerLocationOptions={customerLocationOptions}
       customerLocationMessage={customerLocationMessage}
-      billToOptions={billToOptions}
-      billToWarning={billToWarning}
-      jobBillToCustomerId={jobBillToCustomerId}
+      jobCustomerOverride={jobCustomerOverride}
+      jobCustomerSearchQuery={jobCustomerSearchQuery}
+      jobCustomerSearchResults={jobCustomerSearchResults}
+      isJobCustomerSearchLoading={isJobCustomerSearchLoading}
       jobType={jobType}
       jobCategory={jobCategory}
       jobOrigin={jobOrigin}
@@ -129,9 +137,12 @@ export function OfficeJobIntakeSurface({
       onSelectLocationSearchResult={onSelectLocationSearchResult}
       onSelectCustomerLocation={onSelectCustomerLocation}
       onCreateCustomer={onCreateCustomer}
+      onCreateJobCustomer={onCreateJobCustomer}
       onCreateLocation={onCreateLocation}
       onClearSelectedLocation={onClearSelectedLocation}
-      onJobBillToCustomerChange={onJobBillToCustomerChange}
+      onClearJobCustomerOverride={onClearJobCustomerOverride}
+      onJobCustomerSearchQueryChange={onJobCustomerSearchQueryChange}
+      onSelectJobCustomerSearchResult={onSelectJobCustomerSearchResult}
       onJobTypeChange={onJobTypeChange}
       onJobCategoryChange={onJobCategoryChange}
       onJobOriginChange={onJobOriginChange}

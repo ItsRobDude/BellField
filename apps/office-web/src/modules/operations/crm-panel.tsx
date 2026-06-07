@@ -28,8 +28,10 @@ import {
   updateOfficeLocation
 } from '@/lib/operations-api';
 import { CrmContactCreatePanel } from './crm-contact-create-panel';
+import { CrmCustomerLocationsSection } from './crm-customer-locations-section';
 import { CrmCustomerCreatePanel } from './crm-customer-create-panel';
 import { CrmLocationCreatePanel } from './crm-location-create-panel';
+import { CrmLocationOwnerSection } from './crm-location-owner-section';
 import type {
   ContactFormState,
   ContactLinkDraft,
@@ -197,12 +199,13 @@ export function CrmPanel({
     setMode('newCustomer');
   }
 
-  function openNewLocationForm() {
-    setReturnModeAfterContactForm('search');
-    clearSelectedRecords();
+  function openNewLocationFormForCustomer(customer: CustomerDetail) {
     setLocationDuplicateWarnings([]);
     setCreateLocationMissingContactConfirmation(false);
-    setLocationForm(createEmptyLocationForm(workspace?.customers[0]?.id ?? ''));
+    setSelectedCustomer(customer);
+    setSelectedLocation(null);
+    setSelectedContact(null);
+    setLocationForm(createEmptyLocationForm(customer.id));
     setMode('newLocation');
   }
 
@@ -275,6 +278,27 @@ export function CrmPanel({
       }
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to load CRM detail.');
+    }
+  }
+
+  async function openLocationDetail(locationId: string) {
+    onErrorMessage(null);
+
+    try {
+      const location = await getOfficeLocationDetail({
+        sessionToken,
+        apiBaseUrl,
+        locationId
+      });
+      setSelectedCustomer(null);
+      setSelectedLocation(location);
+      setSelectedContact(null);
+      setReassignCustomerId(location.customerId);
+      hydrateLocationForm(location);
+      hydrateLinkDrafts(location.contacts);
+      setMode('locationDetail');
+    } catch (error) {
+      onErrorMessage(error instanceof Error ? error.message : 'Unable to load location detail.');
     }
   }
 
@@ -392,7 +416,6 @@ export function CrmPanel({
         phone: locationForm.phone || undefined,
         email: locationForm.email || undefined,
         fax: locationForm.fax || undefined,
-        alternateBillToCustomerIds: locationForm.alternateBillToCustomerIds,
         confirmDuplicate: options.confirmDuplicate || locationDuplicateWarnings.length > 0,
         confirmMissingContactInfo
       });
@@ -439,7 +462,6 @@ export function CrmPanel({
         email: selectedLocation.email,
         fax: selectedLocation.fax,
         isActive: selectedLocation.isActive,
-        alternateBillToCustomerIds: [...selectedLocation.alternateBillToCustomerIds],
         confirmDuplicate: true,
         confirmMissingContactInfo: saveLocationMissingContactConfirmation
       });
@@ -724,6 +746,11 @@ export function CrmPanel({
 
   const activeCustomerOptions = workspace?.customers ?? [];
   const activeContactOptions = workspace?.contacts ?? [];
+  const locationFormOwnerName =
+    selectedCustomer?.id === locationForm.customerId
+      ? selectedCustomer.name
+      : (activeCustomerOptions.find((customer) => customer.id === locationForm.customerId)?.name ??
+        'Selected customer');
   const selectedDetailHeading = selectedCustomer
     ? 'Customer'
     : selectedLocation
@@ -747,9 +774,7 @@ export function CrmPanel({
       {mode === 'search' ? (
         <CrmSearchPanel
           isSearching={isSearching}
-          onNewContact={openNewContactForm}
           onNewCustomer={openNewCustomerForm}
-          onNewLocation={openNewLocationForm}
           onSearchQueryChange={setSearchQuery}
           onSelectResult={(result) => void selectResult(result)}
           searchQuery={searchQuery}
@@ -770,11 +795,18 @@ export function CrmPanel({
 
       {mode === 'newLocation' ? (
         <CrmLocationCreatePanel
-          activeCustomerOptions={activeCustomerOptions}
           duplicateWarnings={locationDuplicateWarnings}
           locationForm={locationForm}
           missingContactConfirmation={createLocationMissingContactConfirmation}
-          onBack={returnToSearch}
+          ownerCustomerName={locationFormOwnerName}
+          onBack={() => {
+            if (selectedCustomer) {
+              setMode('customerDetail');
+              return;
+            }
+
+            returnToSearch();
+          }}
           onCancelMissingContactConfirmation={() =>
             setCreateLocationMissingContactConfirmation(false)
           }
@@ -800,6 +832,15 @@ export function CrmPanel({
           <div style={styles.row}>
             <h3 style={styles.subheading}>{selectedDetailHeading}</h3>
             <div style={styles.inlineActionBar}>
+              {selectedCustomer ? (
+                <button
+                  type="button"
+                  onClick={() => openNewLocationFormForCustomer(selectedCustomer)}
+                  style={styles.button}
+                >
+                  Add location
+                </button>
+              ) : null}
               {selectedCustomer || selectedLocation ? (
                 <button type="button" onClick={openNewContactForm} style={styles.button}>
                   New contact
@@ -958,6 +999,11 @@ export function CrmPanel({
                   void handleArchiveContactLink(linkId, isActive)
                 }
               />
+              <CrmCustomerLocationsSection
+                locations={selectedCustomer.locations}
+                onAddLocation={() => openNewLocationFormForCustomer(selectedCustomer)}
+                onOpenLocation={(locationId) => void openLocationDetail(locationId)}
+              />
             </div>
           ) : null}
 
@@ -1112,61 +1158,14 @@ export function CrmPanel({
                     />
                     Location is active
                   </label>
-                  <label style={styles.inlineLabel}>
-                    <span>Alternate bill-to customers</span>
-                    <select
-                      multiple
-                      value={selectedLocation.alternateBillToCustomerIds}
-                      onChange={(event) =>
-                        setSelectedLocation((current) =>
-                          current
-                            ? {
-                                ...current,
-                                alternateBillToCustomerIds: Array.from(
-                                  event.target.selectedOptions
-                                ).map((option) => option.value)
-                              }
-                            : current
-                        )
-                      }
-                      style={styles.input}
-                    >
-                      {activeCustomerOptions.map((customer) => (
-                        <option key={customer.id} value={customer.id}>
-                          {customer.name}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div style={styles.subpanel}>
-                    <strong>Reassign owner</strong>
-                    <div style={styles.formRow}>
-                      <select
-                        value={reassignCustomerId}
-                        onChange={(event) => setReassignCustomerId(event.target.value)}
-                        style={styles.input}
-                      >
-                        {activeCustomerOptions.map((customer) => (
-                          <option key={customer.id} value={customer.id}>
-                            {customer.name}
-                          </option>
-                        ))}
-                      </select>
-                      <input
-                        value={reassignNote}
-                        onChange={(event) => setReassignNote(event.target.value)}
-                        placeholder="Reason or note"
-                        style={styles.input}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void handleReassignLocation()}
-                        style={styles.button}
-                      >
-                        Reassign owner
-                      </button>
-                    </div>
-                  </div>
+                  <CrmLocationOwnerSection
+                    activeCustomerOptions={activeCustomerOptions}
+                    reassignCustomerId={reassignCustomerId}
+                    reassignNote={reassignNote}
+                    onReassignCustomerChange={setReassignCustomerId}
+                    onReassignNoteChange={setReassignNote}
+                    onSubmit={() => void handleReassignLocation()}
+                  />
                 </>
               ) : null}
 

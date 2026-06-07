@@ -1,7 +1,9 @@
 import type {
   ContactDetail,
+  ContactMethodMutationResponse,
   ContactMutationResponse,
   CreateContactRequest,
+  CreateContactMethodRequest,
   CreateCustomerRequest,
   CreateLocationRequest,
   CrmSearchResponse,
@@ -13,6 +15,7 @@ import type {
   LocationMutationResponse,
   ReassignLocationOwnerRequest,
   UpdateContactLinkRequest,
+  UpdateContactMethodRequest,
   UpdateContactRequest,
   UpdateCustomerRequest,
   UpdateLocationRequest
@@ -31,7 +34,10 @@ export type UpdateLocationRequestDto = UpdateLocationRequest;
 export type ReassignLocationOwnerRequestDto = ReassignLocationOwnerRequest;
 export type LocationMutationResponseDto = LocationMutationResponse;
 export type CreateContactRequestDto = CreateContactRequest;
+export type CreateContactMethodRequestDto = CreateContactMethodRequest;
 export type UpdateContactRequestDto = UpdateContactRequest;
+export type UpdateContactMethodRequestDto = UpdateContactMethodRequest;
 export type LinkContactRequestDto = LinkContactRequest;
 export type UpdateContactLinkRequestDto = UpdateContactLinkRequest;
 export type ContactMutationResponseDto = ContactMutationResponse;
+export type ContactMethodMutationResponseDto = ContactMethodMutationResponse;
