@@ -37,7 +37,6 @@ import {
 import {
   buildFieldJobCardMetadata,
   buildFieldMediaCaptionDraftKey,
-  countJobRegisterEntries,
   fieldDetailTabs,
   summarizeJobQueueBadge,
   type FieldDetailTab
@@ -382,11 +381,9 @@ export function FieldJobFeed({
         const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
         const cardMetadata = buildFieldJobCardMetadata({
           currentEmployeeId,
-          equipmentCount: equipment.length,
           job,
           locationAddress: formatFieldLocationAddress(location),
-          locationName: location?.name ?? job.locationName,
-          registerEntryCount: countJobRegisterEntries(job)
+          locationName: location?.name ?? job.locationName
         });
         const isExpanded = selectedJobId === job.id;
 
@@ -401,13 +398,13 @@ export function FieldJobFeed({
                 <View style={styles.flexColumn}>
                   <Text style={styles.scheduleLabel}>{cardMetadata.scheduleLabel}</Text>
                   <Text style={styles.jobCardTitle}>{cardMetadata.title}</Text>
+                  <Text style={styles.jobCardSummary}>{cardMetadata.summaryLine}</Text>
                   {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
                 </View>
                 <QueueBadge label={queueBadge.label} tone={queueBadge.tone} />
               </View>
-              <Text style={styles.summaryText}>{cardMetadata.locationLine}</Text>
-              <Text style={styles.summaryText}>{cardMetadata.countsLine}</Text>
-              <Text style={styles.pendingText}>Open job detail</Text>
+              <Text style={styles.jobLocationLine}>{cardMetadata.locationLine}</Text>
+              <Text style={styles.pendingText}>Open details</Text>
             </Pressable>
           );
         }
@@ -422,8 +419,9 @@ export function FieldJobFeed({
             </View>
             <Text style={styles.scheduleLabel}>{cardMetadata.scheduleLabel}</Text>
             <Text style={styles.jobCardTitle}>{cardMetadata.title}</Text>
+            <Text style={styles.jobCardSummary}>{cardMetadata.summaryLine}</Text>
             {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
-            <Text style={styles.summaryText}>{cardMetadata.locationLine}</Text>
+            <Text style={styles.jobLocationLine}>{cardMetadata.locationLine}</Text>
             <Text style={styles.summaryText}>Bill to: {job.billToCustomerName}</Text>
 
             <ScrollView

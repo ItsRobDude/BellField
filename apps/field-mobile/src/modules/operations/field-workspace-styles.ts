@@ -167,6 +167,8 @@ export const fieldWorkspaceStyles = StyleSheet.create({
   errorText: { color: '#b42318', fontSize: 14 },
   scheduleLabel: { color: '#475569', fontSize: 13, fontWeight: '700', lineHeight: 18 },
   jobCardTitle: { color: '#0b1f44', fontSize: 19, fontWeight: '700', lineHeight: 26 },
+  jobCardSummary: { color: '#1f2933', fontSize: 15, fontWeight: '600', lineHeight: 21 },
+  jobLocationLine: { color: '#52606d', fontSize: 14, lineHeight: 20 },
   segmentedControlScroller: { marginHorizontal: -4 },
   bottomNav: {
     alignItems: 'center',

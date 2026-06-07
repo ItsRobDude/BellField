@@ -1,9 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import {
-  formatAppointmentSchedule,
-  formatFieldLocationAddress,
-  formatWorkOrderLine
-} from './field-appointment-display';
+import { formatAppointmentSchedule, formatFieldLocationAddress } from './field-appointment-display';
 import { formatAppointmentAssignmentLine } from './field-assignment-display';
 import { openAddressInMaps, openPhoneNumber } from './field-contact-actions';
 import { formatAppointmentStatusLabel } from './field-workspace-drafts';
@@ -32,7 +28,6 @@ export function FieldJobOverviewSection({
   const appointment = selectFieldTimelineAppointment(job, currentEmployeeId);
   const address = formatFieldLocationAddress(location);
   const phoneRows = buildPhoneRows(location, customer);
-  const workOrderLine = formatWorkOrderLine(job);
 
   return (
     <View style={localStyles.stack}>
@@ -86,12 +81,13 @@ export function FieldJobOverviewSection({
 
       <View style={styles.summaryCard}>
         <Text style={styles.sectionTitleSmall}>What</Text>
+        <Text style={localStyles.rowLabel}>Office notes</Text>
         <Text style={localStyles.summaryValue}>{job.summary}</Text>
         <View style={localStyles.factGrid}>
-          <Fact label="Call type" value={job.origin} />
-          <Fact label="Job type" value={job.jobType} />
+          <Fact label="Type" value={job.jobType} />
           <Fact label="Category" value={job.category} />
-          {workOrderLine ? <Fact label="Work order" value={job.workOrderNumber ?? ''} /> : null}
+          <Fact label="Origin" value={job.origin} />
+          {job.workOrderNumber ? <Fact label="Work order" value={job.workOrderNumber} /> : null}
         </View>
       </View>
     </View>

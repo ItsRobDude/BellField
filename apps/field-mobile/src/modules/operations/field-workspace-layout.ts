@@ -27,9 +27,9 @@ export type JobQueueBadge = {
 };
 
 export type FieldJobCardMetadata = {
-  countsLine: string;
   locationLine: string;
   scheduleLabel: string;
+  summaryLine: string;
   title: string;
 };
 
@@ -97,17 +97,15 @@ export function formatFieldJobCardScheduleLabel(job: FieldJob, currentEmployeeId
 
 export function buildFieldJobCardMetadata(input: {
   currentEmployeeId: string;
-  equipmentCount: number;
   job: FieldJob;
   locationAddress: string;
   locationName: string;
-  registerEntryCount: number;
 }): FieldJobCardMetadata {
   return {
-    countsLine: `Appointments: ${input.job.appointments.length} - Register: ${input.registerEntryCount} - Equipment: ${input.equipmentCount}`,
     locationLine: `${input.locationName} - ${input.locationAddress}`,
     scheduleLabel: formatFieldJobCardScheduleLabel(input.job, input.currentEmployeeId),
-    title: `Job ${input.job.jobNumber}: ${input.job.summary}`
+    summaryLine: input.job.summary,
+    title: `Job ${input.job.jobNumber}`
   };
 }
 

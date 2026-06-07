@@ -250,7 +250,7 @@ describe('field workspace layout helpers', () => {
     );
   });
 
-  it('builds collapsed job card metadata without losing queue-relevant counts', () => {
+  it('builds collapsed job card metadata around schedule, summary, and location', () => {
     const job = buildJob({
       appointments: [
         buildAppointment({
@@ -265,17 +265,15 @@ describe('field workspace layout helpers', () => {
     expect(
       buildFieldJobCardMetadata({
         currentEmployeeId: 'employee-1',
-        equipmentCount: 2,
         job,
         locationAddress: '214 Cedar Avenue, Everett, WA 98201',
-        locationName: 'Parker Residence',
-        registerEntryCount: 1
+        locationName: 'Parker Residence'
       })
     ).toEqual({
-      countsLine: 'Appointments: 1 - Register: 1 - Equipment: 2',
       locationLine: 'Parker Residence - 214 Cedar Avenue, Everett, WA 98201',
       scheduleLabel: '2026-05-24 - 08:00-10:00',
-      title: 'Job 1001: No cooling'
+      summaryLine: 'No cooling',
+      title: 'Job 1001'
     });
   });
 
