@@ -95,6 +95,10 @@ function agingBucketLabel(bucket: ArAgingReport['rows'][number]['bucket']): stri
   return 'Over 90';
 }
 
+function formatGeneratedAt(value: string): string {
+  return `Generated ${value.slice(0, 10)} ${value.slice(11, 16)} UTC`;
+}
+
 // Top-level Reports surface (M10 slice 3). Fixed, read-only reports — no builder. Tabs appear per the
 // actor's gates: AR/Open Balances always; Job Profitability with jobCosting:view (Inventory in 3C).
 export function OfficeReportsSurface({
@@ -263,6 +267,7 @@ function ArOpenBalancesReportView({
 
       {report ? (
         <>
+          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Jobs owing" value={String(report.totals.jobCount)} />
             <TotalItem label="Net billed" value={money(report.totals.netBilled)} />
@@ -361,6 +366,7 @@ function ArAgingReportView({
 
       {report ? (
         <>
+          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Jobs owing" value={String(report.totals.jobCount)} />
             <TotalItem label="Current" value={money(report.totals.current)} />
@@ -463,6 +469,7 @@ function SalesTaxSummaryReportView({
 
       {report ? (
         <>
+          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Posted records" value={String(report.totals.invoiceCount)} />
             <TotalItem label="Taxable base" value={money(report.totals.taxableBase)} />
@@ -561,6 +568,7 @@ function JobProfitabilityReportView({
 
       {report ? (
         <>
+          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Jobs" value={String(report.totals.jobCount)} />
             <TotalItem label="Revenue" value={money(report.totals.revenue)} />
@@ -671,6 +679,7 @@ function InventoryValuationReportView({
 
       {report ? (
         <>
+          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Lines" value={String(report.totals.rowCount)} />
             <TotalItem label="Total quantity" value={String(report.totals.totalQuantity)} />

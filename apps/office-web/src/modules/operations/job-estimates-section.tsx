@@ -217,7 +217,7 @@ export function JobEstimatesSection({
         apiBaseUrl,
         sessionToken
       });
-      downloadBlob(`estimate-${estimate.id}.html`, blob);
+      downloadBlob(`estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.html`, blob);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to download the estimate.');
     }
@@ -525,4 +525,8 @@ function formatMargin(marginBasisPoints: number | null): string {
     return 'n/a';
   }
   return `${(marginBasisPoints / 100).toFixed(1)}%`;
+}
+
+function safeFilenamePart(value: string): string {
+  return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'estimate';
 }

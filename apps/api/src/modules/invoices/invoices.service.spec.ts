@@ -226,6 +226,17 @@ describe('InvoicesService', () => {
     expect(document.html).toContain('Acme');
     expect(document.html).toContain('$99.00');
   });
+
+  it('uses customer-safe fallback copy for a draft invoice document', async () => {
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.getInvoiceById.mockResolvedValue(draftInvoice());
+
+    const document = await service.exportInvoiceDocument('token', 'invoice-main-job-1');
+
+    expect(document.html).toContain('Bill-to details are not available on this draft.');
+    expect(document.html).toContain('Service location details are not available on this draft.');
+    expect(document.html).not.toContain('pending posting snapshot');
+  });
 });
 
 describe('InvoicesService line editing', () => {

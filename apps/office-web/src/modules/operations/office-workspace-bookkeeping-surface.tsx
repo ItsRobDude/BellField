@@ -74,6 +74,7 @@ export function OfficeBookkeepingSurface({
         <p style={styles.muted}>Loading worklists…</p>
       ) : queues ? (
         <>
+          <p style={styles.tinyMuted}>Showing up to 50 records per worklist.</p>
           <QueuePanel
             title="Ready to post"
             emptyText="No drafts with billable lines are waiting to post."

@@ -180,7 +180,7 @@ describe('JobInvoiceSection posting', () => {
       })
     );
     expect(mockedDownload.downloadBlob).toHaveBeenCalledWith(
-      'invoice-inv-1.html',
+      'invoice-1001-inv-1.html',
       expect.any(Blob)
     );
   });

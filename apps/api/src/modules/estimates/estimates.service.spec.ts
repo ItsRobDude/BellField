@@ -420,7 +420,9 @@ describe('EstimatesService', () => {
     expect(document.filename).toContain('estimate-Replacement-options');
     expect(document.html).toContain('Better - Selected');
     expect(document.html).toContain('Better condenser');
+    expect(document.html).toContain('Option total');
     expect(document.html).toContain('$150.00');
+    expect(document.html).not.toContain('Profit');
   });
 
   it('refuses to edit an approved estimate (strict lifecycle)', async () => {

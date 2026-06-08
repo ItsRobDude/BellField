@@ -79,7 +79,6 @@ function renderOptionSections(estimate: EstimateRecord): string {
       ${renderLineTable(lines)}
       <div class="summary">
         <div><span>Option total</span><strong>${money(option.totals.total)}</strong></div>
-        <div><span>Profit</span><span>${money(option.totals.profit)}</span></div>
       </div>
     </div>`;
       })

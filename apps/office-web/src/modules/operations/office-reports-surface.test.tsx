@@ -198,6 +198,7 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
     expect(screen.getByText('Beta')).toBeInTheDocument();
     expect(screen.getByText('$120.00')).toBeInTheDocument(); // total amount due
     expect(screen.getByText('1003')).toBeInTheDocument();
+    expect(screen.getByText('Generated 2026-06-06 00:00 UTC')).toBeInTheDocument();
   });
 
   it('hides the export button without reports:export', async () => {

@@ -6,13 +6,13 @@ export type InvoiceDocument = {
 };
 
 export function renderInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
-  const title = `${invoice.invoiceKind === 'main' ? 'Invoice' : invoice.invoiceKind} ${invoice.id}`;
+  const title = `${invoiceKindLabel(invoice.invoiceKind)} ${invoice.id}`;
   const context = invoice.posted;
   const statusLabel = invoice.status === 'posted' ? 'Posted' : 'Draft';
   const jobNumber = context?.jobNumber ?? invoice.jobId;
-  const billToName = context?.billTo.name ?? 'Draft bill-to pending posting snapshot';
+  const billToName = context?.billTo.name ?? 'Bill-to details are not available on this draft.';
   const serviceLocationName =
-    context?.serviceLocation.name ?? 'Draft service location pending posting snapshot';
+    context?.serviceLocation.name ?? 'Service location details are not available on this draft.';
   const filename = `invoice-${safeFilenamePart(jobNumber)}-${invoice.id}.html`;
 
   return {
@@ -96,6 +96,12 @@ function renderLine(line: InvoiceRecord['lineItems'][number]): string {
     <td class="money">${money(line.unitPrice)}</td>
     <td class="money">${money(line.lineSubtotal)}</td>
   </tr>`;
+}
+
+function invoiceKindLabel(kind: InvoiceRecord['invoiceKind']): string {
+  if (kind === 'adjustment') return 'Adjustment';
+  if (kind === 'credit') return 'Credit';
+  return 'Invoice';
 }
 
 function formatAddress(
