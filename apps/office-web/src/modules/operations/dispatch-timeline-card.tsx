@@ -25,6 +25,7 @@ export type DispatchDragBaseState = {
   slotWidth: number;
   mode: 'dragging' | 'saving' | 'error';
   errorMessage: string | null;
+  overlapWarning?: string | null;
 };
 
 export type DispatchPendingDragState = DispatchDragBaseState & {
@@ -69,6 +70,7 @@ type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
   activeScheduleEditor: DispatchScheduleEditorState | null;
   dragState: DispatchTimelineDragState | null;
+  hasScheduleConflict?: boolean;
   placementStyle?: CSSProperties;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail: () => void;
@@ -96,6 +98,7 @@ export function DispatchCardButton({
   card,
   activeScheduleEditor,
   dragState,
+  hasScheduleConflict = false,
   placementStyle,
   technicians,
   onOpenJobDetail,
@@ -111,6 +114,8 @@ export function DispatchCardButton({
   const address = formatDispatchCardAddress(card);
   const statusLabel = appointmentStatusLabels[card.status];
   const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
+  const overlapLabel = hasScheduleConflict ? ', overlaps another appointment' : '';
+  const hasOverlapWarning = hasScheduleConflict || Boolean(dragState?.overlapWarning);
   const canResize = Boolean(
     onResizeStart &&
       card.scheduledDate &&
@@ -124,6 +129,7 @@ export function DispatchCardButton({
       ref={cardFrameRef}
       style={{
         ...timelineCardFrameStyle,
+        ...(hasOverlapWarning ? timelineCardConflictStyle : null),
         ...(dragState ? timelineCardDraggingStyle : null),
         ...placementStyle
       }}
@@ -158,7 +164,7 @@ export function DispatchCardButton({
             y: frameRect ? frameRect.top + 16 : 16
           });
         }}
-        aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}`}
+        aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}${overlapLabel}`}
         style={{
           ...timelineCardMainButtonStyle,
           ...(canDrag ? timelineCardMoveButtonStyle : null),
@@ -173,6 +179,7 @@ export function DispatchCardButton({
             <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
             <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
             {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
+            {hasScheduleConflict ? <span style={timelineOverlapChipStyle}>Overlap</span> : null}
           </div>
           <span style={timelineCardAddressStyle}>{address}</span>
         </div>
@@ -243,21 +250,26 @@ function formatDispatchDragPreview(dragState: DispatchTimelineDragState): string
     return '';
   }
 
+  let previewText = '';
+
   if (dragState.kind === 'assignment') {
     if (!dragState.targetLabel) {
-      return 'Drop on another row to assign';
+      previewText = 'Drop on another row to assign';
+    } else {
+      previewText = dragState.targetTechnicianId
+        ? `Assign to ${dragState.targetLabel}`
+        : 'Move to Unassigned';
     }
-
-    return dragState.targetTechnicianId
-      ? `Assign to ${dragState.targetLabel}`
-      : 'Move to Unassigned';
+  } else if (dragState.kind === 'move') {
+    previewText = formatDispatchMovePreview(
+      dragState.previewStartMinutes,
+      dragState.previewEndMinutes
+    );
+  } else {
+    previewText = formatDispatchResizePreview(dragState.startMinutes, dragState.previewEndMinutes);
   }
 
-  if (dragState.kind === 'move') {
-    return formatDispatchMovePreview(dragState.previewStartMinutes, dragState.previewEndMinutes);
-  }
-
-  return formatDispatchResizePreview(dragState.startMinutes, dragState.previewEndMinutes);
+  return dragState.overlapWarning ? `${previewText}: ${dragState.overlapWarning}` : previewText;
 }
 
 const timelineCardFrameStyle: CSSProperties = {
@@ -282,6 +294,12 @@ const timelineCardFrameStyle: CSSProperties = {
 const timelineCardDraggingStyle: CSSProperties = {
   boxShadow: '0 0 0 2px rgba(23, 107, 91, 0.18)',
   outline: '1px solid #176b5b'
+};
+
+const timelineCardConflictStyle: CSSProperties = {
+  background: '#fff7ed',
+  borderColor: '#f59e0b',
+  boxShadow: '0 0 0 2px rgba(245, 158, 11, 0.16)'
 };
 
 const timelineCardMainButtonStyle: CSSProperties = {
@@ -422,6 +440,20 @@ const timelineReviewChipStyle: CSSProperties = {
   background: '#fde7e5',
   borderRadius: 4,
   color: '#b42318',
+  display: 'inline-flex',
+  flex: '0 0 auto',
+  fontSize: '0.68rem',
+  fontWeight: 800,
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
+  padding: '0 0.3rem'
+};
+
+const timelineOverlapChipStyle: CSSProperties = {
+  alignItems: 'center',
+  background: '#fef3c7',
+  borderRadius: 4,
+  color: '#92400e',
   display: 'inline-flex',
   flex: '0 0 auto',
   fontSize: '0.68rem',

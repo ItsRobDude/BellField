@@ -581,6 +581,123 @@ describe('DispatchBoardPanel', () => {
     expect(onOpenJobDetail).not.toHaveBeenCalled();
   });
 
+  it('marks overlapping timed cards in technician rows without blocking the board', () => {
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' }),
+          buildDispatchAppointment({
+            appointmentId: 'appt-tech2',
+            jobId: 'job-2',
+            jobNumber: '1002',
+            scheduledStartTime: '09:30',
+            scheduledEndTime: '11:00'
+          })
+        ])}
+        viewDate="2026-05-22"
+      />
+    );
+
+    const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
+
+    expect(within(taylorRegion).getAllByText('Overlap')).toHaveLength(2);
+    expect(
+      within(taylorRegion).getByRole('button', {
+        name: /Job 1001.*overlaps another appointment/i
+      })
+    ).toBeInTheDocument();
+    expect(
+      within(taylorRegion).getByRole('button', {
+        name: /Job 1002.*overlaps another appointment/i
+      })
+    ).toBeInTheDocument();
+  });
+
+  it('warns but still saves when a timed card is moved into an overlap', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' }),
+          buildDispatchAppointment({
+            appointmentId: 'appt-blocker',
+            jobId: 'job-2',
+            jobNumber: '1002',
+            scheduledStartTime: '10:30',
+            scheduledEndTime: '12:00'
+          })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+    fireEvent.pointerDown(cardButton, { clientX: 100, button: 0, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 196 });
+
+    expect(
+      screen.getByText('9:00 AM - 11:00 AM: Overlaps another appointment')
+    ).toBeInTheDocument();
+
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+        scheduledDate: '2026-05-22',
+        scheduledStartTime: '09:00',
+        scheduledEndTime: '11:00',
+        timeWindowLabel: '9:00 AM - 11:00 AM',
+        technicianId: 'tech-1'
+      });
+    });
+  });
+
+  it('warns but still saves when a card duration is resized into an overlap', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({
+            appointmentId: 'appt-tech1',
+            scheduledEndTime: '09:00'
+          }),
+          buildDispatchAppointment({
+            appointmentId: 'appt-blocker',
+            jobId: 'job-2',
+            jobNumber: '1002',
+            scheduledStartTime: '09:30',
+            scheduledEndTime: '11:00'
+          })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const resizeHandle = screen.getByRole('button', { name: 'Resize job 1001 duration' });
+    fireEvent.pointerDown(resizeHandle, { clientX: 100, pointerId: 1 });
+    fireEvent.pointerMove(window, { clientX: 196 });
+
+    expect(
+      screen.getByText('8:00 AM - 10:00 AM: Overlaps another appointment')
+    ).toBeInTheDocument();
+
+    fireEvent.pointerUp(window);
+
+    await waitFor(() => {
+      expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+        scheduledDate: '2026-05-22',
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '10:00',
+        timeWindowLabel: '8:00 AM - 10:00 AM',
+        technicianId: 'tech-1'
+      });
+    });
+  });
+
   it('keeps normal card open behavior when pointer movement does not become a drag', () => {
     const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
     const onOpenJobDetail = vi.fn();
@@ -627,6 +744,56 @@ describe('DispatchBoardPanel', () => {
       fireEvent.pointerMove(window, { clientX: 102, clientY: 130 });
 
       expect(screen.getByText('Assign to Sam Tech')).toBeInTheDocument();
+
+      fireEvent.pointerUp(window);
+
+      await waitFor(() => {
+        expect(onAppointmentScheduleUpdate).toHaveBeenCalledWith('job-1', 'appt-tech1', {
+          scheduledDate: '2026-05-22',
+          scheduledStartTime: '08:00',
+          scheduledEndTime: '10:00',
+          timeWindowLabel: '',
+          technicianId: 'tech-2'
+        });
+      });
+    } finally {
+      restoreElementFromPoint();
+    }
+  });
+
+  it('warns but still saves when reassignment would overlap the target row', async () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' }),
+          buildDispatchAppointment({
+            appointmentId: 'appt-sam',
+            jobId: 'job-2',
+            jobNumber: '1002',
+            technicianId: 'tech-2',
+            technicianName: 'Sam Tech',
+            scheduledStartTime: '09:00',
+            scheduledEndTime: '11:00'
+          })
+        ])}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const samRow = screen.getByRole('region', { name: 'Appointments for Sam Tech' });
+    const restoreElementFromPoint = stubElementFromPoint(samRow);
+
+    try {
+      const cardButton = screen.getByRole('button', { name: /Job 1001/ });
+      fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
+      fireEvent.pointerMove(window, { clientX: 102, clientY: 130 });
+
+      expect(
+        screen.getByText('Assign to Sam Tech: Overlaps another appointment')
+      ).toBeInTheDocument();
 
       fireEvent.pointerUp(window);
 

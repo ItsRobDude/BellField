@@ -16,11 +16,11 @@ import {
   createDispatchScheduleDraft,
   DispatchTimelineRow,
   formatDispatchCardAddress,
-  formatTechnicianRowSublabel,
   timelineLaneCellStyle,
   type DispatchAssignmentTarget,
   type DispatchContextMenuPosition
 } from './dispatch-timeline-row';
+import { formatTechnicianRowSublabel } from './dispatch-technician-row-format';
 import {
   timelineColumnGap,
   timelineGridTemplateColumns,
@@ -72,6 +72,16 @@ export function DispatchBoardPanel({
     () => buildDispatchBoardModel(dispatchBoard),
     [dispatchBoard]
   );
+  const assignmentTargetCardLookup = useMemo(() => {
+    const lookup = new Map<string, DispatchAppointmentCard[]>();
+
+    lookup.set('', model.unassignedQueue);
+    model.technicianRows.forEach((row) => {
+      lookup.set(row.technicianId, row.cards);
+    });
+
+    return lookup;
+  }, [model]);
   const totalCardCount = model.cardLookup.size;
   const unassignedCount = model.unassignedQueue.length;
   const [scheduleEditor, setScheduleEditor] = useState<DispatchScheduleEditorState | null>(null);
@@ -224,6 +234,10 @@ export function DispatchBoardPanel({
     await onAppointmentScheduleUpdate?.(card.jobId, card.appointmentId, draft);
   }
 
+  function getAssignmentTargetCards(technicianId: string): DispatchAppointmentCard[] {
+    return assignmentTargetCardLookup.get(technicianId) ?? [];
+  }
+
   const contextMenuCard = contextMenu ? model.cardLookup.get(contextMenu.appointmentId) : null;
 
   return (
@@ -300,6 +314,7 @@ export function DispatchBoardPanel({
               onScheduleUpdate={
                 onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
               }
+              getAssignmentTargetCards={getAssignmentTargetCards}
               onAssignmentTargetPreviewChange={setAssignmentTargetPreview}
               onScheduleDraftChange={handleScheduleDraftChange}
               onScheduleEditorCancel={() => setScheduleEditor(null)}
@@ -324,6 +339,7 @@ export function DispatchBoardPanel({
                 onScheduleUpdate={
                   onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
                 }
+                getAssignmentTargetCards={getAssignmentTargetCards}
                 onAssignmentTargetPreviewChange={setAssignmentTargetPreview}
                 onScheduleDraftChange={handleScheduleDraftChange}
                 onScheduleEditorCancel={() => setScheduleEditor(null)}

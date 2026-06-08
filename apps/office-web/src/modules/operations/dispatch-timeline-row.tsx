@@ -2,6 +2,7 @@
 
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type CSSProperties,
@@ -17,6 +18,12 @@ import {
   type DispatchResizeState,
   type DispatchTimelineDragState
 } from './dispatch-timeline-card';
+import {
+  buildDispatchOverlapLookup,
+  getDispatchCardTimeRange,
+  hasDispatchOverlapWithCards,
+  type DispatchTimeRange
+} from './dispatch-overlap-utils';
 import type { DispatchScheduleDraft, DispatchScheduleEditorState } from './dispatch-schedule-types';
 import {
   timelineCardMinHeight,
@@ -65,6 +72,7 @@ type DispatchTimelineRowProps = {
     position: DispatchContextMenuPosition
   ) => void;
   onScheduleUpdate?: (card: DispatchAppointmentCard, draft: DispatchScheduleDraft) => Promise<void>;
+  getAssignmentTargetCards?: (technicianId: string) => DispatchAppointmentCard[];
   onAssignmentTargetPreviewChange: (target: DispatchAssignmentTarget | null) => void;
   onScheduleDraftChange: (patch: Partial<DispatchScheduleDraft>) => void;
   onScheduleEditorCancel: () => void;
@@ -73,6 +81,7 @@ type DispatchTimelineRowProps = {
 
 const dispatchMoveThresholdPixels = 6;
 const dispatchAssignmentThresholdPixels = 16;
+const dispatchOverlapWarningText = 'Overlaps another appointment';
 
 export function DispatchTimelineRow({
   label,
@@ -87,6 +96,7 @@ export function DispatchTimelineRow({
   onOpenScheduleEditor,
   onOpenContextMenu,
   onScheduleUpdate,
+  getAssignmentTargetCards,
   onAssignmentTargetPreviewChange,
   onScheduleDraftChange,
   onScheduleEditorCancel,
@@ -95,6 +105,7 @@ export function DispatchTimelineRow({
   const [dragState, setDragState] = useState<DispatchTimelineDragState | null>(null);
   const dragStateRef = useRef<DispatchTimelineDragState | null>(null);
   const suppressNextOpenRef = useRef(false);
+  const overlapLookup = useMemo(() => buildDispatchOverlapLookup(cards), [cards]);
   const isAssignmentTargetActive =
     activeAssignmentTargetId !== null && activeAssignmentTargetId === assignmentTarget.technicianId;
 
@@ -204,7 +215,11 @@ export function DispatchTimelineRow({
       pointerStartY: event.clientY,
       slotWidth: getTimelineSlotWidth(cardFrameElement),
       mode: 'dragging',
-      errorMessage: null
+      errorMessage: null,
+      overlapWarning: getOverlapWarningForRange(card.appointmentId, {
+        startMinutes,
+        endMinutes: baseEndMinutes
+      })
     });
   }
 
@@ -238,7 +253,8 @@ export function DispatchTimelineRow({
       pointerStartY: event.clientY,
       slotWidth: getTimelineSlotWidth(cardFrameElement),
       mode: 'dragging',
-      errorMessage: null
+      errorMessage: null,
+      overlapWarning: null
     });
   }
 
@@ -285,7 +301,11 @@ export function DispatchTimelineRow({
           kind: 'assignment',
           targetTechnicianId: target?.technicianId ?? null,
           targetLabel: target?.label ?? null,
-          hasMoved: true
+          hasMoved: true,
+          overlapWarning: getAssignmentOverlapWarning(
+            current.appointmentId,
+            target?.technicianId ?? null
+          )
         };
       }
 
@@ -314,7 +334,11 @@ export function DispatchTimelineRow({
       return {
         ...current,
         targetTechnicianId: target?.technicianId ?? null,
-        targetLabel: target?.label ?? null
+        targetLabel: target?.label ?? null,
+        overlapWarning: getAssignmentOverlapWarning(
+          current.appointmentId,
+          target?.technicianId ?? null
+        )
       };
     }
 
@@ -327,7 +351,11 @@ export function DispatchTimelineRow({
 
     return {
       ...current,
-      previewEndMinutes
+      previewEndMinutes,
+      overlapWarning: getOverlapWarningForRange(current.appointmentId, {
+        startMinutes: current.startMinutes,
+        endMinutes: previewEndMinutes
+      })
     };
   }
 
@@ -344,8 +372,41 @@ export function DispatchTimelineRow({
     return {
       ...state,
       previewStartMinutes,
-      previewEndMinutes: previewStartMinutes + durationMinutes
+      previewEndMinutes: previewStartMinutes + durationMinutes,
+      overlapWarning: getOverlapWarningForRange(state.appointmentId, {
+        startMinutes: previewStartMinutes,
+        endMinutes: previewStartMinutes + durationMinutes
+      })
     };
+  }
+
+  function getOverlapWarningForRange(
+    appointmentId: string,
+    range: DispatchTimeRange | null,
+    targetCards = cards
+  ): string | null {
+    return hasDispatchOverlapWithCards(targetCards, appointmentId, range)
+      ? dispatchOverlapWarningText
+      : null;
+  }
+
+  function getAssignmentOverlapWarning(
+    appointmentId: string,
+    targetTechnicianId: string | null
+  ): string | null {
+    if (!targetTechnicianId) {
+      return null;
+    }
+
+    const card = cards.find((candidate) => candidate.appointmentId === appointmentId);
+
+    if (!card) {
+      return null;
+    }
+
+    const targetCards = getAssignmentTargetCards?.(targetTechnicianId) ?? [];
+
+    return getOverlapWarningForRange(appointmentId, getDispatchCardTimeRange(card), targetCards);
   }
 
   async function commitTimelineDrag(state: DispatchTimelineDragState) {
@@ -532,6 +593,7 @@ export function DispatchTimelineRow({
                   : null
               }
               dragState={dragState?.appointmentId === card.appointmentId ? dragState : null}
+              hasScheduleConflict={Boolean(overlapLookup.get(card.appointmentId)?.size)}
               placementStyle={getTimelineCardPlacementStyle(
                 card,
                 index,
@@ -567,10 +629,6 @@ export function createDispatchScheduleDraft(
     timeWindowLabel: card.timeWindowLabel ?? '',
     technicianId: card.technicianId ?? ''
   };
-}
-
-export function formatTechnicianRowSublabel(roleId: string): string {
-  return roleId === 'technician' ? 'Technician' : roleId;
 }
 
 function getTimelineCardPlacementStyle(
