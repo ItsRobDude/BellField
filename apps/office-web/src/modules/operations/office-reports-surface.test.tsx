@@ -404,6 +404,51 @@ describe('OfficeReportsSurface (Service Agreements)', () => {
       /^service-agreements-active-2026-06-06/
     );
   });
+
+  it('downloads the expiring service agreement CSV when reports:export is present', async () => {
+    mockedApi.downloadExpiringServiceAgreementsCsv.mockResolvedValue(
+      new Blob(['csv'], { type: 'text/csv' })
+    );
+    renderSurface(true, false, false, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Agreements' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export expiring CSV' }));
+    await waitFor(() =>
+      expect(mockedApi.downloadExpiringServiceAgreementsCsv).toHaveBeenCalledTimes(1)
+    );
+    expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(
+      /^service-agreements-expiring-2026-06-06/
+    );
+  });
+
+  it('downloads the service agreement billing due CSV when reports:export is present', async () => {
+    mockedApi.downloadServiceAgreementBillingDueCsv.mockResolvedValue(
+      new Blob(['csv'], { type: 'text/csv' })
+    );
+    renderSurface(true, false, false, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Agreements' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export billing CSV' }));
+    await waitFor(() =>
+      expect(mockedApi.downloadServiceAgreementBillingDueCsv).toHaveBeenCalledTimes(1)
+    );
+    expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(
+      /^service-agreements-billing-due-2026-06-06/
+    );
+  });
+
+  it('downloads the service agreement visit prompt CSV when reports:export is present', async () => {
+    mockedApi.downloadServiceAgreementVisitPromptsCsv.mockResolvedValue(
+      new Blob(['csv'], { type: 'text/csv' })
+    );
+    renderSurface(true, false, false, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Agreements' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export visits CSV' }));
+    await waitFor(() =>
+      expect(mockedApi.downloadServiceAgreementVisitPromptsCsv).toHaveBeenCalledTimes(1)
+    );
+    expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(
+      /^service-agreement-visit-prompts-2026-06-06/
+    );
+  });
 });
 
 describe('OfficeReportsSurface (Job Profitability)', () => {

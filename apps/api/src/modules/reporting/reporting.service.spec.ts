@@ -507,6 +507,17 @@ describe('ReportingService service agreement CSV exports', () => {
     );
   });
 
+  it('rejects 403 without agreements:view and never queries', async () => {
+    const { service, databaseService } = createAgreementReportService([
+      'reports:view',
+      'reports:export'
+    ]);
+    await expect(service.exportActiveServiceAgreements('token')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(databaseService.query).not.toHaveBeenCalled();
+  });
+
   it('exports active agreements CSV when fully permitted', async () => {
     const { service } = createAgreementReportService([
       'reports:view',
@@ -522,6 +533,60 @@ describe('ReportingService service agreement CSV exports', () => {
     );
     expect(lines[1]).toBe(
       'SA-1001,Acme,Annual maintenance plan,2026-07-01,annual,2026-07-01,240,Main Shop,2,1'
+    );
+  });
+
+  it('exports expiring agreements CSV when fully permitted', async () => {
+    const { service } = createAgreementReportService([
+      'reports:view',
+      'agreements:view',
+      'reports:export'
+    ]);
+    const out = await service.exportExpiringServiceAgreements('token');
+    const lines = out.csv.split('\n');
+
+    expect(out.filename).toMatch(/^service-agreements-expiring-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(lines[0]).toBe(
+      'Agreement #,Customer,Name,Renewal date,Billing cadence,Next billing date,Billing amount,Covered locations,Covered equipment count,Active visit templates,End date'
+    );
+    expect(lines[1]).toBe(
+      'SA-1002,Acme,Annual maintenance plan,2026-07-01,annual,2026-07-01,240,Main Shop,2,1,'
+    );
+  });
+
+  it('exports billing due agreements CSV when fully permitted', async () => {
+    const { service } = createAgreementReportService([
+      'reports:view',
+      'agreements:view',
+      'reports:export'
+    ]);
+    const out = await service.exportServiceAgreementBillingDue('token');
+    const lines = out.csv.split('\n');
+
+    expect(out.filename).toMatch(/^service-agreements-billing-due-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(lines[0]).toBe(
+      'Agreement #,Customer,Name,Renewal date,Billing cadence,Next billing date,Billing amount,Covered locations,Covered equipment count,Active visit templates,Days until billing'
+    );
+    expect(lines[1]).toBe(
+      'SA-1001,Acme,Annual maintenance plan,2026-07-01,annual,2026-07-01,240,Main Shop,2,1,10'
+    );
+  });
+
+  it('exports visit template prompt CSV when fully permitted', async () => {
+    const { service } = createAgreementReportService([
+      'reports:view',
+      'agreements:view',
+      'reports:export'
+    ]);
+    const out = await service.exportServiceAgreementVisitTemplatePrompts('token');
+    const lines = out.csv.split('\n');
+
+    expect(out.filename).toMatch(/^service-agreement-visit-prompts-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(lines[0]).toBe(
+      'Agreement #,Customer,Agreement,Template,Frequency,Projected due date,Days until projected due,Preferred month,Preferred day,Job type,Category,Covered locations'
+    );
+    expect(lines[1]).toBe(
+      'SA-1001,Acme,Annual maintenance plan,Spring visit,annual,2026-06-15,7,6,15,Maintenance,Recurring,Main Shop'
     );
   });
 });
