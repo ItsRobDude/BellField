@@ -16,10 +16,10 @@ import {
   createDispatchScheduleDraft,
   DispatchTimelineRow,
   formatDispatchCardAddress,
-  timelineLaneCellStyle,
   type DispatchAssignmentTarget,
   type DispatchContextMenuPosition
 } from './dispatch-timeline-row';
+import { timelineLaneCellStyle } from './dispatch-timeline-shared-styles';
 import { formatTechnicianRowSublabel } from './dispatch-technician-row-format';
 import {
   timelineColumnGap,
@@ -304,6 +304,7 @@ export function DispatchBoardPanel({
               assignmentTarget={{ technicianId: '', label: 'Unassigned' }}
               activeAssignmentTargetId={assignmentTargetPreview?.technicianId ?? null}
               cards={model.unassignedQueue}
+              showScheduleConflicts={false}
               activeScheduleEditor={scheduleEditor}
               technicians={dispatchBoard.technicians}
               onOpenJobDetail={onOpenJobDetail}
@@ -329,6 +330,7 @@ export function DispatchBoardPanel({
                 assignmentTarget={{ technicianId: row.technicianId, label: row.technicianName }}
                 activeAssignmentTargetId={assignmentTargetPreview?.technicianId ?? null}
                 cards={row.cards}
+                showScheduleConflicts={true}
                 activeScheduleEditor={scheduleEditor}
                 technicians={dispatchBoard.technicians}
                 onOpenJobDetail={onOpenJobDetail}

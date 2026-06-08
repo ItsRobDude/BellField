@@ -613,6 +613,41 @@ describe('DispatchBoardPanel', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not mark timed unassigned appointments as schedule overlaps', () => {
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({
+            appointmentId: 'appt-unassigned-1',
+            technicianId: undefined,
+            technicianName: undefined
+          }),
+          buildDispatchAppointment({
+            appointmentId: 'appt-unassigned-2',
+            jobId: 'job-2',
+            jobNumber: '1002',
+            technicianId: undefined,
+            technicianName: undefined,
+            scheduledStartTime: '09:30',
+            scheduledEndTime: '11:00'
+          })
+        ])}
+        viewDate="2026-05-22"
+      />
+    );
+
+    const unassignedRegion = screen.getByRole('region', { name: /Unassigned appointments/i });
+
+    expect(within(unassignedRegion).getByText('#1001')).toBeInTheDocument();
+    expect(within(unassignedRegion).getByText('#1002')).toBeInTheDocument();
+    expect(within(unassignedRegion).queryByText('Overlap')).not.toBeInTheDocument();
+    expect(
+      within(unassignedRegion).queryByRole('button', {
+        name: /overlaps another appointment/i
+      })
+    ).not.toBeInTheDocument();
+  });
+
   it('warns but still saves when a timed card is moved into an overlap', async () => {
     const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
 

@@ -37,6 +37,7 @@ import {
   timelineSlotMinutes,
   timelineStartMinutes
 } from './dispatch-timeline-layout';
+import { timelineLaneCellStyle } from './dispatch-timeline-shared-styles';
 import {
   buildDispatchMoveDraft,
   buildDispatchReassignmentDraft,
@@ -63,6 +64,7 @@ type DispatchTimelineRowProps = {
   assignmentTarget: DispatchAssignmentTarget;
   activeAssignmentTargetId: string | null;
   cards: DispatchAppointmentCard[];
+  showScheduleConflicts?: boolean;
   activeScheduleEditor: DispatchScheduleEditorState | null;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail?: (jobId: string, appointmentId?: string) => void;
@@ -90,6 +92,7 @@ export function DispatchTimelineRow({
   assignmentTarget,
   activeAssignmentTargetId,
   cards,
+  showScheduleConflicts = true,
   activeScheduleEditor,
   technicians,
   onOpenJobDetail,
@@ -593,7 +596,9 @@ export function DispatchTimelineRow({
                   : null
               }
               dragState={dragState?.appointmentId === card.appointmentId ? dragState : null}
-              hasScheduleConflict={Boolean(overlapLookup.get(card.appointmentId)?.size)}
+              hasScheduleConflict={
+                showScheduleConflicts && Boolean(overlapLookup.get(card.appointmentId)?.size)
+              }
               placementStyle={getTimelineCardPlacementStyle(
                 card,
                 index,
@@ -761,11 +766,6 @@ const timelineRowSublabelStyle: CSSProperties = {
   fontSize: '0.72rem',
   fontWeight: 700,
   lineHeight: 1.2
-};
-
-export const timelineLaneCellStyle: CSSProperties = {
-  display: 'grid',
-  minWidth: 0
 };
 
 const timelineLaneStyle: CSSProperties = {
