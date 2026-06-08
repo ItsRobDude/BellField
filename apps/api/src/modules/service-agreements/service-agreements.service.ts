@@ -8,8 +8,16 @@ import type {
   CatalogItemKind,
   CatalogLineSnapshot,
   CatalogPriceMode,
+  CustomerAccountSummary,
+  EquipmentSummary,
+  LocationSummary,
   ServiceAgreementVisitTemplate
 } from '@bellfield/contracts';
+import type {
+  CustomerAccountRecord,
+  EquipmentRecord,
+  LocationRecord
+} from '../company-data/company-data.types';
 import { EquipmentDataService } from '../company-data/equipment-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -17,6 +25,7 @@ import { ServiceAgreementsRepository } from './service-agreements.repository';
 import type {
   CreateServiceAgreementRequestDto,
   ServiceAgreementDto,
+  ServiceAgreementReferenceDataResponseDto,
   ServiceAgreementResponseDto,
   ServiceAgreementsResponseDto,
   ServiceAgreementStatusChangeRequestDto,
@@ -65,6 +74,39 @@ export class ServiceAgreementsService {
       throw new NotFoundException('Service agreement not found.');
     }
     return { agreement };
+  }
+
+  async getReferenceData(
+    sessionToken: string,
+    agreementId?: string
+  ): Promise<ServiceAgreementReferenceDataResponseDto> {
+    const resolvedAgreementId = agreementId?.trim();
+    const isEditMode = resolvedAgreementId !== undefined && resolvedAgreementId !== '';
+    await this.authorize(sessionToken, isEditMode ? 'agreements:edit' : 'agreements:create');
+
+    if (resolvedAgreementId) {
+      const existing = await this.serviceAgreementsRepository.getAgreementById(resolvedAgreementId);
+      if (!existing) {
+        throw new NotFoundException('Service agreement not found.');
+      }
+    }
+
+    const includeInactive = isEditMode;
+    const [customers, locations, equipment] = await Promise.all([
+      this.referenceDataService.listCustomers(includeInactive),
+      this.referenceDataService.listLocations(includeInactive),
+      this.equipmentDataService.listEquipment(includeInactive)
+    ]);
+    const customerById = new Map(customers.map((customer) => [customer.id, customer]));
+    const locationById = new Map(locations.map((location) => [location.id, location]));
+
+    return {
+      customers: customers.map(toCustomerSummary),
+      locations: locations.map((location) => toLocationSummary(location, customerById)),
+      equipment: equipment.map((equipmentRecord) =>
+        toEquipmentSummary(equipmentRecord, locationById, customerById)
+      )
+    };
   }
 
   async createAgreement(
@@ -399,6 +441,54 @@ function validateCatalogSnapshot(snapshot: CatalogLineSnapshot): void {
     'Catalog snapshot inventory item name',
     160
   );
+}
+
+function toCustomerSummary(customer: CustomerAccountRecord): CustomerAccountSummary {
+  return { ...customer, flags: [...customer.flags] };
+}
+
+function toLocationSummary(
+  location: LocationRecord,
+  customerById: Map<string, CustomerAccountRecord>
+): LocationSummary {
+  return {
+    ...location,
+    customerName: customerById.get(location.customerId)?.name ?? 'Unknown customer',
+    contacts: [],
+    alternateBillToCustomerIds: [...location.alternateBillToCustomerIds]
+  };
+}
+
+function toEquipmentSummary(
+  equipment: EquipmentRecord,
+  locationById: Map<string, LocationRecord>,
+  customerById: Map<string, CustomerAccountRecord>
+): EquipmentSummary {
+  const location = equipment.locationId ? locationById.get(equipment.locationId) : undefined;
+  const customer = location ? customerById.get(location.customerId) : undefined;
+
+  return {
+    id: equipment.id,
+    locationId: equipment.locationId,
+    locationName: location?.name,
+    customerName: customer?.name,
+    inventoryLocationLabel: equipment.inventoryLocationLabel,
+    equipmentType: equipment.equipmentType,
+    brand: equipment.brand,
+    model: equipment.model,
+    serialNumber: equipment.serialNumber,
+    filterSizes: [...equipment.filterSizes],
+    equipmentLocationDescription: equipment.equipmentLocationDescription,
+    installDate: equipment.installDate,
+    warrantyStartDate: equipment.warrantyStartDate,
+    warrantyEndDate: equipment.warrantyEndDate,
+    warrantyProviderNote: equipment.warrantyProviderNote,
+    replacesEquipmentId: equipment.replacesEquipmentId,
+    replacedByEquipmentId: equipment.replacedByEquipmentId,
+    status: equipment.status,
+    notes: equipment.notes,
+    updatedAt: equipment.updatedAt
+  };
 }
 
 function validateCatalogKind(value: unknown): void {

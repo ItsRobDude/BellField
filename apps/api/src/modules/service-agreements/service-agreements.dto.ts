@@ -47,6 +47,13 @@ export class ListServiceAgreementsQueryDto {
   status?: ServiceAgreementStatusValue;
 }
 
+export class ServiceAgreementReferenceDataQueryDto {
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  agreementId?: string;
+}
+
 class ServiceAgreementVisitTemplateRequestDto implements ServiceAgreementVisitTemplateInput {
   @IsString()
   @MinLength(1)

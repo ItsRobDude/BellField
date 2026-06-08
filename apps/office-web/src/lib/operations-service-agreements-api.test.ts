@@ -4,6 +4,7 @@ import {
   createOfficeServiceAgreement,
   endOfficeServiceAgreement,
   getOfficeServiceAgreement,
+  getOfficeServiceAgreementReferenceData,
   listOfficeServiceAgreements,
   pauseOfficeServiceAgreement,
   updateOfficeServiceAgreement
@@ -51,6 +52,37 @@ describe('operations-api service agreement helpers', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       'http://api.test/operations/service-agreements/agreement-1',
+      expect.anything()
+    );
+  });
+
+  it('calls service agreement reference data endpoint with optional edit context', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mockJsonResponse({ customers: [], locations: [], equipment: [] }))
+      .mockResolvedValueOnce(mockJsonResponse({ customers: [], locations: [], equipment: [] }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await getOfficeServiceAgreementReferenceData({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
+    await getOfficeServiceAgreementReferenceData({
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test',
+      agreementId: 'agreement-1'
+    });
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      'http://api.test/operations/service-agreements/reference-data',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer session-token' })
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      'http://api.test/operations/service-agreements/reference-data?agreementId=agreement-1',
       expect.anything()
     );
   });

@@ -5,8 +5,7 @@ import {
   activateOfficeServiceAgreement,
   createOfficeServiceAgreement,
   endOfficeServiceAgreement,
-  getOfficeEquipmentWorkspace,
-  getOfficeJobsWorkspace,
+  getOfficeServiceAgreementReferenceData,
   listOfficeServiceAgreements,
   pauseOfficeServiceAgreement,
   updateOfficeServiceAgreement,
@@ -54,6 +53,7 @@ export function OfficeAgreementsSurface({
   const [searchText, setSearchText] = useState('');
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSourceLoading, setIsSourceLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -63,21 +63,12 @@ export function OfficeAgreementsSurface({
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const [agreementResult, jobsWorkspace, equipmentWorkspace] = await Promise.all([
-        listOfficeServiceAgreements({
-          apiBaseUrl,
-          sessionToken,
-          status: statusFilter === 'all' ? undefined : statusFilter
-        }),
-        getOfficeJobsWorkspace({ apiBaseUrl, sessionToken }),
-        getOfficeEquipmentWorkspace({ apiBaseUrl, sessionToken, includeInactive: true })
-      ]);
-      setAgreements(agreementResult.agreements);
-      setSources({
-        customers: jobsWorkspace.customers,
-        locations: jobsWorkspace.locations,
-        equipment: equipmentWorkspace.equipment
+      const agreementResult = await listOfficeServiceAgreements({
+        apiBaseUrl,
+        sessionToken,
+        status: statusFilter === 'all' ? undefined : statusFilter
       });
+      setAgreements(agreementResult.agreements);
       setHasLoaded(true);
       setSelectedAgreementId((current) => {
         if (current && agreementResult.agreements.some((agreement) => agreement.id === current)) {
@@ -95,6 +86,31 @@ export function OfficeAgreementsSurface({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadSources = useCallback(
+    async (agreementId?: string): Promise<AgreementWorkbenchSources | null> => {
+      setIsSourceLoading(true);
+      setErrorMessage(null);
+      setNoticeMessage(null);
+      try {
+        const result = await getOfficeServiceAgreementReferenceData({
+          apiBaseUrl,
+          sessionToken,
+          agreementId
+        });
+        setSources(result);
+        return result;
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : 'Unable to load agreement reference data.'
+        );
+        return null;
+      } finally {
+        setIsSourceLoading(false);
+      }
+    },
+    [apiBaseUrl, sessionToken]
+  );
 
   const visibleAgreements = useMemo(() => {
     const search = searchText.trim().toLocaleLowerCase();
@@ -120,17 +136,29 @@ export function OfficeAgreementsSurface({
     [agreements, selectedAgreementId]
   );
 
-  function startCreate() {
-    if (!sources) {
+  async function startCreate() {
+    const loadedSources = await loadSources();
+    if (!loadedSources) {
+      return;
+    }
+    if (loadedSources.customers.length === 0) {
+      setErrorMessage('Create a customer before creating a service agreement.');
       return;
     }
     setErrorMessage(null);
     setNoticeMessage(null);
     setSelectedAgreementId(null);
-    setActiveForm({ kind: 'create', draft: emptyAgreementDraft(sources.customers[0]?.id ?? '') });
+    setActiveForm({
+      kind: 'create',
+      draft: emptyAgreementDraft(loadedSources.customers[0]?.id ?? '')
+    });
   }
 
-  function startEdit(agreement: ServiceAgreementSummary) {
+  async function startEdit(agreement: ServiceAgreementSummary) {
+    const loadedSources = await loadSources(agreement.id);
+    if (!loadedSources) {
+      return;
+    }
     setErrorMessage(null);
     setNoticeMessage(null);
     setSelectedAgreementId(agreement.id);
@@ -234,10 +262,10 @@ export function OfficeAgreementsSurface({
             <button
               type="button"
               style={styles.primaryButton}
-              disabled={isLoading || isSaving || formOpen || !sources?.customers.length}
-              onClick={startCreate}
+              disabled={isLoading || isSourceLoading || isSaving || formOpen}
+              onClick={() => void startCreate()}
             >
-              New agreement
+              {isSourceLoading ? 'Loading...' : 'New agreement'}
             </button>
           ) : null}
           <button
@@ -396,7 +424,7 @@ function AgreementDetail({
   canEdit: boolean;
   isSaving: boolean;
   formOpen: boolean;
-  onEdit: (agreement: ServiceAgreementSummary) => void;
+  onEdit: (agreement: ServiceAgreementSummary) => Promise<void> | void;
   onStatusChange: (
     agreement: ServiceAgreementSummary,
     action: 'activate' | 'pause' | 'end'
@@ -435,7 +463,7 @@ function AgreementDetail({
             type="button"
             style={styles.button}
             disabled={isSaving || formOpen}
-            onClick={() => onEdit(agreement)}
+            onClick={() => void onEdit(agreement)}
           >
             Edit
           </button>

@@ -12,6 +12,32 @@ function createService() {
     })
   };
   const referenceDataService = {
+    listCustomers: jest.fn().mockResolvedValue([
+      {
+        id: 'customer-1',
+        name: 'Acme',
+        accountType: 'company',
+        billingAddressLine1: '123 Main',
+        billingCity: 'Blaine',
+        billingState: 'WA',
+        billingPostalCode: '98230',
+        isActive: true,
+        flags: []
+      }
+    ]),
+    listLocations: jest.fn().mockResolvedValue([
+      {
+        id: 'location-1',
+        name: 'Main',
+        customerId: 'customer-1',
+        addressLine1: '123 Main',
+        city: 'Blaine',
+        state: 'WA',
+        postalCode: '98230',
+        isActive: true,
+        alternateBillToCustomerIds: []
+      }
+    ]),
     getCustomerById: jest.fn().mockResolvedValue({ id: 'customer-1', name: 'Acme' }),
     getLocationById: jest
       .fn()
@@ -20,6 +46,21 @@ function createService() {
       )
   };
   const equipmentDataService = {
+    listEquipment: jest.fn().mockResolvedValue([
+      {
+        id: 'equipment-1',
+        locationId: 'location-1',
+        equipmentType: 'Unit',
+        brand: 'Generic',
+        model: 'A1',
+        serialNumber: '',
+        filterSizes: [],
+        status: 'active',
+        notes: '',
+        createdAt: '2026-06-08T00:00:00.000Z',
+        updatedAt: '2026-06-08T00:00:00.000Z'
+      }
+    ]),
     getEquipmentById: jest.fn().mockResolvedValue({
       id: 'equipment-1',
       locationId: 'location-1',
@@ -85,6 +126,67 @@ function agreement(overrides: Partial<ServiceAgreementDto> = {}): ServiceAgreeme
     ...overrides
   };
 }
+
+describe('ServiceAgreementsService.getReferenceData', () => {
+  it('loads create reference data through agreements:create', async () => {
+    const { service, identityAccessService, referenceDataService, equipmentDataService } =
+      createService();
+
+    const result = await service.getReferenceData('token');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'agreements:create',
+      ['office-web']
+    );
+    expect(referenceDataService.listCustomers).toHaveBeenCalledWith(false);
+    expect(referenceDataService.listLocations).toHaveBeenCalledWith(false);
+    expect(equipmentDataService.listEquipment).toHaveBeenCalledWith(false);
+    expect(result.customers[0]).toMatchObject({ id: 'customer-1', name: 'Acme' });
+    expect(result.locations[0]).toMatchObject({
+      id: 'location-1',
+      customerName: 'Acme',
+      contacts: []
+    });
+    expect(result.equipment[0]).toMatchObject({
+      id: 'equipment-1',
+      locationName: 'Main',
+      customerName: 'Acme'
+    });
+  });
+
+  it('loads edit reference data through agreements:edit after verifying the agreement exists', async () => {
+    const {
+      service,
+      identityAccessService,
+      referenceDataService,
+      equipmentDataService,
+      serviceAgreementsRepository
+    } = createService();
+    serviceAgreementsRepository.getAgreementById.mockResolvedValue(agreement());
+
+    await service.getReferenceData('token', 'agreement-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'agreements:edit',
+      ['office-web']
+    );
+    expect(serviceAgreementsRepository.getAgreementById).toHaveBeenCalledWith('agreement-1');
+    expect(referenceDataService.listCustomers).toHaveBeenCalledWith(true);
+    expect(referenceDataService.listLocations).toHaveBeenCalledWith(true);
+    expect(equipmentDataService.listEquipment).toHaveBeenCalledWith(true);
+  });
+
+  it('rejects edit reference data for an unknown agreement', async () => {
+    const { service, serviceAgreementsRepository } = createService();
+    serviceAgreementsRepository.getAgreementById.mockResolvedValue(null);
+
+    await expect(service.getReferenceData('token', 'missing-agreement')).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+  });
+});
 
 describe('ServiceAgreementsService.createAgreement', () => {
   it('creates an office-only agreement with normalized coverage and source validation', async () => {

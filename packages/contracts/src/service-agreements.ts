@@ -1,4 +1,6 @@
 import type { CatalogLineSnapshot } from './catalog.js';
+import type { CustomerAccountSummary, LocationSummary } from './crm.js';
+import type { EquipmentSummary } from './equipment.js';
 
 export type ServiceAgreementStatus = 'draft' | 'active' | 'paused' | 'ended';
 
@@ -90,6 +92,12 @@ export interface ServiceAgreementsResponse {
 
 export interface ServiceAgreementResponse {
   agreement: ServiceAgreementSummary;
+}
+
+export interface ServiceAgreementReferenceDataResponse {
+  customers: CustomerAccountSummary[];
+  locations: LocationSummary[];
+  equipment: EquipmentSummary[];
 }
 
 export interface ServiceAgreementVisitTemplateInput {

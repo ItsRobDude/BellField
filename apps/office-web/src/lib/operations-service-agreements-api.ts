@@ -1,5 +1,6 @@
 import type {
   CreateServiceAgreementRequest,
+  ServiceAgreementReferenceDataResponse,
   ServiceAgreementResponse,
   ServiceAgreementsResponse,
   ServiceAgreementStatus,
@@ -13,6 +14,7 @@ export type {
   ServiceAgreementBillingCadence,
   ServiceAgreementCoveredEquipment,
   ServiceAgreementCoveredLocation,
+  ServiceAgreementReferenceDataResponse,
   ServiceAgreementResponse,
   ServiceAgreementsResponse,
   ServiceAgreementStatus,
@@ -58,6 +60,25 @@ export async function getOfficeServiceAgreement(input: {
 }): Promise<ServiceAgreementResponse> {
   return requestJson<ServiceAgreementResponse>(
     `/operations/service-agreements/${input.agreementId}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
+}
+
+export async function getOfficeServiceAgreementReferenceData(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+  agreementId?: string;
+}): Promise<ServiceAgreementReferenceDataResponse> {
+  const query = new URLSearchParams();
+  if (input.agreementId) {
+    query.set('agreementId', input.agreementId);
+  }
+  const suffix = query.toString();
+  return requestJson<ServiceAgreementReferenceDataResponse>(
+    `/operations/service-agreements/reference-data${suffix ? `?${suffix}` : ''}`,
     {
       apiBaseUrl: input.apiBaseUrl,
       sessionToken: input.sessionToken

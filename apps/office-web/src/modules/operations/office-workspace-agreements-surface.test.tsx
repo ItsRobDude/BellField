@@ -7,8 +7,7 @@ vi.mock('@/lib/operations-api', () => ({
   activateOfficeServiceAgreement: vi.fn(),
   createOfficeServiceAgreement: vi.fn(),
   endOfficeServiceAgreement: vi.fn(),
-  getOfficeEquipmentWorkspace: vi.fn(),
-  getOfficeJobsWorkspace: vi.fn(),
+  getOfficeServiceAgreementReferenceData: vi.fn(),
   listOfficeServiceAgreements: vi.fn(),
   pauseOfficeServiceAgreement: vi.fn(),
   updateOfficeServiceAgreement: vi.fn()
@@ -44,7 +43,7 @@ const agreement = {
 
 function arrange() {
   mockedApi.listOfficeServiceAgreements.mockResolvedValue({ agreements: [agreement] });
-  mockedApi.getOfficeJobsWorkspace.mockResolvedValue({
+  mockedApi.getOfficeServiceAgreementReferenceData.mockResolvedValue({
     customers: [
       {
         id: 'customer-1',
@@ -73,12 +72,6 @@ function arrange() {
         alternateBillToCustomerIds: []
       }
     ],
-    technicians: [],
-    jobs: []
-  });
-  mockedApi.getOfficeEquipmentWorkspace.mockResolvedValue({
-    locations: [],
-    suggestedEquipmentTypes: [],
     equipment: [
       {
         id: 'equipment-1',
@@ -131,12 +124,20 @@ describe('OfficeAgreementsSurface', () => {
     expect(screen.queryByRole('button', { name: 'New agreement' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Activate' })).toBeNull();
+    expect(mockedApi.getOfficeServiceAgreementReferenceData).not.toHaveBeenCalled();
   });
 
   it('creates an agreement with covered location and equipment selections', async () => {
     renderSurface();
     fireEvent.click(await screen.findByRole('button', { name: 'New agreement' }));
-    fireEvent.change(screen.getByRole('textbox', { name: 'Name' }), {
+    await waitFor(() =>
+      expect(mockedApi.getOfficeServiceAgreementReferenceData).toHaveBeenCalledWith({
+        apiBaseUrl: 'http://api.test',
+        sessionToken: 'session-token',
+        agreementId: undefined
+      })
+    );
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Name' }), {
       target: { value: 'Priority plan' }
     });
     fireEvent.click(screen.getByLabelText(/Main Shop/));
@@ -159,6 +160,20 @@ describe('OfficeAgreementsSurface', () => {
         })
       )
     );
+  });
+
+  it('loads edit reference data for the selected agreement before opening the form', async () => {
+    renderSurface();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    await waitFor(() =>
+      expect(mockedApi.getOfficeServiceAgreementReferenceData).toHaveBeenCalledWith({
+        apiBaseUrl: 'http://api.test',
+        sessionToken: 'session-token',
+        agreementId: 'agreement-1'
+      })
+    );
+    expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Annual maintenance');
   });
 
   it('activates a draft agreement from the detail panel', async () => {

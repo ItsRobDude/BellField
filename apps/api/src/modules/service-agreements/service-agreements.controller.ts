@@ -3,6 +3,7 @@ import { getBearerToken } from '../../common/http/bearer-token';
 import {
   CreateServiceAgreementRequestBodyDto,
   ListServiceAgreementsQueryDto,
+  ServiceAgreementReferenceDataQueryDto,
   ServiceAgreementStatusChangeRequestBodyDto,
   UpdateServiceAgreementRequestBodyDto
 } from './service-agreements.dto';
@@ -18,6 +19,14 @@ export class ServiceAgreementsController {
     @Query() query: ListServiceAgreementsQueryDto
   ) {
     return this.serviceAgreementsService.listAgreements(getBearerToken(auth), query);
+  }
+
+  @Get('reference-data')
+  async getReferenceData(
+    @Headers('authorization') auth: string | undefined,
+    @Query() query: ServiceAgreementReferenceDataQueryDto
+  ) {
+    return this.serviceAgreementsService.getReferenceData(getBearerToken(auth), query.agreementId);
   }
 
   @Get(':agreementId')

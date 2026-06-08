@@ -1,6 +1,7 @@
 import type {
   CreateServiceAgreementRequest,
   ServiceAgreementBillingCadence,
+  ServiceAgreementReferenceDataResponse,
   ServiceAgreementResponse,
   ServiceAgreementsResponse,
   ServiceAgreementStatus,
@@ -44,6 +45,7 @@ export const serviceAgreementVisitFrequencies = [
 export type ServiceAgreementDto = ServiceAgreementSummary;
 export type ServiceAgreementsResponseDto = ServiceAgreementsResponse;
 export type ServiceAgreementResponseDto = ServiceAgreementResponse;
+export type ServiceAgreementReferenceDataResponseDto = ServiceAgreementReferenceDataResponse;
 export type CreateServiceAgreementRequestDto = CreateServiceAgreementRequest;
 export type UpdateServiceAgreementRequestDto = UpdateServiceAgreementRequest;
 export type ServiceAgreementStatusChangeRequestDto = ServiceAgreementStatusChangeRequest;

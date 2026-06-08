@@ -41,6 +41,7 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
   getOfficeRegisterEntries: vi.fn(),
+  getOfficeServiceAgreementReferenceData: vi.fn(),
   activateOfficeServiceAgreement: vi.fn(),
   createOfficeServiceAgreement: vi.fn(),
   endOfficeServiceAgreement: vi.fn(),
@@ -543,6 +544,11 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
     locations: [],
     equipment: [],
     suggestedEquipmentTypes: []
+  });
+  mockedOperationsApi.getOfficeServiceAgreementReferenceData.mockResolvedValue({
+    customers: workspace.customers,
+    locations: workspace.locations,
+    equipment: []
   });
   mockedOperationsApi.listOfficeServiceAgreements.mockResolvedValue({ agreements: [] });
   mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({ registerEntries: [] });
