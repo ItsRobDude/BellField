@@ -28,6 +28,64 @@ export class ReportingController {
     return csv;
   }
 
+  @Get('ar-aging')
+  async getArAging(@Headers('authorization') auth: string | undefined) {
+    return this.reportingService.getArAging(getBearerToken(auth));
+  }
+
+  @Get('ar-aging/export')
+  async exportArAging(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportArAging(getBearerToken(auth));
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
+  @Get('sales-tax-summary')
+  async getSalesTaxSummary(@Headers('authorization') auth: string | undefined) {
+    return this.reportingService.getSalesTaxSummary(getBearerToken(auth));
+  }
+
+  @Get('sales-tax-summary/export')
+  async exportSalesTaxSummary(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportSalesTaxSummary(
+      getBearerToken(auth)
+    );
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
+  @Get('posted-invoices/export')
+  async exportPostedInvoices(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportPostedInvoices(
+      getBearerToken(auth)
+    );
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
+  @Get('payment-ledger/export')
+  async exportPaymentLedger(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportPaymentLedger(getBearerToken(auth));
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
   @Get('job-profitability')
   async getJobProfitability(@Headers('authorization') auth: string | undefined) {
     return this.reportingService.getJobProfitability(getBearerToken(auth));

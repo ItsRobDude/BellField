@@ -1,9 +1,13 @@
 import { ForbiddenException, Injectable } from '@nestjs/common';
 import type {
+  ArAgingReport,
   ArOpenBalancesReport,
   InventoryValuationReport,
   JobProfitabilityReport,
-  PermissionKey
+  PaymentLedgerExportRow,
+  PermissionKey,
+  PostedInvoiceExportRow,
+  SalesTaxSummaryReport
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -15,8 +19,8 @@ import {
 import { queryInventoryOnHand } from '../inventory/inventory-onhand-query';
 import { toCsv, type CsvColumn } from './report-csv';
 
-function roundMoney(value: number): number {
-  return Math.round(value * 100) / 100;
+function roundMoney(value: string | number): number {
+  return Math.round(Number(value) * 100) / 100;
 }
 
 function roundQuantity(value: number): number {
@@ -29,6 +33,52 @@ const AR_CSV_COLUMNS: CsvColumn<ArOpenBalancesReport['rows'][number]>[] = [
   { header: 'Net billed', value: (row) => row.netBilled },
   { header: 'Paid', value: (row) => row.paidTotal },
   { header: 'Amount due', value: (row) => row.amountDue }
+];
+
+const AR_AGING_CSV_COLUMNS: CsvColumn<ArAgingReport['rows'][number]>[] = [
+  { header: 'Job #', value: (row) => row.jobNumber },
+  { header: 'Customer', value: (row) => row.customerName },
+  { header: 'Oldest posted', value: (row) => row.oldestPostedAt.slice(0, 10) },
+  { header: 'Days old', value: (row) => row.daysOld },
+  { header: 'Bucket', value: (row) => row.bucket },
+  { header: 'Amount due', value: (row) => row.amountDue }
+];
+
+const SALES_TAX_CSV_COLUMNS: CsvColumn<SalesTaxSummaryReport['rows'][number]>[] = [
+  { header: 'Tax rate bps', value: (row) => row.taxRateBasisPoints },
+  { header: 'Invoice count', value: (row) => row.invoiceCount },
+  { header: 'Taxable base', value: (row) => row.taxableBase },
+  { header: 'Tax', value: (row) => row.tax },
+  { header: 'Total', value: (row) => row.total }
+];
+
+const POSTED_INVOICE_CSV_COLUMNS: CsvColumn<PostedInvoiceExportRow>[] = [
+  { header: 'Invoice ID', value: (row) => row.invoiceId },
+  { header: 'Job #', value: (row) => row.jobNumber },
+  { header: 'Customer', value: (row) => row.customerName },
+  { header: 'Kind', value: (row) => row.invoiceKind },
+  { header: 'Posted at', value: (row) => row.postedAt },
+  { header: 'Subtotal', value: (row) => row.subtotal },
+  { header: 'Discount', value: (row) => row.discount },
+  { header: 'Taxable base', value: (row) => row.taxableBase },
+  { header: 'Tax', value: (row) => row.tax },
+  { header: 'Total', value: (row) => row.total }
+];
+
+const PAYMENT_LEDGER_CSV_COLUMNS: CsvColumn<PaymentLedgerExportRow>[] = [
+  { header: 'Payment ID', value: (row) => row.paymentId },
+  { header: 'Invoice ID', value: (row) => row.invoiceId },
+  { header: 'Job #', value: (row) => row.jobNumber },
+  { header: 'Customer', value: (row) => row.customerName },
+  { header: 'Amount', value: (row) => row.amount },
+  { header: 'Method', value: (row) => row.method },
+  { header: 'Received at', value: (row) => row.receivedAt },
+  { header: 'Reference', value: (row) => row.reference ?? '' },
+  { header: 'Memo', value: (row) => row.memo ?? '' },
+  { header: 'Recorded by', value: (row) => row.recordedByName },
+  { header: 'Void', value: (row) => (row.isVoid ? 'yes' : 'no') },
+  { header: 'Voided at', value: (row) => row.voidedAt ?? '' },
+  { header: 'Void reason', value: (row) => row.voidReason ?? '' }
 ];
 
 const PROFITABILITY_CSV_COLUMNS: CsvColumn<JobProfitabilityReport['rows'][number]>[] = [
@@ -100,6 +150,102 @@ export class ReportingService {
     };
   }
 
+  /** AR aging by oldest posted invoice date. Gate: reports:view + invoices:view. */
+  async getArAging(sessionToken: string): Promise<ArAgingReport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, ['invoices:view']);
+    return this.buildArAging();
+  }
+
+  /** AR aging CSV export. Gate: reports:view + invoices:view + reports:export. */
+  async exportArAging(sessionToken: string): Promise<ReportCsvExport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'invoices:view',
+      'reports:export'
+    ]);
+    const report = await this.buildArAging();
+    return {
+      filename: `ar-aging-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(AR_AGING_CSV_COLUMNS, report.rows)
+    };
+  }
+
+  /** Sales-tax summary over posted invoice records. Gate: reports:view + invoices:view. */
+  async getSalesTaxSummary(sessionToken: string): Promise<SalesTaxSummaryReport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, ['invoices:view']);
+    return this.buildSalesTaxSummary();
+  }
+
+  /** Sales-tax summary CSV export. Gate: reports:view + invoices:view + reports:export. */
+  async exportSalesTaxSummary(sessionToken: string): Promise<ReportCsvExport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'invoices:view',
+      'reports:export'
+    ]);
+    const report = await this.buildSalesTaxSummary();
+    return {
+      filename: `sales-tax-summary-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(SALES_TAX_CSV_COLUMNS, report.rows)
+    };
+  }
+
+  /** Posted invoice CSV export. Gate: reports:view + invoices:view + reports:export. */
+  async exportPostedInvoices(sessionToken: string): Promise<ReportCsvExport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'invoices:view',
+      'reports:export'
+    ]);
+    const rows = await this.queryPostedInvoiceExportRows();
+    const date = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `posted-invoices-${date}.csv`,
+      csv: toCsv(POSTED_INVOICE_CSV_COLUMNS, rows)
+    };
+  }
+
+  /** Payment ledger CSV export. Gate: reports:view + payments:view + reports:export. */
+  async exportPaymentLedger(sessionToken: string): Promise<ReportCsvExport> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'payments:view',
+      'reports:export'
+    ]);
+    const rows = await this.queryPaymentLedgerExportRows();
+    const date = new Date().toISOString().slice(0, 10);
+    return {
+      filename: `payment-ledger-${date}.csv`,
+      csv: toCsv(PAYMENT_LEDGER_CSV_COLUMNS, rows)
+    };
+  }
+
   /** Build the AR report (no auth — callers gate first). */
   private async buildArOpenBalances(): Promise<ArOpenBalancesReport> {
     // Reuse the bookkeeping open-balance calculation (un-limited) — no duplicated invoice/payment math.
@@ -124,6 +270,233 @@ export class ReportingService {
       },
       rows
     };
+  }
+
+  private async buildArAging(): Promise<ArAgingReport> {
+    const rows = await this.queryArAgingRows();
+    const totals: ArAgingReport['totals'] = {
+      jobCount: rows.length,
+      current: 0,
+      days31To60: 0,
+      days61To90: 0,
+      over90: 0,
+      amountDue: 0
+    };
+
+    for (const row of rows) {
+      totals[row.bucket] = roundMoney(totals[row.bucket] + row.amountDue);
+      totals.amountDue = roundMoney(totals.amountDue + row.amountDue);
+    }
+
+    return { generatedAt: new Date().toISOString(), totals, rows };
+  }
+
+  private async queryArAgingRows(): Promise<ArAgingReport['rows']> {
+    const result = await this.databaseService.query<{
+      jobId: string;
+      jobNumber: string;
+      customerName: string;
+      oldestPostedAt: string | Date;
+      amountDue: string | number;
+    }>(
+      `with billed as (
+         select
+           i.job_id,
+           sum(
+             case
+               when i.status = 'posted' and i.invoice_kind in ('main', 'adjustment') then i.total_amount
+               when i.status = 'posted' and i.invoice_kind = 'credit' then -i.total_amount
+               else 0
+             end
+           ) as net_billed,
+           min(i.posted_at) filter (where i.status = 'posted') as oldest_posted_at
+         from invoices i
+         group by i.job_id
+       ),
+       paid as (
+         select inv.job_id, coalesce(sum(p.amount), 0) as paid_total
+         from payments p
+         join invoices inv on inv.id = p.invoice_id
+         where p.is_void = false
+         group by inv.job_id
+       )
+       select
+         j.id as "jobId",
+         j.job_number as "jobNumber",
+         c.name as "customerName",
+         b.oldest_posted_at as "oldestPostedAt",
+         coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) as "amountDue"
+       from billed b
+       join jobs j on j.id = b.job_id
+       join customers c on c.id = j.bill_to_customer_id
+       left join paid pd on pd.job_id = b.job_id
+       where coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) > 0
+         and b.oldest_posted_at is not null
+       order by "amountDue" desc`
+    );
+
+    const today = Date.now();
+    return result.rows.map((row) => {
+      const oldestPostedAt = new Date(row.oldestPostedAt).toISOString();
+      const daysOld = Math.max(
+        0,
+        Math.floor((today - new Date(oldestPostedAt).getTime()) / (1000 * 60 * 60 * 24))
+      );
+      return {
+        jobId: row.jobId,
+        jobNumber: row.jobNumber,
+        customerName: row.customerName,
+        oldestPostedAt,
+        daysOld,
+        amountDue: roundMoney(row.amountDue),
+        bucket: getAgingBucket(daysOld)
+      };
+    });
+  }
+
+  private async buildSalesTaxSummary(): Promise<SalesTaxSummaryReport> {
+    const result = await this.databaseService.query<{
+      taxRateBasisPoints: number;
+      invoiceCount: string | number;
+      taxableBase: string | number;
+      tax: string | number;
+      total: string | number;
+    }>(
+      `select
+         tax_rate_basis_points as "taxRateBasisPoints",
+         count(*) as "invoiceCount",
+         coalesce(sum(case when invoice_kind = 'credit' then -taxable_base_amount else taxable_base_amount end), 0) as "taxableBase",
+         coalesce(sum(case when invoice_kind = 'credit' then -tax_amount else tax_amount end), 0) as "tax",
+         coalesce(sum(case when invoice_kind = 'credit' then -total_amount else total_amount end), 0) as "total"
+       from invoices
+       where status = 'posted'
+       group by tax_rate_basis_points
+       order by tax_rate_basis_points asc`
+    );
+
+    const rows = result.rows.map((row) => ({
+      taxRateBasisPoints: row.taxRateBasisPoints,
+      invoiceCount: Number(row.invoiceCount),
+      taxableBase: roundMoney(row.taxableBase),
+      tax: roundMoney(row.tax),
+      total: roundMoney(row.total)
+    }));
+    const totals = rows.reduce(
+      (acc, row) => ({
+        invoiceCount: acc.invoiceCount + row.invoiceCount,
+        taxableBase: roundMoney(acc.taxableBase + row.taxableBase),
+        tax: roundMoney(acc.tax + row.tax),
+        total: roundMoney(acc.total + row.total)
+      }),
+      { invoiceCount: 0, taxableBase: 0, tax: 0, total: 0 }
+    );
+
+    return { generatedAt: new Date().toISOString(), totals, rows };
+  }
+
+  private async queryPostedInvoiceExportRows(): Promise<PostedInvoiceExportRow[]> {
+    const result = await this.databaseService.query<{
+      invoiceId: string;
+      jobId: string;
+      jobNumber: string;
+      customerName: string;
+      invoiceKind: PostedInvoiceExportRow['invoiceKind'];
+      postedAt: string | Date;
+      subtotal: string | number;
+      discount: string | number;
+      taxableBase: string | number;
+      tax: string | number;
+      total: string | number;
+    }>(
+      `select
+         i.id as "invoiceId",
+         i.job_id as "jobId",
+         j.job_number as "jobNumber",
+         c.name as "customerName",
+         i.invoice_kind as "invoiceKind",
+         i.posted_at as "postedAt",
+         i.subtotal_amount as "subtotal",
+         i.discount_amount_applied as "discount",
+         i.taxable_base_amount as "taxableBase",
+         i.tax_amount as "tax",
+         i.total_amount as "total"
+       from invoices i
+       join jobs j on j.id = i.job_id
+       join customers c on c.id = j.bill_to_customer_id
+       where i.status = 'posted'
+       order by i.posted_at desc, i.id asc`
+    );
+
+    return result.rows.map((row) => ({
+      invoiceId: row.invoiceId,
+      jobId: row.jobId,
+      jobNumber: row.jobNumber,
+      customerName: row.customerName,
+      invoiceKind: row.invoiceKind,
+      postedAt: new Date(row.postedAt).toISOString(),
+      subtotal: roundMoney(row.subtotal),
+      discount: roundMoney(row.discount),
+      taxableBase: roundMoney(row.taxableBase),
+      tax: roundMoney(row.tax),
+      total: roundMoney(row.total)
+    }));
+  }
+
+  private async queryPaymentLedgerExportRows(): Promise<PaymentLedgerExportRow[]> {
+    const result = await this.databaseService.query<{
+      paymentId: string;
+      invoiceId: string;
+      jobId: string;
+      jobNumber: string;
+      customerName: string;
+      amount: string | number;
+      method: string;
+      receivedAt: string | Date;
+      reference: string | null;
+      memo: string | null;
+      recordedByName: string;
+      isVoid: boolean;
+      voidedAt: string | Date | null;
+      voidReason: string | null;
+    }>(
+      `select
+         p.id as "paymentId",
+         p.invoice_id as "invoiceId",
+         i.job_id as "jobId",
+         j.job_number as "jobNumber",
+         c.name as "customerName",
+         p.amount,
+         p.method,
+         p.received_at as "receivedAt",
+         p.reference,
+         p.memo,
+         p.recorded_by_name as "recordedByName",
+         p.is_void as "isVoid",
+         p.voided_at as "voidedAt",
+         p.void_reason as "voidReason"
+       from payments p
+       join invoices i on i.id = p.invoice_id
+       join jobs j on j.id = i.job_id
+       join customers c on c.id = j.bill_to_customer_id
+       order by p.received_at desc, p.id asc`
+    );
+
+    return result.rows.map((row) => ({
+      paymentId: row.paymentId,
+      invoiceId: row.invoiceId,
+      jobId: row.jobId,
+      jobNumber: row.jobNumber,
+      customerName: row.customerName,
+      amount: roundMoney(row.amount),
+      method: row.method,
+      receivedAt: new Date(row.receivedAt).toISOString(),
+      reference: row.reference ?? undefined,
+      memo: row.memo ?? undefined,
+      recordedByName: row.recordedByName,
+      isVoid: row.isVoid,
+      voidedAt: row.voidedAt ? new Date(row.voidedAt).toISOString() : undefined,
+      voidReason: row.voidReason ?? undefined
+    }));
   }
 
   /** Job profitability. Gate: reports:view + jobCosting:view. */
@@ -306,4 +679,11 @@ export class ReportingService {
       }
     }
   }
+}
+
+function getAgingBucket(daysOld: number): ArAgingReport['rows'][number]['bucket'] {
+  if (daysOld <= 30) return 'current';
+  if (daysOld <= 60) return 'days31To60';
+  if (daysOld <= 90) return 'days61To90';
+  return 'over90';
 }

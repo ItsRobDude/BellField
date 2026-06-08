@@ -28,6 +28,75 @@ export interface ArOpenBalancesReport {
   }>;
 }
 
+export interface ArAgingReport {
+  generatedAt: string;
+  totals: {
+    jobCount: number;
+    current: number;
+    days31To60: number;
+    days61To90: number;
+    over90: number;
+    amountDue: number;
+  };
+  rows: Array<{
+    jobId: string;
+    jobNumber: string;
+    customerName: string;
+    oldestPostedAt: string;
+    daysOld: number;
+    amountDue: number;
+    bucket: 'current' | 'days31To60' | 'days61To90' | 'over90';
+  }>;
+}
+
+export interface SalesTaxSummaryReport {
+  generatedAt: string;
+  totals: {
+    invoiceCount: number;
+    taxableBase: number;
+    tax: number;
+    total: number;
+  };
+  rows: Array<{
+    taxRateBasisPoints: number;
+    invoiceCount: number;
+    taxableBase: number;
+    tax: number;
+    total: number;
+  }>;
+}
+
+export interface PostedInvoiceExportRow {
+  invoiceId: string;
+  jobId: string;
+  jobNumber: string;
+  customerName: string;
+  invoiceKind: 'main' | 'adjustment' | 'credit';
+  postedAt: string;
+  subtotal: number;
+  discount: number;
+  taxableBase: number;
+  tax: number;
+  total: number;
+}
+
+export interface PaymentLedgerExportRow {
+  paymentId: string;
+  invoiceId: string;
+  jobId: string;
+  jobNumber: string;
+  customerName: string;
+  amount: number;
+  method: string;
+  receivedAt: string;
+  reference?: string;
+  memo?: string;
+  recordedByName: string;
+  isVoid: boolean;
+  voidedAt?: string;
+  voidReason?: string;
+}
+
 /** Per-job profitability. Revenue from posted invoices; cost from the M9 rollup/snapshot (never
  * invoice-line unit cost). When `costComplete` is false the profit is "known so far", not final. */
 export interface JobProfitabilityReport {

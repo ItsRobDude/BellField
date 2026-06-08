@@ -1,14 +1,18 @@
 import type {
+  ArAgingReport,
   ArOpenBalancesReport,
   InventoryValuationReport,
-  JobProfitabilityReport
+  JobProfitabilityReport,
+  SalesTaxSummaryReport
 } from '@bellfield/contracts';
 import { requestBlob, requestJson } from './operations-api-base';
 
 export type {
   ArOpenBalancesReport,
+  ArAgingReport,
   JobProfitabilityReport,
-  InventoryValuationReport
+  InventoryValuationReport,
+  SalesTaxSummaryReport
 } from '@bellfield/contracts';
 
 /** AR / open-balance snapshot. Gate: reports:view + invoices:view. */
@@ -28,6 +32,66 @@ export async function downloadArOpenBalancesCsv(input: {
   apiBaseUrl?: string;
 }): Promise<Blob> {
   return requestBlob('/operations/reports/ar-open-balances/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function getArAging(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<ArAgingReport> {
+  return requestJson<ArAgingReport>('/operations/reports/ar-aging', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadArAgingCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/ar-aging/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function getSalesTaxSummary(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<SalesTaxSummaryReport> {
+  return requestJson<SalesTaxSummaryReport>('/operations/reports/sales-tax-summary', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadSalesTaxSummaryCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/sales-tax-summary/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadPostedInvoicesCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/posted-invoices/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadPaymentLedgerCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/payment-ledger/export', {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl
   });

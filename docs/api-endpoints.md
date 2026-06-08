@@ -199,14 +199,20 @@ on-hand) — the report layer only aggregates totals. Primary gate `reports:view
 secondary gate; CSV export adds `reports:export` (enforced server-side, not UI-only). See
 `docs/m10-trust-admin-plan.md` §5c.
 
-| Method | Path                                             | Surface | Permission gate                    | Purpose                                                                                                       |
-| ------ | ------------------------------------------------ | ------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/operations/reports/ar-open-balances`           | office  | `reports:view` + `invoices:view`   | Jobs with an open balance: net billed (posted main+adjustment−credit) − non-void payments, where > 0.         |
-| `GET`  | `/operations/reports/ar-open-balances/export`    | office  | above + `reports:export`           | The AR report as a downloadable CSV.                                                                          |
-| `GET`  | `/operations/reports/job-profitability`          | office  | `reports:view` + `jobCosting:view` | Per-job revenue (posted invoices) vs cost (rollup/snapshot); incomplete-cost flags; null margin when partial. |
-| `GET`  | `/operations/reports/job-profitability/export`   | office  | above + `reports:export`           | The profitability report as a downloadable CSV.                                                               |
-| `GET`  | `/operations/reports/inventory-valuation`        | office  | `reports:view` + `inventory:view`  | On-hand per item+location at weighted-average cost; zero balances excluded.                                   |
-| `GET`  | `/operations/reports/inventory-valuation/export` | office  | above + `reports:export`           | The valuation report as a downloadable CSV.                                                                   |
+| Method | Path                                             | Surface | Permission gate                                     | Purpose                                                                                                       |
+| ------ | ------------------------------------------------ | ------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/reports/ar-open-balances`           | office  | `reports:view` + `invoices:view`                    | Jobs with an open balance: net billed (posted main+adjustment−credit) − non-void payments, where > 0.         |
+| `GET`  | `/operations/reports/ar-open-balances/export`    | office  | above + `reports:export`                            | The AR report as a downloadable CSV.                                                                          |
+| `GET`  | `/operations/reports/ar-aging`                   | office  | `reports:view` + `invoices:view`                    | Open AR bucketed by the oldest posted invoice date for each job.                                              |
+| `GET`  | `/operations/reports/ar-aging/export`            | office  | above + `reports:export`                            | The AR aging report as a downloadable CSV.                                                                    |
+| `GET`  | `/operations/reports/sales-tax-summary`          | office  | `reports:view` + `invoices:view`                    | Posted invoice taxable base, tax, and totals grouped by tax rate; credits subtract.                           |
+| `GET`  | `/operations/reports/sales-tax-summary/export`   | office  | above + `reports:export`                            | The sales-tax summary as a downloadable CSV.                                                                  |
+| `GET`  | `/operations/reports/posted-invoices/export`     | office  | above + `reports:export`                            | Posted invoice accounting handoff CSV.                                                                        |
+| `GET`  | `/operations/reports/payment-ledger/export`      | office  | `reports:view` + `payments:view` + `reports:export` | Payment ledger accounting handoff CSV including void markers.                                                 |
+| `GET`  | `/operations/reports/job-profitability`          | office  | `reports:view` + `jobCosting:view`                  | Per-job revenue (posted invoices) vs cost (rollup/snapshot); incomplete-cost flags; null margin when partial. |
+| `GET`  | `/operations/reports/job-profitability/export`   | office  | above + `reports:export`                            | The profitability report as a downloadable CSV.                                                               |
+| `GET`  | `/operations/reports/inventory-valuation`        | office  | `reports:view` + `inventory:view`                   | On-hand per item+location at weighted-average cost; zero balances excluded.                                   |
+| `GET`  | `/operations/reports/inventory-valuation/export` | office  | above + `reports:export`                            | The valuation report as a downloadable CSV.                                                                   |
 
 `reports:view` → Owner, Admin, Dispatcher, BookKeeping; `reports:export` → Owner, Admin, BookKeeping. The
 secondary gates make the surface per-report: e.g. Dispatcher sees only AR (no `jobCosting:view`/

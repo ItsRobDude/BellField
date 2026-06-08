@@ -2,15 +2,23 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import {
+  downloadArAgingCsv,
   downloadArOpenBalancesCsv,
   downloadInventoryValuationCsv,
   downloadJobProfitabilityCsv,
+  downloadPaymentLedgerCsv,
+  downloadPostedInvoicesCsv,
+  downloadSalesTaxSummaryCsv,
+  getArAging,
   getArOpenBalances,
   getInventoryValuation,
   getJobProfitability,
+  getSalesTaxSummary,
+  type ArAgingReport,
   type ArOpenBalancesReport,
   type InventoryValuationReport,
-  type JobProfitabilityReport
+  type JobProfitabilityReport,
+  type SalesTaxSummaryReport
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -26,7 +34,7 @@ export type OfficeReportsSurfaceProps = {
   canViewInventoryValuation: boolean;
 };
 
-type ReportKey = 'ar' | 'profitability' | 'inventory';
+type ReportKey = 'ar' | 'aging' | 'tax' | 'profitability' | 'inventory';
 
 const numberCellStyle: CSSProperties = { ...styles.tableCell, textAlign: 'right' };
 const numberHeadStyle: CSSProperties = { ...styles.tableHeadCell, textAlign: 'right' };
@@ -80,6 +88,13 @@ function formatMargin(basisPoints: number | null): string {
   return basisPoints === null ? '—' : `${(basisPoints / 100).toFixed(1)}%`;
 }
 
+function agingBucketLabel(bucket: ArAgingReport['rows'][number]['bucket']): string {
+  if (bucket === 'current') return 'Current';
+  if (bucket === 'days31To60') return '31-60';
+  if (bucket === 'days61To90') return '61-90';
+  return 'Over 90';
+}
+
 // Top-level Reports surface (M10 slice 3). Fixed, read-only reports — no builder. Tabs appear per the
 // actor's gates: AR/Open Balances always; Job Profitability with jobCosting:view (Inventory in 3C).
 export function OfficeReportsSurface({
@@ -92,6 +107,8 @@ export function OfficeReportsSurface({
   const [active, setActive] = useState<ReportKey>('ar');
   const tabs: Array<{ key: ReportKey; label: string }> = [
     { key: 'ar', label: 'AR / Open Balances' },
+    { key: 'aging', label: 'AR Aging' },
+    { key: 'tax', label: 'Sales Tax' },
     ...(canViewProfitability
       ? [{ key: 'profitability' as ReportKey, label: 'Job Profitability' }]
       : []),
@@ -120,6 +137,20 @@ export function OfficeReportsSurface({
 
       {active === 'ar' ? (
         <ArOpenBalancesReportView
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canExport={canExportReports}
+        />
+      ) : null}
+      {active === 'aging' ? (
+        <ArAgingReportView
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canExport={canExportReports}
+        />
+      ) : null}
+      {active === 'tax' ? (
+        <SalesTaxSummaryReportView
           apiBaseUrl={apiBaseUrl}
           sessionToken={sessionToken}
           canExport={canExportReports}
@@ -186,14 +217,44 @@ function ArOpenBalancesReportView({
     }
   }
 
+  async function handlePostedInvoiceExport() {
+    try {
+      const blob = await downloadPostedInvoicesCsv({ apiBaseUrl, sessionToken });
+      downloadBlob(`posted-invoices-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export invoices.');
+    }
+  }
+
+  async function handlePaymentExport() {
+    try {
+      const blob = await downloadPaymentLedgerCsv({ apiBaseUrl, sessionToken });
+      downloadBlob(`payment-ledger-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export payments.');
+    }
+  }
+
   return (
     <div>
       <div style={styles.row}>
         <h2 style={{ ...styles.heading, fontSize: '1rem' }}>AR / Open Balances</h2>
         {canExport && report ? (
-          <button type="button" style={styles.button} onClick={() => void handleExport()}>
-            Export CSV
-          </button>
+          <div style={styles.row}>
+            <button type="button" style={styles.button} onClick={() => void handleExport()}>
+              Export AR CSV
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => void handlePostedInvoiceExport()}
+            >
+              Export invoices CSV
+            </button>
+            <button type="button" style={styles.button} onClick={() => void handlePaymentExport()}>
+              Export payments CSV
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -230,6 +291,206 @@ function ArOpenBalancesReportView({
                     <td style={numberCellStyle}>{money(r.netBilled)}</td>
                     <td style={numberCellStyle}>{money(r.paidTotal)}</td>
                     <td style={numberCellStyle}>{money(r.amountDue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function ArAgingReportView({
+  apiBaseUrl,
+  sessionToken,
+  canExport
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  canExport: boolean;
+}) {
+  const [report, setReport] = useState<ArAgingReport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setErrorMessage(null);
+    getArAging({ apiBaseUrl, sessionToken })
+      .then((result) => {
+        if (active) setReport(result);
+      })
+      .catch((error) => {
+        if (active) {
+          setErrorMessage(error instanceof Error ? error.message : 'Unable to load report.');
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionToken]);
+
+  async function handleExport() {
+    try {
+      const blob = await downloadArAgingCsv({ apiBaseUrl, sessionToken });
+      downloadBlob(`ar-aging-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export the report.');
+    }
+  }
+
+  return (
+    <div>
+      <div style={styles.row}>
+        <h2 style={{ ...styles.heading, fontSize: '1rem' }}>AR Aging</h2>
+        {canExport && report ? (
+          <button type="button" style={styles.button} onClick={() => void handleExport()}>
+            Export CSV
+          </button>
+        ) : null}
+      </div>
+
+      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      {isLoading ? <p style={styles.notice}>Loading…</p> : null}
+
+      {report ? (
+        <>
+          <div style={totalsStyle}>
+            <TotalItem label="Jobs owing" value={String(report.totals.jobCount)} />
+            <TotalItem label="Current" value={money(report.totals.current)} />
+            <TotalItem label="31-60" value={money(report.totals.days31To60)} />
+            <TotalItem label="61-90" value={money(report.totals.days61To90)} />
+            <TotalItem label="Over 90" value={money(report.totals.over90)} />
+            <TotalItem label="Amount due" value={money(report.totals.amountDue)} />
+          </div>
+
+          {report.rows.length === 0 ? (
+            <p style={styles.notice}>No jobs with an aged open balance.</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeadCell}>Job #</th>
+                  <th style={styles.tableHeadCell}>Customer</th>
+                  <th style={styles.tableHeadCell}>Oldest posted</th>
+                  <th style={numberHeadStyle}>Days</th>
+                  <th style={styles.tableHeadCell}>Bucket</th>
+                  <th style={numberHeadStyle}>Amount due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((r) => (
+                  <tr key={r.jobId}>
+                    <td style={styles.tableCell}>{r.jobNumber}</td>
+                    <td style={styles.tableCell}>{r.customerName}</td>
+                    <td style={styles.tableCell}>{r.oldestPostedAt.slice(0, 10)}</td>
+                    <td style={numberCellStyle}>{r.daysOld}</td>
+                    <td style={styles.tableCell}>{agingBucketLabel(r.bucket)}</td>
+                    <td style={numberCellStyle}>{money(r.amountDue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+function SalesTaxSummaryReportView({
+  apiBaseUrl,
+  sessionToken,
+  canExport
+}: {
+  apiBaseUrl: string;
+  sessionToken: string;
+  canExport: boolean;
+}) {
+  const [report, setReport] = useState<SalesTaxSummaryReport | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    setIsLoading(true);
+    setErrorMessage(null);
+    getSalesTaxSummary({ apiBaseUrl, sessionToken })
+      .then((result) => {
+        if (active) setReport(result);
+      })
+      .catch((error) => {
+        if (active) {
+          setErrorMessage(error instanceof Error ? error.message : 'Unable to load report.');
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [apiBaseUrl, sessionToken]);
+
+  async function handleExport() {
+    try {
+      const blob = await downloadSalesTaxSummaryCsv({ apiBaseUrl, sessionToken });
+      downloadBlob(`sales-tax-summary-${report?.generatedAt.slice(0, 10) ?? 'export'}.csv`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to export the report.');
+    }
+  }
+
+  return (
+    <div>
+      <div style={styles.row}>
+        <h2 style={{ ...styles.heading, fontSize: '1rem' }}>Sales Tax</h2>
+        {canExport && report ? (
+          <button type="button" style={styles.button} onClick={() => void handleExport()}>
+            Export CSV
+          </button>
+        ) : null}
+      </div>
+
+      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      {isLoading ? <p style={styles.notice}>Loading…</p> : null}
+
+      {report ? (
+        <>
+          <div style={totalsStyle}>
+            <TotalItem label="Posted records" value={String(report.totals.invoiceCount)} />
+            <TotalItem label="Taxable base" value={money(report.totals.taxableBase)} />
+            <TotalItem label="Tax" value={money(report.totals.tax)} />
+            <TotalItem label="Total" value={money(report.totals.total)} />
+          </div>
+
+          {report.rows.length === 0 ? (
+            <p style={styles.notice}>No posted invoice tax yet.</p>
+          ) : (
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.tableHeadCell}>Tax rate</th>
+                  <th style={numberHeadStyle}>Posted records</th>
+                  <th style={numberHeadStyle}>Taxable base</th>
+                  <th style={numberHeadStyle}>Tax</th>
+                  <th style={numberHeadStyle}>Total</th>
+                </tr>
+              </thead>
+              <tbody>
+                {report.rows.map((r) => (
+                  <tr key={r.taxRateBasisPoints}>
+                    <td style={styles.tableCell}>{(r.taxRateBasisPoints / 100).toFixed(2)}%</td>
+                    <td style={numberCellStyle}>{r.invoiceCount}</td>
+                    <td style={numberCellStyle}>{money(r.taxableBase)}</td>
+                    <td style={numberCellStyle}>{money(r.tax)}</td>
+                    <td style={numberCellStyle}>{money(r.total)}</td>
                   </tr>
                 ))}
               </tbody>

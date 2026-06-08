@@ -1,17 +1,25 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+  ArAgingReport,
   ArOpenBalancesReport,
   InventoryValuationReport,
-  JobProfitabilityReport
+  JobProfitabilityReport,
+  SalesTaxSummaryReport
 } from '@bellfield/contracts';
 import * as reportingApi from '@/lib/reporting-api';
 import * as downloadFile from '@/lib/download-file';
 import { OfficeReportsSurface } from './office-reports-surface';
 
 vi.mock('@/lib/reporting-api', () => ({
+  getArAging: vi.fn(),
   getArOpenBalances: vi.fn(),
+  getSalesTaxSummary: vi.fn(),
+  downloadArAgingCsv: vi.fn(),
   downloadArOpenBalancesCsv: vi.fn(),
+  downloadPaymentLedgerCsv: vi.fn(),
+  downloadPostedInvoicesCsv: vi.fn(),
+  downloadSalesTaxSummaryCsv: vi.fn(),
   getJobProfitability: vi.fn(),
   downloadJobProfitabilityCsv: vi.fn(),
   getInventoryValuation: vi.fn(),
@@ -118,6 +126,43 @@ const inventoryReport: InventoryValuationReport = {
   ]
 };
 
+const agingReport: ArAgingReport = {
+  generatedAt: '2026-06-06T00:00:00.000Z',
+  totals: {
+    jobCount: 1,
+    current: 0,
+    days31To60: 70,
+    days61To90: 0,
+    over90: 0,
+    amountDue: 70
+  },
+  rows: [
+    {
+      jobId: 'a',
+      jobNumber: '1003',
+      customerName: 'Acme',
+      oldestPostedAt: '2026-05-01T00:00:00.000Z',
+      daysOld: 38,
+      amountDue: 70,
+      bucket: 'days31To60'
+    }
+  ]
+};
+
+const salesTaxReport: SalesTaxSummaryReport = {
+  generatedAt: '2026-06-06T00:00:00.000Z',
+  totals: { invoiceCount: 2, taxableBase: 100, tax: 8.25, total: 108.25 },
+  rows: [
+    {
+      taxRateBasisPoints: 825,
+      invoiceCount: 2,
+      taxableBase: 100,
+      tax: 8.25,
+      total: 108.25
+    }
+  ]
+};
+
 function renderSurface(
   canExportReports: boolean,
   canViewProfitability = false,
@@ -135,7 +180,9 @@ function renderSurface(
 }
 
 beforeEach(() => {
+  mockedApi.getArAging.mockResolvedValue(agingReport);
   mockedApi.getArOpenBalances.mockResolvedValue(report);
+  mockedApi.getSalesTaxSummary.mockResolvedValue(salesTaxReport);
   mockedApi.getJobProfitability.mockResolvedValue(profitabilityReport);
   mockedApi.getInventoryValuation.mockResolvedValue(inventoryReport);
 });
@@ -156,7 +203,7 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
   it('hides the export button without reports:export', async () => {
     renderSurface(false);
     await screen.findByText('Acme');
-    expect(screen.queryByRole('button', { name: 'Export CSV' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Export AR CSV' })).toBeNull();
   });
 
   it('downloads the server-rendered CSV when reports:export is present', async () => {
@@ -164,10 +211,21 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
     mockedApi.downloadArOpenBalancesCsv.mockResolvedValue(blob);
     renderSurface(true);
     await screen.findByText('Acme');
-    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export AR CSV' }));
     await waitFor(() => expect(mockedApi.downloadArOpenBalancesCsv).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(mockedDownload.downloadBlob).toHaveBeenCalledTimes(1));
     expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(/^ar-open-balances-2026-06-06/);
+  });
+
+  it('downloads posted invoice and payment CSV handoff files', async () => {
+    mockedApi.downloadPostedInvoicesCsv.mockResolvedValue(new Blob(['posted']));
+    mockedApi.downloadPaymentLedgerCsv.mockResolvedValue(new Blob(['payments']));
+    renderSurface(true);
+    await screen.findByText('Acme');
+    fireEvent.click(screen.getByRole('button', { name: 'Export invoices CSV' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Export payments CSV' }));
+    await waitFor(() => expect(mockedApi.downloadPostedInvoicesCsv).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mockedApi.downloadPaymentLedgerCsv).toHaveBeenCalledTimes(1));
   });
 
   it('shows the empty state when no jobs owe', async () => {
@@ -184,6 +242,30 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
     mockedApi.getArOpenBalances.mockRejectedValue(new Error('Forbidden'));
     renderSurface(true);
     await waitFor(() => expect(screen.getByText('Forbidden')).toBeInTheDocument());
+  });
+});
+
+describe('OfficeReportsSurface (AR Aging)', () => {
+  it('renders aged balances and exports CSV', async () => {
+    mockedApi.downloadArAgingCsv.mockResolvedValue(new Blob(['csv'], { type: 'text/csv' }));
+    renderSurface(true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'AR Aging' }));
+    await waitFor(() => expect(screen.getAllByText('31-60').length).toBeGreaterThan(0));
+    expect(screen.getByText('38')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(mockedApi.downloadArAgingCsv).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('OfficeReportsSurface (Sales Tax)', () => {
+  it('renders tax summary rows and exports CSV', async () => {
+    mockedApi.downloadSalesTaxSummaryCsv.mockResolvedValue(new Blob(['csv'], { type: 'text/csv' }));
+    renderSurface(true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Sales Tax' }));
+    expect(await screen.findByText('8.25%')).toBeInTheDocument();
+    expect(screen.getAllByText('$108.25').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
+    await waitFor(() => expect(mockedApi.downloadSalesTaxSummaryCsv).toHaveBeenCalledTimes(1));
   });
 });
 
