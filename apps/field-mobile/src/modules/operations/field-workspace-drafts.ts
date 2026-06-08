@@ -3,6 +3,8 @@ import type {
   AppointmentStatus,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  FieldCatalogItem,
+  RegisterCatalogSnapshot,
   RegisterEntryKind
 } from '@/lib/operations-api';
 
@@ -46,6 +48,8 @@ export type RegisterEntryDraft = {
    * server auto-costs it as a tracked-inventory issue; empty when capturing free-text. */
   inventoryItemId: string;
   inventoryLocationId: string;
+  catalogItemId: string;
+  catalogSnapshot?: RegisterCatalogSnapshot;
 };
 
 export type FinishReviewState = {
@@ -103,7 +107,58 @@ export function createRegisterEntryDraft(
     partNumber: entry?.partNumber ?? '',
     inventorySourceLabel: entry?.inventorySourceLabel ?? '',
     inventoryItemId: entry?.inventoryItemId ?? '',
-    inventoryLocationId: entry?.inventoryLocationId ?? ''
+    inventoryLocationId: entry?.inventoryLocationId ?? '',
+    catalogItemId: entry?.catalogItemId ?? '',
+    catalogSnapshot: entry?.catalogSnapshot
+  };
+}
+
+export function createCatalogRegisterDraftPatch(
+  item: FieldCatalogItem,
+  truckStockItems: {
+    itemId: string;
+    sku?: string;
+    locationId: string;
+    locationName: string;
+    unitOfMeasure?: string;
+  }[]
+): Partial<RegisterEntryDraft> {
+  const registerEntryKind = mapCatalogKindToRegisterEntryKind(item.kind);
+  const unitPrice = item.defaultSalePrice ?? 0;
+  const truckMatch = item.linkedInventoryItemId
+    ? truckStockItems.find((stockItem) => stockItem.itemId === item.linkedInventoryItemId)
+    : undefined;
+  const catalogSnapshot: RegisterCatalogSnapshot = {
+    catalogItemId: item.id,
+    code: item.code,
+    name: item.name,
+    kind: item.kind,
+    category: item.category,
+    description: item.description,
+    unitOfMeasure: item.unitOfMeasure,
+    selectedUnitPrice: item.defaultSalePrice,
+    taxable: item.taxableDefault,
+    priceMode: 'standard',
+    defaultSalePrice: item.defaultSalePrice,
+    agreementPrice: item.agreementPrice,
+    linkedInventoryItemId: item.linkedInventoryItemId,
+    linkedInventoryItemSku: item.linkedInventoryItemSku,
+    linkedInventoryItemName: item.linkedInventoryItemName
+  };
+
+  return {
+    registerEntryKind,
+    description: item.description || item.name,
+    quantity: '1',
+    unitOfMeasure: item.unitOfMeasure ?? 'each',
+    unitPrice: item.defaultSalePrice === undefined ? '' : String(item.defaultSalePrice),
+    totalAmount: String(unitPrice),
+    partNumber: item.code ?? item.linkedInventoryItemSku ?? '',
+    inventoryItemId: truckMatch && registerEntryKind === 'part' ? truckMatch.itemId : '',
+    inventoryLocationId: truckMatch && registerEntryKind === 'part' ? truckMatch.locationId : '',
+    inventorySourceLabel: truckMatch && registerEntryKind === 'part' ? truckMatch.locationName : '',
+    catalogItemId: item.id,
+    catalogSnapshot
   };
 }
 
@@ -123,6 +178,8 @@ export function parseRegisterEntryDraft(
         inventorySourceLabel?: string;
         inventoryItemId?: string;
         inventoryLocationId?: string;
+        catalogItemId?: string;
+        catalogSnapshot?: RegisterCatalogSnapshot;
       };
     }
   | { ok: false; message: string } {
@@ -173,9 +230,33 @@ export function parseRegisterEntryDraft(
       partNumber: draft.partNumber.trim() || undefined,
       inventorySourceLabel: draft.inventorySourceLabel.trim() || undefined,
       inventoryItemId: hasStructuredRefs ? inventoryItemId : undefined,
-      inventoryLocationId: hasStructuredRefs ? inventoryLocationId : undefined
+      inventoryLocationId: hasStructuredRefs ? inventoryLocationId : undefined,
+      catalogItemId: draft.catalogItemId.trim() || undefined,
+      catalogSnapshot: draft.catalogSnapshot
     }
   };
+}
+
+export function mapCatalogKindToRegisterEntryKind(
+  kind: FieldCatalogItem['kind']
+): RegisterEntryKind {
+  if (kind === 'service') {
+    return 'serviceItem';
+  }
+
+  if (kind === 'part' || kind === 'equipment') {
+    return 'part';
+  }
+
+  if (kind === 'agreement') {
+    return 'membership';
+  }
+
+  if (kind === 'labor') {
+    return 'labor';
+  }
+
+  return 'other';
 }
 
 export function formatAppointmentStatusLabel(status: AppointmentStatus): string {

@@ -274,6 +274,8 @@ export async function drainFieldSyncQueue(
             inventorySourceLabel: operation.inventorySourceLabel,
             inventoryItemId: operation.inventoryItemId,
             inventoryLocationId: operation.inventoryLocationId,
+            catalogItemId: operation.catalogItemId,
+            catalogSnapshot: operation.catalogSnapshot,
             // The queued operation's stable local id is the server idempotency key: a re-drain
             // after a lost response returns the original line instead of creating a duplicate.
             clientOperationId: operation.id,

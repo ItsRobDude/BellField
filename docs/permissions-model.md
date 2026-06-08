@@ -135,6 +135,7 @@ BellField permissions should be grouped into these major modules:
 - Estimates
 - Invoices
 - Payments
+- Catalog
 - Purchasing
 - Inventory
 - Reports
@@ -167,6 +168,7 @@ The current shared contract exposes these exact `PermissionArea` values:
 | `estimates`            | Estimate records and estimate workflow                                               |
 | `invoices`             | Invoice drafts/posting workflow                                                      |
 | `payments`             | Payment workflow                                                                     |
+| `catalog`              | Sellable/chargeable Catalog items and price/work defaults                            |
 | `purchasing`           | Purchase order workflow                                                              |
 | `inventory`            | Inventory locations and material movement                                            |
 | `jobCosting`           | Job cost ledger: labor/expense events, the cost rollup, and reversal corrections     |
@@ -198,11 +200,11 @@ This table summarizes the current defaults so contributors do not have to redisc
 | CSR          | Office core, equipment configure, invoice view, and payment view.                                                                                                                                                                                                                                                               |
 | Dispatcher   | Office core, equipment configure, invoice view, and report view.                                                                                                                                                                                                                                                                |
 | Book Keeping | Office core, invoice view/create/edit/post, payment view/create/edit, jobCosting view/create/edit, and report view/export.                                                                                                                                                                                                      |
-| Technician   | Customer/location/contact view, equipment create/edit/configure, appointment dispatch view/edit, register view/create/edit, media view/create/edit, estimate view/create/edit, and invoice view/edit.                                                                                                                           |
+| Technician   | Customer/location/contact view, equipment create/edit/configure, appointment dispatch view/edit, register view/create/edit, media view/create/edit, catalog view, estimate view/create/edit, and invoice view/edit.                                                                                                             |
 
 Office core currently means:
 
-- customers, locations, contacts, equipment, jobs, appointments/dispatch, register, media, and estimates: `view/create/edit`
+- customers, locations, contacts, equipment, jobs, appointments/dispatch, register, media, catalog, and estimates: `view/create/edit`
 
 ---
 

@@ -23,6 +23,7 @@ const officeCore = [
   ...permissionKeys('appointmentsDispatch', ['view', 'create', 'edit']),
   ...permissionKeys('register', ['view', 'create', 'edit']),
   ...permissionKeys('media', ['view', 'create', 'edit']),
+  ...permissionKeys('catalog', ['view', 'create', 'edit']),
   ...permissionKeys('estimates', ['view', 'create', 'edit'])
 ];
 
@@ -129,6 +130,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...permissionKeys('appointmentsDispatch', ['view', 'edit']),
       ...permissionKeys('register', ['view', 'create', 'edit']),
       ...permissionKeys('media', ['view', 'create', 'edit']),
+      ...permissionKeys('catalog', ['view']),
       ...permissionKeys('estimates', ['view', 'create', 'edit']),
       ...permissionKeys('invoices', ['view', 'edit'])
     ])

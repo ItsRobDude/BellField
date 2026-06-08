@@ -3,6 +3,7 @@ import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-nativ
 import type {
   AppointmentFinishOutcome,
   AppointmentStatus,
+  FieldCatalogItem,
   FieldTruckStockItem
 } from '@/lib/operations-api';
 import { EquipmentTab } from './field-equipment-tab';
@@ -65,6 +66,7 @@ const fieldAppointmentStatuses: AppointmentStatus[] = [
 type FieldJobFeedProps = {
   activeDetailTab: FieldDetailTab;
   assignedEquipment: FieldEquipmentRecord[];
+  catalogItems: FieldCatalogItem[];
   canReplaceRemoveEquipment: boolean;
   currentEmployeeId: string;
   customerLookup: Map<string, FieldCustomer>;
@@ -105,6 +107,7 @@ type FieldJobFeedProps = {
 export function FieldJobFeed({
   activeDetailTab,
   assignedEquipment,
+  catalogItems,
   canReplaceRemoveEquipment,
   currentEmployeeId,
   customerLookup,
@@ -709,6 +712,7 @@ export function FieldJobFeed({
                 registerCreateDrafts={registerCreateDrafts}
                 registerEditDrafts={registerEditDrafts}
                 truckStockItems={truckStockItems}
+                catalogItems={catalogItems}
                 onConfirmVoidRegisterEntry={onConfirmVoidRegisterEntry}
                 onQueueRegisterEntryCreate={(targetJob) => void queueRegisterEntryCreate(targetJob)}
                 onQueueRegisterEntryEdit={(entry) => void queueRegisterEntryEdit(entry)}

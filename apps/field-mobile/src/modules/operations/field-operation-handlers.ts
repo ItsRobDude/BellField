@@ -144,6 +144,8 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
       inventorySourceLabel: parsed.value.inventorySourceLabel,
       inventoryItemId: parsed.value.inventoryItemId,
       inventoryLocationId: parsed.value.inventoryLocationId,
+      catalogItemId: parsed.value.catalogItemId,
+      catalogSnapshot: parsed.value.catalogSnapshot,
       occurredAt: new Date().toISOString(),
       baseUpdatedAt: findJobBaseUpdatedAt(serverSnapshot, job.id),
       state: 'pending'

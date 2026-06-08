@@ -1,5 +1,6 @@
 import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
 import type { AppointmentFinishOutcome, AppointmentStatus, JobStatus } from '@bellfield/contracts';
+import { CatalogService } from '../catalog/catalog.service';
 import { isFinalJobStatus, isReopenTransition } from '../company-data/company-data.types';
 import type { JobRecord } from '../company-data/company-data.types';
 import { isCostExpectedRegisterKind } from '../company-data/register-costing-classification';
@@ -48,7 +49,8 @@ export class JobsAppointmentsService {
     private readonly referenceDataService: ReferenceDataService,
     private readonly equipmentDataService: EquipmentDataService,
     private readonly jobsDataService: JobsDataService,
-    private readonly identityAccessService: IdentityAccessService
+    private readonly identityAccessService: IdentityAccessService,
+    private readonly catalogService: CatalogService
   ) {}
 
   async getWorkspace(sessionToken: string): Promise<JobsWorkspaceResponseDto> {
@@ -503,8 +505,6 @@ export class JobsAppointmentsService {
       };
     }
 
-    // Reopen a finalized job before adding register work: cancelled takes none; completed/closed
-    // takes no cost-bearing line (it would be unresolvable cost). Offline replays are preserved.
     const blockNewRegisterWork =
       isFinalJobStatus(currentJob.status) &&
       accessCheck.status !== 'preservedReplay' &&
@@ -537,8 +537,6 @@ export class JobsAppointmentsService {
     return this.buildRegisterCreateResponse(jobId, actor, request.syncSource);
   }
 
-  /** Job summary after a register create (or an idempotent replay of one), with the field
-   * sync result attached when the call came from the field save queue. */
   private async buildRegisterCreateResponse(
     jobId: string,
     actor: AuthorizedEmployee,
@@ -732,6 +730,7 @@ export class JobsAppointmentsService {
     const jobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
     const locationIds = [...new Set(jobs.map((job) => job.locationId))];
     const equipment = await this.equipmentDataService.listEquipment(true);
+    const catalogItems = await this.catalogService.listFieldCatalogItems();
     const serverTime = new Date().toISOString();
 
     return {
@@ -794,6 +793,7 @@ export class JobsAppointmentsService {
             };
           })
       ),
+      catalogItems,
       serverTime,
       snapshotVersion: serverTime,
       windowStartDate,

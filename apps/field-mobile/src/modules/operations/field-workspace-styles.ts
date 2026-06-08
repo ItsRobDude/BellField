@@ -149,6 +149,9 @@ export const fieldWorkspaceStyles = StyleSheet.create({
   },
   tagButtonText: { color: '#33523d', fontSize: 13, fontWeight: '600' },
   replacementOptionList: { gap: 8 },
+  catalogPicker: { gap: 8 },
+  catalogTagButtonSelected: { backgroundColor: '#1c6b57' },
+  catalogTagButtonTextSelected: { color: '#ffffff' },
   replacementOptionButton: {
     backgroundColor: '#ffffff',
     borderColor: '#d9c8ad',

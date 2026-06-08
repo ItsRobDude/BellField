@@ -40,6 +40,8 @@ type RegisterEntryRow = {
   totalAmount: string | number;
   partNumber: string | null;
   inventorySourceLabel: string | null;
+  catalogItemId: string | null;
+  catalogSnapshot: RegisterEntryRecord['catalogSnapshot'] | null;
   inventoryItemId: string | null;
   inventoryLocationId: string | null;
   billingProjectionState: BillingProjectionState;
@@ -86,6 +88,8 @@ export class JobsRegisterDataRepository {
           total_amount as "totalAmount",
           part_number as "partNumber",
           inventory_source_label as "inventorySourceLabel",
+          catalog_item_id as "catalogItemId",
+          catalog_snapshot as "catalogSnapshot",
           inventory_item_id as "inventoryItemId",
           inventory_location_id as "inventoryLocationId",
           billing_projection_state as "billingProjectionState",
@@ -124,6 +128,8 @@ export class JobsRegisterDataRepository {
           total_amount as "totalAmount",
           part_number as "partNumber",
           inventory_source_label as "inventorySourceLabel",
+          catalog_item_id as "catalogItemId",
+          catalog_snapshot as "catalogSnapshot",
           inventory_item_id as "inventoryItemId",
           inventory_location_id as "inventoryLocationId",
           billing_projection_state as "billingProjectionState",
@@ -613,6 +619,8 @@ export class JobsRegisterDataRepository {
       totalAmount: Number(row.totalAmount),
       partNumber: row.partNumber ?? undefined,
       inventorySourceLabel: row.inventorySourceLabel ?? undefined,
+      catalogItemId: row.catalogItemId ?? undefined,
+      catalogSnapshot: row.catalogSnapshot ?? undefined,
       inventoryItemId: row.inventoryItemId ?? undefined,
       inventoryLocationId: row.inventoryLocationId ?? undefined,
       billingProjectionState: row.billingProjectionState,

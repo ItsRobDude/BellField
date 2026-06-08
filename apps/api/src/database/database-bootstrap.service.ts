@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { getApiRuntimeConfig } from '../common/config/runtime-config';
 import {
   seededAppointments,
+  seededCatalogItems,
   seededContacts,
   seededCustomers,
   seededEquipment,
@@ -38,6 +39,7 @@ export class DatabaseBootstrapService implements OnModuleInit {
     await this.seedEquipmentGroups();
     await this.seedEquipment();
     await this.seedEquipmentHistory();
+    await this.seedCatalogItems();
     await this.seedJobs();
     await this.seedAppointments();
     await this.seedTimelineEntries();
@@ -332,6 +334,63 @@ export class DatabaseBootstrapService implements OnModuleInit {
           on conflict (id) do nothing
         `,
         [entry.id, entry.equipmentId, entry.occurredAt, entry.actorName, entry.kind, entry.message]
+      );
+    }
+  }
+
+  private async seedCatalogItems(): Promise<void> {
+    const createdAt = '2026-04-13T16:00:00.000Z';
+
+    for (const item of seededCatalogItems) {
+      await this.databaseService.query(
+        `
+          insert into catalog_items (
+            id,
+            code,
+            name,
+            kind,
+            category,
+            trade_tags,
+            description,
+            internal_notes,
+            unit_of_measure,
+            taxable_default,
+            default_sale_price,
+            agreement_price,
+            estimated_labor_hours,
+            cost_hint,
+            linked_inventory_item_id,
+            income_category,
+            accounting_export_code,
+            field_visible,
+            is_active,
+            created_at,
+            updated_at
+          )
+          values ($1, $2, $3, $4, $5, $6::text[], $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, true, $19, $19)
+          on conflict (id) do nothing
+        `,
+        [
+          item.id,
+          item.code ?? null,
+          item.name,
+          item.kind,
+          item.category ?? null,
+          item.tradeTags ?? [],
+          item.description ?? null,
+          item.internalNotes ?? null,
+          item.unitOfMeasure ?? null,
+          item.taxableDefault ?? true,
+          item.defaultSalePrice ?? null,
+          item.agreementPrice ?? null,
+          item.estimatedLaborHours ?? null,
+          item.costHint ?? null,
+          item.linkedInventoryItemId ?? null,
+          item.incomeCategory ?? null,
+          item.accountingExportCode ?? null,
+          item.fieldVisible ?? true,
+          createdAt
+        ]
       );
     }
   }

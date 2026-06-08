@@ -28,6 +28,7 @@ export type PermissionArea =
   | 'estimates'
   | 'invoices'
   | 'payments'
+  | 'catalog'
   | 'purchasing'
   | 'inventory'
   | 'jobCosting'

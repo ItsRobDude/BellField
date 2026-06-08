@@ -51,3 +51,19 @@ describe('defaultRoleTemplates history permissions', () => {
     }
   });
 });
+
+describe('defaultRoleTemplates catalog permissions', () => {
+  it('grants office roles catalog view/create/edit for pricebook maintenance', () => {
+    for (const role of ['owner', 'admin', 'csr', 'dispatcher', 'bookKeeping'] as const) {
+      expect(defaultRoleTemplates[role].permissions).toEqual(
+        expect.arrayContaining(['catalog:view', 'catalog:create', 'catalog:edit'])
+      );
+    }
+  });
+
+  it('keeps technician catalog access read-only', () => {
+    expect(defaultRoleTemplates.technician.permissions).toContain('catalog:view');
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('catalog:create');
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('catalog:edit');
+  });
+});

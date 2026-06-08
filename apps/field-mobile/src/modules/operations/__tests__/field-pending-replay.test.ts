@@ -143,6 +143,7 @@ function buildSnapshot(
     locations: [buildLocation()],
     customers: [buildCustomer()],
     equipment: [buildEquipment()],
+    catalogItems: [],
     serverTime: baseTimestamp,
     snapshotVersion: 'v1',
     windowStartDate: '2026-05-22',
@@ -318,6 +319,48 @@ describe('applyPendingOperations', () => {
       inventoryLocationId: 'truck-7',
       // Honest optimistic default: the auto-cost outcome is unknown until the server processes it.
       costingStatus: 'notCosted'
+    });
+  });
+
+  it('carries catalog provenance onto the optimistic register line', () => {
+    const snapshot = buildSnapshot();
+    const operation: PendingOperation = {
+      id: 'op-register-catalog',
+      kind: 'registerEntryCreate',
+      jobId: 'job-1',
+      registerEntryKind: 'serviceItem',
+      description: 'Cooling diagnostic',
+      quantity: 1,
+      unitOfMeasure: 'visit',
+      unitPrice: 129,
+      totalAmount: 129,
+      catalogItemId: 'catalog-cooling-diagnostic',
+      catalogSnapshot: {
+        catalogItemId: 'catalog-cooling-diagnostic',
+        code: 'SVC-COOL-DX',
+        name: 'Cooling diagnostic',
+        kind: 'service',
+        category: 'Diagnostics',
+        unitOfMeasure: 'visit',
+        selectedUnitPrice: 129,
+        taxable: true,
+        priceMode: 'standard',
+        defaultSalePrice: 129
+      },
+      occurredAt: '2026-05-22T13:30:00.000Z',
+      state: 'pending'
+    };
+
+    const result = applyPendingOperations(snapshot, [operation], 'Taylor Tech');
+    const registerEntry = result?.jobs[0]?.registerEntries?.[0];
+
+    expect(registerEntry).toMatchObject({
+      catalogItemId: 'catalog-cooling-diagnostic',
+      catalogSnapshot: {
+        name: 'Cooling diagnostic',
+        kind: 'service',
+        selectedUnitPrice: 129
+      }
     });
   });
 

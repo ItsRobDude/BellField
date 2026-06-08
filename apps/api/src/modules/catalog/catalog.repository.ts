@@ -1,0 +1,283 @@
+import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import type { CatalogItem, FieldCatalogItem } from '@bellfield/contracts';
+import { DatabaseService } from '../../database/database.service';
+import { toIsoString } from '../../database/database-row.utils';
+import type { CreateCatalogItemRequestDto, UpdateCatalogItemRequestDto } from './catalog.types';
+
+type CatalogItemRow = {
+  id: string;
+  code: string | null;
+  name: string;
+  kind: FieldCatalogItem['kind'];
+  category: string | null;
+  tradeTags: string[];
+  description: string | null;
+  unitOfMeasure: string | null;
+  taxableDefault: boolean;
+  defaultSalePrice: string | number | null;
+  agreementPrice: string | number | null;
+  estimatedLaborHours: string | number | null;
+  linkedInventoryItemId: string | null;
+  linkedInventoryItemSku: string | null;
+  linkedInventoryItemName: string | null;
+  internalNotes: string | null;
+  costHint: string | number | null;
+  incomeCategory: string | null;
+  accountingExportCode: string | null;
+  fieldVisible: boolean;
+  isActive: boolean;
+  registerUsageCount: string | number;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+const CATALOG_ITEM_COLUMNS = `
+  ci.id,
+  ci.code,
+  ci.name,
+  ci.kind,
+  ci.category,
+  ci.trade_tags as "tradeTags",
+  ci.description,
+  ci.internal_notes as "internalNotes",
+  ci.unit_of_measure as "unitOfMeasure",
+  ci.taxable_default as "taxableDefault",
+  ci.default_sale_price as "defaultSalePrice",
+  ci.agreement_price as "agreementPrice",
+  ci.estimated_labor_hours as "estimatedLaborHours",
+  ci.cost_hint as "costHint",
+  ci.linked_inventory_item_id as "linkedInventoryItemId",
+  ii.sku as "linkedInventoryItemSku",
+  ii.name as "linkedInventoryItemName",
+  ci.income_category as "incomeCategory",
+  ci.accounting_export_code as "accountingExportCode",
+  ci.field_visible as "fieldVisible",
+  ci.is_active as "isActive",
+  coalesce(usage.register_usage_count, 0) as "registerUsageCount",
+  ci.created_at as "createdAt",
+  ci.updated_at as "updatedAt"
+`;
+
+@Injectable()
+export class CatalogRepository {
+  constructor(private readonly databaseService: DatabaseService) {}
+
+  async listItems(): Promise<CatalogItem[]> {
+    const result = await this.databaseService.query<CatalogItemRow>(
+      `
+        select ${CATALOG_ITEM_COLUMNS}
+        from catalog_items ci
+        left join inventory_items ii on ii.id = ci.linked_inventory_item_id
+        left join (
+          select catalog_item_id, count(*)::int as register_usage_count
+          from register_entries
+          where catalog_item_id is not null
+          group by catalog_item_id
+        ) usage on usage.catalog_item_id = ci.id
+        order by ci.is_active desc, ci.category nulls last, ci.name asc, ci.id asc
+      `
+    );
+
+    return result.rows.map(toCatalogItem);
+  }
+
+  async getItemById(id: string): Promise<CatalogItem | null> {
+    const result = await this.databaseService.query<CatalogItemRow>(
+      `
+        select ${CATALOG_ITEM_COLUMNS}
+        from catalog_items ci
+        left join inventory_items ii on ii.id = ci.linked_inventory_item_id
+        left join (
+          select catalog_item_id, count(*)::int as register_usage_count
+          from register_entries
+          where catalog_item_id is not null
+          group by catalog_item_id
+        ) usage on usage.catalog_item_id = ci.id
+        where ci.id = $1
+        limit 1
+      `,
+      [id]
+    );
+
+    return result.rows[0] ? toCatalogItem(result.rows[0]) : null;
+  }
+
+  async listFieldItems(): Promise<FieldCatalogItem[]> {
+    const result = await this.databaseService.query<CatalogItemRow>(
+      `
+        select ${CATALOG_ITEM_COLUMNS}
+        from catalog_items ci
+        left join inventory_items ii on ii.id = ci.linked_inventory_item_id
+        left join (
+          select catalog_item_id, count(*)::int as register_usage_count
+          from register_entries
+          where catalog_item_id is not null
+          group by catalog_item_id
+        ) usage on usage.catalog_item_id = ci.id
+        where ci.is_active = true
+          and ci.field_visible = true
+          and ci.kind <> 'discount'
+        order by ci.category nulls last, ci.name asc, ci.id asc
+      `
+    );
+
+    return result.rows.map(toFieldCatalogItem);
+  }
+
+  async createItem(input: CreateCatalogItemRequestDto): Promise<CatalogItem> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    await this.databaseService.query(
+      `insert into catalog_items (
+         id, code, name, kind, category, trade_tags, description, internal_notes,
+         unit_of_measure, taxable_default, default_sale_price, agreement_price,
+         estimated_labor_hours, cost_hint, linked_inventory_item_id, income_category,
+         accounting_export_code, field_visible, is_active, created_at, updated_at
+       )
+       values (
+         $1, $2, $3, $4, $5, $6, $7, $8,
+         $9, $10, $11, $12,
+         $13, $14, $15, $16,
+         $17, $18, true, $19, $19
+       )`,
+      [
+        id,
+        cleanOptionalString(input.code),
+        input.name.trim(),
+        input.kind,
+        cleanOptionalString(input.category),
+        normalizeTags(input.tradeTags),
+        cleanOptionalString(input.description),
+        cleanOptionalString(input.internalNotes),
+        cleanOptionalString(input.unitOfMeasure),
+        input.taxableDefault ?? true,
+        input.defaultSalePrice ?? null,
+        input.agreementPrice ?? null,
+        input.estimatedLaborHours ?? null,
+        input.costHint ?? null,
+        cleanOptionalString(input.linkedInventoryItemId),
+        cleanOptionalString(input.incomeCategory),
+        cleanOptionalString(input.accountingExportCode),
+        input.fieldVisible ?? true,
+        now
+      ]
+    );
+    return (await this.getItemById(id))!;
+  }
+
+  async updateItem(id: string, input: UpdateCatalogItemRequestDto): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.query(
+      `update catalog_items set
+         code = $2,
+         name = $3,
+         kind = $4,
+         category = $5,
+         trade_tags = $6,
+         description = $7,
+         internal_notes = $8,
+         unit_of_measure = $9,
+         taxable_default = $10,
+         default_sale_price = $11,
+         agreement_price = $12,
+         estimated_labor_hours = $13,
+         cost_hint = $14,
+         linked_inventory_item_id = $15,
+         income_category = $16,
+         accounting_export_code = $17,
+         field_visible = $18,
+         is_active = $19,
+         updated_at = $20
+       where id = $1`,
+      [
+        id,
+        cleanOptionalString(input.code),
+        input.name.trim(),
+        input.kind,
+        cleanOptionalString(input.category),
+        normalizeTags(input.tradeTags),
+        cleanOptionalString(input.description),
+        cleanOptionalString(input.internalNotes),
+        cleanOptionalString(input.unitOfMeasure),
+        input.taxableDefault,
+        input.defaultSalePrice ?? null,
+        input.agreementPrice ?? null,
+        input.estimatedLaborHours ?? null,
+        input.costHint ?? null,
+        cleanOptionalString(input.linkedInventoryItemId),
+        cleanOptionalString(input.incomeCategory),
+        cleanOptionalString(input.accountingExportCode),
+        input.fieldVisible,
+        input.isActive,
+        now
+      ]
+    );
+  }
+
+  async inventoryItemExists(itemId: string): Promise<boolean> {
+    const result = await this.databaseService.query<{ id: string }>(
+      `select id from inventory_items where id = $1 limit 1`,
+      [itemId]
+    );
+    return Boolean(result.rows[0]);
+  }
+}
+
+function toOptionalNumber(value: string | number | null): number | undefined {
+  return value === null ? undefined : Number(value);
+}
+
+function toFieldCatalogItem(row: CatalogItemRow): FieldCatalogItem {
+  return {
+    id: row.id,
+    code: row.code ?? undefined,
+    name: row.name,
+    kind: row.kind,
+    category: row.category ?? undefined,
+    tradeTags: [...row.tradeTags],
+    description: row.description ?? undefined,
+    unitOfMeasure: row.unitOfMeasure ?? undefined,
+    taxableDefault: row.taxableDefault,
+    defaultSalePrice: toOptionalNumber(row.defaultSalePrice),
+    agreementPrice: toOptionalNumber(row.agreementPrice),
+    estimatedLaborHours: toOptionalNumber(row.estimatedLaborHours),
+    linkedInventoryItemId: row.linkedInventoryItemId ?? undefined,
+    linkedInventoryItemSku: row.linkedInventoryItemSku ?? undefined,
+    linkedInventoryItemName: row.linkedInventoryItemName ?? undefined,
+    updatedAt: toIsoString(row.updatedAt)
+  };
+}
+
+function toCatalogItem(row: CatalogItemRow): CatalogItem {
+  return {
+    ...toFieldCatalogItem(row),
+    internalNotes: row.internalNotes ?? undefined,
+    costHint: toOptionalNumber(row.costHint),
+    incomeCategory: row.incomeCategory ?? undefined,
+    accountingExportCode: row.accountingExportCode ?? undefined,
+    fieldVisible: row.fieldVisible,
+    isActive: row.isActive,
+    registerUsageCount: Number(row.registerUsageCount),
+    createdAt: toIsoString(row.createdAt)
+  };
+}
+
+function cleanOptionalString(value: string | undefined): string | null {
+  const trimmed = value?.trim() ?? '';
+  return trimmed ? trimmed : null;
+}
+
+function normalizeTags(tags: string[] | undefined): string[] {
+  const seen = new Set<string>();
+  const normalized: string[] = [];
+  for (const tag of tags ?? []) {
+    const trimmed = tag.trim();
+    const key = trimmed.toLocaleLowerCase();
+    if (trimmed && !seen.has(key)) {
+      seen.add(key);
+      normalized.push(trimmed);
+    }
+  }
+  return normalized;
+}

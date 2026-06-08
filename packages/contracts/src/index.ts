@@ -11,6 +11,7 @@ export * from './media.js';
 export * from './estimates.js';
 export * from './invoices-payments.js';
 export * from './inventory.js';
+export * from './catalog.js';
 export * from './purchasing.js';
 export * from './job-costing.js';
 export * from './bookkeeping.js';

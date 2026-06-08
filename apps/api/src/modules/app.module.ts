@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { HealthModule } from '../health/health.module';
 import { BookkeepingModule } from './bookkeeping/bookkeeping.module';
+import { CatalogModule } from './catalog/catalog.module';
 import { CrmModule } from './crm/crm.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { EquipmentModule } from './equipment/equipment.module';
@@ -26,6 +27,7 @@ import { ReportingModule } from './reporting/reporting.module';
     HealthModule,
     IdentityAccessModule,
     BookkeepingModule,
+    CatalogModule,
     CrmModule,
     DispatchModule,
     EquipmentModule,

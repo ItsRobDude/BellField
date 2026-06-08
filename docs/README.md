@@ -226,6 +226,16 @@ Read when: continuing this lane, reviewing whether Phase 0-2 is complete, or dec
 
 Does not own: general product rules or screen behavior outside this correction lane. It also does not authorize later phases by itself; follow its stop rule.
 
+### [catalog-phase-plan.md](./catalog-phase-plan.md)
+
+Audience: contributors planning or implementing the trade-neutral Catalog lane.
+
+Purpose: the phase plan for closing the pricebook/catalog gap with a field-first, trade-neutral Catalog that can feed register entries, invoice drafts, estimates, and later service agreements without becoming HVAC-only or a ServiceTitan clone.
+
+Read when: planning Catalog schema, field register catalog selection, office Catalog admin, catalog-backed estimate lines, or catalog/accounting handoff work.
+
+Does not own: core product behavior, workflow state rules, offline sync rules, permissions, or data-modeling invariants; use the focused source-of-truth docs for those.
+
 ## Current-State and Handoff Docs
 
 ### [whats-shipped.md](./whats-shipped.md)

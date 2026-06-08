@@ -922,5 +922,6 @@ export async function getOfficeBookkeepingQueues(input: {
 // Milestone 9 client modules, split out to keep this file under the size budget. Re-exported
 // here so existing imports from '@/lib/operations-api' keep working.
 export * from './operations-inventory-api';
+export * from './operations-catalog-api';
 export * from './operations-purchasing-api';
 export * from './operations-job-costing-api';

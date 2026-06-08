@@ -1,6 +1,7 @@
 import type {
   AppointmentFinishOutcome,
   AppointmentStatus,
+  FieldCatalogItem,
   CreateMediaUploadIntentRequest,
   CreateMediaUploadIntentResponse,
   CreateRegisterEntryRequest,
@@ -17,6 +18,7 @@ import type {
   MediaAttachmentResponse,
   MediaAttachmentsResponse,
   RegisterEntryKind,
+  RegisterCatalogSnapshot,
   RegisterEntrySummary,
   SyncResult
 } from '@bellfield/contracts';
@@ -30,6 +32,7 @@ export type {
   EquipmentMutationResponse,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  FieldCatalogItem,
   FieldTruckStockItem,
   FieldTruckStockResponse,
   JobMutationResponse,
@@ -38,6 +41,7 @@ export type {
   MediaAttachmentsResponse,
   RegisterEntryKind,
   RegisterEntrySummary,
+  RegisterCatalogSnapshot,
   SyncResult
 };
 

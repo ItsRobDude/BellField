@@ -9,6 +9,7 @@ export type OfficeView =
   | 'customers'
   | 'jobs'
   | 'jobIntake'
+  | 'catalog'
   | 'inventory'
   | 'purchasing'
   | 'bookkeeping'
@@ -28,6 +29,7 @@ type OfficeWorkspaceFrameProps = {
   isJobsQueueRefreshing: boolean;
   isRefreshing: boolean;
   canViewInventory: boolean;
+  canViewCatalog: boolean;
   canViewPurchasing: boolean;
   canViewBookkeeping: boolean;
   canViewReports: boolean;
@@ -51,6 +53,7 @@ export function OfficeWorkspaceFrame({
   isJobsQueueRefreshing,
   isRefreshing,
   canViewInventory,
+  canViewCatalog,
   canViewPurchasing,
   canViewBookkeeping,
   canViewReports,
@@ -109,6 +112,13 @@ export function OfficeWorkspaceFrame({
                 label="Inventory"
                 active={activeView === 'inventory'}
                 onClick={() => handleViewChange('inventory')}
+              />
+            ) : null}
+            {canViewCatalog ? (
+              <NavButton
+                label="Catalog"
+                active={activeView === 'catalog'}
+                onClick={() => handleViewChange('catalog')}
               />
             ) : null}
             {canViewPurchasing ? (

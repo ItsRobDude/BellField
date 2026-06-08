@@ -1,3 +1,4 @@
+import type { FieldCatalogItem } from '@bellfield/contracts';
 import type {
   AppointmentRecord,
   ContactLinkRecord,
@@ -193,6 +194,146 @@ export const seededLocationOwnershipHistory: OwnershipHistoryRecord[] = [
 ];
 
 const baseTimestamp = '2026-04-13T16:00:00.000Z';
+
+export const seededCatalogItems: Array<
+  Omit<FieldCatalogItem, 'updatedAt' | 'tradeTags' | 'taxableDefault'> & {
+    tradeTags?: string[];
+    taxableDefault?: boolean;
+    fieldVisible?: boolean;
+    internalNotes?: string;
+    costHint?: number;
+    incomeCategory?: string;
+    accountingExportCode?: string;
+  }
+> = [
+  {
+    id: 'catalog-cooling-diagnostic',
+    code: 'SVC-COOL-DX',
+    name: 'Cooling diagnostic',
+    kind: 'service',
+    category: 'Diagnostics',
+    tradeTags: ['HVAC'],
+    description: 'Diagnose cooling system operation and review findings with the customer.',
+    unitOfMeasure: 'visit',
+    defaultSalePrice: 129,
+    estimatedLaborHours: 1,
+    incomeCategory: 'Service revenue'
+  },
+  {
+    id: 'catalog-filter-16x20x1',
+    code: 'MAT-FILTER-16X20X1',
+    name: '16x20x1 filter',
+    kind: 'part',
+    category: 'Materials',
+    tradeTags: ['HVAC', 'General'],
+    description: 'Replace standard 16x20x1 disposable filter.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: 18,
+    incomeCategory: 'Parts revenue'
+  },
+  {
+    id: 'catalog-contactor-replacement',
+    code: 'REP-CONTACTOR',
+    name: 'Contactor replacement',
+    kind: 'service',
+    category: 'Repairs',
+    tradeTags: ['HVAC', 'Electrical'],
+    description: 'Replace failed contactor and verify operation.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: 289,
+    estimatedLaborHours: 1,
+    incomeCategory: 'Repair revenue'
+  },
+  {
+    id: 'catalog-drain-clearing',
+    code: 'SVC-DRAIN-CLEAR',
+    name: 'Drain clearing',
+    kind: 'service',
+    category: 'Repairs',
+    tradeTags: ['Plumbing'],
+    description: 'Clear accessible drain stoppage and test flow.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: 225,
+    estimatedLaborHours: 1,
+    incomeCategory: 'Service revenue'
+  },
+  {
+    id: 'catalog-outlet-replacement',
+    code: 'REP-OUTLET',
+    name: 'Outlet replacement',
+    kind: 'service',
+    category: 'Repairs',
+    tradeTags: ['Electrical'],
+    description: 'Replace standard outlet and verify safe operation.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: 165,
+    estimatedLaborHours: 0.75,
+    incomeCategory: 'Repair revenue'
+  },
+  {
+    id: 'catalog-torsion-spring-replacement',
+    code: 'REP-TOR-SPRING',
+    name: 'Torsion spring replacement',
+    kind: 'service',
+    category: 'Repairs',
+    tradeTags: ['Garage Door'],
+    description: 'Replace torsion spring and balance door travel.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: 395,
+    estimatedLaborHours: 1.5,
+    incomeCategory: 'Repair revenue'
+  },
+  {
+    id: 'catalog-monthly-pool-service',
+    code: 'AGR-POOL-MONTHLY',
+    name: 'Monthly pool service plan',
+    kind: 'agreement',
+    category: 'Agreements',
+    tradeTags: ['Pool'],
+    description: 'Monthly recurring pool service plan line.',
+    unitOfMeasure: 'month',
+    defaultSalePrice: 185,
+    incomeCategory: 'Agreement revenue'
+  },
+  {
+    id: 'catalog-trip-fee',
+    code: 'FEE-TRIP',
+    name: 'Trip fee',
+    kind: 'fee',
+    category: 'Fees',
+    tradeTags: ['General'],
+    description: 'Standard trip or dispatch charge.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: 79,
+    incomeCategory: 'Fee revenue'
+  },
+  {
+    id: 'catalog-after-hours-labor',
+    code: 'LAB-AH',
+    name: 'After-hours labor',
+    kind: 'labor',
+    category: 'Labor',
+    tradeTags: ['General'],
+    description: 'After-hours labor charged per hour.',
+    unitOfMeasure: 'hour',
+    defaultSalePrice: 175,
+    incomeCategory: 'Labor revenue'
+  },
+  {
+    id: 'catalog-courtesy-discount',
+    code: 'DISC-COURTESY',
+    name: 'Courtesy discount',
+    kind: 'discount',
+    category: 'Discounts',
+    tradeTags: ['General'],
+    description: 'Courtesy discount reserved for office use.',
+    unitOfMeasure: 'each',
+    defaultSalePrice: -25,
+    fieldVisible: false,
+    taxableDefault: false,
+    incomeCategory: 'Discounts'
+  }
+];
 
 export const seededEquipment: EquipmentRecord[] = [
   {

@@ -29,7 +29,8 @@ export function applyPendingOperations(
       contacts: location.contacts.map((contact) => ({ ...contact }))
     })),
     customers: snapshot.customers.map((customer) => ({ ...customer })),
-    equipment: snapshot.equipment.map((record) => ({ ...record }))
+    equipment: snapshot.equipment.map((record) => ({ ...record })),
+    catalogItems: snapshot.catalogItems.map((item) => ({ ...item, tradeTags: [...item.tradeTags] }))
   };
 
   for (const operation of pendingOperations) {
@@ -397,6 +398,8 @@ function buildLocalRegisterEntry(
     inventorySourceLabel: operation.inventorySourceLabel,
     inventoryItemId: operation.inventoryItemId,
     inventoryLocationId: operation.inventoryLocationId,
+    catalogItemId: operation.catalogItemId,
+    catalogSnapshot: operation.catalogSnapshot,
     // Optimistic local default: billable + uncosted. Even when the tech picked structured truck
     // stock we cannot know offline whether on-hand was sufficient, so the real costing status
     // (applied vs needsResolution) only arrives when the server processes this on sync.

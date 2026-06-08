@@ -481,6 +481,7 @@ export function TechnicianWorkspaceScreen({
             <FieldJobFeed
               activeDetailTab={activeDetailTab}
               assignedEquipment={assignedWork?.equipment ?? []}
+              catalogItems={assignedWork?.catalogItems ?? []}
               canReplaceRemoveEquipment={canReplaceRemoveEquipment}
               currentEmployeeId={employee.id}
               customerLookup={customerLookup}

@@ -1,7 +1,13 @@
+import { useMemo, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import type { FieldTruckStockItem, RegisterEntryKind } from '@/lib/operations-api';
+import type {
+  FieldCatalogItem,
+  FieldTruckStockItem,
+  RegisterEntryKind
+} from '@/lib/operations-api';
 import { formatAppointmentSchedule } from './field-appointment-display';
 import {
+  createCatalogRegisterDraftPatch,
   createRegisterEntryDraft,
   formatCurrency,
   formatRegisterEntryKind,
@@ -23,6 +29,7 @@ type RegisterTabProps = {
   job: FieldJob;
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
   registerEditDrafts: Record<string, RegisterEntryDraft>;
+  catalogItems: FieldCatalogItem[];
   truckStockItems: FieldTruckStockItem[];
   onConfirmVoidRegisterEntry: (entry: FieldRegisterEntry) => void;
   onQueueRegisterEntryCreate: (job: FieldJob) => void;
@@ -38,6 +45,7 @@ export function RegisterTab({
   job,
   registerCreateDrafts,
   registerEditDrafts,
+  catalogItems,
   truckStockItems,
   onConfirmVoidRegisterEntry,
   onQueueRegisterEntryCreate,
@@ -172,6 +180,7 @@ export function RegisterTab({
       <RegisterCreateCard
         job={job}
         registerCreateDrafts={registerCreateDrafts}
+        catalogItems={catalogItems}
         truckStockItems={truckStockItems}
         onQueueRegisterEntryCreate={onQueueRegisterEntryCreate}
         onUpdateRegisterCreateDraft={onUpdateRegisterCreateDraft}
@@ -183,21 +192,144 @@ export function RegisterTab({
 function RegisterCreateCard({
   job,
   registerCreateDrafts,
+  catalogItems,
   truckStockItems,
   onQueueRegisterEntryCreate,
   onUpdateRegisterCreateDraft
 }: {
   job: FieldJob;
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
+  catalogItems: FieldCatalogItem[];
   truckStockItems: FieldTruckStockItem[];
   onQueueRegisterEntryCreate: (job: FieldJob) => void;
   onUpdateRegisterCreateDraft: (jobId: string, patch: Partial<RegisterEntryDraft>) => void;
 }) {
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [catalogQuery, setCatalogQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
   const createDraft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
+  const categories = useMemo(
+    () => ['All', ...new Set(catalogItems.map((item) => item.category ?? 'Uncategorized'))],
+    [catalogItems]
+  );
+  const visibleCatalogItems = useMemo(() => {
+    const query = catalogQuery.trim().toLowerCase();
+
+    return catalogItems.filter((item) => {
+      const category = item.category ?? 'Uncategorized';
+      const matchesCategory = selectedCategory === 'All' || selectedCategory === category;
+      const searchable = [
+        item.name,
+        item.code ?? '',
+        item.category ?? '',
+        item.description ?? '',
+        ...item.tradeTags
+      ]
+        .join(' ')
+        .toLowerCase();
+
+      return matchesCategory && (!query || searchable.includes(query));
+    });
+  }, [catalogItems, catalogQuery, selectedCategory]);
 
   return (
     <View style={styles.reviewCard}>
       <Text style={styles.sectionTitleSmall}>Add register line</Text>
+      <Pressable
+        onPress={() => setIsCatalogOpen((current) => !current)}
+        style={styles.secondaryButton}
+      >
+        <Text style={styles.secondaryButtonText}>
+          {isCatalogOpen ? 'Hide Catalog' : 'Add from Catalog'}
+        </Text>
+      </Pressable>
+      {isCatalogOpen ? (
+        <View style={styles.catalogPicker}>
+          <TextInput
+            value={catalogQuery}
+            onChangeText={setCatalogQuery}
+            placeholder="Search Catalog"
+            style={styles.input}
+          />
+          <View style={styles.actionRow}>
+            {categories.map((category) => (
+              <Pressable
+                key={category}
+                onPress={() => setSelectedCategory(category)}
+                style={[
+                  styles.tagButton,
+                  selectedCategory === category ? styles.catalogTagButtonSelected : null
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.tagButtonText,
+                    selectedCategory === category ? styles.catalogTagButtonTextSelected : null
+                  ]}
+                >
+                  {category}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+          {visibleCatalogItems.length === 0 ? (
+            <Text style={styles.summaryText}>No Catalog items match this search.</Text>
+          ) : (
+            <View style={styles.replacementOptionList}>
+              {visibleCatalogItems.slice(0, 20).map((item) => (
+                <Pressable
+                  key={item.id}
+                  onPress={() =>
+                    onUpdateRegisterCreateDraft(
+                      job.id,
+                      createCatalogRegisterDraftPatch(item, truckStockItems)
+                    )
+                  }
+                  style={[
+                    styles.replacementOptionButton,
+                    createDraft.catalogItemId === item.id
+                      ? styles.replacementOptionButtonSelected
+                      : null
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.replacementOptionLabel,
+                      createDraft.catalogItemId === item.id
+                        ? styles.replacementOptionLabelSelected
+                        : null
+                    ]}
+                  >
+                    {item.name}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.summaryText,
+                      createDraft.catalogItemId === item.id
+                        ? styles.replacementOptionDetailSelected
+                        : null
+                    ]}
+                  >
+                    {formatCatalogLine(item)}
+                  </Text>
+                  {item.description ? (
+                    <Text
+                      style={[
+                        styles.summaryText,
+                        createDraft.catalogItemId === item.id
+                          ? styles.replacementOptionDetailSelected
+                          : null
+                      ]}
+                    >
+                      {item.description}
+                    </Text>
+                  ) : null}
+                </Pressable>
+              ))}
+            </View>
+          )}
+        </View>
+      ) : null}
       <View style={styles.actionRow}>
         {registerEntryKinds.map((entryKind) => (
           <Pressable
@@ -357,4 +489,15 @@ function RegisterCreateCard({
       </Pressable>
     </View>
   );
+}
+
+function formatCatalogLine(item: FieldCatalogItem): string {
+  const parts = [
+    item.code,
+    item.category,
+    item.kind,
+    item.defaultSalePrice === undefined ? undefined : formatCurrency(item.defaultSalePrice)
+  ].filter(Boolean);
+
+  return parts.join(' - ');
 }

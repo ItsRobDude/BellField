@@ -80,13 +80,17 @@ function createService() {
     getActiveEmployees: jest.fn().mockResolvedValue([]),
     getEmployeeSummaryById: jest.fn().mockResolvedValue(null)
   };
+  const catalogService = {
+    listFieldCatalogItems: jest.fn().mockResolvedValue([])
+  };
 
   return {
     service: new JobsAppointmentsService(
       referenceDataService as never,
       equipmentDataService as never,
       jobsDataService as never,
-      identityAccessService as never
+      identityAccessService as never,
+      catalogService as never
     ),
     referenceDataService,
     jobsDataService,

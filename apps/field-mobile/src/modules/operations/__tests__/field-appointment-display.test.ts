@@ -72,6 +72,7 @@ function makeSnapshot(
     locations: [baseLocation],
     customers: [],
     equipment: [],
+    catalogItems: [],
     serverTime: '2026-05-22T12:00:00.000Z',
     snapshotVersion: 'snapshot-1',
     windowStartDate: '2026-05-22',

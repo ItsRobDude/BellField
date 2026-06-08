@@ -3,6 +3,7 @@ import type {
   AppointmentStatus,
   EquipmentStatus,
   FieldAssignedWorkResponse,
+  RegisterCatalogSnapshot,
   FieldTruckStockResponse,
   MediaAttachmentKind,
   RegisterEntryKind,
@@ -55,6 +56,8 @@ export type PendingOperation =
       inventorySourceLabel?: string;
       inventoryItemId?: string;
       inventoryLocationId?: string;
+      catalogItemId?: string;
+      catalogSnapshot?: RegisterCatalogSnapshot;
       baseUpdatedAt?: string;
     })
   | (PendingOperationBase & {

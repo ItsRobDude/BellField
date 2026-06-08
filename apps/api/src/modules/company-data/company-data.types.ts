@@ -14,6 +14,7 @@ import type {
   JobsQueueKey as ContractJobsQueueKey,
   MediaAttachmentKind as ContractMediaAttachmentKind,
   RegisterEntryKind as ContractRegisterEntryKind,
+  RegisterCatalogSnapshot as ContractRegisterCatalogSnapshot,
   SyncResult as ContractSyncResult
 } from '@bellfield/contracts';
 
@@ -231,6 +232,7 @@ export const appointmentStatuses = [
 export type AppointmentFinishOutcome = ContractAppointmentFinishOutcome;
 export type FinishedVisitReviewDecision = ContractFinishedVisitReviewDecision;
 export type RegisterEntryKind = ContractRegisterEntryKind;
+export type RegisterCatalogSnapshot = ContractRegisterCatalogSnapshot;
 export type BillingProjectionState = ContractBillingProjectionState;
 export type CostingPolicy = ContractCostingPolicy;
 export type CostingStatus = ContractCostingStatus;
@@ -490,6 +492,8 @@ export type RegisterEntryRecord = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: RegisterCatalogSnapshot;
   inventoryItemId?: string;
   inventoryLocationId?: string;
   billingProjectionState: BillingProjectionState;
@@ -514,6 +518,8 @@ export type CreateRegisterEntryInput = {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: RegisterCatalogSnapshot;
   inventoryItemId?: string;
   inventoryLocationId?: string;
   billingProjectionState?: BillingProjectionState;

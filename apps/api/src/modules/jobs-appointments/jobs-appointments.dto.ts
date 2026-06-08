@@ -3,6 +3,7 @@ import {
   IsIn,
   IsISO8601,
   IsNumber,
+  IsObject,
   IsOptional,
   IsString,
   Matches,
@@ -324,6 +325,16 @@ export class CreateRegisterEntryRequestBodyDto implements CreateRegisterEntryReq
   @MinLength(1)
   @MaxLength(64)
   inventoryLocationId?: string;
+
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  catalogItemId?: string;
+
+  @IsOptional()
+  @IsObject()
+  catalogSnapshot?: CreateRegisterEntryRequestDto['catalogSnapshot'];
 
   @IsOptional()
   @IsIn(billingProjectionStates)

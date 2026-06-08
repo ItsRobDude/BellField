@@ -14,6 +14,22 @@ import { reflectRegisterEntryCreate } from './invoice-reflection-utils';
 import { isCostExpectedRegisterKind } from './register-costing-classification';
 import { autoCostStructuredPartLine, isSelfTruckPartRef } from './register-auto-cost';
 
+async function resolvePersistedCatalogItemId(
+  queryable: QueryExecutor,
+  catalogItemId: string | undefined
+): Promise<string | null> {
+  const trimmedId = catalogItemId?.trim();
+  if (!trimmedId) {
+    return null;
+  }
+
+  const result = await queryable.query<{ id: string }>(
+    `select id from catalog_items where id = $1 limit 1`,
+    [trimmedId]
+  );
+  return result.rows[0]?.id ?? null;
+}
+
 export type RegisterEntryInsertArgs = {
   jobId: string;
   input: CreateRegisterEntryInput;
@@ -110,6 +126,8 @@ export async function insertRegisterEntryWithin(
     (await isSelfTruckPartRef(queryable, { itemId, locationId, actorId: actor.id }));
   const inventoryItemId = structuredRefValid ? itemId : null;
   const inventoryLocationId = structuredRefValid ? locationId : null;
+  const catalogItemId = await resolvePersistedCatalogItemId(queryable, input.catalogItemId);
+  const catalogSnapshot = input.catalogSnapshot ?? null;
 
   await queryable.query(
     `
@@ -117,9 +135,10 @@ export async function insertRegisterEntryWithin(
         id, job_id, appointment_id, kind, description, quantity, unit_of_measure, unit_price,
         total_amount, part_number, inventory_source_label, billing_projection_state, costing_status,
         costing_policy, captured_by_employee_id, captured_by_name, captured_at, is_void, void_reason,
-        created_at, updated_at, inventory_item_id, inventory_location_id, client_operation_id
+        created_at, updated_at, inventory_item_id, inventory_location_id, client_operation_id,
+        catalog_item_id, catalog_snapshot
       )
-      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19, $20, $21, $22)
+      values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, false, null, $18, $19, $20, $21, $22, $23, $24)
     `,
     [
       registerEntryId,
@@ -143,7 +162,9 @@ export async function insertRegisterEntryWithin(
       timelineTime,
       inventoryItemId,
       inventoryLocationId,
-      clientOperationId
+      clientOperationId,
+      catalogItemId,
+      catalogSnapshot === null ? null : JSON.stringify(catalogSnapshot)
     ]
   );
 

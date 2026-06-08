@@ -1,5 +1,6 @@
 import type { CustomerAccountSummary, LocationSummary } from './crm.js';
 import type { EquipmentSummary } from './equipment.js';
+import type { FieldCatalogItem, RegisterCatalogSnapshot } from './catalog.js';
 import type { MediaAttachmentSummary } from './media.js';
 
 export type JobStatus =
@@ -104,6 +105,8 @@ export interface RegisterEntrySummary {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: RegisterCatalogSnapshot;
   /** Structured stock references the tech picked from their truck (Slice 1b). When both are
    * present on a `part` line the server auto-costs it as a tracked-inventory issue. */
   inventoryItemId?: string;
@@ -293,6 +296,8 @@ export interface CreateRegisterEntryRequest {
   totalAmount: number;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: RegisterCatalogSnapshot;
   /** Structured stock references picked from the truck; both present on a `part` line make the
    * server auto-cost it as a tracked-inventory issue at capture time (Slice 1b). */
   inventoryItemId?: string;
@@ -351,6 +356,7 @@ export interface FieldAssignedWorkResponse {
   locations: LocationSummary[];
   customers: CustomerAccountSummary[];
   equipment: EquipmentSummary[];
+  catalogItems: FieldCatalogItem[];
   serverTime: string;
   snapshotVersion: string;
   windowStartDate: string;
