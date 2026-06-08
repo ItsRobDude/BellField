@@ -340,6 +340,89 @@ describe('EstimatesService', () => {
     }
   });
 
+  it('exports an optioned printable estimate document gated on estimates:view', async () => {
+    const { service, identityAccessService, estimatesRepository } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      pendingEstimate({
+        title: 'Replacement options',
+        selectedOptionId: 'better',
+        optionGroups: [
+          {
+            id: 'standard-options',
+            title: 'Options',
+            position: 0,
+            options: [
+              {
+                id: 'good',
+                label: 'Good',
+                position: 0,
+                totals: {
+                  subtotal: 100,
+                  discount: 0,
+                  taxableBase: 100,
+                  tax: 0,
+                  total: 100,
+                  totalCost: 60,
+                  profit: 40,
+                  marginBasisPoints: 4000,
+                  costComplete: true
+                }
+              },
+              {
+                id: 'better',
+                label: 'Better',
+                position: 1,
+                totals: {
+                  subtotal: 150,
+                  discount: 0,
+                  taxableBase: 150,
+                  tax: 0,
+                  total: 150,
+                  totalCost: 75,
+                  profit: 75,
+                  marginBasisPoints: 5000,
+                  costComplete: true
+                }
+              }
+            ]
+          }
+        ],
+        lineItems: [
+          pendingEstimate().lineItems[0],
+          {
+            id: 'line-2',
+            estimateId: 'estimate-1',
+            position: 1,
+            kind: 'equipment',
+            description: 'Better condenser',
+            quantity: 1,
+            unitPrice: 50,
+            unitCost: 15,
+            taxable: true,
+            optionGroupId: 'standard-options',
+            optionId: 'better',
+            lineSubtotal: 50,
+            lineCost: 15,
+            createdAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z'
+          }
+        ]
+      })
+    );
+
+    const document = await service.exportEstimateDocument('token', 'estimate-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'estimates:view',
+      ['office-web']
+    );
+    expect(document.filename).toContain('estimate-Replacement-options');
+    expect(document.html).toContain('Better - Selected');
+    expect(document.html).toContain('Better condenser');
+    expect(document.html).toContain('$150.00');
+  });
+
   it('refuses to edit an approved estimate (strict lifecycle)', async () => {
     const { service, estimatesRepository } = createService();
     estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));

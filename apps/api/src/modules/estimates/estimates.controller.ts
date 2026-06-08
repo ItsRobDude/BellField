@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, Res } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { EstimatesService } from './estimates.service';
 import {
@@ -8,6 +8,8 @@ import {
   DeclineEstimateRequestBodyDto,
   UpdateEstimateRequestBodyDto
 } from './estimates.dto';
+
+type MinimalResponse = { setHeader: (name: string, value: string) => void };
 
 // Estimates are job-owned, so list/create live under the job path. This mirrors
 // the register-entry routing and keeps the "estimate attaches to a job" invariant
@@ -49,6 +51,21 @@ export class EstimatesController {
     @Param('estimateId') estimateId: string
   ) {
     return this.estimatesService.getEstimate(getBearerToken(authorizationHeader), estimateId);
+  }
+
+  @Get(':estimateId/document')
+  async exportDocument(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('estimateId') estimateId: string,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const document = await this.estimatesService.exportEstimateDocument(
+      getBearerToken(authorizationHeader),
+      estimateId
+    );
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+    return document.html;
   }
 
   @Put(':estimateId')

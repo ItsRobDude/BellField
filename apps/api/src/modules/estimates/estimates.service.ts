@@ -19,6 +19,7 @@ import type {
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { InvoicesRepository, type EstimateConversionInput } from '../invoices/invoices.repository';
+import { renderEstimateDocument, type EstimateDocument } from './estimate-document';
 import { EstimatesRepository } from './estimates.repository';
 import type {
   ApproveEstimateRequestDto,
@@ -75,6 +76,17 @@ export class EstimatesService {
     ]);
     const estimate = await this.requireEstimate(estimateId);
     return { estimate: this.toSummary(estimate) };
+  }
+
+  /** Server-rendered printable estimate document. Office-only, gated on estimates:view. */
+  async exportEstimateDocument(
+    sessionToken: string,
+    estimateId: string
+  ): Promise<EstimateDocument> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view', [
+      'office-web'
+    ]);
+    return renderEstimateDocument(await this.requireEstimate(estimateId));
   }
 
   async createEstimate(

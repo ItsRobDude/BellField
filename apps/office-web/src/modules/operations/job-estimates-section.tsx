@@ -6,12 +6,14 @@ import {
   convertOfficeEstimateToInvoice,
   createOfficeEstimate,
   declineOfficeEstimate,
+  downloadOfficeEstimateDocument,
   getOfficeCatalogItems,
   getOfficeEstimatesForJob,
   updateOfficeEstimate,
   type CatalogItem,
   type EstimateSummary
 } from '@/lib/operations-api';
+import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { EstimateEditor } from './job-estimate-editor';
 import {
@@ -207,6 +209,20 @@ export function JobEstimatesSection({
     }
   }
 
+  async function downloadEstimate(estimate: EstimateSummary) {
+    setErrorMessage(null);
+    try {
+      const blob = await downloadOfficeEstimateDocument({
+        estimateId: estimate.id,
+        apiBaseUrl,
+        sessionToken
+      });
+      downloadBlob(`estimate-${estimate.id}.html`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to download the estimate.');
+    }
+  }
+
   return (
     <section style={styles.panel} aria-label="Job estimates">
       <div style={styles.row}>
@@ -255,6 +271,7 @@ export function JobEstimatesSection({
               onApprove={(selectedOptionId) => void approve(estimate.id, selectedOptionId)}
               onDecline={() => void decline(estimate.id)}
               onConvert={() => void convert(estimate.id)}
+              onDownload={() => void downloadEstimate(estimate)}
             />
           ))}
         </div>
@@ -271,7 +288,8 @@ function EstimateCard({
   onEdit,
   onApprove,
   onDecline,
-  onConvert
+  onConvert,
+  onDownload
 }: {
   estimate: EstimateSummary;
   canEdit: boolean;
@@ -281,6 +299,7 @@ function EstimateCard({
   onApprove: (selectedOptionId?: string) => void;
   onDecline: () => void;
   onConvert: () => void;
+  onDownload: () => void;
 }) {
   const isPending = estimate.status === 'pending';
 
@@ -309,6 +328,9 @@ function EstimateCard({
       <EstimateTotals estimate={estimate} />
 
       <div style={styles.inlineActionBar}>
+        <button type="button" style={styles.button} onClick={onDownload}>
+          Download estimate
+        </button>
         {isPending && canEdit ? (
           <button type="button" style={styles.button} onClick={onEdit}>
             Edit
