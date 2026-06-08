@@ -15,8 +15,13 @@ export const timelineTickLabels = [
 export const timelineLabelWidth = '8.5rem';
 export const timelineLaneMinWidth = '96rem';
 export const timelineColumnGap = '0.75rem';
-export const timelineRowMinHeight = '4.85rem';
-export const timelineCardMinHeight = '3.8rem';
+export const timelineRowMinHeightRem = 4.85;
+export const timelineCardMinHeightRem = 3.8;
+export const timelineLaneRowGapRem = 0.3;
+export const timelineLanePaddingBlockRem = 0.35;
+export const timelineRowMinHeight = `${timelineRowMinHeightRem}rem`;
+export const timelineCardMinHeight = `${timelineCardMinHeightRem}rem`;
+export const timelineLaneRowGap = `${timelineLaneRowGapRem}rem`;
 export const timelineCardTextLineHeight = '1.1rem';
 
 export const timelineGridTemplateColumns = `repeat(${timelineSlotCount}, minmax(1rem, 1fr)) minmax(11rem, 12rem)`;

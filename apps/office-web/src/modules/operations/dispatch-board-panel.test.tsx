@@ -599,6 +599,13 @@ describe('DispatchBoardPanel', () => {
     );
 
     const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
+    const taylorLane = taylorRegion.children[1]?.children[0];
+    const firstCardFrame = within(taylorRegion).getByRole('button', {
+      name: /Job 1001.*overlaps another appointment/i
+    }).parentElement as HTMLElement;
+    const secondCardFrame = within(taylorRegion).getByRole('button', {
+      name: /Job 1002.*overlaps another appointment/i
+    }).parentElement as HTMLElement;
 
     expect(within(taylorRegion).getAllByText('Overlap')).toHaveLength(2);
     expect(
@@ -611,6 +618,13 @@ describe('DispatchBoardPanel', () => {
         name: /Job 1002.*overlaps another appointment/i
       })
     ).toBeInTheDocument();
+    expect(taylorRegion).toHaveStyle({ minHeight: '8.6rem' });
+    expect(taylorLane).toHaveStyle({
+      gridTemplateRows: 'repeat(2, minmax(3.8rem, 1fr))',
+      minHeight: '8.6rem'
+    });
+    expect(firstCardFrame).toHaveStyle({ gridRow: '1' });
+    expect(secondCardFrame).toHaveStyle({ gridRow: '2' });
   });
 
   it('does not mark timed unassigned appointments as schedule overlaps', () => {

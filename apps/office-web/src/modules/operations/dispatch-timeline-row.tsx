@@ -23,16 +23,26 @@ import {
 } from './dispatch-timeline-drag-state';
 import {
   timelineCardMinHeight,
+  timelineCardMinHeightRem,
   timelineColumnGap,
   timelineEndMinutes,
   timelineGridTemplateColumns,
   timelineLabelWidth,
+  timelineLanePaddingBlockRem,
   timelineLaneMinWidth,
+  timelineLaneRowGap,
+  timelineLaneRowGapRem,
   timelineRowMinHeight,
+  timelineRowMinHeightRem,
   timelineSlotCount,
   timelineSlotMinutes,
   timelineStartMinutes
 } from './dispatch-timeline-layout';
+import {
+  buildDispatchTimelineLaneLayout,
+  type DispatchTimelineLaneLayout,
+  type DispatchTimelineLanePreview
+} from './dispatch-timeline-lane-layout';
 import { timelineLaneCellStyle } from './dispatch-timeline-shared-styles';
 import {
   buildDispatchMoveDraft,
@@ -102,6 +112,26 @@ export function DispatchTimelineRow({
       void commitTimelineDrag(state);
     }
   });
+  const activeDragPlacementPreview = dragState
+    ? getDispatchDragPlacementPreview(dragState)
+    : undefined;
+  const activeLanePreview: DispatchTimelineLanePreview | undefined =
+    dragState && activeDragPlacementPreview
+      ? {
+          appointmentId: dragState.appointmentId,
+          ...activeDragPlacementPreview
+        }
+      : undefined;
+  const laneLayout = useMemo(
+    () => buildDispatchTimelineLaneLayout(cards, activeLanePreview),
+    [
+      cards,
+      activeLanePreview?.appointmentId,
+      activeLanePreview?.startMinutes,
+      activeLanePreview?.endMinutes
+    ]
+  );
+  const rowMinHeight = getTimelineLaneMinHeight(laneLayout.rowCount);
 
   function handleOpenCardDetail(card: DispatchAppointmentCard) {
     if (consumeCardOpenSuppression()) {
@@ -386,7 +416,7 @@ export function DispatchTimelineRow({
 
   return (
     <section
-      style={timelineRowStyle}
+      style={{ ...timelineRowStyle, minHeight: rowMinHeight }}
       aria-label={ariaLabel}
       data-dispatch-assignment-target-id={assignmentTarget.technicianId}
       data-dispatch-assignment-target-label={assignmentTarget.label}
@@ -394,6 +424,7 @@ export function DispatchTimelineRow({
       <div
         style={{
           ...timelineRowLabelStyle,
+          minHeight: rowMinHeight,
           ...(isAssignmentTargetActive ? timelineAssignmentTargetStyle : null)
         }}
       >
@@ -404,6 +435,8 @@ export function DispatchTimelineRow({
         <div
           style={{
             ...timelineLaneStyle,
+            gridTemplateRows: `repeat(${laneLayout.rowCount}, minmax(${timelineCardMinHeight}, 1fr))`,
+            minHeight: rowMinHeight,
             ...(isAssignmentTargetActive ? timelineAssignmentTargetStyle : null)
           }}
         >
@@ -424,8 +457,9 @@ export function DispatchTimelineRow({
               placementStyle={getTimelineCardPlacementStyle(
                 card,
                 index,
+                laneLayout,
                 dragState?.appointmentId === card.appointmentId
-                  ? getDispatchDragPlacementPreview(dragState)
+                  ? activeDragPlacementPreview
                   : undefined
               )}
               technicians={technicians}
@@ -461,15 +495,17 @@ export function createDispatchScheduleDraft(
 function getTimelineCardPlacementStyle(
   card: DispatchAppointmentCard,
   index: number,
+  laneLayout: DispatchTimelineLaneLayout,
   preview?: { startMinutes?: number; endMinutes?: number }
 ): CSSProperties {
   const startMinutes = preview?.startMinutes ?? parseDispatchTimeToMinutes(card.scheduledStartTime);
   const endMinutes = preview?.endMinutes ?? parseDispatchTimeToMinutes(card.scheduledEndTime);
+  const gridRow = `${laneLayout.cardRows.get(card.appointmentId) ?? Math.max(1, index + 1)}`;
 
   if (startMinutes === null) {
     return {
       gridColumn: `${timelineSlotCount + 1} / span 8`,
-      gridRow: index + 1
+      gridRow
     };
   }
 
@@ -485,8 +521,20 @@ function getTimelineCardPlacementStyle(
   const durationSlots = Math.max(4, Math.ceil((clampedEnd - clampedStart) / timelineSlotMinutes));
 
   return {
-    gridColumn: `${startSlot} / span ${durationSlots}`
+    gridColumn: `${startSlot} / span ${durationSlots}`,
+    gridRow
   };
+}
+
+function getTimelineLaneMinHeight(rowCount: number): string {
+  const boundedRowCount = Math.max(1, rowCount);
+  const stackedHeightRem =
+    timelineCardMinHeightRem * boundedRowCount +
+    timelineLaneRowGapRem * Math.max(0, boundedRowCount - 1) +
+    timelineLanePaddingBlockRem * 2;
+  const minHeightRem = Math.max(timelineRowMinHeightRem, stackedHeightRem);
+
+  return `${Number(minHeightRem.toFixed(2))}rem`;
 }
 
 function getTimelineSlotWidth(cardFrameElement: HTMLDivElement | null): number {
@@ -575,7 +623,7 @@ const timelineLaneStyle: CSSProperties = {
   borderRadius: 8,
   boxSizing: 'border-box',
   display: 'grid',
-  gap: '0.3rem',
+  gap: timelineLaneRowGap,
   gridAutoRows: `minmax(${timelineCardMinHeight}, 1fr)`,
   gridTemplateColumns: timelineGridTemplateColumns,
   height: '100%',
