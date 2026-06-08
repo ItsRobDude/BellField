@@ -20,6 +20,7 @@ import {
   estimateLineItemKindLabels,
   estimateLineItemKindOptions,
   estimateStatusLabels,
+  isUntouchedBlankEstimateLine,
   parseEstimateDraft,
   type EstimateDraft,
   type EstimateLineDraft
@@ -35,6 +36,8 @@ type JobEstimatesSectionProps = {
   canConvert: boolean;
   canViewCatalog: boolean;
 };
+
+type CatalogLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
 // Estimates attach to a job, so this section lives inside the job detail surface.
 // It is self-contained: it fetches its own estimates and owns its draft state,
@@ -53,7 +56,7 @@ export function JobEstimatesSection({
   const [estimates, setEstimates] = useState<EstimateSummary[]>([]);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
   const [catalogSearchText, setCatalogSearchText] = useState('');
-  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [catalogLoadStatus, setCatalogLoadStatus] = useState<CatalogLoadStatus>('idle');
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -82,26 +85,27 @@ export function JobEstimatesSection({
     if (!canViewCatalog) {
       return;
     }
-    setIsCatalogLoading(true);
+    setCatalogLoadStatus('loading');
     try {
       const response = await getOfficeCatalogItems({ apiBaseUrl, sessionToken });
       setCatalogItems(response.items);
+      setCatalogLoadStatus('loaded');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load the Catalog.');
-    } finally {
-      setIsCatalogLoading(false);
+      setCatalogLoadStatus('error');
     }
   }, [apiBaseUrl, canViewCatalog, sessionToken]);
 
   useEffect(() => {
-    if (draft && canViewCatalog && catalogItems.length === 0 && !isCatalogLoading) {
+    if (draft && canViewCatalog && catalogLoadStatus === 'idle') {
       void loadCatalog();
     }
-  }, [canViewCatalog, catalogItems.length, draft, isCatalogLoading, loadCatalog]);
+  }, [canViewCatalog, catalogLoadStatus, draft, loadCatalog]);
 
   function startNewEstimate() {
     setEditingEstimateId(null);
     setDraft(createEmptyEstimateDraft());
+    setCatalogLoadStatus('idle');
     setNoticeMessage(null);
     setErrorMessage(null);
   }
@@ -109,6 +113,7 @@ export function JobEstimatesSection({
   function startEditEstimate(estimate: EstimateSummary) {
     setEditingEstimateId(estimate.id);
     setDraft(buildEstimateDraftFromSummary(estimate));
+    setCatalogLoadStatus('idle');
     setNoticeMessage(null);
     setErrorMessage(null);
   }
@@ -227,7 +232,7 @@ export function JobEstimatesSection({
           canViewCatalog={canViewCatalog}
           catalogItems={catalogItems}
           catalogSearchText={catalogSearchText}
-          isCatalogLoading={isCatalogLoading}
+          isCatalogLoading={catalogLoadStatus === 'loading'}
           onChange={setDraft}
           onCatalogSearchChange={setCatalogSearchText}
           onReloadCatalog={() => void loadCatalog()}
@@ -485,7 +490,10 @@ function EstimateEditor({
   function addCatalogLine(line: EstimateLineDraft) {
     onChange({
       ...draft,
-      lineItems: [...draft.lineItems, line]
+      lineItems:
+        draft.lineItems.length === 1 && isUntouchedBlankEstimateLine(draft.lineItems[0])
+          ? [line]
+          : [...draft.lineItems, line]
     });
   }
 

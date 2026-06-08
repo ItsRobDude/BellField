@@ -9,7 +9,13 @@ import {
   type EstimateDiscount as EngineDiscount,
   type EstimatePricingLine
 } from '@bellfield/estimating';
-import type { ConvertEstimateToInvoiceRequest, InvoiceResponse } from '@bellfield/contracts';
+import type {
+  CatalogLineSnapshot,
+  CatalogItemKind,
+  CatalogPriceMode,
+  ConvertEstimateToInvoiceRequest,
+  InvoiceResponse
+} from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { InvoicesRepository, type EstimateConversionInput } from '../invoices/invoices.repository';
@@ -349,6 +355,9 @@ export class EstimatesService {
     }
 
     for (const line of lineItems) {
+      if (line.catalogSnapshot) {
+        validateCatalogSnapshot(line.catalogSnapshot);
+      }
       if (
         line.catalogItemId &&
         line.catalogSnapshot?.catalogItemId &&
@@ -373,6 +382,19 @@ export class EstimatesService {
   }
 }
 
+const catalogItemKinds = [
+  'service',
+  'part',
+  'equipment',
+  'labor',
+  'fee',
+  'discount',
+  'agreement',
+  'other'
+] as const satisfies readonly CatalogItemKind[];
+
+const catalogPriceModes = ['standard', 'agreement'] as const satisfies readonly CatalogPriceMode[];
+
 function toPricingLine(line: EstimateLineItemInputValue): EstimatePricingLine {
   return {
     quantity: line.quantity,
@@ -380,6 +402,80 @@ function toPricingLine(line: EstimateLineItemInputValue): EstimatePricingLine {
     unitCostDollars: line.unitCost,
     taxable: line.taxable
   };
+}
+
+function validateCatalogSnapshot(snapshot: CatalogLineSnapshot): void {
+  const candidate = snapshot as unknown as Record<string, unknown>;
+  validateOptionalString(candidate.catalogItemId, 'Catalog snapshot item id', 120);
+  validateOptionalString(candidate.code, 'Catalog snapshot code', 80);
+  validateRequiredString(candidate.name, 'Catalog snapshot name', 160);
+  validateCatalogKind(candidate.kind);
+  validateOptionalString(candidate.category, 'Catalog snapshot category', 120);
+  validateOptionalString(candidate.description, 'Catalog snapshot description', 1000);
+  validateOptionalString(candidate.unitOfMeasure, 'Catalog snapshot unit', 40);
+  validateOptionalNumber(candidate.selectedUnitPrice, 'Catalog snapshot selected unit price');
+  validateBoolean(candidate.taxable, 'Catalog snapshot taxable');
+  validateCatalogPriceMode(candidate.priceMode);
+  validateOptionalNumber(candidate.defaultSalePrice, 'Catalog snapshot default sale price');
+  validateOptionalNumber(candidate.agreementPrice, 'Catalog snapshot agreement price');
+  validateOptionalString(
+    candidate.linkedInventoryItemId,
+    'Catalog snapshot inventory item id',
+    120
+  );
+  validateOptionalString(
+    candidate.linkedInventoryItemSku,
+    'Catalog snapshot inventory item sku',
+    120
+  );
+  validateOptionalString(
+    candidate.linkedInventoryItemName,
+    'Catalog snapshot inventory item name',
+    160
+  );
+}
+
+function validateCatalogKind(value: unknown): void {
+  if (typeof value !== 'string' || !catalogItemKinds.includes(value as CatalogItemKind)) {
+    throw new BadRequestException('Catalog snapshot kind is invalid.');
+  }
+}
+
+function validateCatalogPriceMode(value: unknown): void {
+  if (typeof value !== 'string' || !catalogPriceModes.includes(value as CatalogPriceMode)) {
+    throw new BadRequestException('Catalog snapshot price mode is invalid.');
+  }
+}
+
+function validateRequiredString(value: unknown, label: string, maxLength: number): void {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new BadRequestException(`${label} is required.`);
+  }
+  validateOptionalString(value, label, maxLength);
+}
+
+function validateOptionalString(value: unknown, label: string, maxLength: number): void {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value !== 'string' || value.length > maxLength) {
+    throw new BadRequestException(`${label} is invalid.`);
+  }
+}
+
+function validateOptionalNumber(value: unknown, label: string): void {
+  if (value === undefined) {
+    return;
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value)) {
+    throw new BadRequestException(`${label} is invalid.`);
+  }
+}
+
+function validateBoolean(value: unknown, label: string): void {
+  if (typeof value !== 'boolean') {
+    throw new BadRequestException(`${label} is invalid.`);
+  }
 }
 
 /**

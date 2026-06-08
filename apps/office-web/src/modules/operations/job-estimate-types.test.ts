@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildEstimateDraftFromSummary,
   createEmptyEstimateDraft,
+  isUntouchedBlankEstimateLine,
   parseEstimateDraft,
   type EstimateDraft
 } from './job-estimate-types';
@@ -71,6 +72,86 @@ describe('parseEstimateDraft', () => {
     expect(result.value.lineItems[0].unitCost).toBeUndefined();
   });
 
+  it('rejects a blank unit price instead of silently saving zero', () => {
+    const result = parseEstimateDraft(
+      draftWith({
+        title: 'Quote',
+        lineItems: [
+          {
+            kind: 'part',
+            description: 'Capacitor',
+            quantity: '1',
+            unitOfMeasure: '',
+            unitPrice: '',
+            unitCost: '',
+            taxable: true
+          }
+        ]
+      })
+    );
+
+    expect(result.ok).toBe(false);
+  });
+
+  it('accepts an explicit zero unit price', () => {
+    const result = parseEstimateDraft(
+      draftWith({
+        title: 'Quote',
+        lineItems: [
+          {
+            kind: 'other',
+            description: 'Courtesy inspection',
+            quantity: '1',
+            unitOfMeasure: '',
+            unitPrice: '0',
+            unitCost: '',
+            taxable: false
+          }
+        ]
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lineItems[0].unitPrice).toBe(0);
+  });
+
+  it('normalizes catalog snapshots to the edited line price and taxable value', () => {
+    const result = parseEstimateDraft(
+      draftWith({
+        title: 'Quote',
+        lineItems: [
+          {
+            kind: 'part',
+            description: 'Capacitor',
+            quantity: '1',
+            unitOfMeasure: 'each',
+            unitPrice: '150',
+            unitCost: '',
+            taxable: false,
+            catalogItemId: 'catalog-1',
+            catalogSnapshot: {
+              catalogItemId: 'catalog-1',
+              name: 'Capacitor',
+              kind: 'part',
+              taxable: true,
+              priceMode: 'standard',
+              selectedUnitPrice: 120
+            }
+          }
+        ]
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.lineItems[0].catalogSnapshot).toMatchObject({
+      selectedUnitPrice: 150,
+      taxable: false,
+      unitOfMeasure: 'each'
+    });
+  });
+
   it('maps a fixed discount to a dollar amount', () => {
     const result = parseEstimateDraft(
       draftWith({
@@ -138,6 +219,15 @@ describe('parseEstimateDraft', () => {
       })
     );
     expect(result.ok).toBe(false);
+  });
+});
+
+describe('isUntouchedBlankEstimateLine', () => {
+  it('detects only the starter blank line', () => {
+    const starterLine = createEmptyEstimateDraft().lineItems[0]!;
+
+    expect(isUntouchedBlankEstimateLine(starterLine)).toBe(true);
+    expect(isUntouchedBlankEstimateLine({ ...starterLine, description: 'Started' })).toBe(false);
   });
 });
 

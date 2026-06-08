@@ -75,6 +75,20 @@ export function createEmptyEstimateDraft(): EstimateDraft {
   };
 }
 
+export function isUntouchedBlankEstimateLine(line: EstimateLineDraft): boolean {
+  return (
+    line.kind === 'part' &&
+    line.description.trim() === '' &&
+    line.quantity === '1' &&
+    line.unitOfMeasure.trim() === '' &&
+    line.unitPrice.trim() === '' &&
+    line.unitCost.trim() === '' &&
+    line.taxable &&
+    !line.catalogItemId &&
+    !line.catalogSnapshot
+  );
+}
+
 export function buildEstimateDraftFromSummary(estimate: EstimateSummary): EstimateDraft {
   return {
     title: estimate.title,
@@ -134,7 +148,11 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
     if (!Number.isFinite(quantity) || quantity <= 0) {
       return { ok: false, message: `Line ${position}: quantity must be greater than zero.` };
     }
-    const unitPrice = Number(line.unitPrice);
+    const unitPriceText = line.unitPrice.trim();
+    if (unitPriceText === '') {
+      return { ok: false, message: `Line ${position}: enter a unit price.` };
+    }
+    const unitPrice = Number(unitPriceText);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
       return { ok: false, message: `Line ${position}: unit price must be zero or more.` };
     }
@@ -160,7 +178,18 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
       lineInput.catalogItemId = line.catalogItemId;
     }
     if (line.catalogSnapshot) {
-      lineInput.catalogSnapshot = line.catalogSnapshot;
+      const catalogSnapshot = {
+        ...line.catalogSnapshot,
+        selectedUnitPrice: unitPrice,
+        taxable: line.taxable
+      };
+      const unitOfMeasure = line.unitOfMeasure.trim();
+      if (unitOfMeasure) {
+        catalogSnapshot.unitOfMeasure = unitOfMeasure;
+      } else {
+        delete catalogSnapshot.unitOfMeasure;
+      }
+      lineInput.catalogSnapshot = catalogSnapshot;
     }
     lineItems.push(lineInput);
   }

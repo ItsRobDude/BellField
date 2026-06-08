@@ -248,6 +248,62 @@ describe('EstimatesService', () => {
     expect(estimatesRepository.createEstimate).not.toHaveBeenCalled();
   });
 
+  it('rejects a malformed catalog snapshot', async () => {
+    const { service, estimatesRepository } = createService();
+
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Bad Catalog snapshot',
+        lineItems: [
+          {
+            kind: 'part',
+            description: 'Compressor',
+            quantity: 1,
+            unitPrice: 500,
+            taxable: true,
+            catalogItemId: 'catalog-1',
+            catalogSnapshot: {
+              catalogItemId: 'catalog-1',
+              name: '',
+              kind: 'part',
+              taxable: true,
+              priceMode: 'standard'
+            }
+          }
+        ]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(estimatesRepository.createEstimate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a catalog snapshot whose id disagrees with the line reference', async () => {
+    const { service, estimatesRepository } = createService();
+
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Mismatched Catalog snapshot',
+        lineItems: [
+          {
+            kind: 'part',
+            description: 'Compressor',
+            quantity: 1,
+            unitPrice: 500,
+            taxable: true,
+            catalogItemId: 'catalog-1',
+            catalogSnapshot: {
+              catalogItemId: 'catalog-2',
+              name: 'Compressor',
+              kind: 'part',
+              taxable: true,
+              priceMode: 'standard'
+            }
+          }
+        ]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(estimatesRepository.createEstimate).not.toHaveBeenCalled();
+  });
+
   it('rejects a discount that mixes percent and fixed fields', async () => {
     const { service } = createService();
     await expect(
