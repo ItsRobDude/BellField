@@ -104,6 +104,9 @@ export function OfficeWorkspaceShell({
   const canViewCatalog = employee.effectivePermissions.includes('catalog:view');
   const canCreateCatalog = employee.effectivePermissions.includes('catalog:create');
   const canEditCatalog = employee.effectivePermissions.includes('catalog:edit');
+  const canViewAgreements = employee.effectivePermissions.includes('agreements:view');
+  const canCreateAgreements = employee.effectivePermissions.includes('agreements:create');
+  const canEditAgreements = employee.effectivePermissions.includes('agreements:edit');
   const canViewSystem = employee.effectivePermissions.includes('supportLogsBackups:view');
   const canExportSupport = employee.effectivePermissions.includes('supportLogsBackups:export');
   const canViewHistory = employee.effectivePermissions.includes('history:view');
@@ -839,6 +842,7 @@ export function OfficeWorkspaceShell({
       isRefreshing={isRefreshing}
       canViewInventory={canViewInventory}
       canViewCatalog={canViewCatalog}
+      canViewAgreements={canViewAgreements}
       canViewPurchasing={canViewPurchasing}
       canViewBookkeeping={canViewInvoice}
       canViewReports={canViewReports}
@@ -894,6 +898,12 @@ export function OfficeWorkspaceShell({
           canCreate: canCreateCatalog,
           canEdit: canEditCatalog,
           canViewInventory
+        }}
+        agreements={{
+          apiBaseUrl,
+          sessionToken,
+          canCreate: canCreateAgreements,
+          canEdit: canEditAgreements
         }}
         purchasing={{
           apiBaseUrl,

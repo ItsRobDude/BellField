@@ -36,10 +36,17 @@ vi.mock('@/lib/operations-api', () => ({
   getOfficeJobDetail: vi.fn(),
   getOfficeJobIntakeContext: vi.fn(),
   getOfficeJobsQueue: vi.fn(),
+  getOfficeJobsWorkspace: vi.fn(),
   getOfficeLocationDetail: vi.fn(),
   getOfficeMediaAttachments: vi.fn(),
   getOfficeMediaBlob: vi.fn(),
   getOfficeRegisterEntries: vi.fn(),
+  activateOfficeServiceAgreement: vi.fn(),
+  createOfficeServiceAgreement: vi.fn(),
+  endOfficeServiceAgreement: vi.fn(),
+  listOfficeServiceAgreements: vi.fn(),
+  pauseOfficeServiceAgreement: vi.fn(),
+  updateOfficeServiceAgreement: vi.fn(),
   linkOfficeEquipmentReplacement: vi.fn(),
   searchOfficeCrm: vi.fn(),
   updateOfficeAppointmentSchedule: vi.fn(),
@@ -511,6 +518,7 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
   mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee });
   mockedOperationsApi.getOfficeJobIntakeContext.mockResolvedValue(buildJobIntakeContext(workspace));
   mockedOperationsApi.getOfficeJobsQueue.mockResolvedValue(buildJobsQueue(workspace));
+  mockedOperationsApi.getOfficeJobsWorkspace.mockResolvedValue(workspace);
   mockedOperationsApi.getOfficeDispatchBoard.mockResolvedValue(buildDispatchBoard(workspace));
   mockedOperationsApi.searchOfficeCrm.mockResolvedValue({
     query: 'main',
@@ -532,6 +540,7 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
     equipment: [],
     suggestedEquipmentTypes: []
   });
+  mockedOperationsApi.listOfficeServiceAgreements.mockResolvedValue({ agreements: [] });
   mockedOperationsApi.getOfficeRegisterEntries.mockResolvedValue({ registerEntries: [] });
   mockedOperationsApi.getOfficeMediaAttachments.mockResolvedValue({ mediaAttachments: [] });
   mockedOperationsApi.getOfficeMediaBlob.mockResolvedValue(new Blob(['media-bytes']));
@@ -570,7 +579,7 @@ function renderShell({
   initialEmployee?: EmployeeSummary;
   onSignOut?: () => void;
 } = {}) {
-  render(
+  return render(
     <OfficeWorkspaceShell
       apiBaseUrl="http://api.test"
       initialEmployee={initialEmployee}
@@ -691,6 +700,27 @@ describe('OfficeWorkspaceShell IA', () => {
       />
     );
     expect(await screen.findByRole('button', { name: 'Employees' })).toBeInTheDocument();
+  });
+
+  it('shows Agreements only with agreements:view and opens the workbench', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()])); // default employee has no permissions
+    const firstRender = renderShell();
+    await screen.findByRole('region', { name: 'Dispatch board' });
+    expect(screen.queryByRole('button', { name: 'Agreements' })).not.toBeInTheDocument();
+    firstRender.unmount();
+
+    vi.clearAllMocks();
+    const viewer: EmployeeSummary = {
+      ...employee,
+      effectivePermissions: ['agreements:view']
+    };
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedIdentityApi.getCurrentOfficeSession.mockResolvedValue({ employee: viewer });
+    renderShell({ initialEmployee: viewer });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Agreements' }));
+    expect(await screen.findByRole('region', { name: 'Agreements' })).toBeInTheDocument();
+    expect(mockedOperationsApi.listOfficeServiceAgreements).toHaveBeenCalled();
   });
 
   it('switches between Dispatch, Customers, and Jobs from the rail', async () => {
