@@ -13,7 +13,8 @@ function createService() {
   const bookkeepingRepository = {
     listReadyToPost: jest.fn().mockResolvedValue([]),
     listOpenBalances: jest.fn().mockResolvedValue([]),
-    listRecentlyPosted: jest.fn().mockResolvedValue([])
+    listRecentlyPosted: jest.fn().mockResolvedValue([]),
+    listPaymentBatches: jest.fn().mockResolvedValue([])
   };
 
   return {
@@ -58,10 +59,37 @@ describe('BookkeepingService.getInvoiceQueues', () => {
     expect(result.readyToPost).toHaveLength(1);
     expect(result.openBalance[0].amountDue).toBe(150);
     expect(result.recentlyPosted).toEqual([]);
+    expect(result.paymentBatches).toEqual([]);
     // Each worklist is requested with a bounded limit.
     expect(bookkeepingRepository.listReadyToPost).toHaveBeenCalledWith(expect.any(Number));
     expect(bookkeepingRepository.listOpenBalances).toHaveBeenCalledWith(expect.any(Number));
     expect(bookkeepingRepository.listRecentlyPosted).toHaveBeenCalledWith(expect.any(Number));
+    expect(bookkeepingRepository.listPaymentBatches).not.toHaveBeenCalled();
+  });
+
+  it('includes payment batches only when the actor can view payments', async () => {
+    const { service, identityAccessService, bookkeepingRepository } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Bea Bookkeeper',
+      effectivePermissions: ['invoices:view', 'payments:view'],
+      sessionSurface: 'office-web'
+    });
+    bookkeepingRepository.listPaymentBatches.mockResolvedValue([
+      {
+        batchDate: '2026-06-08',
+        method: 'check',
+        paymentCount: 2,
+        totalAmount: 250,
+        latestReceivedAt: '2026-06-08T18:00:00.000Z'
+      }
+    ]);
+
+    const result = await service.getInvoiceQueues('token');
+
+    expect(result.paymentBatches).toHaveLength(1);
+    expect(result.paymentBatches[0].totalAmount).toBe(250);
+    expect(bookkeepingRepository.listPaymentBatches).toHaveBeenCalledWith(expect.any(Number));
   });
 
   it('propagates a forbidden session and queries nothing', async () => {

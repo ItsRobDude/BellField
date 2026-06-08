@@ -2,7 +2,11 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import type { InvoiceKind } from '@bellfield/contracts';
-import type { BookkeepingBalanceItemDto, BookkeepingInvoiceItemDto } from './bookkeeping.types';
+import type {
+  BookkeepingBalanceItemDto,
+  BookkeepingInvoiceItemDto,
+  BookkeepingPaymentBatchItemDto
+} from './bookkeeping.types';
 import { queryOpenBalanceRows } from './open-balance-query';
 
 type InvoiceItemRow = {
@@ -14,6 +18,14 @@ type InvoiceItemRow = {
   total: string | number;
   postedAt: string | Date | null;
   updatedAt: string | Date;
+};
+
+type PaymentBatchRow = {
+  batchDate: string | Date;
+  method: BookkeepingPaymentBatchItemDto['method'];
+  paymentCount: string | number;
+  totalAmount: string | number;
+  latestReceivedAt: string | Date;
 };
 
 @Injectable()
@@ -83,6 +95,34 @@ export class BookkeepingRepository {
     // The open-balance math lives in a shared helper so the AR/open-balance report reuses the exact
     // same calculation (single source of truth — see open-balance-query.ts).
     return queryOpenBalanceRows(this.databaseService, limit);
+  }
+
+  /** Recent non-void payment groupings for deposit prep. Read-only: no deposit state exists yet. */
+  async listPaymentBatches(limit: number): Promise<BookkeepingPaymentBatchItemDto[]> {
+    const result = await this.databaseService.query<PaymentBatchRow>(
+      `select
+         p.received_at::date as "batchDate",
+         p.method,
+         count(*) as "paymentCount",
+         coalesce(sum(p.amount), 0) as "totalAmount",
+         max(p.received_at) as "latestReceivedAt"
+       from payments p
+       where p.is_void = false
+       group by p.received_at::date, p.method
+       order by "batchDate" desc, p.method asc
+       limit $1`,
+      [limit]
+    );
+    return result.rows.map((row) => ({
+      batchDate:
+        row.batchDate instanceof Date
+          ? row.batchDate.toISOString().slice(0, 10)
+          : String(row.batchDate).slice(0, 10),
+      method: row.method,
+      paymentCount: Number(row.paymentCount),
+      totalAmount: roundMoney(row.totalAmount),
+      latestReceivedAt: toIsoString(row.latestReceivedAt)
+    }));
   }
 }
 

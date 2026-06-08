@@ -20,16 +20,22 @@ export class BookkeepingService {
    * posting/adjustment/payment actions live behind their own permissions.
    */
   async getInvoiceQueues(sessionToken: string): Promise<BookkeepingQueuesResponseDto> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:view', [
-      'office-web'
-    ]);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'invoices:view',
+      ['office-web']
+    );
+    const canViewPayments = employee.effectivePermissions.includes('payments:view');
 
-    const [readyToPost, openBalance, recentlyPosted] = await Promise.all([
+    const [readyToPost, openBalance, recentlyPosted, paymentBatches] = await Promise.all([
       this.bookkeepingRepository.listReadyToPost(QUEUE_LIMIT),
       this.bookkeepingRepository.listOpenBalances(QUEUE_LIMIT),
-      this.bookkeepingRepository.listRecentlyPosted(QUEUE_LIMIT)
+      this.bookkeepingRepository.listRecentlyPosted(QUEUE_LIMIT),
+      canViewPayments
+        ? this.bookkeepingRepository.listPaymentBatches(QUEUE_LIMIT)
+        : Promise.resolve([])
     ]);
 
-    return { readyToPost, openBalance, recentlyPosted };
+    return { readyToPost, openBalance, recentlyPosted, paymentBatches };
   }
 }

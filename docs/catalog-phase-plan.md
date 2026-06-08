@@ -526,6 +526,17 @@ Scope:
 - CSV export for posted invoices/payments
 - sales tax summary
 
+Status:
+
+- First accounting handoff slice is implemented. Reports now include AR open balances, AR aging,
+  sales tax summary, job profitability, and inventory valuation, with server-gated CSV exports.
+- Posted invoice and payment ledger CSV exports are available for bookkeeping/accounting handoff.
+- Invoice and estimate document exports are server-rendered printable HTML documents. They are
+  suitable for browser print/PDF handoff without adding a heavy PDF dependency.
+- Estimate documents preserve option sections and clearly mark the selected option when present.
+- Bookkeeping now includes read-only payment batch groupings by received date and method when the
+  actor has `payments:view`; no deposit posting/state machine has been introduced yet.
+
 ### Phase 6 - Service agreements
 
 Goal:

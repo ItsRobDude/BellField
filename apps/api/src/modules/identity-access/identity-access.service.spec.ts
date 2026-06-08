@@ -162,6 +162,7 @@ describe('IdentityAccessService', () => {
       'media:view',
       'media:create',
       'media:edit',
+      'catalog:view',
       'estimates:view',
       'estimates:create',
       'estimates:edit',

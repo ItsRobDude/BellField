@@ -5,6 +5,7 @@ import {
   getOfficeBookkeepingQueues,
   type BookkeepingBalanceItem,
   type BookkeepingInvoiceItem,
+  type BookkeepingPaymentBatchItem,
   type BookkeepingQueuesResponse
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -95,6 +96,14 @@ export function OfficeBookkeepingSurface({
               <InvoiceRow key={item.invoiceId} item={item} onOpenJob={onOpenJob} />
             )}
           />
+          <QueuePanel
+            title="Payment batches"
+            emptyText="No received payments are ready for deposit review."
+            items={queues.paymentBatches}
+            renderItem={(item) => (
+              <PaymentBatchRow key={`${item.batchDate}-${item.method}`} item={item} />
+            )}
+          />
         </>
       ) : null}
     </section>
@@ -150,6 +159,30 @@ function InvoiceRow({
       </div>
     </button>
   );
+}
+
+function PaymentBatchRow({ item }: { item: BookkeepingPaymentBatchItem }) {
+  return (
+    <div style={styles.card}>
+      <div style={styles.row}>
+        <div style={{ minWidth: 0 }}>
+          <strong>
+            {item.batchDate} · {paymentMethodLabel(item.method)}
+          </strong>
+          <p style={styles.tinyMuted}>
+            {item.paymentCount} payment{item.paymentCount === 1 ? '' : 's'} · latest{' '}
+            {item.latestReceivedAt.slice(0, 10)}
+          </p>
+        </div>
+        <strong>{formatCurrency(item.totalAmount)}</strong>
+      </div>
+    </div>
+  );
+}
+
+function paymentMethodLabel(method: BookkeepingPaymentBatchItem['method']): string {
+  if (method === 'ach') return 'ACH';
+  return method.slice(0, 1).toUpperCase() + method.slice(1);
 }
 
 function BalanceRow({
