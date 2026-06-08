@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Param, Post, Put, Res } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { InvoicesService } from './invoices.service';
 import {
@@ -6,6 +6,8 @@ import {
   InvoiceLineItemInputDto,
   VoidInvoiceLineItemRequestBodyDto
 } from './invoices.dto';
+
+type MinimalResponse = { setHeader: (name: string, value: string) => void };
 
 // A job owns one main invoice, so the draft and its line additions are addressed
 // under the job path.
@@ -111,6 +113,21 @@ export class InvoiceController {
     @Param('invoiceId') invoiceId: string
   ) {
     return this.invoicesService.getInvoice(getBearerToken(authorizationHeader), invoiceId);
+  }
+
+  @Get(':invoiceId/document')
+  async exportDocument(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const document = await this.invoicesService.exportInvoiceDocument(
+      getBearerToken(authorizationHeader),
+      invoiceId
+    );
+    response.setHeader('Content-Type', 'text/html; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+    return document.html;
   }
 
   @Post(':invoiceId/lines')

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   addOfficeInvoiceLine,
+  downloadOfficeInvoiceDocument,
   editOfficeInvoiceLine,
   getOfficeInvoiceForJob,
   postOfficeInvoice,
@@ -10,6 +11,7 @@ import {
   type InvoiceLineItemSummary,
   type InvoiceSummary
 } from '@/lib/operations-api';
+import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildInvoiceLineDraft,
@@ -168,6 +170,21 @@ export function JobInvoiceSection({
     }
   }
 
+  async function downloadInvoiceDocument() {
+    if (!invoice) return;
+    setErrorMessage(null);
+    try {
+      const blob = await downloadOfficeInvoiceDocument({
+        invoiceId: invoice.id,
+        apiBaseUrl,
+        sessionToken
+      });
+      downloadBlob(`invoice-${invoice.id}.html`, blob);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to download the invoice.');
+    }
+  }
+
   return (
     <>
       <section style={styles.panel} aria-label="Job invoice draft">
@@ -176,6 +193,15 @@ export function JobInvoiceSection({
           <div style={styles.badgeRow}>
             {invoice ? (
               <span style={styles.badge}>{invoice.status === 'posted' ? 'Posted' : 'Draft'}</span>
+            ) : null}
+            {invoice ? (
+              <button
+                type="button"
+                style={styles.button}
+                onClick={() => void downloadInvoiceDocument()}
+              >
+                Download invoice
+              </button>
             ) : null}
             {invoice && canEdit && invoice.status === 'draft' && !newLineDraft ? (
               <button

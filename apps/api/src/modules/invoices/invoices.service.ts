@@ -14,6 +14,7 @@ import { IdentityAccessService } from '../identity-access/identity-access.servic
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { InvoicesRepository, type InvoiceLineWriteInput } from './invoices.repository';
+import { renderInvoiceDocument, type InvoiceDocument } from './invoice-document';
 import { PaymentsRepository } from './payments.repository';
 import type {
   InvoiceRecord,
@@ -52,6 +53,14 @@ export class InvoicesService {
       'office-web'
     ]);
     return { invoice: this.toSummary(await this.requireInvoice(invoiceId)) };
+  }
+
+  /** Server-rendered printable invoice document. Office-only, gated on invoices:view. */
+  async exportInvoiceDocument(sessionToken: string, invoiceId: string): Promise<InvoiceDocument> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'invoices:view', [
+      'office-web'
+    ]);
+    return renderInvoiceDocument(await this.requireInvoice(invoiceId));
   }
 
   /**

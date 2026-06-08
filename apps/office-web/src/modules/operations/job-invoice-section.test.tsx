@@ -2,10 +2,12 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InvoiceSummary } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
+import * as downloadFile from '@/lib/download-file';
 import { JobInvoiceSection } from './job-invoice-section';
 
 vi.mock('@/lib/operations-api', () => ({
   getOfficeInvoiceForJob: vi.fn(),
+  downloadOfficeInvoiceDocument: vi.fn(),
   addOfficeInvoiceLine: vi.fn(),
   editOfficeInvoiceLine: vi.fn(),
   voidOfficeInvoiceLine: vi.fn(),
@@ -20,8 +22,10 @@ vi.mock('@/lib/operations-api', () => ({
   recordOfficePayment: vi.fn(),
   voidOfficePayment: vi.fn()
 }));
+vi.mock('@/lib/download-file', () => ({ downloadBlob: vi.fn() }));
 
 const mockedApi = vi.mocked(operationsApi);
+const mockedDownload = vi.mocked(downloadFile);
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -38,6 +42,7 @@ beforeEach(() => {
   });
   mockedApi.listOfficeJobAdjustments.mockResolvedValue({ adjustments: [] });
   mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [] });
+  mockedApi.downloadOfficeInvoiceDocument.mockResolvedValue(new Blob(['html']));
 });
 
 afterEach(() => {
@@ -158,6 +163,26 @@ describe('JobInvoiceSection posting', () => {
     expect(screen.getByText('Posted by Olivia Owner on 2026-06-01.')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Post invoice' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add line' })).not.toBeInTheDocument();
+  });
+
+  it('downloads the server-rendered invoice document', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Download invoice' }));
+
+    await waitFor(() =>
+      expect(mockedApi.downloadOfficeInvoiceDocument).toHaveBeenCalledWith({
+        invoiceId: 'inv-1',
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(mockedDownload.downloadBlob).toHaveBeenCalledWith(
+      'invoice-inv-1.html',
+      expect.any(Blob)
+    );
   });
 
   it('hides the Post button when the user lacks invoices:post', async () => {

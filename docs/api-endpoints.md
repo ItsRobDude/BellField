@@ -101,6 +101,7 @@ Every job owns exactly one main invoice draft (created eagerly at job creation, 
 | `POST` | `/operations/jobs/:jobId/invoice/lines`       | office  | `invoices:edit`   | Add a manual line to the draft.                                                                        |
 | `PUT`  | `/operations/invoices/lines/:lineId`          | office  | `invoices:edit`   | Edit a draft line (detaches it from its register source).                                              |
 | `POST` | `/operations/invoices/lines/:lineId/void`     | office  | `invoices:edit`   | Soft-void a draft line.                                                                                |
+| `GET`  | `/operations/invoices/:invoiceId/document`    | office  | `invoices:view`   | Download a printable invoice HTML document for browser print/PDF handoff.                              |
 | `POST` | `/operations/jobs/:jobId/invoice/post`        | office  | `invoices:post`   | Post (lock) the draft: freezes the customer/location/job snapshot, then blocks further edits. No body. |
 | `GET`  | `/operations/jobs/:jobId/invoice/adjustments` | office  | `invoices:view`   | List the job's adjustment/credit correction records (each a full invoice with lines).                  |
 | `POST` | `/operations/jobs/:jobId/invoice/adjustments` | office  | `invoices:create` | Create an adjustment or credit against the posted main. Body `{ kind: 'adjustment' \| 'credit' }`.     |

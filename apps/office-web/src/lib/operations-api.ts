@@ -746,6 +746,17 @@ export async function getOfficeInvoiceForJob(input: {
   });
 }
 
+export async function downloadOfficeInvoiceDocument(input: {
+  invoiceId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob(`/operations/invoices/${input.invoiceId}/document`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
 export async function addOfficeInvoiceLine(
   input: InvoiceLineItemInput & { jobId: string; sessionToken: string; apiBaseUrl?: string }
 ): Promise<InvoiceResponse> {

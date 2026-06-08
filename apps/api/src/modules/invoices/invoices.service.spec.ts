@@ -170,6 +170,62 @@ describe('InvoicesService', () => {
     expect(result.invoice.lineItems[0].sourceKind).toBe('register');
     expect(result.invoice.totals.total).toBe(129.9);
   });
+
+  it('exports a printable invoice document gated on invoices:view', async () => {
+    const { service, identityAccessService, invoicesRepository } = createService();
+    invoicesRepository.getInvoiceById.mockResolvedValue(
+      draftInvoice({
+        status: 'posted',
+        lineItems: [
+          {
+            id: 'line-1',
+            invoiceId: 'invoice-main-job-1',
+            position: 0,
+            kind: 'labor',
+            description: 'Diagnostic visit',
+            quantity: 1,
+            unitPrice: 99,
+            taxable: false,
+            lineSubtotal: 99,
+            sourceKind: 'manual',
+            sourceSyncState: 'linked',
+            createdAt: '2026-06-01T00:00:00.000Z',
+            updatedAt: '2026-06-01T00:00:00.000Z'
+          }
+        ],
+        totals: {
+          subtotal: 99,
+          discount: 0,
+          taxableBase: 0,
+          tax: 0,
+          total: 99,
+          totalCost: 0,
+          profit: 99,
+          marginBasisPoints: null,
+          costComplete: true
+        },
+        posted: {
+          postedAt: '2026-06-02T00:00:00.000Z',
+          postedByName: 'Bookkeeper',
+          billTo: { customerId: 'cust-1', name: 'Acme' },
+          serviceLocation: { locationId: 'loc-1', name: 'Shop' },
+          jobNumber: '1003'
+        }
+      })
+    );
+
+    const document = await service.exportInvoiceDocument('token', 'invoice-main-job-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'invoices:view',
+      ['office-web']
+    );
+    expect(document.filename).toContain('invoice-1003');
+    expect(document.html).toContain('Diagnostic visit');
+    expect(document.html).toContain('Acme');
+    expect(document.html).toContain('$99.00');
+  });
 });
 
 describe('InvoicesService line editing', () => {
