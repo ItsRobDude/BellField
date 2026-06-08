@@ -23,6 +23,7 @@ export type OfficeJobDetailSurfaceProps = {
   canCreateEstimate: boolean;
   canEditEstimate: boolean;
   canApproveEstimate: boolean;
+  canViewCatalog: boolean;
   canViewInvoice: boolean;
   canEditInvoice: boolean;
   canPostInvoice: boolean;
@@ -84,6 +85,7 @@ export function OfficeJobDetailSurface({
   canCreateEstimate,
   canEditEstimate,
   canApproveEstimate,
+  canViewCatalog,
   canViewInvoice,
   canEditInvoice,
   canPostInvoice,
@@ -139,6 +141,7 @@ export function OfficeJobDetailSurface({
         canCreateEstimate={canCreateEstimate}
         canEditEstimate={canEditEstimate}
         canApproveEstimate={canApproveEstimate}
+        canViewCatalog={canViewCatalog}
         canViewInvoice={canViewInvoice}
         canEditInvoice={canEditInvoice}
         canPostInvoice={canPostInvoice}

@@ -39,6 +39,7 @@ type JobDetailPanelProps = {
   canCreateEstimate: boolean;
   canEditEstimate: boolean;
   canApproveEstimate: boolean;
+  canViewCatalog: boolean;
   canViewInvoice: boolean;
   canEditInvoice: boolean;
   canPostInvoice: boolean;
@@ -127,6 +128,7 @@ export function JobDetailPanel({
   canCreateEstimate,
   canEditEstimate,
   canApproveEstimate,
+  canViewCatalog,
   canViewInvoice,
   canEditInvoice,
   canPostInvoice,
@@ -302,6 +304,7 @@ export function JobDetailPanel({
           canEdit={canEditEstimate}
           canApprove={canApproveEstimate}
           canConvert={canConvertEstimate}
+          canViewCatalog={canViewCatalog}
         />
       ) : null}
       {activeTab === 'invoice' && canViewInvoice ? (

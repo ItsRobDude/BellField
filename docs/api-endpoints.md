@@ -72,14 +72,14 @@ a concurrent demotion/deactivation/permission change or a stale update can't sli
 
 | Method | Path                                | Surface | Permission gate   | Purpose                                                                                                                                                  |
 | ------ | ----------------------------------- | ------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/operations/catalog/items`         | office  | `catalog:view`    | List office Catalog items, including inactive rows, internal cost/accounting fields, inventory links, and register usage counts.                         |
+| `GET`  | `/operations/catalog/items`         | office  | `catalog:view`    | List office Catalog items, including inactive rows, inventory links, and register usage counts. Internal cost/accounting fields require `catalog:edit`.  |
 | `POST` | `/operations/catalog/items`         | office  | `catalog:create`  | Create a Catalog item. Supports trade-neutral kinds, category/tags, pricing, tax defaults, cost hint, optional inventory link, and field visibility.     |
 | `PUT`  | `/operations/catalog/items/:itemId` | office  | `catalog:edit`    | Update a Catalog item, including active/inactive state. Edits affect future selections only; historical register/invoice snapshots keep their meaning.   |
 | `GET`  | `/operations/catalog/field-items`   | field   | `register:create` | Field-safe active sellable/chargeable Catalog items for technician register selection. Excludes office-only discounts and internal cost/accounting data. |
 
 ## Estimates
 
-Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined. Approval/decline does not change job status, create an invoice, or create any other downstream record; it does write a job timeline entry and bump `jobs.updated_at` as an audit trail.
+Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lines may optionally reference a Catalog item and carry a frozen sell-side Catalog snapshot. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined. Approval/decline does not change job status, create an invoice, or create any other downstream record; it does write a job timeline entry and bump `jobs.updated_at` as an audit trail.
 
 | Method | Path                                                   | Surface | Permission gate     | Purpose                                                                                                                                                                                       |
 | ------ | ------------------------------------------------------ | ------- | ------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

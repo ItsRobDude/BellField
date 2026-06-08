@@ -80,7 +80,7 @@ export interface UpdateCatalogItemRequest extends CreateCatalogItemRequest {
   isActive: boolean;
 }
 
-export interface RegisterCatalogSnapshot {
+export interface CatalogLineSnapshot {
   catalogItemId?: string;
   code?: string;
   name: string;
@@ -97,3 +97,5 @@ export interface RegisterCatalogSnapshot {
   linkedInventoryItemSku?: string;
   linkedInventoryItemName?: string;
 }
+
+export interface RegisterCatalogSnapshot extends CatalogLineSnapshot {}

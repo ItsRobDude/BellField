@@ -940,6 +940,7 @@ export function OfficeWorkspaceShell({
           canCreateEstimate,
           canEditEstimate,
           canApproveEstimate,
+          canViewCatalog,
           canViewInvoice,
           canEditInvoice,
           canPostInvoice,

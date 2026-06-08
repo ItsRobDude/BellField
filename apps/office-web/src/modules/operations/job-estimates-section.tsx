@@ -6,11 +6,14 @@ import {
   convertOfficeEstimateToInvoice,
   createOfficeEstimate,
   declineOfficeEstimate,
+  getOfficeCatalogItems,
   getOfficeEstimatesForJob,
   updateOfficeEstimate,
+  type CatalogItem,
   type EstimateSummary
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import {
   buildEstimateDraftFromSummary,
   createEmptyEstimateDraft,
@@ -30,6 +33,7 @@ type JobEstimatesSectionProps = {
   canEdit: boolean;
   canApprove: boolean;
   canConvert: boolean;
+  canViewCatalog: boolean;
 };
 
 // Estimates attach to a job, so this section lives inside the job detail surface.
@@ -43,9 +47,13 @@ export function JobEstimatesSection({
   canCreate,
   canEdit,
   canApprove,
-  canConvert
+  canConvert,
+  canViewCatalog
 }: JobEstimatesSectionProps) {
   const [estimates, setEstimates] = useState<EstimateSummary[]>([]);
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [catalogSearchText, setCatalogSearchText] = useState('');
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -69,6 +77,27 @@ export function JobEstimatesSection({
   useEffect(() => {
     void loadEstimates();
   }, [loadEstimates]);
+
+  const loadCatalog = useCallback(async () => {
+    if (!canViewCatalog) {
+      return;
+    }
+    setIsCatalogLoading(true);
+    try {
+      const response = await getOfficeCatalogItems({ apiBaseUrl, sessionToken });
+      setCatalogItems(response.items);
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load the Catalog.');
+    } finally {
+      setIsCatalogLoading(false);
+    }
+  }, [apiBaseUrl, canViewCatalog, sessionToken]);
+
+  useEffect(() => {
+    if (draft && canViewCatalog && catalogItems.length === 0 && !isCatalogLoading) {
+      void loadCatalog();
+    }
+  }, [canViewCatalog, catalogItems.length, draft, isCatalogLoading, loadCatalog]);
 
   function startNewEstimate() {
     setEditingEstimateId(null);
@@ -195,7 +224,13 @@ export function JobEstimatesSection({
           draft={draft}
           isSaving={isSaving}
           isEditing={editingEstimateId !== null}
+          canViewCatalog={canViewCatalog}
+          catalogItems={catalogItems}
+          catalogSearchText={catalogSearchText}
+          isCatalogLoading={isCatalogLoading}
           onChange={setDraft}
+          onCatalogSearchChange={setCatalogSearchText}
+          onReloadCatalog={() => void loadCatalog()}
           onCancel={cancelDraft}
           onSave={() => void saveDraft()}
         />
@@ -329,6 +364,9 @@ function EstimateLineItems({ estimate }: { estimate: EstimateSummary }) {
               <td style={styles.tableCell}>
                 {line.description}
                 {line.taxable ? '' : ' (non-taxable)'}
+                {line.catalogSnapshot ? (
+                  <p style={styles.tinyMuted}>Catalog: {formatCatalogSnapshotLabel(line)}</p>
+                ) : null}
               </td>
               <td style={styles.tableCell}>{estimateLineItemKindLabels[line.kind]}</td>
               <td style={styles.tableCell}>
@@ -390,14 +428,26 @@ function EstimateEditor({
   draft,
   isSaving,
   isEditing,
+  canViewCatalog,
+  catalogItems,
+  catalogSearchText,
+  isCatalogLoading,
   onChange,
+  onCatalogSearchChange,
+  onReloadCatalog,
   onCancel,
   onSave
 }: {
   draft: EstimateDraft;
   isSaving: boolean;
   isEditing: boolean;
+  canViewCatalog: boolean;
+  catalogItems: CatalogItem[];
+  catalogSearchText: string;
+  isCatalogLoading: boolean;
   onChange: (draft: EstimateDraft) => void;
+  onCatalogSearchChange: (value: string) => void;
+  onReloadCatalog: () => void;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -429,6 +479,13 @@ function EstimateEditor({
           taxable: true
         }
       ]
+    });
+  }
+
+  function addCatalogLine(line: EstimateLineDraft) {
+    onChange({
+      ...draft,
+      lineItems: [...draft.lineItems, line]
     });
   }
 
@@ -509,6 +566,17 @@ function EstimateEditor({
             Add line
           </button>
         </div>
+
+        {canViewCatalog ? (
+          <EstimateCatalogPicker
+            items={catalogItems}
+            searchText={catalogSearchText}
+            isLoading={isCatalogLoading}
+            onSearchChange={onCatalogSearchChange}
+            onReload={onReloadCatalog}
+            onAddLine={addCatalogLine}
+          />
+        ) : null}
 
         {draft.lineItems.length === 0 ? (
           <p style={styles.tinyMuted}>Add at least one line item.</p>
@@ -602,6 +670,14 @@ function EstimateEditor({
       </div>
     </div>
   );
+}
+
+function formatCatalogSnapshotLabel(line: EstimateSummary['lineItems'][number]): string {
+  const snapshot = line.catalogSnapshot;
+  if (!snapshot) {
+    return '';
+  }
+  return snapshot.code ? `${snapshot.name} (${snapshot.code})` : snapshot.name;
 }
 
 function formatCurrency(amount: number): string {

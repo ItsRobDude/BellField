@@ -22,6 +22,7 @@ function createService() {
   const estimatesRepository = {
     listEstimatesForJob: jest.fn().mockResolvedValue([]),
     getEstimateById: jest.fn(),
+    catalogItemExists: jest.fn().mockResolvedValue(true),
     createEstimate: jest.fn(),
     replaceEstimate: jest.fn(),
     approveEstimate: jest.fn(),
@@ -176,6 +177,75 @@ describe('EstimatesService', () => {
 
     const [, writeInput] = estimatesRepository.createEstimate.mock.calls[0];
     expect(writeInput.discount).toEqual({ kind: 'fixed', amount: 25 });
+  });
+
+  it('preserves catalog provenance on estimate lines', async () => {
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.createEstimate.mockImplementation(async () =>
+      pendingEstimate({
+        lineItems: [
+          {
+            ...pendingEstimate().lineItems[0],
+            catalogItemId: 'catalog-1',
+            catalogSnapshot: {
+              catalogItemId: 'catalog-1',
+              name: 'Compressor',
+              kind: 'part',
+              taxable: true,
+              priceMode: 'standard'
+            }
+          }
+        ]
+      })
+    );
+
+    await service.createEstimate('token', 'job-1', {
+      title: 'Catalog quote',
+      lineItems: [
+        {
+          kind: 'part',
+          description: 'Compressor',
+          quantity: 1,
+          unitPrice: 500,
+          taxable: true,
+          catalogItemId: 'catalog-1',
+          catalogSnapshot: {
+            catalogItemId: 'catalog-1',
+            name: 'Compressor',
+            kind: 'part',
+            taxable: true,
+            priceMode: 'standard'
+          }
+        }
+      ]
+    });
+
+    const [, writeInput] = estimatesRepository.createEstimate.mock.calls[0];
+    expect(estimatesRepository.catalogItemExists).toHaveBeenCalledWith('catalog-1');
+    expect(writeInput.lineItems[0].catalogItemId).toBe('catalog-1');
+    expect(writeInput.lineItems[0].catalogSnapshot?.name).toBe('Compressor');
+  });
+
+  it('rejects a catalog line whose referenced item is missing', async () => {
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.catalogItemExists.mockResolvedValue(false);
+
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Missing Catalog item',
+        lineItems: [
+          {
+            kind: 'part',
+            description: 'Compressor',
+            quantity: 1,
+            unitPrice: 500,
+            taxable: true,
+            catalogItemId: 'missing-catalog-item'
+          }
+        ]
+      })
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(estimatesRepository.createEstimate).not.toHaveBeenCalled();
   });
 
   it('rejects a discount that mixes percent and fixed fields', async () => {

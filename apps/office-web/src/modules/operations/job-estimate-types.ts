@@ -1,4 +1,5 @@
 import type {
+  CatalogLineSnapshot,
   CreateEstimateRequest,
   EstimateLineItemKind,
   EstimateStatus,
@@ -16,6 +17,8 @@ export type EstimateLineDraft = {
   unitPrice: string;
   unitCost: string;
   taxable: boolean;
+  catalogItemId?: string;
+  catalogSnapshot?: CatalogLineSnapshot;
 };
 
 export type EstimateDraft = {
@@ -90,7 +93,9 @@ export function buildEstimateDraftFromSummary(estimate: EstimateSummary): Estima
       unitOfMeasure: line.unitOfMeasure ?? '',
       unitPrice: String(line.unitPrice),
       unitCost: line.unitCost === undefined ? '' : String(line.unitCost),
-      taxable: line.taxable
+      taxable: line.taxable,
+      catalogItemId: line.catalogItemId,
+      catalogSnapshot: line.catalogSnapshot
     }))
   };
 }
@@ -142,7 +147,7 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
       unitCost = parsedCost;
     }
 
-    lineItems.push({
+    const lineInput: CreateEstimateRequest['lineItems'][number] = {
       kind: line.kind,
       description,
       quantity,
@@ -150,7 +155,14 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
       unitPrice,
       unitCost,
       taxable: line.taxable
-    });
+    };
+    if (line.catalogItemId) {
+      lineInput.catalogItemId = line.catalogItemId;
+    }
+    if (line.catalogSnapshot) {
+      lineInput.catalogSnapshot = line.catalogSnapshot;
+    }
+    lineItems.push(lineInput);
   }
 
   let discount: CreateEstimateRequest['discount'];

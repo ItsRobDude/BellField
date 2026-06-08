@@ -177,6 +177,9 @@ The current shared contract exposes these exact `PermissionArea` values:
 | `companySettings`      | Company-level settings                                                               |
 | `supportLogsBackups`   | Support logs, diagnostics, backup/export operations                                  |
 
+Catalog note: `catalog:view` is enough to browse sell-side Catalog items in office surfaces, but
+internal notes, cost hints, income categories, and accounting export codes require `catalog:edit`.
+
 Current `PermissionAction` values are:
 
 - `view`

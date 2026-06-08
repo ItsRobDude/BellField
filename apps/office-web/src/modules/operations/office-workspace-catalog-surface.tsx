@@ -230,7 +230,17 @@ export function OfficeCatalogSurface({
           emptyText="No catalog items match the current filters."
         >
           <Table
-            head={['Item', 'Kind', 'Price', 'Cost', 'Inventory', 'Field', 'Used', 'Status', '']}
+            head={[
+              'Item',
+              'Kind',
+              'Price',
+              ...(canEdit ? ['Cost'] : []),
+              'Inventory',
+              'Field',
+              'Used',
+              'Status',
+              ''
+            ]}
           >
             {visibleItems.map((item) => (
               <tr key={item.id}>
@@ -254,9 +264,11 @@ export function OfficeCatalogSurface({
                     <p style={styles.tinyMuted}>Agreement {formatCurrency(item.agreementPrice)}</p>
                   ) : null}
                 </td>
-                <td style={styles.tableCell}>
-                  {item.costHint === undefined ? '-' : formatCurrency(item.costHint)}
-                </td>
+                {canEdit ? (
+                  <td style={styles.tableCell}>
+                    {item.costHint === undefined ? '-' : formatCurrency(item.costHint)}
+                  </td>
+                ) : null}
                 <td style={styles.tableCell}>{item.linkedInventoryItemName ?? '-'}</td>
                 <td style={styles.tableCell}>
                   <span style={item.fieldVisible ? styles.badge : styles.dangerBadge}>

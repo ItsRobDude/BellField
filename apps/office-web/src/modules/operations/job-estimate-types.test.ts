@@ -162,6 +162,15 @@ describe('buildEstimateDraftFromSummary', () => {
           unitPrice: 3200,
           unitCost: 2100,
           taxable: true,
+          catalogItemId: 'catalog-1',
+          catalogSnapshot: {
+            catalogItemId: 'catalog-1',
+            name: 'Condenser',
+            kind: 'equipment',
+            taxable: true,
+            priceMode: 'standard',
+            selectedUnitPrice: 3200
+          },
           lineSubtotal: 3200,
           lineCost: 2100,
           createdAt: '2026-06-01T00:00:00.000Z',
@@ -194,9 +203,14 @@ describe('buildEstimateDraftFromSummary', () => {
     expect(draft.validUntil).toBe('2026-07-01');
     expect(draft.lineItems[0].unitPrice).toBe('3200');
     expect(draft.lineItems[0].unitCost).toBe('2100');
+    expect(draft.lineItems[0].catalogItemId).toBe('catalog-1');
+    expect(draft.lineItems[0].catalogSnapshot?.name).toBe('Condenser');
 
     // The rebuilt draft should re-parse without error.
     const reparsed = parseEstimateDraft(draft);
     expect(reparsed.ok).toBe(true);
+    if (!reparsed.ok) return;
+    expect(reparsed.value.lineItems[0].catalogItemId).toBe('catalog-1');
+    expect(reparsed.value.lineItems[0].catalogSnapshot?.name).toBe('Condenser');
   });
 });

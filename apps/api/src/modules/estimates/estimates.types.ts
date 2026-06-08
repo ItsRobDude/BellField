@@ -78,6 +78,8 @@ export type EstimateLineItemRecord = {
   taxable: boolean;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: EstimateLineItemInputValue['catalogSnapshot'];
   lineSubtotal: number;
   lineCost?: number;
   createdAt: string;

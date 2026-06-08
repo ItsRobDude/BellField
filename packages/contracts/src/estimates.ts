@@ -1,3 +1,5 @@
+import type { CatalogLineSnapshot } from './catalog.js';
+
 // Estimate lines add 'equipment' to the register kinds: estimates routinely quote
 // replacement equipment, which captured field work does not.
 export type EstimateLineItemKind =
@@ -30,6 +32,10 @@ export interface EstimateLineItemSummary {
   taxable: boolean;
   partNumber?: string;
   inventorySourceLabel?: string;
+  /** Optional link to the Catalog item that seeded this line. */
+  catalogItemId?: string;
+  /** Frozen Catalog details used when this line was added or last edited. */
+  catalogSnapshot?: CatalogLineSnapshot;
   /** Snapshotted engine output for this line. */
   lineSubtotal: number;
   lineCost?: number;
@@ -105,6 +111,8 @@ export interface EstimateLineItemInput {
   taxable: boolean;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: CatalogLineSnapshot;
 }
 
 export interface EstimatesResponse {

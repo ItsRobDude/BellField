@@ -15,6 +15,7 @@ import {
   ValidateNested
 } from 'class-validator';
 import type {
+  CatalogLineSnapshot,
   ConvertEstimateToInvoiceRequest,
   CreateEstimateRequest,
   DeclineEstimateRequest,
@@ -63,6 +64,15 @@ export class EstimateLineItemInputDto implements EstimateLineItemInput {
   @IsString()
   @MaxLength(120)
   inventorySourceLabel?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(120)
+  catalogItemId?: string;
+
+  @IsOptional()
+  @IsObject()
+  catalogSnapshot?: CatalogLineSnapshot;
 }
 
 // Discount is a small discriminated union; class-validator cannot express that

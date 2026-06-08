@@ -60,6 +60,8 @@ type EstimateLineItemRow = {
   taxable: boolean;
   partNumber: string | null;
   inventorySourceLabel: string | null;
+  catalogItemId: string | null;
+  catalogSnapshot: EstimateLineItemRecord['catalogSnapshot'] | null;
   lineSubtotal: string | number;
   lineCost: string | number | null;
   createdAt: string | Date;
@@ -115,6 +117,8 @@ const ESTIMATE_LINE_COLUMNS = `
   taxable,
   part_number as "partNumber",
   inventory_source_label as "inventorySourceLabel",
+  catalog_item_id as "catalogItemId",
+  catalog_snapshot as "catalogSnapshot",
   line_subtotal_amount as "lineSubtotal",
   line_cost_amount as "lineCost",
   created_at as "createdAt",
@@ -173,6 +177,14 @@ export class EstimatesRepository {
       row,
       lineResult.rows.map((lineRow) => this.toLineItemRecord(lineRow))
     );
+  }
+
+  async catalogItemExists(catalogItemId: string): Promise<boolean> {
+    const result = await this.databaseService.query<{ id: string }>(
+      `select id from catalog_items where id = $1 limit 1`,
+      [catalogItemId]
+    );
+    return Boolean(result.rows[0]);
   }
 
   async createEstimate(
@@ -419,9 +431,14 @@ export class EstimatesRepository {
           insert into estimate_line_items (
             id, estimate_id, line_position, kind, description, quantity, unit_of_measure,
             unit_price, unit_cost, taxable, part_number, inventory_source_label,
-            line_subtotal_amount, line_cost_amount, created_at, updated_at
+            catalog_item_id, catalog_snapshot, line_subtotal_amount, line_cost_amount,
+            created_at, updated_at
           )
-          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)
+          values (
+            $1, $2, $3, $4, $5, $6, $7, $8,
+            $9, $10, $11, $12, $13, $14, $15,
+            $16, $17, $17
+          )
         `,
         [
           randomUUID(),
@@ -436,6 +453,8 @@ export class EstimatesRepository {
           line.taxable,
           line.partNumber?.trim() || null,
           line.inventorySourceLabel?.trim() || null,
+          line.catalogItemId?.trim() || null,
+          line.catalogSnapshot ? JSON.stringify(line.catalogSnapshot) : null,
           lineTotals.lineSubtotal,
           lineTotals.lineCost ?? null,
           now
@@ -526,6 +545,8 @@ export class EstimatesRepository {
       taxable: row.taxable,
       partNumber: row.partNumber ?? undefined,
       inventorySourceLabel: row.inventorySourceLabel ?? undefined,
+      catalogItemId: row.catalogItemId ?? undefined,
+      catalogSnapshot: row.catalogSnapshot ?? undefined,
       lineSubtotal: Number(row.lineSubtotal),
       lineCost: row.lineCost === null ? undefined : Number(row.lineCost),
       createdAt: toIsoString(row.createdAt),

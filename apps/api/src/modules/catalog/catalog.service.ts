@@ -2,6 +2,7 @@ import { BadRequestException, Injectable, NotFoundException } from '@nestjs/comm
 import type {
   FieldCatalogResponse,
   FieldCatalogItem,
+  CatalogItem,
   CatalogItemsResponse,
   CatalogItemResponse
 } from '@bellfield/contracts';
@@ -34,8 +35,12 @@ export class CatalogService {
   }
 
   async listItems(sessionToken: string): Promise<CatalogItemsResponse> {
-    await this.authorize(sessionToken, 'catalog:view');
-    return { items: await this.catalogRepository.listItems() };
+    const actor = await this.authorize(sessionToken, 'catalog:view');
+    const items = await this.catalogRepository.listItems();
+    const canViewInternalCatalogFields = actor.effectivePermissions.includes('catalog:edit');
+    return {
+      items: canViewInternalCatalogFields ? items : items.map(toReadOnlyCatalogItem)
+    };
   }
 
   async createItem(
@@ -95,4 +100,13 @@ export class CatalogService {
       'office-web'
     ]);
   }
+}
+
+function toReadOnlyCatalogItem(item: CatalogItem): CatalogItem {
+  const readOnlyItem = { ...item };
+  delete readOnlyItem.internalNotes;
+  delete readOnlyItem.costHint;
+  delete readOnlyItem.incomeCategory;
+  delete readOnlyItem.accountingExportCode;
+  return readOnlyItem;
 }

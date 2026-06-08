@@ -460,6 +460,8 @@ Status:
   active/inactive Catalog rows; `catalog:create` and `catalog:edit` control writes; Catalog
   rows can carry pricing, tax defaults, cost hints, categories/tags, accounting/export codes,
   field visibility, and optional inventory links.
+- Read-only office Catalog viewers receive sell-side Catalog data only. Internal notes, cost hints,
+  income categories, and accounting export codes require `catalog:edit`.
 - Usage visibility is currently a register-entry usage count. Detailed drill-down is deferred.
 
 ### Phase 3 - Estimate builder catalog selection
@@ -473,6 +475,16 @@ Scope:
 - add catalog-backed estimate lines
 - snapshot line data
 - convert approved estimate into invoice draft using existing conversion behavior
+
+Status:
+
+- First office estimate-builder slice is implemented: users who can create/edit estimates and view
+  the Catalog can add active, non-discount Catalog items from the job estimate editor.
+- Estimate line items now store optional `catalog_item_id` plus a frozen sell-side
+  `catalog_snapshot`; later Catalog edits do not rewrite existing estimates.
+- Approved estimate conversion still uses the existing invoice-draft conversion path. The invoice
+  line remains traceable through `source_estimate_line_item_id`; direct invoice-line Catalog
+  provenance is deferred until invoice/accounting export needs it.
 
 ### Phase 4 - Estimate options
 

@@ -67,6 +67,7 @@ export class EstimatesService {
       ['office-web']
     );
     await this.ensureJobExists(jobId);
+    await this.validateCatalogReferences(request.lineItems);
 
     const writeInput = this.buildWriteInput(
       request.title,
@@ -103,13 +104,16 @@ export class EstimatesService {
 
     // A PUT replaces the whole estimate; fall back to existing values for any
     // field the caller omitted so a partial payload does not silently blank data.
+    const lineItems = request.lineItems ?? existing.lineItems.map(toLineInput);
+    await this.validateCatalogReferences(lineItems);
+
     const writeInput = this.buildWriteInput(
       request.title ?? existing.title,
       request.description !== undefined ? request.description : existing.description,
       request.taxRateBasisPoints ?? existing.taxRateBasisPoints,
       request.discount !== undefined ? (request.discount ?? undefined) : existing.discount,
       request.validUntil !== undefined ? (request.validUntil ?? undefined) : existing.validUntil,
-      request.lineItems ?? existing.lineItems.map(toLineInput)
+      lineItems
     );
 
     const updated = await this.estimatesRepository.replaceEstimate(estimateId, writeInput, actor);
@@ -330,6 +334,31 @@ export class EstimatesService {
     await this.jobsDataService.getJobById(jobId);
   }
 
+  private async validateCatalogReferences(lineItems: EstimateLineItemInputValue[]): Promise<void> {
+    const catalogItemIds = [
+      ...new Set(
+        lineItems
+          .map((line) => line.catalogItemId?.trim())
+          .filter((catalogItemId): catalogItemId is string => Boolean(catalogItemId))
+      )
+    ];
+    for (const catalogItemId of catalogItemIds) {
+      if (!(await this.estimatesRepository.catalogItemExists(catalogItemId))) {
+        throw new NotFoundException('Catalog item not found.');
+      }
+    }
+
+    for (const line of lineItems) {
+      if (
+        line.catalogItemId &&
+        line.catalogSnapshot?.catalogItemId &&
+        line.catalogSnapshot.catalogItemId !== line.catalogItemId
+      ) {
+        throw new BadRequestException('Catalog snapshot must match the selected Catalog item.');
+      }
+    }
+  }
+
   private async requireEstimate(estimateId: string): Promise<EstimateRecord> {
     const estimate = await this.estimatesRepository.getEstimateById(estimateId);
     if (!estimate) {
@@ -422,6 +451,8 @@ function toLineInput(line: {
   taxable: boolean;
   partNumber?: string;
   inventorySourceLabel?: string;
+  catalogItemId?: string;
+  catalogSnapshot?: EstimateLineItemInputValue['catalogSnapshot'];
 }): EstimateLineItemInputValue {
   return {
     kind: line.kind,
@@ -432,6 +463,8 @@ function toLineInput(line: {
     unitCost: line.unitCost,
     taxable: line.taxable,
     partNumber: line.partNumber,
-    inventorySourceLabel: line.inventorySourceLabel
+    inventorySourceLabel: line.inventorySourceLabel,
+    catalogItemId: line.catalogItemId,
+    catalogSnapshot: line.catalogSnapshot
   };
 }

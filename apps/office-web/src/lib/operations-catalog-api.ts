@@ -7,6 +7,7 @@ import type {
 import { requestJson } from './operations-api-base';
 
 export type {
+  CatalogLineSnapshot,
   CatalogItem,
   CatalogItemKind,
   CatalogItemResponse,
