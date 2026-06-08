@@ -419,6 +419,20 @@ That means:
 - BellField records its approval/decline state
 - office still decides how to schedule or convert that work afterward
 
+### Optioned estimate behavior
+
+Estimate options support good/better/best style selling without trade-specific assumptions.
+
+For v1:
+
+- optioned estimates may contain common/base lines plus option-specific lines
+- approving an optioned estimate requires selecting one option path
+- unselected options remain preserved on the estimate for declined/not-selected history
+- converting an approved optioned estimate copies only the base lines plus the selected option lines
+  into the invoice draft
+- approval still does not automatically create a follow-up appointment; office uses the normal
+  job-owned appointment flow when follow-up work should be scheduled
+
 ---
 
 ## 10. Invoice Workflow

@@ -37,9 +37,11 @@ import type {
   EquipmentSummary,
   EquipmentWorkspaceResponse,
   CreateEstimateRequest,
+  ApproveEstimateRequest,
   DeclineEstimateRequest,
   EstimateLineItemInput,
   EstimateLineItemKind,
+  EstimateOptionGroupInput,
   EstimateResponse,
   EstimatesResponse,
   EstimateStatus,
@@ -153,9 +155,11 @@ export type {
   EquipmentSummary,
   EquipmentWorkspaceResponse,
   CreateEstimateRequest,
+  ApproveEstimateRequest,
   DeclineEstimateRequest,
   EstimateLineItemInput,
   EstimateLineItemKind,
+  EstimateOptionGroupInput,
   EstimateResponse,
   EstimatesResponse,
   EstimateStatus,
@@ -690,13 +694,15 @@ export async function updateOfficeEstimate(
 
 export async function approveOfficeEstimate(input: {
   estimateId: string;
+  selectedOptionId?: string;
   sessionToken: string;
   apiBaseUrl?: string;
 }): Promise<EstimateResponse> {
   return requestJson<EstimateResponse>(`/operations/estimates/${input.estimateId}/approve`, {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken,
-    method: 'POST'
+    method: 'POST',
+    body: JSON.stringify({ selectedOptionId: input.selectedOptionId })
   });
 }
 

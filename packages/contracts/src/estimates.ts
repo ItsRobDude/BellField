@@ -36,6 +36,10 @@ export interface EstimateLineItemSummary {
   catalogItemId?: string;
   /** Frozen Catalog details used when this line was added or last edited. */
   catalogSnapshot?: CatalogLineSnapshot;
+  /** Optional option group membership. Omitted for base/common lines. */
+  optionGroupId?: string;
+  /** Optional option membership. Omitted for base/common lines. */
+  optionId?: string;
   /** Snapshotted engine output for this line. */
   lineSubtotal: number;
   lineCost?: number;
@@ -66,6 +70,31 @@ export interface EstimateTotals {
   costComplete: boolean;
 }
 
+export interface EstimateOptionInput {
+  id: string;
+  label: string;
+  position: number;
+}
+
+export interface EstimateOptionGroupInput {
+  id: string;
+  title: string;
+  position: number;
+  options: EstimateOptionInput[];
+}
+
+export interface EstimateOptionSummary extends EstimateOptionInput {
+  /** Base/common lines plus this option's lines, priced as one selectable path. */
+  totals: EstimateTotals;
+}
+
+export interface EstimateOptionGroupSummary {
+  id: string;
+  title: string;
+  position: number;
+  options: EstimateOptionSummary[];
+}
+
 export interface EstimateSummary {
   id: string;
   jobId: string;
@@ -77,6 +106,9 @@ export interface EstimateSummary {
   validUntil?: string;
   lineItems: EstimateLineItemSummary[];
   totals: EstimateTotals;
+  optionGroups?: EstimateOptionGroupSummary[];
+  /** Set on approval for optioned estimates; may be set while pending as a preferred path. */
+  selectedOptionId?: string;
   approvedAt?: string;
   approvedByEmployeeId?: string;
   approvedByName?: string;
@@ -113,6 +145,8 @@ export interface EstimateLineItemInput {
   inventorySourceLabel?: string;
   catalogItemId?: string;
   catalogSnapshot?: CatalogLineSnapshot;
+  optionGroupId?: string;
+  optionId?: string;
 }
 
 export interface EstimatesResponse {
@@ -129,6 +163,8 @@ export interface CreateEstimateRequest {
   taxRateBasisPoints?: number;
   discount?: EstimateDiscount;
   validUntil?: string;
+  optionGroups?: EstimateOptionGroupInput[];
+  selectedOptionId?: string;
   lineItems: EstimateLineItemInput[];
 }
 
@@ -139,7 +175,13 @@ export interface UpdateEstimateRequest {
   taxRateBasisPoints?: number;
   discount?: EstimateDiscount | null;
   validUntil?: string | null;
+  optionGroups?: EstimateOptionGroupInput[] | null;
+  selectedOptionId?: string | null;
   lineItems?: EstimateLineItemInput[];
+}
+
+export interface ApproveEstimateRequest {
+  selectedOptionId?: string;
 }
 
 export interface DeclineEstimateRequest {

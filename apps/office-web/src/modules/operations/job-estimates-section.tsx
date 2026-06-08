@@ -13,17 +13,14 @@ import {
   type EstimateSummary
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
+import { EstimateEditor } from './job-estimate-editor';
 import {
   buildEstimateDraftFromSummary,
   createEmptyEstimateDraft,
   estimateLineItemKindLabels,
-  estimateLineItemKindOptions,
   estimateStatusLabels,
-  isUntouchedBlankEstimateLine,
   parseEstimateDraft,
-  type EstimateDraft,
-  type EstimateLineDraft
+  type EstimateDraft
 } from './job-estimate-types';
 
 type JobEstimatesSectionProps = {
@@ -159,14 +156,14 @@ export function JobEstimatesSection({
     }
   }
 
-  async function approve(estimateId: string) {
+  async function approve(estimateId: string, selectedOptionId?: string) {
     if (!window.confirm('Approve this estimate? Approved estimates can no longer be edited.')) {
       return;
     }
     setErrorMessage(null);
     setNoticeMessage(null);
     try {
-      await approveOfficeEstimate({ estimateId, apiBaseUrl, sessionToken });
+      await approveOfficeEstimate({ estimateId, selectedOptionId, apiBaseUrl, sessionToken });
       setNoticeMessage('Estimate approved.');
       await loadEstimates();
     } catch (error) {
@@ -255,7 +252,7 @@ export function JobEstimatesSection({
               canApprove={canApprove}
               canConvert={canConvert}
               onEdit={() => startEditEstimate(estimate)}
-              onApprove={() => void approve(estimate.id)}
+              onApprove={(selectedOptionId) => void approve(estimate.id, selectedOptionId)}
               onDecline={() => void decline(estimate.id)}
               onConvert={() => void convert(estimate.id)}
             />
@@ -281,7 +278,7 @@ function EstimateCard({
   canApprove: boolean;
   canConvert: boolean;
   onEdit: () => void;
-  onApprove: () => void;
+  onApprove: (selectedOptionId?: string) => void;
   onDecline: () => void;
   onConvert: () => void;
 }) {
@@ -307,6 +304,8 @@ function EstimateCard({
 
       <EstimateLineItems estimate={estimate} />
 
+      <EstimateOptions estimate={estimate} />
+
       <EstimateTotals estimate={estimate} />
 
       <div style={styles.inlineActionBar}>
@@ -315,9 +314,22 @@ function EstimateCard({
             Edit
           </button>
         ) : null}
-        {isPending && canApprove ? (
+        {isPending && canApprove && estimate.optionGroups?.length ? (
+          estimate.optionGroups.flatMap((group) =>
+            group.options.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                style={styles.primaryButton}
+                onClick={() => onApprove(option.id)}
+              >
+                Approve {option.label}
+              </button>
+            ))
+          )
+        ) : isPending && canApprove ? (
           <>
-            <button type="button" style={styles.primaryButton} onClick={onApprove}>
+            <button type="button" style={styles.primaryButton} onClick={() => onApprove()}>
               Approve
             </button>
             <button type="button" style={styles.dangerButton} onClick={onDecline}>
@@ -372,6 +384,11 @@ function EstimateLineItems({ estimate }: { estimate: EstimateSummary }) {
                 {line.catalogSnapshot ? (
                   <p style={styles.tinyMuted}>Catalog: {formatCatalogSnapshotLabel(line)}</p>
                 ) : null}
+                {line.optionId ? (
+                  <p style={styles.tinyMuted}>
+                    Option: {formatOptionLabel(estimate, line.optionId)}
+                  </p>
+                ) : null}
               </td>
               <td style={styles.tableCell}>{estimateLineItemKindLabels[line.kind]}</td>
               <td style={styles.tableCell}>
@@ -384,6 +401,36 @@ function EstimateLineItems({ estimate }: { estimate: EstimateSummary }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+function EstimateOptions({ estimate }: { estimate: EstimateSummary }) {
+  if (!estimate.optionGroups?.length) {
+    return null;
+  }
+
+  return (
+    <div style={styles.subpanel}>
+      {estimate.optionGroups.map((group) => (
+        <div key={group.id}>
+          <strong>{group.title}</strong>
+          <div style={styles.formGridCompact}>
+            {group.options.map((option) => (
+              <div key={option.id} style={styles.panel}>
+                <div style={styles.row}>
+                  <span style={{ fontWeight: 800 }}>{option.label}</span>
+                  {estimate.selectedOptionId === option.id ? (
+                    <span style={styles.badge}>Selected</span>
+                  ) : null}
+                </div>
+                <SummaryRow label="Total" value={formatCurrency(option.totals.total)} emphasize />
+                <SummaryRow label="Profit" value={formatCurrency(option.totals.profit)} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -429,263 +476,22 @@ function SummaryRow({
   );
 }
 
-function EstimateEditor({
-  draft,
-  isSaving,
-  isEditing,
-  canViewCatalog,
-  catalogItems,
-  catalogSearchText,
-  isCatalogLoading,
-  onChange,
-  onCatalogSearchChange,
-  onReloadCatalog,
-  onCancel,
-  onSave
-}: {
-  draft: EstimateDraft;
-  isSaving: boolean;
-  isEditing: boolean;
-  canViewCatalog: boolean;
-  catalogItems: CatalogItem[];
-  catalogSearchText: string;
-  isCatalogLoading: boolean;
-  onChange: (draft: EstimateDraft) => void;
-  onCatalogSearchChange: (value: string) => void;
-  onReloadCatalog: () => void;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
-  function patch(values: Partial<EstimateDraft>) {
-    onChange({ ...draft, ...values });
-  }
-
-  function patchLine(index: number, values: Partial<EstimateLineDraft>) {
-    onChange({
-      ...draft,
-      lineItems: draft.lineItems.map((line, lineIndex) =>
-        lineIndex === index ? { ...line, ...values } : line
-      )
-    });
-  }
-
-  function addLine() {
-    onChange({
-      ...draft,
-      lineItems: [
-        ...draft.lineItems,
-        {
-          kind: 'part',
-          description: '',
-          quantity: '1',
-          unitOfMeasure: '',
-          unitPrice: '',
-          unitCost: '',
-          taxable: true
-        }
-      ]
-    });
-  }
-
-  function addCatalogLine(line: EstimateLineDraft) {
-    onChange({
-      ...draft,
-      lineItems:
-        draft.lineItems.length === 1 && isUntouchedBlankEstimateLine(draft.lineItems[0])
-          ? [line]
-          : [...draft.lineItems, line]
-    });
-  }
-
-  function removeLine(index: number) {
-    onChange({
-      ...draft,
-      lineItems: draft.lineItems.filter((_, lineIndex) => lineIndex !== index)
-    });
-  }
-
-  return (
-    <div style={styles.drawerPanel}>
-      <h3 style={styles.sectionHeading}>{isEditing ? 'Edit estimate' : 'New estimate'}</h3>
-
-      <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          <span>Title</span>
-          <input
-            style={styles.input}
-            value={draft.title}
-            onChange={(event) => patch({ title: event.target.value })}
-          />
-        </label>
-        <label style={styles.fieldLabel}>
-          <span>Tax rate (%)</span>
-          <input
-            style={styles.input}
-            type="number"
-            step="0.01"
-            value={draft.taxRatePercent}
-            onChange={(event) => patch({ taxRatePercent: event.target.value })}
-          />
-        </label>
-        <label style={styles.fieldLabel}>
-          <span>Valid until</span>
-          <input
-            style={styles.input}
-            type="date"
-            value={draft.validUntil}
-            onChange={(event) => patch({ validUntil: event.target.value })}
-          />
-        </label>
-      </div>
-
-      <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          <span>Discount type</span>
-          <select
-            style={styles.input}
-            value={draft.discountKind}
-            onChange={(event) =>
-              patch({ discountKind: event.target.value as EstimateDraft['discountKind'] })
-            }
-          >
-            <option value="none">None</option>
-            <option value="percent">Percent (%)</option>
-            <option value="fixed">Fixed ($)</option>
-          </select>
-        </label>
-        {draft.discountKind !== 'none' ? (
-          <label style={styles.fieldLabel}>
-            <span>{draft.discountKind === 'percent' ? 'Discount (%)' : 'Discount ($)'}</span>
-            <input
-              style={styles.input}
-              type="number"
-              step="0.01"
-              value={draft.discountValue}
-              onChange={(event) => patch({ discountValue: event.target.value })}
-            />
-          </label>
-        ) : null}
-      </div>
-
-      <div style={styles.formSection}>
-        <div style={styles.row}>
-          <h4 style={styles.sectionHeading}>Line items</h4>
-          <button type="button" style={styles.button} onClick={addLine}>
-            Add line
-          </button>
-        </div>
-
-        {canViewCatalog ? (
-          <EstimateCatalogPicker
-            items={catalogItems}
-            searchText={catalogSearchText}
-            isLoading={isCatalogLoading}
-            onSearchChange={onCatalogSearchChange}
-            onReload={onReloadCatalog}
-            onAddLine={addCatalogLine}
-          />
-        ) : null}
-
-        {draft.lineItems.length === 0 ? (
-          <p style={styles.tinyMuted}>Add at least one line item.</p>
-        ) : (
-          draft.lineItems.map((line, index) => (
-            <div key={index} style={styles.subpanel}>
-              <div style={styles.formGridCompact}>
-                <label style={styles.fieldLabel}>
-                  <span>Kind</span>
-                  <select
-                    style={styles.input}
-                    value={line.kind}
-                    onChange={(event) =>
-                      patchLine(index, { kind: event.target.value as EstimateLineDraft['kind'] })
-                    }
-                  >
-                    {estimateLineItemKindOptions.map((kind) => (
-                      <option key={kind} value={kind}>
-                        {estimateLineItemKindLabels[kind]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
-                  <span>Description</span>
-                  <input
-                    style={styles.input}
-                    value={line.description}
-                    onChange={(event) => patchLine(index, { description: event.target.value })}
-                  />
-                </label>
-              </div>
-              <div style={styles.formGridCompact}>
-                <label style={styles.fieldLabel}>
-                  <span>Qty</span>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    step="0.01"
-                    value={line.quantity}
-                    onChange={(event) => patchLine(index, { quantity: event.target.value })}
-                  />
-                </label>
-                <label style={styles.fieldLabel}>
-                  <span>Unit price</span>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    step="0.01"
-                    value={line.unitPrice}
-                    onChange={(event) => patchLine(index, { unitPrice: event.target.value })}
-                  />
-                </label>
-                <label style={styles.fieldLabel}>
-                  <span>Unit cost</span>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    step="0.01"
-                    value={line.unitCost}
-                    onChange={(event) => patchLine(index, { unitCost: event.target.value })}
-                  />
-                </label>
-                <label style={styles.inlineLabel}>
-                  <input
-                    type="checkbox"
-                    checked={line.taxable}
-                    onChange={(event) => patchLine(index, { taxable: event.target.checked })}
-                  />
-                  <span>Taxable</span>
-                </label>
-              </div>
-              <div style={styles.row}>
-                <span style={styles.tinyMuted}>Line {index + 1}</span>
-                <button type="button" style={styles.dangerButton} onClick={() => removeLine(index)}>
-                  Remove
-                </button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-
-      <div style={styles.inlineActionBar}>
-        <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onSave}>
-          {isSaving ? 'Saving…' : isEditing ? 'Save changes' : 'Create estimate'}
-        </button>
-        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
-          Cancel
-        </button>
-      </div>
-    </div>
-  );
-}
-
 function formatCatalogSnapshotLabel(line: EstimateSummary['lineItems'][number]): string {
   const snapshot = line.catalogSnapshot;
   if (!snapshot) {
     return '';
   }
   return snapshot.code ? `${snapshot.name} (${snapshot.code})` : snapshot.name;
+}
+
+function formatOptionLabel(estimate: EstimateSummary, optionId: string): string {
+  for (const group of estimate.optionGroups ?? []) {
+    const option = group.options.find((candidate) => candidate.id === optionId);
+    if (option) {
+      return option.label;
+    }
+  }
+  return optionId;
 }
 
 function formatCurrency(amount: number): string {

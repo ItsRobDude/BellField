@@ -2,9 +2,31 @@ import type {
   CatalogLineSnapshot,
   CreateEstimateRequest,
   EstimateLineItemKind,
+  EstimateOptionGroupInput,
   EstimateStatus,
   EstimateSummary
 } from '@/lib/operations-api';
+
+export const defaultEstimateOptionGroupId = 'standard-options';
+
+export const defaultEstimateOptions = [
+  { id: 'good', label: 'Good', position: 0 },
+  { id: 'better', label: 'Better', position: 1 },
+  { id: 'best', label: 'Best', position: 2 }
+] as const;
+
+export type EstimateOptionDraft = {
+  id: string;
+  label: string;
+  position: number;
+};
+
+export type EstimateOptionGroupDraft = {
+  id: string;
+  title: string;
+  position: number;
+  options: EstimateOptionDraft[];
+};
 
 // String-backed draft shapes for the estimate editor. Money/number fields are
 // kept as strings while editing (matching the register-entry editor) and parsed
@@ -19,6 +41,8 @@ export type EstimateLineDraft = {
   taxable: boolean;
   catalogItemId?: string;
   catalogSnapshot?: CatalogLineSnapshot;
+  optionGroupId?: string;
+  optionId?: string;
 };
 
 export type EstimateDraft = {
@@ -27,6 +51,8 @@ export type EstimateDraft = {
   discountKind: 'none' | 'percent' | 'fixed';
   discountValue: string;
   validUntil: string;
+  optionGroups: EstimateOptionGroupDraft[];
+  selectedOptionId: string;
   lineItems: EstimateLineDraft[];
 };
 
@@ -61,6 +87,8 @@ export function createEmptyEstimateDraft(): EstimateDraft {
     discountKind: 'none',
     discountValue: '',
     validUntil: '',
+    optionGroups: [],
+    selectedOptionId: '',
     lineItems: [
       {
         kind: 'part',
@@ -85,7 +113,9 @@ export function isUntouchedBlankEstimateLine(line: EstimateLineDraft): boolean {
     line.unitCost.trim() === '' &&
     line.taxable &&
     !line.catalogItemId &&
-    !line.catalogSnapshot
+    !line.catalogSnapshot &&
+    !line.optionGroupId &&
+    !line.optionId
   );
 }
 
@@ -100,6 +130,18 @@ export function buildEstimateDraftFromSummary(estimate: EstimateSummary): Estima
         : String(estimate.discount.amount)
       : '',
     validUntil: estimate.validUntil ?? '',
+    optionGroups:
+      estimate.optionGroups?.map((group) => ({
+        id: group.id,
+        title: group.title,
+        position: group.position,
+        options: group.options.map((option) => ({
+          id: option.id,
+          label: option.label,
+          position: option.position
+        }))
+      })) ?? [],
+    selectedOptionId: estimate.selectedOptionId ?? '',
     lineItems: estimate.lineItems.map((line) => ({
       kind: line.kind,
       description: line.description,
@@ -109,7 +151,9 @@ export function buildEstimateDraftFromSummary(estimate: EstimateSummary): Estima
       unitCost: line.unitCost === undefined ? '' : String(line.unitCost),
       taxable: line.taxable,
       catalogItemId: line.catalogItemId,
-      catalogSnapshot: line.catalogSnapshot
+      catalogSnapshot: line.catalogSnapshot,
+      optionGroupId: line.optionGroupId,
+      optionId: line.optionId
     }))
   };
 }
@@ -137,6 +181,13 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
   }
 
   const lineItems: CreateEstimateRequest['lineItems'] = [];
+  const optionGroups = parseOptionGroups(draft.optionGroups);
+  if (!optionGroups.ok) {
+    return optionGroups;
+  }
+  if (draft.selectedOptionId && !findOption(optionGroups.value, draft.selectedOptionId)) {
+    return { ok: false, message: 'Selected option was not found.' };
+  }
   for (let index = 0; index < draft.lineItems.length; index += 1) {
     const line = draft.lineItems[index];
     const position = index + 1;
@@ -174,6 +225,16 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
       unitCost,
       taxable: line.taxable
     };
+    if (line.optionGroupId || line.optionId) {
+      if (!line.optionGroupId || !line.optionId) {
+        return { ok: false, message: `Line ${position}: choose a complete option target.` };
+      }
+      if (!findOption(optionGroups.value, line.optionId, line.optionGroupId)) {
+        return { ok: false, message: `Line ${position}: option target was not found.` };
+      }
+      lineInput.optionGroupId = line.optionGroupId;
+      lineInput.optionId = line.optionId;
+    }
     if (line.catalogItemId) {
       lineInput.catalogItemId = line.catalogItemId;
     }
@@ -216,9 +277,69 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
       taxRateBasisPoints,
       discount,
       validUntil: draft.validUntil || undefined,
+      optionGroups: optionGroups.value.length > 0 ? optionGroups.value : undefined,
+      selectedOptionId: draft.selectedOptionId || undefined,
       lineItems
     }
   };
+}
+
+export function createDefaultEstimateOptionGroup(): EstimateOptionGroupDraft {
+  return {
+    id: defaultEstimateOptionGroupId,
+    title: 'Options',
+    position: 0,
+    options: defaultEstimateOptions.map((option) => ({ ...option }))
+  };
+}
+
+function parseOptionGroups(
+  groups: EstimateOptionGroupDraft[]
+): { ok: true; value: EstimateOptionGroupInput[] } | { ok: false; message: string } {
+  const groupIds = new Set<string>();
+  const optionIds = new Set<string>();
+  const parsedGroups: EstimateOptionGroupInput[] = [];
+  for (const group of groups) {
+    const id = group.id.trim();
+    const title = group.title.trim();
+    if (!id || !title) {
+      return { ok: false, message: 'Option groups need a title.' };
+    }
+    if (groupIds.has(id)) {
+      return { ok: false, message: 'Option group ids must be unique.' };
+    }
+    groupIds.add(id);
+    if (group.options.length < 2) {
+      return { ok: false, message: 'Add at least two options or remove the option group.' };
+    }
+    const options = [];
+    for (const option of group.options) {
+      const optionId = option.id.trim();
+      const label = option.label.trim();
+      if (!optionId || !label) {
+        return { ok: false, message: 'Option labels are required.' };
+      }
+      if (optionIds.has(optionId)) {
+        return { ok: false, message: 'Option ids must be unique.' };
+      }
+      optionIds.add(optionId);
+      options.push({ id: optionId, label, position: option.position });
+    }
+    parsedGroups.push({ id, title, position: group.position, options });
+  }
+  return { ok: true, value: parsedGroups };
+}
+
+function findOption(
+  groups: EstimateOptionGroupInput[],
+  optionId: string,
+  optionGroupId?: string
+): boolean {
+  return groups.some(
+    (group) =>
+      (!optionGroupId || group.id === optionGroupId) &&
+      group.options.some((option) => option.id === optionId)
+  );
 }
 
 function percentStringToBasisPoints(value: string): number | null {

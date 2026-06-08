@@ -6,8 +6,10 @@ import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-uti
 import type {
   EstimateDiscountValue,
   EstimateLineItemRecord,
+  EstimateOptionGroupRecord,
   EstimateRecord,
   EstimateStatusValue,
+  EstimateTotalsRecord,
   EstimateWriteInput
 } from './estimates.types';
 
@@ -40,6 +42,8 @@ type EstimateRow = {
   sourceEstimateId: string | null;
   supersededByEstimateId: string | null;
   convertedToInvoiceId: string | null;
+  optionGroups: EstimateOptionGroupRecord[] | null;
+  selectedOptionId: string | null;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string | Date;
@@ -62,6 +66,8 @@ type EstimateLineItemRow = {
   inventorySourceLabel: string | null;
   catalogItemId: string | null;
   catalogSnapshot: EstimateLineItemRecord['catalogSnapshot'] | null;
+  optionGroupId: string | null;
+  optionId: string | null;
   lineSubtotal: string | number;
   lineCost: string | number | null;
   createdAt: string | Date;
@@ -97,6 +103,8 @@ const ESTIMATE_COLUMNS = `
   source_estimate_id as "sourceEstimateId",
   superseded_by_estimate_id as "supersededByEstimateId",
   converted_to_invoice_id as "convertedToInvoiceId",
+  option_groups as "optionGroups",
+  selected_option_id as "selectedOptionId",
   created_by_employee_id as "createdByEmployeeId",
   created_by_name as "createdByName",
   created_at as "createdAt",
@@ -119,6 +127,8 @@ const ESTIMATE_LINE_COLUMNS = `
   inventory_source_label as "inventorySourceLabel",
   catalog_item_id as "catalogItemId",
   catalog_snapshot as "catalogSnapshot",
+  option_group_id as "optionGroupId",
+  option_id as "optionId",
   line_subtotal_amount as "lineSubtotal",
   line_cost_amount as "lineCost",
   created_at as "createdAt",
@@ -204,6 +214,7 @@ export class EstimatesRepository {
             tax_rate_basis_points, discount_kind, discount_basis_points, discount_amount, valid_until,
             subtotal_amount, discount_amount_applied, taxable_base_amount, tax_amount, total_amount,
             total_cost_amount, profit_amount, margin_basis_points, cost_complete,
+            option_groups, selected_option_id,
             created_by_employee_id, created_by_name, created_at, updated_at, version
           )
           values (
@@ -211,7 +222,8 @@ export class EstimatesRepository {
             $5, $6, $7, $8, $9,
             $10, $11, $12, $13, $14,
             $15, $16, $17, $18,
-            $19, $20, $21, $21, 1
+            $19, $20,
+            $21, $22, $23, $23, 1
           )
         `,
         [
@@ -233,6 +245,8 @@ export class EstimatesRepository {
           input.totals.profit,
           input.totals.marginBasisPoints,
           input.totals.costComplete,
+          input.optionGroups ? JSON.stringify(input.optionGroups) : null,
+          input.selectedOptionId ?? null,
           actor.id,
           actor.displayName,
           now
@@ -292,7 +306,9 @@ export class EstimatesRepository {
             profit_amount = $15,
             margin_basis_points = $16,
             cost_complete = $17,
-            updated_at = $18,
+            option_groups = $18,
+            selected_option_id = $19,
+            updated_at = $20,
             version = version + 1
           where id = $1 and status = 'pending'
         `,
@@ -314,6 +330,8 @@ export class EstimatesRepository {
           input.totals.profit,
           input.totals.marginBasisPoints,
           input.totals.costComplete,
+          input.optionGroups ? JSON.stringify(input.optionGroups) : null,
+          input.selectedOptionId ?? null,
           now
         ]
       );
@@ -340,7 +358,8 @@ export class EstimatesRepository {
 
   async approveEstimate(
     estimateId: string,
-    actor: { id: string; displayName: string }
+    actor: { id: string; displayName: string },
+    approvedOption: { selectedOptionId?: string; totals?: EstimateTotalsRecord } = {}
   ): Promise<EstimateRecord | null> {
     const existing = await this.getEstimateById(estimateId);
     if (!existing) {
@@ -355,10 +374,36 @@ export class EstimatesRepository {
         `
           update estimates
           set status = 'approved', approved_at = $2, approved_by_employee_id = $3,
-              approved_by_name = $4, updated_at = $2, version = version + 1
+              approved_by_name = $4,
+              selected_option_id = coalesce($5, selected_option_id),
+              subtotal_amount = case when $5 is null then subtotal_amount else $6 end,
+              discount_amount_applied = case when $5 is null then discount_amount_applied else $7 end,
+              taxable_base_amount = case when $5 is null then taxable_base_amount else $8 end,
+              tax_amount = case when $5 is null then tax_amount else $9 end,
+              total_amount = case when $5 is null then total_amount else $10 end,
+              total_cost_amount = case when $5 is null then total_cost_amount else $11 end,
+              profit_amount = case when $5 is null then profit_amount else $12 end,
+              margin_basis_points = case when $5 is null then margin_basis_points else $13 end,
+              cost_complete = case when $5 is null then cost_complete else $14 end,
+              updated_at = $2, version = version + 1
           where id = $1 and status = 'pending'
         `,
-        [estimateId, now, actor.id, actor.displayName]
+        [
+          estimateId,
+          now,
+          actor.id,
+          actor.displayName,
+          approvedOption.selectedOptionId ?? null,
+          approvedOption.totals?.subtotal ?? null,
+          approvedOption.totals?.discount ?? null,
+          approvedOption.totals?.taxableBase ?? null,
+          approvedOption.totals?.tax ?? null,
+          approvedOption.totals?.total ?? null,
+          approvedOption.totals?.totalCost ?? null,
+          approvedOption.totals?.profit ?? null,
+          approvedOption.totals?.marginBasisPoints ?? null,
+          approvedOption.totals?.costComplete ?? null
+        ]
       );
 
       if (updateResult.rowCount === 0) {
@@ -431,13 +476,14 @@ export class EstimatesRepository {
           insert into estimate_line_items (
             id, estimate_id, line_position, kind, description, quantity, unit_of_measure,
             unit_price, unit_cost, taxable, part_number, inventory_source_label,
-            catalog_item_id, catalog_snapshot, line_subtotal_amount, line_cost_amount,
+            catalog_item_id, catalog_snapshot, option_group_id, option_id,
+            line_subtotal_amount, line_cost_amount,
             created_at, updated_at
           )
           values (
             $1, $2, $3, $4, $5, $6, $7, $8,
             $9, $10, $11, $12, $13, $14, $15,
-            $16, $17, $17
+            $16, $17, $18, $19, $20, $20
           )
         `,
         [
@@ -455,6 +501,8 @@ export class EstimatesRepository {
           line.inventorySourceLabel?.trim() || null,
           line.catalogItemId?.trim() || null,
           line.catalogSnapshot ? JSON.stringify(line.catalogSnapshot) : null,
+          line.optionGroupId?.trim() || null,
+          line.optionId?.trim() || null,
           lineTotals.lineSubtotal,
           lineTotals.lineCost ?? null,
           now
@@ -523,6 +571,8 @@ export class EstimatesRepository {
       sourceEstimateId: row.sourceEstimateId ?? undefined,
       supersededByEstimateId: row.supersededByEstimateId ?? undefined,
       convertedToInvoiceId: row.convertedToInvoiceId ?? undefined,
+      optionGroups: row.optionGroups ?? undefined,
+      selectedOptionId: row.selectedOptionId ?? undefined,
       createdByEmployeeId: row.createdByEmployeeId,
       createdByName: row.createdByName,
       createdAt: toIsoString(row.createdAt),
@@ -547,6 +597,8 @@ export class EstimatesRepository {
       inventorySourceLabel: row.inventorySourceLabel ?? undefined,
       catalogItemId: row.catalogItemId ?? undefined,
       catalogSnapshot: row.catalogSnapshot ?? undefined,
+      optionGroupId: row.optionGroupId ?? undefined,
+      optionId: row.optionId ?? undefined,
       lineSubtotal: Number(row.lineSubtotal),
       lineCost: row.lineCost === null ? undefined : Number(row.lineCost),
       createdAt: toIsoString(row.createdAt),

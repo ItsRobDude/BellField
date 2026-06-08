@@ -21,6 +21,7 @@ import { JobsDataService } from '../company-data/jobs-data.service';
 import { InvoicesRepository, type EstimateConversionInput } from '../invoices/invoices.repository';
 import { EstimatesRepository } from './estimates.repository';
 import type {
+  ApproveEstimateRequestDto,
   CreateEstimateRequestDto,
   DeclineEstimateRequestDto,
   EstimateRecord,
@@ -31,7 +32,21 @@ import type {
   EstimateWriteInput,
   UpdateEstimateRequestDto
 } from './estimates.types';
-import type { EstimateDiscountValue, EstimateLineItemInputValue } from './estimates.types';
+import type {
+  EstimateDiscountValue,
+  EstimateLineItemInputValue,
+  EstimateOptionGroupInputValue
+} from './estimates.types';
+import {
+  findOption,
+  getConvertibleLines,
+  normalizeOptionGroups,
+  priceOptionGroups,
+  resolveSelectedOptionForWrite,
+  toOptionGroupInput,
+  toTotalsRecordFromEngine,
+  validateOptionLineMembership
+} from './estimates-options';
 
 @Injectable()
 export class EstimatesService {
@@ -81,6 +96,8 @@ export class EstimatesService {
       request.taxRateBasisPoints,
       request.discount,
       request.validUntil,
+      request.optionGroups,
+      request.selectedOptionId,
       request.lineItems
     );
 
@@ -119,6 +136,12 @@ export class EstimatesService {
       request.taxRateBasisPoints ?? existing.taxRateBasisPoints,
       request.discount !== undefined ? (request.discount ?? undefined) : existing.discount,
       request.validUntil !== undefined ? (request.validUntil ?? undefined) : existing.validUntil,
+      request.optionGroups !== undefined
+        ? (request.optionGroups ?? undefined)
+        : existing.optionGroups?.map(toOptionGroupInput),
+      request.selectedOptionId !== undefined
+        ? (request.selectedOptionId ?? undefined)
+        : existing.selectedOptionId,
       lineItems
     );
 
@@ -129,7 +152,11 @@ export class EstimatesService {
     return { estimate: this.toSummary(updated) };
   }
 
-  async approveEstimate(sessionToken: string, estimateId: string): Promise<EstimateResponseDto> {
+  async approveEstimate(
+    sessionToken: string,
+    estimateId: string,
+    request: ApproveEstimateRequestDto = {}
+  ): Promise<EstimateResponseDto> {
     const actor = await this.identityAccessService.getAuthorizedEmployee(
       sessionToken,
       'estimates:approve',
@@ -142,7 +169,12 @@ export class EstimatesService {
       );
     }
 
-    const approved = await this.estimatesRepository.approveEstimate(estimateId, actor);
+    const approvedOption = this.resolveApprovedOption(existing, request.selectedOptionId);
+    const approved = await this.estimatesRepository.approveEstimate(
+      estimateId,
+      actor,
+      approvedOption
+    );
     if (!approved) {
       throw new NotFoundException('Estimate not found.');
     }
@@ -232,7 +264,7 @@ export class EstimatesService {
       taxRateBasisPoints: estimate.taxRateBasisPoints,
       discount: estimate.discount,
       actor: { id: actor.id, displayName: actor.displayName },
-      lines: estimate.lineItems.map((line) => ({
+      lines: getConvertibleLines(estimate).map((line) => ({
         estimateLineItemId: line.id,
         kind: line.kind,
         description: line.description,
@@ -277,6 +309,8 @@ export class EstimatesService {
     taxRateBasisPoints: number | undefined,
     discount: EstimateDiscountValue | undefined,
     validUntil: string | undefined,
+    optionGroups: EstimateOptionGroupInputValue[] | undefined,
+    selectedOptionId: string | undefined,
     lineItems: EstimateLineItemInputValue[]
   ): EstimateWriteInput {
     const trimmedTitle = title.trim();
@@ -294,6 +328,10 @@ export class EstimatesService {
     // than silently treating any non-percent kind as a fixed discount.
     const normalizedDiscount = normalizeDiscount(discount);
 
+    const normalizedOptionGroups = normalizeOptionGroups(optionGroups);
+    const selectedOption = resolveSelectedOptionForWrite(normalizedOptionGroups, selectedOptionId);
+    validateOptionLineMembership(lineItems, normalizedOptionGroups);
+
     let priced;
     try {
       priced = priceEstimate(lineItems.map(toPricingLine), {
@@ -308,17 +346,15 @@ export class EstimatesService {
       );
     }
 
-    const totals: EstimateTotalsRecord = {
-      subtotal: priced.subtotalDollars,
-      discount: priced.discountDollars,
-      taxableBase: priced.taxableBaseDollars,
-      tax: priced.taxDollars,
-      total: priced.totalDollars,
-      totalCost: priced.margin.totalCostDollars,
-      profit: priced.margin.profitDollars,
-      marginBasisPoints: priced.margin.marginBasisPoints,
-      costComplete: priced.margin.costComplete
-    };
+    const optionGroupsWithTotals = normalizedOptionGroups
+      ? priceOptionGroups(normalizedOptionGroups, lineItems, resolvedTaxRate, normalizedDiscount)
+      : undefined;
+    const selectedOptionTotals =
+      optionGroupsWithTotals && selectedOption
+        ? findOption(optionGroupsWithTotals, selectedOption.id)?.totals
+        : undefined;
+    const defaultOptionTotals = optionGroupsWithTotals?.[0]?.options[0]?.totals;
+    const totals = toTotalsRecordFromEngine(selectedOptionTotals ?? defaultOptionTotals ?? priced);
 
     return {
       title: trimmedTitle,
@@ -328,6 +364,8 @@ export class EstimatesService {
       validUntil: validUntil || undefined,
       lineItems,
       totals,
+      optionGroups: optionGroupsWithTotals,
+      selectedOptionId: selectedOption?.id,
       lineTotals: priced.lines.map((line) => ({
         lineSubtotal: line.sellTotalDollars,
         lineCost: line.costTotalDollars
@@ -379,6 +417,30 @@ export class EstimatesService {
   private toSummary(record: EstimateRecord): EstimateSummaryDto {
     // The record shape already matches the contract summary one-to-one.
     return record;
+  }
+
+  private resolveApprovedOption(
+    estimate: EstimateRecord,
+    requestedOptionId: string | undefined
+  ): { selectedOptionId?: string; totals?: EstimateTotalsRecord } {
+    if (!estimate.optionGroups || estimate.optionGroups.length === 0) {
+      if (requestedOptionId) {
+        throw new BadRequestException('This estimate has no options to approve.');
+      }
+      return {};
+    }
+
+    const selectedOptionId = requestedOptionId?.trim() || estimate.selectedOptionId;
+    if (!selectedOptionId) {
+      throw new BadRequestException('Choose one estimate option before approving.');
+    }
+
+    const selectedOption = findOption(estimate.optionGroups, selectedOptionId);
+    if (!selectedOption) {
+      throw new BadRequestException('Selected estimate option was not found.');
+    }
+
+    return { selectedOptionId: selectedOption.id, totals: selectedOption.totals };
   }
 }
 
@@ -549,6 +611,8 @@ function toLineInput(line: {
   inventorySourceLabel?: string;
   catalogItemId?: string;
   catalogSnapshot?: EstimateLineItemInputValue['catalogSnapshot'];
+  optionGroupId?: string;
+  optionId?: string;
 }): EstimateLineItemInputValue {
   return {
     kind: line.kind,
@@ -561,6 +625,8 @@ function toLineInput(line: {
     partNumber: line.partNumber,
     inventorySourceLabel: line.inventorySourceLabel,
     catalogItemId: line.catalogItemId,
-    catalogSnapshot: line.catalogSnapshot
+    catalogSnapshot: line.catalogSnapshot,
+    optionGroupId: line.optionGroupId,
+    optionId: line.optionId
   };
 }

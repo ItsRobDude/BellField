@@ -499,6 +499,18 @@ Scope:
 - declined option history
 - clear office workflow for follow-up appointments
 
+Status:
+
+- First office estimate-options slice is implemented. Pending estimates can carry a trade-neutral
+  option group with editable option labels, and estimate lines can be base/common lines or option
+  lines.
+- The API snapshots option totals as base/common lines plus each option's lines. Approval requires
+  one selected option path for optioned estimates; simple estimates continue to approve as before.
+- Approved estimate conversion copies only base/common lines plus the selected option lines into the
+  invoice draft. Unselected options remain visible on the estimate as history.
+- Follow-up scheduling remains the existing job-owned appointment workflow. Approval does not
+  automatically create downstream jobs, appointments, invoices, or status changes.
+
 ### Phase 5 - Documents and accounting handoff
 
 Goal:

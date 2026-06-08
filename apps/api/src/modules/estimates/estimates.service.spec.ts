@@ -360,10 +360,119 @@ describe('EstimatesService', () => {
     expect(result.estimate.status).toBe('approved');
     expect(estimatesRepository.approveEstimate).toHaveBeenCalledWith(
       'estimate-1',
-      expect.any(Object)
+      expect.any(Object),
+      {}
     );
     // Invariant: approval has no downstream side-effects on the job.
     expect(jobsDataService.getJobById).not.toHaveBeenCalled();
+  });
+
+  it('prices option paths as base lines plus each option', async () => {
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.createEstimate.mockImplementation(async () => pendingEstimate());
+
+    await service.createEstimate('token', 'job-1', {
+      title: 'Repair options',
+      taxRateBasisPoints: 0,
+      optionGroups: [
+        {
+          id: 'standard-options',
+          title: 'Options',
+          position: 0,
+          options: [
+            { id: 'good', label: 'Good', position: 0 },
+            { id: 'better', label: 'Better', position: 1 }
+          ]
+        }
+      ],
+      lineItems: [
+        {
+          kind: 'serviceItem',
+          description: 'Diagnostic',
+          quantity: 1,
+          unitPrice: 100,
+          taxable: false
+        },
+        {
+          kind: 'part',
+          description: 'Basic repair',
+          quantity: 1,
+          unitPrice: 200,
+          taxable: false,
+          optionGroupId: 'standard-options',
+          optionId: 'good'
+        },
+        {
+          kind: 'part',
+          description: 'Better repair',
+          quantity: 1,
+          unitPrice: 400,
+          taxable: false,
+          optionGroupId: 'standard-options',
+          optionId: 'better'
+        }
+      ]
+    });
+
+    const [, writeInput] = estimatesRepository.createEstimate.mock.calls[0];
+    expect(writeInput.optionGroups[0].options[0].totals.total).toBe(300);
+    expect(writeInput.optionGroups[0].options[1].totals.total).toBe(500);
+    expect(writeInput.totals.total).toBe(300);
+  });
+
+  it('requires one selected option before approving an optioned estimate', async () => {
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      pendingEstimate({
+        optionGroups: [
+          {
+            id: 'standard-options',
+            title: 'Options',
+            position: 0,
+            options: [
+              { id: 'good', label: 'Good', position: 0, totals: pendingEstimate().totals },
+              { id: 'better', label: 'Better', position: 1, totals: pendingEstimate().totals }
+            ]
+          }
+        ]
+      })
+    );
+
+    await expect(service.approveEstimate('token', 'estimate-1', {})).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    expect(estimatesRepository.approveEstimate).not.toHaveBeenCalled();
+  });
+
+  it('approves one selected option path and forwards that option total', async () => {
+    const { service, estimatesRepository } = createService();
+    const betterTotals = { ...pendingEstimate().totals, total: 500, subtotal: 500 };
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      pendingEstimate({
+        optionGroups: [
+          {
+            id: 'standard-options',
+            title: 'Options',
+            position: 0,
+            options: [
+              { id: 'good', label: 'Good', position: 0, totals: pendingEstimate().totals },
+              { id: 'better', label: 'Better', position: 1, totals: betterTotals }
+            ]
+          }
+        ]
+      })
+    );
+    estimatesRepository.approveEstimate.mockResolvedValue(
+      pendingEstimate({ status: 'approved', selectedOptionId: 'better', totals: betterTotals })
+    );
+
+    await service.approveEstimate('token', 'estimate-1', { selectedOptionId: 'better' });
+
+    expect(estimatesRepository.approveEstimate).toHaveBeenCalledWith(
+      'estimate-1',
+      expect.any(Object),
+      { selectedOptionId: 'better', totals: betterTotals }
+    );
   });
 
   it('refuses to approve an already-declined estimate', async () => {
@@ -441,6 +550,57 @@ describe('EstimatesService convertToInvoice', () => {
       expect.any(Object),
       'replace'
     );
+  });
+
+  it('converts only base lines plus the approved option lines', async () => {
+    const { service, estimatesRepository, invoicesRepository } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      pendingEstimate({
+        status: 'approved',
+        selectedOptionId: 'better',
+        optionGroups: [
+          {
+            id: 'standard-options',
+            title: 'Options',
+            position: 0,
+            options: [
+              { id: 'good', label: 'Good', position: 0, totals: pendingEstimate().totals },
+              { id: 'better', label: 'Better', position: 1, totals: pendingEstimate().totals }
+            ]
+          }
+        ],
+        lineItems: [
+          {
+            ...pendingEstimate().lineItems[0],
+            id: 'base-line',
+            description: 'Diagnostic',
+            optionGroupId: undefined,
+            optionId: undefined
+          },
+          {
+            ...pendingEstimate().lineItems[0],
+            id: 'good-line',
+            description: 'Good repair',
+            optionGroupId: 'standard-options',
+            optionId: 'good'
+          },
+          {
+            ...pendingEstimate().lineItems[0],
+            id: 'better-line',
+            description: 'Better repair',
+            optionGroupId: 'standard-options',
+            optionId: 'better'
+          }
+        ]
+      })
+    );
+
+    await service.convertToInvoice('token', 'estimate-1', {});
+
+    const conversionInput = invoicesRepository.convertEstimateIntoDraft.mock.calls[0][1];
+    expect(
+      conversionInput.lines.map((line: { estimateLineItemId: string }) => line.estimateLineItemId)
+    ).toEqual(['base-line', 'better-line']);
   });
 
   it('refuses to convert an estimate that was already converted', async () => {

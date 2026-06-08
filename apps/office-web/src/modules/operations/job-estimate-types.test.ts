@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   buildEstimateDraftFromSummary,
+  createDefaultEstimateOptionGroup,
   createEmptyEstimateDraft,
   isUntouchedBlankEstimateLine,
   parseEstimateDraft,
@@ -220,6 +221,75 @@ describe('parseEstimateDraft', () => {
     );
     expect(result.ok).toBe(false);
   });
+
+  it('serializes option groups and option line membership', () => {
+    const optionGroup = createDefaultEstimateOptionGroup();
+    const result = parseEstimateDraft(
+      draftWith({
+        title: 'Repair options',
+        optionGroups: [optionGroup],
+        selectedOptionId: 'better',
+        lineItems: [
+          {
+            kind: 'serviceItem',
+            description: 'Diagnostic',
+            quantity: '1',
+            unitOfMeasure: '',
+            unitPrice: '100',
+            unitCost: '',
+            taxable: false
+          },
+          {
+            kind: 'part',
+            description: 'Better repair',
+            quantity: '1',
+            unitOfMeasure: '',
+            unitPrice: '400',
+            unitCost: '',
+            taxable: false,
+            optionGroupId: optionGroup.id,
+            optionId: 'better'
+          }
+        ]
+      })
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.value.optionGroups?.[0]?.options.map((option) => option.label)).toEqual([
+      'Good',
+      'Better',
+      'Best'
+    ]);
+    expect(result.value.selectedOptionId).toBe('better');
+    expect(result.value.lineItems[1].optionGroupId).toBe(optionGroup.id);
+    expect(result.value.lineItems[1].optionId).toBe('better');
+  });
+
+  it('rejects an option line whose option target is missing', () => {
+    const optionGroup = createDefaultEstimateOptionGroup();
+    const result = parseEstimateDraft(
+      draftWith({
+        title: 'Repair options',
+        optionGroups: [optionGroup],
+        lineItems: [
+          {
+            kind: 'part',
+            description: 'Better repair',
+            quantity: '1',
+            unitOfMeasure: '',
+            unitPrice: '400',
+            unitCost: '',
+            taxable: false,
+            optionGroupId: optionGroup.id,
+            optionId: 'missing'
+          }
+        ]
+      })
+    );
+
+    expect(result.ok).toBe(false);
+  });
 });
 
 describe('isUntouchedBlankEstimateLine', () => {
@@ -241,6 +311,48 @@ describe('buildEstimateDraftFromSummary', () => {
       taxRateBasisPoints: 825,
       discount: { kind: 'percent', basisPoints: 1000 },
       validUntil: '2026-07-01',
+      optionGroups: [
+        {
+          id: 'standard-options',
+          title: 'Options',
+          position: 0,
+          options: [
+            {
+              id: 'good',
+              label: 'Good',
+              position: 0,
+              totals: {
+                subtotal: 3200,
+                discount: 320,
+                taxableBase: 2880,
+                tax: 237.6,
+                total: 3117.6,
+                totalCost: 2100,
+                profit: 780,
+                marginBasisPoints: 2708,
+                costComplete: true
+              }
+            },
+            {
+              id: 'better',
+              label: 'Better',
+              position: 1,
+              totals: {
+                subtotal: 4200,
+                discount: 420,
+                taxableBase: 3780,
+                tax: 311.85,
+                total: 4091.85,
+                totalCost: 2500,
+                profit: 1280,
+                marginBasisPoints: 3386,
+                costComplete: true
+              }
+            }
+          ]
+        }
+      ],
+      selectedOptionId: 'good',
       lineItems: [
         {
           id: 'line-1',
@@ -261,6 +373,8 @@ describe('buildEstimateDraftFromSummary', () => {
             priceMode: 'standard',
             selectedUnitPrice: 3200
           },
+          optionGroupId: 'standard-options',
+          optionId: 'good',
           lineSubtotal: 3200,
           lineCost: 2100,
           createdAt: '2026-06-01T00:00:00.000Z',
@@ -291,6 +405,8 @@ describe('buildEstimateDraftFromSummary', () => {
     expect(draft.discountKind).toBe('percent');
     expect(draft.discountValue).toBe('10');
     expect(draft.validUntil).toBe('2026-07-01');
+    expect(draft.optionGroups[0].options[0].label).toBe('Good');
+    expect(draft.selectedOptionId).toBe('good');
     expect(draft.lineItems[0].unitPrice).toBe('3200');
     expect(draft.lineItems[0].unitCost).toBe('2100');
     expect(draft.lineItems[0].catalogItemId).toBe('catalog-1');
@@ -302,5 +418,6 @@ describe('buildEstimateDraftFromSummary', () => {
     if (!reparsed.ok) return;
     expect(reparsed.value.lineItems[0].catalogItemId).toBe('catalog-1');
     expect(reparsed.value.lineItems[0].catalogSnapshot?.name).toBe('Condenser');
+    expect(reparsed.value.lineItems[0].optionId).toBe('good');
   });
 });

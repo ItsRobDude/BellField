@@ -2,6 +2,7 @@ import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common
 import { getBearerToken } from '../../common/http/bearer-token';
 import { EstimatesService } from './estimates.service';
 import {
+  ApproveEstimateRequestBodyDto,
   ConvertEstimateToInvoiceRequestBodyDto,
   CreateEstimateRequestBodyDto,
   DeclineEstimateRequestBodyDto,
@@ -66,9 +67,14 @@ export class EstimatesController {
   @Post(':estimateId/approve')
   async approve(
     @Headers('authorization') authorizationHeader: string | undefined,
-    @Param('estimateId') estimateId: string
+    @Param('estimateId') estimateId: string,
+    @Body() request: ApproveEstimateRequestBodyDto
   ) {
-    return this.estimatesService.approveEstimate(getBearerToken(authorizationHeader), estimateId);
+    return this.estimatesService.approveEstimate(
+      getBearerToken(authorizationHeader),
+      estimateId,
+      request
+    );
   }
 
   @Post(':estimateId/decline')

@@ -1,9 +1,12 @@
 import type {
   CreateEstimateRequest,
+  ApproveEstimateRequest,
   DeclineEstimateRequest,
   EstimateDiscount,
   EstimateLineItemInput,
   EstimateLineItemKind,
+  EstimateOptionGroupInput,
+  EstimateOptionGroupSummary,
   EstimateResponse,
   EstimatesResponse,
   EstimateStatus,
@@ -20,9 +23,12 @@ export type EstimatesResponseDto = EstimatesResponse;
 export type EstimateResponseDto = EstimateResponse;
 export type CreateEstimateRequestDto = CreateEstimateRequest;
 export type UpdateEstimateRequestDto = UpdateEstimateRequest;
+export type ApproveEstimateRequestDto = ApproveEstimateRequest;
 export type DeclineEstimateRequestDto = DeclineEstimateRequest;
 export type EstimateLineItemInputValue = EstimateLineItemInput;
 export type EstimateDiscountValue = EstimateDiscount;
+export type EstimateOptionGroupInputValue = EstimateOptionGroupInput;
+export type EstimateOptionGroupRecord = EstimateOptionGroupSummary;
 
 export const estimateLineItemKinds = [
   'labor',
@@ -49,6 +55,8 @@ export type EstimateRecord = {
   validUntil?: string;
   lineItems: EstimateLineItemRecord[];
   totals: EstimateTotalsRecord;
+  optionGroups?: EstimateOptionGroupRecord[];
+  selectedOptionId?: string;
   approvedAt?: string;
   approvedByEmployeeId?: string;
   approvedByName?: string;
@@ -80,6 +88,8 @@ export type EstimateLineItemRecord = {
   inventorySourceLabel?: string;
   catalogItemId?: string;
   catalogSnapshot?: EstimateLineItemInputValue['catalogSnapshot'];
+  optionGroupId?: string;
+  optionId?: string;
   lineSubtotal: number;
   lineCost?: number;
   createdAt: string;
@@ -107,6 +117,8 @@ export type EstimateWriteInput = {
   validUntil?: string;
   lineItems: EstimateLineItemInputValue[];
   totals: EstimateTotalsRecord;
+  optionGroups?: EstimateOptionGroupRecord[];
+  selectedOptionId?: string;
   /** Pre-priced per-line snapshots, aligned by index with lineItems. */
   lineTotals: Array<{ lineSubtotal: number; lineCost?: number }>;
 };
