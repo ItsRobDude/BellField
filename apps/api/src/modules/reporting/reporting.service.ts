@@ -7,7 +7,8 @@ import type {
   PaymentLedgerExportRow,
   PermissionKey,
   PostedInvoiceExportRow,
-  SalesTaxSummaryReport
+  SalesTaxSummaryReport,
+  ServiceAgreementReports
 } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
@@ -18,6 +19,13 @@ import {
 } from '../job-costing/job-cost-rollup-utils';
 import { queryInventoryOnHand } from '../inventory/inventory-onhand-query';
 import { toCsv, type CsvColumn } from './report-csv';
+import {
+  buildServiceAgreementReports,
+  SERVICE_AGREEMENT_ACTIVE_CSV_COLUMNS,
+  SERVICE_AGREEMENT_BILLING_CSV_COLUMNS,
+  SERVICE_AGREEMENT_EXPIRING_CSV_COLUMNS,
+  SERVICE_AGREEMENT_VISIT_TEMPLATE_CSV_COLUMNS
+} from './service-agreement-reporting';
 
 function roundMoney(value: string | number): number {
   return Math.round(Number(value) * 100) / 100;
@@ -246,6 +254,49 @@ export class ReportingService {
     };
   }
 
+  /** Service agreement reporting bundle. Gate: reports:view + agreements:view. */
+  async getServiceAgreementReports(sessionToken: string): Promise<ServiceAgreementReports> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, ['agreements:view']);
+    return buildServiceAgreementReports(this.databaseService);
+  }
+
+  async exportActiveServiceAgreements(sessionToken: string): Promise<ReportCsvExport> {
+    const report = await this.getExportableServiceAgreementReports(sessionToken);
+    return {
+      filename: `service-agreements-active-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(SERVICE_AGREEMENT_ACTIVE_CSV_COLUMNS, report.activeAgreements)
+    };
+  }
+
+  async exportExpiringServiceAgreements(sessionToken: string): Promise<ReportCsvExport> {
+    const report = await this.getExportableServiceAgreementReports(sessionToken);
+    return {
+      filename: `service-agreements-expiring-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(SERVICE_AGREEMENT_EXPIRING_CSV_COLUMNS, report.expiringSoon)
+    };
+  }
+
+  async exportServiceAgreementBillingDue(sessionToken: string): Promise<ReportCsvExport> {
+    const report = await this.getExportableServiceAgreementReports(sessionToken);
+    return {
+      filename: `service-agreements-billing-due-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(SERVICE_AGREEMENT_BILLING_CSV_COLUMNS, report.nextBillingDue)
+    };
+  }
+
+  async exportServiceAgreementVisitTemplatePrompts(sessionToken: string): Promise<ReportCsvExport> {
+    const report = await this.getExportableServiceAgreementReports(sessionToken);
+    return {
+      filename: `service-agreement-visit-prompts-${report.generatedAt.slice(0, 10)}.csv`,
+      csv: toCsv(SERVICE_AGREEMENT_VISIT_TEMPLATE_CSV_COLUMNS, report.visitTemplatePrompts)
+    };
+  }
+
   /** Build the AR report (no auth — callers gate first). */
   private async buildArOpenBalances(): Promise<ArOpenBalancesReport> {
     // Reuse the bookkeeping open-balance calculation (un-limited) — no duplicated invoice/payment math.
@@ -289,6 +340,21 @@ export class ReportingService {
     }
 
     return { generatedAt: new Date().toISOString(), totals, rows };
+  }
+
+  private async getExportableServiceAgreementReports(
+    sessionToken: string
+  ): Promise<ServiceAgreementReports> {
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'reports:view',
+      ['office-web']
+    );
+    this.requireSecondaryPermissions(employee.effectivePermissions, [
+      'agreements:view',
+      'reports:export'
+    ]);
+    return buildServiceAgreementReports(this.databaseService);
   }
 
   private async queryArAgingRows(): Promise<ArAgingReport['rows']> {

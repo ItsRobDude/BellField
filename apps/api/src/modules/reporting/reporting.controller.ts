@@ -86,6 +86,62 @@ export class ReportingController {
     return csv;
   }
 
+  @Get('service-agreements')
+  async getServiceAgreementReports(@Headers('authorization') auth: string | undefined) {
+    return this.reportingService.getServiceAgreementReports(getBearerToken(auth));
+  }
+
+  @Get('service-agreements/active/export')
+  async exportActiveServiceAgreements(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportActiveServiceAgreements(
+      getBearerToken(auth)
+    );
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
+  @Get('service-agreements/expiring/export')
+  async exportExpiringServiceAgreements(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportExpiringServiceAgreements(
+      getBearerToken(auth)
+    );
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
+  @Get('service-agreements/billing-due/export')
+  async exportServiceAgreementBillingDue(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } = await this.reportingService.exportServiceAgreementBillingDue(
+      getBearerToken(auth)
+    );
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
+  @Get('service-agreements/visit-prompts/export')
+  async exportServiceAgreementVisitTemplatePrompts(
+    @Headers('authorization') auth: string | undefined,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const { filename, csv } =
+      await this.reportingService.exportServiceAgreementVisitTemplatePrompts(getBearerToken(auth));
+    response.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    response.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return csv;
+  }
+
   @Get('job-profitability')
   async getJobProfitability(@Headers('authorization') auth: string | undefined) {
     return this.reportingService.getJobProfitability(getBearerToken(auth));

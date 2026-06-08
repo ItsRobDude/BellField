@@ -6,6 +6,11 @@
 
 import type { JobStatus } from './jobs.js';
 import type { InventoryItemKind } from './inventory.js';
+import type {
+  ServiceAgreementBillingCadence,
+  ServiceAgreementStatus,
+  ServiceAgreementVisitFrequency
+} from './service-agreements.js';
 
 /** AR / open-balance snapshot: jobs that still owe money. Rows only where `amountDue > 0`. */
 export interface ArOpenBalancesReport {
@@ -151,4 +156,67 @@ export interface InventoryValuationReport {
     averageUnitCost: number;
     totalValue: number;
   }>;
+}
+
+export interface ServiceAgreementReportRow {
+  agreementId: string;
+  agreementNumber: string;
+  customerId: string;
+  customerName: string;
+  name: string;
+  status: ServiceAgreementStatus;
+  startDate?: string;
+  endDate?: string;
+  renewalDate?: string;
+  billingCadence: ServiceAgreementBillingCadence;
+  nextBillingDate?: string;
+  billingAmount?: number;
+  coveredLocationNames: string[];
+  coveredEquipmentCount: number;
+  activeVisitTemplateCount: number;
+  updatedAt: string;
+}
+
+export interface ServiceAgreementBillingDueReportRow extends ServiceAgreementReportRow {
+  daysUntilBilling: number;
+}
+
+export interface ServiceAgreementVisitTemplatePromptRow {
+  agreementId: string;
+  agreementNumber: string;
+  customerId: string;
+  customerName: string;
+  agreementName: string;
+  templateId: string;
+  title: string;
+  frequency: ServiceAgreementVisitFrequency;
+  preferredMonth?: number;
+  preferredDayOfMonth?: number;
+  projectedDueDate?: string;
+  daysUntilProjectedDue?: number;
+  timeWindowLabel?: string;
+  jobType?: string;
+  category?: string;
+  summary?: string;
+  estimatedDurationMinutes?: number;
+  coveredLocationNames: string[];
+}
+
+export interface ServiceAgreementReports {
+  generatedAt: string;
+  windows: {
+    expiringSoonThrough: string;
+    nextBillingDueThrough: string;
+    visitTemplatePromptThrough: string;
+  };
+  totals: {
+    activeAgreementCount: number;
+    expiringSoonCount: number;
+    nextBillingDueCount: number;
+    visitTemplatePromptCount: number;
+  };
+  activeAgreements: ServiceAgreementReportRow[];
+  expiringSoon: ServiceAgreementReportRow[];
+  nextBillingDue: ServiceAgreementBillingDueReportRow[];
+  visitTemplatePrompts: ServiceAgreementVisitTemplatePromptRow[];
 }

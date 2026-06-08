@@ -367,3 +367,161 @@ describe('ReportingService.exportInventoryValuation', () => {
     expect(lines[1]).toBe('Capacitor,part,Warehouse,10,20,200');
   });
 });
+
+type AgreementReportDbRow = {
+  agreementId: string;
+  agreementNumber: string;
+  customerId: string;
+  customerName: string;
+  name: string;
+  status: string;
+  startDate: string | null;
+  endDate: string | null;
+  renewalDate: string | null;
+  billingCadence: string;
+  nextBillingDate: string | null;
+  billingAmount: string | null;
+  coveredLocationNames: string[];
+  coveredEquipmentCount: string;
+  activeVisitTemplateCount: string;
+  updatedAt: string;
+  daysUntilBilling?: string;
+};
+
+function agreementRow(over: Partial<AgreementReportDbRow> = {}): AgreementReportDbRow {
+  return {
+    agreementId: 'agreement-1',
+    agreementNumber: 'SA-1001',
+    customerId: 'customer-1',
+    customerName: 'Acme',
+    name: 'Annual maintenance plan',
+    status: 'active',
+    startDate: '2026-01-01',
+    endDate: null,
+    renewalDate: '2026-07-01',
+    billingCadence: 'annual',
+    nextBillingDate: '2026-07-01',
+    billingAmount: '240.00',
+    coveredLocationNames: ['Main Shop'],
+    coveredEquipmentCount: '2',
+    activeVisitTemplateCount: '1',
+    updatedAt: '2026-06-01T10:00:00.000Z',
+    ...over
+  };
+}
+
+function createAgreementReportService(perms = ['reports:view', 'agreements:view']) {
+  const databaseService = {
+    query: jest.fn((sql: string) => {
+      if (sql.includes('active_service_agreements_report')) {
+        return Promise.resolve({ rows: [agreementRow()] });
+      }
+      if (sql.includes('expiring_service_agreements_report')) {
+        return Promise.resolve({ rows: [agreementRow({ agreementNumber: 'SA-1002' })] });
+      }
+      if (sql.includes('billing_due_service_agreements_report')) {
+        return Promise.resolve({ rows: [agreementRow({ daysUntilBilling: '10' })] });
+      }
+      if (sql.includes('visit_template_service_agreements_report')) {
+        return Promise.resolve({
+          rows: [
+            {
+              agreementId: 'agreement-1',
+              agreementNumber: 'SA-1001',
+              customerId: 'customer-1',
+              customerName: 'Acme',
+              agreementName: 'Annual maintenance plan',
+              templateId: 'template-1',
+              title: 'Spring visit',
+              frequency: 'annual',
+              preferredMonth: 6,
+              preferredDayOfMonth: 15,
+              projectedDueDate: '2026-06-15',
+              daysUntilProjectedDue: '7',
+              timeWindowLabel: 'Morning',
+              jobType: 'Maintenance',
+              category: 'Recurring',
+              summary: 'Annual check',
+              estimatedDurationMinutes: 90,
+              coveredLocationNames: ['Main Shop']
+            }
+          ]
+        });
+      }
+      return Promise.resolve({ rows: [] });
+    })
+  };
+  const identityAccessService = {
+    getAuthorizedEmployee: jest.fn().mockResolvedValue({
+      id: 'owner-1',
+      effectivePermissions: perms,
+      sessionSurface: 'office-web'
+    })
+  };
+  return {
+    service: new ReportingService(databaseService as never, identityAccessService as never),
+    databaseService
+  };
+}
+
+describe('ReportingService.getServiceAgreementReports', () => {
+  it('rejects 403 without agreements:view and never queries', async () => {
+    const { service, databaseService } = createAgreementReportService(['reports:view']);
+    await expect(service.getServiceAgreementReports('token')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(databaseService.query).not.toHaveBeenCalled();
+  });
+
+  it('builds agreement report totals and rows', async () => {
+    const { service, databaseService } = createAgreementReportService();
+    const report = await service.getServiceAgreementReports('token');
+
+    expect(databaseService.query).toHaveBeenCalledTimes(4);
+    expect(report.totals).toEqual({
+      activeAgreementCount: 1,
+      expiringSoonCount: 1,
+      nextBillingDueCount: 1,
+      visitTemplatePromptCount: 1
+    });
+    expect(report.activeAgreements[0]).toMatchObject({
+      agreementNumber: 'SA-1001',
+      billingAmount: 240,
+      coveredEquipmentCount: 2,
+      activeVisitTemplateCount: 1
+    });
+    expect(report.nextBillingDue[0]).toMatchObject({ daysUntilBilling: 10 });
+    expect(report.visitTemplatePrompts[0]).toMatchObject({
+      title: 'Spring visit',
+      projectedDueDate: '2026-06-15',
+      daysUntilProjectedDue: 7
+    });
+  });
+});
+
+describe('ReportingService service agreement CSV exports', () => {
+  it('rejects 403 without reports:export', async () => {
+    const { service } = createAgreementReportService(['reports:view', 'agreements:view']);
+    await expect(service.exportActiveServiceAgreements('token')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+  });
+
+  it('exports active agreements CSV when fully permitted', async () => {
+    const { service } = createAgreementReportService([
+      'reports:view',
+      'agreements:view',
+      'reports:export'
+    ]);
+    const out = await service.exportActiveServiceAgreements('token');
+    const lines = out.csv.split('\n');
+
+    expect(out.filename).toMatch(/^service-agreements-active-\d{4}-\d{2}-\d{2}\.csv$/);
+    expect(lines[0]).toBe(
+      'Agreement #,Customer,Name,Renewal date,Billing cadence,Next billing date,Billing amount,Covered locations,Covered equipment count,Active visit templates'
+    );
+    expect(lines[1]).toBe(
+      'SA-1001,Acme,Annual maintenance plan,2026-07-01,annual,2026-07-01,240,Main Shop,2,1'
+    );
+  });
+});
