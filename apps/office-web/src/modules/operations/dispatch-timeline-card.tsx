@@ -5,6 +5,7 @@ import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
 import { DispatchSchedulePopover } from './dispatch-schedule-popover';
 import type { DispatchScheduleDraft, DispatchScheduleEditorState } from './dispatch-schedule-types';
+import type { DispatchTimelineDragState } from './dispatch-timeline-drag-state';
 import { timelineCardMinHeight, timelineCardTextLineHeight } from './dispatch-timeline-layout';
 import {
   formatDispatchMovePreview,
@@ -17,54 +18,6 @@ export type DispatchContextMenuPosition = {
   x: number;
   y: number;
 };
-
-export type DispatchDragBaseState = {
-  appointmentId: string;
-  pointerStartX: number;
-  pointerStartY: number;
-  slotWidth: number;
-  mode: 'dragging' | 'saving' | 'error';
-  errorMessage: string | null;
-  overlapWarning?: string | null;
-};
-
-export type DispatchPendingDragState = DispatchDragBaseState & {
-  kind: 'pending';
-  sourceTechnicianId: string;
-  canTimeMove: boolean;
-  baseStartMinutes: number | null;
-  baseEndMinutes: number | null;
-};
-
-export type DispatchResizeState = DispatchDragBaseState & {
-  kind: 'resize';
-  startMinutes: number;
-  baseEndMinutes: number;
-  previewEndMinutes: number;
-};
-
-export type DispatchMoveState = DispatchDragBaseState & {
-  kind: 'move';
-  baseStartMinutes: number;
-  baseEndMinutes: number;
-  previewStartMinutes: number;
-  previewEndMinutes: number;
-  hasMoved: boolean;
-};
-
-export type DispatchAssignmentState = DispatchDragBaseState & {
-  kind: 'assignment';
-  sourceTechnicianId: string;
-  targetTechnicianId: string | null;
-  targetLabel: string | null;
-  hasMoved: boolean;
-};
-
-export type DispatchTimelineDragState =
-  | DispatchPendingDragState
-  | DispatchResizeState
-  | DispatchMoveState
-  | DispatchAssignmentState;
 
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;

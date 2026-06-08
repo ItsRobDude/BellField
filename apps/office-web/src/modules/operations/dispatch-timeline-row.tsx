@@ -1,23 +1,9 @@
 'use client';
 
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent
-} from 'react';
+import { useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
-import {
-  DispatchCardButton,
-  type DispatchAssignmentState,
-  type DispatchContextMenuPosition,
-  type DispatchMoveState,
-  type DispatchResizeState,
-  type DispatchTimelineDragState
-} from './dispatch-timeline-card';
+import { DispatchCardButton, type DispatchContextMenuPosition } from './dispatch-timeline-card';
 import {
   buildDispatchOverlapLookup,
   getDispatchCardTimeRange,
@@ -25,6 +11,16 @@ import {
   type DispatchTimeRange
 } from './dispatch-overlap-utils';
 import type { DispatchScheduleDraft, DispatchScheduleEditorState } from './dispatch-schedule-types';
+import {
+  dispatchOverlapWarningText,
+  getDispatchDragPlacementPreview,
+  getNextDispatchDragState,
+  type DispatchAssignmentState,
+  type DispatchAssignmentTarget,
+  type DispatchMoveState,
+  type DispatchResizeState,
+  type DispatchTimelineDragState
+} from './dispatch-timeline-drag-state';
 import {
   timelineCardMinHeight,
   timelineColumnGap,
@@ -42,20 +38,15 @@ import {
   buildDispatchMoveDraft,
   buildDispatchReassignmentDraft,
   buildDispatchResizeDraft,
-  clampDispatchMoveStartMinutes,
-  clampDispatchResizeEndMinutes,
   getDispatchMoveDurationMinutes,
   getDispatchResizeBaseEndMinutes,
   parseDispatchTimeToMinutes
 } from './dispatch-timeline-time';
+import { useDispatchTimelineDrag } from './use-dispatch-timeline-drag';
 
 export { formatDispatchCardAddress } from './dispatch-timeline-card';
 export type { DispatchContextMenuPosition } from './dispatch-timeline-card';
-
-export type DispatchAssignmentTarget = {
-  technicianId: string;
-  label: string;
-};
+export type { DispatchAssignmentTarget } from './dispatch-timeline-drag-state';
 
 type DispatchTimelineRowProps = {
   label: string;
@@ -81,10 +72,6 @@ type DispatchTimelineRowProps = {
   onScheduleEditorSave: () => void;
 };
 
-const dispatchMoveThresholdPixels = 6;
-const dispatchAssignmentThresholdPixels = 16;
-const dispatchOverlapWarningText = 'Overlaps another appointment';
-
 export function DispatchTimelineRow({
   label,
   sublabel,
@@ -105,77 +92,19 @@ export function DispatchTimelineRow({
   onScheduleEditorCancel,
   onScheduleEditorSave
 }: DispatchTimelineRowProps) {
-  const [dragState, setDragState] = useState<DispatchTimelineDragState | null>(null);
-  const dragStateRef = useRef<DispatchTimelineDragState | null>(null);
-  const suppressNextOpenRef = useRef(false);
   const overlapLookup = useMemo(() => buildDispatchOverlapLookup(cards), [cards]);
   const isAssignmentTargetActive =
     activeAssignmentTargetId !== null && activeAssignmentTargetId === assignmentTarget.technicianId;
-
-  useEffect(() => {
-    dragStateRef.current = dragState;
-  }, [dragState]);
-
-  function setActiveDragState(state: DispatchTimelineDragState | null) {
-    dragStateRef.current = state;
-    setDragState(state);
-  }
-
-  useEffect(() => {
-    if (!dragState || dragState.mode !== 'dragging') {
-      return;
+  const { dragState, setActiveDragState, consumeCardOpenSuppression } = useDispatchTimelineDrag({
+    getNextDragState,
+    onAssignmentTargetPreviewChange,
+    onDragEnd: (state) => {
+      void commitTimelineDrag(state);
     }
-
-    function handlePointerMove(event: PointerEvent) {
-      const current = dragStateRef.current;
-
-      if (!current || current.mode !== 'dragging') {
-        return;
-      }
-
-      const next = getNextDragState(current, event);
-
-      if (next !== current) {
-        dragStateRef.current = next;
-        setDragState(next);
-      }
-
-      onAssignmentTargetPreviewChange(
-        next.kind === 'assignment' && next.targetTechnicianId !== null
-          ? { technicianId: next.targetTechnicianId, label: next.targetLabel ?? 'Unassigned' }
-          : null
-      );
-    }
-
-    function handlePointerUp() {
-      const current = dragStateRef.current;
-
-      if (current) {
-        if (
-          (current.kind === 'move' && current.hasMoved) ||
-          (current.kind === 'assignment' && current.hasMoved)
-        ) {
-          suppressNextOpenRef.current = true;
-        }
-
-        onAssignmentTargetPreviewChange(null);
-        void commitTimelineDrag(current);
-      }
-    }
-
-    window.addEventListener('pointermove', handlePointerMove);
-    window.addEventListener('pointerup', handlePointerUp, { once: true });
-
-    return () => {
-      window.removeEventListener('pointermove', handlePointerMove);
-      window.removeEventListener('pointerup', handlePointerUp);
-      onAssignmentTargetPreviewChange(null);
-    };
-  }, [dragState?.appointmentId, dragState?.mode, onAssignmentTargetPreviewChange]);
+  });
 
   function handleOpenCardDetail(card: DispatchAppointmentCard) {
-    if (suppressNextOpenRef.current) {
-      suppressNextOpenRef.current = false;
+    if (consumeCardOpenSuppression()) {
       return;
     }
 
@@ -265,122 +194,15 @@ export function DispatchTimelineRow({
     current: DispatchTimelineDragState,
     event: PointerEvent
   ): DispatchTimelineDragState {
-    const deltaX = event.clientX - current.pointerStartX;
-    const deltaY = event.clientY - current.pointerStartY;
-    const absoluteDeltaX = Math.abs(deltaX);
-    const absoluteDeltaY = Math.abs(deltaY);
-
-    if (current.kind === 'pending') {
-      if (
-        current.canTimeMove &&
-        absoluteDeltaX >= dispatchMoveThresholdPixels &&
-        absoluteDeltaX > absoluteDeltaY &&
-        current.baseStartMinutes !== null &&
-        current.baseEndMinutes !== null
-      ) {
-        return getMovedDragState(
-          {
-            ...current,
-            kind: 'move',
-            baseStartMinutes: current.baseStartMinutes,
-            baseEndMinutes: current.baseEndMinutes,
-            previewStartMinutes: current.baseStartMinutes,
-            previewEndMinutes: current.baseEndMinutes,
-            hasMoved: true
-          },
-          event.clientX
-        );
+    return getNextDispatchDragState(
+      current,
+      { clientX: event.clientX, clientY: event.clientY },
+      {
+        getAssignmentTargetAtPoint,
+        getOverlapWarningForRange,
+        getAssignmentOverlapWarning
       }
-
-      if (absoluteDeltaY >= dispatchAssignmentThresholdPixels && absoluteDeltaY > absoluteDeltaX) {
-        const target = getAssignmentTargetAtPoint(
-          event.clientX,
-          event.clientY,
-          current.sourceTechnicianId
-        );
-
-        return {
-          ...current,
-          kind: 'assignment',
-          targetTechnicianId: target?.technicianId ?? null,
-          targetLabel: target?.label ?? null,
-          hasMoved: true,
-          overlapWarning: getAssignmentOverlapWarning(
-            current.appointmentId,
-            target?.technicianId ?? null
-          )
-        };
-      }
-
-      return current;
-    }
-
-    if (current.kind === 'move') {
-      const hasMoved =
-        current.hasMoved ||
-        Math.abs(event.clientX - current.pointerStartX) >= dispatchMoveThresholdPixels;
-
-      if (!hasMoved) {
-        return current;
-      }
-
-      return getMovedDragState({ ...current, hasMoved }, event.clientX);
-    }
-
-    if (current.kind === 'assignment') {
-      const target = getAssignmentTargetAtPoint(
-        event.clientX,
-        event.clientY,
-        current.sourceTechnicianId
-      );
-
-      return {
-        ...current,
-        targetTechnicianId: target?.technicianId ?? null,
-        targetLabel: target?.label ?? null,
-        overlapWarning: getAssignmentOverlapWarning(
-          current.appointmentId,
-          target?.technicianId ?? null
-        )
-      };
-    }
-
-    const slotDelta = Math.round((event.clientX - current.pointerStartX) / current.slotWidth);
-    const previewEndMinutes = clampDispatchResizeEndMinutes(
-      current.startMinutes,
-      current.baseEndMinutes + slotDelta * timelineSlotMinutes,
-      timelineEndMinutes
     );
-
-    return {
-      ...current,
-      previewEndMinutes,
-      overlapWarning: getOverlapWarningForRange(current.appointmentId, {
-        startMinutes: current.startMinutes,
-        endMinutes: previewEndMinutes
-      })
-    };
-  }
-
-  function getMovedDragState(state: DispatchMoveState, clientX: number): DispatchMoveState {
-    const slotDelta = Math.round((clientX - state.pointerStartX) / state.slotWidth);
-    const durationMinutes = state.baseEndMinutes - state.baseStartMinutes;
-    const previewStartMinutes = clampDispatchMoveStartMinutes(
-      state.baseStartMinutes + slotDelta * timelineSlotMinutes,
-      durationMinutes,
-      timelineStartMinutes,
-      timelineEndMinutes
-    );
-
-    return {
-      ...state,
-      previewStartMinutes,
-      previewEndMinutes: previewStartMinutes + durationMinutes,
-      overlapWarning: getOverlapWarningForRange(state.appointmentId, {
-        startMinutes: previewStartMinutes,
-        endMinutes: previewStartMinutes + durationMinutes
-      })
-    };
   }
 
   function getOverlapWarningForRange(
@@ -414,7 +236,7 @@ export function DispatchTimelineRow({
 
   async function commitTimelineDrag(state: DispatchTimelineDragState) {
     if (state.kind === 'pending') {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
@@ -433,14 +255,14 @@ export function DispatchTimelineRow({
 
   async function commitResize(state: DispatchResizeState) {
     if (!onScheduleUpdate) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
     const card = cards.find((candidate) => candidate.appointmentId === state.appointmentId);
 
     if (!card) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
@@ -451,19 +273,19 @@ export function DispatchTimelineRow({
         : state.previewEndMinutes !== currentEndMinutes;
 
     if (!didResize) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
-    setDragState((current) =>
+    setActiveDragState((current) =>
       current?.appointmentId === state.appointmentId ? { ...current, mode: 'saving' } : current
     );
 
     try {
       await onScheduleUpdate(card, buildDispatchResizeDraft(card, state.previewEndMinutes));
-      setDragState(null);
+      setActiveDragState(null);
     } catch (error) {
-      setDragState((current) =>
+      setActiveDragState((current) =>
         current?.appointmentId === state.appointmentId
           ? {
               ...current,
@@ -478,14 +300,14 @@ export function DispatchTimelineRow({
 
   async function commitMove(state: DispatchMoveState) {
     if (!onScheduleUpdate) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
     const card = cards.find((candidate) => candidate.appointmentId === state.appointmentId);
 
     if (!card) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
@@ -495,11 +317,11 @@ export function DispatchTimelineRow({
         state.previewEndMinutes !== state.baseEndMinutes);
 
     if (!didMove) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
-    setDragState((current) =>
+    setActiveDragState((current) =>
       current?.appointmentId === state.appointmentId ? { ...current, mode: 'saving' } : current
     );
 
@@ -508,9 +330,9 @@ export function DispatchTimelineRow({
         card,
         buildDispatchMoveDraft(card, state.previewStartMinutes, state.previewEndMinutes)
       );
-      setDragState(null);
+      setActiveDragState(null);
     } catch (error) {
-      setDragState((current) =>
+      setActiveDragState((current) =>
         current?.appointmentId === state.appointmentId
           ? {
               ...current,
@@ -525,31 +347,31 @@ export function DispatchTimelineRow({
 
   async function commitAssignment(state: DispatchAssignmentState) {
     if (!onScheduleUpdate) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
     const card = cards.find((candidate) => candidate.appointmentId === state.appointmentId);
 
     if (!card || state.targetTechnicianId === null) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
     if (state.targetTechnicianId === state.sourceTechnicianId) {
-      setDragState(null);
+      setActiveDragState(null);
       return;
     }
 
-    setDragState((current) =>
+    setActiveDragState((current) =>
       current?.appointmentId === state.appointmentId ? { ...current, mode: 'saving' } : current
     );
 
     try {
       await onScheduleUpdate(card, buildDispatchReassignmentDraft(card, state.targetTechnicianId));
-      setDragState(null);
+      setActiveDragState(null);
     } catch (error) {
-      setDragState((current) =>
+      setActiveDragState((current) =>
         current?.appointmentId === state.appointmentId
           ? {
               ...current,
@@ -603,7 +425,7 @@ export function DispatchTimelineRow({
                 card,
                 index,
                 dragState?.appointmentId === card.appointmentId
-                  ? getDragPlacementPreview(dragState)
+                  ? getDispatchDragPlacementPreview(dragState)
                   : undefined
               )}
               technicians={technicians}
@@ -665,28 +487,6 @@ function getTimelineCardPlacementStyle(
   return {
     gridColumn: `${startSlot} / span ${durationSlots}`
   };
-}
-
-function getDragPlacementPreview(dragState: DispatchTimelineDragState):
-  | {
-      startMinutes?: number;
-      endMinutes?: number;
-    }
-  | undefined {
-  if (dragState.kind === 'move') {
-    return {
-      startMinutes: dragState.previewStartMinutes,
-      endMinutes: dragState.previewEndMinutes
-    };
-  }
-
-  if (dragState.kind === 'resize') {
-    return {
-      endMinutes: dragState.previewEndMinutes
-    };
-  }
-
-  return undefined;
 }
 
 function getTimelineSlotWidth(cardFrameElement: HTMLDivElement | null): number {
