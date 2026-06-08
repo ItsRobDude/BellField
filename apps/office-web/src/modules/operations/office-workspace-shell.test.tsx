@@ -988,11 +988,7 @@ describe('OfficeWorkspaceShell IA', () => {
     renderShell();
 
     fireEvent.click(await screen.findByRole('button', { name: 'Jobs' }));
-    fireEvent.click(
-      await within(screen.getByRole('region', { name: 'Open jobs' })).findByRole('button', {
-        name: 'Load more'
-      })
-    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Load more Open' }));
 
     await waitFor(() => {
       expect(mockedOperationsApi.getOfficeJobsQueue).toHaveBeenLastCalledWith({

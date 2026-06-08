@@ -64,7 +64,7 @@ function buildJobsQueue(
 }
 
 describe('JobsQueuePanel', () => {
-  it('renders server-provided review, waiting, unscheduled, and open queues', () => {
+  it('renders server-provided jobs in one worklist with queue filters', () => {
     const jobsQueue = buildJobsQueue({
       review: [
         buildQueueItem({
@@ -97,19 +97,48 @@ describe('JobsQueuePanel', () => {
 
     render(<JobsQueuePanel jobsQueue={jobsQueue} onOpenJobDetail={vi.fn()} onNewJob={vi.fn()} />);
 
-    expect(
-      within(screen.getByRole('region', { name: 'Review jobs' })).getByText('Review this')
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('region', { name: 'Waiting jobs' })).getByText('Waiting for part')
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('region', { name: 'Unscheduled jobs' })).getByText('Needs date')
-    ).toBeInTheDocument();
-    expect(
-      within(screen.getByRole('region', { name: 'Open jobs' })).getByText('Regular work')
-    ).toBeInTheDocument();
+    const filters = within(screen.getByRole('toolbar', { name: 'Job queue filters' }));
+    expect(filters.getByRole('button', { name: 'All 4' })).toHaveAttribute('aria-pressed', 'true');
+    expect(filters.getByRole('button', { name: 'Review 1' })).toBeInTheDocument();
+    expect(filters.getByRole('button', { name: 'Waiting 1' })).toBeInTheDocument();
+    expect(filters.getByRole('button', { name: 'Unscheduled 1' })).toBeInTheDocument();
+    expect(filters.getByRole('button', { name: 'Open 1' })).toBeInTheDocument();
+
+    const worklist = within(screen.getByRole('region', { name: 'Jobs worklist' }));
+    expect(worklist.getByText('Review this')).toBeInTheDocument();
+    expect(worklist.getByText('Waiting for part')).toBeInTheDocument();
+    expect(worklist.getByText('Needs date')).toBeInTheDocument();
+    expect(worklist.getByText('Regular work')).toBeInTheDocument();
     expect(screen.getByText('4 active')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Review jobs' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Open jobs' })).not.toBeInTheDocument();
+  });
+
+  it('filters the worklist without dedicating space to empty buckets', () => {
+    const jobsQueue = buildJobsQueue({
+      waitingOnParts: [
+        buildQueueItem({
+          id: 'job-waiting',
+          jobNumber: '1002',
+          summary: 'Waiting for part',
+          status: 'waitingOnParts'
+        })
+      ],
+      open: [buildQueueItem({ id: 'job-open', jobNumber: '1004', summary: 'Regular work' })]
+    });
+
+    render(<JobsQueuePanel jobsQueue={jobsQueue} onOpenJobDetail={vi.fn()} onNewJob={vi.fn()} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Waiting 1' }));
+
+    let worklist = within(screen.getByRole('region', { name: 'Jobs worklist' }));
+    expect(worklist.getByText('Waiting for part')).toBeInTheDocument();
+    expect(worklist.queryByText('Regular work')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Review 0' }));
+
+    worklist = within(screen.getByRole('region', { name: 'Jobs worklist' }));
+    expect(worklist.getByText('No review jobs.')).toBeInTheDocument();
   });
 
   it('opens job detail from a queue card and keeps the new-job action focused', () => {
@@ -161,11 +190,7 @@ describe('JobsQueuePanel', () => {
       />
     );
 
-    fireEvent.click(
-      within(screen.getByRole('region', { name: 'Open jobs' })).getByRole('button', {
-        name: 'Load more'
-      })
-    );
+    fireEvent.click(screen.getByRole('button', { name: 'Load more Open' }));
 
     expect(onLoadMoreQueue).toHaveBeenCalledWith('open', 'cursor-1');
   });

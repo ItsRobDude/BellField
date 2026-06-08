@@ -570,7 +570,7 @@ export class JobsCommandDataRepository {
         update jobs
         set status = $2, updated_at = $3
         where id = $1
-          and status not in ('closed', 'cancelled')
+          and status not in ('closed', 'cancelled', 'waitingOnParts')
       `,
       [jobId, nextStatus, updatedAt]
     );

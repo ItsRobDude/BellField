@@ -75,7 +75,11 @@ function createRegisterEntryRow(overrides: Record<string, unknown> = {}) {
 function createDatabaseService(
   jobRowOverrides: Record<string, unknown> = {},
   appointmentRowOverrides?: Record<string, unknown>,
-  previousStatusForLock?: string
+  previousStatusForLock?: string,
+  derivedStatusSummary?: {
+    hasScheduledAppointment: boolean;
+    hasActiveProgressAppointment: boolean;
+  }
 ) {
   let insertedJobId = 'job-1';
   const appointmentRow = appointmentRowOverrides
@@ -90,6 +94,10 @@ function createDatabaseService(
       // The in-transaction "select status ... for update" the status-change hook reads.
       if (sql.includes('from jobs where id = $1 for update')) {
         return { rows: previousStatusForLock ? [{ status: previousStatusForLock }] : [] };
+      }
+
+      if (sql.includes('as "hasScheduledAppointment"')) {
+        return { rows: derivedStatusSummary ? [derivedStatusSummary] : [] };
       }
 
       if (sql.includes('insert into jobs') && params) {
@@ -367,6 +375,68 @@ describe('JobsDataRepository', () => {
     );
     expect(timelineCall?.[1]?.[4]).toBe('appointmentCreated');
     expect(timelineCall?.[1]?.[5]).toBe('Appointment added for 2026-04-15.');
+  });
+
+  it('does not move a waiting-on-parts job out of waiting when adding an appointment', async () => {
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'waitingOnParts' },
+      undefined,
+      undefined,
+      {
+        hasScheduledAppointment: true,
+        hasActiveProgressAppointment: false
+      }
+    );
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.createAppointment(
+      'job-1',
+      { scheduledDate: '2026-04-15', technicianId: 'tech-1' },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const statusUpdateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes("status not in ('closed', 'cancelled', 'waitingOnParts')")
+    );
+
+    expect(statusUpdateCall).toBeDefined();
+  });
+
+  it('does not move a waiting-on-parts job out of waiting when rescheduling an appointment', async () => {
+    const { databaseService, queryable } = createDatabaseService(
+      { status: 'waitingOnParts' },
+      {
+        id: 'appointment-1',
+        jobId: 'job-1',
+        scheduledDate: '2026-04-15',
+        technicianId: 'tech-1'
+      },
+      undefined,
+      {
+        hasScheduledAppointment: true,
+        hasActiveProgressAppointment: false
+      }
+    );
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.updateAppointmentSchedule(
+      'appointment-1',
+      {
+        scheduledDate: '2026-04-16',
+        scheduledStartTime: '09:00',
+        scheduledEndTime: '11:00',
+        technicianId: 'tech-1'
+      },
+      'Dispatcher',
+      '2026-04-14T11:00:00.000Z'
+    );
+
+    const statusUpdateCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes("status not in ('closed', 'cancelled', 'waitingOnParts')")
+    );
+
+    expect(statusUpdateCall).toBeDefined();
   });
 
   it('persists structured appointment times when creating an appointment', async () => {
