@@ -551,6 +551,65 @@ Scope:
 - renewal/billing cadence
 - agreement reporting
 
+Implementation direction:
+
+- Treat service agreements as a real customer agreement lifecycle, not as extra Catalog setup
+  fields.
+- Keep the Catalog `agreement` kind as the sellable/quoted line that can seed an agreement.
+- Make agreement records customer-owned, with coverage rows for one or more service locations and
+  optional equipment coverage.
+- Support location-only agreements so the model stays useful for trades that do not track
+  equipment heavily.
+- Preserve agreement/catalog/estimate source details as snapshots when an agreement is created, so
+  later Catalog edits do not rewrite what was sold.
+- Keep renewal and billing cadence informational in the first passes. Do not auto-create invoices
+  or payments from agreements yet.
+- Use recurring visit templates as scheduling prompts/templates first. Do not auto-create jobs or
+  appointments until a later explicit scheduling slice.
+- Use broad UI language such as "Service agreement", "Maintenance plan", and "Recurring service
+  plan". Avoid HVAC-only defaults.
+
+Recommended slices:
+
+1. **6A - Agreement records and API backbone**
+
+   - Add `agreements` as a permission area.
+   - Add contracts for agreement status, coverage, billing cadence, renewal dates, and visit
+     templates.
+   - Add migrations for service agreements, covered locations, covered equipment, and visit
+     templates.
+   - Add office-only API endpoints to list, create, update, activate, pause, and end agreements.
+
+2. **6B - Office agreement workbench**
+
+   - Add a standalone office Agreements surface behind `agreements:view`.
+   - Allow office users with `agreements:create`/`agreements:edit` to manage core agreement fields,
+     coverage, and visit templates.
+   - Keep delete out of the first UI; use pause/end/archive-style behavior for history.
+
+3. **6C - Customer/location context and reporting**
+
+   - Show active and ended agreements in customer and location operational context.
+   - Add simple reports for active agreements, agreements expiring soon, next billing due, and visit
+     templates due for scheduling.
+   - Gate reports with `reports:view` plus `agreements:view`; CSV export requires `reports:export`.
+
+4. **6D - Field read-only coverage**
+   - Add read-only active agreement coverage to assigned-work context for technicians.
+   - Show only customer-facing agreement/coverage context, not internal accounting or margin data.
+   - Do not allow field users to create, edit, renew, or bill agreements in this slice.
+
+Out of scope for Phase 6 first pass:
+
+- automatic invoice creation
+- automatic payment/deposit posting
+- automatic job or appointment generation
+- customer portal or agreement e-signature
+- customer communication campaigns
+- enforcement of included discounts or entitlements across billing
+- revenue recognition or deferred revenue accounting
+- trade-specific maintenance logic beyond generic visit templates
+
 ---
 
 ## 13. First Slice Recommendation
