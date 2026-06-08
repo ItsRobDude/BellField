@@ -224,6 +224,8 @@ export interface CrmActivityEntry {
 }
 
 export interface CrmOperationalContext {
+  /** True when the caller was authorized to receive agreement context. */
+  agreementContextVisible: boolean;
   summary: CrmOperationalSummary;
   jobs: CrmOperationalJobSummary[];
   appointments: CrmOperationalAppointmentSummary[];

@@ -48,11 +48,13 @@ export function CrmOperationalOverview({
         <strong>Equipment</strong>
         <span>{operational.summary.equipmentCount} active / pending</span>
       </div>
-      <div style={styles.subpanel}>
-        <strong>Agreements</strong>
-        <span>{operational.summary.activeAgreementCount} active</span>
-        <span style={styles.tinyMuted}>{operational.summary.endedAgreementCount} ended</span>
-      </div>
+      {operational.agreementContextVisible ? (
+        <div style={styles.subpanel}>
+          <strong>Agreements</strong>
+          <span>{operational.summary.activeAgreementCount} active</span>
+          <span style={styles.tinyMuted}>{operational.summary.endedAgreementCount} ended</span>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -190,19 +192,13 @@ export function CrmInvoicesSection({ operational }: { operational: CrmOperationa
 }
 
 export function CrmAgreementsSection({ operational }: { operational: CrmOperationalContext }) {
-  const activeAgreements = operational.agreements.filter(
-    (agreement) => agreement.status === 'active'
-  );
-  const endedAgreements = operational.agreements.filter(
-    (agreement) => agreement.status === 'ended'
-  );
-
   return (
     <div style={styles.subpanel}>
       <div style={styles.row}>
         <strong>Service agreements</strong>
         <span style={styles.tinyMuted}>
-          {activeAgreements.length} active / {endedAgreements.length} ended
+          {operational.summary.activeAgreementCount} active /{' '}
+          {operational.summary.endedAgreementCount} ended
         </span>
       </div>
       {operational.agreements.length > 0 ? (

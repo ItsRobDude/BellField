@@ -37,11 +37,10 @@ type CustomerDetailSurfaceProps = {
   setExistingContactId: (contactId: string) => void;
 };
 
-const customerDetailTabs: Array<{ key: CustomerDetailTab; label: string }> = [
+const baseCustomerDetailTabs: Array<{ key: CustomerDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'locations', label: 'Locations' },
   { key: 'contacts', label: 'People' },
-  { key: 'agreements', label: 'Agreements' },
   { key: 'jobs', label: 'Jobs' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'activity', label: 'Activity' }
@@ -68,6 +67,18 @@ export function CustomerDetailSurface({
   onSelectedCustomerTabChange,
   setExistingContactId
 }: CustomerDetailSurfaceProps) {
+  const detailTabs = customer.operational.agreementContextVisible
+    ? [
+        ...baseCustomerDetailTabs.slice(0, 3),
+        { key: 'agreements' as CustomerDetailTab, label: 'Agreements' },
+        ...baseCustomerDetailTabs.slice(3)
+      ]
+    : baseCustomerDetailTabs;
+  const selectedTab =
+    selectedCustomerTab === 'agreements' && !customer.operational.agreementContextVisible
+      ? 'overview'
+      : selectedCustomerTab;
+
   return (
     <div style={styles.list}>
       <div style={styles.row}>
@@ -85,20 +96,20 @@ export function CustomerDetailSurface({
         </button>
       </div>
       <div style={styles.tabList} role="tablist" aria-label="Customer sections">
-        {customerDetailTabs.map((tab) => (
+        {detailTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             role="tab"
-            aria-selected={selectedCustomerTab === tab.key}
+            aria-selected={selectedTab === tab.key}
             onClick={() => onSelectedCustomerTabChange(tab.key)}
-            style={selectedCustomerTab === tab.key ? styles.activeTabButton : styles.tabButton}
+            style={selectedTab === tab.key ? styles.activeTabButton : styles.tabButton}
           >
             {tab.label}
           </button>
         ))}
       </div>
-      {selectedCustomerTab === 'overview' ? (
+      {selectedTab === 'overview' ? (
         <>
           <CrmOperationalOverview
             operational={customer.operational}
@@ -178,14 +189,14 @@ export function CustomerDetailSurface({
           />
         </>
       ) : null}
-      {selectedCustomerTab === 'locations' ? (
+      {selectedTab === 'locations' ? (
         <CrmCustomerLocationsSection
           locations={customer.locations}
           onAddLocation={onAddLocation}
           onOpenLocation={onOpenLocation}
         />
       ) : null}
-      {selectedCustomerTab === 'contacts' ? (
+      {selectedTab === 'contacts' ? (
         <RecordContactsSection
           title="Customer people"
           contacts={customer.contacts}
@@ -200,16 +211,14 @@ export function CustomerDetailSurface({
           onArchiveLink={onArchiveLink}
         />
       ) : null}
-      {selectedCustomerTab === 'jobs' ? (
-        <CrmJobsSection operational={customer.operational} />
-      ) : null}
-      {selectedCustomerTab === 'agreements' ? (
+      {selectedTab === 'jobs' ? <CrmJobsSection operational={customer.operational} /> : null}
+      {selectedTab === 'agreements' && customer.operational.agreementContextVisible ? (
         <CrmAgreementsSection operational={customer.operational} />
       ) : null}
-      {selectedCustomerTab === 'invoices' ? (
+      {selectedTab === 'invoices' ? (
         <CrmInvoicesSection operational={customer.operational} />
       ) : null}
-      {selectedCustomerTab === 'activity' ? (
+      {selectedTab === 'activity' ? (
         <CrmActivitySection activity={customer.operational.activity} />
       ) : null}
     </div>

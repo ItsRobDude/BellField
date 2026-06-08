@@ -42,11 +42,10 @@ type LocationDetailSurfaceProps = {
   setExistingContactId: (contactId: string) => void;
 };
 
-const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
+const baseLocationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'contacts', label: 'People' },
   { key: 'equipment', label: 'Equipment' },
-  { key: 'agreements', label: 'Agreements' },
   { key: 'jobs', label: 'Jobs' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'activity', label: 'Activity' }
@@ -78,6 +77,18 @@ export function LocationDetailSurface({
   onSelectedLocationTabChange,
   setExistingContactId
 }: LocationDetailSurfaceProps) {
+  const detailTabs = location.operational.agreementContextVisible
+    ? [
+        ...baseLocationDetailTabs.slice(0, 3),
+        { key: 'agreements' as LocationDetailTab, label: 'Agreements' },
+        ...baseLocationDetailTabs.slice(3)
+      ]
+    : baseLocationDetailTabs;
+  const selectedTab =
+    selectedLocationTab === 'agreements' && !location.operational.agreementContextVisible
+      ? 'overview'
+      : selectedLocationTab;
+
   return (
     <div style={styles.list}>
       <div style={styles.row}>
@@ -92,20 +103,20 @@ export function LocationDetailSurface({
         </button>
       </div>
       <div style={styles.tabList} role="tablist" aria-label="Location sections">
-        {locationDetailTabs.map((tab) => (
+        {detailTabs.map((tab) => (
           <button
             key={tab.key}
             type="button"
             role="tab"
-            aria-selected={selectedLocationTab === tab.key}
+            aria-selected={selectedTab === tab.key}
             onClick={() => onSelectedLocationTabChange(tab.key)}
-            style={selectedLocationTab === tab.key ? styles.activeTabButton : styles.tabButton}
+            style={selectedTab === tab.key ? styles.activeTabButton : styles.tabButton}
           >
             {tab.label}
           </button>
         ))}
       </div>
-      {selectedLocationTab === 'overview' ? (
+      {selectedTab === 'overview' ? (
         <>
           <CrmOperationalOverview
             operational={location.operational}
@@ -193,7 +204,7 @@ export function LocationDetailSurface({
         </>
       ) : null}
 
-      {selectedLocationTab === 'equipment' ? (
+      {selectedTab === 'equipment' ? (
         <LocationEquipmentSection
           key={location.id}
           apiBaseUrl={apiBaseUrl}
@@ -205,7 +216,7 @@ export function LocationDetailSurface({
         />
       ) : null}
 
-      {selectedLocationTab === 'contacts' ? (
+      {selectedTab === 'contacts' ? (
         <RecordContactsSection
           title="Location people"
           contacts={location.contacts}
@@ -221,19 +232,17 @@ export function LocationDetailSurface({
         />
       ) : null}
 
-      {selectedLocationTab === 'jobs' ? (
-        <CrmJobsSection operational={location.operational} />
-      ) : null}
+      {selectedTab === 'jobs' ? <CrmJobsSection operational={location.operational} /> : null}
 
-      {selectedLocationTab === 'agreements' ? (
+      {selectedTab === 'agreements' && location.operational.agreementContextVisible ? (
         <CrmAgreementsSection operational={location.operational} />
       ) : null}
 
-      {selectedLocationTab === 'invoices' ? (
+      {selectedTab === 'invoices' ? (
         <CrmInvoicesSection operational={location.operational} />
       ) : null}
 
-      {selectedLocationTab === 'activity' ? (
+      {selectedTab === 'activity' ? (
         <CrmActivitySection activity={location.operational.activity} />
       ) : null}
     </div>

@@ -155,6 +155,7 @@ describe('CrmOperationalDataRepository', () => {
       activeAgreementCount: 0,
       endedAgreementCount: 0
     });
+    expect(context.agreementContextVisible).toBe(false);
     expect(context.agreements).toEqual([]);
     expect(context.jobs[0]).toMatchObject({
       id: 'job-1',
@@ -245,6 +246,12 @@ describe('CrmOperationalDataRepository', () => {
           updatedAt: '2025-12-31T10:00:00.000Z'
         }
       ],
+      [
+        {
+          activeAgreementCount: '4',
+          endedAgreementCount: '2'
+        }
+      ],
       []
     ]);
 
@@ -252,8 +259,9 @@ describe('CrmOperationalDataRepository', () => {
       includeAgreementContext: true
     });
 
-    expect(databaseService.query).toHaveBeenCalledTimes(5);
-    expect(context.summary).toMatchObject({ activeAgreementCount: 1, endedAgreementCount: 1 });
+    expect(databaseService.query).toHaveBeenCalledTimes(6);
+    expect(context.agreementContextVisible).toBe(true);
+    expect(context.summary).toMatchObject({ activeAgreementCount: 4, endedAgreementCount: 2 });
     expect(context.agreements).toEqual([
       expect.objectContaining({
         id: 'agreement-1',
@@ -275,5 +283,8 @@ describe('CrmOperationalDataRepository', () => {
     expect(agreementQuery).toContain('from service_agreements agreement');
     expect(agreementQuery).toContain('scoped_acl.location_id = $1');
     expect(databaseService.query.mock.calls[3]?.[1]).toEqual(['location-1', 25]);
+    const countQuery = String(databaseService.query.mock.calls[4]?.[0] ?? '');
+    expect(countQuery).toContain('count(*) filter');
+    expect(databaseService.query.mock.calls[4]?.[1]).toEqual(['location-1']);
   });
 });

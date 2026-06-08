@@ -236,6 +236,7 @@ function buildMediaAttachment(
 
 function emptyOperationalContext(): CrmOperationalContext {
   return {
+    agreementContextVisible: false,
     summary: {
       openJobCount: 0,
       equipmentCount: 0,

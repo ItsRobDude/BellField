@@ -1,7 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import type {
   CrmOperationalAppointmentSummary,
-  CrmOperationalAgreementSummary,
   CrmOperationalContext,
   CrmOperationalEquipmentSummary,
   CrmOperationalEstimateSummary,
@@ -17,13 +16,18 @@ import {
 import { DatabaseService } from '../../database/database.service';
 import type { AppointmentStatus, EquipmentStatus, JobStatus } from './company-data.types';
 import { listCrmActivityForCustomer, listCrmActivityForLocation } from './crm-activity.repository';
+import {
+  getCrmAgreementCountsForCustomer,
+  getCrmAgreementCountsForLocation,
+  listCrmAgreementsForCustomer,
+  listCrmAgreementsForLocation
+} from './crm-agreements-context.repository';
 
 const crmJobLimit = 25;
 const crmAppointmentLimit = 50;
 const crmInvoiceLimit = 25;
 const crmEstimateLimit = 25;
 const crmEquipmentLimit = 25;
-const crmAgreementLimit = 25;
 const crmActivityLimit = 60;
 const activeJobSqlList = "'new', 'scheduled', 'inProgress', 'waitingOnParts'";
 
@@ -38,25 +42,6 @@ type SummaryRow = {
   appointmentCount: string | number;
   invoiceCount: string | number;
   estimateCount: string | number;
-};
-
-type AgreementRow = {
-  id: string;
-  agreementNumber: string;
-  customerId: string;
-  customerName: string;
-  name: string;
-  status: CrmOperationalAgreementSummary['status'];
-  startDate: string | Date | null;
-  endDate: string | Date | null;
-  renewalDate: string | Date | null;
-  billingCadence: CrmOperationalAgreementSummary['billingCadence'];
-  nextBillingDate: string | Date | null;
-  billingAmount: string | number | null;
-  coveredLocationNames: string[] | null;
-  coveredEquipmentCount: string | number;
-  activeVisitTemplateCount: string | number;
-  updatedAt: string | Date;
 };
 
 type AppointmentRow = {
@@ -152,19 +137,25 @@ export class CrmOperationalDataRepository {
     const summary = await this.getLocationSummary(locationId);
     const jobs = await this.listJobsForLocation(locationId);
     const jobIds = jobs.map((job) => job.id);
-    const [appointments, invoices, estimates, equipment, agreements, activity] = await Promise.all([
-      this.listAppointmentsForJobs(jobIds),
-      this.listInvoicesForJobs(jobIds),
-      this.listEstimatesForJobs(jobIds),
-      this.listEquipmentForLocation(locationId),
-      options.includeAgreementContext
-        ? this.listAgreementsForLocation(locationId)
-        : Promise.resolve([]),
-      listCrmActivityForLocation(this.databaseService, locationId, crmActivityLimit)
-    ]);
+    const includeAgreementContext = options.includeAgreementContext === true;
+    const [appointments, invoices, estimates, equipment, agreements, agreementCounts, activity] =
+      await Promise.all([
+        this.listAppointmentsForJobs(jobIds),
+        this.listInvoicesForJobs(jobIds),
+        this.listEstimatesForJobs(jobIds),
+        this.listEquipmentForLocation(locationId),
+        includeAgreementContext
+          ? listCrmAgreementsForLocation(this.databaseService, locationId)
+          : Promise.resolve([]),
+        includeAgreementContext
+          ? getCrmAgreementCountsForLocation(this.databaseService, locationId)
+          : Promise.resolve(emptyAgreementCounts()),
+        listCrmActivityForLocation(this.databaseService, locationId, crmActivityLimit)
+      ]);
 
     return {
-      summary: this.withAgreementCounts(summary, agreements),
+      agreementContextVisible: includeAgreementContext,
+      summary: this.withAgreementCounts(summary, agreementCounts),
       jobs,
       appointments,
       invoices,
@@ -182,19 +173,25 @@ export class CrmOperationalDataRepository {
     const summary = await this.getCustomerSummary(customerId);
     const jobs = await this.listJobsForCustomer(customerId);
     const jobIds = jobs.map((job) => job.id);
-    const [appointments, invoices, estimates, equipment, agreements, activity] = await Promise.all([
-      this.listAppointmentsForJobs(jobIds),
-      this.listInvoicesForJobs(jobIds),
-      this.listEstimatesForJobs(jobIds),
-      this.listEquipmentForCustomer(customerId),
-      options.includeAgreementContext
-        ? this.listAgreementsForCustomer(customerId)
-        : Promise.resolve([]),
-      listCrmActivityForCustomer(this.databaseService, customerId, crmActivityLimit)
-    ]);
+    const includeAgreementContext = options.includeAgreementContext === true;
+    const [appointments, invoices, estimates, equipment, agreements, agreementCounts, activity] =
+      await Promise.all([
+        this.listAppointmentsForJobs(jobIds),
+        this.listInvoicesForJobs(jobIds),
+        this.listEstimatesForJobs(jobIds),
+        this.listEquipmentForCustomer(customerId),
+        includeAgreementContext
+          ? listCrmAgreementsForCustomer(this.databaseService, customerId)
+          : Promise.resolve([]),
+        includeAgreementContext
+          ? getCrmAgreementCountsForCustomer(this.databaseService, customerId)
+          : Promise.resolve(emptyAgreementCounts()),
+        listCrmActivityForCustomer(this.databaseService, customerId, crmActivityLimit)
+      ]);
 
     return {
-      summary: this.withAgreementCounts(summary, agreements),
+      agreementContextVisible: includeAgreementContext,
+      summary: this.withAgreementCounts(summary, agreementCounts),
       jobs,
       appointments,
       invoices,
@@ -552,78 +549,6 @@ export class CrmOperationalDataRepository {
     return result.rows.map((row) => this.toEquipmentSummary(row));
   }
 
-  private async listAgreementsForLocation(
-    locationId: string
-  ): Promise<CrmOperationalAgreementSummary[]> {
-    const result = await this.databaseService.query<AgreementRow>(
-      this.getAgreementsSelectSql(
-        `
-          inner join service_agreement_covered_locations scoped_acl
-            on scoped_acl.agreement_id = agreement.id
-           and scoped_acl.location_id = $1
-        `,
-        ''
-      ),
-      [locationId, crmAgreementLimit]
-    );
-
-    return result.rows.map((row) => this.toAgreementSummary(row));
-  }
-
-  private async listAgreementsForCustomer(
-    customerId: string
-  ): Promise<CrmOperationalAgreementSummary[]> {
-    const result = await this.databaseService.query<AgreementRow>(
-      this.getAgreementsSelectSql('', 'and agreement.customer_id = $1'),
-      [customerId, crmAgreementLimit]
-    );
-
-    return result.rows.map((row) => this.toAgreementSummary(row));
-  }
-
-  private getAgreementsSelectSql(scopeJoinSql: string, scopeWhereSql: string): string {
-    return `
-      select
-        agreement.id,
-        agreement.agreement_number as "agreementNumber",
-        agreement.customer_id as "customerId",
-        customer.name as "customerName",
-        agreement.name,
-        agreement.status,
-        agreement.start_date as "startDate",
-        agreement.end_date as "endDate",
-        agreement.renewal_date as "renewalDate",
-        agreement.billing_cadence as "billingCadence",
-        agreement.next_billing_date as "nextBillingDate",
-        agreement.billing_amount as "billingAmount",
-        array_agg(distinct covered_location.name order by covered_location.name)
-          filter (where covered_location.name is not null) as "coveredLocationNames",
-        count(distinct covered_equipment.equipment_id) as "coveredEquipmentCount",
-        count(distinct visit_template.id)
-          filter (where visit_template.is_active = true) as "activeVisitTemplateCount",
-        agreement.updated_at as "updatedAt"
-      from service_agreements agreement
-      inner join customers customer on customer.id = agreement.customer_id
-      ${scopeJoinSql}
-      left join service_agreement_covered_locations covered_agreement_location
-        on covered_agreement_location.agreement_id = agreement.id
-      left join locations covered_location
-        on covered_location.id = covered_agreement_location.location_id
-      left join service_agreement_covered_equipment covered_equipment
-        on covered_equipment.agreement_id = agreement.id
-      left join service_agreement_visit_templates visit_template
-        on visit_template.agreement_id = agreement.id
-      where agreement.status in ('active', 'ended')
-        ${scopeWhereSql}
-      group by agreement.id, customer.name
-      order by
-        case agreement.status when 'active' then 0 else 1 end,
-        agreement.renewal_date nulls last,
-        agreement.updated_at desc
-      limit $2
-    `;
-  }
-
   private toSummary(row: SummaryRow | undefined): CrmOperationalSummary {
     return {
       openJobCount: Number(row?.openJobCount ?? 0),
@@ -639,12 +564,11 @@ export class CrmOperationalDataRepository {
 
   private withAgreementCounts(
     summary: CrmOperationalSummary,
-    agreements: CrmOperationalAgreementSummary[]
+    agreementCounts: Pick<CrmOperationalSummary, 'activeAgreementCount' | 'endedAgreementCount'>
   ): CrmOperationalSummary {
     return {
       ...summary,
-      activeAgreementCount: agreements.filter((agreement) => agreement.status === 'active').length,
-      endedAgreementCount: agreements.filter((agreement) => agreement.status === 'ended').length
+      ...agreementCounts
     };
   }
 
@@ -716,25 +640,11 @@ export class CrmOperationalDataRepository {
       updatedAt: toIsoString(row.updatedAt)
     };
   }
+}
 
-  private toAgreementSummary(row: AgreementRow): CrmOperationalAgreementSummary {
-    return {
-      id: row.id,
-      agreementNumber: row.agreementNumber,
-      customerId: row.customerId,
-      customerName: row.customerName,
-      name: row.name,
-      status: row.status,
-      startDate: toOptionalDateString(row.startDate),
-      endDate: toOptionalDateString(row.endDate),
-      renewalDate: toOptionalDateString(row.renewalDate),
-      billingCadence: row.billingCadence,
-      nextBillingDate: toOptionalDateString(row.nextBillingDate),
-      billingAmount: row.billingAmount === null ? undefined : Number(row.billingAmount),
-      coveredLocationNames: row.coveredLocationNames ?? [],
-      coveredEquipmentCount: Number(row.coveredEquipmentCount),
-      activeVisitTemplateCount: Number(row.activeVisitTemplateCount),
-      updatedAt: toIsoString(row.updatedAt)
-    };
-  }
+function emptyAgreementCounts(): Pick<
+  CrmOperationalSummary,
+  'activeAgreementCount' | 'endedAgreementCount'
+> {
+  return { activeAgreementCount: 0, endedAgreementCount: 0 };
 }

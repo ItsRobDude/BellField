@@ -97,6 +97,7 @@ const contactResult: CrmSearchResult = {
 
 function emptyOperationalContext(): CrmOperationalContext {
   return {
+    agreementContextVisible: false,
     summary: {
       openJobCount: 0,
       equipmentCount: 0,
@@ -310,6 +311,7 @@ describe('CrmPanel', () => {
 
     expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Add phone' })).toBeInTheDocument();
+    expect(screen.queryByRole('tab', { name: 'Agreements' })).not.toBeInTheDocument();
     expect(screen.queryByLabelText('Customer, location, or person search')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
@@ -418,6 +420,7 @@ describe('CrmPanel', () => {
       ...customerDetail,
       operational: {
         ...emptyOperationalContext(),
+        agreementContextVisible: true,
         summary: {
           openJobCount: 1,
           lastServiceAt: '2026-06-01',
