@@ -20,6 +20,7 @@ import { SystemDiagnosticsModule } from './system-diagnostics/system-diagnostics
 import { SupportModule } from './support/support.module';
 import { HistoryModule } from './history/history.module';
 import { ReportingModule } from './reporting/reporting.module';
+import { ServiceAgreementsModule } from './service-agreements/service-agreements.module';
 
 @Module({
   imports: [
@@ -43,7 +44,8 @@ import { ReportingModule } from './reporting/reporting.module';
     SystemDiagnosticsModule,
     SupportModule,
     HistoryModule,
-    ReportingModule
+    ReportingModule,
+    ServiceAgreementsModule
   ]
 })
 export class AppModule {}

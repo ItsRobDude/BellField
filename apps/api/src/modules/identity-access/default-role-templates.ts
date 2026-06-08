@@ -24,6 +24,7 @@ const officeCore = [
   ...permissionKeys('register', ['view', 'create', 'edit']),
   ...permissionKeys('media', ['view', 'create', 'edit']),
   ...permissionKeys('catalog', ['view', 'create', 'edit']),
+  ...permissionKeys('agreements', ['view', 'create', 'edit']),
   ...permissionKeys('estimates', ['view', 'create', 'edit'])
 ];
 
@@ -57,6 +58,7 @@ const ownerPermissions = [
   ...permissionKeys('appointmentsDispatch', ['delete', 'configure']),
   ...permissionKeys('register', ['delete', 'configure']),
   ...permissionKeys('media', ['delete', 'configure']),
+  ...permissionKeys('agreements', ['delete', 'configure']),
   ...permissionKeys('estimates', ['delete', 'approve']),
   ...permissionKeys('invoices', ['delete', 'approve', 'post', 'configure']),
   ...permissionKeys('payments', ['delete', 'configure']),

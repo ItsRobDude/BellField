@@ -67,3 +67,19 @@ describe('defaultRoleTemplates catalog permissions', () => {
     expect(defaultRoleTemplates.technician.permissions).not.toContain('catalog:edit');
   });
 });
+
+describe('defaultRoleTemplates agreement permissions', () => {
+  it('grants office roles agreement view/create/edit for agreement lifecycle work', () => {
+    for (const role of ['owner', 'admin', 'csr', 'dispatcher', 'bookKeeping'] as const) {
+      expect(defaultRoleTemplates[role].permissions).toEqual(
+        expect.arrayContaining(['agreements:view', 'agreements:create', 'agreements:edit'])
+      );
+    }
+  });
+
+  it('does not expose agreements to technicians until the field read-only slice exists', () => {
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('agreements:view');
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('agreements:create');
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('agreements:edit');
+  });
+});

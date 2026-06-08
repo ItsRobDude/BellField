@@ -77,6 +77,24 @@ a concurrent demotion/deactivation/permission change or a stale update can't sli
 | `PUT`  | `/operations/catalog/items/:itemId` | office  | `catalog:edit`    | Update a Catalog item, including active/inactive state. Edits affect future selections only; historical register/invoice snapshots keep their meaning.   |
 | `GET`  | `/operations/catalog/field-items`   | field   | `register:create` | Field-safe active sellable/chargeable Catalog items for technician register selection. Excludes office-only discounts and internal cost/accounting data. |
 
+## Service Agreements
+
+Service agreements are customer-owned lifecycle records seeded from sellable agreement Catalog
+lines or estimate line context when available. Coverage is location-first and trade-neutral:
+each agreement covers at least one customer location, with optional covered equipment assigned to
+those covered locations. Renewal and billing fields are informational in Phase 6A; these endpoints
+do not create invoices, payments, jobs, or appointments.
+
+| Method | Path                                                             | Surface | Permission gate     | Purpose                                                                                             |
+| ------ | ---------------------------------------------------------------- | ------- | ------------------- | --------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/service-agreements?customerId=&locationId=&status=` | office  | `agreements:view`   | List service agreements, optionally filtered by customer, covered location, or status.              |
+| `GET`  | `/operations/service-agreements/:agreementId`                    | office  | `agreements:view`   | Load one agreement with covered locations, covered equipment, and recurring visit templates.        |
+| `POST` | `/operations/service-agreements`                                 | office  | `agreements:create` | Create a draft service agreement with preserved Catalog/estimate source context when supplied.      |
+| `PUT`  | `/operations/service-agreements/:agreementId`                    | office  | `agreements:edit`   | Replace editable agreement terms, coverage, and visit templates. Ended agreements cannot be edited. |
+| `POST` | `/operations/service-agreements/:agreementId/activate`           | office  | `agreements:edit`   | Activate a draft or paused agreement.                                                               |
+| `POST` | `/operations/service-agreements/:agreementId/pause`              | office  | `agreements:edit`   | Pause an active agreement.                                                                          |
+| `POST` | `/operations/service-agreements/:agreementId/end`                | office  | `agreements:edit`   | End a draft, active, or paused agreement while preserving the record.                               |
+
 ## Estimates
 
 Estimates attach to a job and are priced server-side by `@bellfield/estimating`; clients send line inputs only and the API returns the snapshotted totals. Lines may optionally reference a Catalog item and carry a frozen sell-side Catalog snapshot. Estimates may also carry option groups: base/common lines plus option-specific lines, with option path totals snapshotted by the API. Lifecycle is strict: only `pending` estimates can be edited, approved, or declined. Approval/decline does not change job status, create an invoice, or create any other downstream record; it does write a job timeline entry and bump `jobs.updated_at` as an audit trail.
