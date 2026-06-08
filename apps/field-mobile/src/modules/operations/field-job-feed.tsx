@@ -39,11 +39,13 @@ import {
   buildFieldJobCardMetadata,
   buildFieldMediaCaptionDraftKey,
   fieldDetailTabs,
+  getAgreementCoverageForJob,
   summarizeJobQueueBadge,
   type FieldDetailTab
 } from './field-workspace-layout';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
 import type {
+  FieldAgreementCoverage,
   FieldAppointment,
   FieldCustomer,
   FieldEquipmentRecord,
@@ -65,6 +67,7 @@ const fieldAppointmentStatuses: AppointmentStatus[] = [
 
 type FieldJobFeedProps = {
   activeDetailTab: FieldDetailTab;
+  agreementCoverage: FieldAgreementCoverage[];
   assignedEquipment: FieldEquipmentRecord[];
   catalogItems: FieldCatalogItem[];
   canReplaceRemoveEquipment: boolean;
@@ -106,6 +109,7 @@ type FieldJobFeedProps = {
 
 export function FieldJobFeed({
   activeDetailTab,
+  agreementCoverage,
   assignedEquipment,
   catalogItems,
   canReplaceRemoveEquipment,
@@ -379,6 +383,7 @@ export function FieldJobFeed({
         const equipment = assignedEquipment.filter(
           (record) => record.locationId === job.locationId
         );
+        const jobAgreementCoverage = getAgreementCoverageForJob(job, agreementCoverage);
         const workOrderLine = formatWorkOrderLine(job);
         const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
         const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
@@ -650,6 +655,7 @@ export function FieldJobFeed({
               <>
                 <FieldJobOverviewSection
                   currentEmployeeId={currentEmployeeId}
+                  agreementCoverage={jobAgreementCoverage}
                   customer={customer}
                   job={job}
                   location={location}

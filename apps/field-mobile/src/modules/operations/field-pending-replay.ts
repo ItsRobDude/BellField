@@ -30,7 +30,16 @@ export function applyPendingOperations(
     })),
     customers: snapshot.customers.map((customer) => ({ ...customer })),
     equipment: snapshot.equipment.map((record) => ({ ...record })),
-    catalogItems: snapshot.catalogItems.map((item) => ({ ...item, tradeTags: [...item.tradeTags] }))
+    catalogItems: snapshot.catalogItems.map((item) => ({
+      ...item,
+      tradeTags: [...item.tradeTags]
+    })),
+    agreementCoverage: (snapshot.agreementCoverage ?? []).map((agreement) => ({
+      ...agreement,
+      coveredLocations: agreement.coveredLocations.map((location) => ({ ...location })),
+      coveredEquipment: agreement.coveredEquipment.map((record) => ({ ...record })),
+      activeVisitTemplates: agreement.activeVisitTemplates.map((template) => ({ ...template }))
+    }))
   };
 
   for (const operation of pendingOperations) {

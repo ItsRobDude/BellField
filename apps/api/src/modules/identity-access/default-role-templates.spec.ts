@@ -77,8 +77,8 @@ describe('defaultRoleTemplates agreement permissions', () => {
     }
   });
 
-  it('does not expose agreements to technicians until the field read-only slice exists', () => {
-    expect(defaultRoleTemplates.technician.permissions).not.toContain('agreements:view');
+  it('keeps technician agreement access read-only for field coverage context', () => {
+    expect(defaultRoleTemplates.technician.permissions).toContain('agreements:view');
     expect(defaultRoleTemplates.technician.permissions).not.toContain('agreements:create');
     expect(defaultRoleTemplates.technician.permissions).not.toContain('agreements:edit');
   });

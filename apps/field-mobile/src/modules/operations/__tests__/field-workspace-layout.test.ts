@@ -8,6 +8,7 @@ import {
   countJobRegisterEntries,
   fieldDetailTabs,
   formatFieldJobCardScheduleLabel,
+  getAgreementCoverageForJob,
   getPendingOperationsForJob,
   resolveSelectedFieldJob,
   selectFieldTimelineAppointment,
@@ -15,6 +16,7 @@ import {
   sortFieldJobsBySchedule,
   summarizeJobQueueBadge
 } from '../field-workspace-layout';
+import type { FieldAgreementCoverage } from '../field-workspace-types';
 
 const baseTimestamp = '2026-05-23T10:00:00.000Z';
 
@@ -70,6 +72,22 @@ function buildEquipment(overrides: Partial<EquipmentSummary> = {}): EquipmentSum
   };
 }
 
+function buildAgreementCoverage(
+  overrides: Partial<FieldAgreementCoverage> = {}
+): FieldAgreementCoverage {
+  return {
+    agreementId: 'agreement-1',
+    agreementNumber: 'SA-1001',
+    customerId: 'customer-1',
+    customerName: 'Acme',
+    name: 'Residential maintenance plan',
+    coveredLocations: [{ locationId: 'location-1', locationName: 'Main Shop' }],
+    coveredEquipment: [],
+    activeVisitTemplates: [],
+    ...overrides
+  };
+}
+
 describe('field workspace layout helpers', () => {
   it('keeps job-level and appointment-level media caption drafts separate', () => {
     expect(buildFieldMediaCaptionDraftKey({ jobId: 'job-1' })).toBe('job:job-1');
@@ -95,6 +113,35 @@ describe('field workspace layout helpers', () => {
       'equipment',
       'sync'
     ]);
+  });
+
+  it('filters agreement coverage to the selected job location', () => {
+    const job = buildJob({ locationId: 'location-1' });
+    const coverage = [
+      buildAgreementCoverage(),
+      buildAgreementCoverage({
+        agreementId: 'agreement-2',
+        agreementNumber: 'SA-1002',
+        coveredLocations: [{ locationId: 'location-2', locationName: 'Second Shop' }]
+      }),
+      buildAgreementCoverage({
+        agreementId: 'agreement-3',
+        agreementNumber: 'SA-1003',
+        coveredLocations: [],
+        coveredEquipment: [
+          {
+            equipmentId: 'equipment-1',
+            equipmentLabel: 'Condenser - Carrier 24ABC',
+            locationId: 'location-1',
+            locationName: 'Main Shop'
+          }
+        ]
+      })
+    ];
+
+    expect(
+      getAgreementCoverageForJob(job, coverage).map((agreement) => agreement.agreementId)
+    ).toEqual(['agreement-1', 'agreement-3']);
   });
 
   it('sorts assigned jobs by the current technician appointment timeline', () => {

@@ -351,12 +351,51 @@ export interface JobMutationResponse extends JobSummary {
   syncResult?: SyncResult;
 }
 
+export interface FieldAgreementCoverageLocation {
+  locationId: string;
+  locationName: string;
+}
+
+export interface FieldAgreementCoverageEquipment {
+  equipmentId: string;
+  equipmentLabel: string;
+  locationId: string;
+  locationName: string;
+}
+
+export interface FieldAgreementCoverageVisitTemplate {
+  title: string;
+  frequency: 'monthly' | 'quarterly' | 'semiAnnual' | 'annual' | 'custom';
+  intervalMonths?: number;
+  preferredMonth?: number;
+  preferredDayOfMonth?: number;
+  timeWindowLabel?: string;
+  jobType?: string;
+  category?: string;
+  summary?: string;
+  estimatedDurationMinutes?: number;
+}
+
+export interface FieldAgreementCoverageSummary {
+  agreementId: string;
+  agreementNumber: string;
+  customerId: string;
+  customerName: string;
+  name: string;
+  description?: string;
+  renewalDate?: string;
+  coveredLocations: FieldAgreementCoverageLocation[];
+  coveredEquipment: FieldAgreementCoverageEquipment[];
+  activeVisitTemplates: FieldAgreementCoverageVisitTemplate[];
+}
+
 export interface FieldAssignedWorkResponse {
   jobs: JobSummary[];
   locations: LocationSummary[];
   customers: CustomerAccountSummary[];
   equipment: EquipmentSummary[];
   catalogItems: FieldCatalogItem[];
+  agreementCoverage: FieldAgreementCoverageSummary[];
   serverTime: string;
   snapshotVersion: string;
   windowStartDate: string;

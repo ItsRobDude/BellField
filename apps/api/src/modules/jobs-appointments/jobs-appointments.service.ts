@@ -9,6 +9,8 @@ import { JobsDataService } from '../company-data/jobs-data.service';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import type { AuthorizedEmployee } from '../identity-access/identity-access.types';
+import { FieldAgreementCoverageRepository } from '../service-agreements/field-agreement-coverage.repository';
+import { listAssignedEquipmentSummaries } from './field-assigned-equipment-summary';
 import { getAssignedWorkWindow } from './field-work-window';
 import {
   validateRegisterEntryNumbers,
@@ -50,7 +52,8 @@ export class JobsAppointmentsService {
     private readonly equipmentDataService: EquipmentDataService,
     private readonly jobsDataService: JobsDataService,
     private readonly identityAccessService: IdentityAccessService,
-    private readonly catalogService: CatalogService
+    private readonly catalogService: CatalogService,
+    private readonly fieldAgreementCoverageRepository: FieldAgreementCoverageRepository
   ) {}
 
   async getWorkspace(sessionToken: string): Promise<JobsWorkspaceResponseDto> {
@@ -729,8 +732,10 @@ export class JobsAppointmentsService {
     const { windowStartDate, windowEndDate, allowedDates } = getAssignedWorkWindow();
     const jobs = await this.jobsDataService.listAssignedJobsForEmployee(actor.id, allowedDates);
     const locationIds = [...new Set(jobs.map((job) => job.locationId))];
-    const equipment = await this.equipmentDataService.listEquipment(true);
     const catalogItems = await this.catalogService.listFieldCatalogItems();
+    const agreementCoverage = this.canViewAgreementCoverage(actor)
+      ? await this.fieldAgreementCoverageRepository.listActiveCoverageForLocations(locationIds)
+      : [];
     const serverTime = new Date().toISOString();
 
     return {
@@ -754,46 +759,9 @@ export class JobsAppointmentsService {
           )
         ].map((customerId) => this.toCustomerSummary(customerId))
       ),
-      equipment: await Promise.all(
-        equipment
-          .filter(
-            (equipmentRecord) =>
-              equipmentRecord.locationId && locationIds.includes(equipmentRecord.locationId)
-          )
-          .map(async (equipmentRecord) => {
-            const equipmentGroup = equipmentRecord.systemGroupId
-              ? await this.equipmentDataService.getEquipmentGroupById(equipmentRecord.systemGroupId)
-              : null;
-            const age = deriveEquipmentAge(equipmentRecord.installDate);
-
-            return {
-              id: equipmentRecord.id,
-              locationId: equipmentRecord.locationId,
-              inventoryLocationLabel: equipmentRecord.inventoryLocationLabel,
-              equipmentType: equipmentRecord.equipmentType,
-              brand: equipmentRecord.brand,
-              model: equipmentRecord.model,
-              serialNumber: equipmentRecord.serialNumber,
-              filterSizes: [...equipmentRecord.filterSizes],
-              equipmentLocationDescription: equipmentRecord.equipmentLocationDescription,
-              installDate: equipmentRecord.installDate,
-              warrantyStartDate: equipmentRecord.warrantyStartDate,
-              warrantyEndDate: equipmentRecord.warrantyEndDate,
-              warrantyProviderNote: equipmentRecord.warrantyProviderNote,
-              status: equipmentRecord.status,
-              ageYears: age.ageYears,
-              ageLabel: age.ageLabel,
-              systemGroup: equipmentGroup
-                ? { id: equipmentGroup.id, name: equipmentGroup.name }
-                : undefined,
-              replacesEquipmentId: equipmentRecord.replacesEquipmentId,
-              replacedByEquipmentId: equipmentRecord.replacedByEquipmentId,
-              notes: equipmentRecord.notes,
-              updatedAt: equipmentRecord.updatedAt
-            };
-          })
-      ),
+      equipment: await listAssignedEquipmentSummaries(this.equipmentDataService, locationIds),
       catalogItems,
+      agreementCoverage,
       serverTime,
       snapshotVersion: serverTime,
       windowStartDate,
@@ -967,6 +935,10 @@ export class JobsAppointmentsService {
 
   private canViewRegisterEntries(actor: AuthorizedEmployee): boolean {
     return actor.effectivePermissions.includes('register:view');
+  }
+
+  private canViewAgreementCoverage(actor: AuthorizedEmployee): boolean {
+    return actor.effectivePermissions.includes('agreements:view');
   }
 
   private ensureOfficeJobLifecyclePermission(
@@ -1144,36 +1116,6 @@ export class JobsAppointmentsService {
 
     return replay.baseUpdatedAt <= replay.occurredAt;
   }
-}
-
-function deriveEquipmentAge(installDate?: string): { ageYears?: number; ageLabel?: string } {
-  if (!installDate) {
-    return {};
-  }
-
-  const installedAt = new Date(`${installDate}T00:00:00.000Z`);
-
-  if (Number.isNaN(installedAt.getTime())) {
-    return {};
-  }
-
-  const now = new Date();
-  let ageYears = now.getUTCFullYear() - installedAt.getUTCFullYear();
-  const monthOffset = now.getUTCMonth() - installedAt.getUTCMonth();
-  const dayOffset = now.getUTCDate() - installedAt.getUTCDate();
-
-  if (monthOffset < 0 || (monthOffset === 0 && dayOffset < 0)) {
-    ageYears -= 1;
-  }
-
-  if (ageYears < 0) {
-    return {};
-  }
-
-  return {
-    ageYears,
-    ageLabel: ageYears === 0 ? 'Less than 1 year' : ageYears === 1 ? '1 year' : `${ageYears} years`
-  };
 }
 
 function formatAppointmentCount(count: number): string {

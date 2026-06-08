@@ -5,9 +5,15 @@ import { openAddressInMaps, openPhoneNumber } from './field-contact-actions';
 import { formatAppointmentStatusLabel } from './field-workspace-drafts';
 import { selectFieldTimelineAppointment } from './field-workspace-layout';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
-import type { FieldCustomer, FieldJob, FieldLocation } from './field-workspace-types';
+import type {
+  FieldAgreementCoverage,
+  FieldCustomer,
+  FieldJob,
+  FieldLocation
+} from './field-workspace-types';
 
 type FieldJobOverviewSectionProps = {
+  agreementCoverage: FieldAgreementCoverage[];
   currentEmployeeId: string;
   customer?: FieldCustomer;
   job: FieldJob;
@@ -20,6 +26,7 @@ type PhoneRow = {
 };
 
 export function FieldJobOverviewSection({
+  agreementCoverage,
   currentEmployeeId,
   customer,
   job,
@@ -90,6 +97,31 @@ export function FieldJobOverviewSection({
           {job.workOrderNumber ? <Fact label="Work order" value={job.workOrderNumber} /> : null}
         </View>
       </View>
+
+      {agreementCoverage.length > 0 ? (
+        <View style={styles.summaryCard}>
+          <Text style={styles.sectionTitleSmall}>Service agreements</Text>
+          {agreementCoverage.map((agreement) => (
+            <View key={agreement.agreementId} style={localStyles.agreementBlock}>
+              <Text style={localStyles.rowValue}>
+                {agreement.name} ({agreement.agreementNumber})
+              </Text>
+              <Text style={styles.summaryText}>{formatAgreementRenewalLine(agreement)}</Text>
+              {agreement.description ? (
+                <Text style={styles.summaryText}>{agreement.description}</Text>
+              ) : null}
+              <AgreementList
+                items={agreement.coveredEquipment.map((record) => record.equipmentLabel)}
+                label="Covered equipment"
+              />
+              <AgreementList
+                items={agreement.activeVisitTemplates.map(formatVisitTemplateLine)}
+                label="Recurring service"
+              />
+            </View>
+          ))}
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -99,6 +131,25 @@ function Fact({ label, value }: { label: string; value: string }) {
     <View style={localStyles.fact}>
       <Text style={localStyles.rowLabel}>{label}</Text>
       <Text style={localStyles.rowValue}>{value}</Text>
+    </View>
+  );
+}
+
+function AgreementList({ items, label }: { items: string[]; label: string }) {
+  const visibleItems = items.filter(Boolean);
+
+  if (visibleItems.length === 0) {
+    return null;
+  }
+
+  return (
+    <View style={localStyles.agreementList}>
+      <Text style={localStyles.rowLabel}>{label}</Text>
+      {visibleItems.map((item) => (
+        <Text key={item} style={styles.summaryText}>
+          {item}
+        </Text>
+      ))}
     </View>
   );
 }
@@ -141,6 +192,44 @@ function dedupePhoneRows(rows: PhoneRow[]): PhoneRow[] {
   return dedupedRows;
 }
 
+function formatAgreementRenewalLine(agreement: FieldAgreementCoverage): string {
+  return agreement.renewalDate ? `Renewal: ${agreement.renewalDate}` : 'No renewal date listed.';
+}
+
+function formatVisitTemplateLine(
+  template: FieldAgreementCoverage['activeVisitTemplates'][number]
+): string {
+  const details = [
+    formatVisitFrequency(template),
+    template.timeWindowLabel,
+    template.estimatedDurationMinutes
+      ? `${template.estimatedDurationMinutes} min estimated`
+      : undefined
+  ].filter((entry): entry is string => Boolean(entry));
+  const detailLine = details.length > 0 ? ` - ${details.join(', ')}` : '';
+
+  return `${template.title}${detailLine}`;
+}
+
+function formatVisitFrequency(
+  template: FieldAgreementCoverage['activeVisitTemplates'][number]
+): string {
+  switch (template.frequency) {
+    case 'monthly':
+      return 'Monthly';
+    case 'quarterly':
+      return 'Quarterly';
+    case 'semiAnnual':
+      return 'Semiannual';
+    case 'annual':
+      return 'Annual';
+    case 'custom':
+      return template.intervalMonths
+        ? `Every ${template.intervalMonths} months`
+        : 'Custom frequency';
+  }
+}
+
 const localStyles = StyleSheet.create({
   stack: { gap: 10 },
   tapRow: {
@@ -168,5 +257,12 @@ const localStyles = StyleSheet.create({
     gap: 2,
     paddingHorizontal: 12,
     paddingVertical: 10
-  }
+  },
+  agreementBlock: {
+    borderColor: '#dfe5ef',
+    borderTopWidth: 1,
+    gap: 6,
+    paddingTop: 10
+  },
+  agreementList: { gap: 3 }
 });

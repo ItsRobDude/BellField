@@ -133,6 +133,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...permissionKeys('register', ['view', 'create', 'edit']),
       ...permissionKeys('media', ['view', 'create', 'edit']),
       ...permissionKeys('catalog', ['view']),
+      ...permissionKeys('agreements', ['view']),
       ...permissionKeys('estimates', ['view', 'create', 'edit']),
       ...permissionKeys('invoices', ['view', 'edit'])
     ])

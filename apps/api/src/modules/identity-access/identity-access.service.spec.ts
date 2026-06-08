@@ -142,7 +142,7 @@ function adminSessionRepo(
 }
 
 describe('IdentityAccessService', () => {
-  it('pins technician default permissions to field equipment work without true delete', () => {
+  it('pins technician default permissions to field equipment and agreement coverage without true delete', () => {
     const service = new IdentityAccessService({} as IdentityAccessRepository);
     const technicianRole = service.getRoleTemplates().find((role) => role.id === 'technician');
 
@@ -163,6 +163,7 @@ describe('IdentityAccessService', () => {
       'media:create',
       'media:edit',
       'catalog:view',
+      'agreements:view',
       'estimates:view',
       'estimates:create',
       'estimates:edit',

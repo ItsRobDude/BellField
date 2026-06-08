@@ -480,6 +480,7 @@ export function TechnicianWorkspaceScreen({
           {activeWorkspaceTab === 'jobs' ? (
             <FieldJobFeed
               activeDetailTab={activeDetailTab}
+              agreementCoverage={assignedWork?.agreementCoverage ?? []}
               assignedEquipment={assignedWork?.equipment ?? []}
               catalogItems={assignedWork?.catalogItems ?? []}
               canReplaceRemoveEquipment={canReplaceRemoveEquipment}

@@ -91,6 +91,7 @@ function buildSnapshot(): FieldAssignedWorkResponse {
       }
     ],
     catalogItems: [],
+    agreementCoverage: [],
     serverTime: baseTimestamp,
     snapshotVersion: 'v1',
     windowStartDate: '2026-05-22',

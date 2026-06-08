@@ -83,6 +83,9 @@ function createService() {
   const catalogService = {
     listFieldCatalogItems: jest.fn().mockResolvedValue([])
   };
+  const fieldAgreementCoverageRepository = {
+    listActiveCoverageForLocations: jest.fn().mockResolvedValue([])
+  };
 
   return {
     service: new JobsAppointmentsService(
@@ -90,11 +93,13 @@ function createService() {
       equipmentDataService as never,
       jobsDataService as never,
       identityAccessService as never,
-      catalogService as never
+      catalogService as never,
+      fieldAgreementCoverageRepository as never
     ),
     referenceDataService,
     jobsDataService,
-    identityAccessService
+    identityAccessService,
+    fieldAgreementCoverageRepository
   };
 }
 
@@ -1091,5 +1096,80 @@ describe('JobsAppointmentsService', () => {
       isVoid: true,
       voidReason: 'Duplicate line.'
     });
+  });
+
+  it('includes read-only agreement coverage in assigned work when the technician can view agreements', async () => {
+    const { service, jobsDataService, identityAccessService, fieldAgreementCoverageRepository } =
+      createService();
+    const job = createJob('scheduled');
+    const agreementCoverage = [
+      {
+        agreementId: 'agreement-1',
+        agreementNumber: 'SA-1001',
+        customerId: 'customer-1',
+        customerName: 'Acme',
+        name: 'Residential maintenance plan',
+        renewalDate: '2026-12-31',
+        coveredLocations: [{ locationId: 'location-1', locationName: 'Main Shop' }],
+        coveredEquipment: [
+          {
+            equipmentId: 'equipment-1',
+            equipmentLabel: 'Condenser - Carrier 24ABC',
+            locationId: 'location-1',
+            locationName: 'Main Shop'
+          }
+        ],
+        activeVisitTemplates: [
+          {
+            title: 'Spring maintenance',
+            frequency: 'annual' as const,
+            timeWindowLabel: 'Morning'
+          }
+        ]
+      }
+    ];
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['appointmentsDispatch:view', 'agreements:view'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([job]);
+    jobsDataService.getJobById.mockResolvedValue(job);
+    fieldAgreementCoverageRepository.listActiveCoverageForLocations.mockResolvedValue(
+      agreementCoverage
+    );
+
+    const response = await service.getAssignedWork('session-token');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'session-token',
+      'appointmentsDispatch:view',
+      ['field-mobile']
+    );
+    expect(fieldAgreementCoverageRepository.listActiveCoverageForLocations).toHaveBeenCalledWith([
+      'location-1'
+    ]);
+    expect(response.agreementCoverage).toEqual(agreementCoverage);
+  });
+
+  it('keeps assigned work available without agreement coverage when agreement view is absent', async () => {
+    const { service, jobsDataService, identityAccessService, fieldAgreementCoverageRepository } =
+      createService();
+    const job = createJob('scheduled');
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'tech-1',
+      displayName: 'Field Tech',
+      effectivePermissions: ['appointmentsDispatch:view'],
+      sessionSurface: 'field-mobile'
+    });
+    jobsDataService.listAssignedJobsForEmployee.mockResolvedValue([job]);
+    jobsDataService.getJobById.mockResolvedValue(job);
+
+    const response = await service.getAssignedWork('session-token');
+
+    expect(fieldAgreementCoverageRepository.listActiveCoverageForLocations).not.toHaveBeenCalled();
+    expect(response.jobs).toHaveLength(1);
+    expect(response.agreementCoverage).toEqual([]);
   });
 });

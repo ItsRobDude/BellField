@@ -12,6 +12,7 @@ export const fieldDetailTabs = [
 export type FieldDetailTab = (typeof fieldDetailTabs)[number]['id'];
 export type FieldJob = FieldAssignedWorkResponse['jobs'][number];
 export type FieldEquipmentRecord = FieldAssignedWorkResponse['equipment'][number];
+export type FieldAgreementCoverage = FieldAssignedWorkResponse['agreementCoverage'][number];
 type FieldAppointment = FieldJob['appointments'][number];
 
 export type FieldReplacementEquipmentOption = {
@@ -172,6 +173,17 @@ export function summarizeJobQueueBadge(
 
 export function countJobRegisterEntries(job: FieldJob): number {
   return (job.registerEntries ?? []).filter((entry) => !entry.isVoid).length;
+}
+
+export function getAgreementCoverageForJob(
+  job: FieldJob,
+  agreementCoverage: FieldAgreementCoverage[] = []
+): FieldAgreementCoverage[] {
+  return agreementCoverage.filter(
+    (agreement) =>
+      agreement.coveredLocations.some((location) => location.locationId === job.locationId) ||
+      agreement.coveredEquipment.some((record) => record.locationId === job.locationId)
+  );
 }
 
 export function buildReplacementEquipmentOptions(

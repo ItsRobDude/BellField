@@ -219,6 +219,8 @@ Permission checks per §6.
 The field assigned-work response currently includes:
 
 - `registerEntries?: RegisterEntrySummary[]` per job when the actor can view register entries
+- `agreementCoverage` for active customer-facing service agreement coverage when the actor has
+  `agreements:view`; it excludes agreement billing/accounting/admin fields.
 
 Field media capture/blob replay is now queued from field-mobile using the existing media endpoints. Field captures can be job-level or appointment-level, use the documented 50 MB client-side guard before hashing, mark deterministic media failures as rejected for queue resolution, and delete staged local files after successful sync. Media attachments are still not part of the field assigned-work snapshot.
 When added, they should be filtered by the technician's assigned-work window the same way appointments are today and cached in the existing snapshot.

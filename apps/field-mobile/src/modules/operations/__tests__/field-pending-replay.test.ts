@@ -135,6 +135,36 @@ function buildEquipment(overrides: Partial<EquipmentSummary> = {}): EquipmentSum
   };
 }
 
+function buildAgreementCoverage(
+  overrides: Partial<FieldAssignedWorkResponse['agreementCoverage'][number]> = {}
+): FieldAssignedWorkResponse['agreementCoverage'][number] {
+  return {
+    agreementId: 'agreement-1',
+    agreementNumber: 'SA-1001',
+    customerId: 'customer-1',
+    customerName: 'Acme',
+    name: 'Residential maintenance plan',
+    renewalDate: '2026-12-31',
+    coveredLocations: [{ locationId: 'location-1', locationName: 'Main Shop' }],
+    coveredEquipment: [
+      {
+        equipmentId: 'equipment-1',
+        equipmentLabel: 'Condenser - Carrier 24ABC',
+        locationId: 'location-1',
+        locationName: 'Main Shop'
+      }
+    ],
+    activeVisitTemplates: [
+      {
+        title: 'Spring maintenance',
+        frequency: 'annual',
+        estimatedDurationMinutes: 90
+      }
+    ],
+    ...overrides
+  };
+}
+
 function buildSnapshot(
   overrides: Partial<FieldAssignedWorkResponse> = {}
 ): FieldAssignedWorkResponse {
@@ -144,6 +174,7 @@ function buildSnapshot(
     customers: [buildCustomer()],
     equipment: [buildEquipment()],
     catalogItems: [],
+    agreementCoverage: [],
     serverTime: baseTimestamp,
     snapshotVersion: 'v1',
     windowStartDate: '2026-05-22',
@@ -164,6 +195,36 @@ describe('applyPendingOperations', () => {
     expect(result).not.toBe(snapshot);
     expect(result?.jobs[0]).not.toBe(snapshot.jobs[0]);
     expect(result?.jobs[0]?.timeline).toHaveLength(0);
+  });
+
+  it('preserves agreement coverage without sharing nested snapshot references', () => {
+    const snapshot = buildSnapshot({ agreementCoverage: [buildAgreementCoverage()] });
+    const result = applyPendingOperations(snapshot, [], 'Taylor');
+
+    expect(result?.agreementCoverage).toEqual(snapshot.agreementCoverage);
+    expect(result?.agreementCoverage).not.toBe(snapshot.agreementCoverage);
+    expect(result?.agreementCoverage[0]?.coveredLocations).not.toBe(
+      snapshot.agreementCoverage[0]?.coveredLocations
+    );
+    expect(result?.agreementCoverage[0]?.coveredEquipment).not.toBe(
+      snapshot.agreementCoverage[0]?.coveredEquipment
+    );
+    expect(result?.agreementCoverage[0]?.activeVisitTemplates).not.toBe(
+      snapshot.agreementCoverage[0]?.activeVisitTemplates
+    );
+  });
+
+  it('keeps older cached snapshots usable when agreement coverage is missing', () => {
+    const legacySnapshot = buildSnapshot() as Partial<FieldAssignedWorkResponse>;
+    delete legacySnapshot.agreementCoverage;
+
+    const result = applyPendingOperations(
+      legacySnapshot as FieldAssignedWorkResponse,
+      [],
+      'Taylor'
+    );
+
+    expect(result?.agreementCoverage).toEqual([]);
   });
 
   it('records a job note as a local timeline entry with provenance', () => {
