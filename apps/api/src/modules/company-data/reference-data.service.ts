@@ -28,6 +28,10 @@ import type {
 import { CrmOperationalDataRepository } from './crm-operational-data.repository';
 import { ReferenceDataRepository } from './reference-data.repository';
 
+export type ReferenceDetailOptions = {
+  includeAgreementContext?: boolean;
+};
+
 @Injectable()
 export class ReferenceDataService {
   constructor(
@@ -103,13 +107,16 @@ export class ReferenceDataService {
     return contactMethod;
   }
 
-  async getCustomerDetail(customerId: string): Promise<CustomerDetail> {
+  async getCustomerDetail(
+    customerId: string,
+    options: ReferenceDetailOptions = {}
+  ): Promise<CustomerDetail> {
     const customer = await this.getCustomerById(customerId);
     const [links, locations, contactMethods, operational] = await Promise.all([
       this.referenceDataRepository.listCustomerContactLinks(customerId, true),
       this.referenceDataRepository.listLocationsForCustomer(customerId, true),
       this.referenceDataRepository.listCustomerContactMethods(customerId, true),
-      this.crmOperationalDataRepository.getCustomerOperationalContext(customerId)
+      this.crmOperationalDataRepository.getCustomerOperationalContext(customerId, options)
     ]);
 
     return {
@@ -130,14 +137,17 @@ export class ReferenceDataService {
     };
   }
 
-  async getLocationDetail(locationId: string): Promise<LocationDetail> {
+  async getLocationDetail(
+    locationId: string,
+    options: ReferenceDetailOptions = {}
+  ): Promise<LocationDetail> {
     const location = await this.getLocationById(locationId);
     const customer = await this.getCustomerById(location.customerId);
     const [links, ownershipHistory, contactMethods, operational] = await Promise.all([
       this.referenceDataRepository.listLocationContactLinks(locationId, true),
       this.referenceDataRepository.listOwnershipHistory(locationId),
       this.referenceDataRepository.listLocationContactMethods(locationId, true),
-      this.crmOperationalDataRepository.getLocationOperationalContext(locationId)
+      this.crmOperationalDataRepository.getLocationOperationalContext(locationId, options)
     ]);
 
     return {
@@ -191,19 +201,23 @@ export class ReferenceDataService {
     };
   }
 
-  async createCustomer(customer: Omit<CustomerAccountRecord, 'id'>): Promise<CustomerDetail> {
+  async createCustomer(
+    customer: Omit<CustomerAccountRecord, 'id'>,
+    options: ReferenceDetailOptions = {}
+  ): Promise<CustomerDetail> {
     const createdCustomer = await this.referenceDataRepository.createCustomer(customer);
     await this.syncLegacyContactMethods('customer', createdCustomer.id, {
       phone: createdCustomer.phone,
       email: createdCustomer.email,
       fax: createdCustomer.fax
     });
-    return this.getCustomerDetail(createdCustomer.id);
+    return this.getCustomerDetail(createdCustomer.id, options);
   }
 
   async updateCustomer(
     customerId: string,
-    customer: Partial<Omit<CustomerAccountRecord, 'id'>>
+    customer: Partial<Omit<CustomerAccountRecord, 'id'>>,
+    options: ReferenceDetailOptions = {}
   ): Promise<CustomerDetail> {
     const updatedCustomer = await this.referenceDataRepository.updateCustomer(customerId, customer);
 
@@ -216,10 +230,13 @@ export class ReferenceDataService {
       email: updatedCustomer.email,
       fax: updatedCustomer.fax
     });
-    return this.getCustomerDetail(updatedCustomer.id);
+    return this.getCustomerDetail(updatedCustomer.id, options);
   }
 
-  async createLocation(location: Omit<LocationRecord, 'id'>): Promise<LocationDetail> {
+  async createLocation(
+    location: Omit<LocationRecord, 'id'>,
+    options: ReferenceDetailOptions = {}
+  ): Promise<LocationDetail> {
     const createdLocation = await this.referenceDataRepository.createLocation(location);
     await this.referenceDataRepository.addOwnershipHistoryEntry({
       locationId: createdLocation.id,
@@ -231,12 +248,13 @@ export class ReferenceDataService {
       email: createdLocation.email,
       fax: createdLocation.fax
     });
-    return this.getLocationDetail(createdLocation.id);
+    return this.getLocationDetail(createdLocation.id, options);
   }
 
   async updateLocation(
     locationId: string,
-    location: Partial<Omit<LocationRecord, 'id' | 'customerId'>>
+    location: Partial<Omit<LocationRecord, 'id' | 'customerId'>>,
+    options: ReferenceDetailOptions = {}
   ): Promise<LocationDetail> {
     const updatedLocation = await this.referenceDataRepository.updateLocation(locationId, location);
 
@@ -249,14 +267,15 @@ export class ReferenceDataService {
       email: updatedLocation.email,
       fax: updatedLocation.fax
     });
-    return this.getLocationDetail(updatedLocation.id);
+    return this.getLocationDetail(updatedLocation.id, options);
   }
 
   async reassignLocationOwner(
     locationId: string,
     customerId: string,
     effectiveDate: string,
-    note?: string
+    note?: string,
+    options: ReferenceDetailOptions = {}
   ): Promise<LocationDetail> {
     const updatedLocation = await this.referenceDataRepository.reassignLocationOwner(
       locationId,
@@ -269,7 +288,7 @@ export class ReferenceDataService {
       throw new NotFoundException('Location not found.');
     }
 
-    return this.getLocationDetail(updatedLocation.id);
+    return this.getLocationDetail(updatedLocation.id, options);
   }
 
   async createContact(contact: Omit<ContactRecord, 'id'>): Promise<ContactDetail> {

@@ -3,6 +3,7 @@ import type {
   CrmActivityEntry,
   CrmActivityEntryKind,
   CrmOperationalAppointmentSummary,
+  CrmOperationalAgreementSummary,
   CrmOperationalContext,
   CrmOperationalEquipmentSummary,
   CrmOperationalEstimateSummary,
@@ -23,8 +24,13 @@ const crmAppointmentLimit = 50;
 const crmInvoiceLimit = 25;
 const crmEstimateLimit = 25;
 const crmEquipmentLimit = 25;
+const crmAgreementLimit = 25;
 const crmActivityLimit = 60;
 const activeJobSqlList = "'new', 'scheduled', 'inProgress', 'waitingOnParts'";
+
+type CrmOperationalOptions = {
+  includeAgreementContext?: boolean;
+};
 
 type SummaryRow = {
   openJobCount: string | number;
@@ -33,6 +39,25 @@ type SummaryRow = {
   appointmentCount: string | number;
   invoiceCount: string | number;
   estimateCount: string | number;
+};
+
+type AgreementRow = {
+  id: string;
+  agreementNumber: string;
+  customerId: string;
+  customerName: string;
+  name: string;
+  status: CrmOperationalAgreementSummary['status'];
+  startDate: string | Date | null;
+  endDate: string | Date | null;
+  renewalDate: string | Date | null;
+  billingCadence: CrmOperationalAgreementSummary['billingCadence'];
+  nextBillingDate: string | Date | null;
+  billingAmount: string | number | null;
+  coveredLocationNames: string[] | null;
+  coveredEquipmentCount: string | number;
+  activeVisitTemplateCount: string | number;
+  updatedAt: string | Date;
 };
 
 type AppointmentRow = {
@@ -134,34 +159,64 @@ type ActivityRow = {
 export class CrmOperationalDataRepository {
   constructor(private readonly databaseService: DatabaseService) {}
 
-  async getLocationOperationalContext(locationId: string): Promise<CrmOperationalContext> {
+  async getLocationOperationalContext(
+    locationId: string,
+    options: CrmOperationalOptions = {}
+  ): Promise<CrmOperationalContext> {
     const summary = await this.getLocationSummary(locationId);
     const jobs = await this.listJobsForLocation(locationId);
     const jobIds = jobs.map((job) => job.id);
-    const [appointments, invoices, estimates, equipment, activity] = await Promise.all([
+    const [appointments, invoices, estimates, equipment, agreements, activity] = await Promise.all([
       this.listAppointmentsForJobs(jobIds),
       this.listInvoicesForJobs(jobIds),
       this.listEstimatesForJobs(jobIds),
       this.listEquipmentForLocation(locationId),
+      options.includeAgreementContext
+        ? this.listAgreementsForLocation(locationId)
+        : Promise.resolve([]),
       this.listActivityForLocation(locationId)
     ]);
 
-    return { summary, jobs, appointments, invoices, estimates, equipment, activity };
+    return {
+      summary: this.withAgreementCounts(summary, agreements),
+      jobs,
+      appointments,
+      invoices,
+      estimates,
+      equipment,
+      agreements,
+      activity
+    };
   }
 
-  async getCustomerOperationalContext(customerId: string): Promise<CrmOperationalContext> {
+  async getCustomerOperationalContext(
+    customerId: string,
+    options: CrmOperationalOptions = {}
+  ): Promise<CrmOperationalContext> {
     const summary = await this.getCustomerSummary(customerId);
     const jobs = await this.listJobsForCustomer(customerId);
     const jobIds = jobs.map((job) => job.id);
-    const [appointments, invoices, estimates, equipment, activity] = await Promise.all([
+    const [appointments, invoices, estimates, equipment, agreements, activity] = await Promise.all([
       this.listAppointmentsForJobs(jobIds),
       this.listInvoicesForJobs(jobIds),
       this.listEstimatesForJobs(jobIds),
       this.listEquipmentForCustomer(customerId),
+      options.includeAgreementContext
+        ? this.listAgreementsForCustomer(customerId)
+        : Promise.resolve([]),
       this.listActivityForCustomer(customerId)
     ]);
 
-    return { summary, jobs, appointments, invoices, estimates, equipment, activity };
+    return {
+      summary: this.withAgreementCounts(summary, agreements),
+      jobs,
+      appointments,
+      invoices,
+      estimates,
+      equipment,
+      agreements,
+      activity
+    };
   }
 
   private async getLocationSummary(locationId: string): Promise<CrmOperationalSummary> {
@@ -511,6 +566,78 @@ export class CrmOperationalDataRepository {
     return result.rows.map((row) => this.toEquipmentSummary(row));
   }
 
+  private async listAgreementsForLocation(
+    locationId: string
+  ): Promise<CrmOperationalAgreementSummary[]> {
+    const result = await this.databaseService.query<AgreementRow>(
+      this.getAgreementsSelectSql(
+        `
+          inner join service_agreement_covered_locations scoped_acl
+            on scoped_acl.agreement_id = agreement.id
+           and scoped_acl.location_id = $1
+        `,
+        ''
+      ),
+      [locationId, crmAgreementLimit]
+    );
+
+    return result.rows.map((row) => this.toAgreementSummary(row));
+  }
+
+  private async listAgreementsForCustomer(
+    customerId: string
+  ): Promise<CrmOperationalAgreementSummary[]> {
+    const result = await this.databaseService.query<AgreementRow>(
+      this.getAgreementsSelectSql('', 'and agreement.customer_id = $1'),
+      [customerId, crmAgreementLimit]
+    );
+
+    return result.rows.map((row) => this.toAgreementSummary(row));
+  }
+
+  private getAgreementsSelectSql(scopeJoinSql: string, scopeWhereSql: string): string {
+    return `
+      select
+        agreement.id,
+        agreement.agreement_number as "agreementNumber",
+        agreement.customer_id as "customerId",
+        customer.name as "customerName",
+        agreement.name,
+        agreement.status,
+        agreement.start_date as "startDate",
+        agreement.end_date as "endDate",
+        agreement.renewal_date as "renewalDate",
+        agreement.billing_cadence as "billingCadence",
+        agreement.next_billing_date as "nextBillingDate",
+        agreement.billing_amount as "billingAmount",
+        array_agg(distinct covered_location.name order by covered_location.name)
+          filter (where covered_location.name is not null) as "coveredLocationNames",
+        count(distinct covered_equipment.equipment_id) as "coveredEquipmentCount",
+        count(distinct visit_template.id)
+          filter (where visit_template.is_active = true) as "activeVisitTemplateCount",
+        agreement.updated_at as "updatedAt"
+      from service_agreements agreement
+      inner join customers customer on customer.id = agreement.customer_id
+      ${scopeJoinSql}
+      left join service_agreement_covered_locations covered_agreement_location
+        on covered_agreement_location.agreement_id = agreement.id
+      left join locations covered_location
+        on covered_location.id = covered_agreement_location.location_id
+      left join service_agreement_covered_equipment covered_equipment
+        on covered_equipment.agreement_id = agreement.id
+      left join service_agreement_visit_templates visit_template
+        on visit_template.agreement_id = agreement.id
+      where agreement.status in ('active', 'ended')
+        ${scopeWhereSql}
+      group by agreement.id, customer.name
+      order by
+        case agreement.status when 'active' then 0 else 1 end,
+        agreement.renewal_date nulls last,
+        agreement.updated_at desc
+      limit $2
+    `;
+  }
+
   private async listActivityForLocation(locationId: string): Promise<CrmActivityEntry[]> {
     const result = await this.databaseService.query<ActivityRow>(
       `
@@ -693,7 +820,20 @@ export class CrmOperationalDataRepository {
       equipmentCount: Number(row?.equipmentCount ?? 0),
       appointmentCount: Number(row?.appointmentCount ?? 0),
       invoiceCount: Number(row?.invoiceCount ?? 0),
-      estimateCount: Number(row?.estimateCount ?? 0)
+      estimateCount: Number(row?.estimateCount ?? 0),
+      activeAgreementCount: 0,
+      endedAgreementCount: 0
+    };
+  }
+
+  private withAgreementCounts(
+    summary: CrmOperationalSummary,
+    agreements: CrmOperationalAgreementSummary[]
+  ): CrmOperationalSummary {
+    return {
+      ...summary,
+      activeAgreementCount: agreements.filter((agreement) => agreement.status === 'active').length,
+      endedAgreementCount: agreements.filter((agreement) => agreement.status === 'ended').length
     };
   }
 
@@ -762,6 +902,27 @@ export class CrmOperationalDataRepository {
       serialNumber: row.serialNumber ?? undefined,
       status: row.status,
       installDate: toOptionalDateString(row.installDate),
+      updatedAt: toIsoString(row.updatedAt)
+    };
+  }
+
+  private toAgreementSummary(row: AgreementRow): CrmOperationalAgreementSummary {
+    return {
+      id: row.id,
+      agreementNumber: row.agreementNumber,
+      customerId: row.customerId,
+      customerName: row.customerName,
+      name: row.name,
+      status: row.status,
+      startDate: toOptionalDateString(row.startDate),
+      endDate: toOptionalDateString(row.endDate),
+      renewalDate: toOptionalDateString(row.renewalDate),
+      billingCadence: row.billingCadence,
+      nextBillingDate: toOptionalDateString(row.nextBillingDate),
+      billingAmount: row.billingAmount === null ? undefined : Number(row.billingAmount),
+      coveredLocationNames: row.coveredLocationNames ?? [],
+      coveredEquipmentCount: Number(row.coveredEquipmentCount),
+      activeVisitTemplateCount: Number(row.activeVisitTemplateCount),
       updatedAt: toIsoString(row.updatedAt)
     };
   }

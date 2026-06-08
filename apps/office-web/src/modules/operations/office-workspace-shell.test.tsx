@@ -241,13 +241,16 @@ function emptyOperationalContext(): CrmOperationalContext {
       equipmentCount: 0,
       appointmentCount: 0,
       invoiceCount: 0,
-      estimateCount: 0
+      estimateCount: 0,
+      activeAgreementCount: 0,
+      endedAgreementCount: 0
     },
     jobs: [],
     appointments: [],
     invoices: [],
     estimates: [],
     equipment: [],
+    agreements: [],
     activity: []
   };
 }

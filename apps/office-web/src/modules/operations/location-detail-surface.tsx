@@ -4,6 +4,7 @@ import type { ContactLink, CrmWorkspaceResponse, LocationDetail } from '@/lib/op
 import { ContactMethodsEditor } from './contact-methods-editor';
 import type { ContactLinkDraft, LocationDetailTab } from './crm-panel-types';
 import {
+  CrmAgreementsSection,
   CrmActivitySection,
   CrmInvoicesSection,
   CrmJobsSection,
@@ -45,6 +46,7 @@ const locationDetailTabs: Array<{ key: LocationDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'contacts', label: 'People' },
   { key: 'equipment', label: 'Equipment' },
+  { key: 'agreements', label: 'Agreements' },
   { key: 'jobs', label: 'Jobs' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'activity', label: 'Activity' }
@@ -221,6 +223,10 @@ export function LocationDetailSurface({
 
       {selectedLocationTab === 'jobs' ? (
         <CrmJobsSection operational={location.operational} />
+      ) : null}
+
+      {selectedLocationTab === 'agreements' ? (
+        <CrmAgreementsSection operational={location.operational} />
       ) : null}
 
       {selectedLocationTab === 'invoices' ? (

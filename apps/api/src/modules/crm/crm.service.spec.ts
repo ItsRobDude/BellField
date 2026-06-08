@@ -319,6 +319,22 @@ describe('CrmService', () => {
     expect(referenceDataService.searchCrm).not.toHaveBeenCalled();
   });
 
+  it('passes agreement context through customer detail when agreements:view is present', async () => {
+    const { service, referenceDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValueOnce({
+      id: 'employee-1',
+      displayName: 'CSR',
+      effectivePermissions: ['customers:view', 'agreements:view'],
+      sessionSurface: 'office-web'
+    });
+
+    await service.getCustomerDetail('session-token', 'customer-1');
+
+    expect(referenceDataService.getCustomerDetail).toHaveBeenCalledWith('customer-1', {
+      includeAgreementContext: true
+    });
+  });
+
   it('blocks duplicate customer creation until confirmed', async () => {
     const { service, referenceDataService } = createService();
     referenceDataService.findCustomerDuplicateCandidates.mockResolvedValueOnce([
@@ -550,7 +566,8 @@ describe('CrmService', () => {
         phone: undefined,
         email: undefined,
         fax: undefined
-      })
+      }),
+      { includeAgreementContext: false }
     );
   });
 
@@ -590,7 +607,8 @@ describe('CrmService', () => {
         phone: undefined,
         email: undefined,
         fax: undefined
-      })
+      }),
+      { includeAgreementContext: false }
     );
   });
 
@@ -613,7 +631,8 @@ describe('CrmService', () => {
         phone: undefined,
         email: undefined,
         fax: '(555) 333-4444'
-      })
+      }),
+      { includeAgreementContext: false }
     );
   });
 
@@ -707,7 +726,8 @@ describe('CrmService', () => {
       'location-1',
       'customer-2',
       todayDateString(),
-      'Sold'
+      'Sold',
+      { includeAgreementContext: false }
     );
   });
 
@@ -885,7 +905,8 @@ describe('CrmService', () => {
       'location-1',
       expect.objectContaining({
         fax: '(555) 333-4444'
-      })
+      }),
+      { includeAgreementContext: false }
     );
   });
 

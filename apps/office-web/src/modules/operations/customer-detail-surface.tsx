@@ -5,6 +5,7 @@ import { ContactMethodsEditor } from './contact-methods-editor';
 import { CrmCustomerLocationsSection } from './crm-customer-locations-section';
 import { splitCommaValues } from './crm-form-helpers';
 import {
+  CrmAgreementsSection,
   CrmActivitySection,
   CrmInvoicesSection,
   CrmJobsSection,
@@ -40,6 +41,7 @@ const customerDetailTabs: Array<{ key: CustomerDetailTab; label: string }> = [
   { key: 'overview', label: 'Overview' },
   { key: 'locations', label: 'Locations' },
   { key: 'contacts', label: 'People' },
+  { key: 'agreements', label: 'Agreements' },
   { key: 'jobs', label: 'Jobs' },
   { key: 'invoices', label: 'Invoices' },
   { key: 'activity', label: 'Activity' }
@@ -200,6 +202,9 @@ export function CustomerDetailSurface({
       ) : null}
       {selectedCustomerTab === 'jobs' ? (
         <CrmJobsSection operational={customer.operational} />
+      ) : null}
+      {selectedCustomerTab === 'agreements' ? (
+        <CrmAgreementsSection operational={customer.operational} />
       ) : null}
       {selectedCustomerTab === 'invoices' ? (
         <CrmInvoicesSection operational={customer.operational} />

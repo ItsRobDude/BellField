@@ -102,13 +102,16 @@ function emptyOperationalContext(): CrmOperationalContext {
       equipmentCount: 0,
       appointmentCount: 0,
       invoiceCount: 0,
-      estimateCount: 0
+      estimateCount: 0,
+      activeAgreementCount: 0,
+      endedAgreementCount: 0
     },
     jobs: [],
     appointments: [],
     invoices: [],
     estimates: [],
     equipment: [],
+    agreements: [],
     activity: []
   };
 }
@@ -421,7 +424,9 @@ describe('CrmPanel', () => {
           equipmentCount: 2,
           appointmentCount: 1,
           invoiceCount: 1,
-          estimateCount: 1
+          estimateCount: 1,
+          activeAgreementCount: 1,
+          endedAgreementCount: 0
         },
         jobs: [
           {
@@ -481,6 +486,25 @@ describe('CrmPanel', () => {
           }
         ],
         equipment: [],
+        agreements: [
+          {
+            id: 'agreement-1',
+            agreementNumber: 'SA-1001',
+            customerId: 'customer-1',
+            customerName: 'Acme',
+            name: 'Annual maintenance plan',
+            status: 'active',
+            startDate: '2026-01-01',
+            renewalDate: '2027-01-01',
+            billingCadence: 'annual',
+            nextBillingDate: '2027-01-01',
+            billingAmount: 240,
+            coveredLocationNames: ['Main Shop'],
+            coveredEquipmentCount: 2,
+            activeVisitTemplateCount: 1,
+            updatedAt: '2026-06-01T10:00:00.000Z'
+          }
+        ],
         activity: [
           {
             id: 'contact-link-1',
@@ -532,6 +556,7 @@ describe('CrmPanel', () => {
 
     expect(await screen.findByText('Open jobs')).toBeInTheDocument();
     expect(screen.getByText('Last service')).toBeInTheDocument();
+    expect(screen.getByText('1 active')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Jobs' }));
     expect(screen.getByText('1001')).toBeInTheDocument();
@@ -542,6 +567,12 @@ describe('CrmPanel', () => {
     expect(screen.getByText('$125.00')).toBeInTheDocument();
     expect(screen.getByText('Replace capacitor')).toBeInTheDocument();
     expect(screen.getByText('Cost incomplete')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Agreements' }));
+    expect(screen.getByText('SA-1001')).toBeInTheDocument();
+    expect(screen.getByText('Annual maintenance plan')).toBeInTheDocument();
+    expect(screen.getByText('Main Shop · 2 equipment item(s)')).toBeInTheDocument();
+    expect(screen.getByText('$240.00 Annual · next 2027-01-01')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
     expect(screen.getByText('Contact linked: Casey Parker')).toBeInTheDocument();
@@ -567,7 +598,9 @@ describe('CrmPanel', () => {
           equipmentCount: 1,
           appointmentCount: 1,
           invoiceCount: 0,
-          estimateCount: 0
+          estimateCount: 0,
+          activeAgreementCount: 0,
+          endedAgreementCount: 0
         },
         jobs: [
           {

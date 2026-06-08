@@ -2,6 +2,10 @@ import type { EquipmentStatus } from './equipment.js';
 import type { EstimateStatus } from './estimates.js';
 import type { InvoiceKind, InvoiceStatus } from './invoices-payments.js';
 import type { AppointmentStatus, JobStatus } from './jobs.js';
+import type {
+  ServiceAgreementBillingCadence,
+  ServiceAgreementStatus
+} from './service-agreements.js';
 
 export interface CustomerAccountSummary {
   id: string;
@@ -109,6 +113,8 @@ export interface CrmOperationalSummary {
   appointmentCount: number;
   invoiceCount: number;
   estimateCount: number;
+  activeAgreementCount: number;
+  endedAgreementCount: number;
 }
 
 export interface CrmOperationalAppointmentSummary {
@@ -183,6 +189,25 @@ export interface CrmOperationalEquipmentSummary {
   updatedAt: string;
 }
 
+export interface CrmOperationalAgreementSummary {
+  id: string;
+  agreementNumber: string;
+  customerId: string;
+  customerName: string;
+  name: string;
+  status: ServiceAgreementStatus;
+  startDate?: string;
+  endDate?: string;
+  renewalDate?: string;
+  billingCadence: ServiceAgreementBillingCadence;
+  nextBillingDate?: string;
+  billingAmount?: number;
+  coveredLocationNames: string[];
+  coveredEquipmentCount: number;
+  activeVisitTemplateCount: number;
+  updatedAt: string;
+}
+
 export type CrmActivityEntryKind = 'ownership' | 'contact' | 'job' | 'appointment' | 'equipment';
 
 export interface CrmActivityEntry {
@@ -205,6 +230,7 @@ export interface CrmOperationalContext {
   invoices: CrmOperationalInvoiceSummary[];
   estimates: CrmOperationalEstimateSummary[];
   equipment: CrmOperationalEquipmentSummary[];
+  agreements: CrmOperationalAgreementSummary[];
   activity: CrmActivityEntry[];
 }
 

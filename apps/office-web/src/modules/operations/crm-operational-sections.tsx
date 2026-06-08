@@ -3,6 +3,7 @@
 import type {
   ContactMethodSummary,
   CrmActivityEntry,
+  CrmOperationalAgreementSummary,
   CrmOperationalContext,
   CrmOperationalJobSummary
 } from '@/lib/operations-api';
@@ -46,6 +47,11 @@ export function CrmOperationalOverview({
       <div style={styles.subpanel}>
         <strong>Equipment</strong>
         <span>{operational.summary.equipmentCount} active / pending</span>
+      </div>
+      <div style={styles.subpanel}>
+        <strong>Agreements</strong>
+        <span>{operational.summary.activeAgreementCount} active</span>
+        <span style={styles.tinyMuted}>{operational.summary.endedAgreementCount} ended</span>
       </div>
     </div>
   );
@@ -183,6 +189,62 @@ export function CrmInvoicesSection({ operational }: { operational: CrmOperationa
   );
 }
 
+export function CrmAgreementsSection({ operational }: { operational: CrmOperationalContext }) {
+  const activeAgreements = operational.agreements.filter(
+    (agreement) => agreement.status === 'active'
+  );
+  const endedAgreements = operational.agreements.filter(
+    (agreement) => agreement.status === 'ended'
+  );
+
+  return (
+    <div style={styles.subpanel}>
+      <div style={styles.row}>
+        <strong>Service agreements</strong>
+        <span style={styles.tinyMuted}>
+          {activeAgreements.length} active / {endedAgreements.length} ended
+        </span>
+      </div>
+      {operational.agreements.length > 0 ? (
+        <div style={styles.tableWrap}>
+          <table style={styles.table}>
+            <thead>
+              <tr>
+                <th style={styles.tableHeadCell}>Agreement</th>
+                <th style={styles.tableHeadCell}>Status</th>
+                <th style={styles.tableHeadCell}>Coverage</th>
+                <th style={styles.tableHeadCell}>Billing</th>
+                <th style={styles.tableHeadCell}>Visits</th>
+              </tr>
+            </thead>
+            <tbody>
+              {operational.agreements.map((agreement) => (
+                <tr key={agreement.id}>
+                  <td style={styles.tableCell}>
+                    <strong>{agreement.agreementNumber}</strong>
+                    <div style={styles.tinyMuted}>{agreement.name}</div>
+                    {agreement.renewalDate ? (
+                      <div style={styles.tinyMuted}>Renews {formatDate(agreement.renewalDate)}</div>
+                    ) : null}
+                  </td>
+                  <td style={styles.tableCell}>{formatCamelStatus(agreement.status)}</td>
+                  <td style={styles.tableCell}>{formatAgreementCoverage(agreement)}</td>
+                  <td style={styles.tableCell}>{formatAgreementBilling(agreement)}</td>
+                  <td style={styles.tableCell}>
+                    {agreement.activeVisitTemplateCount} active template(s)
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p style={styles.muted}>No active or ended service agreements recorded.</p>
+      )}
+    </div>
+  );
+}
+
 export function CrmActivitySection({ activity }: { activity: CrmActivityEntry[] }) {
   return (
     <div style={styles.subpanel}>
@@ -236,6 +298,29 @@ function formatCurrency(value: number): string {
     style: 'currency',
     currency: 'USD'
   }).format(value);
+}
+
+function formatAgreementCoverage(agreement: CrmOperationalAgreementSummary): string {
+  const locations =
+    agreement.coveredLocationNames.length > 0
+      ? agreement.coveredLocationNames.join(', ')
+      : 'No locations listed';
+  const equipment =
+    agreement.coveredEquipmentCount > 0
+      ? ` · ${agreement.coveredEquipmentCount} equipment item(s)`
+      : '';
+  return `${locations}${equipment}`;
+}
+
+function formatAgreementBilling(agreement: CrmOperationalAgreementSummary): string {
+  if (agreement.billingCadence === 'none') {
+    return 'No recurring billing';
+  }
+
+  const amount =
+    agreement.billingAmount === undefined ? '' : `${formatCurrency(agreement.billingAmount)} `;
+  const next = agreement.nextBillingDate ? ` · next ${formatDate(agreement.nextBillingDate)}` : '';
+  return `${amount}${formatCamelStatus(agreement.billingCadence)}${next}`;
 }
 
 function formatDate(value: string | undefined): string | undefined {

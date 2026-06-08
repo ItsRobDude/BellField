@@ -86,17 +86,21 @@ export class CrmService {
   }
 
   async getCustomerDetail(sessionToken: string, customerId: string) {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:view', [
-      'office-web'
-    ]);
-    return this.referenceDataService.getCustomerDetail(customerId);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'customers:view',
+      ['office-web']
+    );
+    return this.referenceDataService.getCustomerDetail(customerId, detailOptionsFor(employee));
   }
 
   async getLocationDetail(sessionToken: string, locationId: string) {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:view', [
-      'office-web'
-    ]);
-    return this.referenceDataService.getLocationDetail(locationId);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'locations:view',
+      ['office-web']
+    );
+    return this.referenceDataService.getLocationDetail(locationId, detailOptionsFor(employee));
   }
 
   async getContactDetail(sessionToken: string, contactId: string) {
@@ -110,9 +114,11 @@ export class CrmService {
     sessionToken: string,
     request: CreateCustomerRequestDto
   ): Promise<CustomerMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:create', [
-      'office-web'
-    ]);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'customers:create',
+      ['office-web']
+    );
     const duplicateWarnings = await this.findCustomerDuplicates(request);
     this.ensureDuplicateConfirmation(
       duplicateWarnings,
@@ -120,19 +126,22 @@ export class CrmService {
       'customer account'
     );
 
-    const customer = await this.referenceDataService.createCustomer({
-      name: request.name.trim(),
-      accountType: toSupportedAccountType(request.accountType),
-      isActive: true,
-      billingAddressLine1: request.billingAddressLine1.trim(),
-      billingCity: request.billingCity.trim(),
-      billingState: request.billingState.trim(),
-      billingPostalCode: request.billingPostalCode.trim(),
-      phone: trimOptional(request.phone),
-      email: trimOptional(request.email),
-      fax: trimOptional(request.fax),
-      flags: (request.flags ?? []).map((flag) => flag.trim()).filter(Boolean)
-    });
+    const customer = await this.referenceDataService.createCustomer(
+      {
+        name: request.name.trim(),
+        accountType: toSupportedAccountType(request.accountType),
+        isActive: true,
+        billingAddressLine1: request.billingAddressLine1.trim(),
+        billingCity: request.billingCity.trim(),
+        billingState: request.billingState.trim(),
+        billingPostalCode: request.billingPostalCode.trim(),
+        phone: trimOptional(request.phone),
+        email: trimOptional(request.email),
+        fax: trimOptional(request.fax),
+        flags: (request.flags ?? []).map((flag) => flag.trim()).filter(Boolean)
+      },
+      detailOptionsFor(employee)
+    );
 
     return {
       customer,
@@ -145,9 +154,11 @@ export class CrmService {
     customerId: string,
     request: UpdateCustomerRequestDto
   ): Promise<CustomerMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'customers:edit', [
-      'office-web'
-    ]);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'customers:edit',
+      ['office-web']
+    );
     const current = await this.referenceDataService.getCustomerById(customerId);
     const duplicateWarnings = await this.findCustomerDuplicates(
       { ...current, ...request },
@@ -159,19 +170,23 @@ export class CrmService {
       'customer account'
     );
 
-    const customer = await this.referenceDataService.updateCustomer(customerId, {
-      name: request.name?.trim(),
-      accountType: request.accountType ? toSupportedAccountType(request.accountType) : undefined,
-      billingAddressLine1: request.billingAddressLine1?.trim(),
-      billingCity: request.billingCity?.trim(),
-      billingState: request.billingState?.trim(),
-      billingPostalCode: request.billingPostalCode?.trim(),
-      phone: request.phone !== undefined ? trimOptional(request.phone) : undefined,
-      email: request.email !== undefined ? trimOptional(request.email) : undefined,
-      fax: request.fax !== undefined ? trimOptional(request.fax) : undefined,
-      isActive: request.isActive,
-      flags: request.flags?.map((flag) => flag.trim()).filter(Boolean)
-    });
+    const customer = await this.referenceDataService.updateCustomer(
+      customerId,
+      {
+        name: request.name?.trim(),
+        accountType: request.accountType ? toSupportedAccountType(request.accountType) : undefined,
+        billingAddressLine1: request.billingAddressLine1?.trim(),
+        billingCity: request.billingCity?.trim(),
+        billingState: request.billingState?.trim(),
+        billingPostalCode: request.billingPostalCode?.trim(),
+        phone: request.phone !== undefined ? trimOptional(request.phone) : undefined,
+        email: request.email !== undefined ? trimOptional(request.email) : undefined,
+        fax: request.fax !== undefined ? trimOptional(request.fax) : undefined,
+        isActive: request.isActive,
+        flags: request.flags?.map((flag) => flag.trim()).filter(Boolean)
+      },
+      detailOptionsFor(employee)
+    );
 
     return {
       customer,
@@ -183,9 +198,11 @@ export class CrmService {
     sessionToken: string,
     request: CreateLocationRequestDto
   ): Promise<LocationMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:create', [
-      'office-web'
-    ]);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'locations:create',
+      ['office-web']
+    );
     ensureLocationContactConfirmation(
       request.phone,
       request.email,
@@ -202,19 +219,22 @@ export class CrmService {
     const duplicateWarnings = await this.findLocationDuplicates(request);
     this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'location');
 
-    const location = await this.referenceDataService.createLocation({
-      customerId: request.customerId,
-      name: request.name.trim(),
-      addressLine1: request.addressLine1.trim(),
-      city: request.city.trim(),
-      state: request.state.trim(),
-      postalCode: request.postalCode.trim(),
-      phone: trimOptional(request.phone),
-      email: trimOptional(request.email),
-      fax: trimOptional(request.fax),
-      isActive: true,
-      alternateBillToCustomerIds: request.alternateBillToCustomerIds ?? []
-    });
+    const location = await this.referenceDataService.createLocation(
+      {
+        customerId: request.customerId,
+        name: request.name.trim(),
+        addressLine1: request.addressLine1.trim(),
+        city: request.city.trim(),
+        state: request.state.trim(),
+        postalCode: request.postalCode.trim(),
+        phone: trimOptional(request.phone),
+        email: trimOptional(request.email),
+        fax: trimOptional(request.fax),
+        isActive: true,
+        alternateBillToCustomerIds: request.alternateBillToCustomerIds ?? []
+      },
+      detailOptionsFor(employee)
+    );
 
     return {
       location,
@@ -227,9 +247,11 @@ export class CrmService {
     locationId: string,
     request: UpdateLocationRequestDto
   ): Promise<LocationMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', [
-      'office-web'
-    ]);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'locations:edit',
+      ['office-web']
+    );
     const current = await this.referenceDataService.getLocationById(locationId);
     const currentDetail = await this.referenceDataService.getLocationDetail(locationId);
     ensureLocationContactConfirmation(
@@ -251,18 +273,22 @@ export class CrmService {
     );
     this.ensureDuplicateConfirmation(duplicateWarnings, request.confirmDuplicate, 'location');
 
-    const location = await this.referenceDataService.updateLocation(locationId, {
-      name: request.name?.trim(),
-      addressLine1: request.addressLine1?.trim(),
-      city: request.city?.trim(),
-      state: request.state?.trim(),
-      postalCode: request.postalCode?.trim(),
-      phone: request.phone !== undefined ? trimOptional(request.phone) : undefined,
-      email: request.email !== undefined ? trimOptional(request.email) : undefined,
-      fax: request.fax !== undefined ? trimOptional(request.fax) : undefined,
-      isActive: request.isActive,
-      alternateBillToCustomerIds: request.alternateBillToCustomerIds
-    });
+    const location = await this.referenceDataService.updateLocation(
+      locationId,
+      {
+        name: request.name?.trim(),
+        addressLine1: request.addressLine1?.trim(),
+        city: request.city?.trim(),
+        state: request.state?.trim(),
+        postalCode: request.postalCode?.trim(),
+        phone: request.phone !== undefined ? trimOptional(request.phone) : undefined,
+        email: request.email !== undefined ? trimOptional(request.email) : undefined,
+        fax: request.fax !== undefined ? trimOptional(request.fax) : undefined,
+        isActive: request.isActive,
+        alternateBillToCustomerIds: request.alternateBillToCustomerIds
+      },
+      detailOptionsFor(employee)
+    );
 
     return {
       location,
@@ -275,9 +301,11 @@ export class CrmService {
     locationId: string,
     request: ReassignLocationOwnerRequestDto
   ): Promise<LocationMutationResponse> {
-    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'locations:edit', [
-      'office-web'
-    ]);
+    const employee = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'locations:edit',
+      ['office-web']
+    );
     const effectiveDate = normalizeDateOnly(request.effectiveDate);
     if (effectiveDate > todayDateString()) {
       throw new BadRequestException('Future ownership transfer dates are not supported yet.');
@@ -302,7 +330,8 @@ export class CrmService {
       locationId,
       targetCustomer.id,
       effectiveDate,
-      request.note?.trim()
+      request.note?.trim(),
+      detailOptionsFor(employee)
     );
     return { location };
   }
@@ -758,6 +787,12 @@ function hasActivePhoneOrEmailMethod(contactMethods: ContactMethodSummary[]): bo
 
 function hasDoNotService(flags: string[]): boolean {
   return flags.some((flag) => flag.toLowerCase().includes('do not service'));
+}
+
+function detailOptionsFor(employee: { effectivePermissions: readonly string[] }) {
+  return {
+    includeAgreementContext: employee.effectivePermissions.includes('agreements:view')
+  };
 }
 
 function toSupportedAccountType(

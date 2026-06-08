@@ -67,6 +67,7 @@ export type CustomerDetailTab =
   | 'overview'
   | 'locations'
   | 'contacts'
+  | 'agreements'
   | 'jobs'
   | 'invoices'
   | 'activity';
@@ -75,6 +76,7 @@ export type LocationDetailTab =
   | 'overview'
   | 'contacts'
   | 'equipment'
+  | 'agreements'
   | 'jobs'
   | 'invoices'
   | 'activity';

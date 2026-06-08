@@ -151,8 +151,11 @@ describe('CrmOperationalDataRepository', () => {
       equipmentCount: 2,
       appointmentCount: 3,
       invoiceCount: 1,
-      estimateCount: 1
+      estimateCount: 1,
+      activeAgreementCount: 0,
+      endedAgreementCount: 0
     });
+    expect(context.agreements).toEqual([]);
     expect(context.jobs[0]).toMatchObject({
       id: 'job-1',
       jobNumber: '1001',
@@ -188,5 +191,89 @@ describe('CrmOperationalDataRepository', () => {
         String(sql).includes('from customer_contact_links link')
       )
     ).toBe(true);
+  });
+
+  it('includes active and ended location agreements when agreement context is requested', async () => {
+    const { databaseService, repository } = createRepository([
+      [
+        {
+          openJobCount: '0',
+          lastServiceAt: null,
+          equipmentCount: '0',
+          appointmentCount: '0',
+          invoiceCount: '0',
+          estimateCount: '0'
+        }
+      ],
+      [],
+      [],
+      [
+        {
+          id: 'agreement-1',
+          agreementNumber: 'SA-1001',
+          customerId: 'customer-1',
+          customerName: 'Acme',
+          name: 'Annual maintenance plan',
+          status: 'active',
+          startDate: '2026-01-01',
+          endDate: null,
+          renewalDate: '2027-01-01',
+          billingCadence: 'annual',
+          nextBillingDate: '2027-01-01',
+          billingAmount: '240.00',
+          coveredLocationNames: ['Main Shop'],
+          coveredEquipmentCount: '2',
+          activeVisitTemplateCount: '1',
+          updatedAt: '2026-06-01T10:00:00.000Z'
+        },
+        {
+          id: 'agreement-2',
+          agreementNumber: 'SA-1002',
+          customerId: 'customer-1',
+          customerName: 'Acme',
+          name: 'Legacy maintenance plan',
+          status: 'ended',
+          startDate: '2025-01-01',
+          endDate: '2025-12-31',
+          renewalDate: null,
+          billingCadence: 'none',
+          nextBillingDate: null,
+          billingAmount: null,
+          coveredLocationNames: ['Main Shop'],
+          coveredEquipmentCount: '0',
+          activeVisitTemplateCount: '0',
+          updatedAt: '2025-12-31T10:00:00.000Z'
+        }
+      ],
+      []
+    ]);
+
+    const context = await repository.getLocationOperationalContext('location-1', {
+      includeAgreementContext: true
+    });
+
+    expect(databaseService.query).toHaveBeenCalledTimes(5);
+    expect(context.summary).toMatchObject({ activeAgreementCount: 1, endedAgreementCount: 1 });
+    expect(context.agreements).toEqual([
+      expect.objectContaining({
+        id: 'agreement-1',
+        agreementNumber: 'SA-1001',
+        status: 'active',
+        billingAmount: 240,
+        coveredLocationNames: ['Main Shop'],
+        coveredEquipmentCount: 2,
+        activeVisitTemplateCount: 1
+      }),
+      expect.objectContaining({
+        id: 'agreement-2',
+        agreementNumber: 'SA-1002',
+        status: 'ended',
+        billingAmount: undefined
+      })
+    ]);
+    const agreementQuery = String(databaseService.query.mock.calls[3]?.[0] ?? '');
+    expect(agreementQuery).toContain('from service_agreements agreement');
+    expect(agreementQuery).toContain('scoped_acl.location_id = $1');
+    expect(databaseService.query.mock.calls[3]?.[1]).toEqual(['location-1', 25]);
   });
 });
