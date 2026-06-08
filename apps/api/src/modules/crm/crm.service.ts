@@ -17,6 +17,11 @@ import type {
 } from '@bellfield/contracts';
 import { ReferenceDataService } from '../company-data/reference-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
+import {
+  detailOptionsFor,
+  ensureLocationContactConfirmation,
+  trimOptional
+} from './crm-service-helpers';
 import type {
   CreateContactRequestDto,
   CreateCustomerRequestDto,
@@ -703,29 +708,6 @@ export class CrmService {
   }
 }
 
-function ensureLocationContactConfirmation(
-  phone: string | undefined,
-  email: string | undefined,
-  confirmMissingContactInfo: boolean | undefined,
-  hasActiveContactMethod = false
-): void {
-  if (
-    !trimOptional(phone) &&
-    !trimOptional(email) &&
-    !hasActiveContactMethod &&
-    !confirmMissingContactInfo
-  ) {
-    throw new ConflictException(
-      'Locations without phone or email need office confirmation before saving.'
-    );
-  }
-}
-
-function trimOptional(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  return trimmed ? trimmed : undefined;
-}
-
 function normalizeDateOnly(value: string): string {
   const trimmed = value.trim();
 
@@ -787,12 +769,6 @@ function hasActivePhoneOrEmailMethod(contactMethods: ContactMethodSummary[]): bo
 
 function hasDoNotService(flags: string[]): boolean {
   return flags.some((flag) => flag.toLowerCase().includes('do not service'));
-}
-
-function detailOptionsFor(employee: { effectivePermissions: readonly string[] }) {
-  return {
-    includeAgreementContext: employee.effectivePermissions.includes('agreements:view')
-  };
 }
 
 function toSupportedAccountType(

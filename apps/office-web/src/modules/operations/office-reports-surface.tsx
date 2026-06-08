@@ -21,6 +21,7 @@ import {
   type SalesTaxSummaryReport
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
+import { ServiceAgreementReportsView } from './office-service-agreement-reports-view';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeReportsSurfaceProps = {
@@ -32,9 +33,11 @@ export type OfficeReportsSurfaceProps = {
   canViewProfitability: boolean;
   /** inventory:view — gates the Inventory Valuation report. */
   canViewInventoryValuation: boolean;
+  /** agreements:view — gates the Service Agreement report bundle. */
+  canViewAgreements: boolean;
 };
 
-type ReportKey = 'ar' | 'aging' | 'tax' | 'profitability' | 'inventory';
+type ReportKey = 'ar' | 'aging' | 'tax' | 'agreements' | 'profitability' | 'inventory';
 
 const numberCellStyle: CSSProperties = { ...styles.tableCell, textAlign: 'right' };
 const numberHeadStyle: CSSProperties = { ...styles.tableHeadCell, textAlign: 'right' };
@@ -106,13 +109,15 @@ export function OfficeReportsSurface({
   sessionToken,
   canExportReports,
   canViewProfitability,
-  canViewInventoryValuation
+  canViewInventoryValuation,
+  canViewAgreements
 }: OfficeReportsSurfaceProps) {
   const [active, setActive] = useState<ReportKey>('ar');
   const tabs: Array<{ key: ReportKey; label: string }> = [
     { key: 'ar', label: 'AR / Open Balances' },
     { key: 'aging', label: 'AR Aging' },
     { key: 'tax', label: 'Sales Tax' },
+    ...(canViewAgreements ? [{ key: 'agreements' as ReportKey, label: 'Agreements' }] : []),
     ...(canViewProfitability
       ? [{ key: 'profitability' as ReportKey, label: 'Job Profitability' }]
       : []),
@@ -155,6 +160,13 @@ export function OfficeReportsSurface({
       ) : null}
       {active === 'tax' ? (
         <SalesTaxSummaryReportView
+          apiBaseUrl={apiBaseUrl}
+          sessionToken={sessionToken}
+          canExport={canExportReports}
+        />
+      ) : null}
+      {active === 'agreements' && canViewAgreements ? (
+        <ServiceAgreementReportsView
           apiBaseUrl={apiBaseUrl}
           sessionToken={sessionToken}
           canExport={canExportReports}

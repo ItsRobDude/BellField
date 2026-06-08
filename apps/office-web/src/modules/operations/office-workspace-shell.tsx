@@ -932,7 +932,8 @@ export function OfficeWorkspaceShell({
           sessionToken,
           canExportReports,
           canViewProfitability: canViewJobCosting,
-          canViewInventoryValuation: canViewInventory
+          canViewInventoryValuation: canViewInventory,
+          canViewAgreements
         }}
         employees={{
           apiBaseUrl,

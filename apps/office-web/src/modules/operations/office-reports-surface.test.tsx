@@ -5,7 +5,8 @@ import type {
   ArOpenBalancesReport,
   InventoryValuationReport,
   JobProfitabilityReport,
-  SalesTaxSummaryReport
+  SalesTaxSummaryReport,
+  ServiceAgreementReports
 } from '@bellfield/contracts';
 import * as reportingApi from '@/lib/reporting-api';
 import * as downloadFile from '@/lib/download-file';
@@ -14,11 +15,16 @@ import { OfficeReportsSurface } from './office-reports-surface';
 vi.mock('@/lib/reporting-api', () => ({
   getArAging: vi.fn(),
   getArOpenBalances: vi.fn(),
+  getServiceAgreementReports: vi.fn(),
   getSalesTaxSummary: vi.fn(),
   downloadArAgingCsv: vi.fn(),
   downloadArOpenBalancesCsv: vi.fn(),
+  downloadActiveServiceAgreementsCsv: vi.fn(),
+  downloadExpiringServiceAgreementsCsv: vi.fn(),
   downloadPaymentLedgerCsv: vi.fn(),
   downloadPostedInvoicesCsv: vi.fn(),
+  downloadServiceAgreementBillingDueCsv: vi.fn(),
+  downloadServiceAgreementVisitPromptsCsv: vi.fn(),
   downloadSalesTaxSummaryCsv: vi.fn(),
   getJobProfitability: vi.fn(),
   downloadJobProfitabilityCsv: vi.fn(),
@@ -163,10 +169,103 @@ const salesTaxReport: SalesTaxSummaryReport = {
   ]
 };
 
+const serviceAgreementReport: ServiceAgreementReports = {
+  generatedAt: '2026-06-06T00:00:00.000Z',
+  windows: {
+    expiringSoonThrough: '2026-08-05',
+    nextBillingDueThrough: '2026-08-05',
+    visitTemplatePromptThrough: '2026-08-05'
+  },
+  totals: {
+    activeAgreementCount: 1,
+    expiringSoonCount: 1,
+    nextBillingDueCount: 1,
+    visitTemplatePromptCount: 1
+  },
+  activeAgreements: [
+    {
+      agreementId: 'agreement-1',
+      agreementNumber: 'SA-1001',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      name: 'Annual maintenance plan',
+      status: 'active',
+      startDate: '2026-01-01',
+      renewalDate: '2026-07-01',
+      billingCadence: 'annual',
+      nextBillingDate: '2026-07-01',
+      billingAmount: 240,
+      coveredLocationNames: ['Main Shop'],
+      coveredEquipmentCount: 2,
+      activeVisitTemplateCount: 1,
+      updatedAt: '2026-06-01T10:00:00.000Z'
+    }
+  ],
+  expiringSoon: [
+    {
+      agreementId: 'agreement-1',
+      agreementNumber: 'SA-1001',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      name: 'Annual maintenance plan',
+      status: 'active',
+      startDate: '2026-01-01',
+      renewalDate: '2026-07-01',
+      billingCadence: 'annual',
+      nextBillingDate: '2026-07-01',
+      billingAmount: 240,
+      coveredLocationNames: ['Main Shop'],
+      coveredEquipmentCount: 2,
+      activeVisitTemplateCount: 1,
+      updatedAt: '2026-06-01T10:00:00.000Z'
+    }
+  ],
+  nextBillingDue: [
+    {
+      agreementId: 'agreement-1',
+      agreementNumber: 'SA-1001',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      name: 'Annual maintenance plan',
+      status: 'active',
+      startDate: '2026-01-01',
+      renewalDate: '2026-07-01',
+      billingCadence: 'annual',
+      nextBillingDate: '2026-07-01',
+      billingAmount: 240,
+      coveredLocationNames: ['Main Shop'],
+      coveredEquipmentCount: 2,
+      activeVisitTemplateCount: 1,
+      updatedAt: '2026-06-01T10:00:00.000Z',
+      daysUntilBilling: 24
+    }
+  ],
+  visitTemplatePrompts: [
+    {
+      agreementId: 'agreement-1',
+      agreementNumber: 'SA-1001',
+      customerId: 'customer-1',
+      customerName: 'Acme',
+      agreementName: 'Annual maintenance plan',
+      templateId: 'template-1',
+      title: 'Spring visit',
+      frequency: 'annual',
+      preferredMonth: 6,
+      preferredDayOfMonth: 15,
+      projectedDueDate: '2026-06-15',
+      daysUntilProjectedDue: 9,
+      jobType: 'Maintenance',
+      category: 'Recurring',
+      coveredLocationNames: ['Main Shop']
+    }
+  ]
+};
+
 function renderSurface(
   canExportReports: boolean,
   canViewProfitability = false,
-  canViewInventoryValuation = false
+  canViewInventoryValuation = false,
+  canViewAgreements = false
 ) {
   render(
     <OfficeReportsSurface
@@ -175,6 +274,7 @@ function renderSurface(
       canExportReports={canExportReports}
       canViewProfitability={canViewProfitability}
       canViewInventoryValuation={canViewInventoryValuation}
+      canViewAgreements={canViewAgreements}
     />
   );
 }
@@ -185,6 +285,7 @@ beforeEach(() => {
   mockedApi.getSalesTaxSummary.mockResolvedValue(salesTaxReport);
   mockedApi.getJobProfitability.mockResolvedValue(profitabilityReport);
   mockedApi.getInventoryValuation.mockResolvedValue(inventoryReport);
+  mockedApi.getServiceAgreementReports.mockResolvedValue(serviceAgreementReport);
 });
 
 afterEach(() => {
@@ -267,6 +368,41 @@ describe('OfficeReportsSurface (Sales Tax)', () => {
     expect(screen.getAllByText('$108.25').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Export CSV' }));
     await waitFor(() => expect(mockedApi.downloadSalesTaxSummaryCsv).toHaveBeenCalledTimes(1));
+  });
+});
+
+describe('OfficeReportsSurface (Service Agreements)', () => {
+  it('hides the Agreements tab without agreements:view', async () => {
+    renderSurface(true, false, false, false);
+    await screen.findByText('Acme');
+    expect(screen.queryByRole('tab', { name: 'Agreements' })).toBeNull();
+  });
+
+  it('renders service agreement reports when agreements:view is present', async () => {
+    renderSurface(true, false, false, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Agreements' }));
+
+    expect(await screen.findByText('Service Agreements')).toBeInTheDocument();
+    expect(screen.getAllByText('SA-1001').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Annual maintenance plan').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('$240.00 Annual · next 2026-07-01').length).toBeGreaterThan(0);
+    expect(screen.getByText('Spring visit')).toBeInTheDocument();
+    expect(screen.getByText('2026-06-15')).toBeInTheDocument();
+  });
+
+  it('downloads the active service agreement CSV when reports:export is present', async () => {
+    mockedApi.downloadActiveServiceAgreementsCsv.mockResolvedValue(
+      new Blob(['csv'], { type: 'text/csv' })
+    );
+    renderSurface(true, false, false, true);
+    fireEvent.click(await screen.findByRole('tab', { name: 'Agreements' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Export active CSV' }));
+    await waitFor(() =>
+      expect(mockedApi.downloadActiveServiceAgreementsCsv).toHaveBeenCalledTimes(1)
+    );
+    expect(mockedDownload.downloadBlob.mock.calls[0][0]).toMatch(
+      /^service-agreements-active-2026-06-06/
+    );
   });
 });
 

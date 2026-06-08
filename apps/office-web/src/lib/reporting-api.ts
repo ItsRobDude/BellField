@@ -3,7 +3,8 @@ import type {
   ArOpenBalancesReport,
   InventoryValuationReport,
   JobProfitabilityReport,
-  SalesTaxSummaryReport
+  SalesTaxSummaryReport,
+  ServiceAgreementReports
 } from '@bellfield/contracts';
 import { requestBlob, requestJson } from './operations-api-base';
 
@@ -12,7 +13,8 @@ export type {
   ArAgingReport,
   JobProfitabilityReport,
   InventoryValuationReport,
-  SalesTaxSummaryReport
+  SalesTaxSummaryReport,
+  ServiceAgreementReports
 } from '@bellfield/contracts';
 
 /** AR / open-balance snapshot. Gate: reports:view + invoices:view. */
@@ -92,6 +94,57 @@ export async function downloadPaymentLedgerCsv(input: {
   apiBaseUrl?: string;
 }): Promise<Blob> {
   return requestBlob('/operations/reports/payment-ledger/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+/** Service agreement reports. Gate: reports:view + agreements:view. */
+export async function getServiceAgreementReports(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<ServiceAgreementReports> {
+  return requestJson<ServiceAgreementReports>('/operations/reports/service-agreements', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadActiveServiceAgreementsCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/service-agreements/active/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadExpiringServiceAgreementsCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/service-agreements/expiring/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadServiceAgreementBillingDueCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/service-agreements/billing-due/export', {
+    sessionToken: input.sessionToken,
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function downloadServiceAgreementVisitPromptsCsv(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob('/operations/reports/service-agreements/visit-prompts/export', {
     sessionToken: input.sessionToken,
     apiBaseUrl: input.apiBaseUrl
   });
