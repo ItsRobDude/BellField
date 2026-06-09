@@ -18,6 +18,7 @@ Current top-level apps:
 Current shared packages:
 
 - `packages/contracts`
+- `packages/estimating`
 - `packages/validation`
 - `packages/utils`
 
@@ -95,6 +96,7 @@ Rules:
 Current shared packages should stay narrow:
 
 - `contracts` for shared request, response, and contract shapes
+- `estimating` for the shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
 - `validation` for shared validation helpers
 - `utils` for small cross-cutting utilities
 

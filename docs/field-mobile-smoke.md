@@ -1,6 +1,6 @@
 # Field Mobile Smoke Runbook
 
-This runbook validates the current Milestone 6 field app behavior against a local API and local seeded database.
+This runbook validates current field app behavior against a local API and local seeded database.
 
 It is intentionally a local development workflow. It does not add production setup, purchasing, PO receiving, inventory locations, or installer behavior.
 
@@ -198,7 +198,7 @@ adb reverse --remove tcp:3001
 
 ### 2026-06-08 — register sync and revoked-session wipe — PASS
 
-- Commit: `e717bd5` plus the current field revoked-device hardening patch in the working tree.
+- Commit: `e717bd5` plus the later field revoked-device hardening patch.
 - Device: Samsung Galaxy Tab S9 Ultra (SM-X910), Android 16, Expo Go 56.0.1, real hardware.
 - API: `http://127.0.0.1:3001`; Docker Postgres; migrations applied; `pnpm dev:field-smoke-data` prepared the today/tomorrow work window.
 - Setup: Expo Go app data was cleared with `adb shell pm clear host.exp.exponent`, then Metro and API were reached over `adb reverse tcp:8081` and `adb reverse tcp:3001`.

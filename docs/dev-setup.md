@@ -26,6 +26,7 @@ Current apps:
 Current shared packages:
 
 - `packages/contracts`
+- `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
 - `packages/validation`
 - `packages/utils`
 

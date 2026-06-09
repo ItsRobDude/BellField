@@ -40,7 +40,7 @@ Does not own: product behavior, workflow rules, permission behavior, or deployme
 
 Audience: product, engineering, and contributors implementing user-facing behavior.
 
-Purpose: plain-English product rules for accounts, locations, contacts, equipment, jobs, estimates, invoices, and related core behavior.
+Purpose: plain-English product rules for audience priority, operational growth posture, accounts, locations, contacts, equipment, jobs, estimates, invoices, and related core behavior.
 
 Read when: deciding how BellField should behave for office or field users.
 
@@ -196,6 +196,16 @@ Read when: deciding where new code belongs, whether a new package or app is just
 
 Does not own: current product behavior or a literal inventory of everything that already exists.
 
+### [repo-map.md](./repo-map.md)
+
+Audience: engineers and AI contributors getting oriented before a change.
+
+Purpose: compact current repo map, key module locations, common commands, source-of-truth docs, and drift traps.
+
+Read when: starting work in BellField or handing the repo to a fresh contributor.
+
+Does not own: product rules, workflow semantics, API details, or architecture policy.
+
 ### [architecture-guardrails.md](./architecture-guardrails.md)
 
 Audience: contributors changing imports, package boundaries, or shared-code placement.
@@ -304,6 +314,7 @@ For all code tasks:
 
 - `AGENTS.md`
 - `README.md`
+- `repo-map.md`
 - `engineering-standards.md`
 
 For product behavior changes:

@@ -44,6 +44,7 @@ Read:
 
 - `README.md`
 - `docs/README.md`
+- `docs/repo-map.md`
 - `docs/engineering-standards.md`
 - this file
 
@@ -230,6 +231,7 @@ Expected top-level structure:
 - `apps/api`
 - `apps/worker`
 - `packages/contracts`
+- `packages/estimating`
 - `packages/validation`
 - `packages/utils`
 - `docs/`

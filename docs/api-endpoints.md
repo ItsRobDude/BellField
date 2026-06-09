@@ -32,22 +32,26 @@ a concurrent demotion/deactivation/permission change or a stale update can't sli
 
 ## CRM
 
-| Method  | Path                                                   | Surface | Permission gate    | Purpose                                                                 |
-| ------- | ------------------------------------------------------ | ------- | ------------------ | ----------------------------------------------------------------------- |
-| `GET`   | `/operations/crm`                                      | office  | `customers:view`   | Load current CRM workspace lists.                                       |
-| `GET`   | `/operations/crm/search?q=...`                         | office  | `customers:view`   | Prefix SQL-backed CRM search across customers, locations, and contacts. |
-| `GET`   | `/operations/crm/customers/:customerId`                | office  | `customers:view`   | Load customer detail.                                                   |
-| `POST`  | `/operations/crm/customers`                            | office  | `customers:create` | Create customer with duplicate confirmation path.                       |
-| `PATCH` | `/operations/crm/customers/:customerId`                | office  | `customers:edit`   | Update customer with duplicate confirmation path.                       |
-| `GET`   | `/operations/crm/locations/:locationId`                | office  | `locations:view`   | Load location detail.                                                   |
-| `POST`  | `/operations/crm/locations`                            | office  | `locations:create` | Create location with missing contact and duplicate confirmation paths.  |
-| `PATCH` | `/operations/crm/locations/:locationId`                | office  | `locations:edit`   | Update location with missing contact and duplicate confirmation paths.  |
-| `POST`  | `/operations/crm/locations/:locationId/reassign-owner` | office  | `locations:edit`   | Reassign current location owner/customer.                               |
-| `GET`   | `/operations/crm/contacts/:contactId`                  | office  | `contacts:view`    | Load contact detail.                                                    |
-| `POST`  | `/operations/crm/contacts`                             | office  | `contacts:create`  | Create shared contact.                                                  |
-| `PATCH` | `/operations/crm/contacts/:contactId`                  | office  | `contacts:edit`    | Update global contact fields or a linked local override.                |
-| `POST`  | `/operations/crm/contact-links`                        | office  | `contacts:edit`    | Link a contact to a customer or location.                               |
-| `PATCH` | `/operations/crm/contact-links/:linkId`                | office  | `contacts:edit`    | Update link tags, active state, or end date.                            |
+| Method  | Path                                                    | Surface | Permission gate    | Purpose                                                                                                 |
+| ------- | ------------------------------------------------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/operations/crm`                                       | office  | `customers:view`   | Load current CRM workspace lists.                                                                       |
+| `GET`   | `/operations/crm/search?q=...`                          | office  | `customers:view`   | Prefix SQL-backed CRM search across customers, locations, and contacts.                                 |
+| `GET`   | `/operations/crm/customers/:customerId`                 | office  | `customers:view`   | Load customer detail.                                                                                   |
+| `POST`  | `/operations/crm/customers`                             | office  | `customers:create` | Create customer with duplicate confirmation path.                                                       |
+| `PATCH` | `/operations/crm/customers/:customerId`                 | office  | `customers:edit`   | Update customer with duplicate confirmation path.                                                       |
+| `POST`  | `/operations/crm/customers/:customerId/contact-methods` | office  | `customers:edit`   | Add a customer contact method. DTO details live in contracts/controller.                                |
+| `GET`   | `/operations/crm/locations/:locationId`                 | office  | `locations:view`   | Load location detail.                                                                                   |
+| `POST`  | `/operations/crm/locations`                             | office  | `locations:create` | Create location with missing contact and duplicate confirmation paths.                                  |
+| `PATCH` | `/operations/crm/locations/:locationId`                 | office  | `locations:edit`   | Update location with missing contact and duplicate confirmation paths.                                  |
+| `POST`  | `/operations/crm/locations/:locationId/reassign-owner`  | office  | `locations:edit`   | Reassign current location owner/customer.                                                               |
+| `POST`  | `/operations/crm/locations/:locationId/contact-methods` | office  | `locations:edit`   | Add a location contact method. DTO details live in contracts/controller.                                |
+| `GET`   | `/operations/crm/contacts/:contactId`                   | office  | `contacts:view`    | Load contact detail.                                                                                    |
+| `POST`  | `/operations/crm/contacts`                              | office  | `contacts:create`  | Create shared contact.                                                                                  |
+| `PATCH` | `/operations/crm/contacts/:contactId`                   | office  | `contacts:edit`    | Update global contact fields or a linked local override.                                                |
+| `POST`  | `/operations/crm/contacts/:contactId/contact-methods`   | office  | `contacts:edit`    | Add a shared-contact contact method. DTO details live in contracts/controller.                          |
+| `PATCH` | `/operations/crm/contact-methods/:contactMethodId`      | office  | owner edit gate    | Update a contact method. Gate depends on whether it belongs to a customer, location, or shared contact. |
+| `POST`  | `/operations/crm/contact-links`                         | office  | `contacts:edit`    | Link a contact to a customer or location.                                                               |
+| `PATCH` | `/operations/crm/contact-links/:linkId`                 | office  | `contacts:edit`    | Update link tags, active state, or end date.                                                            |
 
 ## Jobs, Appointments, Register, and Field Work
 

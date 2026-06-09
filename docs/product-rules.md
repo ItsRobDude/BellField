@@ -37,6 +37,34 @@ BellField should use other field-service products as reference points, not as co
 BellField is not intended to be an HVAC-only product.
 However, HVAC remains an important early reference case, especially for equipment-heavy workflows, replacement behavior, and service-history behavior.
 
+### Product audience priority
+
+BellField should make tradeoffs in this order:
+
+1. business owners
+2. office staff and dispatchers
+3. field technicians
+
+This does not mean field users are unimportant.
+It means the product should first protect the owner's trust in money, schedule, job history, customer history, inventory, agreements, reports, and employee accountability.
+Office staff are the primary daily operators of that trust.
+Field technicians should get a focused app that captures real work cleanly, avoids clutter, and makes add-on work easy to document without turning the mobile app into the full office system.
+
+### Operational growth posture
+
+BellField should support growth by making legitimate operational work easier to win, finish, bill, and retain.
+
+Growth features should feel like a natural result of captured work:
+
+- a technician documents a real recommendation
+- the office turns that recommendation into a clear estimate
+- the customer can receive and approve the estimate
+- approved work can become scheduled work and eventually a posted invoice
+- future reminders, agreement renewals, and add-on suggestions come from real customer/equipment/job context
+
+BellField should avoid spammy campaign behavior as an early product identity.
+Marketing-style tools should not outrun operational trust, customer history, estimate quality, service agreement truth, or billing safety.
+
 ---
 
 ## 2. Customer Account Rules
@@ -565,6 +593,24 @@ That means:
 - the office still decides how to schedule or book follow-up work
 
 Estimate behavior should stay practical and field-friendly before it becomes highly automated or sales-suite-heavy.
+
+### Estimate delivery and acceptance
+
+BellField should support sending estimates to customers, but the first version should be a customer-document workflow rather than a broad marketing system.
+
+The preferred order is:
+
+1. office sends or resends an estimate document by email
+2. BellField records who sent it, when, to which recipient, and the provider result if available
+3. customer approval/decline can later happen through a secure link with a captured name/signature and timestamp
+4. approved estimates still follow the normal BellField conversion and scheduling rules
+
+Sending should be provider-backed through an optional email adapter such as SMTP, Resend, Postmark, or a similar transactional email provider.
+The chosen provider should be cheap enough for small shops, replaceable, and configured per customer installation.
+Do not hardcode one vendor into product behavior.
+
+Estimate delivery should not automatically schedule work, post invoices, or charge payment methods.
+Office review remains the default control point.
 
 ---
 

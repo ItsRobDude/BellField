@@ -433,6 +433,39 @@ Things like texting, email delivery, payment processing, and similar extras shou
 
 Customers should be able to ignore those entirely if they want.
 
+### Provider ownership and adapters
+
+When BellField integrates with paid services, the normal self-hosted posture should be:
+
+- the customer owns the provider account
+- the customer controls API keys and billing
+- provider keys live in customer-controlled deployment settings
+- BellField stores only the operational result it needs, such as send status, payment confirmation, or a provider reference
+- provider pricing and terms are rechecked at implementation time
+
+Email, SMS, and payment integrations should be adapter-backed so the product can support provider choices over time.
+Examples include:
+
+- transactional email through SMTP, Resend, Postmark, or similar providers
+- payment links or gateway capture through Stripe or another processor
+- SMS through Twilio, Telnyx, or another compliant messaging provider
+
+These examples are not product dependencies.
+They are candidates for optional adapters when the implementation slice reaches customer document delivery, reminders, or payment capture.
+
+### Growth and communication boundary
+
+BellField should add communication tools in an operational order:
+
+1. estimate and invoice delivery
+2. customer approval links and audit history
+3. payment links for posted invoices
+4. appointment reminders and on-my-way messages
+5. service agreement renewal or follow-up notices
+
+Full marketing campaigns, broad customer portals, and BellField-hosted customer-data services should remain later optional work.
+They should not become required infrastructure for the core self-hosted product.
+
 ---
 
 ## 16. Technical Constraints for the Codebase

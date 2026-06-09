@@ -33,6 +33,7 @@ Top-level apps:
 Current shared packages:
 
 - `packages/contracts` - shared request and response contracts
+- `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
 - `packages/validation` - shared validation helpers
 - `packages/utils` - shared utility code
 
@@ -163,6 +164,7 @@ Operational and sequencing docs:
 - [docs/self-hosted-installation-strategy.md](./docs/self-hosted-installation-strategy.md) - supported install posture, pilot setup boundary, and installer/runbook readiness gates
 - [docs/milestone-implementation-plan.md](./docs/milestone-implementation-plan.md) - build order and milestone discipline
 - [docs/whats-shipped.md](./docs/whats-shipped.md) - current shipped/open/not-started snapshot
+- [docs/repo-map.md](./docs/repo-map.md) - compact repo orientation for engineers and AI contributors
 - [docs/architecture-guardrails.md](./docs/architecture-guardrails.md) - checked architecture rules
 - [docs/modular-monolith-codebase-structure.md](./docs/modular-monolith-codebase-structure.md) - architecture direction and repo-structure guardrails
 

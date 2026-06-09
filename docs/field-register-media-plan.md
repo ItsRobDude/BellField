@@ -47,7 +47,7 @@ Audit refreshed after the register/media backend, field register queue, and offi
 
 ### Remaining doc/code gaps
 
-- `docs/offline-sync.md` describes media attachment queueing as a v1 behavior. Both the backend and field-side capture/staging/blob replay are now implemented (see §1 above); manual device smoke is the only remaining step.
+- `docs/offline-sync.md` describes media attachment queueing as a v1 behavior. Backend metadata/blob storage plus field-side capture/staging/blob replay are implemented, and the first real-device media smoke passed. Remaining pressure is transient retry and partial-success hardening.
 - `docs/data-modeling-rules.md` now summarizes implemented register/media entity behavior; keep detailed endpoint shape in `docs/api-endpoints.md`.
 
 ---
@@ -104,7 +104,7 @@ These satisfy the §13 "unified history" rule in data-modeling-rules.
 
 ## 3. Media: proposed v1 data model
 
-**Status: shipped. Backend plus field-mobile capture/staging and blob replay are implemented; only manual device smoke remains. Keep this section as design history.**
+**Status: shipped. Backend plus field-mobile capture/staging and blob replay are implemented, and the first real-device media smoke passed. Keep this section as design history; transient retry and partial-success hardening remain future reliability work.**
 
 ### Entity: `media_attachments`
 
@@ -446,6 +446,6 @@ Recommended smallest-safe-first order, one PR per item:
 - [x] Slice 3 — Field-mobile pending-operation extensions (register only). Test against the existing field harness. No media yet.
 - [x] Slice 3a — Office-web captured-work review surface. No media capture yet.
 - [x] Slice 4 — Field-mobile media capture. Uses approved Expo ImagePicker/FileSystem/Crypto dependencies.
-- [ ] Slice 5 — Office-web deeper invoice/register handoff after invoice drafts exist.
+- [x] Slice 5 — Office-web deeper invoice/register handoff after invoice drafts exist.
 
 Each slice should run `pnpm --filter @bellfield/api test`, `pnpm check:architecture`, and the touched-app's lint + test. Migrations land with tracked up/down per `docs/database-migrations.md`.
