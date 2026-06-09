@@ -20,3 +20,4 @@ export * from './system-diagnostics.js';
 export * from './history.js';
 export * from './reporting.js';
 export * from './company-settings.js';
+export * from './document-delivery.js';

@@ -11,13 +11,114 @@ function createService() {
         'estimates:view',
         'estimates:create',
         'estimates:edit',
-        'estimates:approve'
+        'estimates:approve',
+        'estimates:send'
       ],
       sessionSurface: 'office-web'
     })
   };
   const jobsDataService = {
-    getJobById: jest.fn().mockResolvedValue({ id: 'job-1', status: 'new' })
+    getJobById: jest.fn().mockResolvedValue({
+      id: 'job-1',
+      jobNumber: '1001',
+      locationId: 'location-1',
+      billToCustomerId: 'customer-1',
+      status: 'new'
+    })
+  };
+  const referenceDataService = {
+    getLocationById: jest.fn().mockResolvedValue({
+      id: 'location-1',
+      name: 'Main Shop',
+      customerId: 'customer-1',
+      addressLine1: '123 Main',
+      city: 'Blaine',
+      state: 'WA',
+      postalCode: '98230'
+    }),
+    getCustomerById: jest.fn().mockResolvedValue({
+      id: 'customer-1',
+      name: 'Acme',
+      accountType: 'company',
+      billingAddressLine1: 'PO Box 1',
+      billingCity: 'Blaine',
+      billingState: 'WA',
+      billingPostalCode: '98230',
+      isActive: true,
+      flags: []
+    })
+  };
+  const companySettingsRepository = {
+    getSettings: jest.fn().mockResolvedValue({
+      companyName: 'BellField',
+      customerFacingSenderName: 'BellField Estimates',
+      customerFacingFromEmail: 'estimates@bellfield.app',
+      estimateEmailSubject: 'Estimate from {companyName}',
+      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
+      emailProvider: { provider: 'resend', configured: true }
+    })
+  };
+  const customerDeliveryRepository = {
+    listOutboundMessagesForEstimate: jest.fn().mockResolvedValue([]),
+    hasRecentEstimateEmail: jest.fn().mockResolvedValue(false),
+    createDocumentSnapshot: jest.fn().mockImplementation(async (input) => ({
+      ...input,
+      generatedByName: input.generatedByName,
+      generatedAt: input.generatedAt
+    })),
+    createOutboundMessage: jest.fn().mockImplementation(async (input) => ({
+      ...input,
+      sentByName: input.sentByName,
+      queuedAt: input.queuedAt
+    })),
+    markOutboundMessageSent: jest.fn().mockImplementation(async (messageId, providerMessageId) => ({
+      id: messageId,
+      channel: 'email',
+      provider: 'resend',
+      status: 'sent',
+      jobId: 'job-1',
+      estimateId: 'estimate-1',
+      documentSnapshotId: 'snapshot-1',
+      recipientEmail: 'customer@example.com',
+      subject: 'Estimate from BellField',
+      bodyText: 'Hello Acme, attached is AC replacement.',
+      sentByName: 'Dispatcher',
+      queuedAt: '2026-06-01T00:00:00.000Z',
+      sentAt: '2026-06-01T00:00:01.000Z',
+      providerMessageId
+    })),
+    markOutboundMessageFailed: jest.fn().mockImplementation(async (messageId, providerError) => ({
+      id: messageId,
+      channel: 'email',
+      provider: 'resend',
+      status: 'failed',
+      jobId: 'job-1',
+      estimateId: 'estimate-1',
+      documentSnapshotId: 'snapshot-1',
+      recipientEmail: 'customer@example.com',
+      subject: 'Estimate from BellField',
+      bodyText: 'Hello Acme, attached is AC replacement.',
+      sentByName: 'Dispatcher',
+      queuedAt: '2026-06-01T00:00:00.000Z',
+      providerError
+    })),
+    addEstimateDeliveryTimeline: jest.fn()
+  };
+  const customerDocumentStorageService = {
+    writeEstimatePdf: jest.fn().mockResolvedValue({
+      storagePath: 'customer-documents/jobs/job-1/estimates/estimate-1/snapshot-1.pdf',
+      sha256: 'a'.repeat(64),
+      byteSize: 64
+    })
+  };
+  const emailProviderService = {
+    sendEstimateEmail: jest.fn().mockResolvedValue({
+      kind: 'sent',
+      providerMessageId: 'resend-message-1'
+    })
+  };
+  const estimatePdfRendererService = {
+    renderEstimatePdf: jest.fn().mockResolvedValue(Buffer.from('%PDF test'))
   };
   const estimatesRepository = {
     listEstimatesForJob: jest.fn().mockResolvedValue([]),
@@ -38,11 +139,23 @@ function createService() {
     service: new EstimatesService(
       identityAccessService as never,
       jobsDataService as never,
+      referenceDataService as never,
+      companySettingsRepository as never,
+      customerDeliveryRepository as never,
+      customerDocumentStorageService as never,
+      emailProviderService as never,
+      estimatePdfRendererService as never,
       estimatesRepository as never,
       invoicesRepository as never
     ),
     identityAccessService,
     jobsDataService,
+    referenceDataService,
+    companySettingsRepository,
+    customerDeliveryRepository,
+    customerDocumentStorageService,
+    emailProviderService,
+    estimatePdfRendererService,
     estimatesRepository,
     invoicesRepository
   };
@@ -423,6 +536,100 @@ describe('EstimatesService', () => {
     expect(document.html).toContain('Option total');
     expect(document.html).toContain('$150.00');
     expect(document.html).not.toContain('Profit');
+  });
+
+  it('sends an approved estimate as a PDF email and logs delivery', async () => {
+    const {
+      service,
+      estimatesRepository,
+      customerDeliveryRepository,
+      customerDocumentStorageService,
+      emailProviderService,
+      estimatePdfRendererService
+    } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
+
+    const result = await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'Customer@Example.com'
+    });
+
+    expect(estimatePdfRendererService.renderEstimatePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estimate: expect.objectContaining({ id: 'estimate-1' }),
+        settings: expect.objectContaining({ customerFacingFromEmail: 'estimates@bellfield.app' })
+      })
+    );
+    expect(customerDocumentStorageService.writeEstimatePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        bytes: Buffer.from('%PDF test')
+      })
+    );
+    expect(emailProviderService.sendEstimateEmail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: 'customer@example.com',
+        fromEmail: 'estimates@bellfield.app',
+        attachment: expect.objectContaining({ filename: expect.stringMatching(/\.pdf$/) })
+      })
+    );
+    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        kind: 'estimateSent',
+        message: 'Estimate sent to customer@example.com: AC replacement.'
+      })
+    );
+    expect(result.outboundMessage.status).toBe('sent');
+    expect(result.outboundMessage).not.toHaveProperty('bodyText');
+    expect(result.documentSnapshot).not.toHaveProperty('storagePath');
+  });
+
+  it('refuses to send a pending estimate', async () => {
+    const { service, estimatesRepository, emailProviderService } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate());
+
+    await expect(
+      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+  });
+
+  it('marks provider failures as failed delivery records with a timeline entry', async () => {
+    const { service, estimatesRepository, emailProviderService, customerDeliveryRepository } =
+      createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
+    emailProviderService.sendEstimateEmail.mockResolvedValue({
+      kind: 'error',
+      message: 'Provider rejected request.'
+    });
+
+    const result = await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(customerDeliveryRepository.markOutboundMessageFailed).toHaveBeenCalledWith(
+      expect.any(String),
+      'Provider rejected request.',
+      expect.any(String)
+    );
+    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'estimateDeliveryFailed' })
+    );
+    expect(result.outboundMessage.status).toBe('failed');
+    expect(result.outboundMessage.providerError).toBe('Provider rejected request.');
+  });
+
+  it('blocks accidental duplicate estimate sends inside the short retry window', async () => {
+    const { service, estimatesRepository, customerDeliveryRepository, emailProviderService } =
+      createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
+    customerDeliveryRepository.hasRecentEstimateEmail.mockResolvedValue(true);
+
+    await expect(
+      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
   });
 
   it('refuses to edit an approved estimate (strict lifecycle)', async () => {

@@ -11,6 +11,9 @@ import type {
   EstimatesResponse,
   EstimateStatus,
   EstimateSummary,
+  OutboundMessagesResponse,
+  SendEstimateRequest,
+  SendEstimateResponse,
   UpdateEstimateRequest
 } from '@bellfield/contracts';
 
@@ -25,6 +28,9 @@ export type CreateEstimateRequestDto = CreateEstimateRequest;
 export type UpdateEstimateRequestDto = UpdateEstimateRequest;
 export type ApproveEstimateRequestDto = ApproveEstimateRequest;
 export type DeclineEstimateRequestDto = DeclineEstimateRequest;
+export type SendEstimateRequestDto = SendEstimateRequest;
+export type SendEstimateResponseDto = SendEstimateResponse;
+export type OutboundMessagesResponseDto = OutboundMessagesResponse;
 export type EstimateLineItemInputValue = EstimateLineItemInput;
 export type EstimateDiscountValue = EstimateDiscount;
 export type EstimateOptionGroupInputValue = EstimateOptionGroupInput;

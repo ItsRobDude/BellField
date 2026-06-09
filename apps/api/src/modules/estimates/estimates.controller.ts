@@ -6,6 +6,7 @@ import {
   ConvertEstimateToInvoiceRequestBodyDto,
   CreateEstimateRequestBodyDto,
   DeclineEstimateRequestBodyDto,
+  SendEstimateRequestBodyDto,
   UpdateEstimateRequestBodyDto
 } from './estimates.dto';
 
@@ -117,6 +118,30 @@ export class EstimatesController {
       getBearerToken(authorizationHeader),
       estimateId,
       request
+    );
+  }
+
+  @Post(':estimateId/send')
+  async sendEstimate(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('estimateId') estimateId: string,
+    @Body() request: SendEstimateRequestBodyDto
+  ) {
+    return this.estimatesService.sendEstimate(
+      getBearerToken(authorizationHeader),
+      estimateId,
+      request
+    );
+  }
+
+  @Get(':estimateId/outbound-messages')
+  async listOutboundMessages(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('estimateId') estimateId: string
+  ) {
+    return this.estimatesService.listEstimateOutboundMessages(
+      getBearerToken(authorizationHeader),
+      estimateId
     );
   }
 }

@@ -2,6 +2,7 @@ import { Type } from 'class-transformer';
 import {
   IsArray,
   IsBoolean,
+  IsEmail,
   IsIn,
   IsISO8601,
   IsInt,
@@ -24,6 +25,7 @@ import type {
   EstimateLineItemInput,
   EstimateOptionGroupInput,
   EstimateOptionInput,
+  SendEstimateRequest,
   UpdateEstimateRequest
 } from '@bellfield/contracts';
 import { estimateLineItemKinds, type EstimateLineItemKindValue } from './estimates.types';
@@ -231,4 +233,20 @@ export class ConvertEstimateToInvoiceRequestBodyDto implements ConvertEstimateTo
   @IsOptional()
   @IsIn(['append', 'replace'])
   mode?: 'append' | 'replace';
+}
+
+export class SendEstimateRequestBodyDto implements SendEstimateRequest {
+  @IsEmail()
+  @MaxLength(254)
+  recipientEmail!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(160)
+  subject?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  bodyText?: string;
 }
