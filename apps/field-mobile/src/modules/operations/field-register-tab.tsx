@@ -7,6 +7,7 @@ import type {
 } from '@/lib/operations-api';
 import { formatAppointmentSchedule } from './field-appointment-display';
 import {
+  buildPricedRegisterDraftPatch,
   createCatalogRegisterDraftPatch,
   createRegisterEntryDraft,
   formatCurrency,
@@ -14,6 +15,11 @@ import {
   isLocalRegisterEntry,
   type RegisterEntryDraft
 } from './field-workspace-drafts';
+import {
+  buildRegisterSearchResults,
+  findTruckMatchForCatalogItem,
+  type RegisterSearchResult
+} from './field-register-search';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
 import type { FieldJob, FieldRegisterEntry } from './field-workspace-types';
 
@@ -53,128 +59,65 @@ export function RegisterTab({
   onUpdateRegisterCreateDraft,
   onUpdateRegisterEditDraft
 }: RegisterTabProps) {
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+
   return (
     <View style={styles.block}>
-      <Text style={styles.sectionTitleSmall}>Register entries</Text>
+      <Text style={styles.sectionTitleSmall}>Register</Text>
       {(job.registerEntries ?? []).length === 0 ? (
-        <Text style={styles.summaryText}>No register lines saved for this job yet.</Text>
+        <Text style={styles.summaryText}>No work lines saved yet.</Text>
       ) : (
-        (job.registerEntries ?? []).map((entry) => {
-          const editDraft = registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
-          const isLocalEntry = isLocalRegisterEntry(entry);
+        <View style={styles.replacementOptionList}>
+          {(job.registerEntries ?? []).map((entry) => {
+            const editDraft = registerEditDrafts[entry.id] ?? createRegisterEntryDraft(entry);
+            const isLocalEntry = isLocalRegisterEntry(entry);
+            const isExpanded = expandedEntryId === entry.id;
 
-          return (
-            <View key={entry.id} style={styles.queueItem}>
-              <Text style={styles.summaryText}>
-                {formatRegisterEntryKind(entry.kind)} - {entry.description} - {entry.quantity}
-                {entry.unitOfMeasure ? ` ${entry.unitOfMeasure}` : ''} -{' '}
-                {formatCurrency(entry.totalAmount)}
-                {entry.isVoid ? ' - voided' : ''}
-              </Text>
-              {entry.voidReason ? (
-                <Text style={styles.pendingText}>Void reason: {entry.voidReason}</Text>
-              ) : null}
-              {isLocalEntry ? (
-                <Text style={styles.pendingText}>
-                  This line is queued locally. Wait for sync or discard it from the pending queue
-                  before changing it.
-                </Text>
-              ) : null}
-              {!entry.isVoid && !isLocalEntry ? (
-                <>
-                  <View style={styles.actionRow}>
-                    {registerEntryKinds.map((entryKind) => (
-                      <Pressable
-                        key={entryKind}
-                        onPress={() =>
-                          onUpdateRegisterEditDraft(entry, {
-                            registerEntryKind: entryKind
-                          })
-                        }
-                        style={styles.tagButton}
-                      >
-                        <Text style={styles.tagButtonText}>
-                          {formatRegisterEntryKind(entryKind)}
-                        </Text>
-                      </Pressable>
-                    ))}
+            return (
+              <View key={entry.id} style={styles.queueItem}>
+                <Pressable
+                  disabled={entry.isVoid || isLocalEntry}
+                  onPress={() => setExpandedEntryId(isExpanded ? null : entry.id)}
+                  style={styles.registerLineSummary}
+                >
+                  <View style={styles.flexColumn}>
+                    <Text style={styles.replacementOptionLabel}>{entry.description}</Text>
+                    <Text style={styles.summaryText}>{formatEntrySummary(entry)}</Text>
+                    {entry.inventorySourceLabel ? (
+                      <Text style={styles.summaryText}>Source: {entry.inventorySourceLabel}</Text>
+                    ) : null}
                   </View>
-                  <TextInput
-                    value={editDraft.description}
-                    onChangeText={(value) =>
-                      onUpdateRegisterEditDraft(entry, { description: value })
-                    }
-                    placeholder="Description"
-                    style={styles.input}
-                  />
-                  <TextInput
-                    value={editDraft.quantity}
-                    onChangeText={(value) => onUpdateRegisterEditDraft(entry, { quantity: value })}
-                    keyboardType="decimal-pad"
-                    placeholder="Quantity"
-                    style={styles.input}
-                  />
-                  <TextInput
-                    value={editDraft.unitOfMeasure}
-                    onChangeText={(value) =>
-                      onUpdateRegisterEditDraft(entry, { unitOfMeasure: value })
-                    }
-                    placeholder="Unit"
-                    style={styles.input}
-                  />
-                  <TextInput
-                    value={editDraft.unitPrice}
-                    onChangeText={(value) => onUpdateRegisterEditDraft(entry, { unitPrice: value })}
-                    keyboardType="decimal-pad"
-                    placeholder="Unit price"
-                    style={styles.input}
-                  />
-                  <TextInput
-                    value={editDraft.totalAmount}
-                    onChangeText={(value) =>
-                      onUpdateRegisterEditDraft(entry, { totalAmount: value })
-                    }
-                    keyboardType="decimal-pad"
-                    placeholder="Total amount"
-                    style={styles.input}
-                  />
-                  <TextInput
-                    value={editDraft.partNumber}
-                    onChangeText={(value) =>
-                      onUpdateRegisterEditDraft(entry, { partNumber: value })
-                    }
-                    placeholder="Part number"
-                    style={styles.input}
-                  />
-                  <TextInput
-                    value={editDraft.inventorySourceLabel}
-                    onChangeText={(value) =>
-                      onUpdateRegisterEditDraft(entry, {
-                        inventorySourceLabel: value
-                      })
-                    }
-                    placeholder="Source label"
-                    style={styles.input}
-                  />
-                  <View style={styles.actionRow}>
-                    <Pressable
-                      onPress={() => onQueueRegisterEntryEdit(entry)}
-                      style={styles.secondaryButton}
-                    >
-                      <Text style={styles.secondaryButtonText}>Save register edit locally</Text>
-                    </Pressable>
-                    <Pressable
-                      onPress={() => onConfirmVoidRegisterEntry(entry)}
-                      style={styles.dangerButton}
-                    >
-                      <Text style={styles.dangerButtonText}>Void line locally</Text>
-                    </Pressable>
+                  <View style={styles.registerLineAmount}>
+                    <Text style={styles.replacementOptionLabel}>
+                      {formatCurrency(entry.totalAmount)}
+                    </Text>
+                    {entry.isVoid ? <Text style={styles.errorText}>Voided</Text> : null}
+                    {isLocalEntry ? <Text style={styles.pendingText}>Queued</Text> : null}
                   </View>
-                </>
-              ) : null}
-            </View>
-          );
-        })
+                </Pressable>
+                {entry.voidReason ? (
+                  <Text style={styles.pendingText}>Void reason: {entry.voidReason}</Text>
+                ) : null}
+                {isLocalEntry ? (
+                  <Text style={styles.pendingText}>
+                    This line is waiting to sync. Use the pending queue if it needs review.
+                  </Text>
+                ) : null}
+                {!entry.isVoid && !isLocalEntry && isExpanded ? (
+                  <RegisterLineAdvancedEditor
+                    draft={editDraft}
+                    job={job}
+                    onChange={(patch) => onUpdateRegisterEditDraft(entry, patch)}
+                    saveLabel="Save details"
+                    onSave={() => onQueueRegisterEntryEdit(entry)}
+                    onVoid={() => onConfirmVoidRegisterEntry(entry)}
+                    showVoid
+                  />
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
       )}
 
       <RegisterCreateCard
@@ -204,300 +147,403 @@ function RegisterCreateCard({
   onQueueRegisterEntryCreate: (job: FieldJob) => void;
   onUpdateRegisterCreateDraft: (jobId: string, patch: Partial<RegisterEntryDraft>) => void;
 }) {
-  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
-  const [catalogQuery, setCatalogQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState<string>('All');
+  const [query, setQuery] = useState('');
+  const [selectedResult, setSelectedResult] = useState<RegisterSearchResult | null>(null);
+  const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const createDraft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
-  const categories = useMemo(
-    () => ['All', ...new Set(catalogItems.map((item) => item.category ?? 'Uncategorized'))],
-    [catalogItems]
+  const results = useMemo(
+    () => buildRegisterSearchResults(catalogItems, truckStockItems, query),
+    [catalogItems, query, truckStockItems]
   );
-  const visibleCatalogItems = useMemo(() => {
-    const query = catalogQuery.trim().toLowerCase();
 
-    return catalogItems.filter((item) => {
-      const category = item.category ?? 'Uncategorized';
-      const matchesCategory = selectedCategory === 'All' || selectedCategory === category;
-      const searchable = [
-        item.name,
-        item.code ?? '',
-        item.category ?? '',
-        item.description ?? '',
-        ...item.tradeTags
-      ]
-        .join(' ')
-        .toLowerCase();
+  function applyCatalogItem(item: FieldCatalogItem) {
+    const truckMatch = findTruckMatchForCatalogItem(item, truckStockItems);
+    setSelectedResult({ id: `catalog:${item.id}`, kind: 'catalog', item, truckMatch });
+    setIsAdvancedOpen(false);
+    onUpdateRegisterCreateDraft(job.id, createCatalogRegisterDraftPatch(item, truckStockItems));
+  }
 
-      return matchesCategory && (!query || searchable.includes(query));
+  function applyTruckStockItem(item: FieldTruckStockItem) {
+    setSelectedResult({ id: `truck:${item.itemId}:${item.locationId}`, kind: 'truckStock', item });
+    setIsAdvancedOpen(false);
+    onUpdateRegisterCreateDraft(job.id, {
+      registerEntryKind: 'part',
+      description: item.itemName,
+      quantity: '1',
+      unitOfMeasure: item.unitOfMeasure ?? 'each',
+      unitPrice: '',
+      totalAmount: '0',
+      partNumber: item.sku ?? '',
+      inventoryItemId: item.itemId,
+      inventoryLocationId: item.locationId,
+      inventorySourceLabel: item.locationName,
+      catalogItemId: '',
+      catalogSnapshot: undefined
     });
-  }, [catalogItems, catalogQuery, selectedCategory]);
+  }
+
+  function applyCustomLine() {
+    setSelectedResult({ id: 'custom', kind: 'custom' });
+    setIsAdvancedOpen(true);
+    onUpdateRegisterCreateDraft(job.id, {
+      ...createRegisterEntryDraft({ appointmentId: createDraft.appointmentId || undefined }),
+      registerEntryKind: 'other',
+      totalAmount: createDraft.totalAmount || '0'
+    });
+  }
+
+  function applyResult(result: RegisterSearchResult) {
+    if (result.kind === 'catalog') {
+      applyCatalogItem(result.item);
+      return;
+    }
+
+    if (result.kind === 'truckStock') {
+      applyTruckStockItem(result.item);
+      return;
+    }
+
+    applyCustomLine();
+  }
+
+  function updateCreateDraft(patch: Partial<RegisterEntryDraft>) {
+    onUpdateRegisterCreateDraft(job.id, patch);
+  }
 
   return (
     <View style={styles.reviewCard}>
-      <Text style={styles.sectionTitleSmall}>Add register line</Text>
-      <Pressable
-        onPress={() => setIsCatalogOpen((current) => !current)}
-        style={styles.secondaryButton}
-      >
-        <Text style={styles.secondaryButtonText}>
-          {isCatalogOpen ? 'Hide Catalog' : 'Add from Catalog'}
-        </Text>
-      </Pressable>
-      {isCatalogOpen ? (
-        <View style={styles.catalogPicker}>
-          <TextInput
-            value={catalogQuery}
-            onChangeText={setCatalogQuery}
-            placeholder="Search Catalog"
-            style={styles.input}
-          />
-          <View style={styles.actionRow}>
-            {categories.map((category) => (
-              <Pressable
-                key={category}
-                onPress={() => setSelectedCategory(category)}
+      <Text style={styles.sectionTitleSmall}>Add work</Text>
+      <TextInput
+        value={query}
+        onChangeText={setQuery}
+        placeholder="Search Catalog or truck stock"
+        style={styles.input}
+      />
+      <View style={styles.replacementOptionList}>
+        {results.length === 0 ? (
+          <Text style={styles.summaryText}>No matching Catalog or truck-stock items.</Text>
+        ) : (
+          results.map((result) => (
+            <Pressable
+              key={result.id}
+              onPress={() => applyResult(result)}
+              style={[
+                styles.replacementOptionButton,
+                selectedResult?.id === result.id ? styles.replacementOptionButtonSelected : null
+              ]}
+            >
+              <Text
                 style={[
-                  styles.tagButton,
-                  selectedCategory === category ? styles.catalogTagButtonSelected : null
+                  styles.replacementOptionLabel,
+                  selectedResult?.id === result.id ? styles.replacementOptionLabelSelected : null
                 ]}
               >
-                <Text
-                  style={[
-                    styles.tagButtonText,
-                    selectedCategory === category ? styles.catalogTagButtonTextSelected : null
-                  ]}
-                >
-                  {category}
-                </Text>
-              </Pressable>
-            ))}
+                {formatSearchResultTitle(result)}
+              </Text>
+              <Text
+                style={[
+                  styles.summaryText,
+                  selectedResult?.id === result.id ? styles.replacementOptionDetailSelected : null
+                ]}
+              >
+                {formatSearchResultDetail(result)}
+              </Text>
+            </Pressable>
+          ))
+        )}
+      </View>
+
+      {selectedResult ? (
+        <View style={styles.registerComposerCard}>
+          <Text style={styles.sectionTitleSmall}>{createDraft.description || 'Custom line'}</Text>
+          <Text style={styles.summaryText}>{formatSelectedResultDetail(selectedResult)}</Text>
+          {createDraft.catalogSnapshot?.estimatedLaborHours &&
+          createDraft.registerEntryKind !== 'labor' ? (
+            <Text style={styles.summaryText}>
+              Planned time: {createDraft.catalogSnapshot.estimatedLaborHours} hr
+            </Text>
+          ) : null}
+          <TextInput
+            value={createDraft.quantity}
+            onChangeText={(quantity) =>
+              updateCreateDraft(buildPricedRegisterDraftPatch(createDraft, { quantity }))
+            }
+            keyboardType="decimal-pad"
+            placeholder={getQuantityPlaceholder(createDraft)}
+            style={styles.input}
+          />
+          {selectedResult.kind === 'truckStock' && !createDraft.catalogItemId ? (
+            <TextInput
+              value={createDraft.unitPrice}
+              onChangeText={(unitPrice) =>
+                updateCreateDraft(buildPricedRegisterDraftPatch(createDraft, { unitPrice }))
+              }
+              keyboardType="decimal-pad"
+              placeholder="Unit price"
+              style={styles.input}
+            />
+          ) : null}
+          <View style={styles.registerTotalRow}>
+            <Text style={styles.summaryText}>Total</Text>
+            <Text style={styles.replacementOptionLabel}>
+              {formatCurrency(Number(createDraft.totalAmount) || 0)}
+            </Text>
           </View>
-          {visibleCatalogItems.length === 0 ? (
-            <Text style={styles.summaryText}>No Catalog items match this search.</Text>
-          ) : (
-            <View style={styles.replacementOptionList}>
-              {visibleCatalogItems.slice(0, 20).map((item) => (
-                <Pressable
-                  key={item.id}
-                  onPress={() =>
-                    onUpdateRegisterCreateDraft(
-                      job.id,
-                      createCatalogRegisterDraftPatch(item, truckStockItems)
-                    )
-                  }
-                  style={[
-                    styles.replacementOptionButton,
-                    createDraft.catalogItemId === item.id
-                      ? styles.replacementOptionButtonSelected
-                      : null
-                  ]}
-                >
-                  <Text
-                    style={[
-                      styles.replacementOptionLabel,
-                      createDraft.catalogItemId === item.id
-                        ? styles.replacementOptionLabelSelected
-                        : null
-                    ]}
-                  >
-                    {item.name}
-                  </Text>
-                  <Text
-                    style={[
-                      styles.summaryText,
-                      createDraft.catalogItemId === item.id
-                        ? styles.replacementOptionDetailSelected
-                        : null
-                    ]}
-                  >
-                    {formatCatalogLine(item)}
-                  </Text>
-                  {item.description ? (
-                    <Text
-                      style={[
-                        styles.summaryText,
-                        createDraft.catalogItemId === item.id
-                          ? styles.replacementOptionDetailSelected
-                          : null
-                      ]}
-                    >
-                      {item.description}
-                    </Text>
-                  ) : null}
-                </Pressable>
-              ))}
-            </View>
-          )}
+          <View style={styles.actionRow}>
+            <Pressable onPress={() => onQueueRegisterEntryCreate(job)} style={styles.primaryButton}>
+              <Text style={styles.primaryButtonText}>Add line</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setIsAdvancedOpen((current) => !current)}
+              style={styles.secondaryButton}
+            >
+              <Text style={styles.secondaryButtonText}>
+                {isAdvancedOpen ? 'Hide details' : 'More details'}
+              </Text>
+            </Pressable>
+          </View>
+          {isAdvancedOpen ? (
+            <RegisterLineAdvancedEditor
+              draft={createDraft}
+              job={job}
+              onChange={updateCreateDraft}
+              saveLabel="Add line"
+              onSave={() => onQueueRegisterEntryCreate(job)}
+            />
+          ) : null}
         </View>
-      ) : null}
+      ) : (
+        <Pressable onPress={applyCustomLine} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>Add custom line</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
+function RegisterLineAdvancedEditor({
+  draft,
+  job,
+  onChange,
+  saveLabel,
+  onSave,
+  onVoid,
+  showVoid = false
+}: {
+  draft: RegisterEntryDraft;
+  job: FieldJob;
+  onChange: (patch: Partial<RegisterEntryDraft>) => void;
+  saveLabel: string;
+  onSave: () => void;
+  onVoid?: () => void;
+  showVoid?: boolean;
+}) {
+  function patchPriced(values: Partial<Pick<RegisterEntryDraft, 'quantity' | 'unitPrice'>>) {
+    onChange(buildPricedRegisterDraftPatch(draft, values));
+  }
+
+  return (
+    <View style={styles.registerAdvancedPanel}>
       <View style={styles.actionRow}>
         {registerEntryKinds.map((entryKind) => (
           <Pressable
             key={entryKind}
-            onPress={() =>
-              onUpdateRegisterCreateDraft(job.id, {
-                registerEntryKind: entryKind
-              })
-            }
-            style={styles.tagButton}
+            onPress={() => onChange({ registerEntryKind: entryKind })}
+            style={[
+              styles.tagButton,
+              draft.registerEntryKind === entryKind ? styles.catalogTagButtonSelected : null
+            ]}
           >
-            <Text style={styles.tagButtonText}>{formatRegisterEntryKind(entryKind)}</Text>
+            <Text
+              style={[
+                styles.tagButtonText,
+                draft.registerEntryKind === entryKind ? styles.catalogTagButtonTextSelected : null
+              ]}
+            >
+              {formatRegisterEntryKind(entryKind)}
+            </Text>
           </Pressable>
         ))}
       </View>
       {job.appointments.length > 0 ? (
         <View style={styles.actionRow}>
           <Pressable
-            onPress={() => onUpdateRegisterCreateDraft(job.id, { appointmentId: '' })}
-            style={styles.tagButton}
+            onPress={() => onChange({ appointmentId: '' })}
+            style={[
+              styles.tagButton,
+              !draft.appointmentId ? styles.catalogTagButtonSelected : null
+            ]}
           >
-            <Text style={styles.tagButtonText}>Job-level</Text>
+            <Text
+              style={[
+                styles.tagButtonText,
+                !draft.appointmentId ? styles.catalogTagButtonTextSelected : null
+              ]}
+            >
+              Job-level
+            </Text>
           </Pressable>
           {job.appointments.map((appointment) => (
             <Pressable
               key={appointment.id}
-              onPress={() =>
-                onUpdateRegisterCreateDraft(job.id, {
-                  appointmentId: appointment.id
-                })
-              }
-              style={styles.tagButton}
+              onPress={() => onChange({ appointmentId: appointment.id })}
+              style={[
+                styles.tagButton,
+                draft.appointmentId === appointment.id ? styles.catalogTagButtonSelected : null
+              ]}
             >
-              <Text style={styles.tagButtonText}>{formatAppointmentSchedule(appointment)}</Text>
+              <Text
+                style={[
+                  styles.tagButtonText,
+                  draft.appointmentId === appointment.id
+                    ? styles.catalogTagButtonTextSelected
+                    : null
+                ]}
+              >
+                {formatAppointmentSchedule(appointment)}
+              </Text>
             </Pressable>
           ))}
         </View>
       ) : null}
-      {createDraft.registerEntryKind === 'part' ? (
-        <View style={styles.block}>
-          <Text style={styles.sectionTitleSmall}>Truck stock</Text>
-          {truckStockItems.length === 0 ? (
-            <Text style={styles.summaryText}>
-              No truck stock cached. Enter the part details manually - the office will resolve its
-              cost.
-            </Text>
-          ) : (
-            <View style={styles.replacementOptionList}>
-              {truckStockItems.map((item) => {
-                const isSelected =
-                  createDraft.inventoryItemId === item.itemId &&
-                  createDraft.inventoryLocationId === item.locationId;
-
-                return (
-                  <Pressable
-                    key={`${item.itemId}:${item.locationId}`}
-                    onPress={() =>
-                      onUpdateRegisterCreateDraft(job.id, {
-                        inventoryItemId: item.itemId,
-                        inventoryLocationId: item.locationId,
-                        description: item.itemName,
-                        partNumber: item.sku ?? '',
-                        unitOfMeasure: item.unitOfMeasure ?? createDraft.unitOfMeasure,
-                        inventorySourceLabel: item.locationName
-                      })
-                    }
-                    style={[
-                      styles.replacementOptionButton,
-                      isSelected ? styles.replacementOptionButtonSelected : null
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.replacementOptionLabel,
-                        isSelected ? styles.replacementOptionLabelSelected : null
-                      ]}
-                    >
-                      {item.itemName}
-                    </Text>
-                    <Text
-                      style={[
-                        styles.summaryText,
-                        isSelected ? styles.replacementOptionDetailSelected : null
-                      ]}
-                    >
-                      {item.quantityOnHand} on hand - {item.locationName}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-              {createDraft.inventoryItemId ? (
-                <Pressable
-                  onPress={() =>
-                    onUpdateRegisterCreateDraft(job.id, {
-                      inventoryItemId: '',
-                      inventoryLocationId: ''
-                    })
-                  }
-                  style={styles.tagButton}
-                >
-                  <Text style={styles.tagButtonText}>Clear truck selection</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          )}
-        </View>
-      ) : null}
       <TextInput
-        value={createDraft.description}
-        onChangeText={(value) => onUpdateRegisterCreateDraft(job.id, { description: value })}
+        value={draft.description}
+        onChangeText={(description) => onChange({ description })}
         placeholder="Description"
         style={styles.input}
       />
       <TextInput
-        value={createDraft.quantity}
-        onChangeText={(value) => onUpdateRegisterCreateDraft(job.id, { quantity: value })}
+        value={draft.quantity}
+        onChangeText={(quantity) => patchPriced({ quantity })}
         keyboardType="decimal-pad"
-        placeholder="Quantity"
+        placeholder={getQuantityPlaceholder(draft)}
         style={styles.input}
       />
       <TextInput
-        value={createDraft.unitOfMeasure}
-        onChangeText={(value) => onUpdateRegisterCreateDraft(job.id, { unitOfMeasure: value })}
+        value={draft.unitOfMeasure}
+        onChangeText={(unitOfMeasure) => onChange({ unitOfMeasure })}
         placeholder="Unit"
         style={styles.input}
       />
       <TextInput
-        value={createDraft.unitPrice}
-        onChangeText={(value) => onUpdateRegisterCreateDraft(job.id, { unitPrice: value })}
+        value={draft.unitPrice}
+        onChangeText={(unitPrice) => patchPriced({ unitPrice })}
         keyboardType="decimal-pad"
         placeholder="Unit price"
         style={styles.input}
       />
       <TextInput
-        value={createDraft.totalAmount}
-        onChangeText={(value) => onUpdateRegisterCreateDraft(job.id, { totalAmount: value })}
+        value={draft.totalAmount}
+        onChangeText={(totalAmount) => onChange({ totalAmount })}
         keyboardType="decimal-pad"
-        placeholder="Total amount"
+        placeholder="Total"
         style={styles.input}
       />
       <TextInput
-        value={createDraft.partNumber}
-        onChangeText={(value) => onUpdateRegisterCreateDraft(job.id, { partNumber: value })}
+        value={draft.partNumber}
+        onChangeText={(partNumber) => onChange({ partNumber })}
         placeholder="Part number"
         style={styles.input}
       />
       <TextInput
-        value={createDraft.inventorySourceLabel}
-        onChangeText={(value) =>
-          onUpdateRegisterCreateDraft(job.id, { inventorySourceLabel: value })
-        }
-        placeholder="Source label"
+        value={draft.inventorySourceLabel}
+        onChangeText={(inventorySourceLabel) => onChange({ inventorySourceLabel })}
+        placeholder="Source"
         style={styles.input}
       />
-      <Pressable onPress={() => onQueueRegisterEntryCreate(job)} style={styles.secondaryButton}>
-        <Text style={styles.secondaryButtonText}>Save register line locally</Text>
-      </Pressable>
+      <View style={styles.actionRow}>
+        <Pressable onPress={onSave} style={styles.secondaryButton}>
+          <Text style={styles.secondaryButtonText}>{saveLabel}</Text>
+        </Pressable>
+        {showVoid && onVoid ? (
+          <Pressable onPress={onVoid} style={styles.dangerButton}>
+            <Text style={styles.dangerButtonText}>Void line</Text>
+          </Pressable>
+        ) : null}
+      </View>
     </View>
   );
 }
 
-function formatCatalogLine(item: FieldCatalogItem): string {
-  const parts = [
-    item.code,
-    item.category,
-    item.kind,
-    item.defaultSalePrice === undefined ? undefined : formatCurrency(item.defaultSalePrice)
-  ].filter(Boolean);
+function formatSearchResultTitle(result: RegisterSearchResult): string {
+  if (result.kind === 'catalog') {
+    return result.item.name;
+  }
 
-  return parts.join(' - ');
+  if (result.kind === 'truckStock') {
+    return result.item.itemName;
+  }
+
+  return 'Custom line';
+}
+
+function formatSearchResultDetail(result: RegisterSearchResult): string {
+  if (result.kind === 'catalog') {
+    const parts = [
+      formatCatalogKind(result.item.kind),
+      result.item.category,
+      result.item.code,
+      result.item.defaultSalePrice === undefined
+        ? 'No price'
+        : formatCurrency(result.item.defaultSalePrice),
+      result.truckMatch ? `${result.truckMatch.quantityOnHand} on truck` : undefined
+    ].filter(Boolean);
+    return parts.join(' - ');
+  }
+
+  if (result.kind === 'truckStock') {
+    return [
+      'Truck stock',
+      result.item.sku,
+      `${result.item.quantityOnHand} on hand`,
+      result.item.locationName
+    ]
+      .filter(Boolean)
+      .join(' - ');
+  }
+
+  return 'Enter a one-off charge or note for this job.';
+}
+
+function formatSelectedResultDetail(result: RegisterSearchResult): string {
+  if (result.kind === 'catalog') {
+    const description = result.item.description ?? formatCatalogKind(result.item.kind);
+    const source = result.truckMatch ? `Truck stock: ${result.truckMatch.locationName}` : undefined;
+    return [description, source].filter(Boolean).join(' - ');
+  }
+
+  if (result.kind === 'truckStock') {
+    return `${result.item.quantityOnHand} on hand - ${result.item.locationName}`;
+  }
+
+  return 'Custom line for work that is not in the Catalog yet.';
+}
+
+function formatEntrySummary(entry: FieldRegisterEntry): string {
+  return [
+    formatRegisterEntryKind(entry.kind),
+    formatQuantity(entry.quantity, entry.unitOfMeasure),
+    entry.catalogSnapshot?.code ?? entry.partNumber
+  ]
+    .filter(Boolean)
+    .join(' - ');
+}
+
+function formatQuantity(quantity: number, unitOfMeasure?: string): string {
+  return `${quantity}${unitOfMeasure ? ` ${unitOfMeasure}` : ''}`;
+}
+
+function getQuantityPlaceholder(draft: RegisterEntryDraft): string {
+  return draft.registerEntryKind === 'labor' ? 'Time in hours' : 'Quantity';
+}
+
+function formatCatalogKind(kind: FieldCatalogItem['kind']): string {
+  if (kind === 'service') return 'Service';
+  if (kind === 'part') return 'Part';
+  if (kind === 'equipment') return 'Equipment';
+  if (kind === 'labor') return 'Labor';
+  if (kind === 'fee') return 'Fee';
+  if (kind === 'discount') return 'Discount';
+  if (kind === 'agreement') return 'Agreement';
+  return 'Other';
 }

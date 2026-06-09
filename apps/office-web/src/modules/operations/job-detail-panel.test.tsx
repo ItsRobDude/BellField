@@ -497,6 +497,8 @@ describe('JobDetailPanel', () => {
       />
     );
 
+    expect(screen.queryByLabelText('Register quantity for Diagnostic capacitor')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
     fireEvent.change(screen.getByLabelText('Register quantity for Diagnostic capacitor'), {
       target: { value: '2' }
     });

@@ -141,6 +141,7 @@ export function createCatalogRegisterDraftPatch(
     priceMode: 'standard',
     defaultSalePrice: item.defaultSalePrice,
     agreementPrice: item.agreementPrice,
+    estimatedLaborHours: item.estimatedLaborHours,
     linkedInventoryItemId: item.linkedInventoryItemId,
     linkedInventoryItemSku: item.linkedInventoryItemSku,
     linkedInventoryItemName: item.linkedInventoryItemName
@@ -160,6 +161,42 @@ export function createCatalogRegisterDraftPatch(
     catalogItemId: item.id,
     catalogSnapshot
   };
+}
+
+export function buildPricedRegisterDraftPatch(
+  draft: RegisterEntryDraft,
+  patch: Partial<Pick<RegisterEntryDraft, 'quantity' | 'unitPrice'>>
+): Partial<RegisterEntryDraft> {
+  const quantity = patch.quantity ?? draft.quantity;
+  const unitPrice = patch.unitPrice ?? draft.unitPrice;
+  const totalAmount = calculateDraftLineTotal(quantity, unitPrice);
+
+  return {
+    ...patch,
+    ...(totalAmount === null ? {} : { totalAmount })
+  };
+}
+
+export function calculateDraftLineTotal(
+  quantityValue: string,
+  unitPriceValue: string
+): string | null {
+  const quantity = Number(quantityValue);
+  const unitPrice = Number(unitPriceValue);
+
+  if (!Number.isFinite(quantity) || !Number.isFinite(unitPrice)) {
+    return null;
+  }
+
+  return formatDraftNumber(quantity * unitPrice);
+}
+
+export function formatDraftNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '';
+  }
+
+  return String(Math.round(value * 100) / 100);
 }
 
 export function parseRegisterEntryDraft(

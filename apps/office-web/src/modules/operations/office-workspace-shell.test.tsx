@@ -1505,6 +1505,7 @@ describe('OfficeWorkspaceShell IA', () => {
         apiBaseUrl: 'http://api.test'
       });
     });
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
     fireEvent.change(await screen.findByLabelText('Register quantity for Diagnostic capacitor'), {
       target: { value: '2' }
     });

@@ -144,15 +144,12 @@ function FieldSyncSummaryCard({
       {syncHealth.detail ? <Text style={styles.summaryText}>{syncHealth.detail}</Text> : null}
       {showQuietDetail && syncHealth.tone === 'quiet' ? (
         <Text style={styles.summaryText}>
-          Background sync is healthy. Field edits stay protected on this device until the next sync.
+          Background sync is healthy. Saved field edits will sync back to the office.
         </Text>
       ) : null}
+      <Text style={styles.summaryText}>Work window: {formatWorkWindow(assignedWork)}</Text>
       <Text style={styles.summaryText}>
-        Scope: {assignedWork?.windowStartDate ?? 'today'} through{' '}
-        {assignedWork?.windowEndDate ?? 'tomorrow'}
-      </Text>
-      <Text style={styles.summaryText}>
-        Last successful sync: {syncMetadata.lastSuccessfulSyncAt ?? 'Not synced yet'}
+        Last sync: {formatLastSync(syncMetadata.lastSuccessfulSyncAt)}
       </Text>
       {children}
     </View>
@@ -339,4 +336,80 @@ function getSyncHealthCardStyle(tone: SyncTone) {
   }
 
   return undefined;
+}
+
+function formatWorkWindow(assignedWork: FieldAssignedWorkResponse | null): string {
+  if (!assignedWork) {
+    return 'Today and tomorrow';
+  }
+
+  const startDate = parseLocalDate(assignedWork.windowStartDate);
+  const endDate = parseLocalDate(assignedWork.windowEndDate);
+  const today = new Date();
+
+  if (
+    startDate &&
+    endDate &&
+    isSameLocalDate(startDate, today) &&
+    daysBetween(startDate, endDate) === 1
+  ) {
+    return 'Today and tomorrow';
+  }
+
+  if (assignedWork.windowStartDate === assignedWork.windowEndDate) {
+    return formatDateLabel(assignedWork.windowStartDate);
+  }
+
+  return `${formatDateLabel(assignedWork.windowStartDate)} to ${formatDateLabel(
+    assignedWork.windowEndDate
+  )}`;
+}
+
+function formatLastSync(value: string | null): string {
+  if (!value) {
+    return 'Not synced yet';
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return 'Not synced yet';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+    month: 'short',
+    day: 'numeric'
+  }).format(date);
+}
+
+function formatDateLabel(value: string): string {
+  const date = parseLocalDate(value);
+  if (!date) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(date);
+}
+
+function parseLocalDate(value: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return null;
+  }
+
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+}
+
+function isSameLocalDate(left: Date, right: Date): boolean {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  );
+}
+
+function daysBetween(startDate: Date, endDate: Date): number {
+  const millisPerDay = 24 * 60 * 60 * 1000;
+  return Math.round((endDate.getTime() - startDate.getTime()) / millisPerDay);
 }

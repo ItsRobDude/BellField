@@ -426,6 +426,7 @@ function validateCatalogSnapshot(snapshot: CatalogLineSnapshot): void {
   validateCatalogPriceMode(candidate.priceMode);
   validateOptionalNumber(candidate.defaultSalePrice, 'Catalog snapshot default sale price');
   validateOptionalNumber(candidate.agreementPrice, 'Catalog snapshot agreement price');
+  validateOptionalNumber(candidate.estimatedLaborHours, 'Catalog snapshot estimated labor hours');
   validateOptionalString(
     candidate.linkedInventoryItemId,
     'Catalog snapshot inventory item id',

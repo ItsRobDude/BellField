@@ -167,6 +167,42 @@ export const fieldWorkspaceStyles = StyleSheet.create({
   replacementOptionLabel: { color: '#1f2933', fontSize: 14, fontWeight: '700' },
   replacementOptionLabelSelected: { color: '#ffffff' },
   replacementOptionDetailSelected: { color: '#e8f3ed' },
+  registerAdvancedPanel: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d9c8ad',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12
+  },
+  registerComposerCard: {
+    backgroundColor: '#ffffff',
+    borderColor: '#d5e2cd',
+    borderRadius: 12,
+    borderWidth: 1,
+    gap: 8,
+    padding: 12
+  },
+  registerLineAmount: { alignItems: 'flex-end', flexShrink: 0, gap: 4 },
+  registerLineSummary: {
+    alignItems: 'flex-start',
+    backgroundColor: '#ffffff',
+    borderColor: '#d9c8ad',
+    borderRadius: 12,
+    borderWidth: 1,
+    flexDirection: 'row',
+    gap: 10,
+    justifyContent: 'space-between',
+    padding: 12
+  },
+  registerTotalRow: {
+    alignItems: 'center',
+    borderColor: '#e4e8f0',
+    borderTopWidth: 1,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingTop: 8
+  },
   errorText: { color: '#b42318', fontSize: 14 },
   scheduleLabel: { color: '#475569', fontSize: 13, fontWeight: '700', lineHeight: 18 },
   jobCardTitle: { color: '#0b1f44', fontSize: 19, fontWeight: '700', lineHeight: 26 },

@@ -48,10 +48,10 @@ try {
   const locationId = process.env.BELLFIELD_SMOKE_LOCATION_ID || 'location-parkers-home';
   const job = await request('POST', '/operations/jobs', {
     locationId,
-    jobType: 'M9 smoke validation',
+    jobType: 'Validation',
     category: 'Validation',
     origin: 'Local smoke script',
-    summary: `M9 API smoke ${tag}`,
+    summary: 'Local M9 API smoke validation',
     workOrderNumber: tag
   });
   evidence.created.jobId = job.id;
@@ -59,7 +59,7 @@ try {
 
   const partItem = await request('POST', '/operations/inventory/items', {
     sku: `${tag}-part`,
-    name: `${tag} Part`,
+    name: 'Smoke test part',
     kind: 'part',
     unitOfMeasure: 'ea',
     defaultUnitCost: 20,
@@ -67,18 +67,18 @@ try {
   });
   const equipmentItem = await request('POST', '/operations/inventory/items', {
     sku: `${tag}-equipment`,
-    name: `${tag} Equipment`,
+    name: 'Smoke test equipment',
     kind: 'equipment',
     unitOfMeasure: 'ea',
     defaultUnitCost: 1800,
     description: 'Created by the local M9 smoke runner.'
   });
   const warehouse = await request('POST', '/operations/inventory/locations', {
-    name: `${tag} Warehouse`,
+    name: 'Smoke test warehouse',
     kind: 'warehouse'
   });
   const truck = await request('POST', '/operations/inventory/locations', {
-    name: `${tag} Truck`,
+    name: 'Smoke test truck',
     kind: 'truck',
     assignedEmployeeId: 'employee-technician-1'
   });
@@ -110,25 +110,25 @@ try {
   });
 
   const labor = await request('POST', `/operations/jobs/${job.id}/labor`, {
-    description: `${tag} labor`,
+    description: 'Smoke test labor',
     hours: 2,
     ratePerHour: 100
   });
   const expense = await request('POST', `/operations/jobs/${job.id}/expenses`, {
-    description: `${tag} permit`,
+    description: 'Smoke test permit',
     amount: 50
   });
   evidence.created.laborEventId = labor.event.id;
   evidence.created.expenseEventId = expense.event.id;
 
   const inventoryPo = await createOrderAndReceivePo({
-    vendorName: `${tag} Inventory Vendor`,
+    vendorName: 'Smoke test inventory vendor',
     destinationInventoryLocationId: warehouse.location.id,
     lines: [
       {
         kind: 'part',
         itemId: partItem.item.id,
-        description: `${tag} replenishment`,
+        description: 'Smoke test replenishment',
         quantity: 3,
         expectedUnitCost: 30
       }
@@ -137,14 +137,14 @@ try {
   evidence.created.inventoryPurchaseOrderId = inventoryPo.id;
 
   const jobPo = await createOrderAndReceivePo({
-    vendorName: `${tag} Equipment Vendor`,
+    vendorName: 'Smoke test equipment vendor',
     destinationCustomerLocationId: locationId,
     jobId: job.id,
     lines: [
       {
         kind: 'equipment',
         itemId: equipmentItem.item.id,
-        description: `${tag} furnace`,
+        description: 'Smoke test furnace',
         quantity: 1,
         expectedUnitCost: 1800,
         equipmentType: 'Furnace',
@@ -157,14 +157,14 @@ try {
   evidence.created.jobPurchaseOrderId = jobPo.id;
 
   const pendingReceivePo = await createAndOrderPo({
-    vendorName: `${tag} Pending Vendor`,
+    vendorName: 'Smoke test pending vendor',
     destinationCustomerLocationId: locationId,
     jobId: job.id,
     lines: [
       {
         kind: 'part',
         itemId: partItem.item.id,
-        description: `${tag} receive-after-finalization guard`,
+        description: 'Smoke test receive-after-finalization guard',
         quantity: 1,
         expectedUnitCost: 12
       }
@@ -190,12 +190,12 @@ try {
   });
 
   await expectStatus('POST', `/operations/jobs/${job.id}/labor`, {
-    description: `${tag} rejected labor`,
+    description: 'Smoke test rejected labor',
     hours: 1,
     ratePerHour: 100
   });
   await expectStatus('POST', `/operations/jobs/${job.id}/expenses`, {
-    description: `${tag} rejected expense`,
+    description: 'Smoke test rejected expense',
     amount: 10
   });
   await expectStatus('POST', `/operations/jobs/${job.id}/cost-events/${labor.event.id}/reverse`, {

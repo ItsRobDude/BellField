@@ -117,6 +117,7 @@ function toCatalogLineSnapshot(item: CatalogItem): CatalogLineSnapshot {
     priceMode: 'standard',
     defaultSalePrice: item.defaultSalePrice,
     agreementPrice: item.agreementPrice,
+    estimatedLaborHours: item.estimatedLaborHours,
     linkedInventoryItemId: item.linkedInventoryItemId,
     linkedInventoryItemSku: item.linkedInventoryItemSku,
     linkedInventoryItemName: item.linkedInventoryItemName

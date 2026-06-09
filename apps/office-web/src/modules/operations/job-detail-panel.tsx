@@ -172,6 +172,7 @@ export function JobDetailPanel({
   onOpenMediaAttachment
 }: JobDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<JobDetailTab>(initialTab);
+  const [editingRegisterEntryId, setEditingRegisterEntryId] = useState<string | null>(null);
   const jobPendingStatusChange =
     pendingJobStatusChange?.jobId === job.id ? pendingJobStatusChange : null;
   useEffect(() => {
@@ -289,6 +290,8 @@ export function JobDetailPanel({
         ? renderCapturedRegister({
             job,
             capturedWork,
+            editingRegisterEntryId,
+            onEditRegisterEntry: setEditingRegisterEntryId,
             onRegisterDraftChange,
             onSaveRegisterEntry,
             onRegisterVoidReasonChange,
@@ -349,6 +352,8 @@ export function JobDetailPanel({
 function renderCapturedRegister({
   job,
   capturedWork,
+  editingRegisterEntryId,
+  onEditRegisterEntry,
   onRegisterDraftChange,
   onSaveRegisterEntry,
   onRegisterVoidReasonChange,
@@ -356,6 +361,8 @@ function renderCapturedRegister({
 }: {
   job: JobSummary;
   capturedWork?: CapturedWorkDetails;
+  editingRegisterEntryId: string | null;
+  onEditRegisterEntry: (entryId: string | null) => void;
   onRegisterDraftChange: JobDetailPanelProps['onRegisterDraftChange'];
   onSaveRegisterEntry: JobDetailPanelProps['onSaveRegisterEntry'];
   onRegisterVoidReasonChange: JobDetailPanelProps['onRegisterVoidReasonChange'];
@@ -376,6 +383,8 @@ function renderCapturedRegister({
           job,
           entry,
           draft: capturedWork.registerDrafts[entry.id],
+          isEditing: editingRegisterEntryId === entry.id,
+          onEditRegisterEntry,
           voidReason: capturedWork.registerVoidReasons[entry.id] ?? '',
           onRegisterDraftChange,
           onSaveRegisterEntry,
@@ -391,6 +400,8 @@ function renderRegisterEntry({
   job,
   entry,
   draft,
+  isEditing,
+  onEditRegisterEntry,
   voidReason,
   onRegisterDraftChange,
   onSaveRegisterEntry,
@@ -400,6 +411,8 @@ function renderRegisterEntry({
   job: JobSummary;
   entry: RegisterEntrySummary;
   draft: RegisterEntryEditDraft | undefined;
+  isEditing: boolean;
+  onEditRegisterEntry: (entryId: string | null) => void;
   voidReason: string;
   onRegisterDraftChange: JobDetailPanelProps['onRegisterDraftChange'];
   onSaveRegisterEntry: JobDetailPanelProps['onSaveRegisterEntry'];
@@ -431,17 +444,33 @@ function renderRegisterEntry({
         <div style={styles.badgeRow}>
           {entry.isVoid ? <span style={styles.dangerBadge}>Voided</span> : null}
           <span style={styles.badge}>{entry.capturedByName}</span>
+          {!entry.isVoid ? (
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => onEditRegisterEntry(isEditing ? null : entry.id)}
+            >
+              {isEditing ? 'Close' : 'Edit'}
+            </button>
+          ) : null}
         </div>
       </div>
       <p style={styles.tinyMuted}>
         {formatDateTime(entry.capturedAt)}
         {entry.appointmentId ? ` - ${formatAppointmentReference(job, entry.appointmentId)}` : ''}
       </p>
+      {entry.inventorySourceLabel || entry.partNumber || entry.catalogSnapshot?.name ? (
+        <p style={styles.tinyMuted}>
+          {[entry.catalogSnapshot?.name, entry.partNumber, entry.inventorySourceLabel]
+            .filter(Boolean)
+            .join(' - ')}
+        </p>
+      ) : null}
       {entry.isVoid ? (
         <p style={styles.tinyMuted}>
           {entry.voidReason ? `Void reason: ${entry.voidReason}` : 'Voided.'}
         </p>
-      ) : (
+      ) : isEditing ? (
         <>
           <div style={styles.formGridCompact}>
             <label style={fieldLabelStyle}>
@@ -572,7 +601,7 @@ function renderRegisterEntry({
             </button>
           </div>
         </>
-      )}
+      ) : null}
     </section>
   );
 }

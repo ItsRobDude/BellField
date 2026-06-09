@@ -39,7 +39,11 @@ export function FieldJobOverviewSection({
   return (
     <View style={localStyles.stack}>
       <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitleSmall}>Who</Text>
+        <Text style={styles.sectionTitleSmall}>Job context</Text>
+        <View style={localStyles.factGrid}>
+          <Fact label="Customer" value={customer?.name ?? job.billToCustomerName} />
+          <Fact label="Location" value={location?.name ?? job.locationName} />
+        </View>
         {phoneRows.length > 0 ? (
           phoneRows.map((row) => (
             <Pressable
@@ -54,11 +58,6 @@ export function FieldJobOverviewSection({
         ) : (
           <Text style={styles.summaryText}>No phone numbers recorded for this location.</Text>
         )}
-      </View>
-
-      <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitleSmall}>Where</Text>
-        <Text style={styles.summaryText}>{location?.name ?? job.locationName}</Text>
         <Pressable
           disabled={!location}
           onPress={() => void openAddressInMaps(address)}
@@ -70,7 +69,7 @@ export function FieldJobOverviewSection({
       </View>
 
       <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitleSmall}>When</Text>
+        <Text style={styles.sectionTitleSmall}>Work summary</Text>
         {appointment ? (
           <>
             <Text style={styles.summaryText}>{formatAppointmentSchedule(appointment)}</Text>
@@ -84,10 +83,6 @@ export function FieldJobOverviewSection({
         ) : (
           <Text style={styles.summaryText}>No active appointment is scheduled for this job.</Text>
         )}
-      </View>
-
-      <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitleSmall}>What</Text>
         <Text style={localStyles.rowLabel}>Office notes</Text>
         <Text style={localStyles.summaryValue}>{job.summary}</Text>
         <View style={localStyles.factGrid}>

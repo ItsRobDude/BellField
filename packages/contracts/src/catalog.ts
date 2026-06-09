@@ -93,6 +93,7 @@ export interface CatalogLineSnapshot {
   priceMode: CatalogPriceMode;
   defaultSalePrice?: number;
   agreementPrice?: number;
+  estimatedLaborHours?: number;
   linkedInventoryItemId?: string;
   linkedInventoryItemSku?: string;
   linkedInventoryItemName?: string;

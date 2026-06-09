@@ -486,6 +486,12 @@ Status:
   line remains traceable through `source_estimate_line_item_id`; direct invoice-line Catalog
   provenance is deferred until invoice/accounting export needs it.
 
+Field UX note:
+
+- The field Register now uses a compact Add Work composer: technicians search field-visible
+  Catalog rows and cached truck stock together, select a result, confirm quantity/time, and add the
+  line while advanced billing/source fields stay behind a details control.
+
 ### Phase 4 - Estimate options
 
 Goal:
