@@ -337,6 +337,13 @@ export class ServiceAgreementsRepository {
     now: string,
     queryable: QueryExecutor
   ): Promise<void> {
+    // Coverage and visit-template rows are owned detail of the agreement, so an update replaces
+    // the whole set: delete, then re-insert with fresh ids. This is safe only because nothing
+    // references these child-row ids — no other table has a foreign key to them, and every reader
+    // (field coverage, reports, CRM context) scopes by agreement_id. Trade-off: each child row's
+    // created_at resets on any agreement edit. Before deferred recurring-visit generation starts
+    // referencing visit-template ids, switch this to upsert-by-stable-id so generated visits are
+    // not orphaned by an unrelated agreement edit.
     await queryable.query(`delete from service_agreement_visit_templates where agreement_id = $1`, [
       agreementId
     ]);

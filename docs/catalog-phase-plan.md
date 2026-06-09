@@ -616,6 +616,30 @@ Out of scope for Phase 6 first pass:
 - revenue recognition or deferred revenue accounting
 - trade-specific maintenance logic beyond generic visit templates
 
+Status:
+
+- Phase 6 first pass (slices 6A–6D) is implemented. Service agreements are a real customer-owned
+  lifecycle, not extra Catalog fields: agreement records + API backbone
+  (`apps/api/src/modules/service-agreements`, migration `20260608_004_service_agreements`), an
+  office Agreements workbench, customer/location CRM context, agreement reports with CSV export,
+  and field read-only active coverage (customer-facing fields only, scoped to the technician's
+  assigned locations).
+- Status changes follow an activate/pause/end lifecycle; pause/end preserve history (no hard
+  delete). Renewal/billing cadence is informational only — no automatic invoice, payment, job, or
+  appointment generation. Agreements seeded from a Catalog `agreement` line keep a sell-side
+  snapshot, and selling that line stays a register/invoice line; it does not create a lifecycle
+  agreement record.
+- A 2026-06-08 hardening pass fixed two correctness bugs: (1) optional agreement fields could not
+  be cleared once set — update now uses absent = keep / `null` = clear / value = set semantics,
+  with `null` kept out of the create path; (2) the "visit templates due" report counted templates
+  with no computable due date as due-soon — those are now excluded.
+- Decision (also commented in `service-agreements.repository.ts`): an agreement update replaces its
+  whole coverage/visit-template child set (delete + re-insert with fresh ids). This is safe because
+  no table references those child-row ids and every reader scopes by `agreement_id`; the only
+  trade-off is that child `created_at` resets on any edit. Before the deferred recurring-visit
+  generation references visit-template ids, switch to upsert-by-stable-id so generated visits are
+  not orphaned by an unrelated agreement edit.
+
 ---
 
 ## 13. First Slice Recommendation
