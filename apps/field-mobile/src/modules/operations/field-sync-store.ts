@@ -96,6 +96,18 @@ export async function initializeFieldSyncStore(): Promise<void> {
   `);
 }
 
+export async function clearFieldSyncStore(): Promise<void> {
+  await initializeFieldSyncStore();
+  const database = await getDatabase();
+
+  await database.execAsync(`
+    delete from assigned_work_snapshot;
+    delete from pending_operations;
+    delete from sync_metadata;
+    delete from truck_stock_snapshot;
+  `);
+}
+
 export async function loadAssignedWorkSnapshot(): Promise<AssignedWorkSnapshot | null> {
   const database = await getDatabase();
   const row = await database.getFirstAsync<{ payload_json: string }>(

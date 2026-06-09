@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { createFieldMediaUploadIntent, FieldApiError, isFieldApiError } from '../operations-api';
+import {
+  createFieldMediaUploadIntent,
+  FieldApiError,
+  isFieldApiError,
+  isFieldSessionAccessLostError
+} from '../operations-api';
 
 describe('operations API error handling', () => {
   afterEach(() => {
@@ -39,5 +44,18 @@ describe('operations API error handling', () => {
       status: 413,
       message: 'Media exceeds the configured maximum of 50000000 bytes.'
     });
+  });
+
+  it('classifies revoked or cut-off field sessions separately from normal API failures', () => {
+    expect(isFieldSessionAccessLostError(new FieldApiError('Session not found.', 401))).toBe(true);
+    expect(
+      isFieldSessionAccessLostError(
+        new FieldApiError('You no longer have permission to perform this action.', 403)
+      )
+    ).toBe(true);
+    expect(isFieldSessionAccessLostError(new FieldApiError('Permission denied.', 403))).toBe(false);
+    expect(isFieldSessionAccessLostError(new FieldApiError('Server unavailable.', 500))).toBe(
+      false
+    );
   });
 });

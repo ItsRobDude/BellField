@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
   ActivityIndicator,
@@ -10,7 +10,11 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { getAssignedFieldWork, getFieldTruckStock } from '@/lib/operations-api';
+import {
+  getAssignedFieldWork,
+  getFieldTruckStock,
+  isFieldSessionAccessLostError
+} from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import {
   initializeFieldSyncStore,
@@ -22,6 +26,7 @@ import {
   saveSyncMetadata,
   saveTruckStockSnapshot
 } from './field-sync-store';
+import { clearFieldDeviceLocalStorage } from './field-device-local-storage';
 import type {
   AssignedWorkSnapshot,
   PendingOperation,
@@ -60,6 +65,7 @@ type Props = {
   employee: EmployeeSummary;
   sessionToken: string;
   onSignOut: () => void;
+  onSessionAccessLost: (message: string) => void;
 };
 
 const defaultSyncMetadata: SyncMetadata = {
@@ -92,7 +98,8 @@ export function TechnicianWorkspaceScreen({
   apiBaseUrl,
   employee,
   sessionToken,
-  onSignOut
+  onSignOut,
+  onSessionAccessLost
 }: Props) {
   const safeAreaInsets = useSafeAreaInsets();
   const [serverSnapshot, setServerSnapshot] = useState<AssignedWorkSnapshot | null>(null);
@@ -160,6 +167,22 @@ export function TechnicianWorkspaceScreen({
     }
   }, [scheduledJobs, selectedJobId]);
 
+  const clearLocalStateForSessionAccessLoss = useCallback(
+    async (serverMessage: string) => {
+      const message =
+        'Device access ended. BellField cleared local field data from this device. Sign in again if access has been restored.';
+
+      await clearFieldDeviceLocalStorage();
+      setServerSnapshot(null);
+      setTruckStock(null);
+      setPendingOperations([]);
+      setSyncMetadata(defaultSyncMetadata);
+      setErrorMessage(serverMessage);
+      onSessionAccessLost(message);
+    },
+    [onSessionAccessLost]
+  );
+
   useEffect(() => {
     async function initializeWorkspace() {
       setIsInitializing(true);
@@ -196,6 +219,13 @@ export function TechnicianWorkspaceScreen({
         setSyncMetadata(nextSyncMetadata);
         await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
       } catch (error) {
+        if (isFieldSessionAccessLostError(error)) {
+          await clearLocalStateForSessionAccessLoss(
+            error instanceof Error ? error.message : 'This device session is no longer valid.'
+          );
+          return;
+        }
+
         setErrorMessage(
           error instanceof Error ? error.message : 'Unable to load BellField field storage.'
         );
@@ -205,7 +235,7 @@ export function TechnicianWorkspaceScreen({
     }
 
     void initializeWorkspace();
-  }, [apiBaseUrl, sessionToken]);
+  }, [apiBaseUrl, clearLocalStateForSessionAccessLoss, sessionToken]);
 
   async function refreshAssignedWork(showSpinner = true, metadataOverride?: SyncMetadata) {
     if (showSpinner) {
@@ -230,6 +260,13 @@ export function TechnicianWorkspaceScreen({
       setSyncMetadata(nextSyncMetadata);
       await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
     } catch (error) {
+      if (isFieldSessionAccessLostError(error)) {
+        await clearLocalStateForSessionAccessLoss(
+          error instanceof Error ? error.message : 'This device session is no longer valid.'
+        );
+        return;
+      }
+
       setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh assigned work.');
     } finally {
       if (showSpinner) {
@@ -286,7 +323,8 @@ export function TechnicianWorkspaceScreen({
         setServerSnapshot,
         setSyncMetadata,
         setPendingOperations,
-        setErrorMessage
+        setErrorMessage,
+        onSessionAccessLost: clearLocalStateForSessionAccessLoss
       },
       options
     );

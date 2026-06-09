@@ -29,7 +29,12 @@ vi.mock('expo-crypto', () => cryptoMock);
 vi.mock('expo-image-picker', () => imagePickerMock);
 
 // eslint-disable-next-line import/first -- Expo modules must be mocked before loading the capture helper.
-import { deleteStagedFieldMedia, fieldMediaMaxBytes, pickFieldMedia } from '../field-media-capture';
+import {
+  clearStagedFieldMediaDirectory,
+  deleteStagedFieldMedia,
+  fieldMediaMaxBytes,
+  pickFieldMedia
+} from '../field-media-capture';
 
 describe('pickFieldMedia', () => {
   beforeEach(() => {
@@ -166,6 +171,17 @@ describe('pickFieldMedia', () => {
 
     expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith(
       'file:///app/Documents/bellfield-media/media-1.jpg',
+      {
+        idempotent: true
+      }
+    );
+  });
+
+  it('clears the staged media directory when field device storage is wiped', async () => {
+    await clearStagedFieldMediaDirectory();
+
+    expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith(
+      'file:///app/Documents/bellfield-media/',
       {
         idempotent: true
       }

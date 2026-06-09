@@ -195,3 +195,19 @@ adb reverse --remove tcp:3001
   independently inspected — the staged file lives in Expo Go's app sandbox, which isn't reachable
   over adb without root.
 - Evidence (gitignored): `artifacts/validation/2026-06-05T02-15-14-442Z/field-media/`.
+
+### 2026-06-08 — register sync and revoked-session wipe — PASS
+
+- Commit: `e717bd5` plus the current field revoked-device hardening patch in the working tree.
+- Device: Samsung Galaxy Tab S9 Ultra (SM-X910), Android 16, Expo Go 56.0.1, real hardware.
+- API: `http://127.0.0.1:3001`; Docker Postgres; migrations applied; `pnpm dev:field-smoke-data` prepared the today/tomorrow work window.
+- Setup: Expo Go app data was cleared with `adb shell pm clear host.exp.exponent`, then Metro and API were reached over `adb reverse tcp:8081` and `adb reverse tcp:3001`.
+- Result: **PASS** for the focused field reliability slice:
+  - field sign-in loaded assigned work for Job 1002 and Job 1001.
+  - Job 1002 detail opened with Overview, Appointments, Register, Equipment, and Sync tabs visible.
+  - a truck-stock register line was saved locally; the header changed to "1 change waiting to sync" and the job badge showed "1 queued".
+  - manual Sync Now cleared the queue and returned the header to "Synced".
+  - server-side DB verification found the synced register entry on `job-service-1002` with the expected description, quantity, inventory item/location ids, and `client_operation_id`.
+  - the active field session was revoked through the admin API; the next tablet refresh returned to sign-in and displayed "Device access ended. BellField cleared local field data from this device."
+- Evidence (gitignored): `artifacts/validation/2026-06-08T17-40-49-960Z/field/`.
+- Not repeated in this run: media capture/pick and transient media retry. The prior 2026-06-05 media upload smoke remains the current real-device media proof; media transient retry remains the next hardening/smoke target.

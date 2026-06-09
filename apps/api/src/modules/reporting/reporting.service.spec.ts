@@ -465,6 +465,14 @@ function createAgreementReportService(perms = ['reports:view', 'agreements:view'
 }
 
 describe('ReportingService.getServiceAgreementReports', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-08T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('rejects 403 without agreements:view and never queries', async () => {
     const { service, databaseService } = createAgreementReportService(['reports:view']);
     await expect(service.getServiceAgreementReports('token')).rejects.toBeInstanceOf(
@@ -500,6 +508,14 @@ describe('ReportingService.getServiceAgreementReports', () => {
 });
 
 describe('ReportingService service agreement CSV exports', () => {
+  beforeEach(() => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-06-08T12:00:00.000Z'));
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
   it('rejects 403 without reports:export', async () => {
     const { service } = createAgreementReportService(['reports:view', 'agreements:view']);
     await expect(service.exportActiveServiceAgreements('token')).rejects.toBeInstanceOf(

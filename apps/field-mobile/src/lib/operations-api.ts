@@ -59,6 +59,22 @@ export function isFieldApiError(error: unknown): error is FieldApiError {
   return error instanceof FieldApiError;
 }
 
+export function isFieldSessionAccessLostError(error: unknown): boolean {
+  if (!isFieldApiError(error)) {
+    return false;
+  }
+
+  if (error.status === 401) {
+    return true;
+  }
+
+  if (error.status !== 403) {
+    return false;
+  }
+
+  return /inactive|no longer have permission/i.test(error.message);
+}
+
 async function requestJson<TResponse>(
   path: string,
   options: RequestInit & { apiBaseUrl?: string; sessionToken: string } = { sessionToken: '' }

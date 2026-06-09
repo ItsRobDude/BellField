@@ -78,6 +78,17 @@ export async function deleteStagedFieldMedia(localUri: string): Promise<void> {
   await FileSystem.deleteAsync(localUri, { idempotent: true });
 }
 
+export async function clearStagedFieldMediaDirectory(): Promise<void> {
+  const baseDirectory = FileSystem.documentDirectory;
+
+  if (!baseDirectory) {
+    return;
+  }
+
+  const mediaDirectory = `${baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`}bellfield-media/`;
+  await FileSystem.deleteAsync(mediaDirectory, { idempotent: true });
+}
+
 function ensureFieldMediaSizeIsAllowed(byteSize: number | undefined): void {
   if (byteSize !== undefined && byteSize > fieldMediaMaxBytes) {
     throw new Error("Selected media is larger than BellField's 50 MB field upload limit.");

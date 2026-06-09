@@ -20,6 +20,7 @@ Behaviors backed by tests in `apps/field-mobile/src/modules/operations/__tests__
 - **Queue resolution controls** — conflicted/rejected local operations stay visible but are no longer replayed by ordinary `Sync Now` until the technician explicitly marks them for retry. The technician can also discard one conflicted/rejected local change after confirmation.
 - **Register entries** — technicians can add line-item register entries, edit existing register lines, and void existing register lines locally. Register operations use the same pending queue, conflict/rejected preservation, Sync Now, background drain, and local overlay model as notes/status/equipment.
 - **Background sync** — the technician workspace now runs an in-screen background drain loop while mounted, plus an active-app regain trigger. It avoids OS-level background fetch dependencies.
+- **Revoked-device cutoff** — when the server no longer accepts the field session, the field app clears BellField's local assigned-work cache, pending queue, truck-stock snapshot, and staged media from the Expo app sandbox, then returns to sign-in with a device-access-ended message. This is a best-effort wipe-on-reconnect path; work cannot be synced after the server has already rejected the bearer token.
 
 ---
 
@@ -75,22 +76,22 @@ These are real gaps a technician will notice once dispatch starts driving real-w
 
 Cross-referenced against `docs/milestone-implementation-plan.md` §11 and `docs/offline-sync.md`:
 
-| Milestone 6 scope item                   | Current state                                                                                                                                                                                                                       |
-| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Technician home / dashboard              | Present. The technician workspace is now a job feed plus a focused job detail with tabbed sections and a bottom nav, rather than a single scrollable card.                                                                          |
-| Assigned jobs for today/tomorrow window  | Present. Backend window enforced; local cache mirrors the snapshot.                                                                                                                                                                 |
-| Local cached job/location/equipment data | Present via `expo-sqlite` store.                                                                                                                                                                                                    |
-| Notes                                    | Present. Queueable + replay-safe.                                                                                                                                                                                                   |
-| Appointment statuses                     | Present. Field side excludes `cancelled`.                                                                                                                                                                                           |
-| Register entries                         | Present for field-mobile line creation/edit/void with offline queue replay. Finish review still keeps its separate free-text reminder.                                                                                              |
-| Equipment edits                          | Present.                                                                                                                                                                                                                            |
-| Estimate drafting foundations            | **Not present.** Estimates are office-only in the current milestone; the field app has no estimate builder yet.                                                                                                                     |
-| Photo/video/file queueing                | Present. Expo image/video capture or pick with app-owned local staging, a 50 MB client guard, SHA-256 metadata, upload-intent replay, raw blob finalization, and staged-file cleanup after sync. Manual device smoke still pending. |
-| Background sync                          | Present as an in-screen mounted-workspace loop plus active-app regain trigger. No OS-level background fetch.                                                                                                                        |
-| Sync Now button                          | Present.                                                                                                                                                                                                                            |
-| Pending sync indicator                   | Present (quiet-by-default tone).                                                                                                                                                                                                    |
-| Conflict flagging foundations            | Present (conflict/rejected states with provenance).                                                                                                                                                                                 |
-| Lost/revoked device behavior             | **Not present** on the field side. No wipe-on-reconnect or sign-out-on-revoke surface.                                                                                                                                              |
+| Milestone 6 scope item                   | Current state                                                                                                                                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Technician home / dashboard              | Present. The technician workspace is now a job feed plus a focused job detail with tabbed sections and a bottom nav, rather than a single scrollable card.                                                                              |
+| Assigned jobs for today/tomorrow window  | Present. Backend window enforced; local cache mirrors the snapshot.                                                                                                                                                                     |
+| Local cached job/location/equipment data | Present via `expo-sqlite` store.                                                                                                                                                                                                        |
+| Notes                                    | Present. Queueable + replay-safe.                                                                                                                                                                                                       |
+| Appointment statuses                     | Present. Field side excludes `cancelled`.                                                                                                                                                                                               |
+| Register entries                         | Present for field-mobile line creation/edit/void with offline queue replay. Finish review still keeps its separate free-text reminder.                                                                                                  |
+| Equipment edits                          | Present.                                                                                                                                                                                                                                |
+| Estimate drafting foundations            | **Not present.** Estimates are office-only in the current milestone; the field app has no estimate builder yet.                                                                                                                         |
+| Photo/video/file queueing                | Present. Expo image/video capture or pick with app-owned local staging, a 50 MB client guard, SHA-256 metadata, upload-intent replay, raw blob finalization, and staged-file cleanup after sync. Manual device smoke still pending.     |
+| Background sync                          | Present as an in-screen mounted-workspace loop plus active-app regain trigger. No OS-level background fetch.                                                                                                                            |
+| Sync Now button                          | Present.                                                                                                                                                                                                                                |
+| Pending sync indicator                   | Present (quiet-by-default tone).                                                                                                                                                                                                        |
+| Conflict flagging foundations            | Present (conflict/rejected states with provenance).                                                                                                                                                                                     |
+| Lost/revoked device behavior             | Present for server-confirmed session access loss: local BellField field storage is cleared and the user is returned to sign-in. A 2026-06-08 real-device smoke revoked the active field session and confirmed the wipe/sign-in surface. |
 
 ---
 
@@ -116,9 +117,7 @@ feed/detail/bottom-nav layout). Remaining field-side gaps:
 
 1. **Route/navigation action from the address.** Add a tap target that hands the
    service address to device maps.
-2. **Lost/revoked device behavior.** No wipe-on-reconnect or sign-out-on-revoke
-   surface on the field side yet.
-3. **Estimate drafting on the field side.** Estimates are office-only in the
+2. **Estimate drafting on the field side.** Estimates are office-only in the
    current milestone; a field builder is a later, deliberate lane.
 
 Each item is small enough to ship as its own lane and none of them require

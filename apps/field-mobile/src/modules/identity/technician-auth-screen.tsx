@@ -61,6 +61,11 @@ export function TechnicianAuthScreen() {
         apiBaseUrl={apiBaseUrl}
         employee={employee}
         sessionToken={sessionToken}
+        onSessionAccessLost={(message) => {
+          setSessionToken(null);
+          setEmployee(null);
+          setErrorMessage(message);
+        }}
         onSignOut={() => {
           setSessionToken(null);
           setEmployee(null);

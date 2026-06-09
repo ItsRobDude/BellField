@@ -10,7 +10,8 @@ Current implementation note:
 
 - `docs/field-handoff-findings.md` tracks the field app's current shipped/offline status.
 - In-screen background sync and register entry queueing exist.
-- Field-side media capture/blob replay now has a first implementation with client-side size guardrails, deterministic media failure resolution, and staged-file cleanup after successful sync. Revoked-device wipe remains open Milestone 6 work.
+- Field-side media capture/blob replay now has a first implementation with client-side size guardrails, deterministic media failure resolution, and staged-file cleanup after successful sync.
+- Field-mobile now treats server-confirmed session access loss as a device cutoff: it clears assigned-work cache, pending queue, truck-stock cache, and staged media from BellField's Expo-owned local storage, then returns to sign-in.
 
 ---
 

@@ -4,6 +4,7 @@ import {
   createFieldMediaUploadIntent,
   createFieldRegisterEntry,
   getAssignedFieldWork,
+  isFieldSessionAccessLostError,
   updateFieldAppointmentStatus,
   updateFieldEquipment,
   updateFieldRegisterEntry,
@@ -37,6 +38,7 @@ export type FieldSyncDrainContext = {
   setSyncMetadata: Dispatch<SetStateAction<SyncMetadata>>;
   setPendingOperations: Dispatch<SetStateAction<PendingOperation[]>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
+  onSessionAccessLost?: (message: string) => Promise<void>;
 };
 
 // Internal drain orchestration. Called by both the manual Sync Now button and the background
@@ -55,7 +57,8 @@ export async function drainFieldSyncQueue(
     setServerSnapshot,
     setSyncMetadata,
     setPendingOperations,
-    setErrorMessage
+    setErrorMessage,
+    onSessionAccessLost
   } = ctx;
 
   if (options.visible) {
@@ -538,6 +541,12 @@ export async function drainFieldSyncQueue(
       } catch (error) {
         const nextErrorMessage =
           error instanceof Error ? error.message : 'Unable to sync queued field work.';
+
+        if (isFieldSessionAccessLostError(error)) {
+          await onSessionAccessLost?.(nextErrorMessage);
+          return { ok: false };
+        }
+
         const failedMetadata: SyncMetadata = {
           ...attemptedMetadata,
           lastSyncError: nextErrorMessage
@@ -571,6 +580,12 @@ export async function drainFieldSyncQueue(
   } catch (error) {
     const nextErrorMessage =
       error instanceof Error ? error.message : 'Unable to sync queued field work.';
+
+    if (isFieldSessionAccessLostError(error)) {
+      await onSessionAccessLost?.(nextErrorMessage);
+      return { ok: false };
+    }
+
     const failedMetadata: SyncMetadata = {
       ...attemptedMetadata,
       lastSyncError: nextErrorMessage
