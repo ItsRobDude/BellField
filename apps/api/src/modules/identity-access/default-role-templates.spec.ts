@@ -68,6 +68,19 @@ describe('defaultRoleTemplates catalog permissions', () => {
   });
 });
 
+describe('defaultRoleTemplates estimate send permissions', () => {
+  it('grants estimate sending to owner and admin by default', () => {
+    expect(defaultRoleTemplates.owner.permissions).toContain('estimates:send');
+    expect(defaultRoleTemplates.admin.permissions).toContain('estimates:send');
+  });
+
+  it('does not grant estimate sending to office, bookkeeping, or field roles by default', () => {
+    for (const role of ['csr', 'dispatcher', 'bookKeeping', 'technician'] as const) {
+      expect(defaultRoleTemplates[role].permissions).not.toContain('estimates:send');
+    }
+  });
+});
+
 describe('defaultRoleTemplates agreement permissions', () => {
   it('grants office roles agreement view/create/edit for agreement lifecycle work', () => {
     for (const role of ['owner', 'admin', 'csr', 'dispatcher', 'bookKeeping'] as const) {

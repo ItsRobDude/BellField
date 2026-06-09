@@ -38,6 +38,7 @@ const adminCore = [
   // Job cost is internal financial data, so it is its own area rather than riding on
   // jobs:edit: admins/owners (and bookkeeping below) can see and post job costs.
   ...permissionKeys('jobCosting', ['view', 'create', 'edit']),
+  ...permissionKeys('estimates', ['send']),
   ...permissionKeys('reports', ['view', 'export']),
   ...permissionKeys('employeesPermissions', ['view', 'configure']),
   ...permissionKeys('companySettings', ['view', 'configure']),

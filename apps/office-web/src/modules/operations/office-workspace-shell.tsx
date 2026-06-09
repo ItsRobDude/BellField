@@ -113,6 +113,8 @@ export function OfficeWorkspaceShell({
   const canViewReports = employee.effectivePermissions.includes('reports:view');
   const canExportReports = employee.effectivePermissions.includes('reports:export');
   const canViewEmployees = employee.effectivePermissions.includes('employeesPermissions:view');
+  const canViewSettings = employee.effectivePermissions.includes('companySettings:view');
+  const canConfigureSettings = employee.effectivePermissions.includes('companySettings:configure');
   const canConfigureEmployees = employee.effectivePermissions.includes(
     'employeesPermissions:configure'
   );
@@ -847,6 +849,7 @@ export function OfficeWorkspaceShell({
       canViewBookkeeping={canViewInvoice}
       canViewReports={canViewReports}
       canViewEmployees={canViewEmployees}
+      canViewSettings={canViewSettings}
       canViewSystem={canViewSystem}
       canViewHistory={canViewHistory}
       noticeMessage={noticeMessage}
@@ -942,6 +945,11 @@ export function OfficeWorkspaceShell({
           canCreate: canCreateEmployees,
           actorId: employee.id,
           actorRoleId: employee.roleId
+        }}
+        settings={{
+          apiBaseUrl,
+          sessionToken,
+          canConfigure: canConfigureSettings
         }}
         jobDetail={{
           selectedJobId,

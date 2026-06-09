@@ -4,6 +4,7 @@ import { HealthModule } from '../health/health.module';
 import { BookkeepingModule } from './bookkeeping/bookkeeping.module';
 import { CatalogModule } from './catalog/catalog.module';
 import { CrmModule } from './crm/crm.module';
+import { CompanySettingsModule } from './company-settings/company-settings.module';
 import { DispatchModule } from './dispatch/dispatch.module';
 import { EquipmentModule } from './equipment/equipment.module';
 import { EstimatesModule } from './estimates/estimates.module';
@@ -29,6 +30,7 @@ import { ServiceAgreementsModule } from './service-agreements/service-agreements
     IdentityAccessModule,
     BookkeepingModule,
     CatalogModule,
+    CompanySettingsModule,
     CrmModule,
     DispatchModule,
     EquipmentModule,

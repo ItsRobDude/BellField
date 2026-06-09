@@ -13,6 +13,7 @@ export type PermissionAction =
   | 'delete'
   | 'approve'
   | 'post'
+  | 'send'
   | 'export'
   | 'configure';
 

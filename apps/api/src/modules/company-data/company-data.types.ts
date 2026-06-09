@@ -322,6 +322,8 @@ export type JobTimelineEntry = {
     | 'estimateApproved'
     | 'estimateDeclined'
     | 'estimateConverted'
+    | 'estimateSent'
+    | 'estimateDeliveryFailed'
     | 'invoicePosted'
     | 'invoiceAdjustmentCreated'
     | 'paymentRecorded'

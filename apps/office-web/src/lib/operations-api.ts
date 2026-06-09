@@ -958,3 +958,4 @@ export * from './operations-catalog-api';
 export * from './operations-purchasing-api';
 export * from './operations-service-agreements-api';
 export * from './operations-job-costing-api';
+export * from './operations-company-settings-api';
