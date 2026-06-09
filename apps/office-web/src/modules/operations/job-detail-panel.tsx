@@ -97,7 +97,6 @@ type JobDetailPanelProps = {
   onOpenMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
 };
 
-// Final phases: job cost is locked (reopen to revise). Mirrors the API's finalJobStatuses.
 const finalJobStatusValues: JobStatus[] = ['completed', 'closed', 'cancelled'];
 
 const registerKindLabels: Record<RegisterEntryKind, string> = {
@@ -321,8 +320,6 @@ export function JobDetailPanel({
           sessionToken={sessionToken}
           canEdit={canEditInvoice}
           canPost={canPostInvoice}
-          // Adjustments/credits are gated on invoices:create — the same authority
-          // that converts an estimate into the invoice.
           canCreateAdjustments={canConvertEstimate}
           paymentPermissions={paymentPermissions}
         />

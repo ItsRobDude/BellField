@@ -26,6 +26,36 @@ function createService() {
       status: 'new'
     })
   };
+  const estimateDeliveryService = {
+    listEstimateOutboundMessages: jest.fn().mockResolvedValue({ outboundMessages: [] }),
+    sendEstimate: jest.fn().mockResolvedValue({
+      outboundMessage: {
+        id: 'message-1',
+        channel: 'email',
+        provider: 'resend',
+        status: 'sent',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        sentByName: 'Dispatcher',
+        queuedAt: '2026-06-01T00:00:00.000Z'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'estimate',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        sourceVersion: 1,
+        filename: 'estimate.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 64,
+        generatedByName: 'Dispatcher',
+        generatedAt: '2026-06-01T00:00:00.000Z'
+      }
+    })
+  };
   const referenceDataService = {
     getLocationById: jest.fn().mockResolvedValue({
       id: 'location-1',
@@ -139,17 +169,13 @@ function createService() {
     service: new EstimatesService(
       identityAccessService as never,
       jobsDataService as never,
-      referenceDataService as never,
-      companySettingsRepository as never,
-      customerDeliveryRepository as never,
-      customerDocumentStorageService as never,
-      emailProviderService as never,
-      estimatePdfRendererService as never,
+      estimateDeliveryService as never,
       estimatesRepository as never,
       invoicesRepository as never
     ),
     identityAccessService,
     jobsDataService,
+    estimateDeliveryService,
     referenceDataService,
     companySettingsRepository,
     customerDeliveryRepository,
@@ -538,98 +564,28 @@ describe('EstimatesService', () => {
     expect(document.html).not.toContain('Profit');
   });
 
-  it('sends an approved estimate as a PDF email and logs delivery', async () => {
-    const {
-      service,
-      estimatesRepository,
-      customerDeliveryRepository,
-      customerDocumentStorageService,
-      emailProviderService,
-      estimatePdfRendererService
-    } = createService();
-    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
-
-    const result = await service.sendEstimate('token', 'estimate-1', {
-      recipientEmail: 'Customer@Example.com'
-    });
-
-    expect(estimatePdfRendererService.renderEstimatePdf).toHaveBeenCalledWith(
-      expect.objectContaining({
-        estimate: expect.objectContaining({ id: 'estimate-1' }),
-        settings: expect.objectContaining({ customerFacingFromEmail: 'estimates@bellfield.app' })
-      })
-    );
-    expect(customerDocumentStorageService.writeEstimatePdf).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jobId: 'job-1',
-        estimateId: 'estimate-1',
-        bytes: Buffer.from('%PDF test')
-      })
-    );
-    expect(emailProviderService.sendEstimateEmail).toHaveBeenCalledWith(
-      expect.objectContaining({
-        to: 'customer@example.com',
-        fromEmail: 'estimates@bellfield.app',
-        attachment: expect.objectContaining({ filename: expect.stringMatching(/\.pdf$/) })
-      })
-    );
-    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
-      expect.objectContaining({
-        jobId: 'job-1',
-        kind: 'estimateSent',
-        message: 'Estimate sent to customer@example.com: AC replacement.'
-      })
-    );
-    expect(result.outboundMessage.status).toBe('sent');
-    expect(result.outboundMessage).not.toHaveProperty('bodyText');
-    expect(result.documentSnapshot).not.toHaveProperty('storagePath');
-  });
-
-  it('refuses to send a pending estimate', async () => {
-    const { service, estimatesRepository, emailProviderService } = createService();
-    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate());
-
-    await expect(
-      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
-    ).rejects.toBeInstanceOf(ConflictException);
-    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
-  });
-
-  it('marks provider failures as failed delivery records with a timeline entry', async () => {
-    const { service, estimatesRepository, emailProviderService, customerDeliveryRepository } =
-      createService();
-    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
-    emailProviderService.sendEstimateEmail.mockResolvedValue({
-      kind: 'error',
-      message: 'Provider rejected request.'
-    });
+  it('delegates estimate delivery to the delivery service', async () => {
+    const { service, estimateDeliveryService } = createService();
 
     const result = await service.sendEstimate('token', 'estimate-1', {
       recipientEmail: 'customer@example.com'
     });
 
-    expect(customerDeliveryRepository.markOutboundMessageFailed).toHaveBeenCalledWith(
-      expect.any(String),
-      'Provider rejected request.',
-      expect.any(String)
-    );
-    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
-      expect.objectContaining({ kind: 'estimateDeliveryFailed' })
-    );
-    expect(result.outboundMessage.status).toBe('failed');
-    expect(result.outboundMessage.providerError).toBe('Provider rejected request.');
+    expect(estimateDeliveryService.sendEstimate).toHaveBeenCalledWith('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+    expect(result.outboundMessage.status).toBe('sent');
   });
 
-  it('blocks accidental duplicate estimate sends inside the short retry window', async () => {
-    const { service, estimatesRepository, customerDeliveryRepository, emailProviderService } =
-      createService();
-    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate({ status: 'approved' }));
-    customerDeliveryRepository.hasRecentEstimateEmail.mockResolvedValue(true);
+  it('delegates estimate outbound-message history to the delivery service', async () => {
+    const { service, estimateDeliveryService } = createService();
 
-    await expect(
-      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
-    ).rejects.toBeInstanceOf(ConflictException);
-    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+    await service.listEstimateOutboundMessages('token', 'estimate-1');
+
+    expect(estimateDeliveryService.listEstimateOutboundMessages).toHaveBeenCalledWith(
+      'token',
+      'estimate-1'
+    );
   });
 
   it('refuses to edit an approved estimate (strict lifecycle)', async () => {

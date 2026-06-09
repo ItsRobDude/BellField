@@ -4,6 +4,7 @@ import { CompanySettingsModule } from '../company-settings/company-settings.modu
 import { CustomerDeliveryModule } from '../customer-delivery/customer-delivery.module';
 import { IdentityAccessModule } from '../identity-access/identity-access.module';
 import { InvoicesModule } from '../invoices/invoices.module';
+import { EstimateDeliveryService } from './estimate-delivery.service';
 import { EstimatesController, JobEstimatesController } from './estimates.controller';
 import { EstimatesRepository } from './estimates.repository';
 import { EstimatesService } from './estimates.service';
@@ -21,6 +22,6 @@ import { EstimatesService } from './estimates.service';
     InvoicesModule
   ],
   controllers: [JobEstimatesController, EstimatesController],
-  providers: [EstimatesRepository, EstimatesService]
+  providers: [EstimatesRepository, EstimateDeliveryService, EstimatesService]
 })
 export class EstimatesModule {}

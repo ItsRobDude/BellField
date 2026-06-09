@@ -1,0 +1,308 @@
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import type {
+  CompanySettings,
+  CustomerDocumentSnapshotSummary,
+  OutboundMessageSummary
+} from '@bellfield/contracts';
+import { CompanySettingsRepository } from '../company-settings/company-settings.repository';
+import { JobsDataService } from '../company-data/jobs-data.service';
+import { ReferenceDataService } from '../company-data/reference-data.service';
+import { CustomerDeliveryRepository } from '../customer-delivery/customer-delivery.repository';
+import type {
+  CustomerDocumentSnapshotRecord,
+  EmailProviderSendInput,
+  OutboundMessageRecord
+} from '../customer-delivery/customer-delivery.types';
+import { CustomerDocumentStorageService } from '../customer-delivery/customer-document-storage.service';
+import {
+  buildEmailProviderInput,
+  EmailProviderService
+} from '../customer-delivery/email-provider.service';
+import { EstimatePdfRendererService } from '../customer-delivery/estimate-pdf-renderer.service';
+import { IdentityAccessService } from '../identity-access/identity-access.service';
+import { EstimatesRepository } from './estimates.repository';
+import type {
+  EstimateRecord,
+  OutboundMessagesResponseDto,
+  SendEstimateRequestDto,
+  SendEstimateResponseDto
+} from './estimates.types';
+
+@Injectable()
+export class EstimateDeliveryService {
+  constructor(
+    private readonly identityAccessService: IdentityAccessService,
+    private readonly jobsDataService: JobsDataService,
+    private readonly referenceDataService: ReferenceDataService,
+    private readonly companySettingsRepository: CompanySettingsRepository,
+    private readonly customerDeliveryRepository: CustomerDeliveryRepository,
+    private readonly customerDocumentStorageService: CustomerDocumentStorageService,
+    private readonly emailProviderService: EmailProviderService,
+    private readonly estimatePdfRendererService: EstimatePdfRendererService,
+    private readonly estimatesRepository: EstimatesRepository
+  ) {}
+
+  async listEstimateOutboundMessages(
+    sessionToken: string,
+    estimateId: string
+  ): Promise<OutboundMessagesResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view', [
+      'office-web'
+    ]);
+    await this.requireEstimate(estimateId);
+    const outboundMessages =
+      await this.customerDeliveryRepository.listOutboundMessagesForEstimate(estimateId);
+    return { outboundMessages: outboundMessages.map(toOutboundMessageSummary) };
+  }
+
+  async sendEstimate(
+    sessionToken: string,
+    estimateId: string,
+    request: SendEstimateRequestDto
+  ): Promise<SendEstimateResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'estimates:send',
+      ['office-web']
+    );
+    const estimate = await this.requireEstimate(estimateId);
+    if (estimate.status !== 'approved') {
+      throw new ConflictException(
+        `Only approved estimates can be sent (status: ${estimate.status}).`
+      );
+    }
+    if (estimate.supersededByEstimateId) {
+      throw new ConflictException('This estimate has been superseded and cannot be sent.');
+    }
+
+    const recipientEmail = normalizeEmail(request.recipientEmail);
+    if (
+      await this.customerDeliveryRepository.hasRecentEstimateEmail({
+        estimateId,
+        recipientEmail,
+        since: new Date(Date.now() - 60_000).toISOString()
+      })
+    ) {
+      throw new ConflictException(
+        'This estimate was just sent to that recipient. Wait a moment before trying again.'
+      );
+    }
+
+    const [job, settings] = await Promise.all([
+      this.jobsDataService.getJobById(estimate.jobId),
+      this.companySettingsRepository.getSettings()
+    ]);
+    const [location, billToCustomer] = await Promise.all([
+      this.referenceDataService.getLocationById(job.locationId),
+      this.referenceDataService.getCustomerById(job.billToCustomerId)
+    ]);
+    const generatedAt = new Date().toISOString();
+    const pdfBytes = await this.estimatePdfRendererService.renderEstimatePdf({
+      estimate,
+      settings,
+      job,
+      location,
+      billToCustomer,
+      generatedAt
+    });
+    if (pdfBytes.byteLength > 15_000_000) {
+      throw new BadRequestException('Estimate PDF is too large to email.');
+    }
+
+    const snapshotId = randomUUID();
+    const filename = `estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.pdf`;
+    const stored = await this.customerDocumentStorageService.writeEstimatePdf({
+      jobId: estimate.jobId,
+      estimateId: estimate.id,
+      snapshotId,
+      bytes: pdfBytes
+    });
+    const documentSnapshot = await this.customerDeliveryRepository.createDocumentSnapshot({
+      id: snapshotId,
+      documentType: 'estimate',
+      jobId: estimate.jobId,
+      estimateId: estimate.id,
+      sourceVersion: estimate.version,
+      filename,
+      contentType: 'application/pdf',
+      storagePath: stored.storagePath,
+      sha256: stored.sha256,
+      byteSize: stored.byteSize,
+      generatedByEmployeeId: actor.id,
+      generatedByName: actor.displayName,
+      generatedAt
+    });
+
+    const emailContent = buildEstimateEmailContent(
+      settings,
+      {
+        companyName: settings.companyName,
+        customerName: billToCustomer.name,
+        estimateTitle: estimate.title,
+        jobNumber: job.jobNumber,
+        locationName: location.name
+      },
+      request
+    );
+    const outboundMessageId = randomUUID();
+    await this.customerDeliveryRepository.createOutboundMessage({
+      id: outboundMessageId,
+      channel: 'email',
+      provider: 'resend',
+      status: 'queued',
+      jobId: estimate.jobId,
+      estimateId: estimate.id,
+      documentSnapshotId: documentSnapshot.id,
+      recipientEmail,
+      subject: emailContent.subject,
+      bodyText: emailContent.bodyText,
+      sentByEmployeeId: actor.id,
+      sentByName: actor.displayName,
+      queuedAt: generatedAt
+    });
+
+    const providerResult = await this.sendEstimateEmailSafely(
+      buildEmailProviderInput(settings, {
+        to: recipientEmail,
+        subject: emailContent.subject,
+        bodyText: emailContent.bodyText,
+        attachment: {
+          filename,
+          contentType: 'application/pdf',
+          bytes: pdfBytes
+        },
+        idempotencyKey: `estimate-send-${outboundMessageId}`
+      })
+    );
+    const completedAt = new Date().toISOString();
+    const outboundMessage =
+      providerResult.kind === 'sent'
+        ? await this.customerDeliveryRepository.markOutboundMessageSent(
+            outboundMessageId,
+            providerResult.providerMessageId,
+            completedAt
+          )
+        : await this.customerDeliveryRepository.markOutboundMessageFailed(
+            outboundMessageId,
+            providerResult.message,
+            completedAt
+          );
+
+    await this.customerDeliveryRepository.addEstimateDeliveryTimeline({
+      jobId: estimate.jobId,
+      occurredAt: completedAt,
+      actorName: actor.displayName,
+      kind: providerResult.kind === 'sent' ? 'estimateSent' : 'estimateDeliveryFailed',
+      message:
+        providerResult.kind === 'sent'
+          ? `Estimate sent to ${recipientEmail}: ${estimate.title}.`
+          : `Estimate delivery failed for ${recipientEmail}: ${estimate.title}.`
+    });
+
+    return {
+      outboundMessage: toOutboundMessageSummary(outboundMessage),
+      documentSnapshot: toDocumentSnapshotSummary(documentSnapshot)
+    };
+  }
+
+  private async requireEstimate(estimateId: string): Promise<EstimateRecord> {
+    const estimate = await this.estimatesRepository.getEstimateById(estimateId);
+    if (!estimate) {
+      throw new NotFoundException('Estimate not found.');
+    }
+    return estimate;
+  }
+
+  private async sendEstimateEmailSafely(input: EmailProviderSendInput) {
+    try {
+      return await this.emailProviderService.sendEstimateEmail(input);
+    } catch (error) {
+      return {
+        kind: 'error' as const,
+        message: error instanceof Error ? error.message : 'Email delivery failed.'
+      };
+    }
+  }
+}
+
+function safeFilenamePart(value: string): string {
+  return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'estimate';
+}
+
+function normalizeEmail(value: string): string {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) {
+    throw new BadRequestException('Recipient email is required.');
+  }
+  return normalized;
+}
+
+function buildEstimateEmailContent(
+  settings: CompanySettings,
+  tokens: Record<string, string>,
+  request: SendEstimateRequestDto
+): { subject: string; bodyText: string } {
+  const subject = (request.subject?.trim() || settings.estimateEmailSubject).trim();
+  const bodyText = (request.bodyText?.trim() || settings.estimateEmailBody).trim();
+  if (!subject) {
+    throw new BadRequestException('Estimate email subject is required.');
+  }
+  if (!bodyText) {
+    throw new BadRequestException('Estimate email body is required.');
+  }
+  return {
+    subject: renderTemplate(subject, tokens),
+    bodyText: renderTemplate(bodyText, tokens)
+  };
+}
+
+function renderTemplate(template: string, tokens: Record<string, string>): string {
+  return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, tokenName: string) => {
+    return tokens[tokenName] ?? match;
+  });
+}
+
+function toDocumentSnapshotSummary(
+  record: CustomerDocumentSnapshotRecord
+): CustomerDocumentSnapshotSummary {
+  return {
+    id: record.id,
+    documentType: record.documentType,
+    jobId: record.jobId,
+    estimateId: record.estimateId,
+    invoiceId: record.invoiceId,
+    sourceVersion: record.sourceVersion,
+    filename: record.filename,
+    contentType: record.contentType,
+    sha256: record.sha256,
+    byteSize: record.byteSize,
+    generatedByName: record.generatedByName,
+    generatedAt: record.generatedAt
+  };
+}
+
+function toOutboundMessageSummary(record: OutboundMessageRecord): OutboundMessageSummary {
+  return {
+    id: record.id,
+    channel: record.channel,
+    provider: record.provider,
+    status: record.status,
+    jobId: record.jobId,
+    estimateId: record.estimateId,
+    invoiceId: record.invoiceId,
+    documentSnapshotId: record.documentSnapshotId,
+    recipientEmail: record.recipientEmail,
+    subject: record.subject,
+    sentByName: record.sentByName,
+    queuedAt: record.queuedAt,
+    sentAt: record.sentAt,
+    providerMessageId: record.providerMessageId,
+    providerError: record.providerError
+  };
+}
