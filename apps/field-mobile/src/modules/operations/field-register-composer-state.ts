@@ -1,6 +1,12 @@
 import type { RegisterSearchResult } from './field-register-search';
 import { formatCurrency, type RegisterEntryDraft } from './field-workspace-drafts';
 
+export type RegisterComposerSelectionState = {
+  query: string;
+  selectedResult: RegisterSearchResult | null;
+  isAdvancedOpen: boolean;
+};
+
 export function isDraftCoherentForSelectedResult(
   draft: RegisterEntryDraft,
   result: RegisterSearchResult
@@ -34,4 +40,19 @@ export function formatDraftTotalLabel(draft: RegisterEntryDraft): string {
   }
 
   return formatCurrency(totalAmount);
+}
+
+export function resolveRegisterComposerAfterAddAttempt(
+  state: RegisterComposerSelectionState,
+  didQueue: boolean
+): RegisterComposerSelectionState {
+  if (!didQueue) {
+    return state;
+  }
+
+  return {
+    query: '',
+    selectedResult: null,
+    isAdvancedOpen: false
+  };
 }

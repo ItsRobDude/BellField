@@ -39,7 +39,7 @@ export function buildRegisterSearchResults(
       item
     }));
 
-  return [...catalogResults, ...truckResults].slice(0, 13).concat({ id: 'custom', kind: 'custom' });
+  return [...catalogResults, ...truckResults].slice(0, 13);
 }
 
 export function findTruckMatchForCatalogItem(

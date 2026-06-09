@@ -22,7 +22,8 @@ import {
 } from './field-register-search';
 import {
   formatDraftTotalLabel,
-  isDraftCoherentForSelectedResult
+  isDraftCoherentForSelectedResult,
+  resolveRegisterComposerAfterAddAttempt
 } from './field-register-composer-state';
 import { createRegisterAddLineGate } from './field-register-submit-guard';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
@@ -156,7 +157,7 @@ function RegisterCreateCard({
   const [selectedResult, setSelectedResult] = useState<RegisterSearchResult | null>(null);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
-  const addLineGateRef = useRef(createRegisterAddLineGate());
+  const addLineGateRef = useRef<ReturnType<typeof createRegisterAddLineGate> | null>(null);
   const createDraft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
   const results = useMemo(
     () => buildRegisterSearchResults(catalogItems, truckStockItems, query),
@@ -222,16 +223,23 @@ function RegisterCreateCard({
     onUpdateRegisterCreateDraft(job.id, patch);
   }
 
+  function getAddLineGate() {
+    addLineGateRef.current ??= createRegisterAddLineGate();
+    return addLineGateRef.current;
+  }
+
   async function handleAddLine() {
-    return addLineGateRef.current.run(async () => {
+    return getAddLineGate().run(async () => {
       setIsAdding(true);
       try {
         const didQueue = await onQueueRegisterEntryCreate(job);
-        if (didQueue) {
-          setQuery('');
-          setSelectedResult(null);
-          setIsAdvancedOpen(false);
-        }
+        const nextComposerState = resolveRegisterComposerAfterAddAttempt(
+          { query, selectedResult, isAdvancedOpen },
+          didQueue
+        );
+        setQuery(nextComposerState.query);
+        setSelectedResult(nextComposerState.selectedResult);
+        setIsAdvancedOpen(nextComposerState.isAdvancedOpen);
         return didQueue;
       } finally {
         setIsAdding(false);

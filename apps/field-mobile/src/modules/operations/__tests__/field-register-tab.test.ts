@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import type { FieldCatalogItem, FieldTruckStockItem } from '@bellfield/contracts';
 import {
   formatDraftTotalLabel,
-  isDraftCoherentForSelectedResult
+  isDraftCoherentForSelectedResult,
+  resolveRegisterComposerAfterAddAttempt
 } from '../field-register-composer-state';
 import { buildRegisterSearchResults } from '../field-register-search';
 import { createRegisterAddLineGate } from '../field-register-submit-guard';
@@ -46,10 +47,7 @@ describe('field register add-work helpers', () => {
   it('searches Catalog items and truck stock together', () => {
     const results = buildRegisterSearchResults([baseCatalogItem], [truckStockItem], 'capacitor');
 
-    expect(results.map((result) => result.id)).toEqual([
-      'truck:inventory-capacitor:truck-1',
-      'custom'
-    ]);
+    expect(results.map((result) => result.id)).toEqual(['truck:inventory-capacitor:truck-1']);
   });
 
   it('prefers a linked Catalog result over a duplicate truck-stock result', () => {
@@ -59,7 +57,17 @@ describe('field register add-work helpers', () => {
       'diagnostic'
     );
 
-    expect(results.map((result) => result.id)).toEqual(['catalog:catalog-diagnostic', 'custom']);
+    expect(results.map((result) => result.id)).toEqual(['catalog:catalog-diagnostic']);
+  });
+
+  it('returns no recommendations when a search has no Catalog or truck-stock matches', () => {
+    const results = buildRegisterSearchResults(
+      [baseCatalogItem],
+      [truckStockItem],
+      'frobnosticator'
+    );
+
+    expect(results).toEqual([]);
   });
 
   it('carries Catalog labor into a time-based draft and recalculates total from hours', () => {
@@ -157,6 +165,39 @@ describe('field register add-work helpers', () => {
     expect(isDraftCoherentForSelectedResult(createRegisterEntryDraft(), selectedResult)).toBe(
       false
     );
+  });
+
+  it('preserves the selected composer state after a failed Add line queue attempt', () => {
+    const selectedResult = {
+      id: 'catalog:catalog-diagnostic',
+      kind: 'catalog',
+      item: baseCatalogItem
+    } as const;
+    const state = {
+      query: 'diagnostic',
+      selectedResult,
+      isAdvancedOpen: true
+    };
+
+    expect(resolveRegisterComposerAfterAddAttempt(state, false)).toBe(state);
+  });
+
+  it('resets the selected composer state after a successful Add line queue attempt', () => {
+    const state = {
+      query: 'diagnostic',
+      selectedResult: {
+        id: 'catalog:catalog-diagnostic',
+        kind: 'catalog',
+        item: baseCatalogItem
+      } as const,
+      isAdvancedOpen: true
+    };
+
+    expect(resolveRegisterComposerAfterAddAttempt(state, true)).toEqual({
+      query: '',
+      selectedResult: null,
+      isAdvancedOpen: false
+    });
   });
 
   it('shows price-not-set for incomplete pricing instead of fake zero dollars', () => {
