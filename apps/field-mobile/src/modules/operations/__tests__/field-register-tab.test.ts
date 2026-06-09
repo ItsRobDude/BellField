@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import type { FieldCatalogItem, FieldTruckStockItem } from '@bellfield/contracts';
+import {
+  formatDraftTotalLabel,
+  isDraftCoherentForSelectedResult
+} from '../field-register-composer-state';
 import { buildRegisterSearchResults } from '../field-register-search';
+import { createRegisterAddLineGate } from '../field-register-submit-guard';
 import {
   buildPricedRegisterDraftPatch,
   createCatalogRegisterDraftPatch,
@@ -32,6 +37,12 @@ const truckStockItem: FieldTruckStockItem = {
 };
 
 describe('field register add-work helpers', () => {
+  it('keeps blank search from rendering the full Catalog wall', () => {
+    const results = buildRegisterSearchResults([baseCatalogItem], [truckStockItem], '');
+
+    expect(results).toEqual([]);
+  });
+
   it('searches Catalog items and truck stock together', () => {
     const results = buildRegisterSearchResults([baseCatalogItem], [truckStockItem], 'capacitor');
 
@@ -105,5 +116,58 @@ describe('field register add-work helpers', () => {
       inventoryLocationId: 'truck-1',
       inventorySourceLabel: 'Truck 1'
     });
+  });
+
+  it('guards Add line so a second in-flight tap cannot queue another operation', async () => {
+    const gate = createRegisterAddLineGate();
+    let calls = 0;
+    let releaseFirst: (() => void) | undefined;
+    const first = gate.run(
+      () =>
+        new Promise<boolean>((resolve) => {
+          calls += 1;
+          releaseFirst = () => resolve(true);
+        })
+    );
+    const second = await gate.run(async () => {
+      calls += 1;
+      return true;
+    });
+
+    releaseFirst?.();
+
+    await expect(first).resolves.toBe(true);
+    expect(second).toBe(false);
+    expect(calls).toBe(1);
+    expect(gate.isAdding()).toBe(false);
+  });
+
+  it('treats a successful Catalog selection as coherent and a reset draft as stale', () => {
+    const selectedResult = {
+      id: 'catalog:catalog-diagnostic',
+      kind: 'catalog',
+      item: baseCatalogItem
+    } as const;
+    const selectedDraft = {
+      ...createRegisterEntryDraft(),
+      ...createCatalogRegisterDraftPatch(baseCatalogItem, [])
+    };
+
+    expect(isDraftCoherentForSelectedResult(selectedDraft, selectedResult)).toBe(true);
+    expect(isDraftCoherentForSelectedResult(createRegisterEntryDraft(), selectedResult)).toBe(
+      false
+    );
+  });
+
+  it('shows price-not-set for incomplete pricing instead of fake zero dollars', () => {
+    expect(formatDraftTotalLabel(createRegisterEntryDraft({ totalAmount: 0 }))).toBe(
+      'Price not set'
+    );
+    expect(
+      formatDraftTotalLabel({
+        ...createRegisterEntryDraft({ totalAmount: 0 }),
+        unitPrice: '0'
+      })
+    ).toBe('$0.00');
   });
 });

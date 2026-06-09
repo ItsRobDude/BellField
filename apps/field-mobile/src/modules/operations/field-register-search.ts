@@ -11,6 +11,10 @@ export function buildRegisterSearchResults(
   queryValue: string
 ): RegisterSearchResult[] {
   const query = queryValue.trim().toLowerCase();
+  if (!query) {
+    return [];
+  }
+
   const catalogResults: RegisterSearchResult[] = catalogItems
     .filter((item) => matchesCatalogItem(item, query))
     .slice(0, 8)
@@ -48,10 +52,6 @@ export function findTruckMatchForCatalogItem(
 }
 
 function matchesCatalogItem(item: FieldCatalogItem, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-
   return [
     item.name,
     item.code ?? '',
@@ -67,9 +67,5 @@ function matchesCatalogItem(item: FieldCatalogItem, query: string): boolean {
 }
 
 function matchesTruckStockItem(item: FieldTruckStockItem, query: string): boolean {
-  if (!query) {
-    return true;
-  }
-
   return [item.itemName, item.sku ?? '', item.locationName].join(' ').toLowerCase().includes(query);
 }

@@ -214,7 +214,7 @@ export function FieldJobFeed({
     }
   }
 
-  async function queueRegisterEntryCreate(job: FieldJob) {
+  async function queueRegisterEntryCreate(job: FieldJob): Promise<boolean> {
     const draft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
     const didQueue = await onQueueRegisterEntryCreate(job, draft);
 
@@ -224,6 +224,8 @@ export function FieldJobFeed({
         [job.id]: createRegisterEntryDraft({ appointmentId: draft.appointmentId || undefined })
       }));
     }
+
+    return didQueue;
   }
 
   async function queueRegisterEntryEdit(entry: FieldRegisterEntry) {
@@ -720,7 +722,7 @@ export function FieldJobFeed({
                 truckStockItems={truckStockItems}
                 catalogItems={catalogItems}
                 onConfirmVoidRegisterEntry={onConfirmVoidRegisterEntry}
-                onQueueRegisterEntryCreate={(targetJob) => void queueRegisterEntryCreate(targetJob)}
+                onQueueRegisterEntryCreate={queueRegisterEntryCreate}
                 onQueueRegisterEntryEdit={(entry) => void queueRegisterEntryEdit(entry)}
                 onUpdateRegisterCreateDraft={updateRegisterCreateDraft}
                 onUpdateRegisterEditDraft={updateRegisterEditDraft}

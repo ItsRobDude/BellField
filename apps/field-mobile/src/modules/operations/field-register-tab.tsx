@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import type {
   FieldCatalogItem,
@@ -20,6 +20,11 @@ import {
   findTruckMatchForCatalogItem,
   type RegisterSearchResult
 } from './field-register-search';
+import {
+  formatDraftTotalLabel,
+  isDraftCoherentForSelectedResult
+} from './field-register-composer-state';
+import { createRegisterAddLineGate } from './field-register-submit-guard';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
 import type { FieldJob, FieldRegisterEntry } from './field-workspace-types';
 
@@ -38,7 +43,7 @@ type RegisterTabProps = {
   catalogItems: FieldCatalogItem[];
   truckStockItems: FieldTruckStockItem[];
   onConfirmVoidRegisterEntry: (entry: FieldRegisterEntry) => void;
-  onQueueRegisterEntryCreate: (job: FieldJob) => void;
+  onQueueRegisterEntryCreate: (job: FieldJob) => Promise<boolean>;
   onQueueRegisterEntryEdit: (entry: FieldRegisterEntry) => void;
   onUpdateRegisterCreateDraft: (jobId: string, patch: Partial<RegisterEntryDraft>) => void;
   onUpdateRegisterEditDraft: (
@@ -144,17 +149,24 @@ function RegisterCreateCard({
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
   catalogItems: FieldCatalogItem[];
   truckStockItems: FieldTruckStockItem[];
-  onQueueRegisterEntryCreate: (job: FieldJob) => void;
+  onQueueRegisterEntryCreate: (job: FieldJob) => Promise<boolean>;
   onUpdateRegisterCreateDraft: (jobId: string, patch: Partial<RegisterEntryDraft>) => void;
 }) {
   const [query, setQuery] = useState('');
   const [selectedResult, setSelectedResult] = useState<RegisterSearchResult | null>(null);
   const [isAdvancedOpen, setIsAdvancedOpen] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
+  const addLineGateRef = useRef(createRegisterAddLineGate());
   const createDraft = registerCreateDrafts[job.id] ?? createRegisterEntryDraft();
   const results = useMemo(
     () => buildRegisterSearchResults(catalogItems, truckStockItems, query),
     [catalogItems, query, truckStockItems]
   );
+  const selectedDraftResult =
+    selectedResult !== null && isDraftCoherentForSelectedResult(createDraft, selectedResult)
+      ? selectedResult
+      : null;
+  const shouldShowResults = selectedDraftResult === null;
 
   function applyCatalogItem(item: FieldCatalogItem) {
     const truckMatch = findTruckMatchForCatalogItem(item, truckStockItems);
@@ -210,6 +222,23 @@ function RegisterCreateCard({
     onUpdateRegisterCreateDraft(job.id, patch);
   }
 
+  async function handleAddLine() {
+    return addLineGateRef.current.run(async () => {
+      setIsAdding(true);
+      try {
+        const didQueue = await onQueueRegisterEntryCreate(job);
+        if (didQueue) {
+          setQuery('');
+          setSelectedResult(null);
+          setIsAdvancedOpen(false);
+        }
+        return didQueue;
+      } finally {
+        setIsAdding(false);
+      }
+    });
+  }
+
   return (
     <View style={styles.reviewCard}>
       <Text style={styles.sectionTitleSmall}>Add work</Text>
@@ -219,44 +248,46 @@ function RegisterCreateCard({
         placeholder="Search Catalog or truck stock"
         style={styles.input}
       />
-      <View style={styles.replacementOptionList}>
-        {results.length === 0 ? (
-          <Text style={styles.summaryText}>No matching Catalog or truck-stock items.</Text>
-        ) : (
-          results.map((result) => (
-            <Pressable
-              key={result.id}
-              onPress={() => applyResult(result)}
-              style={[
-                styles.replacementOptionButton,
-                selectedResult?.id === result.id ? styles.replacementOptionButtonSelected : null
-              ]}
-            >
-              <Text
+      {shouldShowResults && query.trim() ? (
+        <View style={styles.replacementOptionList}>
+          {results.length === 0 ? (
+            <Text style={styles.summaryText}>No matching Catalog or truck-stock items.</Text>
+          ) : (
+            results.map((result) => (
+              <Pressable
+                key={result.id}
+                onPress={() => applyResult(result)}
                 style={[
-                  styles.replacementOptionLabel,
-                  selectedResult?.id === result.id ? styles.replacementOptionLabelSelected : null
+                  styles.replacementOptionButton,
+                  selectedResult?.id === result.id ? styles.replacementOptionButtonSelected : null
                 ]}
               >
-                {formatSearchResultTitle(result)}
-              </Text>
-              <Text
-                style={[
-                  styles.summaryText,
-                  selectedResult?.id === result.id ? styles.replacementOptionDetailSelected : null
-                ]}
-              >
-                {formatSearchResultDetail(result)}
-              </Text>
-            </Pressable>
-          ))
-        )}
-      </View>
+                <Text
+                  style={[
+                    styles.replacementOptionLabel,
+                    selectedResult?.id === result.id ? styles.replacementOptionLabelSelected : null
+                  ]}
+                >
+                  {formatSearchResultTitle(result)}
+                </Text>
+                <Text
+                  style={[
+                    styles.summaryText,
+                    selectedResult?.id === result.id ? styles.replacementOptionDetailSelected : null
+                  ]}
+                >
+                  {formatSearchResultDetail(result)}
+                </Text>
+              </Pressable>
+            ))
+          )}
+        </View>
+      ) : null}
 
-      {selectedResult ? (
+      {selectedDraftResult ? (
         <View style={styles.registerComposerCard}>
           <Text style={styles.sectionTitleSmall}>{createDraft.description || 'Custom line'}</Text>
-          <Text style={styles.summaryText}>{formatSelectedResultDetail(selectedResult)}</Text>
+          <Text style={styles.summaryText}>{formatSelectedResultDetail(selectedDraftResult)}</Text>
           {createDraft.catalogSnapshot?.estimatedLaborHours &&
           createDraft.registerEntryKind !== 'labor' ? (
             <Text style={styles.summaryText}>
@@ -272,7 +303,7 @@ function RegisterCreateCard({
             placeholder={getQuantityPlaceholder(createDraft)}
             style={styles.input}
           />
-          {selectedResult.kind === 'truckStock' && !createDraft.catalogItemId ? (
+          {selectedDraftResult.kind === 'truckStock' && !createDraft.catalogItemId ? (
             <TextInput
               value={createDraft.unitPrice}
               onChangeText={(unitPrice) =>
@@ -285,21 +316,31 @@ function RegisterCreateCard({
           ) : null}
           <View style={styles.registerTotalRow}>
             <Text style={styles.summaryText}>Total</Text>
-            <Text style={styles.replacementOptionLabel}>
-              {formatCurrency(Number(createDraft.totalAmount) || 0)}
-            </Text>
+            <Text style={styles.replacementOptionLabel}>{formatDraftTotalLabel(createDraft)}</Text>
           </View>
           <View style={styles.actionRow}>
-            <Pressable onPress={() => onQueueRegisterEntryCreate(job)} style={styles.primaryButton}>
-              <Text style={styles.primaryButtonText}>Add line</Text>
+            <Pressable
+              disabled={isAdding}
+              onPress={() => void handleAddLine()}
+              style={[styles.primaryButton, isAdding ? styles.disabledButton : null]}
+            >
+              <Text style={styles.primaryButtonText}>{isAdding ? 'Adding...' : 'Add line'}</Text>
             </Pressable>
             <Pressable
+              disabled={isAdding}
               onPress={() => setIsAdvancedOpen((current) => !current)}
-              style={styles.secondaryButton}
+              style={[styles.secondaryButton, isAdding ? styles.disabledButton : null]}
             >
               <Text style={styles.secondaryButtonText}>
                 {isAdvancedOpen ? 'Hide details' : 'More details'}
               </Text>
+            </Pressable>
+            <Pressable
+              disabled={isAdding}
+              onPress={() => setSelectedResult(null)}
+              style={[styles.secondaryButton, isAdding ? styles.disabledButton : null]}
+            >
+              <Text style={styles.secondaryButtonText}>Change item</Text>
             </Pressable>
           </View>
           {isAdvancedOpen ? (
@@ -307,8 +348,9 @@ function RegisterCreateCard({
               draft={createDraft}
               job={job}
               onChange={updateCreateDraft}
-              saveLabel="Add line"
-              onSave={() => onQueueRegisterEntryCreate(job)}
+              saveLabel={isAdding ? 'Adding...' : 'Add line'}
+              onSave={() => void handleAddLine()}
+              saveDisabled={isAdding}
             />
           ) : null}
         </View>
@@ -328,6 +370,7 @@ function RegisterLineAdvancedEditor({
   saveLabel,
   onSave,
   onVoid,
+  saveDisabled = false,
   showVoid = false
 }: {
   draft: RegisterEntryDraft;
@@ -335,6 +378,7 @@ function RegisterLineAdvancedEditor({
   onChange: (patch: Partial<RegisterEntryDraft>) => void;
   saveLabel: string;
   onSave: () => void;
+  saveDisabled?: boolean;
   onVoid?: () => void;
   showVoid?: boolean;
 }) {
@@ -452,7 +496,11 @@ function RegisterLineAdvancedEditor({
         style={styles.input}
       />
       <View style={styles.actionRow}>
-        <Pressable onPress={onSave} style={styles.secondaryButton}>
+        <Pressable
+          disabled={saveDisabled}
+          onPress={onSave}
+          style={[styles.secondaryButton, saveDisabled ? styles.disabledButton : null]}
+        >
           <Text style={styles.secondaryButtonText}>{saveLabel}</Text>
         </Pressable>
         {showVoid && onVoid ? (
