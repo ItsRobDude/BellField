@@ -322,25 +322,29 @@ function mergeAgreementMutation(
   return {
     customerId: existing.customerId,
     name: request.name ?? existing.name,
-    description: pickOptional(request, 'description', existing.description),
-    sourceCatalogItemId: pickOptional(request, 'sourceCatalogItemId', existing.sourceCatalogItemId),
-    sourceCatalogSnapshot: pickOptional(
+    description: pickNullableOptional(request, 'description', existing.description),
+    sourceCatalogItemId: pickNullableOptional(
+      request,
+      'sourceCatalogItemId',
+      existing.sourceCatalogItemId
+    ),
+    sourceCatalogSnapshot: pickNullableOptional(
       request,
       'sourceCatalogSnapshot',
       existing.sourceCatalogSnapshot
     ),
-    sourceEstimateId: pickOptional(request, 'sourceEstimateId', existing.sourceEstimateId),
-    sourceEstimateLineItemId: pickOptional(
+    sourceEstimateId: pickNullableOptional(request, 'sourceEstimateId', existing.sourceEstimateId),
+    sourceEstimateLineItemId: pickNullableOptional(
       request,
       'sourceEstimateLineItemId',
       existing.sourceEstimateLineItemId
     ),
-    startDate: request.startDate ?? existing.startDate,
-    endDate: request.endDate ?? existing.endDate,
-    renewalDate: request.renewalDate ?? existing.renewalDate,
+    startDate: pickNullableOptional(request, 'startDate', existing.startDate),
+    endDate: pickNullableOptional(request, 'endDate', existing.endDate),
+    renewalDate: pickNullableOptional(request, 'renewalDate', existing.renewalDate),
     billingCadence: request.billingCadence ?? existing.billingCadence,
-    nextBillingDate: request.nextBillingDate ?? existing.nextBillingDate,
-    billingAmount: request.billingAmount ?? existing.billingAmount,
+    nextBillingDate: pickNullableOptional(request, 'nextBillingDate', existing.nextBillingDate),
+    billingAmount: pickNullableOptional(request, 'billingAmount', existing.billingAmount),
     coveredLocationIds:
       request.coveredLocationIds ??
       existing.coveredLocations.map((location) => location.locationId),
@@ -351,12 +355,18 @@ function mergeAgreementMutation(
   };
 }
 
-function pickOptional<T extends object, K extends keyof T, V>(
+function pickNullableOptional<T extends object, K extends keyof T, V>(
   object: T,
   key: K,
   fallback: V | undefined
-): T[K] | V | undefined {
-  return Object.prototype.hasOwnProperty.call(object, key) ? object[key] : fallback;
+): Exclude<T[K], null | undefined> | V | undefined {
+  if (!Object.prototype.hasOwnProperty.call(object, key)) {
+    return fallback;
+  }
+  const value = object[key];
+  return value === null || value === undefined
+    ? undefined
+    : (value as Exclude<T[K], null | undefined>);
 }
 
 function toVisitTemplateInput(

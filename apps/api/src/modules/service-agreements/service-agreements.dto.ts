@@ -120,37 +120,37 @@ class ServiceAgreementMutationRequestDto {
   @IsOptional()
   @IsString()
   @MaxLength(2000)
-  description?: string;
+  description?: string | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  sourceCatalogItemId?: string;
+  sourceCatalogItemId?: string | null;
 
   @IsOptional()
-  sourceCatalogSnapshot?: CatalogLineSnapshot;
-
-  @IsOptional()
-  @IsString()
-  @MaxLength(64)
-  sourceEstimateId?: string;
+  sourceCatalogSnapshot?: CatalogLineSnapshot | null;
 
   @IsOptional()
   @IsString()
   @MaxLength(64)
-  sourceEstimateLineItemId?: string;
+  sourceEstimateId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  sourceEstimateLineItemId?: string | null;
 
   @IsOptional()
   @IsDateString()
-  startDate?: string;
+  startDate?: string | null;
 
   @IsOptional()
   @IsDateString()
-  endDate?: string;
+  endDate?: string | null;
 
   @IsOptional()
   @IsDateString()
-  renewalDate?: string;
+  renewalDate?: string | null;
 
   @IsOptional()
   @IsIn(serviceAgreementBillingCadences)
@@ -158,12 +158,12 @@ class ServiceAgreementMutationRequestDto {
 
   @IsOptional()
   @IsDateString()
-  nextBillingDate?: string;
+  nextBillingDate?: string | null;
 
   @IsOptional()
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0)
-  billingAmount?: number;
+  billingAmount?: number | null;
 
   @IsOptional()
   @IsArray()
@@ -191,6 +191,17 @@ export class CreateServiceAgreementRequestBodyDto
   extends ServiceAgreementMutationRequestDto
   implements CreateServiceAgreementRequest
 {
+  declare description?: string;
+  declare sourceCatalogItemId?: string;
+  declare sourceCatalogSnapshot?: CatalogLineSnapshot;
+  declare sourceEstimateId?: string;
+  declare sourceEstimateLineItemId?: string;
+  declare startDate?: string;
+  declare endDate?: string;
+  declare renewalDate?: string;
+  declare nextBillingDate?: string;
+  declare billingAmount?: number;
+
   @IsString()
   @MaxLength(64)
   customerId!: string;

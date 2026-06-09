@@ -465,13 +465,13 @@ export function toCreateRequest(draft: AgreementDraft): CreateServiceAgreementRe
 export function toUpdateRequest(draft: AgreementDraft): UpdateServiceAgreementRequest {
   return {
     name: draft.name.trim(),
-    description: emptyToUndefined(draft.description),
-    startDate: emptyToUndefined(draft.startDate),
-    endDate: emptyToUndefined(draft.endDate),
-    renewalDate: emptyToUndefined(draft.renewalDate),
+    description: emptyToNull(draft.description),
+    startDate: emptyToNull(draft.startDate),
+    endDate: emptyToNull(draft.endDate),
+    renewalDate: emptyToNull(draft.renewalDate),
     billingCadence: draft.billingCadence,
-    nextBillingDate: emptyToUndefined(draft.nextBillingDate),
-    billingAmount: parseOptionalNumber(draft.billingAmount),
+    nextBillingDate: emptyToNull(draft.nextBillingDate),
+    billingAmount: parseOptionalNumberOrNull(draft.billingAmount),
     coveredLocationIds: draft.coveredLocationIds,
     coveredEquipmentIds: draft.coveredEquipmentIds,
     visitTemplates: draft.visitTemplates.map(toVisitTemplateRequest)
@@ -601,6 +601,10 @@ function parseOptionalNumber(value: string): number | undefined {
   return Number.isFinite(parsed) ? parsed : undefined;
 }
 
+function parseOptionalNumberOrNull(value: string): number | null {
+  return parseOptionalNumber(value) ?? null;
+}
+
 function parseOptionalInteger(value: string): number | undefined {
   const parsed = parseOptionalNumber(value);
   return parsed === undefined ? undefined : Math.trunc(parsed);
@@ -609,6 +613,11 @@ function parseOptionalInteger(value: string): number | undefined {
 function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function emptyToNull(value: string): string | null {
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 function formatEquipmentLabel(equipment: EquipmentSummary): string {

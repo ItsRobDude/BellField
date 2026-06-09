@@ -135,17 +135,17 @@ export interface CreateServiceAgreementRequest {
 
 export interface UpdateServiceAgreementRequest {
   name?: string;
-  description?: string;
-  sourceCatalogItemId?: string;
-  sourceCatalogSnapshot?: CatalogLineSnapshot;
-  sourceEstimateId?: string;
-  sourceEstimateLineItemId?: string;
-  startDate?: string;
-  endDate?: string;
-  renewalDate?: string;
+  description?: string | null;
+  sourceCatalogItemId?: string | null;
+  sourceCatalogSnapshot?: CatalogLineSnapshot | null;
+  sourceEstimateId?: string | null;
+  sourceEstimateLineItemId?: string | null;
+  startDate?: string | null;
+  endDate?: string | null;
+  renewalDate?: string | null;
   billingCadence?: ServiceAgreementBillingCadence;
-  nextBillingDate?: string;
-  billingAmount?: number;
+  nextBillingDate?: string | null;
+  billingAmount?: number | null;
   coveredLocationIds?: string[];
   coveredEquipmentIds?: string[];
   visitTemplates?: ServiceAgreementVisitTemplateInput[];

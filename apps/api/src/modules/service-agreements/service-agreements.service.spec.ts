@@ -293,6 +293,89 @@ describe('ServiceAgreementsService.createAgreement', () => {
   });
 });
 
+describe('ServiceAgreementsService.updateAgreement', () => {
+  it('clears nullable agreement fields when the update explicitly sends null', async () => {
+    const { service, serviceAgreementsRepository } = createService();
+    serviceAgreementsRepository.getAgreementById.mockResolvedValue(
+      agreement({
+        description: 'Existing description',
+        sourceCatalogItemId: 'catalog-1',
+        sourceCatalogSnapshot: {
+          name: 'Maintenance plan',
+          kind: 'agreement',
+          taxable: true,
+          priceMode: 'agreement'
+        },
+        sourceEstimateId: 'estimate-1',
+        sourceEstimateLineItemId: 'line-1',
+        startDate: '2026-01-01',
+        endDate: '2026-12-31',
+        renewalDate: '2026-11-01',
+        nextBillingDate: '2026-07-01',
+        billingAmount: 240
+      })
+    );
+    serviceAgreementsRepository.updateAgreement.mockResolvedValue(agreement());
+
+    await service.updateAgreement('token', 'agreement-1', {
+      description: null,
+      sourceCatalogItemId: null,
+      sourceCatalogSnapshot: null,
+      sourceEstimateId: null,
+      sourceEstimateLineItemId: null,
+      startDate: null,
+      endDate: null,
+      renewalDate: null,
+      nextBillingDate: null,
+      billingAmount: null
+    });
+
+    expect(serviceAgreementsRepository.updateAgreement).toHaveBeenCalledWith(
+      'agreement-1',
+      expect.objectContaining({
+        description: undefined,
+        sourceCatalogItemId: undefined,
+        sourceCatalogSnapshot: undefined,
+        sourceEstimateId: undefined,
+        sourceEstimateLineItemId: undefined,
+        startDate: undefined,
+        endDate: undefined,
+        renewalDate: undefined,
+        nextBillingDate: undefined,
+        billingAmount: undefined
+      }),
+      expect.objectContaining({ id: 'office-1' })
+    );
+  });
+
+  it('preserves nullable agreement fields when the update omits them', async () => {
+    const { service, serviceAgreementsRepository } = createService();
+    serviceAgreementsRepository.getAgreementById.mockResolvedValue(
+      agreement({
+        description: 'Existing description',
+        renewalDate: '2026-11-01',
+        nextBillingDate: '2026-07-01',
+        billingAmount: 240
+      })
+    );
+    serviceAgreementsRepository.updateAgreement.mockResolvedValue(agreement());
+
+    await service.updateAgreement('token', 'agreement-1', { name: 'Updated plan' });
+
+    expect(serviceAgreementsRepository.updateAgreement).toHaveBeenCalledWith(
+      'agreement-1',
+      expect.objectContaining({
+        name: 'Updated plan',
+        description: 'Existing description',
+        renewalDate: '2026-11-01',
+        nextBillingDate: '2026-07-01',
+        billingAmount: 240
+      }),
+      expect.objectContaining({ id: 'office-1' })
+    );
+  });
+});
+
 describe('ServiceAgreementsService status changes', () => {
   it('activates a draft agreement through agreements:edit', async () => {
     const { service, identityAccessService, serviceAgreementsRepository } = createService();

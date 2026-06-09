@@ -200,6 +200,41 @@ describe('OfficeAgreementsSurface', () => {
     );
   });
 
+  it('sends nulls when cleared optional agreement fields should be removed', async () => {
+    mockedApi.listOfficeServiceAgreements.mockResolvedValue({
+      agreements: [
+        {
+          ...agreement,
+          description: 'Existing description',
+          renewalDate: '2026-07-01',
+          nextBillingDate: '2026-08-01',
+          billingAmount: 240
+        }
+      ]
+    });
+    renderSurface();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+
+    fireEvent.change(await screen.findByLabelText('Description'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Renewal'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Next billing'), { target: { value: '' } });
+    fireEvent.change(screen.getByLabelText('Billing amount'), { target: { value: '' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(mockedApi.updateOfficeServiceAgreement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: expect.objectContaining({
+            description: null,
+            renewalDate: null,
+            nextBillingDate: null,
+            billingAmount: null
+          })
+        })
+      )
+    );
+  });
+
   it('activates a draft agreement from the detail panel', async () => {
     renderSurface();
     fireEvent.click(await screen.findByRole('button', { name: 'Activate' }));
