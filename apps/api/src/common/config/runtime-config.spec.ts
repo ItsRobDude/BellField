@@ -4,7 +4,13 @@ const defaultDatabaseUrl = 'postgresql://postgres:postgres@localhost:5432/bellfi
 const validProductionDatabaseUrl = 'postgresql://app:secret@db.internal:5432/bellfield';
 
 describe('getApiRuntimeConfig', () => {
-  const envKeys = ['NODE_ENV', 'PORT', 'DATABASE_URL', 'BOOTSTRAP_SEED_DATA'] as const;
+  const envKeys = [
+    'NODE_ENV',
+    'PORT',
+    'DATABASE_URL',
+    'BOOTSTRAP_SEED_DATA',
+    'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY'
+  ] as const;
   const original: Record<string, string | undefined> = {};
 
   beforeEach(() => {
@@ -32,6 +38,7 @@ describe('getApiRuntimeConfig', () => {
     expect(config.port).toBe(3001);
     expect(config.databaseUrl).toBe(defaultDatabaseUrl);
     expect(config.bootstrapSeedData).toBe(true);
+    expect(config.estimateEmailResendApiKey).toBeUndefined();
   });
 
   it('treats the test environment as non-production and forgiving', () => {
@@ -55,6 +62,16 @@ describe('getApiRuntimeConfig', () => {
     expect(config.port).toBe(8080);
     expect(config.databaseUrl).toBe(validProductionDatabaseUrl);
     expect(config.bootstrapSeedData).toBe(false);
+  });
+
+  it('reads the server-owned estimate email resend key when configured', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = '  re_server_owned  ';
+
+    const config = getApiRuntimeConfig();
+
+    expect(config.estimateEmailResendApiKey).toBe('re_server_owned');
   });
 
   it('refuses to start in production when DATABASE_URL is missing', () => {

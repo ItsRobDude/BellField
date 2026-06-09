@@ -7,6 +7,7 @@ import type {
   LocationRecord
 } from '../company-data/company-data.types';
 import type { EstimateRecord } from '../estimates/estimates.types';
+import { bellfieldEstimateEmailFromAddress } from './email-provider.service';
 
 export type EstimatePdfRenderInput = {
   estimate: EstimateRecord;
@@ -46,7 +47,7 @@ function renderPdf(doc: PDFKit.PDFDocument, input: EstimatePdfRenderInput): void
   const { estimate, settings, job, location, billToCustomer } = input;
   doc.fontSize(20).fillColor('#1f2933').text(settings.companyName, { continued: false });
   doc.moveDown(0.4);
-  doc.fontSize(10).fillColor('#52606d').text(settings.customerFacingFromEmail);
+  doc.fontSize(10).fillColor('#52606d').text(bellfieldEstimateEmailFromAddress);
   if (settings.replyToEmail) {
     doc.text(`Reply to: ${settings.replyToEmail}`);
   }

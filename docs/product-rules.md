@@ -605,9 +605,8 @@ The preferred order is:
 3. customer approval/decline can later happen through a secure link with a captured name/signature and timestamp
 4. approved estimates still follow the normal BellField conversion and scheduling rules
 
-Sending should be provider-backed through an optional email adapter such as SMTP, Resend, Postmark, or a similar transactional email provider.
-The chosen provider should be cheap enough for small shops, replaceable, and configured per customer installation.
-Do not hardcode one vendor into product behavior.
+Estimate email delivery is BellField-operated. The email must be sent from `estimates@bellfield.app`; shops may edit company name, reply-to, subject template, and body template, but they must not configure or replace the backend email provider.
+User-facing APIs, when added later, are for automating shop workflows and must not expose backend provider keys, sending-domain controls, storage credentials, or other infrastructure settings.
 
 Estimate delivery should not automatically schedule work, post invoices, or charge payment methods.
 Office review remains the default control point.

@@ -1,29 +1,24 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { CompanySettings } from '@bellfield/contracts';
-import { CompanySettingsRepository } from '../company-settings/company-settings.repository';
-import { SecretCryptoService } from '../company-settings/secret-crypto.service';
+import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import type { EmailProviderSendInput, EmailProviderSendResult } from './customer-delivery.types';
 
-type ResendResponseBody = {
-  id?: string;
-  message?: string;
-  name?: string;
-};
+export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
+const bellfieldEstimateEmailFromName = 'BellField Estimates';
+const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
+const deliveryFailedMessage =
+  'BellField estimate email delivery failed. Try again or contact support.';
 
 @Injectable()
 export class EmailProviderService {
-  constructor(
-    private readonly companySettingsRepository: CompanySettingsRepository,
-    private readonly secretCryptoService: SecretCryptoService
-  ) {}
+  private readonly logger = new Logger(EmailProviderService.name);
 
   async sendEstimateEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
-    const secret = await this.companySettingsRepository.getEmailProviderSecret('resend');
-    if (!secret) {
-      return { kind: 'notConfigured', message: 'Resend is not configured.' };
+    const apiKey = getApiRuntimeConfig().estimateEmailResendApiKey;
+    if (!apiKey) {
+      return { kind: 'notConfigured', message: deliveryNotConfiguredMessage };
     }
 
-    const apiKey = this.secretCryptoService.decryptSecret(secret);
     const response = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
@@ -33,7 +28,7 @@ export class EmailProviderService {
       },
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
-        from: formatFrom(input.fromName, input.fromEmail),
+        from: formatFrom(bellfieldEstimateEmailFromName, bellfieldEstimateEmailFromAddress),
         to: [input.to],
         reply_to: input.replyToEmail ? [input.replyToEmail] : undefined,
         subject: input.subject,
@@ -48,18 +43,22 @@ export class EmailProviderService {
       })
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Email provider request failed.';
-      return { error: message };
+      this.logger.warn(`BellField estimate email delivery request failed: ${message}`);
+      return { error: deliveryFailedMessage };
     });
 
     if ('error' in response) {
       return { kind: 'error', message: response.error };
     }
 
-    const body = (await response.json().catch(() => ({}))) as ResendResponseBody;
+    const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
     if (!response.ok) {
+      this.logger.warn(
+        `BellField estimate email delivery returned HTTP ${response.status}: ${body.message ?? 'no response message'}`
+      );
       return {
         kind: 'error',
-        message: body.message ?? body.name ?? `Resend returned HTTP ${response.status}.`
+        message: deliveryFailedMessage
       };
     }
 
@@ -68,13 +67,11 @@ export class EmailProviderService {
 }
 
 export function buildEmailProviderInput(
-  settings: CompanySettings,
-  input: Omit<EmailProviderSendInput, 'fromEmail' | 'fromName' | 'replyToEmail'>
+  settings: Pick<CompanySettings, 'replyToEmail'>,
+  input: Omit<EmailProviderSendInput, 'replyToEmail'>
 ): EmailProviderSendInput {
   return {
     ...input,
-    fromEmail: settings.customerFacingFromEmail,
-    fromName: settings.customerFacingSenderName,
     replyToEmail: settings.replyToEmail
   };
 }

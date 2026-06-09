@@ -1,8 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getOfficeCompanySettings,
-  updateOfficeCompanySettings,
-  updateOfficeEmailProviderSecret
+  updateOfficeCompanySettings
 } from './operations-company-settings-api';
 
 function mockJsonResponse(body: unknown) {
@@ -21,8 +20,7 @@ describe('operations-company-settings-api', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse({ settings: {} }))
-      .mockResolvedValueOnce(mockJsonResponse({ settings: {} }))
-      .mockResolvedValueOnce(mockJsonResponse({ emailProvider: { configured: true } }));
+      .mockResolvedValueOnce(mockJsonResponse({ settings: {} }));
     vi.stubGlobal('fetch', fetchMock);
 
     await getOfficeCompanySettings({
@@ -33,16 +31,8 @@ describe('operations-company-settings-api', () => {
       sessionToken: 'session-token',
       apiBaseUrl: 'http://api.test',
       companyName: 'BellField',
-      customerFacingSenderName: 'BellField Estimates',
-      customerFacingFromEmail: 'estimates@bellfield.app',
       estimateEmailSubject: 'Estimate from BellField',
       estimateEmailBody: 'Attached.'
-    });
-    await updateOfficeEmailProviderSecret({
-      sessionToken: 'session-token',
-      apiBaseUrl: 'http://api.test',
-      provider: 'resend',
-      apiKey: 're_12345678901234567890'
     });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -57,10 +47,6 @@ describe('operations-company-settings-api', () => {
       'http://api.test/operations/company-settings',
       expect.objectContaining({ method: 'PUT' })
     );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
-      'http://api.test/operations/company-settings/email-provider-secret',
-      expect.objectContaining({ method: 'PUT' })
-    );
+    expect(fetchMock).toHaveBeenCalledTimes(2);
   });
 });

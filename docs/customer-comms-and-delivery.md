@@ -10,7 +10,7 @@ module.
 Primary references:
 
 - [product-rules.md](./product-rules.md) - audience priority and operational growth posture
-- [deployment-model.md](./deployment-model.md) - optional provider adapters and self-hosted constraints
+- [deployment-model.md](./deployment-model.md) - BellField-operated delivery and self-hosted constraints
 - [workflows-and-state-machines.md](./workflows-and-state-machines.md) - estimate, invoice, and payment lifecycle rules
 - [permissions-model.md](./permissions-model.md) - permission-aware access to estimates, invoices, payments, and settings
 
@@ -24,7 +24,8 @@ Every customer-facing message in this lane must be:
 - permission-aware
 - tied to a real operational record
 - logged to the job timeline or another durable audit surface
-- provider-backed but provider-replaceable
+- delivered through BellField-controlled backend/provider infrastructure where
+  BellField owns operational provider keys
 
 BellField should not send surprise campaigns, automatic review spam, or broad
 marketing blasts as part of this lane.
@@ -53,11 +54,11 @@ BellField already has enough operational structure to support this lane later:
 - Payments are recorded against posted invoices as an append-only ledger.
 - Jobs already have a mixed timeline that can show important estimate, invoice,
   payment, media, register, and appointment events.
-- `companySettings` already exists as a permission area, but a proper settings
-  screen is still future work.
+- `companySettings` exists as a permission area with an office settings surface
+  for company name, reply-to, and estimate email template defaults.
 
-This document does not mean outbound delivery is implemented yet.
-It defines the shape for the next implementation slices.
+Estimate PDF attachment delivery has started. This document continues to define
+the guardrails for the next delivery slices.
 
 ---
 
@@ -78,54 +79,49 @@ the first communications foundation.
 
 ---
 
-## 4. Provider Posture
+## 4. Delivery Ownership
 
-Email, SMS, and payment services are optional adapters.
+Estimate email delivery is BellField-operated.
 
-Default posture:
+Default posture for estimate and invoice email:
 
-- the customer owns the provider account
-- the customer controls API keys and billing
-- provider keys stay in customer-controlled deployment/settings storage
-- BellField stores operational results, not provider secrets
-- provider pricing and terms are rechecked at implementation time
+- office users can send/resend operational documents
+- the email From address is fixed as `estimates@bellfield.app`
+- the provider account, provider API key, sending domain, and delivery backend
+  are BellField-controlled infrastructure
+- shops never enter email-provider API keys or choose an email provider
+- shops may configure customer-facing content such as company name, reply-to,
+  subject template, and body template
+- BellField stores operational results such as send status, provider reference,
+  document snapshot, recipient, actor, and failure summary
 
-Recommended adapter sequence:
+User-facing APIs, when added later, are for automating shop workflows. They must
+not expose controls for backend infrastructure, delivery providers, provider
+keys, signing secrets, storage credentials, or other operational plumbing.
 
-1. `EmailProvider`
-2. `PaymentProvider`
-3. `SmsProvider`
-
-Resend is the recommended first email provider because it is a simple
-transactional-email fit for estimate and invoice delivery. It must still sit
-behind an adapter so BellField can later support SMTP, Postmark, SES, or another
-provider without rewriting product workflows.
+The backend may still keep an internal email-provider adapter so BellField can
+change implementation details without rewriting estimate workflows. That adapter
+boundary is internal product infrastructure, not a customer configuration
+surface.
 
 ---
 
 ## 5. Settings Direction
 
-BellField needs a proper settings screen for this lane.
-
-Environment variables are acceptable only as a bootstrap or server-admin fallback
-while the settings surface is being built. They are not the long-term customer
-experience for provider configuration.
+BellField needs a proper settings screen for customer-facing content, not for
+provider configuration.
 
 The settings screen should eventually include:
 
 - company name
-- customer-facing sender name
-- sending email address
 - reply-to email address
-- email provider selection
-- Resend API key and verified-domain status
 - default document branding basics
-- payment-provider settings
-- SMS-provider settings
-- provider test-send tools
+- estimate email subject/body template defaults
+- later invoice email template defaults
+- later document branding basics such as logo and footer text
 
-Secrets must not be shown back to ordinary users after save. High-permission
-users may replace or revoke them.
+The settings screen must not ask for email-provider API keys, delivery-provider
+selection, verified-domain setup, backend secrets, or infrastructure credentials.
 
 ---
 
@@ -138,9 +134,10 @@ Preferred delivery behavior:
 
 1. BellField generates or retrieves the customer document.
 2. The office user chooses a recipient and clicks send.
-3. BellField sends an email with a secure PDF link as the reliable default.
-4. BellField may also attach the PDF when the provider and document size allow it.
-5. The send action, actor, recipient, provider result, and failure state are
+3. BellField sends from `estimates@bellfield.app`.
+4. First implementation may attach the generated PDF; later implementations may
+   move to a secure PDF link as the reliable default.
+5. The send action, actor, recipient, delivery result, and failure state are
    logged.
 
 Reasoning:
@@ -169,8 +166,8 @@ Examples:
 - customer approved estimate through secure link
 
 The timeline should record the operational meaning. Provider-specific payloads
-belong in a dedicated outbound-message event table or diagnostics surface, not
-as raw customer-facing timeline noise.
+belong in a dedicated outbound-message event table, support export, or
+diagnostics surface, not as raw customer-facing timeline noise.
 
 ---
 
@@ -194,11 +191,10 @@ Likely `outbound_messages` fields:
 - document type
 - document record id
 - channel
-- provider key
+- delivery provider key (internal; not customer configured)
 - provider message id
 - status
 - recipient email or phone
-- sender display name
 - actor employee id
 - created timestamp
 - sent timestamp
@@ -232,8 +228,8 @@ Customer links should support future revocation and resend.
 
 ### Phase 1 - Communications Foundation
 
-- add provider adapter boundary
-- add per-install settings direction
+- add BellField-operated email adapter boundary
+- add customer-facing content settings
 - add outbound message persistence
 - add job timeline entries for send/failure results
 - support email first
@@ -282,14 +278,14 @@ The first code slice should be estimate email delivery.
 Acceptance criteria:
 
 - office user with the right estimate permission can send an estimate
-- sender and recipient come from settings/contact context, not hardcoded source
-  constants
-- provider call goes through `EmailProvider`
+- sender address is fixed as `estimates@bellfield.app`
+- recipient comes from contact context or explicit office input
+- provider call goes through an internal BellField email-delivery adapter
 - document delivery uses a PDF or secure PDF link
 - send attempt is persisted
 - success/failure is visible to the office
 - job timeline records the send result
-- Resend-specific behavior is isolated to a provider implementation
+- provider-specific behavior is isolated from office settings and user workflow
 - no automatic scheduling, invoice posting, payment charging, or campaign behavior
 
 Do not add SMS, payment links, or customer acceptance to the first slice unless
@@ -299,7 +295,6 @@ the implementation is intentionally re-scoped.
 
 ## 12. Open Decisions Before Coding
 
-- exact storage location for provider settings and encrypted secrets
 - whether first PDF delivery uses generated PDF attachments, secure PDF links, or
   link-first plus attachment when safe
 - exact permission name for sending customer-facing estimate and invoice

@@ -1,8 +1,4 @@
-import type {
-  CompanySettingsResponse,
-  EmailProviderSecretResponse,
-  UpdateCompanySettingsRequest
-} from '@bellfield/contracts';
+import type { CompanySettingsResponse, UpdateCompanySettingsRequest } from '@bellfield/contracts';
 import { requestJson } from './operations-api-base';
 
 export async function getOfficeCompanySettings(input: {
@@ -25,22 +21,4 @@ export async function updateOfficeCompanySettings(
     method: 'PUT',
     body: JSON.stringify(payload)
   });
-}
-
-export async function updateOfficeEmailProviderSecret(input: {
-  provider: 'resend';
-  apiKey: string;
-  sessionToken: string;
-  apiBaseUrl?: string;
-}): Promise<EmailProviderSecretResponse> {
-  const { sessionToken, apiBaseUrl, provider, apiKey } = input;
-  return requestJson<EmailProviderSecretResponse>(
-    '/operations/company-settings/email-provider-secret',
-    {
-      apiBaseUrl,
-      sessionToken,
-      method: 'PUT',
-      body: JSON.stringify({ provider, apiKey })
-    }
-  );
 }

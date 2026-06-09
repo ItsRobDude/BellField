@@ -437,23 +437,26 @@ Customers should be able to ignore those entirely if they want.
 
 ### Provider ownership and adapters
 
-When BellField integrates with paid services, the normal self-hosted posture should be:
+BellField-operated customer document email is not a customer-configured provider.
 
-- the customer owns the provider account
-- the customer controls API keys and billing
-- provider keys live in customer-controlled deployment settings
-- BellField stores only the operational result it needs, such as send status, payment confirmation, or a provider reference
-- provider pricing and terms are rechecked at implementation time
+For estimate and invoice email delivery:
 
-Email, SMS, and payment integrations should be adapter-backed so the product can support provider choices over time.
-Examples include:
+- BellField controls the sending provider, sending domain, and backend API key
+- messages are sent from `estimates@bellfield.app`
+- shops may configure customer-facing content such as company name, reply-to,
+  subject template, and body template
+- shops must not enter provider API keys, change the delivery provider, or manage
+  sending-domain verification inside BellField
+- BellField stores only the operational result it needs, such as send status,
+  document snapshot, recipient, actor, failure summary, or provider reference
 
-- transactional email through SMTP, Resend, Postmark, or similar providers
-- payment links or gateway capture through Stripe or another processor
-- SMS through Twilio, Telnyx, or another compliant messaging provider
+Optional SMS, payment, accounting, or workflow integrations may get their own
+ownership model later. User-facing APIs are for automating shop workflows, not
+for changing backend infrastructure, provider keys, storage credentials, signing
+secrets, or other operational plumbing.
 
-These examples are not product dependencies.
-They are candidates for optional adapters when the implementation slice reaches customer document delivery, reminders, or payment capture.
+Internal adapters are still useful so BellField can replace implementation
+details over time. They are not customer configuration surfaces.
 
 ### Growth and communication boundary
 

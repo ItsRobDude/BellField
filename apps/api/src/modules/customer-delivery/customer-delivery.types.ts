@@ -52,8 +52,6 @@ export type CreateOutboundMessageInput = {
 
 export type EmailProviderSendInput = {
   to: string;
-  fromEmail: string;
-  fromName: string;
   replyToEmail?: string;
   subject: string;
   bodyText: string;

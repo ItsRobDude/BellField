@@ -44,11 +44,8 @@ function createDeliveryService() {
   const companySettingsRepository = {
     getSettings: jest.fn().mockResolvedValue({
       companyName: 'BellField',
-      customerFacingSenderName: 'BellField Estimates',
-      customerFacingFromEmail: 'estimates@bellfield.app',
       estimateEmailSubject: 'Estimate from {companyName}',
-      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
-      emailProvider: { provider: 'resend', configured: true }
+      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.'
     })
   };
   const customerDeliveryRepository = {
@@ -199,7 +196,7 @@ describe('EstimateDeliveryService', () => {
     expect(estimatePdfRendererService.renderEstimatePdf).toHaveBeenCalledWith(
       expect.objectContaining({
         estimate: expect.objectContaining({ id: 'estimate-1' }),
-        settings: expect.objectContaining({ customerFacingFromEmail: 'estimates@bellfield.app' })
+        settings: expect.objectContaining({ companyName: 'BellField' })
       })
     );
     expect(customerDocumentStorageService.writeEstimatePdf).toHaveBeenCalledWith(
@@ -212,9 +209,14 @@ describe('EstimateDeliveryService', () => {
     expect(emailProviderService.sendEstimateEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
-        fromEmail: 'estimates@bellfield.app',
         attachment: expect.objectContaining({ filename: expect.stringMatching(/\.pdf$/) })
       })
+    );
+    expect(emailProviderService.sendEstimateEmail.mock.calls[0]?.[0]).not.toHaveProperty(
+      'fromEmail'
+    );
+    expect(emailProviderService.sendEstimateEmail.mock.calls[0]?.[0]).not.toHaveProperty(
+      'fromName'
     );
     expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
       expect.objectContaining({

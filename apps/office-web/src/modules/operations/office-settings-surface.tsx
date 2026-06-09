@@ -4,10 +4,11 @@ import { useCallback, useEffect, useState } from 'react';
 import type { CompanySettings } from '@bellfield/contracts';
 import {
   getOfficeCompanySettings,
-  updateOfficeCompanySettings,
-  updateOfficeEmailProviderSecret
+  updateOfficeCompanySettings
 } from '@/lib/operations-company-settings-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+
+const estimateEmailFromAddress = 'estimates@bellfield.app';
 
 export type OfficeSettingsSurfaceProps = {
   apiBaseUrl: string;
@@ -17,8 +18,6 @@ export type OfficeSettingsSurfaceProps = {
 
 type SettingsDraft = {
   companyName: string;
-  customerFacingSenderName: string;
-  customerFacingFromEmail: string;
   replyToEmail: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
@@ -26,8 +25,6 @@ type SettingsDraft = {
 
 const emptyDraft: SettingsDraft = {
   companyName: '',
-  customerFacingSenderName: '',
-  customerFacingFromEmail: '',
   replyToEmail: '',
   estimateEmailSubject: '',
   estimateEmailBody: ''
@@ -40,10 +37,8 @@ export function OfficeSettingsSurface({
 }: OfficeSettingsSurfaceProps) {
   const [settings, setSettings] = useState<CompanySettings | null>(null);
   const [draft, setDraft] = useState<SettingsDraft>(emptyDraft);
-  const [apiKey, setApiKey] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
-  const [isSavingSecret, setIsSavingSecret] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -74,8 +69,6 @@ export function OfficeSettingsSurface({
         apiBaseUrl,
         sessionToken,
         companyName: draft.companyName,
-        customerFacingSenderName: draft.customerFacingSenderName,
-        customerFacingFromEmail: draft.customerFacingFromEmail,
         replyToEmail: draft.replyToEmail.trim() || undefined,
         estimateEmailSubject: draft.estimateEmailSubject,
         estimateEmailBody: draft.estimateEmailBody
@@ -87,31 +80,6 @@ export function OfficeSettingsSurface({
       setErrorMessage(error instanceof Error ? error.message : 'Unable to save settings.');
     } finally {
       setIsSaving(false);
-    }
-  }
-
-  async function saveProviderSecret() {
-    setIsSavingSecret(true);
-    setNoticeMessage(null);
-    setErrorMessage(null);
-    try {
-      const response = await updateOfficeEmailProviderSecret({
-        apiBaseUrl,
-        sessionToken,
-        provider: 'resend',
-        apiKey
-      });
-      setSettings((current) =>
-        current ? { ...current, emailProvider: response.emailProvider } : current
-      );
-      setApiKey('');
-      setNoticeMessage('Email provider key saved.');
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to save the email provider key.'
-      );
-    } finally {
-      setIsSavingSecret(false);
     }
   }
 
@@ -150,26 +118,12 @@ export function OfficeSettingsSurface({
               />
             </label>
             <label style={styles.fieldLabel}>
-              Sender name
-              <input
-                aria-label="Sender name"
-                value={draft.customerFacingSenderName}
-                disabled={!canConfigure}
-                onChange={(event) =>
-                  setDraftValue(setDraft, 'customerFacingSenderName', event.target.value)
-                }
-                style={styles.input}
-              />
-            </label>
-            <label style={styles.fieldLabel}>
               From email
               <input
-                aria-label="From email"
-                value={draft.customerFacingFromEmail}
-                disabled={!canConfigure}
-                onChange={(event) =>
-                  setDraftValue(setDraft, 'customerFacingFromEmail', event.target.value)
-                }
+                aria-label="Estimate email from address"
+                value={estimateEmailFromAddress}
+                disabled
+                readOnly
                 style={styles.input}
               />
             </label>
@@ -222,42 +176,6 @@ export function OfficeSettingsSurface({
               </button>
             ) : null}
           </section>
-
-          <section style={styles.panel} aria-label="Email provider">
-            <h2 style={styles.sectionHeading}>Email provider</h2>
-            <p style={styles.muted}>
-              Resend is {settings.emailProvider.configured ? 'configured' : 'not configured'}.
-            </p>
-            {settings.emailProvider.lastConfiguredAt ? (
-              <p style={styles.tinyMuted}>
-                Last updated by {settings.emailProvider.lastConfiguredByName ?? 'Unknown'} on{' '}
-                {new Date(settings.emailProvider.lastConfiguredAt).toLocaleString()}
-              </p>
-            ) : null}
-            {canConfigure ? (
-              <>
-                <label style={styles.fieldLabel}>
-                  Resend API key
-                  <input
-                    aria-label="Resend API key"
-                    type="password"
-                    autoComplete="off"
-                    value={apiKey}
-                    onChange={(event) => setApiKey(event.target.value)}
-                    style={styles.input}
-                  />
-                </label>
-                <button
-                  type="button"
-                  style={styles.button}
-                  disabled={isSavingSecret || apiKey.trim().length < 20}
-                  onClick={() => void saveProviderSecret()}
-                >
-                  {isSavingSecret ? 'Saving...' : 'Save provider key'}
-                </button>
-              </>
-            ) : null}
-          </section>
         </div>
       ) : isLoading ? (
         <p style={styles.notice}>Loading settings...</p>
@@ -269,8 +187,6 @@ export function OfficeSettingsSurface({
 function toDraft(settings: CompanySettings): SettingsDraft {
   return {
     companyName: settings.companyName,
-    customerFacingSenderName: settings.customerFacingSenderName,
-    customerFacingFromEmail: settings.customerFacingFromEmail,
     replyToEmail: settings.replyToEmail ?? '',
     estimateEmailSubject: settings.estimateEmailSubject,
     estimateEmailBody: settings.estimateEmailBody

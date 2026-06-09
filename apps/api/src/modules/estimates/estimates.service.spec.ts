@@ -81,11 +81,8 @@ function createService() {
   const companySettingsRepository = {
     getSettings: jest.fn().mockResolvedValue({
       companyName: 'BellField',
-      customerFacingSenderName: 'BellField Estimates',
-      customerFacingFromEmail: 'estimates@bellfield.app',
       estimateEmailSubject: 'Estimate from {companyName}',
-      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
-      emailProvider: { provider: 'resend', configured: true }
+      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.'
     })
   };
   const customerDeliveryRepository = {

@@ -59,6 +59,7 @@ export type ApiRuntimeConfig = {
   port: number;
   databaseUrl: string;
   bootstrapSeedData: boolean;
+  estimateEmailResendApiKey?: string;
 };
 
 /**
@@ -102,6 +103,8 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     nodeEnv,
     port,
     databaseUrl,
-    bootstrapSeedData: getBoolean(process.env.BOOTSTRAP_SEED_DATA, nodeEnv !== 'production')
+    bootstrapSeedData: getBoolean(process.env.BOOTSTRAP_SEED_DATA, nodeEnv !== 'production'),
+    estimateEmailResendApiKey:
+      process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY?.trim() || undefined
   };
 }

@@ -2,20 +2,16 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PermissionKey } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { CompanySettingsRepository } from './company-settings.repository';
-import { SecretCryptoService } from './secret-crypto.service';
 import type {
   CompanySettingsResponseDto,
-  EmailProviderSecretResponseDto,
-  UpdateCompanySettingsRequestDto,
-  UpdateEmailProviderSecretRequestDto
+  UpdateCompanySettingsRequestDto
 } from './company-settings.types';
 
 @Injectable()
 export class CompanySettingsService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
-    private readonly companySettingsRepository: CompanySettingsRepository,
-    private readonly secretCryptoService: SecretCryptoService
+    private readonly companySettingsRepository: CompanySettingsRepository
   ) {}
 
   async getSettings(sessionToken: string): Promise<CompanySettingsResponseDto> {
@@ -34,25 +30,6 @@ export class CompanySettingsService {
     };
   }
 
-  async updateEmailProviderSecret(
-    sessionToken: string,
-    request: UpdateEmailProviderSecretRequestDto
-  ): Promise<EmailProviderSecretResponseDto> {
-    const actor = await this.authorize(sessionToken, 'companySettings:configure');
-    const apiKey = request.apiKey.trim();
-    if (!apiKey) {
-      throw new BadRequestException('Email provider API key is required.');
-    }
-    const encryptedSecret = this.secretCryptoService.encryptSecret(apiKey);
-    return {
-      emailProvider: await this.companySettingsRepository.upsertEmailProviderSecret(
-        request.provider,
-        encryptedSecret,
-        actor
-      )
-    };
-  }
-
   private authorize(sessionToken: string, permission: PermissionKey) {
     return this.identityAccessService.getAuthorizedEmployee(sessionToken, permission, [
       'office-web'
@@ -64,17 +41,12 @@ function normalizeSettings(
   request: UpdateCompanySettingsRequestDto
 ): UpdateCompanySettingsRequestDto {
   const companyName = request.companyName.trim();
-  const customerFacingSenderName = request.customerFacingSenderName.trim();
-  const customerFacingFromEmail = request.customerFacingFromEmail.trim().toLowerCase();
   const replyToEmail = request.replyToEmail?.trim().toLowerCase();
   const estimateEmailSubject = request.estimateEmailSubject.trim();
   const estimateEmailBody = request.estimateEmailBody.trim();
 
   if (!companyName) {
     throw new BadRequestException('Company name is required.');
-  }
-  if (!customerFacingSenderName) {
-    throw new BadRequestException('Sender name is required.');
   }
   if (!estimateEmailSubject) {
     throw new BadRequestException('Estimate email subject is required.');
@@ -85,8 +57,6 @@ function normalizeSettings(
 
   return {
     companyName,
-    customerFacingSenderName,
-    customerFacingFromEmail,
     replyToEmail: replyToEmail || undefined,
     estimateEmailSubject,
     estimateEmailBody

@@ -138,11 +138,11 @@ Does not own: the install recipe itself (`self-hosted-installation-strategy.md`)
 
 ### [customer-comms-and-delivery.md](./customer-comms-and-delivery.md)
 
-Audience: contributors planning customer-facing document delivery, estimate email, invoice email, payment links, SMS, or provider adapters.
+Audience: contributors planning customer-facing document delivery, estimate email, invoice email, payment links, SMS, or BellField-operated delivery infrastructure.
 
-Purpose: owner-first communications and money-loop delivery plan: person-triggered messages, provider adapters, secure PDF delivery, future settings screen, timeline audit rules, and the phased path from estimate email to payment links and SMS.
+Purpose: owner-first communications and money-loop delivery plan: person-triggered messages, BellField-operated estimate email, secure PDF delivery, customer-facing template settings, timeline audit rules, and the phased path from estimate email to payment links and SMS.
 
-Read when: planning or implementing outbound customer email/SMS, estimate/invoice delivery, customer approval links, payment links, provider settings, or customer-facing document delivery.
+Read when: planning or implementing outbound customer email/SMS, estimate/invoice delivery, customer approval links, payment links, or customer-facing document delivery.
 
 Does not own: estimate/invoice lifecycle rules (`workflows-and-state-machines.md`), permission taxonomy (`permissions-model.md`), or self-hosting constraints (`deployment-model.md`).
 
@@ -349,7 +349,7 @@ For deployment or hosting changes:
 - `self-hosted-installation-strategy.md` when the change affects installer shape, setup support, backup/restore, updates, or pilot install expectations
 - `asset-protection-and-licensing.md` when the change affects licensing, distribution, update entitlement, or whether legitimate customers can run or update the product
 
-For customer document delivery, communications, or provider adapters:
+For customer document delivery, communications, or BellField-operated delivery infrastructure:
 
 - `customer-comms-and-delivery.md`
 - `product-rules.md`

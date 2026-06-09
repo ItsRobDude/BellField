@@ -752,7 +752,7 @@ After the current reliability/self-hosted closeout items are solid, the next own
 Preferred order:
 
 1. Communications foundation:
-   add a provider-backed outbound message model for operational email first, with per-install provider settings and audit history.
+   add a BellField-operated outbound message model for operational email first, with customer-facing template settings and audit history. Shops must not configure email providers or provider API keys.
 2. Estimate delivery:
    let office users send and resend estimate documents, recording recipient, actor, timestamp, provider reference, and failure state when available.
 3. Estimate customer acceptance:
@@ -773,4 +773,4 @@ Field work in this lane should focus on clean capture of recommendations, add-on
 - Field media capture now uses the approved Expo ImagePicker, FileSystem, and Crypto dependencies; no additional picker/storage dependencies should be added without a new reason.
 - Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion shipped in Milestone 7. Invoice posting, adjustment/credit records, read-side balance, payments, and bookkeeping worklists have shipped in Milestone 8.
 - Payments remain online-only in v1.
-- Optional email/SMS/payment providers are allowed when the slice reaches them, but the core self-hosted product should not require paid communication or payment services to function.
+- Estimate/invoice email delivery is BellField-operated from `estimates@bellfield.app`; optional SMS/payment integrations may get separate ownership decisions later, but customer-facing APIs must not expose backend provider or infrastructure controls.
