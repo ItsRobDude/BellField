@@ -43,6 +43,10 @@ import type {
   EstimateLineItemInput,
   EstimateLineItemKind,
   EstimateOptionGroupInput,
+  OutboundMessagesResponse,
+  OutboundMessageSummary,
+  SendEstimateRequest,
+  SendEstimateResponse,
   EstimateResponse,
   EstimatesResponse,
   EstimateStatus,
@@ -163,6 +167,10 @@ export type {
   EstimateLineItemInput,
   EstimateLineItemKind,
   EstimateOptionGroupInput,
+  OutboundMessagesResponse,
+  OutboundMessageSummary,
+  SendEstimateRequest,
+  SendEstimateResponse,
   EstimateResponse,
   EstimatesResponse,
   EstimateStatus,
@@ -732,6 +740,33 @@ export async function declineOfficeEstimate(
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+export async function sendOfficeEstimate(
+  input: SendEstimateRequest & { estimateId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<SendEstimateResponse> {
+  const { estimateId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<SendEstimateResponse>(`/operations/estimates/${estimateId}/send`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function getOfficeEstimateOutboundMessages(input: {
+  estimateId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<OutboundMessagesResponse> {
+  return requestJson<OutboundMessagesResponse>(
+    `/operations/estimates/${input.estimateId}/outbound-messages`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
 }
 
 export async function convertOfficeEstimateToInvoice(input: {

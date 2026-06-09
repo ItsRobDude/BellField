@@ -11,8 +11,10 @@ vi.mock('@/lib/operations-api', () => ({
   createOfficeEstimate: vi.fn(),
   declineOfficeEstimate: vi.fn(),
   downloadOfficeEstimateDocument: vi.fn(),
+  getOfficeEstimateOutboundMessages: vi.fn(),
   getOfficeCatalogItems: vi.fn(),
   getOfficeEstimatesForJob: vi.fn(),
+  sendOfficeEstimate: vi.fn(),
   updateOfficeEstimate: vi.fn()
 }));
 vi.mock('@/lib/download-file', () => ({ downloadBlob: vi.fn() }));
@@ -66,7 +68,38 @@ describe('JobEstimatesSection', () => {
     vi.clearAllMocks();
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [estimate] });
     mockedApi.getOfficeCatalogItems.mockResolvedValue({ items: [] });
+    mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({ outboundMessages: [] });
     mockedApi.downloadOfficeEstimateDocument.mockResolvedValue(new Blob(['html']));
+    mockedApi.sendOfficeEstimate.mockResolvedValue({
+      outboundMessage: {
+        id: 'message-1',
+        channel: 'email',
+        provider: 'resend',
+        status: 'sent',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        documentSnapshotId: 'snapshot-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T00:00:00.000Z',
+        sentAt: '2026-06-01T00:00:01.000Z',
+        providerMessageId: 'resend-message-1'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'estimate',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        sourceVersion: 1,
+        filename: 'estimate.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 100,
+        generatedByName: 'Olivia Owner',
+        generatedAt: '2026-06-01T00:00:00.000Z'
+      }
+    });
   });
 
   it('downloads printable estimates with a readable title-based filename', async () => {
@@ -78,6 +111,7 @@ describe('JobEstimatesSection', () => {
         canCreate
         canEdit
         canApprove
+        canSend
         canConvert
         canViewCatalog={false}
       />
@@ -96,5 +130,59 @@ describe('JobEstimatesSection', () => {
       'estimate-Replacement-options-estimate-1.html',
       expect.any(Blob)
     );
+  });
+
+  it('sends an approved estimate PDF and refreshes delivery history', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-01T00:00:00.000Z',
+          approvedByEmployeeId: 'office-1',
+          approvedByName: 'Olivia Owner'
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send estimate' }));
+    expect(await screen.findByLabelText('Estimate recipient email')).toHaveValue(
+      'customer@example.com'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+
+    await waitFor(() => {
+      expect(mockedApi.sendOfficeEstimate).toHaveBeenCalledWith({
+        estimateId: 'estimate-1',
+        apiBaseUrl: 'http://api.test',
+        sessionToken: 'session-token',
+        recipientEmail: 'customer@example.com',
+        subject: undefined,
+        bodyText: undefined
+      });
+    });
+    expect(confirmSpy).toHaveBeenCalledWith('Send this estimate to customer@example.com?');
+    expect(await screen.findByText('Estimate sent.')).toBeInTheDocument();
+    expect(mockedApi.getOfficeEstimateOutboundMessages).toHaveBeenCalledWith({
+      estimateId: 'estimate-1',
+      apiBaseUrl: 'http://api.test',
+      sessionToken: 'session-token'
+    });
   });
 });

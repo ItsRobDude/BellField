@@ -130,6 +130,7 @@ export function OfficeWorkspaceShell({
   const canCreateEstimate = employee.effectivePermissions.includes('estimates:create');
   const canEditEstimate = employee.effectivePermissions.includes('estimates:edit');
   const canApproveEstimate = employee.effectivePermissions.includes('estimates:approve');
+  const canSendEstimate = employee.effectivePermissions.includes('estimates:send');
   const canViewInvoice = employee.effectivePermissions.includes('invoices:view');
   const canEditInvoice = employee.effectivePermissions.includes('invoices:edit');
   const canPostInvoice = employee.effectivePermissions.includes('invoices:post');
@@ -959,6 +960,7 @@ export function OfficeWorkspaceShell({
           canCreateEstimate,
           canEditEstimate,
           canApproveEstimate,
+          canSendEstimate,
           canViewCatalog,
           canViewInvoice,
           canEditInvoice,
