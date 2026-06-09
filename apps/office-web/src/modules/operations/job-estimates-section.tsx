@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   approveOfficeEstimate,
   convertOfficeEstimateToInvoice,
   createOfficeEstimate,
   declineOfficeEstimate,
-  downloadOfficeEstimateDocument,
+  downloadOfficeEstimatePdf,
   getOfficeEstimateOutboundMessages,
   getOfficeCatalogItems,
   getOfficeEstimatesForJob,
@@ -22,11 +22,10 @@ import { EstimateEditor } from './job-estimate-editor';
 import {
   buildEstimateDraftFromSummary,
   createEmptyEstimateDraft,
-  estimateLineItemKindLabels,
-  estimateStatusLabels,
   parseEstimateDraft,
   type EstimateDraft
 } from './job-estimate-types';
+import { EstimateDetailPanel, EstimateList } from './job-estimate-review';
 
 type JobEstimatesSectionProps = {
   jobId: string;
@@ -73,6 +72,7 @@ export function JobEstimatesSection({
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<EstimateDraft | null>(null);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
+  const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [deliveryPanelEstimateId, setDeliveryPanelEstimateId] = useState<string | null>(null);
   const [deliveryDrafts, setDeliveryDrafts] = useState<Record<string, EstimateDeliveryDraft>>({});
@@ -88,6 +88,12 @@ export function JobEstimatesSection({
     try {
       const response = await getOfficeEstimatesForJob({ jobId, apiBaseUrl, sessionToken });
       setEstimates(response.estimates);
+      setSelectedEstimateId((current) => {
+        if (current && response.estimates.some((estimate) => estimate.id === current)) {
+          return current;
+        }
+        return pickDefaultEstimate(response.estimates)?.id ?? null;
+      });
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load estimates.');
     } finally {
@@ -98,6 +104,11 @@ export function JobEstimatesSection({
   useEffect(() => {
     void loadEstimates();
   }, [loadEstimates]);
+
+  const selectedEstimate = useMemo(
+    () => estimates.find((estimate) => estimate.id === selectedEstimateId) ?? null,
+    [estimates, selectedEstimateId]
+  );
 
   const loadCatalog = useCallback(async () => {
     if (!canViewCatalog) {
@@ -129,6 +140,7 @@ export function JobEstimatesSection({
   }
 
   function startEditEstimate(estimate: EstimateSummary) {
+    setSelectedEstimateId(estimate.id);
     setEditingEstimateId(estimate.id);
     setDraft(buildEstimateDraftFromSummary(estimate));
     setCatalogLoadStatus('idle');
@@ -157,15 +169,22 @@ export function JobEstimatesSection({
     setNoticeMessage(null);
     try {
       if (editingEstimateId) {
-        await updateOfficeEstimate({
+        const response = await updateOfficeEstimate({
           estimateId: editingEstimateId,
           apiBaseUrl,
           sessionToken,
           ...parsed.value
         });
+        setSelectedEstimateId(response.estimate.id);
         setNoticeMessage('Estimate updated.');
       } else {
-        await createOfficeEstimate({ jobId, apiBaseUrl, sessionToken, ...parsed.value });
+        const response = await createOfficeEstimate({
+          jobId,
+          apiBaseUrl,
+          sessionToken,
+          ...parsed.value
+        });
+        setSelectedEstimateId(response.estimate.id);
         setNoticeMessage('Estimate created.');
       }
       cancelDraft();
@@ -231,12 +250,12 @@ export function JobEstimatesSection({
   async function downloadEstimate(estimate: EstimateSummary) {
     setErrorMessage(null);
     try {
-      const blob = await downloadOfficeEstimateDocument({
+      const blob = await downloadOfficeEstimatePdf({
         estimateId: estimate.id,
         apiBaseUrl,
         sessionToken
       });
-      downloadBlob(`estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.html`, blob);
+      downloadBlob(`estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.pdf`, blob);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to download the estimate.');
     }
@@ -365,173 +384,64 @@ export function JobEstimatesSection({
 
       {isLoading ? (
         <p style={styles.muted}>Loading estimates…</p>
-      ) : estimates.length === 0 && !draft ? (
-        <p style={styles.muted}>No estimates yet for this job.</p>
+      ) : estimates.length === 0 ? (
+        !draft ? (
+          <p style={styles.muted}>No estimates yet for this job.</p>
+        ) : null
       ) : (
-        <div style={styles.list}>
-          {estimates.map((estimate) => (
-            <EstimateCard
-              key={estimate.id}
-              estimate={estimate}
+        <div style={{ ...styles.splitGrid, alignItems: 'start' }}>
+          <EstimateList
+            estimates={estimates}
+            selectedEstimateId={selectedEstimateId}
+            onSelect={setSelectedEstimateId}
+          />
+          {selectedEstimate ? (
+            <EstimateDetailPanel
+              estimate={selectedEstimate}
               canEdit={canEdit}
               canApprove={canApprove}
               canSend={canSend}
               canConvert={canConvert}
-              deliveryDraft={deliveryDrafts[estimate.id]}
-              deliveryHistory={outboundMessagesByEstimateId[estimate.id] ?? []}
-              isDeliveryPanelOpen={deliveryPanelEstimateId === estimate.id}
-              isDeliveryHistoryLoading={historyLoadingEstimateId === estimate.id}
-              isSending={sendingEstimateId === estimate.id}
-              onEdit={() => startEditEstimate(estimate)}
-              onApprove={(selectedOptionId) => void approve(estimate.id, selectedOptionId)}
-              onDecline={() => void decline(estimate.id)}
-              onConvert={() => void convert(estimate.id)}
-              onDownload={() => void downloadEstimate(estimate)}
-              onToggleDelivery={() => toggleDeliveryPanel(estimate)}
-              onDeliveryDraftChange={(patch) => updateDeliveryDraft(estimate.id, patch)}
-              onSend={() => void sendEstimate(estimate)}
+              isDeliveryPanelOpen={deliveryPanelEstimateId === selectedEstimate.id}
+              deliveryPanel={
+                deliveryPanelEstimateId === selectedEstimate.id ? (
+                  <EstimateDeliveryPanel
+                    draft={
+                      deliveryDrafts[selectedEstimate.id] ?? {
+                        recipientEmail: '',
+                        subject: '',
+                        bodyText: ''
+                      }
+                    }
+                    history={outboundMessagesByEstimateId[selectedEstimate.id] ?? []}
+                    isHistoryLoading={historyLoadingEstimateId === selectedEstimate.id}
+                    isSending={sendingEstimateId === selectedEstimate.id}
+                    onChange={(patch) => updateDeliveryDraft(selectedEstimate.id, patch)}
+                    onSend={() => void sendEstimate(selectedEstimate)}
+                  />
+                ) : null
+              }
+              onEdit={() => startEditEstimate(selectedEstimate)}
+              onApprove={(selectedOptionId) => void approve(selectedEstimate.id, selectedOptionId)}
+              onDecline={() => void decline(selectedEstimate.id)}
+              onConvert={() => void convert(selectedEstimate.id)}
+              onDownload={() => void downloadEstimate(selectedEstimate)}
+              onToggleDelivery={() => toggleDeliveryPanel(selectedEstimate)}
             />
-          ))}
+          ) : (
+            <p style={styles.muted}>Choose an estimate to review.</p>
+          )}
         </div>
       )}
     </section>
   );
 }
 
-function EstimateCard({
-  estimate,
-  canEdit,
-  canApprove,
-  canSend,
-  canConvert,
-  deliveryDraft,
-  deliveryHistory,
-  isDeliveryPanelOpen,
-  isDeliveryHistoryLoading,
-  isSending,
-  onEdit,
-  onApprove,
-  onDecline,
-  onConvert,
-  onDownload,
-  onToggleDelivery,
-  onDeliveryDraftChange,
-  onSend
-}: {
-  estimate: EstimateSummary;
-  canEdit: boolean;
-  canApprove: boolean;
-  canSend: boolean;
-  canConvert: boolean;
-  deliveryDraft?: EstimateDeliveryDraft;
-  deliveryHistory: OutboundMessageSummary[];
-  isDeliveryPanelOpen: boolean;
-  isDeliveryHistoryLoading: boolean;
-  isSending: boolean;
-  onEdit: () => void;
-  onApprove: (selectedOptionId?: string) => void;
-  onDecline: () => void;
-  onConvert: () => void;
-  onDownload: () => void;
-  onToggleDelivery: () => void;
-  onDeliveryDraftChange: (patch: Partial<EstimateDeliveryDraft>) => void;
-  onSend: () => void;
-}) {
-  const isPending = estimate.status === 'pending';
-
+function pickDefaultEstimate(estimates: EstimateSummary[]): EstimateSummary | undefined {
   return (
-    <article style={estimate.status === 'declined' ? styles.mutedPanel : styles.panel}>
-      <div style={styles.row}>
-        <div style={{ minWidth: 0 }}>
-          <strong>{estimate.title}</strong>
-          <p style={styles.tinyMuted}>
-            {estimate.lineItems.length} line{estimate.lineItems.length === 1 ? '' : 's'} ·{' '}
-            {formatCurrency(estimate.totals.total)}
-            {estimate.validUntil ? ` · valid until ${estimate.validUntil}` : ''}
-          </p>
-        </div>
-        <div style={styles.badgeRow}>
-          <span style={estimate.status === 'declined' ? styles.dangerBadge : styles.badge}>
-            {estimateStatusLabels[estimate.status]}
-          </span>
-        </div>
-      </div>
-
-      <EstimateLineItems estimate={estimate} />
-
-      <EstimateOptions estimate={estimate} />
-
-      <EstimateTotals estimate={estimate} />
-
-      <div style={styles.inlineActionBar}>
-        <button type="button" style={styles.button} onClick={onDownload}>
-          Download estimate
-        </button>
-        {isPending && canEdit ? (
-          <button type="button" style={styles.button} onClick={onEdit}>
-            Edit
-          </button>
-        ) : null}
-        {isPending && canApprove && estimate.optionGroups?.length ? (
-          estimate.optionGroups.flatMap((group) =>
-            group.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                style={styles.primaryButton}
-                onClick={() => onApprove(option.id)}
-              >
-                Approve {option.label}
-              </button>
-            ))
-          )
-        ) : isPending && canApprove ? (
-          <>
-            <button type="button" style={styles.primaryButton} onClick={() => onApprove()}>
-              Approve
-            </button>
-            <button type="button" style={styles.dangerButton} onClick={onDecline}>
-              Decline
-            </button>
-          </>
-        ) : null}
-        {estimate.status === 'approved' && estimate.approvedByName ? (
-          <span style={styles.tinyMuted}>Approved by {estimate.approvedByName}</span>
-        ) : null}
-        {estimate.status === 'approved' && canSend ? (
-          <button type="button" style={styles.button} onClick={onToggleDelivery}>
-            {isDeliveryPanelOpen ? 'Close send' : 'Send estimate'}
-          </button>
-        ) : null}
-        {estimate.status === 'approved' && estimate.convertedToInvoiceId ? (
-          <span style={styles.badge}>Converted to invoice</span>
-        ) : estimate.status === 'approved' && canConvert ? (
-          <button type="button" style={styles.primaryButton} onClick={onConvert}>
-            Convert to invoice
-          </button>
-        ) : null}
-        {estimate.status === 'declined' && estimate.declinedByName ? (
-          <span style={styles.tinyMuted}>Declined by {estimate.declinedByName}</span>
-        ) : null}
-      </div>
-
-      {isDeliveryPanelOpen ? (
-        <EstimateDeliveryPanel
-          draft={
-            deliveryDraft ?? {
-              recipientEmail: '',
-              subject: '',
-              bodyText: ''
-            }
-          }
-          history={deliveryHistory}
-          isHistoryLoading={isDeliveryHistoryLoading}
-          isSending={isSending}
-          onChange={onDeliveryDraftChange}
-          onSend={onSend}
-        />
-      ) : null}
-    </article>
+    estimates.find(
+      (estimate) => estimate.status !== 'declined' && !estimate.supersededByEstimateId
+    ) ?? estimates[0]
   );
 }
 
@@ -625,156 +535,6 @@ function EstimateDeliveryHistory({
       ))}
     </div>
   );
-}
-
-// Read-only line-item summary so a reviewer (who may not have edit access) can
-// see exactly what is being quoted before approving or declining, and so
-// approved/declined estimates remain inspectable.
-function EstimateLineItems({ estimate }: { estimate: EstimateSummary }) {
-  if (estimate.lineItems.length === 0) {
-    return null;
-  }
-
-  return (
-    <div style={styles.tableWrap}>
-      <table style={styles.table}>
-        <thead>
-          <tr>
-            <th style={styles.tableHeadCell}>Item</th>
-            <th style={styles.tableHeadCell}>Kind</th>
-            <th style={styles.tableHeadCell}>Qty</th>
-            <th style={styles.tableHeadCell}>Unit price</th>
-            <th style={styles.tableHeadCell}>Line total</th>
-          </tr>
-        </thead>
-        <tbody>
-          {estimate.lineItems.map((line) => (
-            <tr key={line.id}>
-              <td style={styles.tableCell}>
-                {line.description}
-                {line.taxable ? '' : ' (non-taxable)'}
-                {line.catalogSnapshot ? (
-                  <p style={styles.tinyMuted}>Catalog: {formatCatalogSnapshotLabel(line)}</p>
-                ) : null}
-                {line.optionId ? (
-                  <p style={styles.tinyMuted}>
-                    Option: {formatOptionLabel(estimate, line.optionId)}
-                  </p>
-                ) : null}
-              </td>
-              <td style={styles.tableCell}>{estimateLineItemKindLabels[line.kind]}</td>
-              <td style={styles.tableCell}>
-                {line.quantity}
-                {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''}
-              </td>
-              <td style={styles.tableCell}>{formatCurrency(line.unitPrice)}</td>
-              <td style={styles.tableCell}>{formatCurrency(line.lineSubtotal)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-function EstimateOptions({ estimate }: { estimate: EstimateSummary }) {
-  if (!estimate.optionGroups?.length) {
-    return null;
-  }
-
-  return (
-    <div style={styles.subpanel}>
-      {estimate.optionGroups.map((group) => (
-        <div key={group.id}>
-          <strong>{group.title}</strong>
-          <div style={styles.formGridCompact}>
-            {group.options.map((option) => (
-              <div key={option.id} style={styles.panel}>
-                <div style={styles.row}>
-                  <span style={{ fontWeight: 800 }}>{option.label}</span>
-                  {estimate.selectedOptionId === option.id ? (
-                    <span style={styles.badge}>Selected</span>
-                  ) : null}
-                </div>
-                <SummaryRow label="Total" value={formatCurrency(option.totals.total)} emphasize />
-                <SummaryRow label="Profit" value={formatCurrency(option.totals.profit)} />
-              </div>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function EstimateTotals({ estimate }: { estimate: EstimateSummary }) {
-  const { totals } = estimate;
-  return (
-    <div style={styles.subpanel}>
-      <SummaryRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
-      {totals.discount > 0 ? (
-        <SummaryRow label="Discount" value={`−${formatCurrency(totals.discount)}`} />
-      ) : null}
-      <SummaryRow label="Tax" value={formatCurrency(totals.tax)} />
-      <SummaryRow label="Total" value={formatCurrency(totals.total)} emphasize />
-      <SummaryRow label="Cost" value={formatCurrency(totals.totalCost)} />
-      <SummaryRow
-        label="Profit"
-        value={`${formatCurrency(totals.profit)} (${formatMargin(totals.marginBasisPoints)})`}
-      />
-      {!totals.costComplete ? (
-        <p style={styles.tinyMuted}>
-          Some lines have no cost entered, so profit and margin are an optimistic ceiling.
-        </p>
-      ) : null}
-    </div>
-  );
-}
-
-function SummaryRow({
-  label,
-  value,
-  emphasize
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-}) {
-  return (
-    <div style={styles.row}>
-      <span style={styles.tinyMuted}>{label}</span>
-      <span style={{ fontWeight: emphasize ? 800 : 600 }}>{value}</span>
-    </div>
-  );
-}
-
-function formatCatalogSnapshotLabel(line: EstimateSummary['lineItems'][number]): string {
-  const snapshot = line.catalogSnapshot;
-  if (!snapshot) {
-    return '';
-  }
-  return snapshot.code ? `${snapshot.name} (${snapshot.code})` : snapshot.name;
-}
-
-function formatOptionLabel(estimate: EstimateSummary, optionId: string): string {
-  for (const group of estimate.optionGroups ?? []) {
-    const option = group.options.find((candidate) => candidate.id === optionId);
-    if (option) {
-      return option.label;
-    }
-  }
-  return optionId;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
-}
-
-function formatMargin(marginBasisPoints: number | null): string {
-  if (marginBasisPoints === null) {
-    return 'n/a';
-  }
-  return `${(marginBasisPoints / 100).toFixed(1)}%`;
 }
 
 function formatDateTime(value: string): string {

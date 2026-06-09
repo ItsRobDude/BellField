@@ -180,6 +180,40 @@ function estimateRecord(overrides: Partial<EstimateRecord> = {}): EstimateRecord
 }
 
 describe('EstimateDeliveryService', () => {
+  it('renders an estimate PDF for download without sending or logging delivery', async () => {
+    const {
+      service,
+      identityAccessService,
+      customerDeliveryRepository,
+      customerDocumentStorageService,
+      emailProviderService,
+      estimatePdfRendererService
+    } = createDeliveryService();
+
+    const result = await service.renderEstimatePdfDocument('token', 'estimate-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'estimates:view',
+      ['office-web']
+    );
+    expect(estimatePdfRendererService.renderEstimatePdf).toHaveBeenCalledWith(
+      expect.objectContaining({
+        estimate: expect.objectContaining({ id: 'estimate-1' }),
+        generatedAt: expect.any(String)
+      })
+    );
+    expect(result).toEqual({
+      filename: 'estimate-AC-replacement-estimate-1.pdf',
+      contentType: 'application/pdf',
+      bytes: Buffer.from('%PDF test')
+    });
+    expect(customerDocumentStorageService.writeEstimatePdf).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.createOutboundMessage).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).not.toHaveBeenCalled();
+    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+  });
+
   it('sends an approved estimate as a PDF email and logs delivery', async () => {
     const {
       service,

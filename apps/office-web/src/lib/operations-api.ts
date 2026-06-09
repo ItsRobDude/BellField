@@ -689,6 +689,17 @@ export async function downloadOfficeEstimateDocument(input: {
   });
 }
 
+export async function downloadOfficeEstimatePdf(input: {
+  estimateId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<Blob> {
+  return requestBlob(`/operations/estimates/${input.estimateId}/pdf`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
 export async function createOfficeEstimate(
   input: CreateEstimateRequest & { jobId: string; sessionToken: string; apiBaseUrl?: string }
 ): Promise<EstimateResponse> {

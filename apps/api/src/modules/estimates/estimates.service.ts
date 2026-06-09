@@ -20,6 +20,7 @@ import { IdentityAccessService } from '../identity-access/identity-access.servic
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { InvoicesRepository, type EstimateConversionInput } from '../invoices/invoices.repository';
 import { EstimateDeliveryService } from './estimate-delivery.service';
+import type { EstimatePdfDocument } from './estimate-delivery.service';
 import { renderEstimateDocument, type EstimateDocument } from './estimate-document';
 import { EstimatesRepository } from './estimates.repository';
 import type {
@@ -92,6 +93,14 @@ export class EstimatesService {
       'office-web'
     ]);
     return renderEstimateDocument(await this.requireEstimate(estimateId));
+  }
+
+  /** Server-rendered PDF estimate document. Office-only, gated on estimates:view. */
+  async exportEstimatePdfDocument(
+    sessionToken: string,
+    estimateId: string
+  ): Promise<EstimatePdfDocument> {
+    return this.estimateDeliveryService.renderEstimatePdfDocument(sessionToken, estimateId);
   }
 
   async listEstimateOutboundMessages(

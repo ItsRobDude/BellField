@@ -28,6 +28,11 @@ function createService() {
   };
   const estimateDeliveryService = {
     listEstimateOutboundMessages: jest.fn().mockResolvedValue({ outboundMessages: [] }),
+    renderEstimatePdfDocument: jest.fn().mockResolvedValue({
+      filename: 'estimate-AC-replacement-estimate-1.pdf',
+      contentType: 'application/pdf',
+      bytes: Buffer.from('%PDF test')
+    }),
     sendEstimate: jest.fn().mockResolvedValue({
       outboundMessage: {
         id: 'message-1',
@@ -572,6 +577,18 @@ describe('EstimatesService', () => {
       recipientEmail: 'customer@example.com'
     });
     expect(result.outboundMessage.status).toBe('sent');
+  });
+
+  it('delegates estimate PDF rendering to the delivery service', async () => {
+    const { service, estimateDeliveryService } = createService();
+
+    const result = await service.exportEstimatePdfDocument('token', 'estimate-1');
+
+    expect(estimateDeliveryService.renderEstimatePdfDocument).toHaveBeenCalledWith(
+      'token',
+      'estimate-1'
+    );
+    expect(result.contentType).toBe('application/pdf');
   });
 
   it('delegates estimate outbound-message history to the delivery service', async () => {

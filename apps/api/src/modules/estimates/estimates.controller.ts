@@ -69,6 +69,22 @@ export class EstimatesController {
     return document.html;
   }
 
+  @Get(':estimateId/pdf')
+  async exportPdf(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('estimateId') estimateId: string,
+    @Res({ passthrough: true }) response: MinimalResponse
+  ) {
+    const document = await this.estimatesService.exportEstimatePdfDocument(
+      getBearerToken(authorizationHeader),
+      estimateId
+    );
+    response.setHeader('Content-Type', document.contentType);
+    response.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
+    response.setHeader('Content-Length', String(document.bytes.byteLength));
+    return document.bytes;
+  }
+
   @Put(':estimateId')
   async update(
     @Headers('authorization') authorizationHeader: string | undefined,

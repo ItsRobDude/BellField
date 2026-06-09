@@ -34,6 +34,12 @@ import type {
   SendEstimateResponseDto
 } from './estimates.types';
 
+export type EstimatePdfDocument = {
+  filename: string;
+  contentType: 'application/pdf';
+  bytes: Buffer;
+};
+
 @Injectable()
 export class EstimateDeliveryService {
   constructor(
@@ -59,6 +65,29 @@ export class EstimateDeliveryService {
     const outboundMessages =
       await this.customerDeliveryRepository.listOutboundMessagesForEstimate(estimateId);
     return { outboundMessages: outboundMessages.map(toOutboundMessageSummary) };
+  }
+
+  async renderEstimatePdfDocument(
+    sessionToken: string,
+    estimateId: string
+  ): Promise<EstimatePdfDocument> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:view', [
+      'office-web'
+    ]);
+    const estimate = await this.requireEstimate(estimateId);
+    const generatedAt = new Date().toISOString();
+    const context = await this.loadEstimateDocumentContext(estimate);
+    const bytes = await this.estimatePdfRendererService.renderEstimatePdf({
+      estimate,
+      ...context,
+      generatedAt
+    });
+
+    return {
+      filename: estimatePdfFilename(estimate),
+      contentType: 'application/pdf',
+      bytes
+    };
   }
 
   async sendEstimate(
@@ -94,15 +123,9 @@ export class EstimateDeliveryService {
       );
     }
 
-    const [job, settings] = await Promise.all([
-      this.jobsDataService.getJobById(estimate.jobId),
-      this.companySettingsRepository.getSettings()
-    ]);
-    const [location, billToCustomer] = await Promise.all([
-      this.referenceDataService.getLocationById(job.locationId),
-      this.referenceDataService.getCustomerById(job.billToCustomerId)
-    ]);
     const generatedAt = new Date().toISOString();
+    const { job, settings, location, billToCustomer } =
+      await this.loadEstimateDocumentContext(estimate);
     const pdfBytes = await this.estimatePdfRendererService.renderEstimatePdf({
       estimate,
       settings,
@@ -116,7 +139,7 @@ export class EstimateDeliveryService {
     }
 
     const snapshotId = randomUUID();
-    const filename = `estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.pdf`;
+    const filename = estimatePdfFilename(estimate);
     const stored = await this.customerDocumentStorageService.writeEstimatePdf({
       jobId: estimate.jobId,
       estimateId: estimate.id,
@@ -219,6 +242,19 @@ export class EstimateDeliveryService {
     return estimate;
   }
 
+  private async loadEstimateDocumentContext(estimate: EstimateRecord) {
+    const [job, settings] = await Promise.all([
+      this.jobsDataService.getJobById(estimate.jobId),
+      this.companySettingsRepository.getSettings()
+    ]);
+    const [location, billToCustomer] = await Promise.all([
+      this.referenceDataService.getLocationById(job.locationId),
+      this.referenceDataService.getCustomerById(job.billToCustomerId)
+    ]);
+
+    return { job, settings, location, billToCustomer };
+  }
+
   private async sendEstimateEmailSafely(input: EmailProviderSendInput) {
     try {
       return await this.emailProviderService.sendEstimateEmail(input);
@@ -233,6 +269,10 @@ export class EstimateDeliveryService {
 
 function safeFilenamePart(value: string): string {
   return value.replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || 'estimate';
+}
+
+function estimatePdfFilename(estimate: EstimateRecord): string {
+  return `estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.pdf`;
 }
 
 function normalizeEmail(value: string): string {

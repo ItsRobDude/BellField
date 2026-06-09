@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  downloadOfficeEstimatePdf,
   getOfficeMediaAttachments,
   getOfficeMediaBlob,
   getOfficeRegisterEntries,
@@ -137,6 +138,26 @@ describe('operations-api captured work helpers', () => {
       'http://api.test/operations/estimates/estimate-1/outbound-messages',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer session-token' })
+      })
+    );
+  });
+
+  it('downloads estimate PDFs from the PDF document endpoint', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(new Blob(['pdf-bytes']), { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+
+    await downloadOfficeEstimatePdf({
+      estimateId: 'estimate-1',
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'http://api.test/operations/estimates/estimate-1/pdf',
+      expect.objectContaining({
+        headers: { Authorization: 'Bearer session-token' }
       })
     );
   });

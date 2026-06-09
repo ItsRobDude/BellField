@@ -11,6 +11,7 @@ vi.mock('@/lib/operations-api', () => ({
   createOfficeEstimate: vi.fn(),
   declineOfficeEstimate: vi.fn(),
   downloadOfficeEstimateDocument: vi.fn(),
+  downloadOfficeEstimatePdf: vi.fn(),
   getOfficeEstimateOutboundMessages: vi.fn(),
   getOfficeCatalogItems: vi.fn(),
   getOfficeEstimatesForJob: vi.fn(),
@@ -70,6 +71,7 @@ describe('JobEstimatesSection', () => {
     mockedApi.getOfficeCatalogItems.mockResolvedValue({ items: [] });
     mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({ outboundMessages: [] });
     mockedApi.downloadOfficeEstimateDocument.mockResolvedValue(new Blob(['html']));
+    mockedApi.downloadOfficeEstimatePdf.mockResolvedValue(new Blob(['pdf']));
     mockedApi.sendOfficeEstimate.mockResolvedValue({
       outboundMessage: {
         id: 'message-1',
@@ -102,7 +104,7 @@ describe('JobEstimatesSection', () => {
     });
   });
 
-  it('downloads printable estimates with a readable title-based filename', async () => {
+  it('downloads estimate PDFs with a readable title-based filename', async () => {
     render(
       <JobEstimatesSection
         jobId="job-1"
@@ -117,19 +119,76 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Download estimate' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Download PDF' }));
 
     await waitFor(() =>
-      expect(mockedApi.downloadOfficeEstimateDocument).toHaveBeenCalledWith({
+      expect(mockedApi.downloadOfficeEstimatePdf).toHaveBeenCalledWith({
         estimateId: 'estimate-1',
         apiBaseUrl: 'http://api.test',
         sessionToken: 'session-token'
       })
     );
     expect(mockedDownload.downloadBlob).toHaveBeenCalledWith(
-      'estimate-Replacement-options-estimate-1.html',
+      'estimate-Replacement-options-estimate-1.pdf',
       expect.any(Blob)
     );
+  });
+
+  it('shows one compact row per estimate and detail for only the selected estimate', async () => {
+    const declinedEstimate: EstimateSummary = {
+      ...estimate,
+      id: 'estimate-declined',
+      status: 'declined',
+      title: 'Old repair quote',
+      lineItems: [
+        {
+          ...estimate.lineItems[0],
+          id: 'declined-line',
+          estimateId: 'estimate-declined',
+          description: 'Old blower motor'
+        }
+      ]
+    };
+    const newerEstimate: EstimateSummary = {
+      ...estimate,
+      id: 'estimate-new',
+      title: 'Duct work',
+      lineItems: [
+        {
+          ...estimate.lineItems[0],
+          id: 'duct-line',
+          estimateId: 'estimate-new',
+          description: 'Duct sealing'
+        }
+      ]
+    };
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [declinedEstimate, newerEstimate]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect(await screen.findByRole('button', { name: /Old repair quote/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Duct work/ })).toBeInTheDocument();
+    expect(screen.getByText(/Duct sealing/)).toBeInTheDocument();
+    expect(screen.queryByText('Old blower motor')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: /Old repair quote/ }));
+
+    expect(await screen.findByText(/Old blower motor/)).toBeInTheDocument();
+    expect(screen.queryByText(/Duct sealing/)).not.toBeInTheDocument();
   });
 
   it('sends an approved estimate PDF and refreshes delivery history', async () => {
@@ -161,7 +220,7 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send estimate' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
     expect(await screen.findByLabelText('Estimate recipient email')).toHaveValue(
       'customer@example.com'
     );
