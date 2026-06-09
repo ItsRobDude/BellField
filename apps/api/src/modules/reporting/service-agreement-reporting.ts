@@ -215,7 +215,7 @@ async function queryVisitTemplatePrompts(
     []
   );
   return result.rows.map(toVisitTemplatePromptRow).filter((row) => {
-    return row.daysUntilProjectedDue === undefined || row.daysUntilProjectedDue <= promptWindowDays;
+    return row.daysUntilProjectedDue !== undefined && row.daysUntilProjectedDue <= promptWindowDays;
   });
 }
 

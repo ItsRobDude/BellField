@@ -444,6 +444,26 @@ function createAgreementReportService(perms = ['reports:view', 'agreements:view'
               summary: 'Annual check',
               estimatedDurationMinutes: 90,
               coveredLocationNames: ['Main Shop']
+            },
+            {
+              agreementId: 'agreement-1',
+              agreementNumber: 'SA-1001',
+              customerId: 'customer-1',
+              customerName: 'Acme',
+              agreementName: 'Annual maintenance plan',
+              templateId: 'template-flexible',
+              title: 'Flexible visit',
+              frequency: 'quarterly',
+              preferredMonth: null,
+              preferredDayOfMonth: null,
+              projectedDueDate: null,
+              daysUntilProjectedDue: null,
+              timeWindowLabel: null,
+              jobType: 'Maintenance',
+              category: 'Recurring',
+              summary: 'Schedule when needed',
+              estimatedDurationMinutes: 60,
+              coveredLocationNames: ['Main Shop']
             }
           ]
         });
@@ -504,6 +524,7 @@ describe('ReportingService.getServiceAgreementReports', () => {
       projectedDueDate: '2026-06-15',
       daysUntilProjectedDue: 7
     });
+    expect(report.visitTemplatePrompts.map((row) => row.title)).toEqual(['Spring visit']);
   });
 });
 

@@ -95,6 +95,9 @@ function arrange() {
   mockedApi.activateOfficeServiceAgreement.mockResolvedValue({
     agreement: { ...agreement, status: 'active' }
   });
+  mockedApi.updateOfficeServiceAgreement.mockResolvedValue({
+    agreement: { ...agreement, name: 'Updated maintenance' }
+  });
 }
 
 function renderSurface(overrides: { canCreate?: boolean; canEdit?: boolean } = {}) {
@@ -174,6 +177,27 @@ describe('OfficeAgreementsSurface', () => {
       })
     );
     expect(await screen.findByRole('textbox', { name: 'Name' })).toHaveValue('Annual maintenance');
+  });
+
+  it('updates an agreement without sending create-only customer fields', async () => {
+    renderSurface();
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    const nameInput = await screen.findByRole('textbox', { name: 'Name' });
+
+    fireEvent.change(nameInput, { target: { value: 'Updated maintenance' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    await waitFor(() =>
+      expect(mockedApi.updateOfficeServiceAgreement).toHaveBeenCalledWith(
+        expect.objectContaining({
+          agreementId: 'agreement-1',
+          body: expect.objectContaining({ name: 'Updated maintenance' })
+        })
+      )
+    );
+    expect(mockedApi.updateOfficeServiceAgreement.mock.calls[0]?.[0].body).not.toHaveProperty(
+      'customerId'
+    );
   });
 
   it('activates a draft agreement from the detail panel', async () => {

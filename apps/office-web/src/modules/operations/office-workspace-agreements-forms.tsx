@@ -463,7 +463,19 @@ export function toCreateRequest(draft: AgreementDraft): CreateServiceAgreementRe
 }
 
 export function toUpdateRequest(draft: AgreementDraft): UpdateServiceAgreementRequest {
-  return toCreateRequest(draft);
+  return {
+    name: draft.name.trim(),
+    description: emptyToUndefined(draft.description),
+    startDate: emptyToUndefined(draft.startDate),
+    endDate: emptyToUndefined(draft.endDate),
+    renewalDate: emptyToUndefined(draft.renewalDate),
+    billingCadence: draft.billingCadence,
+    nextBillingDate: emptyToUndefined(draft.nextBillingDate),
+    billingAmount: parseOptionalNumber(draft.billingAmount),
+    coveredLocationIds: draft.coveredLocationIds,
+    coveredEquipmentIds: draft.coveredEquipmentIds,
+    visitTemplates: draft.visitTemplates.map(toVisitTemplateRequest)
+  };
 }
 
 function CheckboxSection({
