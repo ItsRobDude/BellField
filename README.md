@@ -157,6 +157,7 @@ Product source-of-truth docs:
 - [docs/offline-sync.md](./docs/offline-sync.md) - field sync and offline expectations
 - [docs/screen-behavior-spec.md](./docs/screen-behavior-spec.md) - office and field screen behavior
 - [docs/data-modeling-rules.md](./docs/data-modeling-rules.md) - data and history rules that schema work must obey
+- [docs/customer-comms-and-delivery.md](./docs/customer-comms-and-delivery.md) - outbound document delivery, provider adapters, secure PDF links, and customer-facing communication boundaries
 
 Operational and sequencing docs:
 

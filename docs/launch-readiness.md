@@ -110,14 +110,14 @@ The admin/support surface a small shop and BellField support actually need day t
 
 BellField has strong permission modeling and conservative backend rules, but not a production security/release harness. BellField already has CI ([.github/workflows/ci.yml](../.github/workflows/ci.yml)), so several of these are cheap to wire in.
 
-- [ ] secret scanning (e.g. secretlint/gitleaks) wired into existing CI — _safe now_
-- [ ] production dependency audit (`pnpm audit --prod`, exposed as the `security:audit` script) as a CI signal — _safe now_
-- [ ] `SECURITY.md` and a vulnerability-disclosure path — _safe now_
-- [ ] startup validation of required production env vars (`BELLFIELD_MEDIA_ROOT`, `BELLFIELD_MEDIA_TOKEN_SECRET`, `DATABASE_URL`) so prod cannot boot on weak dev fallbacks — _safe now, prevents a real misconfig class_
-- [ ] Dependabot or equivalent dependency-update flow — _safe now_
+- [x] secret scanning wired into existing CI through `pnpm security:secrets`
+- [x] production dependency audit (`pnpm audit --prod`, exposed as the `security:audit` script) wired as a blocking CI gate
+- [x] `SECURITY.md` and private vulnerability-disclosure path using `security@bellfield.app`
+- [x] startup validation of required production env vars (`BELLFIELD_MEDIA_ROOT`, `BELLFIELD_MEDIA_TOKEN_SECRET`, `DATABASE_URL`) so prod cannot boot on weak dev fallbacks or known media-secret placeholders
+- [x] Dependabot dependency-update flow for workspace packages and GitHub Actions, configured weekly and low-noise
 - [ ] a real security review before the first pilot (the repo's security-review path)
 
-**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass): **both `pnpm audit --prod` (the `security:audit` script) and the full `pnpm audit` report "No known vulnerabilities found"** — down from 38 advisory-paths, so the CI `security:audit` step now exits zero (genuinely green, not just advisory-tolerated).
+**Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass): **both `pnpm audit --prod` (the `security:audit` script) and the full `pnpm audit` report "No known vulnerabilities found"** — down from 38 advisory-paths, so the CI `security:audit` step now exits zero and is treated as a real gate.
 
 How each class was resolved, preferring the least-invasive correct fix:
 
@@ -187,8 +187,7 @@ Respecting the milestone discipline in [milestone-implementation-plan.md](./mile
 
 **Safe to start now (hygiene / foundation / business, milestone-independent):**
 
-- secret scanning, dependency audit, and `SECURITY.md` into the existing CI (Section 8)
-- production env-var validation at startup (Section 8)
+- keep the security/release harness green: secret scanning, blocking dependency audit, `SECURITY.md`, Dependabot, and production env-var validation (Section 8)
 - the EULA and privacy posture statement (Section 11)
 - code-signing certificate procurement (Section 11, long lead time)
 - the validation-playbook habit and a smoke checklist (Section 9)

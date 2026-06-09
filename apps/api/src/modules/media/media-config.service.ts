@@ -5,6 +5,11 @@ import * as path from 'node:path';
 
 const DEFAULT_MAX_BYTES = 50 * 1024 * 1024;
 const DEFAULT_TOKEN_TTL_SECONDS = 5 * 60;
+const MIN_PRODUCTION_TOKEN_SECRET_LENGTH = 32;
+const INSECURE_PRODUCTION_TOKEN_SECRETS = new Set([
+  'bellfield-dev-media-token-secret-do-not-use-in-production',
+  'replace-with-a-long-random-secret'
+]);
 
 /**
  * Reads media-related configuration from the environment and applies the
@@ -79,6 +84,16 @@ export class MediaConfigService implements OnModuleInit {
         'BELLFIELD_MEDIA_TOKEN_SECRET not set; using a weak dev fallback. Configure it explicitly for any non-dev deployment.'
       );
     } else {
+      const normalizedConfiguredSecret = configuredSecret.toLowerCase();
+      if (
+        isProduction &&
+        (configuredSecret.length < MIN_PRODUCTION_TOKEN_SECRET_LENGTH ||
+          INSECURE_PRODUCTION_TOKEN_SECRETS.has(normalizedConfiguredSecret))
+      ) {
+        throw new Error(
+          `BellField media token secret is too weak for production: set BELLFIELD_MEDIA_TOKEN_SECRET to at least ${MIN_PRODUCTION_TOKEN_SECRET_LENGTH} random characters.`
+        );
+      }
       this.tokenSecret = configuredSecret;
     }
 

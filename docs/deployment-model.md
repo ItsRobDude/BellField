@@ -224,6 +224,8 @@ Runtime configuration:
 - `BELLFIELD_MEDIA_TOKEN_TTL_SECONDS` - optional signed token lifetime, default 300 seconds
 
 Production must set `BELLFIELD_MEDIA_ROOT` and `BELLFIELD_MEDIA_TOKEN_SECRET`.
+The token secret must be at least 32 characters and cannot be the dev fallback
+or sample placeholder value.
 Development and test runs may fall back to temporary local values, but that fallback is not a deployment posture.
 
 The current v1 filesystem layout stores blobs under:

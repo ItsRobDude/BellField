@@ -61,6 +61,7 @@ Root runtime settings:
 Media config notes:
 
 - Production API startup fails if `BELLFIELD_MEDIA_ROOT` or `BELLFIELD_MEDIA_TOKEN_SECRET` is missing.
+- Production also rejects media token secrets shorter than 32 characters or known sample/dev placeholder values.
 - Development and test runs fall back to an OS temp media folder and a weak dev-only token secret if those values are omitted.
 - Use an absolute Windows-friendly path such as `C:\BellFieldData\media` for local server-style testing.
 

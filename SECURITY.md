@@ -18,7 +18,10 @@ requests, or discussions.**
 
 Instead, report privately by email to:
 
-> `security@bellfield.example` _(TODO: replace with the real security contact before any external release)_
+> `security@bellfield.app`
+
+For normal product support or setup questions, use `support@bellfield.app`.
+The security inbox is reserved for vulnerabilities and sensitive reports.
 
 Please include, where possible:
 

@@ -52,9 +52,5 @@ jobs:
       - name: Build
         run: pnpm build
 
-      # Advisory only: surfaces dependency advisories in the log without failing
-      # the build, since most are transitive and need coordinated dependency
-      # bumps rather than blocking unrelated PRs. Tighten once the backlog clears.
-      - name: Dependency audit (advisory)
+      - name: Dependency audit
         run: pnpm security:audit
-        continue-on-error: true

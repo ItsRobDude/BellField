@@ -49,7 +49,7 @@ Refresh it after major implementation lanes land.
 
 - Estimate customer acceptance links and e-signature capture (good/better/best options and server-rendered estimate document export have shipped)
 - Field-app estimate builder
-- Communications foundation for outbound operational messages, starting with provider-backed estimate email send/resend and delivery audit history.
+- Communications foundation for outbound operational messages, starting with provider-backed estimate email send/resend and delivery audit history. The product/architecture direction is documented in `docs/customer-comms-and-delivery.md`, but implementation has not started.
 - Automated invoice/estimate document **delivery** beyond local export. Server-rendered invoice/estimate document export, accounting-handoff CSV, and read-only payment-batch views have shipped; automated delivery remains later work.
 - Optional online payment-gateway capture/payment links for posted invoices.
 - Optional SMS reminders, on-my-way messages, opt-out handling, and cost controls.

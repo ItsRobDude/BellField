@@ -136,6 +136,16 @@ Read when: planning Milestone 10/11 work, scoping company-readiness tasks, or de
 
 Does not own: the install recipe itself (`self-hosted-installation-strategy.md`), licensing posture (`asset-protection-and-licensing.md`), or hosting philosophy (`deployment-model.md`). It is a consolidating checklist, not the source of truth for any single area.
 
+### [customer-comms-and-delivery.md](./customer-comms-and-delivery.md)
+
+Audience: contributors planning customer-facing document delivery, estimate email, invoice email, payment links, SMS, or provider adapters.
+
+Purpose: owner-first communications and money-loop delivery plan: person-triggered messages, provider adapters, secure PDF delivery, future settings screen, timeline audit rules, and the phased path from estimate email to payment links and SMS.
+
+Read when: planning or implementing outbound customer email/SMS, estimate/invoice delivery, customer approval links, payment links, provider settings, or customer-facing document delivery.
+
+Does not own: estimate/invoice lifecycle rules (`workflows-and-state-machines.md`), permission taxonomy (`permissions-model.md`), or self-hosting constraints (`deployment-model.md`).
+
 ### [validation-playbook.md](./validation-playbook.md)
 
 Audience: contributors validating risky local DB, office UI, field-device, or release-readiness lanes.
@@ -338,6 +348,13 @@ For deployment or hosting changes:
 - `deployment-model.md`
 - `self-hosted-installation-strategy.md` when the change affects installer shape, setup support, backup/restore, updates, or pilot install expectations
 - `asset-protection-and-licensing.md` when the change affects licensing, distribution, update entitlement, or whether legitimate customers can run or update the product
+
+For customer document delivery, communications, or provider adapters:
+
+- `customer-comms-and-delivery.md`
+- `product-rules.md`
+- `workflows-and-state-machines.md` for estimate, invoice, payment, or acceptance behavior
+- `permissions-model.md` for send/configure/payment permissions
 
 For planning what belongs in scope:
 
