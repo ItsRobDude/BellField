@@ -131,15 +131,16 @@ Build: `CustomerDocumentStorageService.readEstimatePdf(storagePath, expectedSha2
 structurally-true to consumable by a deferred retry. Unit-test happy path and
 hash mismatch.
 
-### 0.7 Dedupe covers live queued rows
+### 0.7 Dedupe covers live queued rows — moved to Phase 5.3
 
-Current: the advisory-lock dedupe only blocks rows with
-`queued_at >= now - 60s`. Under retry semantics an older live `queued` row no
-longer blocks a duplicate send.
-
-Build: in `createEstimateSendIntent`, any existing `queued` row for
-(estimate, recipient) blocks regardless of age; `sent` rows keep the 60s
-window. Conflict copy distinguishes "already queued" from "just sent."
+Originally scoped here, deliberately moved: blocking duplicates on any live
+`queued` row regardless of age is only safe alongside queue expiry and
+cancel-while-queued. Before those exist, a hard crash between intent insert
+and the failure mark would wedge an estimate-recipient pair forever with no
+UI recourse. Long-lived queued rows are a Phase 5 phenomenon anyway — until
+retry semantics exist, queued rows live for seconds and today's 60-second
+window is correct and self-healing. The dedupe widening lands in 5.3 with its
+safety prerequisites.
 
 Phase 0 gate: all slices merged, full suite green, no live contradiction
 between code and `deployment-model.md` remains except the interim email key
@@ -358,7 +359,7 @@ and codebase location) blocks the service work.
 
 ### 5.1 Relay service v1 (BellField-hosted)
 
-Build, per the relay plan: license-token auth (3.4), narrow
+Build, per the relay plan: relay-token auth (3.4), narrow
 `send estimate document` API (composes MIME itself; enforces the shared
 attachment constant), per-shop usage metering (usage-based billing with
 markup), quotas, suppression list, provider webhook termination, message
@@ -386,6 +387,11 @@ Build: migration adding `attempt_count`, `next_attempt_at`, `expires_at`
 instead of `failed`. Decision D8: pin `fromName`/`replyToEmail` on the intent
 row at queue time (recommended) so a retry hours later sends what the office
 saw, not drifted settings.
+
+This slice also widens the dedupe (the former 0.7): any live `queued` row for
+(estimate, recipient) blocks a duplicate send regardless of age, with conflict
+copy distinguishing "already queued" from "just sent." Safe here — and only
+here — because expiry and cancel land in the same slice.
 
 ### 5.4 Worker delivery jobs
 

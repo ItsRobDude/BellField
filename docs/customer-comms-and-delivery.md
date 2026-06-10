@@ -113,7 +113,9 @@ definition, so no form of provider credential may live on sold installs.
 
 The only sanctioned end-state is a BellField-hosted delivery relay:
 
-- a customer install authenticates to the relay with its install/license token
+- a customer install authenticates to the relay with its relay token — a
+  revocable credential issued alongside the license; the signed license file
+  itself stays offline and holds no secrets
 - the install submits the rendered subject, body, and document; the relay holds
   the only provider key, performs the send, and returns the same sanitized
   result shape the internal adapter already exposes
@@ -138,7 +140,7 @@ Until the relay exists, the direct provider adapter configured by a server-owned
 environment key is an interim implementation for BellField-operated installs
 only. It must not ship to sold installs.
 
-The controlling design for the relay itself — business model, license-token
+The controlling design for the relay itself — business model, relay-token
 semantics, sender identity tiers, API shape, queueing, and build order — is
 [delivery-relay-plan.md](./delivery-relay-plan.md).
 

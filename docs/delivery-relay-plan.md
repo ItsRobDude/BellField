@@ -27,8 +27,11 @@ customer. Therefore:
 - provider API keys never ship to customer-owned servers — not shared keys and
   not per-install scoped keys
 - the relay holds the only provider credentials
-- the only delivery-related credential on a sold install is its license token,
-  which grants exactly "use the relay as this shop, within entitlement" and is
+- the only delivery-related credential on a sold install is its **relay
+  token**: a revocable online credential issued alongside the license but
+  separate from the signed license file (the offline right-to-run proof never
+  doubles as a network credential and never contains relay secrets). The relay
+  token grants exactly "use the relay as this shop, within entitlement" and is
   revocable server-side in one step
 
 Per-install provider keys were considered and rejected.
@@ -56,15 +59,17 @@ Rules that follow:
 
 ---
 
-## 3. Shop Identity and the License Token (decided)
+## 3. Shop Identity and the Relay Token (decided)
 
 - identity is **per shop**, with **one active server at a time**
-- the relay enforces single-active: a second server presenting the same shop
-  license must not silently coexist; activation moves the license (with a
-  support path for legitimate migration/server-death cases)
-- the token asserts shop identity and relay entitlement only; it carries no
-  provider credentials and no account-level authority
-- revoking one shop's token affects no other shop and touches nothing on
+- the relay enforces single-active: a second server presenting the same shop's
+  relay token must not silently coexist; activation moves the credential (with
+  a support path for legitimate migration/server-death cases)
+- the relay token asserts shop identity and relay entitlement only; it carries
+  no provider credentials and no account-level authority, and it is distinct
+  from the signed license file — the offline license is never a network
+  credential and never contains relay secrets
+- revoking one shop's relay token affects no other shop and touches nothing on
   customer hardware
 
 The license/identity primitive itself (issuance, storage, rotation, activation
@@ -114,7 +119,7 @@ never names providers.
 
 Narrow by design. The relay is not a generic email API:
 
-- authenticate: license token → shop identity + entitlement
+- authenticate: relay token → shop identity + entitlement
 - `send estimate document`: rendered subject, body text, recipient, and the
   PDF; the relay composes the actual MIME message itself in the BellField
   shape — callers cannot construct arbitrary email

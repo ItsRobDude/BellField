@@ -158,9 +158,9 @@ Does not own: relay design (`delivery-relay-plan.md`), licensing posture (`asset
 
 ### [delivery-relay-plan.md](./delivery-relay-plan.md)
 
-Audience: contributors planning or implementing the BellField-hosted delivery relay, license-token consumption, sender identity tiers, or install-side send queueing.
+Audience: contributors planning or implementing the BellField-hosted delivery relay, relay-token consumption, sender identity tiers, or install-side send queueing.
 
-Purpose: the controlling plan for relay key custody, the per-shop single-active license token, BellField-domain vs custom-domain sending, the narrow relay API, queue-and-retry semantics, webhook termination, and the build order toward acceptance and payment links.
+Purpose: the controlling plan for relay key custody, the per-shop single-active relay token, BellField-domain vs custom-domain sending, the narrow relay API, queue-and-retry semantics, webhook termination, and the build order toward acceptance and payment links.
 
 Read when: designing or building the relay, changing how installs send customer email, or touching delivery entitlement behavior.
 

@@ -451,7 +451,9 @@ For estimate and invoice email delivery:
   document snapshot, recipient, actor, failure summary, or provider reference
 - provider API keys never ship to customer-owned servers in any form (shared or
   per-install). Sold installs send through a BellField-hosted delivery relay,
-  authenticated by the install's license token; the relay holds the only
+  authenticated by the install's relay token (a revocable credential issued
+  alongside the license, separate from the signed license file); the relay
+  holds the only
   provider key. See the key-custody section of
   [customer-comms-and-delivery.md](./customer-comms-and-delivery.md).
 - sent documents transit that relay transiently — the same content the delivery
