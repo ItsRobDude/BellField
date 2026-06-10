@@ -424,16 +424,18 @@ poll-from-install. Detailed slicing happens when this phase opens.
 
 ## Decisions
 
-| #   | Decision                                     | Recommendation                                                                | Status |
-| --- | -------------------------------------------- | ----------------------------------------------------------------------------- | ------ |
-| D1  | Runtime packaging for the release artifact   | Compiled `dist/` per app + bundled Node runtime folder; no global installs    | open   |
-| D2  | Windows service wrapper                      | A single vetted wrapper (e.g. WinSW-style) bundled by the installer           | open   |
-| D3  | PostgreSQL provisioning on customer machines | Bundled user-space PG16, installer-initialized, generated password            | open   |
-| D4  | Installer technology                         | Scripted installer (PowerShell-driven or Inno-style); decide at Phase 1 start | open   |
-| D5  | Backup scheduling host                       | Worker job on the 2.1 substrate (shared with Phase 5), not OS scheduled tasks | open   |
-| D6  | Update distribution channel                  | Per-customer credentialed download; portal later                              | open   |
-| D7  | Relay hosting and codebase location          | Decide at Phase 5 start; affects nothing earlier                              | open   |
-| D8  | Pin From identity at queue time              | Pin `fromName`/`replyToEmail` on the intent row                               | open   |
+All eight decided by the owner on 2026-06-10.
+
+| #   | Decision                                     | Decided                                                                                                                                                         | Status  |
+| --- | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------- |
+| D1  | Runtime packaging for the release artifact   | Compiled `dist/` per app + production deps + bundled Node runtime folder; no global installs                                                                    | decided |
+| D2  | Windows service wrapper                      | WinSW, bundled by the installer; one XML config per service, restart-on-failure, log rotation                                                                   | decided |
+| D3  | PostgreSQL provisioning on customer machines | Bundled user-space PG16 binaries, installer-run `initdb`, registered service, generated password                                                                | decided |
+| D4  | Installer technology                         | Inno Setup `setup.exe` (signable, uninstall conventions) calling BellField-owned scripts                                                                        | decided |
+| D5  | Backup scheduling host                       | Worker job on the 2.1 substrate (shared with Phase 5 delivery retry), not OS scheduled tasks                                                                    | decided |
+| D6  | Update distribution channel                  | Per-customer credentialed download issued with the license; portal is later polish                                                                              | decided |
+| D7  | Relay codebase location                      | `apps/relay` in this monorepo, sharing `packages/contracts`; deployed separately, never in the release artifact. Hosting choice stays open until Phase 5 start. | decided |
+| D8  | Sender identity for delayed retries          | Pin `fromName`/`replyToEmail` on the intent row at queue time, matching the frozen subject/body/recipient/PDF                                                   | decided |
 
 Earlier decisions already recorded elsewhere and binding here: relay-only key
 custody, usage-based marked-up relay pricing, per-shop single-active license,
