@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException
 } from '@nestjs/common';
 import {
@@ -58,6 +59,8 @@ import {
 
 @Injectable()
 export class EstimatesService {
+  private readonly logger = new Logger(EstimatesService.name);
+
   constructor(
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
@@ -182,10 +185,19 @@ export class EstimatesService {
     const lineItems = request.lineItems ?? existing.lineItems.map(toLineInput);
     await this.validateCatalogReferences(lineItems);
 
+    // Validate the tax rate only when the caller supplies one. Stored rates
+    // pass through untouched: the 0-25% bound arrived after rows could hold
+    // larger values, and rejecting them here would make those estimates
+    // uneditable through no fault of the caller.
+    const taxRateBasisPoints =
+      request.taxRateBasisPoints !== undefined
+        ? normalizeTaxRateBasisPoints(request.taxRateBasisPoints)
+        : this.passThroughStoredTaxRate(existing);
+
     const writeInput = this.buildWriteInput(
       request.title ?? existing.title,
       request.description !== undefined ? request.description : existing.description,
-      request.taxRateBasisPoints ?? existing.taxRateBasisPoints,
+      taxRateBasisPoints,
       request.discount !== undefined ? (request.discount ?? undefined) : existing.discount,
       request.validUntil !== undefined ? (request.validUntil ?? undefined) : existing.validUntil,
       request.optionGroups !== undefined
@@ -358,7 +370,9 @@ export class EstimatesService {
   private buildWriteInput(
     title: string,
     description: string | undefined,
-    taxRateBasisPoints: number | undefined,
+    // Already resolved by the caller: validated for caller-supplied rates,
+    // passed through for stored ones.
+    taxRateBasisPoints: number,
     discount: EstimateDiscountValue | undefined,
     validUntil: string | undefined,
     optionGroups: EstimateOptionGroupInputValue[] | undefined,
@@ -373,7 +387,7 @@ export class EstimatesService {
       throw new BadRequestException('An estimate needs at least one line item.');
     }
 
-    const resolvedTaxRate = normalizeTaxRateBasisPoints(taxRateBasisPoints);
+    const resolvedTaxRate = taxRateBasisPoints;
     // Defensively validate the discount shape. The DTO only checks that it is an
     // object, so a malformed payload like { kind: 'bogus', amount: 50 } reaches
     // here; normalize it into a known discriminated union or reject it, rather
@@ -456,6 +470,16 @@ export class EstimatesService {
         throw new BadRequestException('Catalog snapshot must match the selected Catalog item.');
       }
     }
+  }
+
+  private passThroughStoredTaxRate(existing: EstimateRecord): number {
+    const stored = existing.taxRateBasisPoints;
+    if (!Number.isInteger(stored) || stored < 0 || stored > 2500) {
+      this.logger.warn(
+        `Estimate ${existing.id} carries an out-of-range stored sales tax rate (${stored} bp); preserving it unchanged.`
+      );
+    }
+    return stored;
   }
 
   private async resolveCreateTaxRate(taxRateBasisPoints: number | undefined): Promise<number> {

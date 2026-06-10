@@ -734,6 +734,23 @@ describe('EstimatesService', () => {
     expect(estimatesRepository.replaceEstimate).not.toHaveBeenCalled();
   });
 
+  it('preserves a legacy out-of-range stored tax rate when an update omits the rate', async () => {
+    // Rows written before the 0-25% bound can hold larger rates. Editing the
+    // estimate must not brick on (or silently rewrite) the stored value.
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      pendingEstimate({ taxRateBasisPoints: 82500 })
+    );
+    estimatesRepository.replaceEstimate.mockResolvedValue(
+      pendingEstimate({ taxRateBasisPoints: 82500 })
+    );
+
+    await service.updateEstimate('token', 'estimate-1', { title: 'Corrected description' });
+
+    const writeInput = estimatesRepository.replaceEstimate.mock.calls[0]?.[1];
+    expect(writeInput.taxRateBasisPoints).toBe(82500);
+  });
+
   it('approves only a pending estimate and never mutates the job', async () => {
     const { service, estimatesRepository, jobsDataService } = createService();
     estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate());

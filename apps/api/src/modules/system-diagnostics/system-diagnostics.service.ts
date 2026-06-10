@@ -47,6 +47,7 @@ export class SystemDiagnosticsService {
     const database = await this.checkDatabase();
     const migrations = await this.checkMigrations();
     const mediaRoot = this.checkMediaRoot();
+    const estimateTaxRates = await this.checkEstimateTaxRates();
 
     return {
       serverTime: new Date().toISOString(),
@@ -69,9 +70,34 @@ export class SystemDiagnosticsService {
           key: 'mediaRoot',
           ok: mediaRoot.writable && mediaRoot.readable,
           detail: mediaRoot.error
-        }
+        },
+        estimateTaxRates
       ]
     };
+  }
+
+  /**
+   * Audit for estimates whose stored sales tax rate predates the 0-25% bound.
+   * Such rows are preserved as-is (history-safe) but flagged here so support
+   * can see them; there is deliberately no automatic clamp.
+   */
+  private async checkEstimateTaxRates(): Promise<SystemDiagnosticsResponse['checks'][number]> {
+    try {
+      const result = await this.databaseService.query<{ count: number }>(
+        'select count(*)::int as count from estimates where tax_rate_basis_points > 2500'
+      );
+      const count = Number(result.rows[0]?.count ?? 0);
+      return count === 0
+        ? { key: 'estimateTaxRates', ok: true }
+        : {
+            key: 'estimateTaxRates',
+            ok: false,
+            detail: `${count} estimate(s) carry a stored sales tax rate above 25%.`
+          };
+    } catch {
+      // Connectivity problems are already reported by the database check.
+      return { key: 'estimateTaxRates', ok: true };
+    }
   }
 
   private async checkDatabase(): Promise<SystemDiagnosticsResponse['database']> {
