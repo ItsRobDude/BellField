@@ -611,6 +611,25 @@ User-facing APIs, when added later, are for automating shop workflows and must n
 Estimate delivery should not automatically schedule work, post invoices, or charge payment methods.
 Office review remains the default control point.
 
+### Sales tax behavior
+
+Company settings own whether the shop charges customer sales tax and the default sales tax rate.
+The normal estimate screen should not ask for a per-estimate tax rate.
+
+Catalog setup owns the default taxability of work being sold:
+
+- each catalog item can be taxable or non-taxable by default
+- catalog categories can optionally seed the taxable default for new catalog items
+- estimate and invoice line taxability remains line-level so staff can correct unusual cases
+
+When an estimate or invoice is priced, BellField should snapshot the rate and line taxability used
+for that document. Later company-setting or catalog changes must not silently rewrite old estimates,
+posted invoices, job history, or accounting reports.
+
+Customer sales tax is separate from purchase/vendor tax and job cost. If a shop pays tax on parts,
+that belongs in purchase, inventory, or job-cost handling rather than being mixed with the customer
+sales tax rate.
+
 ---
 
 ## 9. Job Reopen / Follow-Up Behavior

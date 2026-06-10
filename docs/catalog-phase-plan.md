@@ -460,6 +460,10 @@ Status:
   active/inactive Catalog rows; `catalog:create` and `catalog:edit` control writes; Catalog
   rows can carry pricing, tax defaults, cost hints, categories/tags, accounting/export codes,
   field visibility, and optional inventory links.
+- Managed Catalog categories are implemented in the office Catalog surface. Categories have a name,
+  sort order, active/inactive state, and optional taxable default for new Catalog items. Existing
+  `catalog_items.category` text remains the item display/snapshot value so old estimates, register
+  entries, and invoice lines keep their historical meaning.
 - Read-only office Catalog viewers receive sell-side Catalog data only. Internal notes, cost hints,
   income categories, and accounting export codes require `catalog:edit`.
 - Usage visibility is currently a register-entry usage count. Detailed drill-down is deferred.
@@ -480,6 +484,8 @@ Status:
 
 - First office estimate-builder slice is implemented: users who can create/edit estimates and view
   the Catalog can add active, non-discount Catalog items from the job estimate editor.
+- The estimate Catalog picker starts from organized category cards when no search is active, then
+  drills into one category before adding items. Search still jumps directly to matching items.
 - Estimate line items now store optional `catalog_item_id` plus a frozen sell-side
   `catalog_snapshot`; later Catalog edits do not rewrite existing estimates.
 - Approved estimate conversion still uses the existing invoice-draft conversion path. The invoice

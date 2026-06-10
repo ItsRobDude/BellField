@@ -74,12 +74,15 @@ a concurrent demotion/deactivation/permission change or a stale update can't sli
 
 ## Catalog
 
-| Method | Path                                | Surface | Permission gate   | Purpose                                                                                                                                                  |
-| ------ | ----------------------------------- | ------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/operations/catalog/items`         | office  | `catalog:view`    | List office Catalog items, including inactive rows, inventory links, and register usage counts. Internal cost/accounting fields require `catalog:edit`.  |
-| `POST` | `/operations/catalog/items`         | office  | `catalog:create`  | Create a Catalog item. Supports trade-neutral kinds, category/tags, pricing, tax defaults, cost hint, optional inventory link, and field visibility.     |
-| `PUT`  | `/operations/catalog/items/:itemId` | office  | `catalog:edit`    | Update a Catalog item, including active/inactive state. Edits affect future selections only; historical register/invoice snapshots keep their meaning.   |
-| `GET`  | `/operations/catalog/field-items`   | field   | `register:create` | Field-safe active sellable/chargeable Catalog items for technician register selection. Excludes office-only discounts and internal cost/accounting data. |
+| Method | Path                                         | Surface | Permission gate   | Purpose                                                                                                                                                  |
+| ------ | -------------------------------------------- | ------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/catalog/categories`             | office  | `catalog:view`    | List managed Catalog categories, including inactive categories, sort order, and optional taxable default for new items.                                  |
+| `POST` | `/operations/catalog/categories`             | office  | `catalog:create`  | Create a managed Catalog category. Category defaults seed future Catalog items only; they do not rewrite existing lines or snapshots.                    |
+| `PUT`  | `/operations/catalog/categories/:categoryId` | office  | `catalog:edit`    | Update a managed Catalog category name, sort order, active state, or optional taxable default. Existing item category text is preserved unless edited.   |
+| `GET`  | `/operations/catalog/items`                  | office  | `catalog:view`    | List office Catalog items, including inactive rows, inventory links, and register usage counts. Internal cost/accounting fields require `catalog:edit`.  |
+| `POST` | `/operations/catalog/items`                  | office  | `catalog:create`  | Create a Catalog item. Supports trade-neutral kinds, category/tags, pricing, tax defaults, cost hint, optional inventory link, and field visibility.     |
+| `PUT`  | `/operations/catalog/items/:itemId`          | office  | `catalog:edit`    | Update a Catalog item, including active/inactive state. Edits affect future selections only; historical register/invoice snapshots keep their meaning.   |
+| `GET`  | `/operations/catalog/field-items`            | field   | `register:create` | Field-safe active sellable/chargeable Catalog items for technician register selection. Excludes office-only discounts and internal cost/accounting data. |
 
 ## Service Agreements
 
@@ -120,11 +123,11 @@ Estimates attach to a job and are priced server-side by `@bellfield/estimating`;
 
 ## Company Settings
 
-| Method | Path                                           | Surface | Permission gate             | Purpose                                                                                                                                                     |
-| ------ | ---------------------------------------------- | ------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/operations/company-settings`                 | office  | `companySettings:view`      | Load company name, reply-to, and estimate email template settings. Does not expose backend provider keys or sending-domain controls.                        |
-| `PUT`  | `/operations/company-settings`                 | office  | `companySettings:configure` | Update company name, reply-to, and estimate email template settings. Shops cannot change the BellField-owned From address or backend delivery provider.     |
-| `GET`  | `/operations/company-settings/delivery-status` | office  | `companySettings:view`      | Return safe estimate email readiness for Settings, including the fixed From address and user-facing setup/ready copy. Does not expose provider diagnostics. |
+| Method | Path                                           | Surface | Permission gate             | Purpose                                                                                                                                                                             |
+| ------ | ---------------------------------------------- | ------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/operations/company-settings`                 | office  | `companySettings:view`      | Load company name, reply-to, estimate email template settings, and company sales-tax defaults. Does not expose backend provider keys or sending-domain controls.                    |
+| `PUT`  | `/operations/company-settings`                 | office  | `companySettings:configure` | Update company name, reply-to, estimate email template settings, and company sales-tax defaults. Shops cannot change the BellField-owned From address or backend delivery provider. |
+| `GET`  | `/operations/company-settings/delivery-status` | office  | `companySettings:view`      | Return safe estimate email readiness for Settings, including the fixed From address and user-facing setup/ready copy. Does not expose provider diagnostics.                         |
 
 ## Invoices
 
