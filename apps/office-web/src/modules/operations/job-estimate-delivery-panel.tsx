@@ -1,4 +1,4 @@
-import type { OutboundMessageSummary } from '@bellfield/contracts';
+import type { EstimateEmailDeliveryStatus, OutboundMessageSummary } from '@bellfield/contracts';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type EstimateDeliveryDraft = {
@@ -9,6 +9,7 @@ export type EstimateDeliveryDraft = {
 
 export function EstimateDeliveryPanel({
   draft,
+  deliveryStatus,
   history,
   isHistoryLoading,
   isPreviewLoading,
@@ -17,6 +18,7 @@ export function EstimateDeliveryPanel({
   onSend
 }: {
   draft: EstimateDeliveryDraft;
+  deliveryStatus: EstimateEmailDeliveryStatus | null;
   history: OutboundMessageSummary[];
   isHistoryLoading: boolean;
   isPreviewLoading: boolean;
@@ -24,7 +26,8 @@ export function EstimateDeliveryPanel({
   onChange: (patch: Partial<EstimateDeliveryDraft>) => void;
   onSend: () => void;
 }) {
-  const canSend = !isPreviewLoading;
+  const deliveryBlocked = deliveryStatus !== null && !deliveryStatus.ready;
+  const canSend = !isPreviewLoading && !deliveryBlocked;
 
   return (
     <section style={styles.subpanel} aria-label="Estimate delivery">
@@ -59,6 +62,7 @@ export function EstimateDeliveryPanel({
       </div>
 
       {isPreviewLoading ? <p style={styles.tinyMuted}>Loading send preview...</p> : null}
+      {deliveryBlocked ? <p style={styles.error}>{deliveryStatus.message}</p> : null}
 
       <div style={styles.inlineActionBar}>
         <button

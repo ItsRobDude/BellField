@@ -549,6 +549,59 @@ describe('JobEstimatesSection', () => {
     });
   });
 
+  it('disables sending and explains when estimate email is not available', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-01T00:00:00.000Z',
+          approvedByEmployeeId: 'office-1',
+          approvedByName: 'Olivia Owner'
+        }
+      ]
+    });
+    mockedApi.getOfficeEstimateSendPreview.mockResolvedValue({
+      preview: {
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is Replacement options.'
+      },
+      deliveryStatus: {
+        configured: false,
+        ready: false,
+        status: 'needsSetup',
+        message: 'Estimate email is not available on this server. Contact BellField support.'
+      }
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+
+    expect(
+      await screen.findByText(
+        'Estimate email is not available on this server. Contact BellField support.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send PDF' })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+    expect(mockedApi.sendOfficeEstimate).not.toHaveBeenCalled();
+  });
+
   it('shows a failed send as an error, not a success notice', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({

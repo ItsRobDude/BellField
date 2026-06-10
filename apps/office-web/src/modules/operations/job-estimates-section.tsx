@@ -16,6 +16,7 @@ import {
   updateOfficeEstimate,
   type CatalogCategory,
   type CatalogItem,
+  type EstimateEmailDeliveryStatus,
   type EstimateSummary,
   type OutboundMessageSummary
 } from '@/lib/operations-api';
@@ -82,6 +83,9 @@ export function JobEstimatesSection({
   const [historyLoadingEstimateId, setHistoryLoadingEstimateId] = useState<string | null>(null);
   const [previewLoadingEstimateId, setPreviewLoadingEstimateId] = useState<string | null>(null);
   const [sendingEstimateId, setSendingEstimateId] = useState<string | null>(null);
+  const [deliveryStatusByEstimateId, setDeliveryStatusByEstimateId] = useState<
+    Record<string, EstimateEmailDeliveryStatus>
+  >({});
 
   const loadEstimates = useCallback(async () => {
     setIsLoading(true);
@@ -297,6 +301,10 @@ export function JobEstimatesSection({
         apiBaseUrl,
         sessionToken
       });
+      setDeliveryStatusByEstimateId((current) => ({
+        ...current,
+        [estimateId]: response.deliveryStatus
+      }));
       setDeliveryDrafts((current) => {
         const existing = current[estimateId] ?? {
           recipientEmail: billToCustomerEmail ?? '',
@@ -455,6 +463,7 @@ export function JobEstimatesSection({
                         bodyText: ''
                       }
                     }
+                    deliveryStatus={deliveryStatusByEstimateId[selectedEstimate.id] ?? null}
                     history={outboundMessagesByEstimateId[selectedEstimate.id] ?? []}
                     isHistoryLoading={historyLoadingEstimateId === selectedEstimate.id}
                     isPreviewLoading={previewLoadingEstimateId === selectedEstimate.id}

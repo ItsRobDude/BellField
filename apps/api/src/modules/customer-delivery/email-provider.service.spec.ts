@@ -77,7 +77,7 @@ describe('EmailProviderService', () => {
       configured: false,
       ready: false,
       status: 'needsSetup',
-      message: 'Estimate email is unavailable. Contact BellField support.'
+      message: 'Estimate email is not available on this server. Contact BellField support.'
     });
   });
 
@@ -124,7 +124,7 @@ describe('EmailProviderService', () => {
       configured: true,
       ready: false,
       status: 'needsSetup',
-      message: 'Estimate email is unavailable. Contact BellField support.'
+      message: 'Estimate email is not available on this server. Contact BellField support.'
     });
   });
 });

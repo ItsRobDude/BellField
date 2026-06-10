@@ -1,6 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useState, type CSSProperties } from 'react';
+import type { EstimateEmailDeliveryStatus } from '@bellfield/contracts';
+import { getOfficeEstimateEmailDeliveryStatus } from '@/lib/operations-company-settings-api';
 import {
   downloadSupportExport,
   getSystemDiagnostics,
@@ -57,6 +59,8 @@ export function OfficeSystemSurface({
   canExportSupport
 }: OfficeSystemSurfaceProps) {
   const [diagnostics, setDiagnostics] = useState<SystemDiagnosticsResponse | null>(null);
+  const [estimateEmailStatus, setEstimateEmailStatus] =
+    useState<EstimateEmailDeliveryStatus | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -70,6 +74,14 @@ export function OfficeSystemSurface({
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load system status.');
     } finally {
       setIsLoading(false);
+    }
+    // Loaded separately so a delivery-status failure (e.g. role without
+    // settings access) degrades to "unknown" instead of failing the surface.
+    try {
+      const response = await getOfficeEstimateEmailDeliveryStatus({ apiBaseUrl, sessionToken });
+      setEstimateEmailStatus(response.deliveryStatus);
+    } catch {
+      setEstimateEmailStatus(null);
     }
   }, [apiBaseUrl, sessionToken]);
 
@@ -169,6 +181,28 @@ export function OfficeSystemSurface({
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
                 {diagnostics.app.nodeEnv} · {new Date(diagnostics.serverTime).toLocaleString()}
               </div>
+            </div>
+            <div style={cardStyle}>
+              <div style={labelStyle}>Estimate email</div>
+              <div style={valueStyle}>
+                {estimateEmailStatus ? (
+                  <>
+                    <StatusDot ok={estimateEmailStatus.ready} />
+                    {estimateEmailStatus.ready
+                      ? 'Ready'
+                      : estimateEmailStatus.configured
+                        ? 'Needs attention'
+                        : 'Not configured'}
+                  </>
+                ) : (
+                  'Status unknown'
+                )}
+              </div>
+              {estimateEmailStatus && !estimateEmailStatus.ready ? (
+                <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
+                  {estimateEmailStatus.message}
+                </div>
+              ) : null}
             </div>
           </div>
         </>

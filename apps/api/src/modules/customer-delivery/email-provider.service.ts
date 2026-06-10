@@ -8,7 +8,8 @@ const bellfieldEstimateEmailFromName = 'BellField Estimates';
 export const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
 export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
-const safeNeedsSetupMessage = 'Estimate email is unavailable. Contact BellField support.';
+const safeNeedsSetupMessage =
+  'Estimate email is not available on this server. Contact BellField support.';
 const safeTemporarilyUnavailableMessage =
   'Estimate email availability could not be confirmed. Contact BellField support.';
 

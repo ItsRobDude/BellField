@@ -1,5 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as companySettingsApi from '@/lib/operations-company-settings-api';
 import * as systemApi from '@/lib/system-diagnostics-api';
 import { OfficeSystemSurface } from './office-system-surface';
 
@@ -7,10 +8,22 @@ vi.mock('@/lib/system-diagnostics-api', () => ({
   getSystemDiagnostics: vi.fn(),
   downloadSupportExport: vi.fn()
 }));
+vi.mock('@/lib/operations-company-settings-api', () => ({
+  getOfficeEstimateEmailDeliveryStatus: vi.fn()
+}));
 
 const mockedApi = vi.mocked(systemApi);
+const mockedCompanySettingsApi = vi.mocked(companySettingsApi);
 
 function arrange() {
+  mockedCompanySettingsApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
+    deliveryStatus: {
+      configured: true,
+      ready: true,
+      status: 'ready',
+      message: 'Estimate email is ready.'
+    }
+  });
   mockedApi.getSystemDiagnostics.mockResolvedValue({
     serverTime: '2026-06-06T00:00:00.000Z',
     app: { name: 'BellField API', version: '0.0.1', nodeEnv: 'development' },
@@ -71,5 +84,37 @@ describe('OfficeSystemSurface', () => {
     mockedApi.getSystemDiagnostics.mockRejectedValue(new Error('Forbidden'));
     renderSurface();
     await waitFor(() => expect(screen.getByText('Forbidden')).toBeInTheDocument());
+  });
+
+  it('shows estimate email readiness when delivery is ready', async () => {
+    renderSurface();
+    expect(await screen.findByText('Estimate email')).toBeInTheDocument();
+    expect(await screen.findByText('Ready')).toBeInTheDocument();
+  });
+
+  it('shows the safe not-configured message without provider details', async () => {
+    mockedCompanySettingsApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
+      deliveryStatus: {
+        configured: false,
+        ready: false,
+        status: 'needsSetup',
+        message: 'Estimate email is not available on this server. Contact BellField support.'
+      }
+    });
+    renderSurface();
+    expect(await screen.findByText('Not configured')).toBeInTheDocument();
+    expect(
+      screen.getByText('Estimate email is not available on this server. Contact BellField support.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/resend/i)).toBeNull();
+  });
+
+  it('degrades to unknown when the delivery status is not reachable', async () => {
+    mockedCompanySettingsApi.getOfficeEstimateEmailDeliveryStatus.mockRejectedValue(
+      new Error('Forbidden')
+    );
+    renderSurface();
+    expect(await screen.findByText('Status unknown')).toBeInTheDocument();
+    expect(screen.queryByText('Forbidden')).toBeNull();
   });
 });
