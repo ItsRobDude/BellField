@@ -30,7 +30,7 @@ export const invoiceLineKindLabels: Record<InvoiceLineItemKind, string> = {
   serviceItem: 'Service item',
   part: 'Part',
   equipment: 'Equipment',
-  membership: 'Membership',
+  membership: 'Agreement',
   other: 'Other'
 };
 

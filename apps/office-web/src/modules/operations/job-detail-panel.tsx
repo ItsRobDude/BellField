@@ -103,7 +103,7 @@ const registerKindLabels: Record<RegisterEntryKind, string> = {
   labor: 'Labor',
   serviceItem: 'Service item',
   part: 'Part',
-  membership: 'Membership',
+  membership: 'Agreement',
   other: 'Other'
 };
 

@@ -313,6 +313,10 @@ export function formatRegisterEntryKind(kind: RegisterEntryKind): string {
     return 'Service item';
   }
 
+  if (kind === 'membership') {
+    return 'Agreement';
+  }
+
   return kind.charAt(0).toUpperCase() + kind.slice(1);
 }
 

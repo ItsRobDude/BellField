@@ -75,7 +75,7 @@ export const estimateLineItemKindLabels: Record<EstimateLineItemKind, string> = 
   serviceItem: 'Service item',
   part: 'Part',
   equipment: 'Equipment',
-  membership: 'Membership',
+  membership: 'Agreement',
   other: 'Other'
 };
 
