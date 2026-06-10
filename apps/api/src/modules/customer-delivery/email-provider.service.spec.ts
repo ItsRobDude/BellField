@@ -68,6 +68,68 @@ describe('EmailProviderService', () => {
       message: 'BellField estimate email delivery failed. Try again or contact support.'
     });
   });
+
+  it('reports estimate delivery as needing setup when the server-owned key is missing', async () => {
+    delete process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY;
+    const service = new EmailProviderService();
+
+    await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
+      fromEmail: bellfieldEstimateEmailFromAddress,
+      configured: false,
+      ready: false,
+      status: 'needsSetup',
+      message: 'Delivery needs BellField setup before estimates can be sent.'
+    });
+  });
+
+  it('reports estimate delivery as ready when the sending domain is verified', async () => {
+    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              name: 'bellfield.app',
+              status: 'verified',
+              capabilities: { sending: 'enabled' }
+            }
+          ]
+        }),
+        {
+          headers: { 'Content-Type': 'application/json' },
+          status: 200
+        }
+      )
+    );
+    const service = new EmailProviderService();
+
+    await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
+      fromEmail: bellfieldEstimateEmailFromAddress,
+      configured: true,
+      ready: true,
+      status: 'ready',
+      message: 'Ready to send estimates from estimates@bellfield.app.'
+    });
+  });
+
+  it('reports estimate delivery as needing setup when the sending domain is not verified', async () => {
+    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
+    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ data: [{ name: 'bellfield.app', status: 'not_started' }] }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      })
+    );
+    const service = new EmailProviderService();
+
+    await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
+      fromEmail: bellfieldEstimateEmailFromAddress,
+      configured: true,
+      ready: false,
+      status: 'needsSetup',
+      message: 'Delivery needs BellField setup before estimates can be sent.'
+    });
+  });
 });
 
 function sendInput(

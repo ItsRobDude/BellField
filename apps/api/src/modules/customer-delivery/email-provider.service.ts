@@ -1,13 +1,25 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CompanySettings } from '@bellfield/contracts';
+import type { CompanySettings, EstimateEmailDeliveryStatus } from '@bellfield/contracts';
 import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import type { EmailProviderSendInput, EmailProviderSendResult } from './customer-delivery.types';
 
 export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
 const bellfieldEstimateEmailFromName = 'BellField Estimates';
-const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
-const deliveryFailedMessage =
+export const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
+export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
+const safeNeedsSetupMessage = 'Delivery needs BellField setup before estimates can be sent.';
+const safeTemporarilyUnavailableMessage =
+  'Estimate email setup could not be confirmed. Contact BellField support.';
+
+type ResendDomainSummary = {
+  id?: string;
+  name?: string;
+  status?: string;
+  capabilities?: {
+    sending?: string;
+  };
+};
 
 @Injectable()
 export class EmailProviderService {
@@ -64,6 +76,56 @@ export class EmailProviderService {
 
     return { kind: 'sent', providerMessageId: body.id };
   }
+
+  async getEstimateEmailDeliveryStatus(): Promise<EstimateEmailDeliveryStatus> {
+    const apiKey = getApiRuntimeConfig().estimateEmailResendApiKey;
+    if (!apiKey) {
+      return {
+        fromEmail: bellfieldEstimateEmailFromAddress,
+        configured: false,
+        ready: false,
+        status: 'needsSetup',
+        message: safeNeedsSetupMessage
+      };
+    }
+
+    const sendingDomain = bellfieldEstimateEmailFromAddress.split('@')[1];
+    try {
+      const response = await fetch('https://api.resend.com/domains', {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: AbortSignal.timeout(5_000)
+      });
+      if (!response.ok) {
+        this.logger.warn(
+          `BellField estimate email delivery status check returned HTTP ${response.status}.`
+        );
+        return deliveryStatusUnavailable();
+      }
+      const body = (await response.json().catch(() => ({}))) as {
+        data?: ResendDomainSummary[];
+      };
+      const domain = body.data?.find((item) => item.name === sendingDomain);
+      if (!domain) {
+        return deliveryStatusNeedsSetup();
+      }
+      const sendingEnabled = domain.capabilities?.sending !== 'disabled';
+      const verifiedForSending =
+        (domain.status === 'verified' || domain.status === 'partially_verified') && sendingEnabled;
+      return verifiedForSending
+        ? {
+            fromEmail: bellfieldEstimateEmailFromAddress,
+            configured: true,
+            ready: true,
+            status: 'ready',
+            message: `Ready to send estimates from ${bellfieldEstimateEmailFromAddress}.`
+          }
+        : deliveryStatusNeedsSetup();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Delivery status check failed.';
+      this.logger.warn(`BellField estimate email delivery status check failed: ${message}`);
+      return deliveryStatusUnavailable();
+    }
+  }
 }
 
 export function buildEmailProviderInput(
@@ -79,4 +141,24 @@ export function buildEmailProviderInput(
 function formatFrom(name: string, email: string): string {
   const safeName = name.replaceAll('"', '').trim();
   return safeName ? `${safeName} <${email}>` : email;
+}
+
+function deliveryStatusNeedsSetup(): EstimateEmailDeliveryStatus {
+  return {
+    fromEmail: bellfieldEstimateEmailFromAddress,
+    configured: true,
+    ready: false,
+    status: 'needsSetup',
+    message: safeNeedsSetupMessage
+  };
+}
+
+function deliveryStatusUnavailable(): EstimateEmailDeliveryStatus {
+  return {
+    fromEmail: bellfieldEstimateEmailFromAddress,
+    configured: true,
+    ready: false,
+    status: 'temporarilyUnavailable',
+    message: safeTemporarilyUnavailableMessage
+  };
 }

@@ -43,6 +43,7 @@ import type {
   EstimateLineItemInput,
   EstimateLineItemKind,
   EstimateOptionGroupInput,
+  EstimateSendPreviewResponse,
   OutboundMessagesResponse,
   OutboundMessageSummary,
   SendEstimateRequest,
@@ -167,6 +168,7 @@ export type {
   EstimateLineItemInput,
   EstimateLineItemKind,
   EstimateOptionGroupInput,
+  EstimateSendPreviewResponse,
   OutboundMessagesResponse,
   OutboundMessageSummary,
   SendEstimateRequest,
@@ -698,6 +700,20 @@ export async function downloadOfficeEstimatePdf(input: {
     apiBaseUrl: input.apiBaseUrl,
     sessionToken: input.sessionToken
   });
+}
+
+export async function getOfficeEstimateSendPreview(input: {
+  estimateId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<EstimateSendPreviewResponse> {
+  return requestJson<EstimateSendPreviewResponse>(
+    `/operations/estimates/${input.estimateId}/send-preview`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
 }
 
 export async function createOfficeEstimate(

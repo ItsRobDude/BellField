@@ -33,11 +33,24 @@ function createService() {
       contentType: 'application/pdf',
       bytes: Buffer.from('%PDF test')
     }),
+    getEstimateSendPreview: jest.fn().mockResolvedValue({
+      preview: {
+        fromEmail: 'estimates@bellfield.app',
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is AC replacement.'
+      },
+      deliveryStatus: {
+        fromEmail: 'estimates@bellfield.app',
+        configured: true,
+        ready: true,
+        status: 'ready',
+        message: 'Ready to send estimates from estimates@bellfield.app.'
+      }
+    }),
     sendEstimate: jest.fn().mockResolvedValue({
       outboundMessage: {
         id: 'message-1',
         channel: 'email',
-        provider: 'resend',
         status: 'sent',
         jobId: 'job-1',
         estimateId: 'estimate-1',
@@ -589,6 +602,18 @@ describe('EstimatesService', () => {
       'estimate-1'
     );
     expect(result.contentType).toBe('application/pdf');
+  });
+
+  it('delegates estimate send preview to the delivery service', async () => {
+    const { service, estimateDeliveryService } = createService();
+
+    const result = await service.getEstimateSendPreview('token', 'estimate-1');
+
+    expect(estimateDeliveryService.getEstimateSendPreview).toHaveBeenCalledWith(
+      'token',
+      'estimate-1'
+    );
+    expect(result.preview.fromEmail).toBe('estimates@bellfield.app');
   });
 
   it('delegates estimate outbound-message history to the delivery service', async () => {

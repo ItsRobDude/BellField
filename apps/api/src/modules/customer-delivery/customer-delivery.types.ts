@@ -2,16 +2,30 @@ import type {
   CustomerDocumentSnapshotSummary,
   CustomerDocumentType,
   OutboundMessageProvider,
-  OutboundMessageStatus,
-  OutboundMessageSummary
+  OutboundMessageStatus
 } from '@bellfield/contracts';
 
 export type CustomerDocumentTypeValue = CustomerDocumentType;
 export type CustomerDocumentSnapshotRecord = CustomerDocumentSnapshotSummary & {
   storagePath: string;
 };
-export type OutboundMessageRecord = OutboundMessageSummary & {
+export type OutboundMessageRecord = {
+  id: string;
+  channel: 'email';
+  provider: OutboundMessageProvider;
+  status: OutboundMessageStatus;
+  jobId: string;
+  estimateId?: string;
+  invoiceId?: string;
+  documentSnapshotId?: string;
+  recipientEmail: string;
+  subject: string;
   bodyText: string;
+  sentByName: string;
+  queuedAt: string;
+  sentAt?: string;
+  providerMessageId?: string;
+  providerError?: string;
 };
 export type OutboundMessageStatusValue = OutboundMessageStatus;
 export type OutboundMessageProviderValue = OutboundMessageProvider;

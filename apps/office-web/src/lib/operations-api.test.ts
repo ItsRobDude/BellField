@@ -5,6 +5,7 @@ import {
   getOfficeMediaBlob,
   getOfficeRegisterEntries,
   getOfficeEstimateOutboundMessages,
+  getOfficeEstimateSendPreview,
   sendOfficeEstimate,
   updateOfficeMediaAttachment,
   updateOfficeRegisterEntry,
@@ -113,7 +114,8 @@ describe('operations-api captured work helpers', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse({ outboundMessage: {}, documentSnapshot: {} }))
-      .mockResolvedValueOnce(mockJsonResponse({ outboundMessages: [] }));
+      .mockResolvedValueOnce(mockJsonResponse({ outboundMessages: [] }))
+      .mockResolvedValueOnce(mockJsonResponse({ preview: {}, deliveryStatus: {} }));
     vi.stubGlobal('fetch', fetchMock);
 
     await sendOfficeEstimate({
@@ -127,6 +129,11 @@ describe('operations-api captured work helpers', () => {
       sessionToken: 'session-token',
       apiBaseUrl: 'http://api.test'
     });
+    await getOfficeEstimateSendPreview({
+      estimateId: 'estimate-1',
+      sessionToken: 'session-token',
+      apiBaseUrl: 'http://api.test'
+    });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -136,6 +143,13 @@ describe('operations-api captured work helpers', () => {
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
       'http://api.test/operations/estimates/estimate-1/outbound-messages',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer session-token' })
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      'http://api.test/operations/estimates/estimate-1/send-preview',
       expect.objectContaining({
         headers: expect.objectContaining({ Authorization: 'Bearer session-token' })
       })

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { EstimateEmailDeliveryStatus, EstimateSendPreview } from '@bellfield/contracts';
 import {
   approveOfficeEstimate,
   convertOfficeEstimateToInvoice,
@@ -8,6 +9,7 @@ import {
   declineOfficeEstimate,
   downloadOfficeEstimatePdf,
   getOfficeEstimateOutboundMessages,
+  getOfficeEstimateSendPreview,
   getOfficeCatalogItems,
   getOfficeEstimatesForJob,
   sendOfficeEstimate,
@@ -18,6 +20,7 @@ import {
 } from '@/lib/operations-api';
 import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { EstimateDeliveryPanel, type EstimateDeliveryDraft } from './job-estimate-delivery-panel';
 import { EstimateEditor } from './job-estimate-editor';
 import {
   buildEstimateDraftFromSummary,
@@ -41,11 +44,6 @@ type JobEstimatesSectionProps = {
 };
 
 type CatalogLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
-type EstimateDeliveryDraft = {
-  recipientEmail: string;
-  subject: string;
-  bodyText: string;
-};
 
 // Estimates attach to a job, so this section lives inside the job detail surface.
 // It is self-contained: it fetches its own estimates and owns its draft state,
@@ -79,7 +77,14 @@ export function JobEstimatesSection({
   const [outboundMessagesByEstimateId, setOutboundMessagesByEstimateId] = useState<
     Record<string, OutboundMessageSummary[]>
   >({});
+  const [sendPreviewsByEstimateId, setSendPreviewsByEstimateId] = useState<
+    Record<string, EstimateSendPreview>
+  >({});
+  const [deliveryStatusByEstimateId, setDeliveryStatusByEstimateId] = useState<
+    Record<string, EstimateEmailDeliveryStatus>
+  >({});
   const [historyLoadingEstimateId, setHistoryLoadingEstimateId] = useState<string | null>(null);
+  const [previewLoadingEstimateId, setPreviewLoadingEstimateId] = useState<string | null>(null);
   const [sendingEstimateId, setSendingEstimateId] = useState<string | null>(null);
 
   const loadEstimates = useCallback(async () => {
@@ -283,6 +288,45 @@ export function JobEstimatesSection({
     }
   }
 
+  async function loadSendPreview(estimateId: string) {
+    setPreviewLoadingEstimateId(estimateId);
+    setErrorMessage(null);
+    try {
+      const response = await getOfficeEstimateSendPreview({
+        estimateId,
+        apiBaseUrl,
+        sessionToken
+      });
+      setSendPreviewsByEstimateId((current) => ({
+        ...current,
+        [estimateId]: response.preview
+      }));
+      setDeliveryStatusByEstimateId((current) => ({
+        ...current,
+        [estimateId]: response.deliveryStatus
+      }));
+      setDeliveryDrafts((current) => {
+        const existing = current[estimateId] ?? {
+          recipientEmail: billToCustomerEmail ?? '',
+          subject: '',
+          bodyText: ''
+        };
+        return {
+          ...current,
+          [estimateId]: {
+            ...existing,
+            subject: existing.subject || response.preview.subject,
+            bodyText: existing.bodyText || response.preview.bodyText
+          }
+        };
+      });
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to load send preview.');
+    } finally {
+      setPreviewLoadingEstimateId((current) => (current === estimateId ? null : current));
+    }
+  }
+
   function toggleDeliveryPanel(estimate: EstimateSummary) {
     setNoticeMessage(null);
     setErrorMessage(null);
@@ -298,6 +342,7 @@ export function JobEstimatesSection({
           }
         }));
         void loadDeliveryHistory(estimate.id);
+        void loadSendPreview(estimate.id);
       }
       return next;
     });
@@ -324,7 +369,13 @@ export function JobEstimatesSection({
       setErrorMessage('Recipient email is required.');
       return;
     }
-    if (!window.confirm(`Send this estimate to ${recipientEmail}?`)) {
+    const deliveryStatus = deliveryStatusByEstimateId[estimate.id];
+    if (!deliveryStatus?.ready) {
+      setErrorMessage('Delivery needs BellField setup before this estimate can be sent.');
+      return;
+    }
+    const fromEmail = sendPreviewsByEstimateId[estimate.id]?.fromEmail ?? 'estimates@bellfield.app';
+    if (!window.confirm(`Send this estimate PDF to ${recipientEmail} from ${fromEmail}?`)) {
       return;
     }
 
@@ -341,7 +392,9 @@ export function JobEstimatesSection({
         bodyText: draft?.bodyText.trim() || undefined
       });
       setNoticeMessage(
-        response.outboundMessage.status === 'sent' ? 'Estimate sent.' : 'Estimate delivery failed.'
+        response.outboundMessage.status === 'sent'
+          ? 'Estimate sent.'
+          : (response.outboundMessage.deliveryMessage ?? 'Estimate delivery failed.')
       );
       await loadDeliveryHistory(estimate.id);
     } catch (error) {
@@ -414,7 +467,10 @@ export function JobEstimatesSection({
                       }
                     }
                     history={outboundMessagesByEstimateId[selectedEstimate.id] ?? []}
+                    preview={sendPreviewsByEstimateId[selectedEstimate.id]}
+                    deliveryStatus={deliveryStatusByEstimateId[selectedEstimate.id]}
                     isHistoryLoading={historyLoadingEstimateId === selectedEstimate.id}
+                    isPreviewLoading={previewLoadingEstimateId === selectedEstimate.id}
                     isSending={sendingEstimateId === selectedEstimate.id}
                     onChange={(patch) => updateDeliveryDraft(selectedEstimate.id, patch)}
                     onSend={() => void sendEstimate(selectedEstimate)}
@@ -443,115 +499,6 @@ function pickDefaultEstimate(estimates: EstimateSummary[]): EstimateSummary | un
       (estimate) => estimate.status !== 'declined' && !estimate.supersededByEstimateId
     ) ?? estimates[0]
   );
-}
-
-function EstimateDeliveryPanel({
-  draft,
-  history,
-  isHistoryLoading,
-  isSending,
-  onChange,
-  onSend
-}: {
-  draft: EstimateDeliveryDraft;
-  history: OutboundMessageSummary[];
-  isHistoryLoading: boolean;
-  isSending: boolean;
-  onChange: (patch: Partial<EstimateDeliveryDraft>) => void;
-  onSend: () => void;
-}) {
-  return (
-    <section style={styles.subpanel} aria-label="Estimate delivery">
-      <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          Recipient email
-          <input
-            aria-label="Estimate recipient email"
-            value={draft.recipientEmail}
-            onChange={(event) => onChange({ recipientEmail: event.target.value })}
-            style={styles.input}
-          />
-        </label>
-        <label style={styles.fieldLabel}>
-          Subject
-          <input
-            aria-label="Estimate email subject"
-            value={draft.subject}
-            placeholder="Use settings default"
-            onChange={(event) => onChange({ subject: event.target.value })}
-            style={styles.input}
-          />
-        </label>
-        <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
-          Body
-          <textarea
-            aria-label="Estimate email body"
-            value={draft.bodyText}
-            placeholder="Use settings default"
-            onChange={(event) => onChange({ bodyText: event.target.value })}
-            style={styles.textarea}
-          />
-        </label>
-      </div>
-      <div style={styles.inlineActionBar}>
-        <button type="button" style={styles.primaryButton} disabled={isSending} onClick={onSend}>
-          {isSending ? 'Sending...' : 'Send PDF'}
-        </button>
-      </div>
-      <EstimateDeliveryHistory history={history} isLoading={isHistoryLoading} />
-    </section>
-  );
-}
-
-function EstimateDeliveryHistory({
-  history,
-  isLoading
-}: {
-  history: OutboundMessageSummary[];
-  isLoading: boolean;
-}) {
-  if (isLoading) {
-    return <p style={styles.tinyMuted}>Loading delivery history...</p>;
-  }
-  if (history.length === 0) {
-    return <p style={styles.tinyMuted}>No sends recorded.</p>;
-  }
-
-  return (
-    <div style={styles.listCompact} aria-label="Estimate delivery history">
-      {history.map((message) => (
-        <div key={message.id} style={styles.row}>
-          <span>
-            <strong>{message.recipientEmail}</strong>{' '}
-            <span style={styles.tinyMuted}>{formatDateTime(message.queuedAt)}</span>
-          </span>
-          <span style={message.status === 'failed' ? styles.dangerBadge : styles.badge}>
-            {deliveryStatusLabel(message.status)}
-          </span>
-          {message.providerError ? (
-            <span style={styles.tinyMuted}>{message.providerError}</span>
-          ) : null}
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
-}
-
-function deliveryStatusLabel(status: OutboundMessageSummary['status']): string {
-  if (status === 'sent') return 'Sent';
-  if (status === 'failed') return 'Failed';
-  if (status === 'delivered') return 'Delivered';
-  if (status === 'bounced') return 'Bounced';
-  if (status === 'complained') return 'Complaint';
-  return 'Queued';
 }
 
 function safeFilenamePart(value: string): string {

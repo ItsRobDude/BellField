@@ -8,6 +8,7 @@ import type {
   EstimateOptionGroupInput,
   EstimateOptionGroupSummary,
   EstimateResponse,
+  EstimateSendPreviewResponse,
   EstimatesResponse,
   EstimateStatus,
   EstimateSummary,
@@ -30,6 +31,7 @@ export type ApproveEstimateRequestDto = ApproveEstimateRequest;
 export type DeclineEstimateRequestDto = DeclineEstimateRequest;
 export type SendEstimateRequestDto = SendEstimateRequest;
 export type SendEstimateResponseDto = SendEstimateResponse;
+export type EstimateSendPreviewResponseDto = EstimateSendPreviewResponse;
 export type OutboundMessagesResponseDto = OutboundMessagesResponse;
 export type EstimateLineItemInputValue = EstimateLineItemInput;
 export type EstimateDiscountValue = EstimateDiscount;

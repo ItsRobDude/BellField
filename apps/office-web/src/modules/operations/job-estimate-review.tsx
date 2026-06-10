@@ -14,7 +14,7 @@ export function EstimateList({
 }) {
   return (
     <section style={styles.subpanel} aria-label="Estimate list">
-      <div style={styles.listCompact}>
+      <div style={styles.estimateListScroll}>
         {estimates.map((estimate) => {
           const isSelected = estimate.id === selectedEstimateId;
           return (

@@ -12,6 +12,11 @@ export class CompanySettingsController {
     return this.companySettingsService.getSettings(getBearerToken(auth));
   }
 
+  @Get('delivery-status')
+  async getEstimateEmailDeliveryStatus(@Headers('authorization') auth: string | undefined) {
+    return this.companySettingsService.getEstimateEmailDeliveryStatus(getBearerToken(auth));
+  }
+
   @Put()
   async updateSettings(
     @Headers('authorization') auth: string | undefined,

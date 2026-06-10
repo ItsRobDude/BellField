@@ -28,6 +28,7 @@ import type {
   CreateEstimateRequestDto,
   DeclineEstimateRequestDto,
   EstimateRecord,
+  EstimateSendPreviewResponseDto,
   OutboundMessagesResponseDto,
   EstimateResponseDto,
   EstimatesResponseDto,
@@ -108,6 +109,13 @@ export class EstimatesService {
     estimateId: string
   ): Promise<OutboundMessagesResponseDto> {
     return this.estimateDeliveryService.listEstimateOutboundMessages(sessionToken, estimateId);
+  }
+
+  async getEstimateSendPreview(
+    sessionToken: string,
+    estimateId: string
+  ): Promise<EstimateSendPreviewResponseDto> {
+    return this.estimateDeliveryService.getEstimateSendPreview(sessionToken, estimateId);
   }
 
   async sendEstimate(

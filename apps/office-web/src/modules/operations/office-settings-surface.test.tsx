@@ -4,6 +4,7 @@ import * as settingsApi from '@/lib/operations-company-settings-api';
 import { OfficeSettingsSurface } from './office-settings-surface';
 
 vi.mock('@/lib/operations-company-settings-api', () => ({
+  getOfficeEstimateEmailDeliveryStatus: vi.fn(),
   getOfficeCompanySettings: vi.fn(),
   updateOfficeCompanySettings: vi.fn()
 }));
@@ -16,6 +17,15 @@ function arrange() {
       companyName: 'BellField',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.'
+    }
+  });
+  mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
+    deliveryStatus: {
+      fromEmail: 'estimates@bellfield.app',
+      configured: true,
+      ready: true,
+      status: 'ready',
+      message: 'Ready to send estimates from estimates@bellfield.app.'
     }
   });
   mockedApi.updateOfficeCompanySettings.mockResolvedValue({
@@ -71,7 +81,29 @@ describe('OfficeSettingsSurface', () => {
     expect(await screen.findByLabelText('Estimate email from address')).toHaveValue(
       'estimates@bellfield.app'
     );
+    expect(
+      await screen.findByText('Ready to send estimates from estimates@bellfield.app.')
+    ).toBeInTheDocument();
     expect(screen.queryByLabelText(/api key/i)).toBeNull();
+    expect(screen.queryByText(/resend/i)).toBeNull();
+  });
+
+  it('shows setup copy when estimate delivery is not ready', async () => {
+    mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
+      deliveryStatus: {
+        fromEmail: 'estimates@bellfield.app',
+        configured: true,
+        ready: false,
+        status: 'needsSetup',
+        message: 'Delivery needs BellField setup before estimates can be sent.'
+      }
+    });
+
+    renderSurface();
+
+    expect(
+      await screen.findByText('Estimate email needs BellField setup. Contact BellField support.')
+    ).toBeInTheDocument();
     expect(screen.queryByText(/resend/i)).toBeNull();
   });
 

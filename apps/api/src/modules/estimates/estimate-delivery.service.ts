@@ -8,6 +8,7 @@ import { randomUUID } from 'node:crypto';
 import type {
   CompanySettings,
   CustomerDocumentSnapshotSummary,
+  OutboundMessageFailureCode,
   OutboundMessageSummary
 } from '@bellfield/contracts';
 import { CompanySettingsRepository } from '../company-settings/company-settings.repository';
@@ -21,7 +22,9 @@ import type {
 } from '../customer-delivery/customer-delivery.types';
 import { CustomerDocumentStorageService } from '../customer-delivery/customer-document-storage.service';
 import {
+  bellfieldEstimateEmailFromAddress,
   buildEmailProviderInput,
+  deliveryNotConfiguredMessage,
   EmailProviderService
 } from '../customer-delivery/email-provider.service';
 import { EstimatePdfRendererService } from '../customer-delivery/estimate-pdf-renderer.service';
@@ -29,6 +32,7 @@ import { IdentityAccessService } from '../identity-access/identity-access.servic
 import { EstimatesRepository } from './estimates.repository';
 import type {
   EstimateRecord,
+  EstimateSendPreviewResponseDto,
   OutboundMessagesResponseDto,
   SendEstimateRequestDto,
   SendEstimateResponseDto
@@ -90,6 +94,34 @@ export class EstimateDeliveryService {
     };
   }
 
+  async getEstimateSendPreview(
+    sessionToken: string,
+    estimateId: string
+  ): Promise<EstimateSendPreviewResponseDto> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'estimates:send', [
+      'office-web'
+    ]);
+    const estimate = await this.requireEstimate(estimateId);
+    this.requireSendableEstimate(estimate);
+    const { job, settings, location, billToCustomer } =
+      await this.loadEstimateDocumentContext(estimate);
+    const emailContent = buildEstimateEmailContent(
+      settings,
+      buildEstimateEmailTokens(settings, estimate, job, location, billToCustomer),
+      {}
+    );
+
+    return {
+      preview: {
+        fromEmail: bellfieldEstimateEmailFromAddress,
+        replyToEmail: settings.replyToEmail,
+        subject: emailContent.subject,
+        bodyText: emailContent.bodyText
+      },
+      deliveryStatus: await this.emailProviderService.getEstimateEmailDeliveryStatus()
+    };
+  }
+
   async sendEstimate(
     sessionToken: string,
     estimateId: string,
@@ -101,14 +133,7 @@ export class EstimateDeliveryService {
       ['office-web']
     );
     const estimate = await this.requireEstimate(estimateId);
-    if (estimate.status !== 'approved') {
-      throw new ConflictException(
-        `Only approved estimates can be sent (status: ${estimate.status}).`
-      );
-    }
-    if (estimate.supersededByEstimateId) {
-      throw new ConflictException('This estimate has been superseded and cannot be sent.');
-    }
+    this.requireSendableEstimate(estimate);
 
     const recipientEmail = normalizeEmail(request.recipientEmail);
     if (
@@ -164,13 +189,7 @@ export class EstimateDeliveryService {
 
     const emailContent = buildEstimateEmailContent(
       settings,
-      {
-        companyName: settings.companyName,
-        customerName: billToCustomer.name,
-        estimateTitle: estimate.title,
-        jobNumber: job.jobNumber,
-        locationName: location.name
-      },
+      buildEstimateEmailTokens(settings, estimate, job, location, billToCustomer),
       request
     );
     const outboundMessageId = randomUUID();
@@ -242,6 +261,17 @@ export class EstimateDeliveryService {
     return estimate;
   }
 
+  private requireSendableEstimate(estimate: EstimateRecord) {
+    if (estimate.status !== 'approved') {
+      throw new ConflictException(
+        `Only approved estimates can be sent (status: ${estimate.status}).`
+      );
+    }
+    if (estimate.supersededByEstimateId) {
+      throw new ConflictException('This estimate has been superseded and cannot be sent.');
+    }
+  }
+
   private async loadEstimateDocumentContext(estimate: EstimateRecord) {
     const [job, settings] = await Promise.all([
       this.jobsDataService.getJobById(estimate.jobId),
@@ -286,7 +316,7 @@ function normalizeEmail(value: string): string {
 function buildEstimateEmailContent(
   settings: CompanySettings,
   tokens: Record<string, string>,
-  request: SendEstimateRequestDto
+  request: Partial<Pick<SendEstimateRequestDto, 'subject' | 'bodyText'>>
 ): { subject: string; bodyText: string } {
   const subject = (request.subject?.trim() || settings.estimateEmailSubject).trim();
   const bodyText = (request.bodyText?.trim() || settings.estimateEmailBody).trim();
@@ -299,6 +329,22 @@ function buildEstimateEmailContent(
   return {
     subject: renderTemplate(subject, tokens),
     bodyText: renderTemplate(bodyText, tokens)
+  };
+}
+
+function buildEstimateEmailTokens(
+  settings: CompanySettings,
+  estimate: EstimateRecord,
+  job: { jobNumber: string },
+  location: { name: string },
+  billToCustomer: { name: string }
+): Record<string, string> {
+  return {
+    companyName: settings.companyName,
+    customerName: billToCustomer.name,
+    estimateTitle: estimate.title,
+    jobNumber: job.jobNumber,
+    locationName: location.name
   };
 }
 
@@ -328,10 +374,12 @@ function toDocumentSnapshotSummary(
 }
 
 function toOutboundMessageSummary(record: OutboundMessageRecord): OutboundMessageSummary {
+  const failureCode = deliveryFailureCode(record);
+  const deliveryMessage = deliverySummaryMessage(record, failureCode);
+
   return {
     id: record.id,
     channel: record.channel,
-    provider: record.provider,
     status: record.status,
     jobId: record.jobId,
     estimateId: record.estimateId,
@@ -342,7 +390,35 @@ function toOutboundMessageSummary(record: OutboundMessageRecord): OutboundMessag
     sentByName: record.sentByName,
     queuedAt: record.queuedAt,
     sentAt: record.sentAt,
-    providerMessageId: record.providerMessageId,
-    providerError: record.providerError
+    failureCode,
+    deliveryMessage
   };
+}
+
+function deliveryFailureCode(
+  record: OutboundMessageRecord
+): OutboundMessageFailureCode | undefined {
+  if (record.status !== 'failed') {
+    return undefined;
+  }
+  if (record.providerError === deliveryNotConfiguredMessage) {
+    return 'notConfigured';
+  }
+  if (record.providerError) {
+    return 'deliveryUnavailable';
+  }
+  return 'unknown';
+}
+
+function deliverySummaryMessage(
+  record: OutboundMessageRecord,
+  failureCode: OutboundMessageFailureCode | undefined
+): string | undefined {
+  if (!failureCode) {
+    return undefined;
+  }
+  if (failureCode === 'notConfigured') {
+    return 'Delivery needs BellField setup before estimates can be sent.';
+  }
+  return 'Email was not delivered. Delivery needs BellField setup or retry.';
 }

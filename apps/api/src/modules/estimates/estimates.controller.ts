@@ -150,6 +150,17 @@ export class EstimatesController {
     );
   }
 
+  @Get(':estimateId/send-preview')
+  async getSendPreview(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('estimateId') estimateId: string
+  ) {
+    return this.estimatesService.getEstimateSendPreview(
+      getBearerToken(authorizationHeader),
+      estimateId
+    );
+  }
+
   @Get(':estimateId/outbound-messages')
   async listOutboundMessages(
     @Headers('authorization') authorizationHeader: string | undefined,

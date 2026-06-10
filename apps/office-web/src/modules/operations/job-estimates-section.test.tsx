@@ -13,6 +13,7 @@ vi.mock('@/lib/operations-api', () => ({
   downloadOfficeEstimateDocument: vi.fn(),
   downloadOfficeEstimatePdf: vi.fn(),
   getOfficeEstimateOutboundMessages: vi.fn(),
+  getOfficeEstimateSendPreview: vi.fn(),
   getOfficeCatalogItems: vi.fn(),
   getOfficeEstimatesForJob: vi.fn(),
   sendOfficeEstimate: vi.fn(),
@@ -70,13 +71,27 @@ describe('JobEstimatesSection', () => {
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [estimate] });
     mockedApi.getOfficeCatalogItems.mockResolvedValue({ items: [] });
     mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({ outboundMessages: [] });
+    mockedApi.getOfficeEstimateSendPreview.mockResolvedValue({
+      preview: {
+        fromEmail: 'estimates@bellfield.app',
+        replyToEmail: 'office@example.com',
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is Replacement options.'
+      },
+      deliveryStatus: {
+        fromEmail: 'estimates@bellfield.app',
+        configured: true,
+        ready: true,
+        status: 'ready',
+        message: 'Ready to send estimates from estimates@bellfield.app.'
+      }
+    });
     mockedApi.downloadOfficeEstimateDocument.mockResolvedValue(new Blob(['html']));
     mockedApi.downloadOfficeEstimatePdf.mockResolvedValue(new Blob(['pdf']));
     mockedApi.sendOfficeEstimate.mockResolvedValue({
       outboundMessage: {
         id: 'message-1',
         channel: 'email',
-        provider: 'resend',
         status: 'sent',
         jobId: 'job-1',
         estimateId: 'estimate-1',
@@ -85,8 +100,7 @@ describe('JobEstimatesSection', () => {
         subject: 'Estimate from BellField',
         sentByName: 'Olivia Owner',
         queuedAt: '2026-06-01T00:00:00.000Z',
-        sentAt: '2026-06-01T00:00:01.000Z',
-        providerMessageId: 'resend-message-1'
+        sentAt: '2026-06-01T00:00:01.000Z'
       },
       documentSnapshot: {
         id: 'snapshot-1',
@@ -182,6 +196,9 @@ describe('JobEstimatesSection', () => {
 
     expect(await screen.findByRole('button', { name: /Old repair quote/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Duct work/ })).toBeInTheDocument();
+    expect(screen.getByLabelText('Estimate list').querySelector('div')).toHaveStyle({
+      overflowY: 'auto'
+    });
     expect(screen.getByText(/Duct sealing/)).toBeInTheDocument();
     expect(screen.queryByText('Old blower motor')).not.toBeInTheDocument();
 
@@ -224,6 +241,15 @@ describe('JobEstimatesSection', () => {
     expect(await screen.findByLabelText('Estimate recipient email')).toHaveValue(
       'customer@example.com'
     );
+    expect(await screen.findByLabelText('Estimate email from address')).toHaveValue(
+      'estimates@bellfield.app'
+    );
+    expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
+      'Estimate from BellField'
+    );
+    expect(await screen.findByLabelText('Estimate email body')).toHaveValue(
+      'Hello Acme, attached is Replacement options.'
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
 
     await waitFor(() => {
@@ -232,16 +258,81 @@ describe('JobEstimatesSection', () => {
         apiBaseUrl: 'http://api.test',
         sessionToken: 'session-token',
         recipientEmail: 'customer@example.com',
-        subject: undefined,
-        bodyText: undefined
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is Replacement options.'
       });
     });
-    expect(confirmSpy).toHaveBeenCalledWith('Send this estimate to customer@example.com?');
+    expect(mockedApi.getOfficeEstimateSendPreview).toHaveBeenCalledWith({
+      estimateId: 'estimate-1',
+      apiBaseUrl: 'http://api.test',
+      sessionToken: 'session-token'
+    });
+    expect(confirmSpy).toHaveBeenCalledWith(
+      'Send this estimate PDF to customer@example.com from estimates@bellfield.app?'
+    );
     expect(await screen.findByText('Estimate sent.')).toBeInTheDocument();
     expect(mockedApi.getOfficeEstimateOutboundMessages).toHaveBeenCalledWith({
       estimateId: 'estimate-1',
       apiBaseUrl: 'http://api.test',
       sessionToken: 'session-token'
     });
+  });
+
+  it('shows safe failed-delivery history without backend provider details', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-01T00:00:00.000Z',
+          approvedByEmployeeId: 'office-1',
+          approvedByName: 'Olivia Owner'
+        }
+      ]
+    });
+    mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({
+      outboundMessages: [
+        {
+          id: 'message-failed',
+          channel: 'email',
+          status: 'failed',
+          jobId: 'job-1',
+          estimateId: 'estimate-1',
+          documentSnapshotId: 'snapshot-1',
+          recipientEmail: 'customer@example.com',
+          subject: 'Estimate from BellField',
+          sentByName: 'Olivia Owner',
+          queuedAt: '2026-06-01T00:00:00.000Z',
+          failureCode: 'deliveryUnavailable',
+          deliveryMessage: 'Email was not delivered. Delivery needs BellField setup or retry.',
+          providerError: 'The bellfield.app domain is not verified.'
+        } as unknown as operationsApi.OutboundMessageSummary
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+
+    expect(await screen.findByText('To')).toBeInTheDocument();
+    expect(screen.getByText('customer@example.com')).toBeInTheDocument();
+    expect(
+      screen.getByText('Email was not delivered. Delivery needs BellField setup or retry.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/resend/i)).toBeNull();
+    expect(screen.queryByText(/domain is not verified/i)).toBeNull();
   });
 });

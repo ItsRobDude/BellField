@@ -105,6 +105,13 @@ function createDeliveryService() {
     sendEstimateEmail: jest.fn().mockResolvedValue({
       kind: 'sent',
       providerMessageId: 'resend-message-1'
+    }),
+    getEstimateEmailDeliveryStatus: jest.fn().mockResolvedValue({
+      fromEmail: 'estimates@bellfield.app',
+      configured: true,
+      ready: true,
+      status: 'ready',
+      message: 'Ready to send estimates from estimates@bellfield.app.'
     })
   };
   const estimatePdfRendererService = {
@@ -261,7 +268,38 @@ describe('EstimateDeliveryService', () => {
     );
     expect(result.outboundMessage.status).toBe('sent');
     expect(result.outboundMessage).not.toHaveProperty('bodyText');
+    expect(result.outboundMessage).not.toHaveProperty('provider');
+    expect(result.outboundMessage).not.toHaveProperty('providerMessageId');
     expect(result.documentSnapshot).not.toHaveProperty('storagePath');
+  });
+
+  it('previews resolved estimate email content and delivery readiness without sending', async () => {
+    const { service, identityAccessService, emailProviderService } = createDeliveryService();
+
+    const result = await service.getEstimateSendPreview('token', 'estimate-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'estimates:send',
+      ['office-web']
+    );
+    expect(result).toEqual({
+      preview: {
+        fromEmail: 'estimates@bellfield.app',
+        replyToEmail: undefined,
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is AC replacement.'
+      },
+      deliveryStatus: {
+        fromEmail: 'estimates@bellfield.app',
+        configured: true,
+        ready: true,
+        status: 'ready',
+        message: 'Ready to send estimates from estimates@bellfield.app.'
+      }
+    });
+    expect(emailProviderService.getEstimateEmailDeliveryStatus).toHaveBeenCalledTimes(1);
+    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
   });
 
   it('refuses to send a pending estimate', async () => {
@@ -294,7 +332,11 @@ describe('EstimateDeliveryService', () => {
       expect.objectContaining({ kind: 'estimateDeliveryFailed' })
     );
     expect(result.outboundMessage.status).toBe('failed');
-    expect(result.outboundMessage.providerError).toBe('Provider rejected request.');
+    expect(result.outboundMessage.failureCode).toBe('deliveryUnavailable');
+    expect(result.outboundMessage.deliveryMessage).toBe(
+      'Email was not delivered. Delivery needs BellField setup or retry.'
+    );
+    expect(result.outboundMessage).not.toHaveProperty('providerError');
   });
 
   it('blocks accidental duplicate estimate sends inside the short retry window', async () => {

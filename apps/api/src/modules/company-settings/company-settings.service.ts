@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import type { PermissionKey } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
+import { EmailProviderService } from '../customer-delivery/email-provider.service';
 import { CompanySettingsRepository } from './company-settings.repository';
 import type {
   CompanySettingsResponseDto,
+  EstimateEmailDeliveryStatusResponseDto,
   UpdateCompanySettingsRequestDto
 } from './company-settings.types';
 
@@ -11,7 +13,8 @@ import type {
 export class CompanySettingsService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
-    private readonly companySettingsRepository: CompanySettingsRepository
+    private readonly companySettingsRepository: CompanySettingsRepository,
+    private readonly emailProviderService: EmailProviderService
   ) {}
 
   async getSettings(sessionToken: string): Promise<CompanySettingsResponseDto> {
@@ -27,6 +30,15 @@ export class CompanySettingsService {
     const normalized = normalizeSettings(request);
     return {
       settings: await this.companySettingsRepository.upsertSettings(normalized, actor)
+    };
+  }
+
+  async getEstimateEmailDeliveryStatus(
+    sessionToken: string
+  ): Promise<EstimateEmailDeliveryStatusResponseDto> {
+    await this.authorize(sessionToken, 'companySettings:view');
+    return {
+      deliveryStatus: await this.emailProviderService.getEstimateEmailDeliveryStatus()
     };
   }
 

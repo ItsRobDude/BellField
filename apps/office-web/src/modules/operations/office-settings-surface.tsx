@@ -1,8 +1,9 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import type { CompanySettings } from '@bellfield/contracts';
+import type { CompanySettings, EstimateEmailDeliveryStatus } from '@bellfield/contracts';
 import {
+  getOfficeEstimateEmailDeliveryStatus,
   getOfficeCompanySettings,
   updateOfficeCompanySettings
 } from '@/lib/operations-company-settings-api';
@@ -39,6 +40,8 @@ export function OfficeSettingsSurface({
   const [draft, setDraft] = useState<SettingsDraft>(emptyDraft);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [deliveryStatus, setDeliveryStatus] = useState<EstimateEmailDeliveryStatus | null>(null);
+  const [isDeliveryStatusLoading, setIsDeliveryStatusLoading] = useState(false);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -59,6 +62,28 @@ export function OfficeSettingsSurface({
   useEffect(() => {
     void load();
   }, [load]);
+
+  const loadDeliveryStatus = useCallback(async () => {
+    setIsDeliveryStatusLoading(true);
+    try {
+      const response = await getOfficeEstimateEmailDeliveryStatus({ apiBaseUrl, sessionToken });
+      setDeliveryStatus(response.deliveryStatus);
+    } catch {
+      setDeliveryStatus({
+        fromEmail: estimateEmailFromAddress,
+        configured: false,
+        ready: false,
+        status: 'temporarilyUnavailable',
+        message: 'Estimate email setup could not be confirmed. Contact BellField support.'
+      });
+    } finally {
+      setIsDeliveryStatusLoading(false);
+    }
+  }, [apiBaseUrl, sessionToken]);
+
+  useEffect(() => {
+    void loadDeliveryStatus();
+  }, [loadDeliveryStatus]);
 
   async function saveSettings() {
     setIsSaving(true);
@@ -121,12 +146,19 @@ export function OfficeSettingsSurface({
               From email
               <input
                 aria-label="Estimate email from address"
-                value={estimateEmailFromAddress}
+                value={deliveryStatus?.fromEmail ?? estimateEmailFromAddress}
                 disabled
                 readOnly
                 style={styles.input}
               />
             </label>
+            {isDeliveryStatusLoading ? (
+              <p style={styles.tinyMuted}>Checking estimate email delivery...</p>
+            ) : deliveryStatus ? (
+              <p style={deliveryStatus.ready ? styles.notice : styles.error}>
+                {settingsDeliveryStatusMessage(deliveryStatus)}
+              </p>
+            ) : null}
             <label style={styles.fieldLabel}>
               Reply-to email
               <input
@@ -199,4 +231,14 @@ function setDraftValue(
   value: string
 ) {
   setDraft((current) => ({ ...current, [key]: value }));
+}
+
+function settingsDeliveryStatusMessage(status: EstimateEmailDeliveryStatus): string {
+  if (status.ready) {
+    return status.message;
+  }
+  if (status.status === 'temporarilyUnavailable') {
+    return 'Estimate email setup could not be confirmed. Contact BellField support.';
+  }
+  return 'Estimate email needs BellField setup. Contact BellField support.';
 }

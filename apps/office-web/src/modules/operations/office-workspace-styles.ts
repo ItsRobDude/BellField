@@ -135,6 +135,13 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   },
   list: { display: 'grid', gap: '1rem' },
   listCompact: { display: 'grid', gap: '0.5rem' },
+  estimateListScroll: {
+    display: 'grid',
+    gap: '0.5rem',
+    maxHeight: 'min(34rem, calc(100vh - 16rem))',
+    overflowY: 'auto',
+    paddingRight: '0.25rem'
+  },
   formRow: {
     display: 'grid',
     gap: '0.75rem',
@@ -335,6 +342,13 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     padding: '0.65rem 0.8rem'
   },
   inlineActionBar: { alignItems: 'center', display: 'flex', flexWrap: 'wrap', gap: '0.65rem' },
+  deliveryHistoryItem: {
+    alignItems: 'start',
+    borderTop: '1px solid #edf2ee',
+    display: 'grid',
+    gap: '0.35rem',
+    paddingTop: '0.65rem'
+  },
   notice: {
     background: '#ecfdf5',
     border: '1px solid #a7f3d0',
