@@ -205,6 +205,59 @@ describe('JobEstimatesSection', () => {
     expect(screen.queryByText(/Duct sealing/)).not.toBeInTheDocument();
   });
 
+  it('keeps manual estimate line kind in details and defaults it to service item', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
+    mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New estimate' }));
+
+    expect(screen.queryByLabelText('Kind')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More details' }));
+
+    expect(screen.getByLabelText('Kind')).toHaveValue('serviceItem');
+    expect(screen.getByLabelText('Unit')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Maintenance quote' }
+    });
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'Diagnostic visit' }
+    });
+    fireEvent.change(screen.getByLabelText('Unit price'), { target: { value: '129' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create estimate' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 'job-1',
+          lineItems: [
+            expect.objectContaining({
+              kind: 'serviceItem',
+              description: 'Diagnostic visit',
+              quantity: 1,
+              unitPrice: 129
+            })
+          ]
+        })
+      )
+    );
+  });
+
   it('sends an approved estimate PDF and refreshes delivery history', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({

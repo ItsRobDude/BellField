@@ -89,7 +89,7 @@ export function createEmptyEstimateDraft(): EstimateDraft {
     selectedOptionId: '',
     lineItems: [
       {
-        kind: 'part',
+        kind: 'serviceItem',
         description: '',
         quantity: '1',
         unitOfMeasure: '',
@@ -103,7 +103,7 @@ export function createEmptyEstimateDraft(): EstimateDraft {
 
 export function isUntouchedBlankEstimateLine(line: EstimateLineDraft): boolean {
   return (
-    line.kind === 'part' &&
+    line.kind === 'serviceItem' &&
     line.description.trim() === '' &&
     line.quantity === '1' &&
     line.unitOfMeasure.trim() === '' &&

@@ -292,11 +292,13 @@ describe('parseEstimateDraft', () => {
 });
 
 describe('isUntouchedBlankEstimateLine', () => {
-  it('detects only the starter blank line', () => {
+  it('detects only the service-item starter blank line', () => {
     const starterLine = createEmptyEstimateDraft().lineItems[0]!;
 
+    expect(starterLine.kind).toBe('serviceItem');
     expect(isUntouchedBlankEstimateLine(starterLine)).toBe(true);
     expect(isUntouchedBlankEstimateLine({ ...starterLine, description: 'Started' })).toBe(false);
+    expect(isUntouchedBlankEstimateLine({ ...starterLine, kind: 'part' })).toBe(false);
   });
 });
 

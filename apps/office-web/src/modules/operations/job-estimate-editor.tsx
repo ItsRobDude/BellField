@@ -46,6 +46,7 @@ export function EstimateEditor({
 }: EstimateEditorProps) {
   const optionGroup = draft.optionGroups[0];
   const [activeTargetId, setActiveTargetId] = useState('base');
+  const [expandedLineIndexes, setExpandedLineIndexes] = useState<Set<number>>(() => new Set());
   const activeTarget = resolveLineTarget(activeTargetId, optionGroup);
   const visibleLines = draft.lineItems
     .map((line, index) => ({ line, index }))
@@ -93,7 +94,7 @@ export function EstimateEditor({
         ...draft.lineItems,
         withTarget(
           {
-            kind: 'part',
+            kind: 'serviceItem',
             description: '',
             quantity: '1',
             unitOfMeasure: '',
@@ -122,6 +123,29 @@ export function EstimateEditor({
     onChange({
       ...draft,
       lineItems: draft.lineItems.filter((_, lineIndex) => lineIndex !== index)
+    });
+    setExpandedLineIndexes((current) => {
+      const next = new Set<number>();
+      for (const lineIndex of current) {
+        if (lineIndex < index) {
+          next.add(lineIndex);
+        } else if (lineIndex > index) {
+          next.add(lineIndex - 1);
+        }
+      }
+      return next;
+    });
+  }
+
+  function toggleLineDetails(index: number) {
+    setExpandedLineIndexes((current) => {
+      const next = new Set(current);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
     });
   }
 
@@ -248,22 +272,6 @@ export function EstimateEditor({
           visibleLines.map(({ line, index }) => (
             <div key={index} style={styles.subpanel}>
               <div style={styles.formGridCompact}>
-                <label style={styles.fieldLabel}>
-                  <span>Kind</span>
-                  <select
-                    style={styles.input}
-                    value={line.kind}
-                    onChange={(event) =>
-                      patchLine(index, { kind: event.target.value as EstimateLineDraft['kind'] })
-                    }
-                  >
-                    {estimateLineItemKindOptions.map((kind) => (
-                      <option key={kind} value={kind}>
-                        {estimateLineItemKindLabels[kind]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
                 <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
                   <span>Description</span>
                   <input
@@ -313,11 +321,52 @@ export function EstimateEditor({
                   <span>Taxable</span>
                 </label>
               </div>
+              {expandedLineIndexes.has(index) ? (
+                <div style={styles.formGridCompact}>
+                  <label style={styles.fieldLabel}>
+                    <span>Kind</span>
+                    <select
+                      style={styles.input}
+                      value={line.kind}
+                      onChange={(event) =>
+                        patchLine(index, { kind: event.target.value as EstimateLineDraft['kind'] })
+                      }
+                    >
+                      {estimateLineItemKindOptions.map((kind) => (
+                        <option key={kind} value={kind}>
+                          {estimateLineItemKindLabels[kind]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label style={styles.fieldLabel}>
+                    <span>Unit</span>
+                    <input
+                      style={styles.input}
+                      value={line.unitOfMeasure}
+                      onChange={(event) => patchLine(index, { unitOfMeasure: event.target.value })}
+                    />
+                  </label>
+                </div>
+              ) : null}
               <div style={styles.row}>
                 <span style={styles.tinyMuted}>Line {index + 1}</span>
-                <button type="button" style={styles.dangerButton} onClick={() => removeLine(index)}>
-                  Remove
-                </button>
+                <div style={styles.inlineActionBar}>
+                  <button
+                    type="button"
+                    style={styles.button}
+                    onClick={() => toggleLineDetails(index)}
+                  >
+                    {expandedLineIndexes.has(index) ? 'Hide details' : 'More details'}
+                  </button>
+                  <button
+                    type="button"
+                    style={styles.dangerButton}
+                    onClick={() => removeLine(index)}
+                  >
+                    Remove
+                  </button>
+                </div>
               </div>
             </div>
           ))
