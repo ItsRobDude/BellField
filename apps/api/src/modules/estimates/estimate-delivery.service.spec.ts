@@ -406,6 +406,49 @@ describe('EstimateDeliveryService', () => {
     );
   });
 
+  it('answers sent-but-unrecorded when the provider accepts but the record write fails', async () => {
+    const { service, customerDeliveryRepository } = createDeliveryService();
+    customerDeliveryRepository.markOutboundMessageSent.mockRejectedValue(
+      new Error('database unavailable')
+    );
+
+    const result = await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(result.outboundMessage.status).toBe('sent');
+    expect(result.recordingIncomplete).toBe(true);
+  });
+
+  it('answers sent-but-unrecorded when only the timeline write fails after a send', async () => {
+    const { service, customerDeliveryRepository } = createDeliveryService();
+    customerDeliveryRepository.addEstimateDeliveryTimeline.mockRejectedValue(
+      new Error('database unavailable')
+    );
+
+    const result = await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(result.outboundMessage.status).toBe('sent');
+    expect(result.recordingIncomplete).toBe(true);
+  });
+
+  it('still fails loudly when recording breaks after a provider failure', async () => {
+    const { service, customerDeliveryRepository, emailProviderService } = createDeliveryService();
+    emailProviderService.sendEstimateEmail.mockResolvedValue({
+      kind: 'error',
+      message: 'Provider rejected request.'
+    });
+    customerDeliveryRepository.addEstimateDeliveryTimeline.mockRejectedValue(
+      new Error('database unavailable')
+    );
+
+    await expect(
+      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toThrow('database unavailable');
+  });
+
   it('marks the intent failed when PDF rendering fails, so retries are not blocked', async () => {
     const {
       service,

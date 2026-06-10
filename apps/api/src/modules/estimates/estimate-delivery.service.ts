@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ConflictException,
   Injectable,
+  Logger,
   NotFoundException
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
@@ -45,6 +46,8 @@ export type EstimatePdfDocument = {
 
 @Injectable()
 export class EstimateDeliveryService {
+  private readonly logger = new Logger(EstimateDeliveryService.name);
+
   constructor(
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
@@ -237,33 +240,63 @@ export class EstimateDeliveryService {
       })
     );
     const completedAt = new Date().toISOString();
-    const outboundMessage =
-      providerResult.kind === 'sent'
-        ? await this.customerDeliveryRepository.markOutboundMessageSent(
-            outboundMessageId,
-            providerResult.providerMessageId,
-            completedAt
-          )
-        : await this.customerDeliveryRepository.markOutboundMessageFailed(
-            outboundMessageId,
-            providerResult.message,
-            completedAt
-          );
+    let outboundMessage: OutboundMessageRecord;
+    let recordingIncomplete = false;
+    if (providerResult.kind === 'sent') {
+      try {
+        outboundMessage = await this.customerDeliveryRepository.markOutboundMessageSent(
+          outboundMessageId,
+          providerResult.providerMessageId,
+          completedAt
+        );
+      } catch (error) {
+        // The customer already has the email. Reporting failure here would
+        // invite a duplicate send, so answer truthfully: sent, record broken.
+        this.logger.error(
+          `Estimate ${estimate.id} email was accepted by the provider but could not be recorded as sent: ${describeError(error)}`
+        );
+        recordingIncomplete = true;
+        outboundMessage = {
+          ...intent,
+          status: 'sent',
+          documentSnapshotId: documentSnapshot.id,
+          sentAt: completedAt,
+          providerMessageId: providerResult.providerMessageId
+        };
+      }
+    } else {
+      outboundMessage = await this.customerDeliveryRepository.markOutboundMessageFailed(
+        outboundMessageId,
+        providerResult.message,
+        completedAt
+      );
+    }
 
-    await this.customerDeliveryRepository.addEstimateDeliveryTimeline({
-      jobId: estimate.jobId,
-      occurredAt: completedAt,
-      actorName: actor.displayName,
-      kind: providerResult.kind === 'sent' ? 'estimateSent' : 'estimateDeliveryFailed',
-      message:
-        providerResult.kind === 'sent'
-          ? `Estimate sent to ${recipientEmail}: ${estimate.title}.`
-          : `Estimate delivery failed for ${recipientEmail}: ${estimate.title}.`
-    });
+    try {
+      await this.customerDeliveryRepository.addEstimateDeliveryTimeline({
+        jobId: estimate.jobId,
+        occurredAt: completedAt,
+        actorName: actor.displayName,
+        kind: providerResult.kind === 'sent' ? 'estimateSent' : 'estimateDeliveryFailed',
+        message:
+          providerResult.kind === 'sent'
+            ? `Estimate sent to ${recipientEmail}: ${estimate.title}.`
+            : `Estimate delivery failed for ${recipientEmail}: ${estimate.title}.`
+      });
+    } catch (error) {
+      if (providerResult.kind !== 'sent') {
+        throw error;
+      }
+      this.logger.error(
+        `Estimate ${estimate.id} email was sent but the timeline entry could not be written: ${describeError(error)}`
+      );
+      recordingIncomplete = true;
+    }
 
     return {
       outboundMessage: toOutboundMessageSummary(outboundMessage),
-      documentSnapshot: toDocumentSnapshotSummary(documentSnapshot)
+      documentSnapshot: toDocumentSnapshotSummary(documentSnapshot),
+      ...(recordingIncomplete ? { recordingIncomplete: true } : {})
     };
   }
 
@@ -312,6 +345,10 @@ export class EstimateDeliveryService {
       };
     }
   }
+}
+
+function describeError(error: unknown): string {
+  return error instanceof Error ? error.message : 'unknown error';
 }
 
 function safeFilenamePart(value: string): string {

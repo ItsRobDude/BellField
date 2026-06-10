@@ -357,6 +357,14 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
     margin: 0,
     padding: '0.65rem 0.8rem'
   },
+  warning: {
+    background: '#fffbeb',
+    border: '1px solid #fde68a',
+    borderRadius: 8,
+    color: '#92400e',
+    margin: 0,
+    padding: '0.65rem 0.8rem'
+  },
   error: { color: '#b42318', margin: '0.75rem 0 0' },
   timeline: { margin: 0, paddingInlineStart: '1.1rem' },
   tableWrap: { overflowX: 'auto' },

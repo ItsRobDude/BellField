@@ -56,6 +56,12 @@ export interface SendEstimateRequest {
 export interface SendEstimateResponse {
   outboundMessage: OutboundMessageSummary;
   documentSnapshot: CustomerDocumentSnapshotSummary;
+  /**
+   * True when the provider accepted the email but BellField could not finish
+   * recording the send (audit row or timeline write failed). The customer has
+   * the email; the office must not resend until the record is repaired.
+   */
+  recordingIncomplete?: boolean;
 }
 
 export interface OutboundMessagesResponse {

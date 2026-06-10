@@ -665,6 +665,76 @@ describe('JobEstimatesSection', () => {
     expect(mockedApi.sendOfficeEstimate).not.toHaveBeenCalled();
   });
 
+  it('warns instead of celebrating when a send is accepted but not recorded', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-01T00:00:00.000Z',
+          approvedByEmployeeId: 'office-1',
+          approvedByName: 'Olivia Owner'
+        }
+      ]
+    });
+    mockedApi.sendOfficeEstimate.mockResolvedValue({
+      outboundMessage: {
+        id: 'message-1',
+        channel: 'email',
+        status: 'sent',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T00:00:00.000Z',
+        sentAt: '2026-06-01T00:00:01.000Z'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'estimate',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        sourceVersion: 1,
+        filename: 'estimate.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 100,
+        generatedByName: 'Olivia Owner',
+        generatedAt: '2026-06-01T00:00:00.000Z'
+      },
+      recordingIncomplete: true
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
+      'Estimate from BellField'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+
+    const warning = await screen.findByText(
+      'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
+    );
+    expect(warning).toHaveStyle({ color: '#92400e' });
+    expect(screen.queryByText('Estimate sent.')).toBeNull();
+  });
+
   it('shows a failed send as an error, not a success notice', async () => {
     vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({

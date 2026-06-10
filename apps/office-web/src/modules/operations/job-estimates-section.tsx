@@ -71,6 +71,7 @@ export function JobEstimatesSection({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [draft, setDraft] = useState<EstimateDraft | null>(null);
   const [editingEstimateId, setEditingEstimateId] = useState<string | null>(null);
   const [selectedEstimateId, setSelectedEstimateId] = useState<string | null>(null);
@@ -378,6 +379,7 @@ export function JobEstimatesSection({
     setSendingEstimateId(estimate.id);
     setErrorMessage(null);
     setNoticeMessage(null);
+    setWarningMessage(null);
     try {
       const response = await sendOfficeEstimate({
         estimateId: estimate.id,
@@ -393,7 +395,13 @@ export function JobEstimatesSection({
       if (response.outboundMessage.status === 'sent') {
         // Reload so the list picks up the new Sent state.
         await loadEstimates();
-        setNoticeMessage('Estimate sent.');
+        if (response.recordingIncomplete) {
+          setWarningMessage(
+            'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
+          );
+        } else {
+          setNoticeMessage('Estimate sent.');
+        }
       } else {
         setErrorMessage(response.outboundMessage.deliveryMessage ?? 'Estimate delivery failed.');
       }
@@ -416,6 +424,7 @@ export function JobEstimatesSection({
       </div>
 
       {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      {warningMessage ? <p style={styles.warning}>{warningMessage}</p> : null}
       {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
 
       {draft ? (
