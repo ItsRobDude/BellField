@@ -2,7 +2,9 @@ import { getAssignedWorkWindow } from './field-work-window';
 
 describe('getAssignedWorkWindow', () => {
   it('keeps the assigned-work window on the server local calendar day late in the evening', () => {
-    const referenceDate = new Date('2026-04-14T17:30:00-07:00');
+    // Construct in server-local time: the contract is "the server's calendar
+    // day," so a fixed-offset ISO string would only pass in one timezone.
+    const referenceDate = new Date(2026, 3, 14, 23, 30, 0);
 
     const result = getAssignedWorkWindow(referenceDate);
 

@@ -10,6 +10,7 @@
     "prebuild": "pnpm --filter @bellfield/estimating build",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",
+    "pretest": "pnpm --filter @bellfield/estimating build",
     "test": "jest --runInBand",
     "pretypecheck": "pnpm --filter @bellfield/estimating build",
     "typecheck": "tsc --noEmit -p tsconfig.json",
