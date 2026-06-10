@@ -146,6 +146,16 @@ Read when: planning or implementing outbound customer email/SMS, estimate/invoic
 
 Does not own: estimate/invoice lifecycle rules (`workflows-and-state-machines.md`), permission taxonomy (`permissions-model.md`), or self-hosting constraints (`deployment-model.md`).
 
+### [delivery-relay-plan.md](./delivery-relay-plan.md)
+
+Audience: contributors planning or implementing the BellField-hosted delivery relay, license-token consumption, sender identity tiers, or install-side send queueing.
+
+Purpose: the controlling plan for relay key custody, the per-shop single-active license token, BellField-domain vs custom-domain sending, the narrow relay API, queue-and-retry semantics, webhook termination, and the build order toward acceptance and payment links.
+
+Read when: designing or building the relay, changing how installs send customer email, or touching delivery entitlement behavior.
+
+Does not own: the communications lane phases (`customer-comms-and-delivery.md`), licensing posture (`asset-protection-and-licensing.md`), or hosting philosophy (`deployment-model.md`).
+
 ### [validation-playbook.md](./validation-playbook.md)
 
 Audience: contributors validating risky local DB, office UI, field-device, or release-readiness lanes.

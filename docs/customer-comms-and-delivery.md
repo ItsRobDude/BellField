@@ -138,6 +138,10 @@ Until the relay exists, the direct provider adapter configured by a server-owned
 environment key is an interim implementation for BellField-operated installs
 only. It must not ship to sold installs.
 
+The controlling design for the relay itself — business model, license-token
+semantics, sender identity tiers, API shape, queueing, and build order — is
+[delivery-relay-plan.md](./delivery-relay-plan.md).
+
 ---
 
 ## 5. Settings Direction

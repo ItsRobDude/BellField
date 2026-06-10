@@ -115,6 +115,7 @@ BellField has strong permission modeling and conservative backend rules, but not
 - [x] `SECURITY.md` and private vulnerability-disclosure path using `security@bellfield.app`
 - [x] startup validation of required production env vars (`BELLFIELD_MEDIA_ROOT`, `BELLFIELD_MEDIA_TOKEN_SECRET`, `DATABASE_URL`) so prod cannot boot on weak dev fallbacks or known media-secret placeholders
 - [x] Dependabot dependency-update flow for workspace packages and GitHub Actions, configured weekly and low-noise
+- [ ] packaged/sold installs must not be able to run in development mode: a distributed release with `NODE_ENV` unset currently defaults to development, which enables bootstrap seeding (owner logins with publicly-known `bellfield-*` passwords) and weak dev fallbacks. The release artifact must refuse to start, or hard-disable seeding and dev fallbacks, when not explicitly production.
 - [ ] a real security review before the first pilot (the repo's security-review path)
 
 **Current dependency-audit state** (after the Next 15.5.19 / NestJS 11.1.24 / Expo SDK-56.0.8 upgrade pass): **both `pnpm audit --prod` (the `security:audit` script) and the full `pnpm audit` report "No known vulnerabilities found"** — down from 38 advisory-paths, so the CI `security:audit` step now exits zero and is treated as a real gate.
