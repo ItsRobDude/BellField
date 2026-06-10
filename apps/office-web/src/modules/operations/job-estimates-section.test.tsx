@@ -549,6 +549,77 @@ describe('JobEstimatesSection', () => {
     });
   });
 
+  it('shows a failed send as an error, not a success notice', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-01T00:00:00.000Z',
+          approvedByEmployeeId: 'office-1',
+          approvedByName: 'Olivia Owner'
+        }
+      ]
+    });
+    mockedApi.sendOfficeEstimate.mockResolvedValue({
+      outboundMessage: {
+        id: 'message-failed',
+        channel: 'email',
+        status: 'failed',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T00:00:00.000Z',
+        failureCode: 'deliveryUnavailable',
+        deliveryMessage: 'Email was not delivered. Try again or contact BellField support.'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'estimate',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        sourceVersion: 1,
+        filename: 'estimate.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 100,
+        generatedByName: 'Olivia Owner',
+        generatedAt: '2026-06-01T00:00:00.000Z'
+      }
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
+      'Estimate from BellField'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+
+    const failureMessage = await screen.findByText(
+      'Email was not delivered. Try again or contact BellField support.'
+    );
+    // The failure must render in the red error slot, not the green notice slot.
+    expect(failureMessage).toHaveStyle({ color: '#b42318' });
+    expect(screen.queryByText('Estimate sent.')).toBeNull();
+  });
+
   it('shows safe failed-delivery history without backend provider details', async () => {
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
       estimates: [

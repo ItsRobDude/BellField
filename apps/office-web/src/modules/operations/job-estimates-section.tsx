@@ -377,12 +377,14 @@ export function JobEstimatesSection({
         subject: draft?.subject.trim() || undefined,
         bodyText: draft?.bodyText.trim() || undefined
       });
-      setNoticeMessage(
-        response.outboundMessage.status === 'sent'
-          ? 'Estimate sent.'
-          : (response.outboundMessage.deliveryMessage ?? 'Estimate delivery failed.')
-      );
+      // Refresh history first: loadDeliveryHistory clears errorMessage, so a
+      // failure message set before it would be wiped immediately.
       await loadDeliveryHistory(estimate.id);
+      if (response.outboundMessage.status === 'sent') {
+        setNoticeMessage('Estimate sent.');
+      } else {
+        setErrorMessage(response.outboundMessage.deliveryMessage ?? 'Estimate delivery failed.');
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to send the estimate.');
     } finally {
