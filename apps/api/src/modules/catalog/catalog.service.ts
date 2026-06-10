@@ -98,8 +98,9 @@ export class CatalogService {
     request: CreateCatalogItemRequestDto
   ): Promise<CatalogItemResponse> {
     await this.authorize(sessionToken, 'catalog:create');
-    await this.validateCatalogItemRequest(request);
-    return { item: await this.catalogRepository.createItem(request) };
+    const normalizedRequest = await this.applyCategoryTaxDefault(request);
+    await this.validateCatalogItemRequest(normalizedRequest);
+    return { item: await this.catalogRepository.createItem(normalizedRequest) };
   }
 
   async updateItem(
@@ -140,6 +141,25 @@ export class CatalogService {
     ) {
       throw new NotFoundException('Linked inventory item not found.');
     }
+  }
+
+  private async applyCategoryTaxDefault(
+    request: CreateCatalogItemRequestDto
+  ): Promise<CreateCatalogItemRequestDto> {
+    if (request.taxableDefault !== undefined) {
+      return request;
+    }
+    const categoryName = request.category?.trim();
+    if (!categoryName) {
+      return request;
+    }
+
+    const category = await this.catalogRepository.getCategoryByName(categoryName);
+    if (!category?.isActive || category.defaultTaxable === undefined) {
+      return request;
+    }
+
+    return { ...request, taxableDefault: category.defaultTaxable };
   }
 
   private async validateCatalogCategoryRequest(

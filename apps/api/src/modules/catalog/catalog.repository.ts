@@ -114,6 +114,20 @@ export class CatalogRepository {
     return result.rows[0] ? toCatalogCategory(result.rows[0]) : null;
   }
 
+  async getCategoryByName(name: string): Promise<CatalogCategory | null> {
+    const result = await this.databaseService.query<CatalogCategoryRow>(
+      `
+        select ${CATALOG_CATEGORY_COLUMNS}
+        from catalog_categories
+        where lower(name) = lower($1)
+        limit 1
+      `,
+      [name.trim()]
+    );
+
+    return result.rows[0] ? toCatalogCategory(result.rows[0]) : null;
+  }
+
   async categoryNameExists(name: string, excludingId?: string): Promise<boolean> {
     const result = await this.databaseService.query<{ id: string }>(
       `

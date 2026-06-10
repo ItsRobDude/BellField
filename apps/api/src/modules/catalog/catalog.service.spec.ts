@@ -48,6 +48,7 @@ function createService(effectivePermissions: string[]) {
   const catalogRepository = {
     listCategories: jest.fn().mockResolvedValue([catalogCategory()]),
     getCategoryById: jest.fn(),
+    getCategoryByName: jest.fn().mockResolvedValue(null),
     categoryNameExists: jest.fn().mockResolvedValue(false),
     createCategory: jest.fn(),
     updateCategory: jest.fn(),
@@ -91,6 +92,45 @@ describe('CatalogService', () => {
     expect(result.items[0].costHint).toBe(275);
     expect(result.items[0].incomeCategory).toBe('Parts');
     expect(result.items[0].accountingExportCode).toBe('4000');
+  });
+
+  it('applies an active category tax default when creating a Catalog item without an explicit default', async () => {
+    const { service, catalogRepository } = createService(['catalog:create']);
+    catalogRepository.getCategoryByName.mockResolvedValue(
+      catalogCategory({ name: 'Materials', defaultTaxable: false })
+    );
+    catalogRepository.createItem.mockResolvedValue(catalogItem({ taxableDefault: false }));
+
+    await service.createItem('token', {
+      name: '16x20x1 filter',
+      kind: 'part',
+      category: 'Materials'
+    });
+
+    expect(catalogRepository.getCategoryByName).toHaveBeenCalledWith('Materials');
+    expect(catalogRepository.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: '16x20x1 filter',
+        taxableDefault: false
+      })
+    );
+  });
+
+  it('respects explicit Catalog item taxability over the category default', async () => {
+    const { service, catalogRepository } = createService(['catalog:create']);
+    catalogRepository.createItem.mockResolvedValue(catalogItem({ taxableDefault: true }));
+
+    await service.createItem('token', {
+      name: 'Permit fee',
+      kind: 'fee',
+      category: 'Fees',
+      taxableDefault: true
+    });
+
+    expect(catalogRepository.getCategoryByName).not.toHaveBeenCalled();
+    expect(catalogRepository.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({ taxableDefault: true })
+    );
   });
 
   it('lists managed catalog categories behind catalog view permission', async () => {
