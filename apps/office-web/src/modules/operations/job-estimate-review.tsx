@@ -182,7 +182,7 @@ export function EstimateDetailPanel({
         canSend &&
         !estimate.supersededByEstimateId ? (
           <button type="button" style={styles.button} onClick={onToggleDelivery}>
-            {isDeliveryPanelOpen ? 'Close send' : 'Send PDF'}
+            {isDeliveryPanelOpen ? 'Close' : 'Email estimate'}
           </button>
         ) : null}
         {estimate.status === 'approved' && estimate.convertedToInvoiceId ? (

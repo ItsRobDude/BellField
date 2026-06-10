@@ -653,11 +653,11 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
     expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
       'Estimate from BellField'
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
 
     expect(confirmSpy).toHaveBeenCalledWith('Send this estimate PDF to customer@example.com?');
     await waitFor(() =>
@@ -696,7 +696,7 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
     expect(await screen.findByLabelText('Estimate recipient email')).toHaveValue(
       'customer@example.com'
     );
@@ -707,7 +707,7 @@ describe('JobEstimatesSection', () => {
     expect(await screen.findByLabelText('Estimate email body')).toHaveValue(
       'Hello Acme, attached is Replacement options.'
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
 
     await waitFor(() => {
       expect(mockedApi.sendOfficeEstimate).toHaveBeenCalledWith({
@@ -773,16 +773,16 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
 
     expect(
       await screen.findByText(
         'Estimate email is not available on this server. Contact BellField support.'
       )
     ).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Send PDF' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send email' })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
     expect(mockedApi.sendOfficeEstimate).not.toHaveBeenCalled();
   });
 
@@ -843,11 +843,11 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
     expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
       'Estimate from BellField'
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
 
     const warning = await screen.findByText(
       'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
@@ -913,11 +913,11 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
     expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
       'Estimate from BellField'
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
 
     const failureMessage = await screen.findByText(
       'Email was not delivered. Try again or contact BellField support.'
@@ -974,7 +974,7 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
 
     expect(await screen.findByText('To')).toBeInTheDocument();
     expect(screen.getByText('customer@example.com')).toBeInTheDocument();

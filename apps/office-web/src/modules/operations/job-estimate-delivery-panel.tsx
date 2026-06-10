@@ -27,7 +27,9 @@ export function EstimateDeliveryPanel({
   onSend: () => void;
 }) {
   const deliveryBlocked = deliveryStatus !== null && !deliveryStatus.ready;
-  const canSend = !isPreviewLoading && !deliveryBlocked;
+  const recipientEmail = draft.recipientEmail.trim();
+  const recipientLooksValid = /^\S+@\S+\.\S+$/.test(recipientEmail);
+  const canSend = !isPreviewLoading && !deliveryBlocked && recipientLooksValid;
 
   return (
     <section style={styles.subpanel} aria-label="Estimate delivery">
@@ -36,10 +38,18 @@ export function EstimateDeliveryPanel({
           Recipient email
           <input
             aria-label="Estimate recipient email"
+            type="email"
             value={draft.recipientEmail}
             onChange={(event) => onChange({ recipientEmail: event.target.value })}
             style={styles.input}
           />
+          {recipientEmail === '' ? (
+            <span style={styles.tinyMuted}>
+              No email on file for this customer. Enter one to send.
+            </span>
+          ) : !recipientLooksValid ? (
+            <span style={styles.error}>Enter a valid email address.</span>
+          ) : null}
         </label>
         <label style={styles.fieldLabel}>
           Subject
@@ -71,7 +81,7 @@ export function EstimateDeliveryPanel({
           disabled={!canSend || isSending}
           onClick={onSend}
         >
-          {isSending ? 'Sending...' : 'Send PDF'}
+          {isSending ? 'Sending...' : 'Send email'}
         </button>
       </div>
       <EstimateDeliveryHistory history={history} isLoading={isHistoryLoading} />
