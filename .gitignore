@@ -23,3 +23,5 @@ artifacts/
 .claude/launch.json
 # Transient Codex review scratch files (prompt + captured output).
 tmp-codex-*.txt
+# Codex smoke-test artifacts: screenshots and generated documents from local runs.
+.codex-smoke/
