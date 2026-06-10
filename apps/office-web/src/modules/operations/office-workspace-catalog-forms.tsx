@@ -280,16 +280,23 @@ function buildCategoryOptions(
   if (currentCategory) {
     const key = currentCategory.toLocaleLowerCase();
     const knownCategory = categories.find((category) => category.name.toLocaleLowerCase() === key);
+    // The select matches options by exact string, so a case-variant item (an
+    // item saved as 'hvac' under managed 'HVAC') must keep its own text as the
+    // option value or the form falsely shows "No category".
     byName.set(
       key,
-      knownCategory ?? {
-        id: `unmanaged-${key}`,
-        name: currentCategory,
-        sortOrder: Number.MAX_SAFE_INTEGER,
-        isActive: false,
-        createdAt: '',
-        updatedAt: ''
-      }
+      knownCategory
+        ? knownCategory.name === currentCategory
+          ? knownCategory
+          : { ...knownCategory, name: currentCategory }
+        : {
+            id: `unmanaged-${key}`,
+            name: currentCategory,
+            sortOrder: Number.MAX_SAFE_INTEGER,
+            isActive: false,
+            createdAt: '',
+            updatedAt: ''
+          }
     );
   }
 
