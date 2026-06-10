@@ -97,6 +97,36 @@ describe('OfficeSettingsSurface', () => {
     expect(mockedApi.getOfficeEstimateEmailDeliveryStatus).not.toHaveBeenCalled();
   });
 
+  it('preserves the saved default tax rate when sales tax is turned off', async () => {
+    renderSurface();
+
+    fireEvent.click(await screen.findByLabelText('Charge sales tax'));
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    await waitFor(() => {
+      expect(mockedApi.updateOfficeCompanySettings).toHaveBeenCalledWith(
+        expect.objectContaining({
+          chargesSalesTax: false,
+          defaultSalesTaxBasisPoints: 825
+        })
+      );
+    });
+  });
+
+  it('rejects a blank default tax rate instead of saving it as zero', async () => {
+    renderSurface();
+
+    fireEvent.change(await screen.findByLabelText('Default sales tax rate'), {
+      target: { value: '' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    expect(
+      await screen.findByText('Default sales tax rate must be between 0% and 25%.')
+    ).toBeInTheDocument();
+    expect(mockedApi.updateOfficeCompanySettings).not.toHaveBeenCalled();
+  });
+
   it('renders read-only settings without configure permission', async () => {
     renderSurface(false);
 

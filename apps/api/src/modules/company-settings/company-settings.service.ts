@@ -57,7 +57,7 @@ function normalizeSettings(
   const estimateEmailSubject = request.estimateEmailSubject.trim();
   const estimateEmailBody = request.estimateEmailBody.trim();
   const chargesSalesTax = request.chargesSalesTax === true;
-  const defaultSalesTaxBasisPoints = chargesSalesTax ? request.defaultSalesTaxBasisPoints : 0;
+  const defaultSalesTaxBasisPoints = request.defaultSalesTaxBasisPoints;
 
   if (!companyName) {
     throw new BadRequestException('Company name is required.');

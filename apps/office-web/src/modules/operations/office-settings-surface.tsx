@@ -63,10 +63,7 @@ export function OfficeSettingsSurface({
   }, [load]);
 
   async function saveSettings() {
-    const defaultSalesTaxBasisPoints = parsePercentToBasisPoints(
-      draft.defaultSalesTaxRatePercent,
-      draft.chargesSalesTax
-    );
+    const defaultSalesTaxBasisPoints = parsePercentToBasisPoints(draft.defaultSalesTaxRatePercent);
     if (defaultSalesTaxBasisPoints === null) {
       setErrorMessage('Default sales tax rate must be between 0% and 25%.');
       return;
@@ -195,7 +192,7 @@ export function OfficeSettingsSurface({
                 max="25"
                 step="0.01"
                 value={draft.defaultSalesTaxRatePercent}
-                disabled={!canConfigure || !draft.chargesSalesTax}
+                disabled={!canConfigure}
                 onChange={(event) =>
                   setDraftValue(setDraft, 'defaultSalesTaxRatePercent', event.target.value)
                 }
@@ -240,11 +237,12 @@ function setDraftValue(
   setDraft((current) => ({ ...current, [key]: value }));
 }
 
-function parsePercentToBasisPoints(value: string, isEnabled: boolean): number | null {
-  if (!isEnabled) {
-    return 0;
+function parsePercentToBasisPoints(value: string): number | null {
+  const trimmedValue = value.trim();
+  if (!trimmedValue) {
+    return null;
   }
-  const percent = Number(value);
+  const percent = Number(trimmedValue);
   if (!Number.isFinite(percent) || percent < 0 || percent > 25) {
     return null;
   }
