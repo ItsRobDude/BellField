@@ -139,16 +139,6 @@ export function EstimateEditor({
           />
         </label>
         <label style={styles.fieldLabel}>
-          <span>Tax rate (%)</span>
-          <input
-            style={styles.input}
-            type="number"
-            step="0.01"
-            value={draft.taxRatePercent}
-            onChange={(event) => patch({ taxRatePercent: event.target.value })}
-          />
-        </label>
-        <label style={styles.fieldLabel}>
           <span>Valid until</span>
           <input
             style={styles.input}

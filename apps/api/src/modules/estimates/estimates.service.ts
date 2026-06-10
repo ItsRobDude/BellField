@@ -18,6 +18,7 @@ import type {
 } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
+import { CompanySettingsRepository } from '../company-settings/company-settings.repository';
 import { InvoicesRepository, type EstimateConversionInput } from '../invoices/invoices.repository';
 import { EstimateDeliveryService } from './estimate-delivery.service';
 import type { EstimatePdfDocument } from './estimate-delivery.service';
@@ -62,7 +63,8 @@ export class EstimatesService {
     private readonly jobsDataService: JobsDataService,
     private readonly estimateDeliveryService: EstimateDeliveryService,
     private readonly estimatesRepository: EstimatesRepository,
-    private readonly invoicesRepository: InvoicesRepository
+    private readonly invoicesRepository: InvoicesRepository,
+    private readonly companySettingsRepository: CompanySettingsRepository
   ) {}
 
   async listEstimatesForJob(sessionToken: string, jobId: string): Promise<EstimatesResponseDto> {
@@ -138,11 +140,12 @@ export class EstimatesService {
     );
     await this.ensureJobExists(jobId);
     await this.validateCatalogReferences(request.lineItems);
+    const taxRateBasisPoints = await this.resolveCreateTaxRate(request.taxRateBasisPoints);
 
     const writeInput = this.buildWriteInput(
       request.title,
       request.description,
-      request.taxRateBasisPoints,
+      taxRateBasisPoints,
       request.discount,
       request.validUntil,
       request.optionGroups,
@@ -453,6 +456,14 @@ export class EstimatesService {
         throw new BadRequestException('Catalog snapshot must match the selected Catalog item.');
       }
     }
+  }
+
+  private async resolveCreateTaxRate(taxRateBasisPoints: number | undefined): Promise<number> {
+    if (taxRateBasisPoints !== undefined) {
+      return taxRateBasisPoints;
+    }
+    const settings = await this.companySettingsRepository.getSettings();
+    return settings.chargesSalesTax ? settings.defaultSalesTaxBasisPoints : 0;
   }
 
   private async requireEstimate(estimateId: string): Promise<EstimateRecord> {

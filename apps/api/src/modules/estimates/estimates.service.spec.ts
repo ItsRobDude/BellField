@@ -186,7 +186,8 @@ function createService() {
       jobsDataService as never,
       estimateDeliveryService as never,
       estimatesRepository as never,
-      invoicesRepository as never
+      invoicesRepository as never,
+      companySettingsRepository as never
     ),
     identityAccessService,
     jobsDataService,
@@ -275,6 +276,66 @@ describe('EstimatesService', () => {
     expect(writeInput.totals.profit).toBe(40);
     expect(writeInput.totals.marginBasisPoints).toBe(4000);
     expect(writeInput.lineTotals[0]).toEqual({ lineSubtotal: 100, lineCost: 60 });
+  });
+
+  it('uses the company default sales tax when a create request omits tax', async () => {
+    const { service, estimatesRepository, companySettingsRepository } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'BellField',
+      estimateEmailSubject: 'Estimate from {companyName}',
+      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
+      chargesSalesTax: true,
+      defaultSalesTaxBasisPoints: 825
+    });
+    estimatesRepository.createEstimate.mockImplementation(async () => pendingEstimate());
+
+    await service.createEstimate('token', 'job-1', {
+      title: 'Diagnostic',
+      lineItems: [
+        {
+          kind: 'serviceItem',
+          description: 'Diagnostic',
+          quantity: 1,
+          unitPrice: 100,
+          taxable: true
+        }
+      ]
+    });
+
+    const [, writeInput] = estimatesRepository.createEstimate.mock.calls[0];
+    expect(writeInput.taxRateBasisPoints).toBe(825);
+    expect(writeInput.totals.tax).toBe(8.25);
+  });
+
+  it('keeps an explicit API tax rate override when creating an estimate', async () => {
+    const { service, estimatesRepository, companySettingsRepository } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'BellField',
+      estimateEmailSubject: 'Estimate from {companyName}',
+      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
+      chargesSalesTax: true,
+      defaultSalesTaxBasisPoints: 825
+    });
+    estimatesRepository.createEstimate.mockImplementation(async () => pendingEstimate());
+
+    await service.createEstimate('token', 'job-1', {
+      title: 'Diagnostic',
+      taxRateBasisPoints: 1000,
+      lineItems: [
+        {
+          kind: 'serviceItem',
+          description: 'Diagnostic',
+          quantity: 1,
+          unitPrice: 100,
+          taxable: true
+        }
+      ]
+    });
+
+    const [, writeInput] = estimatesRepository.createEstimate.mock.calls[0];
+    expect(companySettingsRepository.getSettings).not.toHaveBeenCalled();
+    expect(writeInput.taxRateBasisPoints).toBe(1000);
+    expect(writeInput.totals.tax).toBe(10);
   });
 
   it('rejects an estimate with no line items', async () => {

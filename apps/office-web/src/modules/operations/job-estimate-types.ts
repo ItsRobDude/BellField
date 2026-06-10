@@ -47,7 +47,6 @@ export type EstimateLineDraft = {
 
 export type EstimateDraft = {
   title: string;
-  taxRatePercent: string;
   discountKind: 'none' | 'percent' | 'fixed';
   discountValue: string;
   validUntil: string;
@@ -83,7 +82,6 @@ export const estimateLineItemKindLabels: Record<EstimateLineItemKind, string> = 
 export function createEmptyEstimateDraft(): EstimateDraft {
   return {
     title: '',
-    taxRatePercent: '',
     discountKind: 'none',
     discountValue: '',
     validUntil: '',
@@ -122,7 +120,6 @@ export function isUntouchedBlankEstimateLine(line: EstimateLineDraft): boolean {
 export function buildEstimateDraftFromSummary(estimate: EstimateSummary): EstimateDraft {
   return {
     title: estimate.title,
-    taxRatePercent: basisPointsToPercentString(estimate.taxRateBasisPoints),
     discountKind: estimate.discount?.kind ?? 'none',
     discountValue: estimate.discount
       ? estimate.discount.kind === 'percent'
@@ -161,10 +158,9 @@ export function buildEstimateDraftFromSummary(estimate: EstimateSummary): Estima
 type ParseResult = { ok: true; value: CreateEstimateRequest } | { ok: false; message: string };
 
 /**
- * Validate and convert the editor draft into a create/update request body. Tax
- * and percent discounts are entered as human percentages and converted to basis
- * points; the server re-prices authoritatively, so this only needs to produce a
- * well-formed request.
+ * Validate and convert the editor draft into a create/update request body. The
+ * server owns estimate-level tax defaults and re-prices authoritatively, so this
+ * only needs to produce a well-formed request.
  */
 export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
   const title = draft.title.trim();
@@ -173,11 +169,6 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
   }
   if (draft.lineItems.length === 0) {
     return { ok: false, message: 'Add at least one line item.' };
-  }
-
-  const taxRateBasisPoints = percentStringToBasisPoints(draft.taxRatePercent);
-  if (taxRateBasisPoints === null) {
-    return { ok: false, message: 'Tax rate must be a number of zero or more.' };
   }
 
   const lineItems: CreateEstimateRequest['lineItems'] = [];
@@ -274,7 +265,6 @@ export function parseEstimateDraft(draft: EstimateDraft): ParseResult {
     ok: true,
     value: {
       title,
-      taxRateBasisPoints,
       discount,
       validUntil: draft.validUntil || undefined,
       optionGroups: optionGroups.value.length > 0 ? optionGroups.value : undefined,

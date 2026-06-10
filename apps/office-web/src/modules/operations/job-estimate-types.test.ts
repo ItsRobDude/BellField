@@ -14,11 +14,10 @@ function draftWith(overrides: Partial<EstimateDraft> = {}): EstimateDraft {
 }
 
 describe('parseEstimateDraft', () => {
-  it('converts a valid draft into a request, mapping percent fields to basis points', () => {
+  it('converts a valid draft into a request, mapping percent discounts to basis points', () => {
     const result = parseEstimateDraft(
       draftWith({
         title: '  AC replacement  ',
-        taxRatePercent: '8.25',
         discountKind: 'percent',
         discountValue: '10',
         lineItems: [
@@ -38,7 +37,7 @@ describe('parseEstimateDraft', () => {
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.value.title).toBe('AC replacement');
-    expect(result.value.taxRateBasisPoints).toBe(825);
+    expect(result.value.taxRateBasisPoints).toBeUndefined();
     expect(result.value.discount).toEqual({ kind: 'percent', basisPoints: 1000 });
     expect(result.value.lineItems[0]).toEqual({
       kind: 'equipment',
@@ -401,7 +400,6 @@ describe('buildEstimateDraftFromSummary', () => {
 
     const draft = buildEstimateDraftFromSummary(summary);
     expect(draft.title).toBe('AC replacement');
-    expect(draft.taxRatePercent).toBe('8.25');
     expect(draft.discountKind).toBe('percent');
     expect(draft.discountValue).toBe('10');
     expect(draft.validUntil).toBe('2026-07-01');
@@ -416,6 +414,7 @@ describe('buildEstimateDraftFromSummary', () => {
     const reparsed = parseEstimateDraft(draft);
     expect(reparsed.ok).toBe(true);
     if (!reparsed.ok) return;
+    expect(reparsed.value.taxRateBasisPoints).toBeUndefined();
     expect(reparsed.value.lineItems[0].catalogItemId).toBe('catalog-1');
     expect(reparsed.value.lineItems[0].catalogSnapshot?.name).toBe('Condenser');
     expect(reparsed.value.lineItems[0].optionId).toBe('good');
