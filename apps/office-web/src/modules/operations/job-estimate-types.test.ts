@@ -21,6 +21,7 @@ describe('parseEstimateDraft', () => {
         discountValue: '10',
         lineItems: [
           {
+            clientId: 'test-line-1',
             kind: 'equipment',
             description: 'Condenser',
             quantity: '1',
@@ -55,6 +56,7 @@ describe('parseEstimateDraft', () => {
         title: 'Quote',
         lineItems: [
           {
+            clientId: 'test-line-2',
             kind: 'part',
             description: 'Capacitor',
             quantity: '1',
@@ -77,6 +79,7 @@ describe('parseEstimateDraft', () => {
         title: 'Quote',
         lineItems: [
           {
+            clientId: 'test-line-3',
             kind: 'part',
             description: 'Capacitor',
             quantity: '1',
@@ -98,6 +101,7 @@ describe('parseEstimateDraft', () => {
         title: 'Quote',
         lineItems: [
           {
+            clientId: 'test-line-4',
             kind: 'other',
             description: 'Courtesy inspection',
             quantity: '1',
@@ -121,6 +125,7 @@ describe('parseEstimateDraft', () => {
         title: 'Quote',
         lineItems: [
           {
+            clientId: 'test-line-5',
             kind: 'part',
             description: 'Capacitor',
             quantity: '1',
@@ -159,6 +164,7 @@ describe('parseEstimateDraft', () => {
         discountValue: '50',
         lineItems: [
           {
+            clientId: 'test-line-6',
             kind: 'part',
             description: 'X',
             quantity: '1',
@@ -186,6 +192,7 @@ describe('parseEstimateDraft', () => {
         title: 'Quote',
         lineItems: [
           {
+            clientId: 'test-line-7',
             kind: 'part',
             description: 'X',
             quantity: '0',
@@ -206,6 +213,7 @@ describe('parseEstimateDraft', () => {
         title: 'Quote',
         lineItems: [
           {
+            clientId: 'test-line-8',
             kind: 'part',
             description: '  ',
             quantity: '1',
@@ -229,6 +237,7 @@ describe('parseEstimateDraft', () => {
         selectedOptionId: 'better',
         lineItems: [
           {
+            clientId: 'test-line-9',
             kind: 'serviceItem',
             description: 'Diagnostic',
             quantity: '1',
@@ -238,6 +247,7 @@ describe('parseEstimateDraft', () => {
             taxable: false
           },
           {
+            clientId: 'test-line-10',
             kind: 'part',
             description: 'Better repair',
             quantity: '1',
@@ -272,6 +282,7 @@ describe('parseEstimateDraft', () => {
         optionGroups: [optionGroup],
         lineItems: [
           {
+            clientId: 'test-line-11',
             kind: 'part',
             description: 'Better repair',
             quantity: '1',

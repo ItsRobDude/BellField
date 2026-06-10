@@ -9,7 +9,7 @@ import type {
   CatalogLineSnapshot
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import type { EstimateLineDraft } from './job-estimate-types';
+import { createEstimateLineClientId, type EstimateLineDraft } from './job-estimate-types';
 
 type EstimateCatalogPickerProps = {
   items: CatalogItem[];
@@ -256,6 +256,7 @@ function itemMatchesCatalogCategory(
 
 function createCatalogEstimateLine(item: CatalogItem): EstimateLineDraft {
   return {
+    clientId: createEstimateLineClientId(),
     kind: estimateKindByCatalogKind[item.kind],
     description: item.description?.trim() || item.name,
     quantity: '1',

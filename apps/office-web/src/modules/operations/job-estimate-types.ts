@@ -32,6 +32,8 @@ export type EstimateOptionGroupDraft = {
 // kept as strings while editing (matching the register-entry editor) and parsed
 // to numbers only on save.
 export type EstimateLineDraft = {
+  /** Client-only identity for React keys and expand state; never sent to the API. */
+  clientId: string;
   kind: EstimateLineItemKind;
   description: string;
   quantity: string;
@@ -44,6 +46,13 @@ export type EstimateLineDraft = {
   optionGroupId?: string;
   optionId?: string;
 };
+
+let nextEstimateLineClientId = 0;
+
+export function createEstimateLineClientId(): string {
+  nextEstimateLineClientId += 1;
+  return `line-draft-${nextEstimateLineClientId}`;
+}
 
 export type EstimateDraft = {
   title: string;
@@ -105,6 +114,7 @@ export function buildEstimateDraftFromSummary(estimate: EstimateSummary): Estima
       })) ?? [],
     selectedOptionId: estimate.selectedOptionId ?? '',
     lineItems: estimate.lineItems.map((line) => ({
+      clientId: line.id,
       kind: line.kind,
       description: line.description,
       quantity: String(line.quantity),

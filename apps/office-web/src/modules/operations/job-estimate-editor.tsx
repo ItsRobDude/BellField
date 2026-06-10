@@ -6,6 +6,7 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import {
   createDefaultEstimateOptionGroup,
+  createEstimateLineClientId,
   type EstimateDraft,
   type EstimateLineDraft
 } from './job-estimate-types';
@@ -48,7 +49,7 @@ export function EstimateEditor({
 }: EstimateEditorProps) {
   const optionGroup = draft.optionGroups[0];
   const [activeTargetId, setActiveTargetId] = useState('base');
-  const [expandedLineIndexes, setExpandedLineIndexes] = useState<Set<number>>(() => new Set());
+  const [expandedLineIds, setExpandedLineIds] = useState<Set<string>>(() => new Set());
   const activeTarget = resolveLineTarget(activeTargetId, optionGroup);
   const visibleLines = draft.lineItems
     .map((line, index) => ({ line, index }))
@@ -92,6 +93,7 @@ export function EstimateEditor({
   function addCustomLine() {
     const customLine = withTarget(
       {
+        clientId: createEstimateLineClientId(),
         kind: 'serviceItem',
         description: '',
         quantity: '1',
@@ -116,15 +118,6 @@ export function EstimateEditor({
       ...draft,
       lineItems
     });
-    if (insertIndex !== -1) {
-      setExpandedLineIndexes((current) => {
-        const next = new Set<number>();
-        for (const lineIndex of current) {
-          next.add(lineIndex >= insertIndex ? lineIndex + 1 : lineIndex);
-        }
-        return next;
-      });
-    }
   }
 
   function addCatalogLine(line: EstimateLineDraft) {
@@ -140,26 +133,15 @@ export function EstimateEditor({
       ...draft,
       lineItems: draft.lineItems.filter((_, lineIndex) => lineIndex !== index)
     });
-    setExpandedLineIndexes((current) => {
-      const next = new Set<number>();
-      for (const lineIndex of current) {
-        if (lineIndex < index) {
-          next.add(lineIndex);
-        } else if (lineIndex > index) {
-          next.add(lineIndex - 1);
-        }
-      }
-      return next;
-    });
   }
 
-  function toggleLineDetails(index: number) {
-    setExpandedLineIndexes((current) => {
+  function toggleLineDetails(clientId: string) {
+    setExpandedLineIds((current) => {
       const next = new Set(current);
-      if (next.has(index)) {
-        next.delete(index);
+      if (next.has(clientId)) {
+        next.delete(clientId);
       } else {
-        next.add(index);
+        next.add(clientId);
       }
       return next;
     });
@@ -300,7 +282,7 @@ export function EstimateEditor({
             <p style={styles.tinyMuted}>Choose a Catalog item or add a custom line.</p>
           ) : (
             visibleLines.map(({ line, index }) => (
-              <div key={index} style={styles.panel}>
+              <div key={line.clientId} style={styles.panel}>
                 <div style={styles.formGridCompact}>
                   <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
                     <span>Description</span>
@@ -351,7 +333,7 @@ export function EstimateEditor({
                     <span>Taxable</span>
                   </label>
                 </div>
-                {expandedLineIndexes.has(index) ? (
+                {expandedLineIds.has(line.clientId) ? (
                   <div style={styles.formGridCompact}>
                     <label style={styles.fieldLabel}>
                       <span>Unit</span>
@@ -371,9 +353,9 @@ export function EstimateEditor({
                     <button
                       type="button"
                       style={styles.button}
-                      onClick={() => toggleLineDetails(index)}
+                      onClick={() => toggleLineDetails(line.clientId)}
                     >
-                      {expandedLineIndexes.has(index) ? 'Hide details' : 'More details'}
+                      {expandedLineIds.has(line.clientId) ? 'Hide details' : 'More details'}
                     </button>
                     <button
                       type="button"
