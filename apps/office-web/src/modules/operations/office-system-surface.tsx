@@ -35,6 +35,30 @@ const gridStyle: CSSProperties = {
 const labelStyle: CSSProperties = { fontSize: 12, color: '#5b6672', textTransform: 'uppercase' };
 const valueStyle: CSSProperties = { fontSize: 14, color: '#1f2933', marginTop: 4 };
 
+// Any red rollup check renders here, so data-audit checks that have no card
+// of their own (e.g. legacy estimate tax rates) are still owner-visible
+// instead of living only in the support bundle.
+function FailingChecks({ checks }: { checks: SystemDiagnosticsResponse['checks'] }) {
+  const failing = checks.filter((check) => !check.ok);
+  if (failing.length === 0) {
+    return null;
+  }
+  return (
+    <div
+      style={{ ...cardStyle, marginTop: 12, borderColor: '#f0c4bd' }}
+      aria-label="Needs attention"
+    >
+      <div style={labelStyle}>Needs attention</div>
+      {failing.map((check) => (
+        <div key={check.key} style={valueStyle}>
+          <StatusDot ok={false} />
+          {check.detail ?? check.key}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function StatusDot({ ok }: { ok: boolean }) {
   return (
     <span
@@ -205,6 +229,7 @@ export function OfficeSystemSurface({
               ) : null}
             </div>
           </div>
+          <FailingChecks checks={diagnostics.checks} />
         </>
       ) : isLoading ? (
         <p style={styles.notice}>Checking system status…</p>

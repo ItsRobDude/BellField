@@ -109,6 +109,40 @@ describe('OfficeSystemSurface', () => {
     expect(screen.queryByText(/resend/i)).toBeNull();
   });
 
+  it('surfaces failing rollup checks that have no card of their own', async () => {
+    mockedApi.getSystemDiagnostics.mockResolvedValue({
+      serverTime: '2026-06-06T00:00:00.000Z',
+      app: { name: 'BellField API', version: '0.0.1', nodeEnv: 'development' },
+      database: { reachable: true, latencyMs: 3 },
+      migrations: {
+        appliedCount: 41,
+        latestFilename: '20260610_003_normalize_catalog_item_categories.up.sql',
+        latestAppliedAt: '2026-06-10T00:00:00.000Z'
+      },
+      mediaRoot: { path: '/var/bellfield/media', exists: true, writable: true, readable: true },
+      checks: [
+        { key: 'database', ok: true },
+        {
+          key: 'estimateTaxRates',
+          ok: false,
+          detail: '2 estimate(s) carry a stored sales tax rate above 25%.'
+        }
+      ]
+    });
+    renderSurface();
+
+    expect(await screen.findByText('Needs attention')).toBeInTheDocument();
+    expect(
+      screen.getByText('2 estimate(s) carry a stored sales tax rate above 25%.')
+    ).toBeInTheDocument();
+  });
+
+  it('hides the attention block when every check passes', async () => {
+    renderSurface();
+    await screen.findByText(/Reachable/);
+    expect(screen.queryByText('Needs attention')).toBeNull();
+  });
+
   it('degrades to unknown when the delivery status is not reachable', async () => {
     mockedCompanySettingsApi.getOfficeEstimateEmailDeliveryStatus.mockRejectedValue(
       new Error('Forbidden')
