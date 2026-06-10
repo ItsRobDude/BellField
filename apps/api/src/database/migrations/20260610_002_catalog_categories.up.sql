@@ -17,6 +17,20 @@ create table if not exists catalog_categories (
 create unique index if not exists catalog_categories_name_key
   on catalog_categories (lower(name));
 
+with normalized_categories as (
+  select
+    lower(trim(category)) as category_key,
+    min(trim(category)) as display_name,
+    case
+      when bool_and(taxable_default) then true
+      when bool_and(not taxable_default) then false
+      else null
+    end as default_taxable
+  from catalog_items
+  where category is not null
+    and length(trim(category)) > 0
+  group by lower(trim(category))
+)
 insert into catalog_categories (
   id,
   name,
@@ -27,19 +41,12 @@ insert into catalog_categories (
   updated_at
 )
 select
-  'catalog-category-' || md5(lower(trim(category))) as id,
-  trim(category) as name,
-  (row_number() over (order by lower(trim(category))) * 10)::integer as sort_order,
+  'catalog-category-' || md5(category_key) as id,
+  display_name as name,
+  (row_number() over (order by category_key) * 10)::integer as sort_order,
   true as is_active,
-  case
-    when bool_and(taxable_default) then true
-    when bool_and(not taxable_default) then false
-    else null
-  end as default_taxable,
+  default_taxable,
   now(),
   now()
-from catalog_items
-where category is not null
-  and length(trim(category)) > 0
-group by trim(category)
+from normalized_categories
 on conflict do nothing;
