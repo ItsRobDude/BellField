@@ -468,8 +468,8 @@ describe('JobEstimatesSection', () => {
       />
     );
 
-    expect(await screen.findByRole('button', { name: 'Approve Good' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Approve Better' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Mark Good approved' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Mark Better approved' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
 

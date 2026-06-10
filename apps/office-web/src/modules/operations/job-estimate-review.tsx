@@ -137,13 +137,13 @@ export function EstimateDetailPanel({
                     style={styles.primaryButton}
                     onClick={() => onApprove(option.id)}
                   >
-                    Approve {option.label}
+                    Mark {option.label} approved
                   </button>
                 ))
               )
             ) : (
               <button type="button" style={styles.primaryButton} onClick={() => onApprove()}>
-                Approve
+                Mark approved
               </button>
             )}
             <button type="button" style={styles.dangerButton} onClick={onDecline}>

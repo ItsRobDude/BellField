@@ -206,7 +206,9 @@ export function JobEstimatesSection({
   }
 
   async function approve(estimateId: string, selectedOptionId?: string) {
-    if (!window.confirm('Approve this estimate? Approved estimates can no longer be edited.')) {
+    if (
+      !window.confirm('Mark this estimate approved? Approved estimates can no longer be edited.')
+    ) {
       return;
     }
     setErrorMessage(null);
