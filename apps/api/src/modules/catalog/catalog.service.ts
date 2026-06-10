@@ -61,7 +61,14 @@ export class CatalogService {
   ): Promise<CatalogCategoryResponse> {
     await this.authorize(sessionToken, 'catalog:create');
     await this.validateCatalogCategoryRequest(request);
-    return { category: await this.catalogRepository.createCategory(request) };
+    try {
+      return { category: await this.catalogRepository.createCategory(request) };
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new BadRequestException('Catalog category name already exists.');
+      }
+      throw error;
+    }
   }
 
   async updateCategory(
@@ -75,7 +82,14 @@ export class CatalogService {
       throw new NotFoundException('Catalog category not found.');
     }
     await this.validateCatalogCategoryRequest(request, categoryId);
-    await this.catalogRepository.updateCategory(categoryId, request);
+    try {
+      await this.catalogRepository.updateCategory(categoryId, request);
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new BadRequestException('Catalog category name already exists.');
+      }
+      throw error;
+    }
     return { category: (await this.catalogRepository.getCategoryById(categoryId))! };
   }
 
@@ -169,4 +183,10 @@ function toReadOnlyCatalogItem(item: CatalogItem): CatalogItem {
   delete readOnlyItem.incomeCategory;
   delete readOnlyItem.accountingExportCode;
   return readOnlyItem;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' && error !== null && (error as { code?: string }).code === '23505'
+  );
 }

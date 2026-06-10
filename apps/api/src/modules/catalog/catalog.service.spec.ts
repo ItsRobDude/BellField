@@ -132,6 +132,15 @@ describe('CatalogService', () => {
     expect(catalogRepository.createCategory).not.toHaveBeenCalled();
   });
 
+  it('maps concurrent category create unique violations to a friendly duplicate error', async () => {
+    const { service, catalogRepository } = createService(['catalog:create']);
+    catalogRepository.createCategory.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      service.createCategory('token', { name: 'Maintenance', sortOrder: 10 })
+    ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
   it('updates a managed category only when it exists', async () => {
     const { service, catalogRepository } = createService(['catalog:edit']);
     catalogRepository.getCategoryById
@@ -150,6 +159,20 @@ describe('CatalogService', () => {
       sortOrder: 20,
       isActive: true
     });
+  });
+
+  it('maps concurrent category update unique violations to a friendly duplicate error', async () => {
+    const { service, catalogRepository } = createService(['catalog:edit']);
+    catalogRepository.getCategoryById.mockResolvedValue(catalogCategory());
+    catalogRepository.updateCategory.mockRejectedValue({ code: '23505' });
+
+    await expect(
+      service.updateCategory('token', 'category-1', {
+        name: 'Service',
+        sortOrder: 20,
+        isActive: true
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 
   it('rejects updates for missing managed categories', async () => {
