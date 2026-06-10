@@ -8,9 +8,9 @@ const bellfieldEstimateEmailFromName = 'BellField Estimates';
 export const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
 export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
-const safeNeedsSetupMessage = 'Delivery needs BellField setup before estimates can be sent.';
+const safeNeedsSetupMessage = 'Estimate email is unavailable. Contact BellField support.';
 const safeTemporarilyUnavailableMessage =
-  'Estimate email setup could not be confirmed. Contact BellField support.';
+  'Estimate email availability could not be confirmed. Contact BellField support.';
 
 type ResendDomainSummary = {
   id?: string;
@@ -81,7 +81,6 @@ export class EmailProviderService {
     const apiKey = getApiRuntimeConfig().estimateEmailResendApiKey;
     if (!apiKey) {
       return {
-        fromEmail: bellfieldEstimateEmailFromAddress,
         configured: false,
         ready: false,
         status: 'needsSetup',
@@ -113,11 +112,10 @@ export class EmailProviderService {
         (domain.status === 'verified' || domain.status === 'partially_verified') && sendingEnabled;
       return verifiedForSending
         ? {
-            fromEmail: bellfieldEstimateEmailFromAddress,
             configured: true,
             ready: true,
             status: 'ready',
-            message: `Ready to send estimates from ${bellfieldEstimateEmailFromAddress}.`
+            message: 'Estimate email is ready.'
           }
         : deliveryStatusNeedsSetup();
     } catch (error) {
@@ -145,7 +143,6 @@ function formatFrom(name: string, email: string): string {
 
 function deliveryStatusNeedsSetup(): EstimateEmailDeliveryStatus {
   return {
-    fromEmail: bellfieldEstimateEmailFromAddress,
     configured: true,
     ready: false,
     status: 'needsSetup',
@@ -155,7 +152,6 @@ function deliveryStatusNeedsSetup(): EstimateEmailDeliveryStatus {
 
 function deliveryStatusUnavailable(): EstimateEmailDeliveryStatus {
   return {
-    fromEmail: bellfieldEstimateEmailFromAddress,
     configured: true,
     ready: false,
     status: 'temporarilyUnavailable',

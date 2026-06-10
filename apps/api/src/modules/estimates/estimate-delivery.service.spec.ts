@@ -107,11 +107,10 @@ function createDeliveryService() {
       providerMessageId: 'resend-message-1'
     }),
     getEstimateEmailDeliveryStatus: jest.fn().mockResolvedValue({
-      fromEmail: 'estimates@bellfield.app',
       configured: true,
       ready: true,
       status: 'ready',
-      message: 'Ready to send estimates from estimates@bellfield.app.'
+      message: 'Estimate email is ready.'
     })
   };
   const estimatePdfRendererService = {
@@ -285,17 +284,14 @@ describe('EstimateDeliveryService', () => {
     );
     expect(result).toEqual({
       preview: {
-        fromEmail: 'estimates@bellfield.app',
-        replyToEmail: undefined,
         subject: 'Estimate from BellField',
         bodyText: 'Hello Acme, attached is AC replacement.'
       },
       deliveryStatus: {
-        fromEmail: 'estimates@bellfield.app',
         configured: true,
         ready: true,
         status: 'ready',
-        message: 'Ready to send estimates from estimates@bellfield.app.'
+        message: 'Estimate email is ready.'
       }
     });
     expect(emailProviderService.getEstimateEmailDeliveryStatus).toHaveBeenCalledTimes(1);
@@ -334,7 +330,7 @@ describe('EstimateDeliveryService', () => {
     expect(result.outboundMessage.status).toBe('failed');
     expect(result.outboundMessage.failureCode).toBe('deliveryUnavailable');
     expect(result.outboundMessage.deliveryMessage).toBe(
-      'Email was not delivered. Delivery needs BellField setup or retry.'
+      'Email was not delivered. Try again or contact BellField support.'
     );
     expect(result.outboundMessage).not.toHaveProperty('providerError');
   });

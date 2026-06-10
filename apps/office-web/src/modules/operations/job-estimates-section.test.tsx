@@ -73,17 +73,14 @@ describe('JobEstimatesSection', () => {
     mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({ outboundMessages: [] });
     mockedApi.getOfficeEstimateSendPreview.mockResolvedValue({
       preview: {
-        fromEmail: 'estimates@bellfield.app',
-        replyToEmail: 'office@example.com',
         subject: 'Estimate from BellField',
         bodyText: 'Hello Acme, attached is Replacement options.'
       },
       deliveryStatus: {
-        fromEmail: 'estimates@bellfield.app',
         configured: true,
         ready: true,
         status: 'ready',
-        message: 'Ready to send estimates from estimates@bellfield.app.'
+        message: 'Estimate email is ready.'
       }
     });
     mockedApi.downloadOfficeEstimateDocument.mockResolvedValue(new Blob(['html']));
@@ -241,9 +238,7 @@ describe('JobEstimatesSection', () => {
     expect(await screen.findByLabelText('Estimate recipient email')).toHaveValue(
       'customer@example.com'
     );
-    expect(await screen.findByLabelText('Estimate email from address')).toHaveValue(
-      'estimates@bellfield.app'
-    );
+    expect(screen.queryByLabelText('Estimate email from address')).toBeNull();
     expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
       'Estimate from BellField'
     );
@@ -267,9 +262,7 @@ describe('JobEstimatesSection', () => {
       apiBaseUrl: 'http://api.test',
       sessionToken: 'session-token'
     });
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'Send this estimate PDF to customer@example.com from estimates@bellfield.app?'
-    );
+    expect(confirmSpy).toHaveBeenCalledWith('Send this estimate PDF to customer@example.com?');
     expect(await screen.findByText('Estimate sent.')).toBeInTheDocument();
     expect(mockedApi.getOfficeEstimateOutboundMessages).toHaveBeenCalledWith({
       estimateId: 'estimate-1',
@@ -304,7 +297,7 @@ describe('JobEstimatesSection', () => {
           sentByName: 'Olivia Owner',
           queuedAt: '2026-06-01T00:00:00.000Z',
           failureCode: 'deliveryUnavailable',
-          deliveryMessage: 'Email was not delivered. Delivery needs BellField setup or retry.',
+          deliveryMessage: 'Email was not delivered. Try again or contact BellField support.',
           providerError: 'The bellfield.app domain is not verified.'
         } as unknown as operationsApi.OutboundMessageSummary
       ]
@@ -330,7 +323,7 @@ describe('JobEstimatesSection', () => {
     expect(await screen.findByText('To')).toBeInTheDocument();
     expect(screen.getByText('customer@example.com')).toBeInTheDocument();
     expect(
-      screen.getByText('Email was not delivered. Delivery needs BellField setup or retry.')
+      screen.getByText('Email was not delivered. Try again or contact BellField support.')
     ).toBeInTheDocument();
     expect(screen.queryByText(/resend/i)).toBeNull();
     expect(screen.queryByText(/domain is not verified/i)).toBeNull();

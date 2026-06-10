@@ -1,8 +1,4 @@
-import type {
-  EstimateEmailDeliveryStatus,
-  EstimateSendPreview,
-  OutboundMessageSummary
-} from '@bellfield/contracts';
+import type { OutboundMessageSummary } from '@bellfield/contracts';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type EstimateDeliveryDraft = {
@@ -13,8 +9,6 @@ export type EstimateDeliveryDraft = {
 
 export function EstimateDeliveryPanel({
   draft,
-  preview,
-  deliveryStatus,
   history,
   isHistoryLoading,
   isPreviewLoading,
@@ -23,8 +17,6 @@ export function EstimateDeliveryPanel({
   onSend
 }: {
   draft: EstimateDeliveryDraft;
-  preview?: EstimateSendPreview;
-  deliveryStatus?: EstimateEmailDeliveryStatus;
   history: OutboundMessageSummary[];
   isHistoryLoading: boolean;
   isPreviewLoading: boolean;
@@ -32,21 +24,11 @@ export function EstimateDeliveryPanel({
   onChange: (patch: Partial<EstimateDeliveryDraft>) => void;
   onSend: () => void;
 }) {
-  const canSend = Boolean(deliveryStatus?.ready) && !isPreviewLoading;
+  const canSend = !isPreviewLoading;
 
   return (
     <section style={styles.subpanel} aria-label="Estimate delivery">
       <div style={styles.formGridCompact}>
-        <label style={styles.fieldLabel}>
-          From
-          <input
-            aria-label="Estimate email from address"
-            value={preview?.fromEmail ?? 'estimates@bellfield.app'}
-            disabled
-            readOnly
-            style={styles.input}
-          />
-        </label>
         <label style={styles.fieldLabel}>
           Recipient email
           <input
@@ -77,11 +59,6 @@ export function EstimateDeliveryPanel({
       </div>
 
       {isPreviewLoading ? <p style={styles.tinyMuted}>Loading send preview...</p> : null}
-      {deliveryStatus ? (
-        <p style={deliveryStatus.ready ? styles.notice : styles.error}>
-          {jobDeliveryStatusMessage(deliveryStatus)}
-        </p>
-      ) : null}
 
       <div style={styles.inlineActionBar}>
         <button
@@ -137,16 +114,6 @@ function EstimateDeliveryHistory({
       ))}
     </div>
   );
-}
-
-function jobDeliveryStatusMessage(status: EstimateEmailDeliveryStatus): string {
-  if (status.ready) {
-    return status.message;
-  }
-  if (status.status === 'temporarilyUnavailable') {
-    return 'Delivery status could not be confirmed. Try again in a moment.';
-  }
-  return 'Delivery needs BellField setup before this estimate can be sent.';
 }
 
 function formatDateTime(value: string): string {

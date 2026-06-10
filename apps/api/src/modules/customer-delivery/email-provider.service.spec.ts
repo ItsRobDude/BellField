@@ -74,11 +74,10 @@ describe('EmailProviderService', () => {
     const service = new EmailProviderService();
 
     await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
-      fromEmail: bellfieldEstimateEmailFromAddress,
       configured: false,
       ready: false,
       status: 'needsSetup',
-      message: 'Delivery needs BellField setup before estimates can be sent.'
+      message: 'Estimate email is unavailable. Contact BellField support.'
     });
   });
 
@@ -104,11 +103,10 @@ describe('EmailProviderService', () => {
     const service = new EmailProviderService();
 
     await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
-      fromEmail: bellfieldEstimateEmailFromAddress,
       configured: true,
       ready: true,
       status: 'ready',
-      message: 'Ready to send estimates from estimates@bellfield.app.'
+      message: 'Estimate email is ready.'
     });
   });
 
@@ -123,11 +121,10 @@ describe('EmailProviderService', () => {
     const service = new EmailProviderService();
 
     await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
-      fromEmail: bellfieldEstimateEmailFromAddress,
       configured: true,
       ready: false,
       status: 'needsSetup',
-      message: 'Delivery needs BellField setup before estimates can be sent.'
+      message: 'Estimate email is unavailable. Contact BellField support.'
     });
   });
 });

@@ -1,7 +1,6 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import type { EstimateEmailDeliveryStatus, EstimateSendPreview } from '@bellfield/contracts';
 import {
   approveOfficeEstimate,
   convertOfficeEstimateToInvoice,
@@ -76,12 +75,6 @@ export function JobEstimatesSection({
   const [deliveryDrafts, setDeliveryDrafts] = useState<Record<string, EstimateDeliveryDraft>>({});
   const [outboundMessagesByEstimateId, setOutboundMessagesByEstimateId] = useState<
     Record<string, OutboundMessageSummary[]>
-  >({});
-  const [sendPreviewsByEstimateId, setSendPreviewsByEstimateId] = useState<
-    Record<string, EstimateSendPreview>
-  >({});
-  const [deliveryStatusByEstimateId, setDeliveryStatusByEstimateId] = useState<
-    Record<string, EstimateEmailDeliveryStatus>
   >({});
   const [historyLoadingEstimateId, setHistoryLoadingEstimateId] = useState<string | null>(null);
   const [previewLoadingEstimateId, setPreviewLoadingEstimateId] = useState<string | null>(null);
@@ -297,14 +290,6 @@ export function JobEstimatesSection({
         apiBaseUrl,
         sessionToken
       });
-      setSendPreviewsByEstimateId((current) => ({
-        ...current,
-        [estimateId]: response.preview
-      }));
-      setDeliveryStatusByEstimateId((current) => ({
-        ...current,
-        [estimateId]: response.deliveryStatus
-      }));
       setDeliveryDrafts((current) => {
         const existing = current[estimateId] ?? {
           recipientEmail: billToCustomerEmail ?? '',
@@ -369,13 +354,7 @@ export function JobEstimatesSection({
       setErrorMessage('Recipient email is required.');
       return;
     }
-    const deliveryStatus = deliveryStatusByEstimateId[estimate.id];
-    if (!deliveryStatus?.ready) {
-      setErrorMessage('Delivery needs BellField setup before this estimate can be sent.');
-      return;
-    }
-    const fromEmail = sendPreviewsByEstimateId[estimate.id]?.fromEmail ?? 'estimates@bellfield.app';
-    if (!window.confirm(`Send this estimate PDF to ${recipientEmail} from ${fromEmail}?`)) {
+    if (!window.confirm(`Send this estimate PDF to ${recipientEmail}?`)) {
       return;
     }
 
@@ -467,8 +446,6 @@ export function JobEstimatesSection({
                       }
                     }
                     history={outboundMessagesByEstimateId[selectedEstimate.id] ?? []}
-                    preview={sendPreviewsByEstimateId[selectedEstimate.id]}
-                    deliveryStatus={deliveryStatusByEstimateId[selectedEstimate.id]}
                     isHistoryLoading={historyLoadingEstimateId === selectedEstimate.id}
                     isPreviewLoading={previewLoadingEstimateId === selectedEstimate.id}
                     isSending={sendingEstimateId === selectedEstimate.id}

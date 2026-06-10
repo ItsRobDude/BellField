@@ -63,7 +63,6 @@ export interface OutboundMessagesResponse {
 }
 
 export interface EstimateEmailDeliveryStatus {
-  fromEmail: string;
   configured: boolean;
   ready: boolean;
   status: EstimateEmailDeliveryReadiness;
@@ -75,8 +74,6 @@ export interface EstimateEmailDeliveryStatusResponse {
 }
 
 export interface EstimateSendPreview {
-  fromEmail: string;
-  replyToEmail?: string;
   subject: string;
   bodyText: string;
 }

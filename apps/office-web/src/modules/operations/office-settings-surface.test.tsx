@@ -15,22 +15,23 @@ function arrange() {
   mockedApi.getOfficeCompanySettings.mockResolvedValue({
     settings: {
       companyName: 'BellField',
+      replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.'
     }
   });
   mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
     deliveryStatus: {
-      fromEmail: 'estimates@bellfield.app',
       configured: true,
       ready: true,
       status: 'ready',
-      message: 'Ready to send estimates from estimates@bellfield.app.'
+      message: 'Estimate email is ready.'
     }
   });
   mockedApi.updateOfficeCompanySettings.mockResolvedValue({
     settings: {
       companyName: 'BellField HVAC',
+      replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.'
     }
@@ -75,36 +76,14 @@ describe('OfficeSettingsSurface', () => {
     expect(await screen.findByText('Settings saved.')).toBeInTheDocument();
   });
 
-  it('shows the fixed BellField estimate sender without provider key controls', async () => {
+  it('shows editable company email settings without provider controls', async () => {
     renderSurface();
 
-    expect(await screen.findByLabelText('Estimate email from address')).toHaveValue(
-      'estimates@bellfield.app'
-    );
-    expect(
-      await screen.findByText('Ready to send estimates from estimates@bellfield.app.')
-    ).toBeInTheDocument();
+    expect(await screen.findByLabelText('Reply-to email')).toHaveValue('office@example.com');
+    expect(screen.queryByLabelText('Estimate email from address')).toBeNull();
     expect(screen.queryByLabelText(/api key/i)).toBeNull();
     expect(screen.queryByText(/resend/i)).toBeNull();
-  });
-
-  it('shows setup copy when estimate delivery is not ready', async () => {
-    mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
-      deliveryStatus: {
-        fromEmail: 'estimates@bellfield.app',
-        configured: true,
-        ready: false,
-        status: 'needsSetup',
-        message: 'Delivery needs BellField setup before estimates can be sent.'
-      }
-    });
-
-    renderSurface();
-
-    expect(
-      await screen.findByText('Estimate email needs BellField setup. Contact BellField support.')
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/resend/i)).toBeNull();
+    expect(mockedApi.getOfficeEstimateEmailDeliveryStatus).not.toHaveBeenCalled();
   });
 
   it('renders read-only settings without configure permission', async () => {

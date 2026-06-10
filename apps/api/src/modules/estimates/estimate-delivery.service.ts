@@ -22,7 +22,6 @@ import type {
 } from '../customer-delivery/customer-delivery.types';
 import { CustomerDocumentStorageService } from '../customer-delivery/customer-document-storage.service';
 import {
-  bellfieldEstimateEmailFromAddress,
   buildEmailProviderInput,
   deliveryNotConfiguredMessage,
   EmailProviderService
@@ -113,8 +112,6 @@ export class EstimateDeliveryService {
 
     return {
       preview: {
-        fromEmail: bellfieldEstimateEmailFromAddress,
-        replyToEmail: settings.replyToEmail,
         subject: emailContent.subject,
         bodyText: emailContent.bodyText
       },
@@ -418,7 +415,7 @@ function deliverySummaryMessage(
     return undefined;
   }
   if (failureCode === 'notConfigured') {
-    return 'Delivery needs BellField setup before estimates can be sent.';
+    return 'Email was not sent. Contact BellField support.';
   }
-  return 'Email was not delivered. Delivery needs BellField setup or retry.';
+  return 'Email was not delivered. Try again or contact BellField support.';
 }

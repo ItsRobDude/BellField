@@ -35,16 +35,14 @@ function createService() {
     }),
     getEstimateSendPreview: jest.fn().mockResolvedValue({
       preview: {
-        fromEmail: 'estimates@bellfield.app',
         subject: 'Estimate from BellField',
         bodyText: 'Hello Acme, attached is AC replacement.'
       },
       deliveryStatus: {
-        fromEmail: 'estimates@bellfield.app',
         configured: true,
         ready: true,
         status: 'ready',
-        message: 'Ready to send estimates from estimates@bellfield.app.'
+        message: 'Estimate email is ready.'
       }
     }),
     sendEstimate: jest.fn().mockResolvedValue({
@@ -613,7 +611,10 @@ describe('EstimatesService', () => {
       'token',
       'estimate-1'
     );
-    expect(result.preview.fromEmail).toBe('estimates@bellfield.app');
+    expect(result.preview).toEqual({
+      subject: 'Estimate from BellField',
+      bodyText: 'Hello Acme, attached is AC replacement.'
+    });
   });
 
   it('delegates estimate outbound-message history to the delivery service', async () => {
