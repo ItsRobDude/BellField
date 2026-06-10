@@ -7,6 +7,7 @@ import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import {
   createDefaultEstimateOptionGroup,
   createEstimateLineClientId,
+  estimateLineItemKindLabels,
   type EstimateDraft,
   type EstimateLineDraft
 } from './job-estimate-types';
@@ -347,6 +348,37 @@ export function EstimateEditor({
                         }
                       />
                     </label>
+                    {line.catalogItemId ? (
+                      // Catalog lines keep their catalog-derived classification.
+                      <label style={styles.fieldLabel}>
+                        <span>Line type</span>
+                        <input
+                          style={styles.input}
+                          value={estimateLineItemKindLabels[line.kind]}
+                          readOnly
+                          disabled
+                        />
+                      </label>
+                    ) : (
+                      <label style={styles.fieldLabel}>
+                        <span>Line type</span>
+                        <select
+                          style={styles.input}
+                          value={line.kind}
+                          onChange={(event) =>
+                            patchLine(index, {
+                              kind: event.target.value as EstimateLineDraft['kind']
+                            })
+                          }
+                        >
+                          {Object.entries(estimateLineItemKindLabels).map(([value, label]) => (
+                            <option key={value} value={value}>
+                              {label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                   </div>
                 ) : null}
                 <div style={styles.row}>

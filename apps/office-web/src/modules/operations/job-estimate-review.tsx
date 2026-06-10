@@ -221,7 +221,7 @@ function EstimateLineItems({ estimate }: { estimate: EstimateSummary }) {
         <thead>
           <tr>
             <th style={styles.tableHeadCell}>Item</th>
-            <th style={styles.tableHeadCell}>Kind</th>
+            <th style={styles.tableHeadCell}>Line type</th>
             <th style={styles.tableHeadCell}>Qty</th>
             <th style={styles.tableHeadCell}>Unit price</th>
             <th style={styles.tableHeadCell}>Line total</th>

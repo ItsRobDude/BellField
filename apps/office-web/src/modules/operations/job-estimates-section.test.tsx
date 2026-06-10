@@ -437,6 +437,49 @@ describe('JobEstimatesSection', () => {
     expect(afterCatalogAdd[0]).toHaveValue('Replace customer filter.');
   });
 
+  it('lets custom lines pick a business line type while catalog lines stay locked', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
+    mockedApi.getOfficeCatalogItems.mockResolvedValue({
+      items: [catalogItem({ id: 'filter', name: '16x20x1 filter', kind: 'part' })]
+    });
+    mockedApi.getOfficeCatalogCategories.mockResolvedValue({ categories: [] });
+    mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New estimate' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Labor quote' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom line' }));
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Install labor' } });
+    fireEvent.change(screen.getByLabelText('Unit price'), { target: { value: '200' } });
+    fireEvent.click(screen.getByRole('button', { name: 'More details' }));
+
+    const lineType = screen.getByLabelText('Line type');
+    expect(lineType).toHaveValue('serviceItem');
+    fireEvent.change(lineType, { target: { value: 'labor' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create estimate' }));
+    await waitFor(() =>
+      expect(mockedApi.createOfficeEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          lineItems: [expect.objectContaining({ kind: 'labor', description: 'Install labor' })]
+        })
+      )
+    );
+  });
+
   it('does not pre-select an option and labels which option the totals reflect', async () => {
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
     mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
