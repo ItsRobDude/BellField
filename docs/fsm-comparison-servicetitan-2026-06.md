@@ -1,8 +1,10 @@
 # BellField vs. ServiceTitan — Scored Comparison (Chrome rerun, 2026-06-08)
 
 > Historical snapshot: this comparison predates the later Catalog, service-agreement,
-> and field Register Add Work hardening passes. Use it as evidence from that Chrome run,
-> not as current BellField scoring without a fresh review.
+> field Register Add Work, estimate PDF delivery, company Settings, and tax-setting passes.
+> Use it as evidence from that Chrome run, not as current BellField scoring.
+> Current scoring now lives in
+> [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md).
 
 Run against [fsm-comparison-rubric.md](./fsm-comparison-rubric.md) v2 after the
 weighting/Track A/Track B adjustments. Both office products were inspected live in Chrome:

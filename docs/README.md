@@ -308,7 +308,37 @@ Read when: running Milestone 6 field sign-in, home/detail, register, equipment, 
 
 Does not own: field product behavior; use `offline-sync.md` and `screen-behavior-spec.md` for that.
 
+## Evaluation and Comparison Docs
+
+### [fsm-comparison-rubric.md](./fsm-comparison-rubric.md)
+
+Audience: contributors and product reviewers comparing BellField against major field-service management products.
+
+Purpose: reusable 100-point rubric for scoring office UI, field UI, and business-correctness depth against ServiceTitan / Jobber / Housecall Pro / FieldEdge-style expectations.
+
+Read when: running a fresh competitive score, discussing market gaps, or deciding whether a gap is current-scope quality or deferred market parity.
+
+Does not own: BellField behavior; product and workflow docs remain source of truth.
+
+### [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md)
+
+Audience: contributors and product reviewers checking the current competitive score.
+
+Purpose: current Chrome/source/public-reference scorecard after Catalog, optioned estimates, estimate PDF delivery, company Settings, tax-setting, and estimate-editor cleanup.
+
+Read when: asking where BellField stands against the mature FSM market today.
+
+Does not own: implementation order or product behavior. Use it as an evaluation snapshot.
+
 ## Legacy and Planning Context
+
+### [fsm-comparison-servicetitan-2026-06.md](./fsm-comparison-servicetitan-2026-06.md)
+
+Status: historical comparison snapshot.
+
+Use it for: understanding the 2026-06-08 Chrome scoring run before later Catalog, agreement, estimate delivery, Settings, and tax-setting work.
+
+Do not use it for: current BellField scoring. Use `fsm-comparison-servicetitan-2026-06-10.md` instead.
 
 ### [product-shape-plan.md](./product-shape-plan.md)
 
