@@ -146,6 +146,16 @@ Read when: planning or implementing outbound customer email/SMS, estimate/invoic
 
 Does not own: estimate/invoice lifecycle rules (`workflows-and-state-machines.md`), permission taxonomy (`permissions-model.md`), or self-hosting constraints (`deployment-model.md`).
 
+### [sellable-product-execution-plan.md](./sellable-product-execution-plan.md)
+
+Audience: contributors executing the path from "runs for BellField's own shop" to "a stranger can buy, install, run, and update it."
+
+Purpose: the controlling phased execution plan — contradiction closures, the installable artifact and first-admin flow, backup/restore, the licensing primitive, the update channel, relay v1 install integration, and the decisions ledger (D1–D8) — each slice with mechanics and acceptance criteria.
+
+Read when: starting any sellability-infrastructure slice, checking phase order or gates, or recording one of the D# decisions.
+
+Does not own: relay design (`delivery-relay-plan.md`), licensing posture (`asset-protection-and-licensing.md`), install posture (`self-hosted-installation-strategy.md`), or the launch checklist (`launch-readiness.md`). It sequences and executes them.
+
 ### [delivery-relay-plan.md](./delivery-relay-plan.md)
 
 Audience: contributors planning or implementing the BellField-hosted delivery relay, license-token consumption, sender identity tiers, or install-side send queueing.

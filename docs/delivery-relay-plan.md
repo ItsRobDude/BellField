@@ -201,6 +201,11 @@ Until step 3 ships, the direct provider adapter behind
 `BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY` remains the interim implementation
 for BellField-operated installs only and must not ship to sold installs.
 
+Execution detail for this build order — slices, mechanics, acceptance
+criteria, and its place in the wider sellability sequence — lives in
+[sellable-product-execution-plan.md](./sellable-product-execution-plan.md)
+(Phases 0, 3, and 5).
+
 ---
 
 ## 11. Open Items

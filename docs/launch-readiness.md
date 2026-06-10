@@ -211,6 +211,10 @@ Respecting the milestone discipline in [milestone-implementation-plan.md](./mile
 
 **Milestone 12 (Stabilization):** broader hardening, performance, and cleanup beyond the pilot environment.
 
+The slice-level execution of this sequencing — concrete mechanics, acceptance
+criteria, phase gates, and the open D# decisions — is owned by
+[sellable-product-execution-plan.md](./sellable-product-execution-plan.md).
+
 ---
 
 ## 14. Definition of Launch-Ready
