@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import type {
   AppointmentStatus,
   CustomerAccountSummary,
@@ -22,6 +22,7 @@ import {
   type RegisterEntryEditDraft
 } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { jobDetailTabs, useJobDetailTabGuard } from './job-detail-tabs';
 import { JobEstimatesSection } from './job-estimates-section';
 import { JobInvoiceSection } from './job-invoice-section';
 import { JobCostSection } from './job-cost-section';
@@ -107,17 +108,6 @@ const registerKindLabels: Record<RegisterEntryKind, string> = {
   other: 'Other'
 };
 
-const tabs: Array<{ id: JobDetailTab; label: string }> = [
-  { id: 'overview', label: 'Overview' },
-  { id: 'appointments', label: 'Appointments' },
-  { id: 'captured', label: 'Captured' },
-  { id: 'estimates', label: 'Estimates' },
-  { id: 'invoice', label: 'Invoice' },
-  { id: 'jobCost', label: 'Job cost' },
-  { id: 'media', label: 'Media' },
-  { id: 'timeline', label: 'Timeline' }
-];
-
 export function JobDetailPanel({
   technicians,
   job,
@@ -174,27 +164,10 @@ export function JobDetailPanel({
 }: JobDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<JobDetailTab>(initialTab);
   const [editingRegisterEntryId, setEditingRegisterEntryId] = useState<string | null>(null);
-  // Switching tabs unmounts the estimates section, so it registers a guard
-  // that can veto navigation while an estimate draft has unsaved edits.
-  const estimatesUnsavedGuardRef = useRef<(() => boolean) | null>(null);
-  const registerEstimatesUnsavedGuard = useCallback((guard: (() => boolean) | null) => {
-    estimatesUnsavedGuardRef.current = guard;
-  }, []);
-  const changeTab = useCallback(
-    (tab: JobDetailTab) => {
-      if (tab === activeTab) {
-        return;
-      }
-      if (
-        activeTab === 'estimates' &&
-        estimatesUnsavedGuardRef.current &&
-        !estimatesUnsavedGuardRef.current()
-      ) {
-        return;
-      }
-      setActiveTab(tab);
-    },
-    [activeTab]
+  const { registerGuard: registerEstimatesUnsavedGuard, changeTab } = useJobDetailTabGuard(
+    activeTab,
+    setActiveTab,
+    'estimates'
   );
   const jobPendingStatusChange =
     pendingJobStatusChange?.jobId === job.id ? pendingJobStatusChange : null;
@@ -230,7 +203,7 @@ export function JobDetailPanel({
       </div>
 
       <nav aria-label="Job detail tabs" style={styles.tabList}>
-        {tabs
+        {jobDetailTabs
           .filter((tab) => tab.id !== 'invoice' || canViewInvoice)
           .filter((tab) => tab.id !== 'jobCost' || canViewJobCosting)
           .map((tab) => (
