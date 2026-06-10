@@ -406,6 +406,19 @@ describe('EstimateDeliveryService', () => {
     );
   });
 
+  it('strips header-breaking control characters from the email subject', async () => {
+    const { service, emailProviderService } = createDeliveryService();
+
+    await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com',
+      subject: 'Estimate ready\r\nBcc: attacker@example.com'
+    });
+
+    expect(emailProviderService.sendEstimateEmail).toHaveBeenCalledWith(
+      expect.objectContaining({ subject: 'Estimate ready Bcc: attacker@example.com' })
+    );
+  });
+
   it('answers sent-but-unrecorded when the provider accepts but the record write fails', async () => {
     const { service, customerDeliveryRepository } = createDeliveryService();
     customerDeliveryRepository.markOutboundMessageSent.mockRejectedValue(

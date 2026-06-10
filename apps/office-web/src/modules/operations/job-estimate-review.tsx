@@ -38,7 +38,7 @@ export function EstimateList({
               <p style={styles.tinyMuted}>
                 {estimate.lineItems.length} line{estimate.lineItems.length === 1 ? '' : 's'} ·{' '}
                 {formatCurrency(estimate.totals.total)}
-                {estimate.validUntil ? ` · valid until ${estimate.validUntil}` : ''}
+                {estimate.validUntil ? ` · valid until ${formatDateOnly(estimate.validUntil)}` : ''}
               </p>
               <div style={styles.badgeRow}>
                 {estimate.selectedOptionId ? (
@@ -108,7 +108,7 @@ export function EstimateDetailPanel({
           <p style={styles.tinyMuted}>
             {estimate.lineItems.length} line{estimate.lineItems.length === 1 ? '' : 's'} ·{' '}
             {formatCurrency(estimate.totals.total)}
-            {estimate.validUntil ? ` · valid until ${estimate.validUntil}` : ''}
+            {estimate.validUntil ? ` · valid until ${formatDateOnly(estimate.validUntil)}` : ''}
           </p>
         </div>
         <div style={styles.badgeRow}>
@@ -360,6 +360,16 @@ function wasEditedSinceLastSend(estimate: EstimateSummary): boolean {
 function formatSentDate(value: string): string {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
+}
+
+// validUntil is a plain yyyy-mm-dd; build the date in local time so the label
+// never shifts a day in negative-offset timezones.
+function formatDateOnly(value: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) {
+    return value;
+  }
+  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString();
 }
 
 function formatOptionLabel(estimate: EstimateSummary, optionId: string): string {

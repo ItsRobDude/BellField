@@ -381,9 +381,16 @@ function buildEstimateEmailContent(
     throw new BadRequestException('Estimate email body is required.');
   }
   return {
-    subject: renderTemplate(subject, tokens),
+    // The subject becomes an email header; strip CR/LF and control characters
+    // so template or caller input can never smuggle extra headers.
+    subject: stripControlCharacters(renderTemplate(subject, tokens)),
     bodyText: renderTemplate(bodyText, tokens)
   };
+}
+
+function stripControlCharacters(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  return value.replace(/[\u0000-\u001f\u007f]+/g, ' ').trim();
 }
 
 function buildEstimateEmailTokens(
