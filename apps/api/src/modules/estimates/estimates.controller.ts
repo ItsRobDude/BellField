@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Post, Put, Res } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Put,
+  Res,
+  StreamableFile
+} from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { EstimatesService } from './estimates.service';
 import {
@@ -82,7 +92,10 @@ export class EstimatesController {
     response.setHeader('Content-Type', document.contentType);
     response.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
     response.setHeader('Content-Length', String(document.bytes.byteLength));
-    return document.bytes;
+    // A raw Buffer return would go through the Express adapter's res.json()
+    // and be serialized as {"type":"Buffer","data":[...]}; StreamableFile
+    // streams the bytes untouched.
+    return new StreamableFile(document.bytes);
   }
 
   @Put(':estimateId')
