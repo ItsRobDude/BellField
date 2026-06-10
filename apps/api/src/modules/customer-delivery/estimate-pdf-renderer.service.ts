@@ -8,6 +8,11 @@ import type {
 } from '../company-data/company-data.types';
 import type { EstimateRecord } from '../estimates/estimates.types';
 import { bellfieldEstimateEmailFromAddress } from './email-provider.service';
+import { estimateLineColumns, placeRow, type PdfTableColumn } from './estimate-pdf-layout';
+
+const PAGE_LEFT = 48;
+const TABLE_RIGHT = 540;
+const ROW_GAP = 6;
 
 export type EstimatePdfRenderInput = {
   estimate: EstimateRecord;
@@ -93,23 +98,27 @@ function renderPdf(doc: PDFKit.PDFDocument, input: EstimatePdfRenderInput): void
 
   for (const group of estimate.optionGroups ?? []) {
     doc.moveDown(0.5);
-    doc.fontSize(13).fillColor('#111827').text(group.title);
+    ensureRoomFor(doc, 13);
+    doc.fontSize(13).fillColor('#111827').text(group.title, PAGE_LEFT, doc.y);
     for (const option of group.options) {
       const selected = estimate.selectedOptionId === option.id;
       doc.moveDown(0.3);
+      ensureRoomFor(doc, 11);
       doc
         .fontSize(11)
         .fillColor(selected ? '#176b5b' : '#1f2933')
-        .text(`${option.label}${selected ? ' - Selected' : ''}`);
+        .text(`${option.label}${selected ? ' - Selected' : ''}`, PAGE_LEFT, doc.y);
       renderLineSection(
         doc,
         '',
         estimate.lineItems.filter((line) => line.optionId === option.id)
       );
+      ensureRoomFor(doc, 10);
       doc
         .fontSize(10)
         .fillColor('#1f2933')
-        .text(`Option total: ${money(option.totals.total)}`, {
+        .text(`Option total: ${money(option.totals.total)}`, PAGE_LEFT, doc.y, {
+          width: TABLE_RIGHT - PAGE_LEFT,
           align: 'right'
         });
     }
@@ -119,38 +128,104 @@ function renderPdf(doc: PDFKit.PDFDocument, input: EstimatePdfRenderInput): void
   renderTotals(doc, estimate);
 }
 
+function pageBottom(doc: PDFKit.PDFDocument): number {
+  return doc.page.height - doc.page.margins.bottom;
+}
+
+/** Break before single-line headings/labels that would land in the margin. */
+function ensureRoomFor(doc: PDFKit.PDFDocument, fontSize: number): void {
+  if (doc.y + fontSize * 1.4 > pageBottom(doc)) {
+    doc.addPage();
+  }
+}
+
+/**
+ * Draw one table row: every cell at the same y, cursor advanced past the
+ * tallest cell, with a page break (and re-drawn header) when the row would
+ * cross the bottom margin. doc.x is reset afterward because pdfkit keeps the
+ * x of the last positioned text call, which would shove later unpositioned
+ * text into the rightmost column.
+ */
+function drawTableRow(
+  doc: PDFKit.PDFDocument,
+  cells: string[],
+  columns: readonly PdfTableColumn[],
+  options: { fontSize: number; color: string; onNewPage?: () => void }
+): void {
+  doc.fontSize(options.fontSize);
+  const cellHeights = cells.map((text, index) =>
+    doc.heightOfString(text || ' ', {
+      width: columns[index].width,
+      align: columns[index].align
+    })
+  );
+  const placement = placeRow({
+    y: doc.y,
+    cellHeights,
+    rowGap: ROW_GAP,
+    pageTop: doc.page.margins.top,
+    pageBottom: pageBottom(doc)
+  });
+  if (placement.startsOnNewPage) {
+    doc.addPage();
+    options.onNewPage?.();
+    doc.fontSize(options.fontSize);
+  }
+  const y = placement.startsOnNewPage ? doc.y : placement.y;
+  doc.fillColor(options.color);
+  for (const [index, text] of cells.entries()) {
+    doc.text(text, columns[index].x, y, {
+      width: columns[index].width,
+      align: columns[index].align
+    });
+  }
+  doc.x = PAGE_LEFT;
+  doc.y = y + Math.max(0, ...cellHeights) + ROW_GAP;
+}
+
+function renderLineTableHeader(doc: PDFKit.PDFDocument): void {
+  drawTableRow(doc, ['Description', 'Qty', 'Unit', 'Total'], estimateLineColumns, {
+    fontSize: 9,
+    color: '#52606d'
+  });
+  doc
+    .moveTo(PAGE_LEFT, doc.y - ROW_GAP / 2)
+    .lineTo(TABLE_RIGHT, doc.y - ROW_GAP / 2)
+    .strokeColor('#dfe6df')
+    .stroke();
+}
+
 function renderLineSection(
   doc: PDFKit.PDFDocument,
   title: string,
   lines: EstimateRecord['lineItems']
 ): void {
   if (title) {
-    doc.fontSize(13).fillColor('#111827').text(title);
+    ensureRoomFor(doc, 13);
+    doc.fontSize(13).fillColor('#111827').text(title, PAGE_LEFT, doc.y);
   }
   if (lines.length === 0) {
-    doc.fontSize(10).fillColor('#52606d').text('No lines in this section.');
+    doc.fontSize(10).fillColor('#52606d').text('No lines in this section.', PAGE_LEFT, doc.y);
     return;
   }
 
-  doc.fontSize(9).fillColor('#52606d');
-  doc.text('Description', 48, doc.y, { continued: true, width: 260 });
-  doc.text('Qty', 310, doc.y, { continued: true, width: 50, align: 'right' });
-  doc.text('Unit', 360, doc.y, { continued: true, width: 75, align: 'right' });
-  doc.text('Total', 435, doc.y, { width: 100, align: 'right' });
-  doc.moveDown(0.2);
-  doc.moveTo(48, doc.y).lineTo(540, doc.y).strokeColor('#dfe6df').stroke();
-  doc.moveDown(0.25);
+  ensureRoomFor(doc, 9 * 3);
+  renderLineTableHeader(doc);
 
   for (const line of lines) {
-    const y = doc.y;
-    doc.fontSize(10).fillColor('#1f2933');
-    doc.text(line.description, 48, y, { width: 260 });
-    doc.text(String(line.quantity), 310, y, { width: 50, align: 'right' });
-    doc.text(money(line.unitPrice), 360, y, { width: 75, align: 'right' });
-    doc.text(money(line.lineSubtotal), 435, y, { width: 100, align: 'right' });
-    doc.moveDown(0.7);
+    drawTableRow(
+      doc,
+      [line.description, String(line.quantity), money(line.unitPrice), money(line.lineSubtotal)],
+      estimateLineColumns,
+      { fontSize: 10, color: '#1f2933', onNewPage: () => renderLineTableHeader(doc) }
+    );
   }
 }
+
+const totalsColumns: readonly PdfTableColumn[] = [
+  { x: 340, width: 95 },
+  { x: 435, width: 105, align: 'right' }
+];
 
 function renderTotals(doc: PDFKit.PDFDocument, estimate: EstimateRecord): void {
   const totals = [
@@ -160,12 +235,17 @@ function renderTotals(doc: PDFKit.PDFDocument, estimate: EstimateRecord): void {
     ['Tax', estimate.totals.tax],
     ['Total', estimate.totals.total]
   ] as const;
-  doc.moveTo(340, doc.y).lineTo(540, doc.y).strokeColor('#176b5b').stroke();
+  // Keep the totals block on one page; it is short and reads badly split.
+  if (doc.y + totals.length * 18 > pageBottom(doc)) {
+    doc.addPage();
+  }
+  doc.moveTo(340, doc.y).lineTo(TABLE_RIGHT, doc.y).strokeColor('#176b5b').stroke();
   doc.moveDown(0.4);
   for (const [label, value] of totals) {
-    doc.fontSize(label === 'Total' ? 12 : 10).fillColor('#111827');
-    doc.text(label, 340, doc.y, { continued: true, width: 95 });
-    doc.text(money(value), 435, doc.y, { width: 105, align: 'right' });
+    drawTableRow(doc, [label, money(value)], totalsColumns, {
+      fontSize: label === 'Total' ? 12 : 10,
+      color: '#111827'
+    });
   }
 }
 
