@@ -289,8 +289,16 @@ function EstimateOptions({ estimate }: { estimate: EstimateSummary }) {
 
 function EstimateTotals({ estimate }: { estimate: EstimateSummary }) {
   const { totals } = estimate;
+  const firstOptionLabel = estimate.optionGroups?.[0]?.options[0]?.label;
   return (
     <div style={styles.subpanel}>
+      {estimate.optionGroups?.length ? (
+        <p style={styles.tinyMuted}>
+          {estimate.selectedOptionId
+            ? `Totals reflect the ${formatOptionLabel(estimate, estimate.selectedOptionId)} option.`
+            : `No option chosen yet — totals reflect ${firstOptionLabel ?? 'the first option'}.`}
+        </p>
+      ) : null}
       <SummaryRow label="Subtotal" value={formatCurrency(totals.subtotal)} />
       {totals.discount > 0 ? (
         <SummaryRow label="Discount" value={`−${formatCurrency(totals.discount)}`} />

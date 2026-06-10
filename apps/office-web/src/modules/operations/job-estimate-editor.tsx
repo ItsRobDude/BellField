@@ -82,10 +82,12 @@ export function EstimateEditor({
 
   function enableOptions() {
     const group = createDefaultEstimateOptionGroup();
+    // No option is pre-selected: the customer (or the office recording their
+    // choice) picks one, and a pending estimate should not display a
+    // "Selected" badge nobody chose.
     onChange({
       ...draft,
-      optionGroups: [group],
-      selectedOptionId: draft.selectedOptionId || group.options[0]?.id || ''
+      optionGroups: [group]
     });
     setActiveTargetId(group.options[0]?.id ?? 'base');
   }

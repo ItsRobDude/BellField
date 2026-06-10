@@ -431,6 +431,75 @@ describe('JobEstimatesSection', () => {
     expect(descriptions[1]).toHaveValue('Replace customer filter.');
   });
 
+  it('does not pre-select an option and labels which option the totals reflect', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
+    mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New estimate' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add options' }));
+    fireEvent.change(screen.getByLabelText('Title'), { target: { value: 'Optioned quote' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom line' }));
+    fireEvent.change(screen.getByLabelText('Description'), { target: { value: 'Good path' } });
+    fireEvent.change(screen.getByLabelText('Unit price'), { target: { value: '100' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create estimate' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({ selectedOptionId: undefined })
+      )
+    );
+  });
+
+  it('labels pending option totals as reflecting the first option', async () => {
+    const optionTotalsEstimate: EstimateSummary = {
+      ...estimate,
+      optionGroups: [
+        {
+          id: 'group-1',
+          title: 'Choose a path',
+          position: 0,
+          options: [
+            { id: 'option-good', label: 'Good', position: 0, totals: estimate.totals },
+            { id: 'option-better', label: 'Better', position: 1, totals: estimate.totals }
+          ]
+        }
+      ]
+    };
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [optionTotalsEstimate] });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect(
+      await screen.findByText('No option chosen yet — totals reflect Good.')
+    ).toBeInTheDocument();
+  });
+
   it('still offers Decline on a pending estimate with options', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const optionEstimate: EstimateSummary = {
