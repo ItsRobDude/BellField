@@ -276,7 +276,10 @@ function EstimateTotals({ estimate }: { estimate: EstimateSummary }) {
       {totals.discount > 0 ? (
         <SummaryRow label="Discount" value={`−${formatCurrency(totals.discount)}`} />
       ) : null}
-      <SummaryRow label="Tax" value={formatCurrency(totals.tax)} />
+      <SummaryRow
+        label={`Tax (${formatTaxRatePercent(estimate.taxRateBasisPoints)})`}
+        value={formatCurrency(totals.tax)}
+      />
       <SummaryRow label="Total" value={formatCurrency(totals.total)} emphasize />
       <SummaryRow label="Cost" value={formatCurrency(totals.totalCost)} />
       <SummaryRow
@@ -344,6 +347,10 @@ function formatOptionLabel(estimate: EstimateSummary, optionId: string): string 
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
+}
+
+function formatTaxRatePercent(basisPoints: number): string {
+  return `${Number((basisPoints / 100).toFixed(2))}%`;
 }
 
 function formatMargin(marginBasisPoints: number | null): string {

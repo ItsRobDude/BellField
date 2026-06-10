@@ -14,6 +14,8 @@ type EstimateEditorProps = {
   draft: EstimateDraft;
   isSaving: boolean;
   isEditing: boolean;
+  /** Stored rate of the estimate being edited; undefined for new estimates. */
+  taxRateBasisPoints?: number;
   canViewCatalog: boolean;
   catalogItems: CatalogItem[];
   catalogCategories: CatalogCategory[];
@@ -32,6 +34,7 @@ export function EstimateEditor({
   draft,
   isSaving,
   isEditing,
+  taxRateBasisPoints,
   canViewCatalog,
   catalogItems,
   catalogCategories,
@@ -165,6 +168,14 @@ export function EstimateEditor({
   return (
     <div style={styles.drawerPanel}>
       <h3 style={styles.sectionHeading}>{isEditing ? 'Edit estimate' : 'New estimate'}</h3>
+
+      {/* Tax is owned by company settings and catalog taxability; the builder
+          only shows which rate applies so staff are never surprised on save. */}
+      <p style={styles.tinyMuted}>
+        {taxRateBasisPoints !== undefined
+          ? `Sales tax: ${formatTaxRatePercent(taxRateBasisPoints)} (set when this estimate was created)`
+          : 'Sales tax: the company default rate applies on save'}
+      </p>
 
       <div style={styles.formGridCompact}>
         <label style={styles.fieldLabel}>
@@ -389,6 +400,10 @@ export function EstimateEditor({
       </div>
     </div>
   );
+}
+
+function formatTaxRatePercent(basisPoints: number): string {
+  return `${Number((basisPoints / 100).toFixed(2))}%`;
 }
 
 function resolveLineTarget(

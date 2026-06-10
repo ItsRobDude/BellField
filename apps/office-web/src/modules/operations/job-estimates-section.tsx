@@ -432,6 +432,9 @@ export function JobEstimatesSection({
           draft={draft}
           isSaving={isSaving}
           isEditing={editingEstimateId !== null}
+          taxRateBasisPoints={
+            estimates.find((estimate) => estimate.id === editingEstimateId)?.taxRateBasisPoints
+          }
           canViewCatalog={canViewCatalog}
           catalogItems={catalogItems}
           catalogCategories={catalogCategories}

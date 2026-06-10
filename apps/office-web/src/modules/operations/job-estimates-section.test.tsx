@@ -483,6 +483,41 @@ describe('JobEstimatesSection', () => {
     );
   });
 
+  it('shows the effective tax rate read-only in review and editor', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [{ ...estimate, taxRateBasisPoints: 825 }]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect(await screen.findByText('Tax (8.25%)')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(
+      screen.getByText('Sales tax: 8.25% (set when this estimate was created)')
+    ).toBeInTheDocument();
+    // Tax stays read-only in the builder: no input asks for a rate.
+    expect(screen.queryByLabelText(/tax rate/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'New estimate' }));
+    expect(
+      screen.getByText('Sales tax: the company default rate applies on save')
+    ).toBeInTheDocument();
+  });
+
   it('shows sent state and warns when an estimate was edited after sending', async () => {
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
       estimates: [
