@@ -85,24 +85,41 @@ export function EstimateEditor({
   }
 
   function addCustomLine() {
+    const customLine = withTarget(
+      {
+        kind: 'serviceItem',
+        description: '',
+        quantity: '1',
+        unitOfMeasure: '',
+        unitPrice: '',
+        unitCost: '',
+        taxable: true
+      },
+      activeTarget
+    );
+    const insertIndex = draft.lineItems.findIndex((line) => lineMatchesTarget(line, activeTarget));
+    const lineItems =
+      insertIndex === -1
+        ? [...draft.lineItems, customLine]
+        : [
+            ...draft.lineItems.slice(0, insertIndex),
+            customLine,
+            ...draft.lineItems.slice(insertIndex)
+          ];
+
     onChange({
       ...draft,
-      lineItems: [
-        ...draft.lineItems,
-        withTarget(
-          {
-            kind: 'serviceItem',
-            description: '',
-            quantity: '1',
-            unitOfMeasure: '',
-            unitPrice: '',
-            unitCost: '',
-            taxable: true
-          },
-          activeTarget
-        )
-      ]
+      lineItems
     });
+    if (insertIndex !== -1) {
+      setExpandedLineIndexes((current) => {
+        const next = new Set<number>();
+        for (const lineIndex of current) {
+          next.add(lineIndex >= insertIndex ? lineIndex + 1 : lineIndex);
+        }
+        return next;
+      });
+    }
   }
 
   function addCatalogLine(line: EstimateLineDraft) {

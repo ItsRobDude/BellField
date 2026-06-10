@@ -371,6 +371,46 @@ describe('JobEstimatesSection', () => {
     );
   });
 
+  it('puts new custom lines above existing lines so they are immediately editable', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
+    mockedApi.getOfficeCatalogItems.mockResolvedValue({
+      items: [
+        catalogItem({
+          id: 'filter',
+          name: '16x20x1 filter',
+          category: 'Materials',
+          kind: 'part',
+          description: 'Replace customer filter.',
+          defaultSalePrice: 18
+        })
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New estimate' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Materials\s*1 items/i }));
+    fireEvent.click(screen.getByRole('button', { name: /16x20x1 filter/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom line' }));
+
+    const descriptions = screen.getAllByLabelText('Description');
+    expect(descriptions).toHaveLength(2);
+    expect(descriptions[0]).toHaveValue('');
+    expect(descriptions[1]).toHaveValue('Replace customer filter.');
+  });
+
   it('sends an approved estimate PDF and refreshes delivery history', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
