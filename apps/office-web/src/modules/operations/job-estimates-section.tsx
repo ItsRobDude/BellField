@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   approveOfficeEstimate,
   convertOfficeEstimateToInvoice,
@@ -43,9 +43,20 @@ type JobEstimatesSectionProps = {
   canConvert: boolean;
   canViewCatalog: boolean;
   billToCustomerEmail?: string;
+  /**
+   * Lets the host panel ask "may I navigate away?" before unmounting this
+   * section, so a dirty estimate draft is not silently destroyed by a tab
+   * switch. The guard returns true when navigation may proceed.
+   */
+  onUnsavedChangesGuardChange?: (guard: (() => boolean) | null) => void;
 };
 
 type CatalogLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
+
+type PendingEstimateAction = {
+  estimateId: string;
+  kind: 'approve' | 'decline' | 'convert' | 'download';
+};
 
 // Estimates attach to a job, so this section lives inside the job detail surface.
 // It is self-contained: it fetches its own estimates and owns its draft state,
@@ -61,7 +72,8 @@ export function JobEstimatesSection({
   canSend,
   canConvert,
   canViewCatalog,
-  billToCustomerEmail
+  billToCustomerEmail,
+  onUnsavedChangesGuardChange
 }: JobEstimatesSectionProps) {
   const [estimates, setEstimates] = useState<EstimateSummary[]>([]);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
@@ -87,6 +99,39 @@ export function JobEstimatesSection({
   const [deliveryStatusByEstimateId, setDeliveryStatusByEstimateId] = useState<
     Record<string, EstimateEmailDeliveryStatus>
   >({});
+  const [pendingAction, setPendingAction] = useState<PendingEstimateAction | null>(null);
+  // Ref mirror of pendingAction: a double-click fires both handlers in the
+  // same tick, before React re-renders with the disabled state.
+  const pendingActionRef = useRef<PendingEstimateAction | null>(null);
+  const [convertChoiceEstimateId, setConvertChoiceEstimateId] = useState<string | null>(null);
+  const isDraftDirtyRef = useRef(false);
+
+  useEffect(() => {
+    if (!onUnsavedChangesGuardChange) {
+      return;
+    }
+    onUnsavedChangesGuardChange(() => {
+      if (!isDraftDirtyRef.current) {
+        return true;
+      }
+      return window.confirm('Discard unsaved estimate changes?');
+    });
+    return () => onUnsavedChangesGuardChange(null);
+  }, [onUnsavedChangesGuardChange]);
+
+  function beginAction(action: PendingEstimateAction): boolean {
+    if (pendingActionRef.current) {
+      return false;
+    }
+    pendingActionRef.current = action;
+    setPendingAction(action);
+    return true;
+  }
+
+  function endAction() {
+    pendingActionRef.current = null;
+    setPendingAction(null);
+  }
 
   const loadEstimates = useCallback(async () => {
     setIsLoading(true);
@@ -141,7 +186,18 @@ export function JobEstimatesSection({
     }
   }, [canViewCatalog, catalogLoadStatus, draft, loadCatalog]);
 
+  function confirmDiscardDraft(): boolean {
+    if (!draft || !isDraftDirtyRef.current) {
+      return true;
+    }
+    return window.confirm('Discard unsaved estimate changes?');
+  }
+
   function startNewEstimate() {
+    if (!confirmDiscardDraft()) {
+      return;
+    }
+    isDraftDirtyRef.current = false;
     setEditingEstimateId(null);
     setDraft(createEmptyEstimateDraft());
     setCatalogLoadStatus('idle');
@@ -150,6 +206,10 @@ export function JobEstimatesSection({
   }
 
   function startEditEstimate(estimate: EstimateSummary) {
+    if (!confirmDiscardDraft()) {
+      return;
+    }
+    isDraftDirtyRef.current = false;
     setSelectedEstimateId(estimate.id);
     setEditingEstimateId(estimate.id);
     setDraft(buildEstimateDraftFromSummary(estimate));
@@ -158,9 +218,22 @@ export function JobEstimatesSection({
     setErrorMessage(null);
   }
 
+  function changeDraft(next: EstimateDraft) {
+    isDraftDirtyRef.current = true;
+    setDraft(next);
+  }
+
   function cancelDraft() {
+    isDraftDirtyRef.current = false;
     setDraft(null);
     setEditingEstimateId(null);
+  }
+
+  function requestCancelDraft() {
+    if (!confirmDiscardDraft()) {
+      return;
+    }
+    cancelDraft();
   }
 
   async function saveDraft() {
@@ -207,38 +280,52 @@ export function JobEstimatesSection({
   }
 
   async function approve(estimateId: string, selectedOptionId?: string) {
-    if (
-      !window.confirm('Mark this estimate approved? Approved estimates can no longer be edited.')
-    ) {
+    if (!beginAction({ estimateId, kind: 'approve' })) {
       return;
     }
-    setErrorMessage(null);
-    setNoticeMessage(null);
     try {
+      if (
+        !window.confirm('Mark this estimate approved? Approved estimates can no longer be edited.')
+      ) {
+        return;
+      }
+      setErrorMessage(null);
+      setNoticeMessage(null);
       await approveOfficeEstimate({ estimateId, selectedOptionId, apiBaseUrl, sessionToken });
       setNoticeMessage('Estimate approved.');
       await loadEstimates();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to approve the estimate.');
+    } finally {
+      endAction();
     }
   }
 
   async function decline(estimateId: string) {
-    if (!window.confirm('Decline this estimate?')) {
+    if (!beginAction({ estimateId, kind: 'decline' })) {
       return;
     }
-    setErrorMessage(null);
-    setNoticeMessage(null);
     try {
+      if (!window.confirm('Decline this estimate?')) {
+        return;
+      }
+      setErrorMessage(null);
+      setNoticeMessage(null);
       await declineOfficeEstimate({ estimateId, apiBaseUrl, sessionToken });
       setNoticeMessage('Estimate declined.');
       await loadEstimates();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to decline the estimate.');
+    } finally {
+      endAction();
     }
   }
 
   async function convert(estimateId: string, mode?: 'append' | 'replace') {
+    if (!beginAction({ estimateId, kind: 'convert' })) {
+      return;
+    }
+    setConvertChoiceEstimateId(null);
     setErrorMessage(null);
     setNoticeMessage(null);
     try {
@@ -246,20 +333,24 @@ export function JobEstimatesSection({
       setNoticeMessage('Estimate converted to the invoice draft. See the Invoice tab.');
       await loadEstimates();
     } catch (error) {
-      // The API blocks with a choice when the draft already has lines; offer it.
+      // The API blocks with a choice when the draft already has lines; show a
+      // real three-way prompt instead of overloading OK/Cancel with two
+      // different destructive meanings.
       const message = error instanceof Error ? error.message : 'Unable to convert the estimate.';
       if (!mode && /append.*replace|replace.*append/i.test(message)) {
-        const replace = window.confirm(
-          'The invoice draft already has lines.\n\nOK = replace them with this estimate.\nCancel = add this estimate to the existing lines.'
-        );
-        await convert(estimateId, replace ? 'replace' : 'append');
-        return;
+        setConvertChoiceEstimateId(estimateId);
+      } else {
+        setErrorMessage(message);
       }
-      setErrorMessage(message);
+    } finally {
+      endAction();
     }
   }
 
   async function downloadEstimate(estimate: EstimateSummary) {
+    if (!beginAction({ estimateId: estimate.id, kind: 'download' })) {
+      return;
+    }
     setErrorMessage(null);
     try {
       const blob = await downloadOfficeEstimatePdf({
@@ -270,6 +361,8 @@ export function JobEstimatesSection({
       downloadBlob(`estimate-${safeFilenamePart(estimate.title)}-${estimate.id}.pdf`, blob);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to download the estimate.');
+    } finally {
+      endAction();
     }
   }
 
@@ -333,22 +426,22 @@ export function JobEstimatesSection({
   function toggleDeliveryPanel(estimate: EstimateSummary) {
     setNoticeMessage(null);
     setErrorMessage(null);
-    setDeliveryPanelEstimateId((current) => {
-      const next = current === estimate.id ? null : estimate.id;
-      if (next) {
-        setDeliveryDrafts((drafts) => ({
-          ...drafts,
-          [estimate.id]: drafts[estimate.id] ?? {
-            recipientEmail: billToCustomerEmail ?? '',
-            subject: '',
-            bodyText: ''
-          }
-        }));
-        void loadDeliveryHistory(estimate.id);
-        void loadSendPreview(estimate.id);
-      }
-      return next;
-    });
+    // Side effects stay outside the setState updater: React requires updaters
+    // to be pure, and StrictMode double-invokes them.
+    const next = deliveryPanelEstimateId === estimate.id ? null : estimate.id;
+    setDeliveryPanelEstimateId(next);
+    if (next) {
+      setDeliveryDrafts((drafts) => ({
+        ...drafts,
+        [estimate.id]: drafts[estimate.id] ?? {
+          recipientEmail: billToCustomerEmail ?? '',
+          subject: '',
+          bodyText: ''
+        }
+      }));
+      void loadDeliveryHistory(estimate.id);
+      void loadSendPreview(estimate.id);
+    }
   }
 
   function updateDeliveryDraft(estimateId: string, patch: Partial<EstimateDeliveryDraft>) {
@@ -429,6 +522,7 @@ export function JobEstimatesSection({
 
       {draft ? (
         <EstimateEditor
+          key={editingEstimateId ?? 'new'}
           draft={draft}
           isSaving={isSaving}
           isEditing={editingEstimateId !== null}
@@ -440,12 +534,43 @@ export function JobEstimatesSection({
           catalogCategories={catalogCategories}
           catalogSearchText={catalogSearchText}
           isCatalogLoading={catalogLoadStatus === 'loading'}
-          onChange={setDraft}
+          onChange={changeDraft}
           onCatalogSearchChange={setCatalogSearchText}
           onReloadCatalog={() => void loadCatalog()}
-          onCancel={cancelDraft}
+          onCancel={requestCancelDraft}
           onSave={() => void saveDraft()}
         />
+      ) : null}
+
+      {convertChoiceEstimateId && convertChoiceEstimateId === selectedEstimateId ? (
+        <div style={styles.warning} role="alertdialog" aria-label="Invoice draft already has lines">
+          <p style={{ margin: 0 }}>
+            The invoice draft already has lines. What should happen to them?
+          </p>
+          <div style={styles.inlineActionBar}>
+            <button
+              type="button"
+              style={styles.dangerButton}
+              onClick={() => void convert(convertChoiceEstimateId, 'replace')}
+            >
+              Replace them with this estimate
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => void convert(convertChoiceEstimateId, 'append')}
+            >
+              Add this estimate to them
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              onClick={() => setConvertChoiceEstimateId(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
       ) : null}
 
       {isLoading ? (
@@ -468,6 +593,7 @@ export function JobEstimatesSection({
               canApprove={canApprove}
               canSend={canSend}
               canConvert={canConvert}
+              isActionPending={pendingAction?.estimateId === selectedEstimate.id}
               isDeliveryPanelOpen={deliveryPanelEstimateId === selectedEstimate.id}
               deliveryPanel={
                 deliveryPanelEstimateId === selectedEstimate.id ? (

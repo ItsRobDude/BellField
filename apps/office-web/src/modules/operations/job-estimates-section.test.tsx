@@ -483,6 +483,92 @@ describe('JobEstimatesSection', () => {
     );
   });
 
+  it('fires convert once on a double-click and offers a real three-way conflict choice', async () => {
+    const approvedEstimate: EstimateSummary = {
+      ...estimate,
+      status: 'approved',
+      approvedAt: '2026-06-01T00:00:00.000Z',
+      approvedByEmployeeId: 'office-1',
+      approvedByName: 'Olivia Owner'
+    };
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [approvedEstimate] });
+    mockedApi.convertOfficeEstimateToInvoice.mockRejectedValue(
+      new Error('The invoice draft already has lines. Choose "append" or "replace" to convert.')
+    );
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    const convertButton = await screen.findByRole('button', { name: 'Convert to invoice' });
+    fireEvent.click(convertButton);
+    fireEvent.click(convertButton);
+
+    await waitFor(() => expect(mockedApi.convertOfficeEstimateToInvoice).toHaveBeenCalledTimes(1));
+
+    // The conflict surfaces as an explicit three-way prompt, never an
+    // OK/Cancel where Cancel performs an action.
+    expect(
+      await screen.findByText('The invoice draft already has lines. What should happen to them?')
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(mockedApi.convertOfficeEstimateToInvoice).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Convert to invoice' }));
+    await screen.findByText('The invoice draft already has lines. What should happen to them?');
+    mockedApi.convertOfficeEstimateToInvoice.mockResolvedValue({} as never);
+    fireEvent.click(screen.getByRole('button', { name: 'Add this estimate to them' }));
+
+    await waitFor(() =>
+      expect(mockedApi.convertOfficeEstimateToInvoice).toHaveBeenLastCalledWith(
+        expect.objectContaining({ estimateId: 'estimate-1', mode: 'append' })
+      )
+    );
+  });
+
+  it('confirms before discarding unsaved estimate edits', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Changed but unsaved' }
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(confirmSpy).toHaveBeenCalledWith('Discard unsaved estimate changes?');
+    // Declined: the editor stays open with the edit intact.
+    expect(screen.getByLabelText('Title')).toHaveValue('Changed but unsaved');
+
+    confirmSpy.mockReturnValue(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Title')).toBeNull();
+  });
+
   it('shows the effective tax rate read-only in review and editor', async () => {
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
       estimates: [{ ...estimate, taxRateBasisPoints: 825 }]

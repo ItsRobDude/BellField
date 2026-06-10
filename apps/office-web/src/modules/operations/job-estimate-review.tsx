@@ -69,6 +69,7 @@ export function EstimateDetailPanel({
   canApprove,
   canSend,
   canConvert,
+  isActionPending,
   isDeliveryPanelOpen,
   deliveryPanel,
   onEdit,
@@ -83,6 +84,8 @@ export function EstimateDetailPanel({
   canApprove: boolean;
   canSend: boolean;
   canConvert: boolean;
+  /** True while an approve/decline/convert/download is in flight. */
+  isActionPending: boolean;
   isDeliveryPanelOpen: boolean;
   deliveryPanel: ReactNode;
   onEdit: () => void;
@@ -128,11 +131,11 @@ export function EstimateDetailPanel({
       <EstimateTotals estimate={estimate} />
 
       <div style={styles.inlineActionBar}>
-        <button type="button" style={styles.button} onClick={onDownload}>
+        <button type="button" style={styles.button} disabled={isActionPending} onClick={onDownload}>
           Download PDF
         </button>
         {isPending && canEdit ? (
-          <button type="button" style={styles.button} onClick={onEdit}>
+          <button type="button" style={styles.button} disabled={isActionPending} onClick={onEdit}>
             Edit
           </button>
         ) : null}
@@ -145,6 +148,7 @@ export function EstimateDetailPanel({
                     key={option.id}
                     type="button"
                     style={styles.primaryButton}
+                    disabled={isActionPending}
                     onClick={() => onApprove(option.id)}
                   >
                     Mark {option.label} approved
@@ -152,11 +156,21 @@ export function EstimateDetailPanel({
                 ))
               )
             ) : (
-              <button type="button" style={styles.primaryButton} onClick={() => onApprove()}>
+              <button
+                type="button"
+                style={styles.primaryButton}
+                disabled={isActionPending}
+                onClick={() => onApprove()}
+              >
                 Mark approved
               </button>
             )}
-            <button type="button" style={styles.dangerButton} onClick={onDecline}>
+            <button
+              type="button"
+              style={styles.dangerButton}
+              disabled={isActionPending}
+              onClick={onDecline}
+            >
               Decline
             </button>
           </>
@@ -174,7 +188,12 @@ export function EstimateDetailPanel({
         {estimate.status === 'approved' && estimate.convertedToInvoiceId ? (
           <span style={styles.badge}>Converted to invoice</span>
         ) : estimate.status === 'approved' && canConvert ? (
-          <button type="button" style={styles.primaryButton} onClick={onConvert}>
+          <button
+            type="button"
+            style={styles.primaryButton}
+            disabled={isActionPending}
+            onClick={onConvert}
+          >
             Convert to invoice
           </button>
         ) : null}

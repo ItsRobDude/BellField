@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
 import type {
   AppointmentStatus,
   CustomerAccountSummary,
@@ -174,6 +174,28 @@ export function JobDetailPanel({
 }: JobDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<JobDetailTab>(initialTab);
   const [editingRegisterEntryId, setEditingRegisterEntryId] = useState<string | null>(null);
+  // Switching tabs unmounts the estimates section, so it registers a guard
+  // that can veto navigation while an estimate draft has unsaved edits.
+  const estimatesUnsavedGuardRef = useRef<(() => boolean) | null>(null);
+  const registerEstimatesUnsavedGuard = useCallback((guard: (() => boolean) | null) => {
+    estimatesUnsavedGuardRef.current = guard;
+  }, []);
+  const changeTab = useCallback(
+    (tab: JobDetailTab) => {
+      if (tab === activeTab) {
+        return;
+      }
+      if (
+        activeTab === 'estimates' &&
+        estimatesUnsavedGuardRef.current &&
+        !estimatesUnsavedGuardRef.current()
+      ) {
+        return;
+      }
+      setActiveTab(tab);
+    },
+    [activeTab]
+  );
   const jobPendingStatusChange =
     pendingJobStatusChange?.jobId === job.id ? pendingJobStatusChange : null;
   useEffect(() => {
@@ -216,7 +238,7 @@ export function JobDetailPanel({
               key={tab.id}
               type="button"
               style={activeTab === tab.id ? styles.activeTabButton : styles.tabButton}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => changeTab(tab.id)}
             >
               {tab.label}
             </button>
@@ -267,7 +289,7 @@ export function JobDetailPanel({
           registerEntryCount={registerEntryCount}
           mediaAttachmentCount={mediaAttachmentCount}
           focusedAppointmentId={focusedAppointmentId}
-          onSelectTab={setActiveTab}
+          onSelectTab={changeTab}
           onOpenCustomer={onOpenCustomer}
           onOpenLocation={onOpenLocation}
           onJobStatusReviewRequested={onJobStatusReviewRequested}
@@ -311,6 +333,7 @@ export function JobDetailPanel({
           canConvert={canConvertEstimate}
           canViewCatalog={canViewCatalog}
           billToCustomerEmail={billToCustomer.email}
+          onUnsavedChangesGuardChange={registerEstimatesUnsavedGuard}
         />
       ) : null}
       {activeTab === 'invoice' && canViewInvoice ? (
