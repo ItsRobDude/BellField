@@ -126,24 +126,26 @@ export function EstimateDetailPanel({
             Edit
           </button>
         ) : null}
-        {isPending && canApprove && estimate.optionGroups?.length ? (
-          estimate.optionGroups.flatMap((group) =>
-            group.options.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                style={styles.primaryButton}
-                onClick={() => onApprove(option.id)}
-              >
-                Approve {option.label}
-              </button>
-            ))
-          )
-        ) : isPending && canApprove ? (
+        {isPending && canApprove ? (
           <>
-            <button type="button" style={styles.primaryButton} onClick={() => onApprove()}>
-              Approve
-            </button>
+            {estimate.optionGroups?.length ? (
+              estimate.optionGroups.flatMap((group) =>
+                group.options.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    style={styles.primaryButton}
+                    onClick={() => onApprove(option.id)}
+                  >
+                    Approve {option.label}
+                  </button>
+                ))
+              )
+            ) : (
+              <button type="button" style={styles.primaryButton} onClick={() => onApprove()}>
+                Approve
+              </button>
+            )}
             <button type="button" style={styles.dangerButton} onClick={onDecline}>
               Decline
             </button>

@@ -431,6 +431,58 @@ describe('JobEstimatesSection', () => {
     expect(descriptions[1]).toHaveValue('Replace customer filter.');
   });
 
+  it('still offers Decline on a pending estimate with options', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+    const optionEstimate: EstimateSummary = {
+      ...estimate,
+      id: 'estimate-options',
+      title: 'Replace or repair',
+      optionGroups: [
+        {
+          id: 'group-1',
+          title: 'Choose a path',
+          position: 0,
+          options: [
+            { id: 'option-good', label: 'Good', position: 0, totals: estimate.totals },
+            { id: 'option-better', label: 'Better', position: 1, totals: estimate.totals }
+          ]
+        }
+      ]
+    };
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [optionEstimate] });
+    mockedApi.declineOfficeEstimate.mockResolvedValue({
+      estimate: { ...optionEstimate, status: 'declined' }
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect(await screen.findByRole('button', { name: 'Approve Good' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Approve Better' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+
+    expect(confirmSpy).toHaveBeenCalledWith('Decline this estimate?');
+    await waitFor(() =>
+      expect(mockedApi.declineOfficeEstimate).toHaveBeenCalledWith({
+        estimateId: 'estimate-options',
+        apiBaseUrl: 'http://api.test',
+        sessionToken: 'session-token'
+      })
+    );
+  });
+
   it('sends an approved estimate PDF and refreshes delivery history', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
