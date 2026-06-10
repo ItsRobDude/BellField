@@ -194,11 +194,17 @@ describe('CatalogService', () => {
     });
 
     expect(result.category.name).toBe('Service');
-    expect(catalogRepository.updateCategory).toHaveBeenCalledWith('category-1', {
-      name: 'Service',
-      sortOrder: 20,
-      isActive: true
-    });
+    // The previous name rides along so the repository can cascade the rename
+    // to items that reference the category by free-text name.
+    expect(catalogRepository.updateCategory).toHaveBeenCalledWith(
+      'category-1',
+      {
+        name: 'Service',
+        sortOrder: 20,
+        isActive: true
+      },
+      'Maintenance'
+    );
   });
 
   it('maps concurrent category update unique violations to a friendly duplicate error', async () => {

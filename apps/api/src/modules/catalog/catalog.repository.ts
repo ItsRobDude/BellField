@@ -164,18 +164,40 @@ export class CatalogRepository {
     return (await this.getCategoryById(id))!;
   }
 
-  async updateCategory(id: string, input: UpdateCatalogCategoryRequestDto): Promise<void> {
+  /**
+   * Items reference categories by free-text name, so a rename must cascade to
+   * the items in the same transaction or it silently strands them in
+   * "Uncategorized". Estimate line snapshots are deliberately untouched —
+   * history keeps the name that was quoted.
+   */
+  async updateCategory(
+    id: string,
+    input: UpdateCatalogCategoryRequestDto,
+    previousName: string
+  ): Promise<void> {
     const now = new Date().toISOString();
-    await this.databaseService.query(
-      `update catalog_categories set
-         name = $2,
-         sort_order = $3,
-         is_active = $4,
-         default_taxable = $5,
-         updated_at = $6
-       where id = $1`,
-      [id, input.name.trim(), input.sortOrder, input.isActive, input.defaultTaxable ?? null, now]
-    );
+    const newName = input.name.trim();
+    await this.databaseService.transaction(async (queryable) => {
+      await queryable.query(
+        `update catalog_categories set
+           name = $2,
+           sort_order = $3,
+           is_active = $4,
+           default_taxable = $5,
+           updated_at = $6
+         where id = $1`,
+        [id, newName, input.sortOrder, input.isActive, input.defaultTaxable ?? null, now]
+      );
+      if (newName !== previousName.trim()) {
+        await queryable.query(
+          `update catalog_items
+           set category = $1,
+               updated_at = $2
+           where lower(trim(category)) = lower(trim($3))`,
+          [newName, now, previousName]
+        );
+      }
+    });
   }
 
   async listItems(): Promise<CatalogItem[]> {

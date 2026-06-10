@@ -83,7 +83,7 @@ export class CatalogService {
     }
     await this.validateCatalogCategoryRequest(request, categoryId);
     try {
-      await this.catalogRepository.updateCategory(categoryId, request);
+      await this.catalogRepository.updateCategory(categoryId, request, existing.name);
     } catch (error) {
       if (isUniqueViolation(error)) {
         throw new BadRequestException('Catalog category name already exists.');
