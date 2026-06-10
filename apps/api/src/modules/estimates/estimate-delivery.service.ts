@@ -258,10 +258,13 @@ export class EstimateDeliveryService {
     return estimate;
   }
 
+  // Pending estimates are sendable on purpose: the normal flow is build, email
+  // the customer, then record their decision. Each send snapshots the document
+  // and stamps the estimate version, so later edits never rewrite what was sent.
   private requireSendableEstimate(estimate: EstimateRecord) {
-    if (estimate.status !== 'approved') {
+    if (estimate.status !== 'pending' && estimate.status !== 'approved') {
       throw new ConflictException(
-        `Only approved estimates can be sent (status: ${estimate.status}).`
+        `Only pending or approved estimates can be sent (status: ${estimate.status}).`
       );
     }
     if (estimate.supersededByEstimateId) {

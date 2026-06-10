@@ -154,7 +154,9 @@ export function EstimateDetailPanel({
         {estimate.status === 'approved' && estimate.approvedByName ? (
           <span style={styles.tinyMuted}>Approved by {estimate.approvedByName}</span>
         ) : null}
-        {estimate.status === 'approved' && canSend ? (
+        {(isPending || estimate.status === 'approved') &&
+        canSend &&
+        !estimate.supersededByEstimateId ? (
           <button type="button" style={styles.button} onClick={onToggleDelivery}>
             {isDeliveryPanelOpen ? 'Close send' : 'Send PDF'}
           </button>

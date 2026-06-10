@@ -483,6 +483,38 @@ describe('JobEstimatesSection', () => {
     );
   });
 
+  it('offers sending on a pending estimate so the customer can review before approval', async () => {
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Send PDF' }));
+    expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
+      'Estimate from BellField'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send PDF' }));
+
+    expect(confirmSpy).toHaveBeenCalledWith('Send this estimate PDF to customer@example.com?');
+    await waitFor(() =>
+      expect(mockedApi.sendOfficeEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({ estimateId: 'estimate-1' })
+      )
+    );
+  });
+
   it('sends an approved estimate PDF and refreshes delivery history', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({

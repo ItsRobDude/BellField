@@ -300,9 +300,37 @@ describe('EstimateDeliveryService', () => {
     expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
   });
 
-  it('refuses to send a pending estimate', async () => {
+  it('sends a pending estimate so the customer can review before approval', async () => {
+    const { service, estimatesRepository, emailProviderService, customerDeliveryRepository } =
+      createDeliveryService();
+    estimatesRepository.getEstimateById.mockResolvedValue(estimateRecord({ status: 'pending' }));
+
+    const result = await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(emailProviderService.sendEstimateEmail).toHaveBeenCalledTimes(1);
+    expect(customerDeliveryRepository.createDocumentSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ sourceVersion: 1 })
+    );
+    expect(result.outboundMessage.status).toBe('sent');
+  });
+
+  it('refuses to send a declined estimate', async () => {
     const { service, estimatesRepository, emailProviderService } = createDeliveryService();
-    estimatesRepository.getEstimateById.mockResolvedValue(estimateRecord());
+    estimatesRepository.getEstimateById.mockResolvedValue(estimateRecord({ status: 'declined' }));
+
+    await expect(
+      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+  });
+
+  it('refuses to send a superseded estimate', async () => {
+    const { service, estimatesRepository, emailProviderService } = createDeliveryService();
+    estimatesRepository.getEstimateById.mockResolvedValue(
+      estimateRecord({ status: 'pending', supersededByEstimateId: 'estimate-2' })
+    );
 
     await expect(
       service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
