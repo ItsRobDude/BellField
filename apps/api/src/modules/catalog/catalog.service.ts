@@ -154,8 +154,10 @@ export class CatalogService {
       return request;
     }
 
+    // Archived categories keep their meaning: archiving governs visibility in
+    // pickers, not what the category says about taxability.
     const category = await this.catalogRepository.getCategoryByName(categoryName);
-    if (!category?.isActive || category.defaultTaxable === undefined) {
+    if (!category || category.defaultTaxable === undefined) {
       return request;
     }
 
@@ -169,6 +171,14 @@ export class CatalogService {
     const name = request.name.trim();
     if (!name) {
       throw new BadRequestException('Catalog category name is required.');
+    }
+
+    // The estimate picker uses "Uncategorized" as its bucket for items with no
+    // category; a real category with that name would silently alias it.
+    if (name.toLocaleLowerCase() === 'uncategorized') {
+      throw new BadRequestException(
+        '"Uncategorized" is reserved for items without a category. Choose another name.'
+      );
     }
 
     if (request.sortOrder !== undefined) {

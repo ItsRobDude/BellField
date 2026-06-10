@@ -116,6 +116,33 @@ describe('CatalogService', () => {
     );
   });
 
+  it('applies an archived category tax default; archiving governs visibility, not meaning', async () => {
+    const { service, catalogRepository } = createService(['catalog:create']);
+    catalogRepository.getCategoryByName.mockResolvedValue(
+      catalogCategory({ name: 'Materials', isActive: false, defaultTaxable: false })
+    );
+    catalogRepository.createItem.mockResolvedValue(catalogItem({ taxableDefault: false }));
+
+    await service.createItem('token', {
+      name: '16x20x1 filter',
+      kind: 'part',
+      category: 'Materials'
+    });
+
+    expect(catalogRepository.createItem).toHaveBeenCalledWith(
+      expect.objectContaining({ taxableDefault: false })
+    );
+  });
+
+  it('reserves the Uncategorized name for the picker fallback bucket', async () => {
+    const { service, catalogRepository } = createService(['catalog:create']);
+
+    await expect(
+      service.createCategory('token', { name: ' uncategorized ' })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(catalogRepository.createCategory).not.toHaveBeenCalled();
+  });
+
   it('respects explicit Catalog item taxability over the category default', async () => {
     const { service, catalogRepository } = createService(['catalog:create']);
     catalogRepository.createItem.mockResolvedValue(catalogItem({ taxableDefault: true }));
