@@ -54,6 +54,38 @@ export interface CatalogItemResponse {
   item: CatalogItem;
 }
 
+export interface CatalogCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  defaultTaxable?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CatalogCategoriesResponse {
+  categories: CatalogCategory[];
+}
+
+export interface CatalogCategoryResponse {
+  category: CatalogCategory;
+}
+
+export interface CreateCatalogCategoryRequest {
+  name: string;
+  sortOrder?: number;
+  isActive?: boolean;
+  defaultTaxable?: boolean;
+}
+
+export interface UpdateCatalogCategoryRequest {
+  name: string;
+  sortOrder: number;
+  isActive: boolean;
+  defaultTaxable?: boolean;
+}
+
 export interface CreateCatalogItemRequest {
   code?: string;
   name: string;

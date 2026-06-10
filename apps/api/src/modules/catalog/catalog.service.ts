@@ -4,11 +4,18 @@ import type {
   FieldCatalogItem,
   CatalogItem,
   CatalogItemsResponse,
-  CatalogItemResponse
+  CatalogItemResponse,
+  CatalogCategoriesResponse,
+  CatalogCategoryResponse
 } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { CatalogRepository } from './catalog.repository';
-import type { CreateCatalogItemRequestDto, UpdateCatalogItemRequestDto } from './catalog.types';
+import type {
+  CreateCatalogCategoryRequestDto,
+  CreateCatalogItemRequestDto,
+  UpdateCatalogCategoryRequestDto,
+  UpdateCatalogItemRequestDto
+} from './catalog.types';
 
 @Injectable()
 export class CatalogService {
@@ -41,6 +48,35 @@ export class CatalogService {
     return {
       items: canViewInternalCatalogFields ? items : items.map(toReadOnlyCatalogItem)
     };
+  }
+
+  async listCategories(sessionToken: string): Promise<CatalogCategoriesResponse> {
+    await this.authorize(sessionToken, 'catalog:view');
+    return { categories: await this.catalogRepository.listCategories() };
+  }
+
+  async createCategory(
+    sessionToken: string,
+    request: CreateCatalogCategoryRequestDto
+  ): Promise<CatalogCategoryResponse> {
+    await this.authorize(sessionToken, 'catalog:create');
+    await this.validateCatalogCategoryRequest(request);
+    return { category: await this.catalogRepository.createCategory(request) };
+  }
+
+  async updateCategory(
+    sessionToken: string,
+    categoryId: string,
+    request: UpdateCatalogCategoryRequestDto
+  ): Promise<CatalogCategoryResponse> {
+    await this.authorize(sessionToken, 'catalog:edit');
+    const existing = await this.catalogRepository.getCategoryById(categoryId);
+    if (!existing) {
+      throw new NotFoundException('Catalog category not found.');
+    }
+    await this.validateCatalogCategoryRequest(request, categoryId);
+    await this.catalogRepository.updateCategory(categoryId, request);
+    return { category: (await this.catalogRepository.getCategoryById(categoryId))! };
   }
 
   async createItem(
@@ -89,6 +125,30 @@ export class CatalogService {
       !(await this.catalogRepository.inventoryItemExists(linkedInventoryItemId))
     ) {
       throw new NotFoundException('Linked inventory item not found.');
+    }
+  }
+
+  private async validateCatalogCategoryRequest(
+    request: CreateCatalogCategoryRequestDto | UpdateCatalogCategoryRequestDto,
+    existingCategoryId?: string
+  ) {
+    const name = request.name.trim();
+    if (!name) {
+      throw new BadRequestException('Catalog category name is required.');
+    }
+
+    if (request.sortOrder !== undefined) {
+      if (
+        !Number.isInteger(request.sortOrder) ||
+        request.sortOrder < -100000 ||
+        request.sortOrder > 100000
+      ) {
+        throw new BadRequestException('Catalog category sort order is outside the allowed range.');
+      }
+    }
+
+    if (await this.catalogRepository.categoryNameExists(name, existingCategoryId)) {
+      throw new BadRequestException('Catalog category name already exists.');
     }
   }
 

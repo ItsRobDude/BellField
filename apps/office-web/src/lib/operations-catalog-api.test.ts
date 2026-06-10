@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  createOfficeCatalogCategory,
   createOfficeCatalogItem,
+  getOfficeCatalogCategories,
   getOfficeCatalogItems,
+  updateOfficeCatalogCategory,
   updateOfficeCatalogItem
 } from './operations-catalog-api';
 
@@ -21,13 +24,17 @@ describe('operations-catalog-api', () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(mockJsonResponse({ items: [] }))
+      .mockResolvedValueOnce(mockJsonResponse({ categories: [] }))
       .mockResolvedValueOnce(mockJsonResponse({ item: { id: 'catalog-1' } }))
-      .mockResolvedValueOnce(mockJsonResponse({ item: { id: 'catalog-1' } }));
+      .mockResolvedValueOnce(mockJsonResponse({ item: { id: 'catalog-1' } }))
+      .mockResolvedValueOnce(mockJsonResponse({ category: { id: 'category-1' } }))
+      .mockResolvedValueOnce(mockJsonResponse({ category: { id: 'category-1' } }));
     vi.stubGlobal('fetch', fetchMock);
 
     const auth = { sessionToken: 'session-token', apiBaseUrl: 'http://api.test' };
 
     await getOfficeCatalogItems(auth);
+    await getOfficeCatalogCategories(auth);
     await createOfficeCatalogItem({
       ...auth,
       body: { name: 'Diagnostic', kind: 'service' }
@@ -43,6 +50,20 @@ describe('operations-catalog-api', () => {
         isActive: true
       }
     });
+    await createOfficeCatalogCategory({
+      ...auth,
+      body: { name: 'Maintenance', sortOrder: 10, defaultTaxable: true }
+    });
+    await updateOfficeCatalogCategory({
+      ...auth,
+      catalogCategoryId: 'category-1',
+      body: {
+        name: 'Maintenance',
+        sortOrder: 10,
+        isActive: true,
+        defaultTaxable: true
+      }
+    });
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -53,12 +74,29 @@ describe('operations-catalog-api', () => {
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
       2,
+      'http://api.test/operations/catalog/categories',
+      expect.objectContaining({
+        headers: expect.objectContaining({ Authorization: 'Bearer session-token' })
+      })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
       'http://api.test/operations/catalog/items',
       expect.objectContaining({ method: 'POST' })
     );
     expect(fetchMock).toHaveBeenNthCalledWith(
-      3,
+      4,
       'http://api.test/operations/catalog/items/catalog-1',
+      expect.objectContaining({ method: 'PUT' })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      'http://api.test/operations/catalog/categories',
+      expect.objectContaining({ method: 'POST' })
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      'http://api.test/operations/catalog/categories/category-1',
       expect.objectContaining({ method: 'PUT' })
     );
   });

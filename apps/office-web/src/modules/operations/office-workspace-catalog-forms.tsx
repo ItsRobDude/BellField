@@ -1,6 +1,6 @@
 'use client';
 
-import type { CatalogItem, CatalogItemKind } from '@/lib/operations-api';
+import type { CatalogCategory, CatalogItem, CatalogItemKind } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type CatalogDraft = {
@@ -87,6 +87,7 @@ export function draftFromCatalogItem(item: CatalogItem): CatalogDraft {
 
 export function CatalogForm({
   form,
+  categories,
   inventoryItems,
   isSaving,
   onChange,
@@ -94,6 +95,7 @@ export function CatalogForm({
   onSubmit
 }: {
   form: ActiveCatalogForm;
+  categories: CatalogCategory[];
   inventoryItems: Array<{ id: string; name: string }>;
   isSaving: boolean;
   onChange: (form: ActiveCatalogForm) => void;
@@ -101,9 +103,19 @@ export function CatalogForm({
   onSubmit: () => void;
 }) {
   const submitDisabled = isSaving || !form.draft.name.trim();
+  const categoryOptions = buildCategoryOptions(categories, form.draft.category);
 
   function patch(patch: Partial<CatalogDraft>) {
     onChange({ ...form, draft: { ...form.draft, ...patch } });
+  }
+
+  function selectCategory(categoryName: string) {
+    const selectedCategory = categories.find((category) => category.name === categoryName);
+    const categoryPatch: Partial<CatalogDraft> = { category: categoryName };
+    if (!form.editingId && selectedCategory?.defaultTaxable !== undefined) {
+      categoryPatch.taxableDefault = selectedCategory.defaultTaxable;
+    }
+    patch(categoryPatch);
   }
 
   return (
@@ -142,11 +154,22 @@ export function CatalogForm({
             ))}
           </select>
         </label>
-        <TextField
-          label="Category"
-          value={form.draft.category}
-          onChange={(category) => patch({ category })}
-        />
+        <label style={styles.fieldLabel}>
+          Category
+          <select
+            style={styles.input}
+            value={form.draft.category}
+            onChange={(event) => selectCategory(event.target.value)}
+          >
+            <option value="">No category</option>
+            {categoryOptions.map((category) => (
+              <option key={category.name} value={category.name}>
+                {category.name}
+                {category.isActive ? '' : ' (inactive)'}
+              </option>
+            ))}
+          </select>
+        </label>
         <TextField
           label="Tags"
           value={form.draft.tradeTags}
@@ -240,6 +263,45 @@ export function CatalogForm({
       </div>
     </form>
   );
+}
+
+function buildCategoryOptions(
+  categories: CatalogCategory[],
+  currentCategoryName: string
+): CatalogCategory[] {
+  const byName = new Map<string, CatalogCategory>();
+  for (const category of categories) {
+    if (category.isActive) {
+      byName.set(category.name.toLocaleLowerCase(), category);
+    }
+  }
+
+  const currentCategory = currentCategoryName.trim();
+  if (currentCategory) {
+    const key = currentCategory.toLocaleLowerCase();
+    const knownCategory = categories.find((category) => category.name.toLocaleLowerCase() === key);
+    byName.set(
+      key,
+      knownCategory ?? {
+        id: `unmanaged-${key}`,
+        name: currentCategory,
+        sortOrder: Number.MAX_SAFE_INTEGER,
+        isActive: false,
+        createdAt: '',
+        updatedAt: ''
+      }
+    );
+  }
+
+  return [...byName.values()].sort((left, right) => {
+    if (left.isActive !== right.isActive) {
+      return left.isActive ? -1 : 1;
+    }
+    if (left.sortOrder !== right.sortOrder) {
+      return left.sortOrder - right.sortOrder;
+    }
+    return left.name.localeCompare(right.name);
+  });
 }
 
 function TextField({

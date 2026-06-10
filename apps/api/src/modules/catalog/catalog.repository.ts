@@ -1,9 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import type { CatalogItem, FieldCatalogItem } from '@bellfield/contracts';
+import type { CatalogCategory, CatalogItem, FieldCatalogItem } from '@bellfield/contracts';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
-import type { CreateCatalogItemRequestDto, UpdateCatalogItemRequestDto } from './catalog.types';
+import type {
+  CreateCatalogCategoryRequestDto,
+  CreateCatalogItemRequestDto,
+  UpdateCatalogCategoryRequestDto,
+  UpdateCatalogItemRequestDto
+} from './catalog.types';
 
 type CatalogItemRow = {
   id: string;
@@ -28,6 +33,16 @@ type CatalogItemRow = {
   fieldVisible: boolean;
   isActive: boolean;
   registerUsageCount: string | number;
+  createdAt: string | Date;
+  updatedAt: string | Date;
+};
+
+type CatalogCategoryRow = {
+  id: string;
+  name: string;
+  sortOrder: string | number;
+  isActive: boolean;
+  defaultTaxable: boolean | null;
   createdAt: string | Date;
   updatedAt: string | Date;
 };
@@ -59,9 +74,95 @@ const CATALOG_ITEM_COLUMNS = `
   ci.updated_at as "updatedAt"
 `;
 
+const CATALOG_CATEGORY_COLUMNS = `
+  id,
+  name,
+  sort_order as "sortOrder",
+  is_active as "isActive",
+  default_taxable as "defaultTaxable",
+  created_at as "createdAt",
+  updated_at as "updatedAt"
+`;
+
 @Injectable()
 export class CatalogRepository {
   constructor(private readonly databaseService: DatabaseService) {}
+
+  async listCategories(): Promise<CatalogCategory[]> {
+    const result = await this.databaseService.query<CatalogCategoryRow>(
+      `
+        select ${CATALOG_CATEGORY_COLUMNS}
+        from catalog_categories
+        order by is_active desc, sort_order asc, lower(name) asc, id asc
+      `
+    );
+
+    return result.rows.map(toCatalogCategory);
+  }
+
+  async getCategoryById(id: string): Promise<CatalogCategory | null> {
+    const result = await this.databaseService.query<CatalogCategoryRow>(
+      `
+        select ${CATALOG_CATEGORY_COLUMNS}
+        from catalog_categories
+        where id = $1
+        limit 1
+      `,
+      [id]
+    );
+
+    return result.rows[0] ? toCatalogCategory(result.rows[0]) : null;
+  }
+
+  async categoryNameExists(name: string, excludingId?: string): Promise<boolean> {
+    const result = await this.databaseService.query<{ id: string }>(
+      `
+        select id
+        from catalog_categories
+        where lower(name) = lower($1)
+          and ($2::text is null or id <> $2)
+        limit 1
+      `,
+      [name.trim(), excludingId ?? null]
+    );
+
+    return Boolean(result.rows[0]);
+  }
+
+  async createCategory(input: CreateCatalogCategoryRequestDto): Promise<CatalogCategory> {
+    const id = randomUUID();
+    const now = new Date().toISOString();
+    await this.databaseService.query(
+      `insert into catalog_categories (
+         id, name, sort_order, is_active, default_taxable, created_at, updated_at
+       )
+       values ($1, $2, $3, $4, $5, $6, $6)`,
+      [
+        id,
+        input.name.trim(),
+        input.sortOrder ?? 0,
+        input.isActive ?? true,
+        input.defaultTaxable ?? null,
+        now
+      ]
+    );
+
+    return (await this.getCategoryById(id))!;
+  }
+
+  async updateCategory(id: string, input: UpdateCatalogCategoryRequestDto): Promise<void> {
+    const now = new Date().toISOString();
+    await this.databaseService.query(
+      `update catalog_categories set
+         name = $2,
+         sort_order = $3,
+         is_active = $4,
+         default_taxable = $5,
+         updated_at = $6
+       where id = $1`,
+      [id, input.name.trim(), input.sortOrder, input.isActive, input.defaultTaxable ?? null, now]
+    );
+  }
 
   async listItems(): Promise<CatalogItem[]> {
     const result = await this.databaseService.query<CatalogItemRow>(
@@ -222,6 +323,18 @@ export class CatalogRepository {
     );
     return Boolean(result.rows[0]);
   }
+}
+
+function toCatalogCategory(row: CatalogCategoryRow): CatalogCategory {
+  return {
+    id: row.id,
+    name: row.name,
+    sortOrder: Number(row.sortOrder),
+    isActive: row.isActive,
+    defaultTaxable: row.defaultTaxable ?? undefined,
+    createdAt: toIsoString(row.createdAt),
+    updatedAt: toIsoString(row.updatedAt)
+  };
 }
 
 function toOptionalNumber(value: string | number | null): number | undefined {

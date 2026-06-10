@@ -2,14 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import {
+  createOfficeCatalogCategory,
   createOfficeCatalogItem,
+  getOfficeCatalogCategories,
   getOfficeCatalogItems,
   getOfficeInventoryItems,
+  updateOfficeCatalogCategory,
   updateOfficeCatalogItem,
+  type CatalogCategory,
   type CatalogItem,
   type CatalogItemKind,
+  type CreateCatalogCategoryRequest,
   type CreateCatalogItemRequest,
   type InventoryItem,
+  type UpdateCatalogCategoryRequest,
   type UpdateCatalogItemRequest
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -41,6 +47,18 @@ const kindLabels: Record<CatalogItemKind, string> = {
   other: 'Other'
 };
 
+type CatalogCategoryDraft = {
+  name: string;
+  sortOrder: string;
+  defaultTaxableMode: 'none' | 'taxable' | 'nonTaxable';
+  isActive: boolean;
+};
+
+type ActiveCatalogCategoryForm = {
+  editingId: string | null;
+  draft: CatalogCategoryDraft;
+};
+
 export function OfficeCatalogSurface({
   apiBaseUrl,
   sessionToken,
@@ -49,6 +67,7 @@ export function OfficeCatalogSurface({
   canViewInventory
 }: OfficeCatalogSurfaceProps) {
   const [items, setItems] = useState<CatalogItem[]>([]);
+  const [categories, setCategories] = useState<CatalogCategory[]>([]);
   const [inventoryItems, setInventoryItems] = useState<InventoryItem[]>([]);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -58,18 +77,23 @@ export function OfficeCatalogSurface({
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
   const [activeForm, setActiveForm] = useState<ActiveCatalogForm | null>(null);
+  const [activeCategoryForm, setActiveCategoryForm] = useState<ActiveCatalogCategoryForm | null>(
+    null
+  );
 
   const load = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
-      const [catalogResult, inventoryResult] = await Promise.all([
+      const [catalogResult, categoriesResult, inventoryResult] = await Promise.all([
         getOfficeCatalogItems({ apiBaseUrl, sessionToken }),
+        getOfficeCatalogCategories({ apiBaseUrl, sessionToken }),
         canViewInventory
           ? getOfficeInventoryItems({ apiBaseUrl, sessionToken })
           : Promise.resolve({ items: [] })
       ]);
       setItems(catalogResult.items);
+      setCategories(categoriesResult.categories);
       setInventoryItems(inventoryResult.items);
       setHasLoaded(true);
     } catch (error) {
@@ -121,6 +145,7 @@ export function OfficeCatalogSurface({
   async function afterWrite(message: string) {
     setNoticeMessage(message);
     setActiveForm(null);
+    setActiveCategoryForm(null);
     await load();
   }
 
@@ -157,7 +182,40 @@ export function OfficeCatalogSurface({
     }
   }
 
-  const formOpen = activeForm !== null;
+  async function submitCategoryForm() {
+    if (!activeCategoryForm) {
+      return;
+    }
+
+    setIsSaving(true);
+    setErrorMessage(null);
+    setNoticeMessage(null);
+
+    try {
+      if (activeCategoryForm.editingId) {
+        await updateOfficeCatalogCategory({
+          apiBaseUrl,
+          sessionToken,
+          catalogCategoryId: activeCategoryForm.editingId,
+          body: toUpdateCategoryRequest(activeCategoryForm.draft)
+        });
+        await afterWrite('Catalog category updated.');
+      } else {
+        await createOfficeCatalogCategory({
+          apiBaseUrl,
+          sessionToken,
+          body: toCreateCategoryRequest(activeCategoryForm.draft)
+        });
+        await afterWrite('Catalog category created.');
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to save catalog category.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  const formOpen = activeForm !== null || activeCategoryForm !== null;
 
   return (
     <section style={styles.workspacePanel} aria-label="Catalog">
@@ -175,6 +233,21 @@ export function OfficeCatalogSurface({
               onClick={() => setActiveForm({ editingId: null, draft: emptyCatalogDraft })}
             >
               Add item
+            </button>
+          ) : null}
+          {canCreate ? (
+            <button
+              type="button"
+              style={styles.button}
+              disabled={isSaving || formOpen}
+              onClick={() =>
+                setActiveCategoryForm({
+                  editingId: null,
+                  draft: emptyCategoryDraft(categories.length)
+                })
+              }
+            >
+              Add category
             </button>
           ) : null}
           <button
@@ -215,6 +288,7 @@ export function OfficeCatalogSurface({
       {activeForm ? (
         <CatalogForm
           form={activeForm}
+          categories={categories}
           inventoryItems={inventoryLinkOptions}
           isSaving={isSaving}
           onChange={setActiveForm}
@@ -223,89 +297,234 @@ export function OfficeCatalogSurface({
         />
       ) : null}
 
+      {activeCategoryForm ? (
+        <CatalogCategoryForm
+          form={activeCategoryForm}
+          isSaving={isSaving}
+          onChange={setActiveCategoryForm}
+          onCancel={() => setActiveCategoryForm(null)}
+          onSubmit={() => void submitCategoryForm()}
+        />
+      ) : null}
+
       {hasLoaded ? (
-        <CatalogPanel
-          title="Items"
-          count={visibleItems.length}
-          emptyText="No catalog items match the current filters."
-        >
-          <Table
-            head={[
-              'Item',
-              'Kind',
-              'Price',
-              ...(canEdit ? ['Cost'] : []),
-              'Inventory',
-              'Field',
-              'Used',
-              'Status',
-              ''
-            ]}
+        <>
+          <CatalogPanel
+            title="Categories"
+            count={categories.length}
+            emptyText="No catalog categories are set up yet."
           >
-            {visibleItems.map((item) => (
-              <tr key={item.id}>
-                <td style={styles.tableCell}>
-                  <strong>{item.name}</strong>
-                  <p style={styles.tinyMuted}>{item.code ?? item.category ?? 'No code'}</p>
-                  {item.tradeTags.length ? (
-                    <div style={styles.badgeRow}>
-                      {item.tradeTags.map((tag) => (
-                        <span key={tag} style={styles.badge}>
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  ) : null}
-                </td>
-                <td style={styles.tableCell}>{kindLabels[item.kind]}</td>
-                <td style={styles.tableCell}>
-                  {formatCatalogPrice(item)}
-                  {item.agreementPrice !== undefined ? (
-                    <p style={styles.tinyMuted}>Agreement {formatCurrency(item.agreementPrice)}</p>
-                  ) : null}
-                </td>
-                {canEdit ? (
+            <Table head={['Category', 'Sort', 'Tax default', 'Status', '']}>
+              {categories.map((category) => (
+                <tr key={category.id}>
                   <td style={styles.tableCell}>
-                    {item.costHint === undefined ? '-' : formatCurrency(item.costHint)}
+                    <strong>{category.name}</strong>
                   </td>
-                ) : null}
-                <td style={styles.tableCell}>{item.linkedInventoryItemName ?? '-'}</td>
-                <td style={styles.tableCell}>
-                  <span style={item.fieldVisible ? styles.badge : styles.dangerBadge}>
-                    {item.fieldVisible ? 'Visible' : 'Office only'}
-                  </span>
-                </td>
-                <td style={styles.tableCell}>{item.registerUsageCount}</td>
-                <td style={styles.tableCell}>
-                  <span style={item.isActive ? styles.badge : styles.dangerBadge}>
-                    {item.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-                <td style={styles.tableCell}>
+                  <td style={styles.tableCell}>{category.sortOrder}</td>
+                  <td style={styles.tableCell}>{formatCategoryTaxDefault(category)}</td>
+                  <td style={styles.tableCell}>
+                    <span style={category.isActive ? styles.badge : styles.dangerBadge}>
+                      {category.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td style={styles.tableCell}>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        style={styles.tableLinkButton}
+                        disabled={isSaving || formOpen}
+                        onClick={() =>
+                          setActiveCategoryForm({
+                            editingId: category.id,
+                            draft: draftFromCatalogCategory(category)
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </CatalogPanel>
+
+          <CatalogPanel
+            title="Items"
+            count={visibleItems.length}
+            emptyText="No catalog items match the current filters."
+          >
+            <Table
+              head={[
+                'Item',
+                'Kind',
+                'Price',
+                ...(canEdit ? ['Cost'] : []),
+                'Inventory',
+                'Field',
+                'Used',
+                'Status',
+                ''
+              ]}
+            >
+              {visibleItems.map((item) => (
+                <tr key={item.id}>
+                  <td style={styles.tableCell}>
+                    <strong>{item.name}</strong>
+                    <p style={styles.tinyMuted}>{item.code ?? item.category ?? 'No code'}</p>
+                    {item.tradeTags.length ? (
+                      <div style={styles.badgeRow}>
+                        {item.tradeTags.map((tag) => (
+                          <span key={tag} style={styles.badge}>
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
+                  </td>
+                  <td style={styles.tableCell}>{kindLabels[item.kind]}</td>
+                  <td style={styles.tableCell}>
+                    {formatCatalogPrice(item)}
+                    {item.agreementPrice !== undefined ? (
+                      <p style={styles.tinyMuted}>
+                        Agreement {formatCurrency(item.agreementPrice)}
+                      </p>
+                    ) : null}
+                  </td>
                   {canEdit ? (
-                    <button
-                      type="button"
-                      style={styles.tableLinkButton}
-                      disabled={isSaving || formOpen}
-                      onClick={() =>
-                        setActiveForm({
-                          editingId: item.id,
-                          draft: draftFromCatalogItem(item)
-                        })
-                      }
-                    >
-                      Edit
-                    </button>
+                    <td style={styles.tableCell}>
+                      {item.costHint === undefined ? '-' : formatCurrency(item.costHint)}
+                    </td>
                   ) : null}
-                </td>
-              </tr>
-            ))}
-          </Table>
-        </CatalogPanel>
+                  <td style={styles.tableCell}>{item.linkedInventoryItemName ?? '-'}</td>
+                  <td style={styles.tableCell}>
+                    <span style={item.fieldVisible ? styles.badge : styles.dangerBadge}>
+                      {item.fieldVisible ? 'Visible' : 'Office only'}
+                    </span>
+                  </td>
+                  <td style={styles.tableCell}>{item.registerUsageCount}</td>
+                  <td style={styles.tableCell}>
+                    <span style={item.isActive ? styles.badge : styles.dangerBadge}>
+                      {item.isActive ? 'Active' : 'Inactive'}
+                    </span>
+                  </td>
+                  <td style={styles.tableCell}>
+                    {canEdit ? (
+                      <button
+                        type="button"
+                        style={styles.tableLinkButton}
+                        disabled={isSaving || formOpen}
+                        onClick={() =>
+                          setActiveForm({
+                            editingId: item.id,
+                            draft: draftFromCatalogItem(item)
+                          })
+                        }
+                      >
+                        Edit
+                      </button>
+                    ) : null}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </CatalogPanel>
+        </>
       ) : isLoading ? (
         <p style={styles.muted}>Loading catalog...</p>
       ) : null}
     </section>
+  );
+}
+
+function CatalogCategoryForm({
+  form,
+  isSaving,
+  onChange,
+  onCancel,
+  onSubmit
+}: {
+  form: ActiveCatalogCategoryForm;
+  isSaving: boolean;
+  onChange: (form: ActiveCatalogCategoryForm) => void;
+  onCancel: () => void;
+  onSubmit: () => void;
+}) {
+  const submitDisabled = isSaving || !form.draft.name.trim();
+
+  function patch(patch: Partial<CatalogCategoryDraft>) {
+    onChange({ ...form, draft: { ...form.draft, ...patch } });
+  }
+
+  return (
+    <form
+      style={styles.panel}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
+    >
+      <div style={styles.row}>
+        <h2 style={styles.heading}>
+          {form.editingId ? 'Edit catalog category' : 'Add catalog category'}
+        </h2>
+        {form.editingId ? (
+          <label style={styles.inlineLabel}>
+            <input
+              type="checkbox"
+              checked={form.draft.isActive}
+              onChange={(event) => patch({ isActive: event.target.checked })}
+            />
+            Active
+          </label>
+        ) : null}
+      </div>
+
+      <div style={styles.formGridCompact}>
+        <label style={styles.fieldLabel}>
+          Name
+          <input
+            style={styles.input}
+            value={form.draft.name}
+            onChange={(event) => patch({ name: event.target.value })}
+          />
+        </label>
+        <label style={styles.fieldLabel}>
+          Sort order
+          <input
+            style={styles.input}
+            inputMode="numeric"
+            value={form.draft.sortOrder}
+            onChange={(event) => patch({ sortOrder: event.target.value })}
+          />
+        </label>
+        <label style={styles.fieldLabel}>
+          Default tax behavior
+          <select
+            style={styles.input}
+            value={form.draft.defaultTaxableMode}
+            onChange={(event) =>
+              patch({
+                defaultTaxableMode: event.target.value as CatalogCategoryDraft['defaultTaxableMode']
+              })
+            }
+          >
+            <option value="none">No category default</option>
+            <option value="taxable">Taxable by default</option>
+            <option value="nonTaxable">Non-taxable by default</option>
+          </select>
+        </label>
+      </div>
+
+      <div style={styles.inlineActionBar}>
+        <button type="submit" style={styles.primaryButton} disabled={submitDisabled}>
+          {isSaving ? 'Saving...' : 'Save category'}
+        </button>
+        <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
+          Cancel
+        </button>
+      </div>
+    </form>
   );
 }
 
@@ -352,6 +571,36 @@ function Table({ head, children }: { head: string[]; children: ReactNode }) {
   );
 }
 
+function emptyCategoryDraft(categoryCount: number): CatalogCategoryDraft {
+  return {
+    name: '',
+    sortOrder: String((categoryCount + 1) * 10),
+    defaultTaxableMode: 'none',
+    isActive: true
+  };
+}
+
+function draftFromCatalogCategory(category: CatalogCategory): CatalogCategoryDraft {
+  return {
+    name: category.name,
+    sortOrder: String(category.sortOrder),
+    defaultTaxableMode:
+      category.defaultTaxable === undefined
+        ? 'none'
+        : category.defaultTaxable
+          ? 'taxable'
+          : 'nonTaxable',
+    isActive: category.isActive
+  };
+}
+
+function formatCategoryTaxDefault(category: CatalogCategory): string {
+  if (category.defaultTaxable === undefined) {
+    return '-';
+  }
+  return category.defaultTaxable ? 'Taxable' : 'Non-taxable';
+}
+
 function formatCatalogPrice(item: CatalogItem): string {
   if (item.defaultSalePrice === undefined) {
     return '-';
@@ -390,6 +639,36 @@ function toUpdateRequest(draft: CatalogDraft): UpdateCatalogItemRequest {
   };
 }
 
+function toCreateCategoryRequest(draft: CatalogCategoryDraft): CreateCatalogCategoryRequest {
+  return {
+    name: draft.name.trim(),
+    sortOrder: parseRequiredInteger(draft.sortOrder),
+    isActive: draft.isActive,
+    defaultTaxable: defaultTaxableFromMode(draft.defaultTaxableMode)
+  };
+}
+
+function toUpdateCategoryRequest(draft: CatalogCategoryDraft): UpdateCatalogCategoryRequest {
+  return {
+    name: draft.name.trim(),
+    sortOrder: parseRequiredInteger(draft.sortOrder),
+    isActive: draft.isActive,
+    defaultTaxable: defaultTaxableFromMode(draft.defaultTaxableMode)
+  };
+}
+
+function defaultTaxableFromMode(
+  mode: CatalogCategoryDraft['defaultTaxableMode']
+): boolean | undefined {
+  if (mode === 'taxable') {
+    return true;
+  }
+  if (mode === 'nonTaxable') {
+    return false;
+  }
+  return undefined;
+}
+
 function emptyToUndefined(value: string): string | undefined {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
@@ -403,6 +682,18 @@ function parseOptionalNumber(value: string): number | undefined {
   const parsed = Number(trimmed);
   if (!Number.isFinite(parsed)) {
     throw new Error('Enter a valid number.');
+  }
+  return parsed;
+}
+
+function parseRequiredInteger(value: string): number {
+  const trimmed = value.trim();
+  const parsed = Number(trimmed);
+  if (!trimmed || !Number.isInteger(parsed)) {
+    throw new Error('Enter a valid sort order.');
+  }
+  if (parsed < -100000 || parsed > 100000) {
+    throw new Error('Sort order is outside the allowed range.');
   }
   return parsed;
 }

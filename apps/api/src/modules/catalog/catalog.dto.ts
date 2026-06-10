@@ -3,14 +3,21 @@ import {
   IsArray,
   IsBoolean,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength
 } from 'class-validator';
-import type { CreateCatalogItemRequest, UpdateCatalogItemRequest } from '@bellfield/contracts';
+import type {
+  CreateCatalogCategoryRequest,
+  CreateCatalogItemRequest,
+  UpdateCatalogCategoryRequest,
+  UpdateCatalogItemRequest
+} from '@bellfield/contracts';
 import { catalogItemKinds, type CatalogItemKindValue } from './catalog.types';
 
 class CatalogItemRequestBodyDto implements CreateCatalogItemRequest {
@@ -113,4 +120,44 @@ export class UpdateCatalogItemRequestBodyDto
 
   @IsBoolean()
   isActive!: boolean;
+}
+
+export class CreateCatalogCategoryRequestBodyDto implements CreateCatalogCategoryRequest {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  name!: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(-100000)
+  @Max(100000)
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  isActive?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  defaultTaxable?: boolean;
+}
+
+export class UpdateCatalogCategoryRequestBodyDto implements UpdateCatalogCategoryRequest {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(80)
+  name!: string;
+
+  @IsInt()
+  @Min(-100000)
+  @Max(100000)
+  sortOrder!: number;
+
+  @IsBoolean()
+  isActive!: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  defaultTaxable?: boolean;
 }

@@ -1,7 +1,12 @@
 import { Body, Controller, Get, Headers, Param, Post, Put } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { CatalogService } from './catalog.service';
-import { CreateCatalogItemRequestBodyDto, UpdateCatalogItemRequestBodyDto } from './catalog.dto';
+import {
+  CreateCatalogCategoryRequestBodyDto,
+  CreateCatalogItemRequestBodyDto,
+  UpdateCatalogCategoryRequestBodyDto,
+  UpdateCatalogItemRequestBodyDto
+} from './catalog.dto';
 
 @Controller('operations/catalog')
 export class CatalogController {
@@ -10,6 +15,28 @@ export class CatalogController {
   @Get('items')
   async items(@Headers('authorization') auth: string | undefined) {
     return this.catalogService.listItems(getBearerToken(auth));
+  }
+
+  @Get('categories')
+  async categories(@Headers('authorization') auth: string | undefined) {
+    return this.catalogService.listCategories(getBearerToken(auth));
+  }
+
+  @Post('categories')
+  async createCategory(
+    @Headers('authorization') auth: string | undefined,
+    @Body() request: CreateCatalogCategoryRequestBodyDto
+  ) {
+    return this.catalogService.createCategory(getBearerToken(auth), request);
+  }
+
+  @Put('categories/:catalogCategoryId')
+  async updateCategory(
+    @Headers('authorization') auth: string | undefined,
+    @Param('catalogCategoryId') catalogCategoryId: string,
+    @Body() request: UpdateCatalogCategoryRequestBodyDto
+  ) {
+    return this.catalogService.updateCategory(getBearerToken(auth), catalogCategoryId, request);
   }
 
   @Post('items')
