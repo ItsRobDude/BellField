@@ -48,9 +48,42 @@ describe('EmailProviderService', () => {
     expect(request.headers).toEqual(
       expect.objectContaining({ Authorization: 'Bearer server-owned-key' })
     );
-    expect(body.from).toBe(`Acme Heating <${bellfieldEstimateEmailFromAddress}>`);
+    expect(body.from).toBe(`"Acme Heating" <${bellfieldEstimateEmailFromAddress}>`);
     expect(body.reply_to).toEqual(['office@example.com']);
     expect(body.attachments[0]?.content).toBe(Buffer.from('%PDF test').toString('base64'));
+  });
+
+  it('emits an RFC 5322 quoted display name so ordinary shop names cannot break the header', async () => {
+    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
+    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ id: 'resend-message-1' }), {
+        headers: { 'Content-Type': 'application/json' },
+        status: 200
+      })
+    );
+    const service = new EmailProviderService();
+
+    const fromFor = async (fromName: string) => {
+      fetchMock.mockClear();
+      await service.sendEstimateEmail(sendInput({ fromName }));
+      const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
+      return (JSON.parse(String(request.body)) as { from: string }).from;
+    };
+
+    // Commas are routine in legal names and are RFC 5322 specials.
+    expect(await fromFor('Acme Heating, LLC')).toBe(
+      `"Acme Heating, LLC" <${bellfieldEstimateEmailFromAddress}>`
+    );
+    // Angle brackets must not be able to forge or malform the address part.
+    expect(await fromFor('Acme <North>')).toBe(
+      `"Acme <North>" <${bellfieldEstimateEmailFromAddress}>`
+    );
+    // Embedded quotes and backslashes are escaped, not dropped.
+    expect(await fromFor('Bob\'s "Best" HVAC')).toBe(
+      `"Bob's \\"Best\\" HVAC" <${bellfieldEstimateEmailFromAddress}>`
+    );
+    // An all-control/whitespace name falls back to the bare address.
+    expect(await fromFor('   ')).toBe(bellfieldEstimateEmailFromAddress);
   });
 
   it('returns a user-safe failure instead of provider internals', async () => {

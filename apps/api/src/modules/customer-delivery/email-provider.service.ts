@@ -147,9 +147,15 @@ function formatFrom(name: string, email: string): string {
       return code >= 32 && code !== 127;
     })
     .join('')
-    .replaceAll('"', '')
     .trim();
-  return safeName ? `${safeName} <${email}>` : email;
+  if (!safeName) {
+    return email;
+  }
+  // RFC 5322: display names containing specials (commas in "Acme Heating,
+  // LLC", angle brackets, semicolons) must be a quoted-string or the header
+  // is malformed. Always quote, escaping backslashes and double quotes.
+  const escapedName = safeName.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
+  return `"${escapedName}" <${email}>`;
 }
 
 function deliveryStatusNeedsSetup(): EstimateEmailDeliveryStatus {
