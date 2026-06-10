@@ -22,6 +22,7 @@ type EstimateEditorProps = {
   catalogCategories: CatalogCategory[];
   catalogSearchText: string;
   isCatalogLoading: boolean;
+  catalogLoadFailed: boolean;
   onChange: (draft: EstimateDraft) => void;
   onCatalogSearchChange: (value: string) => void;
   onReloadCatalog: () => void;
@@ -41,6 +42,7 @@ export function EstimateEditor({
   catalogCategories,
   catalogSearchText,
   isCatalogLoading,
+  catalogLoadFailed,
   onChange,
   onCatalogSearchChange,
   onReloadCatalog,
@@ -92,27 +94,19 @@ export function EstimateEditor({
     setActiveTargetId(group.options[0]?.id ?? 'base');
   }
 
-  function addCustomLine() {
-    const customLine = withTarget(
-      {
-        clientId: createEstimateLineClientId(),
-        kind: 'serviceItem',
-        description: '',
-        quantity: '1',
-        unitOfMeasure: '',
-        unitPrice: '',
-        unitCost: '',
-        taxable: true
-      },
-      activeTarget
+  // Custom and Catalog lines insert in the same place — at the top of the
+  // active target's lines — so a new row is always visible near the buttons.
+  function insertLineAtTargetTop(line: EstimateLineDraft) {
+    const targetedLine = withTarget(line, activeTarget);
+    const insertIndex = draft.lineItems.findIndex((candidate) =>
+      lineMatchesTarget(candidate, activeTarget)
     );
-    const insertIndex = draft.lineItems.findIndex((line) => lineMatchesTarget(line, activeTarget));
     const lineItems =
       insertIndex === -1
-        ? [...draft.lineItems, customLine]
+        ? [...draft.lineItems, targetedLine]
         : [
             ...draft.lineItems.slice(0, insertIndex),
-            customLine,
+            targetedLine,
             ...draft.lineItems.slice(insertIndex)
           ];
 
@@ -122,11 +116,16 @@ export function EstimateEditor({
     });
   }
 
-  function addCatalogLine(line: EstimateLineDraft) {
-    const targetedLine = withTarget(line, activeTarget);
-    onChange({
-      ...draft,
-      lineItems: [...draft.lineItems, targetedLine]
+  function addCustomLine() {
+    insertLineAtTargetTop({
+      clientId: createEstimateLineClientId(),
+      kind: 'serviceItem',
+      description: '',
+      quantity: '1',
+      unitOfMeasure: '',
+      unitPrice: '',
+      unitCost: '',
+      taxable: true
     });
   }
 
@@ -266,9 +265,10 @@ export function EstimateEditor({
             categories={catalogCategories}
             searchText={catalogSearchText}
             isLoading={isCatalogLoading}
+            loadFailed={catalogLoadFailed}
             onSearchChange={onCatalogSearchChange}
             onReload={onReloadCatalog}
-            onAddLine={addCatalogLine}
+            onAddLine={insertLineAtTargetTop}
           />
         ) : null}
 

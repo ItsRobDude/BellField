@@ -429,6 +429,12 @@ describe('JobEstimatesSection', () => {
     expect(descriptions).toHaveLength(2);
     expect(descriptions[0]).toHaveValue('');
     expect(descriptions[1]).toHaveValue('Replace customer filter.');
+
+    // Catalog picks land at the top too, so both adders behave the same way.
+    fireEvent.click(screen.getByRole('button', { name: /16x20x1 filter/i }));
+    const afterCatalogAdd = screen.getAllByLabelText('Description');
+    expect(afterCatalogAdd).toHaveLength(3);
+    expect(afterCatalogAdd[0]).toHaveValue('Replace customer filter.');
   });
 
   it('does not pre-select an option and labels which option the totals reflect', async () => {

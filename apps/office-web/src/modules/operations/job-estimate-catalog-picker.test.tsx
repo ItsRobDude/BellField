@@ -38,6 +38,7 @@ function renderPicker(input: {
   items: CatalogItem[];
   categories?: CatalogCategory[];
   searchText?: string;
+  loadFailed?: boolean;
   onAddLine?: (line: EstimateLineDraft) => void;
 }) {
   const onSearchChange = vi.fn();
@@ -48,6 +49,7 @@ function renderPicker(input: {
       categories={input.categories ?? []}
       searchText={input.searchText ?? ''}
       isLoading={false}
+      loadFailed={input.loadFailed ?? false}
       onSearchChange={onSearchChange}
       onReload={vi.fn()}
       onAddLine={onAddLine}
@@ -143,5 +145,15 @@ describe('EstimateCatalogPicker', () => {
         catalogItemId: 'filter'
       })
     );
+  });
+
+  it('shows a load failure honestly instead of an empty-catalog message', () => {
+    renderPicker({ items: [], loadFailed: true });
+
+    expect(
+      screen.getByText('The Catalog could not be loaded. Use Refresh to try again.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('No matching Catalog items to add.')).toBeNull();
+    expect(screen.getByRole('button', { name: 'Refresh' })).toBeEnabled();
   });
 });

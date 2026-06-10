@@ -534,6 +534,7 @@ export function JobEstimatesSection({
           catalogCategories={catalogCategories}
           catalogSearchText={catalogSearchText}
           isCatalogLoading={catalogLoadStatus === 'loading'}
+          catalogLoadFailed={catalogLoadStatus === 'error'}
           onChange={changeDraft}
           onCatalogSearchChange={setCatalogSearchText}
           onReloadCatalog={() => void loadCatalog()}

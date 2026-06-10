@@ -16,6 +16,8 @@ type EstimateCatalogPickerProps = {
   categories: CatalogCategory[];
   searchText: string;
   isLoading: boolean;
+  /** True when the catalog request failed, so empty is not shown as "no items". */
+  loadFailed: boolean;
   onSearchChange: (value: string) => void;
   onReload: () => void;
   onAddLine: (line: EstimateLineDraft) => void;
@@ -26,6 +28,7 @@ export function EstimateCatalogPicker({
   categories: catalogCategories,
   searchText,
   isLoading,
+  loadFailed,
   onSearchChange,
   onReload,
   onAddLine
@@ -72,6 +75,8 @@ export function EstimateCatalogPicker({
       />
       {isLoading ? (
         <p style={styles.tinyMuted}>Loading Catalog...</p>
+      ) : loadFailed ? (
+        <p style={styles.error}>The Catalog could not be loaded. Use Refresh to try again.</p>
       ) : showCategories ? (
         <div style={catalogPickerGridStyle}>
           {categories.map((category) => (
@@ -94,9 +99,9 @@ export function EstimateCatalogPicker({
           <span style={styles.fieldText}>{activeCategory.name}</span>
         </div>
       ) : null}
-      {!showCategories ? (
+      {!showCategories && !isLoading && !loadFailed ? (
         matchingCatalogItems.length === 0 ? (
-          <p style={styles.tinyMuted}>No active quoteable Catalog items found.</p>
+          <p style={styles.tinyMuted}>No matching Catalog items to add.</p>
         ) : (
           <div style={catalogPickerGridStyle}>
             {matchingCatalogItems.map((item) => (
