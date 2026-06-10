@@ -37,21 +37,22 @@ Per-install provider keys were considered and rejected.
 
 ## 2. Business Model (decided in principle)
 
-The software remains a one-time purchase. The relay is a paid service, priced
-to cover what each send actually costs BellField (provider fees, infrastructure,
-support). This keeps the no-subscription-software promise intact: customers pay
-once for BellField and pay separately, transparently, for the operating cost of
-BellField-operated delivery.
+The software remains a one-time purchase. The relay is a paid,
+**usage-based** service: shops pay per use, at a rate BellField sets as a
+markup over its real costs (provider fees, infrastructure, support) — a
+margin-bearing service, not a pass-through. This keeps the no-subscription
+software promise intact: customers pay once for BellField and pay separately
+for the delivery service they actually use.
 
 Rules that follow:
 
-- relay entitlement is separate from the software license; a lapsed relay
-  subscription stops relay-backed features only — the software itself never
-  refuses to run (consistent with the asset-protection posture)
+- relay entitlement is separate from the software license; a lapsed or
+  exhausted relay balance stops relay-backed features only — the software
+  itself never refuses to run (consistent with the asset-protection posture)
 - when relay entitlement is missing or exhausted, the office sees the standard
   generic copy ("Estimate email is not available..." / a clear sending-limit
   message); never billing plumbing or provider details
-- exact pricing tiers and included-send quotas: **open**, business decision
+- unit rates and the markup level: business detail, set before pilot
 
 ---
 
@@ -72,37 +73,40 @@ implemented — the relay consumes it, it does not invent it.
 
 ---
 
-## 4. Sender Identity (decided, with one open detail)
+## 4. Sender Identity (decided)
+
+The shop fronts every email. Homeowners are the shop's customers, not
+BellField's — BellField branding does not appear in the From line on either
+tier. Shop identity (display name, reply-to, templates) is shop-owned content.
 
 Two tiers:
 
-**Default — BellField-branded.** Mail is sent from `estimates@bellfield.app`
-and visibly sent by BellField. Zero setup for the shop. Shop identity appears
-in content, reply-to, and templates as today.
+**Default — BellField domain, shop name.** Mail is sent from the address
+`estimates@bellfield.app` with the shop's company name as the From display
+name: `Acme HVAC <estimates@bellfield.app>`. Zero setup for the shop.
 
 **Optional — shop's own domain (paid add-on).** A shop may send from its own
 domain without any exposure of BellField's backend:
 
-1. BellField registers the shop's sending domain (or a dedicated subdomain such
-   as `send.shopdomain.com`) under BellField's provider account, relay-side.
+1. BellField registers a dedicated sending **subdomain** of the shop's domain
+   (such as `send.shopdomain.com`) under BellField's provider account,
+   relay-side. Subdomain-only is decided: the shop's root-domain mail setup is
+   never touched, which keeps misconfigured-SPF support tickets off BellField's
+   desk.
 2. The shop publishes the DNS records (DKIM/SPF/return-path) at its DNS host.
    BellField support assists; the office app may display the records to publish
    but never provider keys or account controls.
 3. The relay confirms verification and from then on sends that shop's mail from
-   its own domain — still through the relay, still BellField's keys only.
+   its own subdomain — still through the relay, still BellField's keys only.
 
 This is the standard ESP multi-domain pattern; it improves reputation isolation
 (a shop's domain carries its own DKIM reputation) and justifies its price by
 its real setup/support cost.
 
-Notes:
-
-- recommend subdomain-first (`send.` / `mail.`) so the shop's root-domain mail
-  is never touched; allowing root domains is a support-cost decision: **open**
-- the no-internal-leakage copy rule governs UI wording, not cryptographic
-  reality: DNS records and raw email headers inherently reveal the delivery
-  provider, as they do for every ESP on earth. That is acceptable; UI copy
-  still never names providers.
+Note: the no-internal-leakage copy rule governs UI wording, not cryptographic
+reality. DNS records and raw email headers inherently reveal the delivery
+provider, as they do for every ESP on earth. That is acceptable; UI copy still
+never names providers.
 
 ---
 
@@ -134,8 +138,8 @@ queues instead of failing:
 - the office sees an honest "Queued — will send automatically" state, can
   cancel while queued, and gets a notice/timeline entry when the send
   eventually succeeds
-- queued sends expire to `failed` after a bounded window rather than surprising
-  a customer days later — recommended 24 hours: **open**
+- queued sends expire to `failed` after **24 hours** (decided) rather than
+  surprising a customer days later
 - the existing 60-second dedupe and immutable document snapshot semantics carry
   over unchanged; the snapshot is taken at queue time so later edits never
   change what eventually sends
@@ -201,9 +205,13 @@ for BellField-operated installs only and must not ship to sold installs.
 
 ## 11. Open Items
 
-- pricing tiers / included quota (business)
-- queue expiry window (recommended 24h)
-- custom domains: subdomain-only vs root allowed
+Resolved 2026-06-10: pricing model (usage-based with markup, §2), queue expiry
+(24 hours, §6), custom domains (subdomain-only, §4), and sender branding (shop
+fronts the email on both tiers, §4).
+
+Still open:
+
+- unit pricing and markup rates (business detail, set before pilot)
 - relay hosting choice and uptime target
 - exact office-facing copy set for entitlement states (configured, ready,
   quota exhausted, suspended) — must follow the no-internal-leakage rule
