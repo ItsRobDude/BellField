@@ -391,6 +391,8 @@ export function JobEstimatesSection({
       // failure message set before it would be wiped immediately.
       await loadDeliveryHistory(estimate.id);
       if (response.outboundMessage.status === 'sent') {
+        // Reload so the list picks up the new Sent state.
+        await loadEstimates();
         setNoticeMessage('Estimate sent.');
       } else {
         setErrorMessage(response.outboundMessage.deliveryMessage ?? 'Estimate delivery failed.');

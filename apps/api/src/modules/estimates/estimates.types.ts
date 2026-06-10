@@ -74,6 +74,8 @@ export type EstimateRecord = {
   sourceEstimateId?: string;
   supersededByEstimateId?: string;
   convertedToInvoiceId?: string;
+  lastSentAt?: string;
+  lastSentSourceVersion?: number;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string;

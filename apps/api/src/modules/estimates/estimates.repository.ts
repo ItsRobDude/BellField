@@ -44,6 +44,8 @@ type EstimateRow = {
   convertedToInvoiceId: string | null;
   optionGroups: EstimateOptionGroupRecord[] | null;
   selectedOptionId: string | null;
+  lastSentAt: string | Date | null;
+  lastSentSourceVersion: number | null;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string | Date;
@@ -105,6 +107,21 @@ const ESTIMATE_COLUMNS = `
   converted_to_invoice_id as "convertedToInvoiceId",
   option_groups as "optionGroups",
   selected_option_id as "selectedOptionId",
+  (
+    select om.sent_at
+    from outbound_messages om
+    where om.estimate_id = estimates.id and om.sent_at is not null
+    order by om.sent_at desc
+    limit 1
+  ) as "lastSentAt",
+  (
+    select cds.source_version
+    from outbound_messages om
+    join customer_document_snapshots cds on cds.id = om.document_snapshot_id
+    where om.estimate_id = estimates.id and om.sent_at is not null
+    order by om.sent_at desc
+    limit 1
+  ) as "lastSentSourceVersion",
   created_by_employee_id as "createdByEmployeeId",
   created_by_name as "createdByName",
   created_at as "createdAt",
@@ -573,6 +590,8 @@ export class EstimatesRepository {
       convertedToInvoiceId: row.convertedToInvoiceId ?? undefined,
       optionGroups: row.optionGroups ?? undefined,
       selectedOptionId: row.selectedOptionId ?? undefined,
+      lastSentAt: row.lastSentAt ? toIsoString(row.lastSentAt) : undefined,
+      lastSentSourceVersion: row.lastSentSourceVersion ?? undefined,
       createdByEmployeeId: row.createdByEmployeeId,
       createdByName: row.createdByName,
       createdAt: toIsoString(row.createdAt),

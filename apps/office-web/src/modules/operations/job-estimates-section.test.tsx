@@ -483,6 +483,37 @@ describe('JobEstimatesSection', () => {
     );
   });
 
+  it('shows sent state and warns when an estimate was edited after sending', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          lastSentAt: '2026-06-09T18:00:00.000Z',
+          lastSentSourceVersion: 1,
+          version: 2
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect((await screen.findAllByText('Sent')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Edited since sent').length).toBeGreaterThan(0);
+    expect(screen.getByText(/Last sent/)).toBeInTheDocument();
+  });
+
   it('offers sending on a pending estimate so the customer can review before approval', async () => {
     const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
 

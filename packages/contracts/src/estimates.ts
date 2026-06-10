@@ -121,6 +121,10 @@ export interface EstimateSummary {
   supersededByEstimateId?: string;
   /** Set once this estimate has been converted into an invoice draft. */
   convertedToInvoiceId?: string;
+  /** Latest provider-accepted email send, if any. */
+  lastSentAt?: string;
+  /** Estimate version captured by that send's document snapshot. */
+  lastSentSourceVersion?: number;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string;

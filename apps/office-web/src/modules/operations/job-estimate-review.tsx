@@ -46,6 +46,10 @@ export function EstimateList({
                     Option {formatOptionLabel(estimate, estimate.selectedOptionId)}
                   </span>
                 ) : null}
+                {estimate.lastSentAt ? <span style={styles.badge}>Sent</span> : null}
+                {wasEditedSinceLastSend(estimate) ? (
+                  <span style={styles.dangerBadge}>Edited since sent</span>
+                ) : null}
                 {estimate.convertedToInvoiceId ? <span style={styles.badge}>Converted</span> : null}
                 {estimate.supersededByEstimateId ? (
                   <span style={styles.dangerBadge}>Superseded</span>
@@ -105,6 +109,12 @@ export function EstimateDetailPanel({
           </p>
         </div>
         <div style={styles.badgeRow}>
+          {estimate.lastSentAt ? (
+            <span style={styles.tinyMuted}>Last sent {formatSentDate(estimate.lastSentAt)}</span>
+          ) : null}
+          {wasEditedSinceLastSend(estimate) ? (
+            <span style={styles.dangerBadge}>Edited since sent</span>
+          ) : null}
           <span style={estimate.status === 'declined' ? styles.dangerBadge : styles.badge}>
             {estimateStatusLabels[estimate.status]}
           </span>
@@ -305,6 +315,21 @@ function formatCatalogSnapshotLabel(line: EstimateSummary['lineItems'][number]):
     return '';
   }
   return snapshot.code ? `${snapshot.name} (${snapshot.code})` : snapshot.name;
+}
+
+// The customer's copy is the snapshot from the last send; flag the estimate
+// once later edits make the live version differ from what was emailed.
+function wasEditedSinceLastSend(estimate: EstimateSummary): boolean {
+  return (
+    estimate.lastSentAt !== undefined &&
+    estimate.lastSentSourceVersion !== undefined &&
+    estimate.lastSentSourceVersion !== estimate.version
+  );
+}
+
+function formatSentDate(value: string): string {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 
 function formatOptionLabel(estimate: EstimateSummary, optionId: string): string {
