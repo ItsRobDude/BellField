@@ -52,17 +52,17 @@ function createDeliveryService() {
   };
   const customerDeliveryRepository = {
     listOutboundMessagesForEstimate: jest.fn().mockResolvedValue([]),
-    hasRecentEstimateEmail: jest.fn().mockResolvedValue(false),
     createDocumentSnapshot: jest.fn().mockImplementation(async (input) => ({
       ...input,
       generatedByName: input.generatedByName,
       generatedAt: input.generatedAt
     })),
-    createOutboundMessage: jest.fn().mockImplementation(async (input) => ({
+    createEstimateSendIntent: jest.fn().mockImplementation(async (input) => ({
       ...input,
       sentByName: input.sentByName,
       queuedAt: input.queuedAt
     })),
+    setOutboundMessageDocumentSnapshot: jest.fn(),
     markOutboundMessageSent: jest.fn().mockImplementation(async (messageId, providerMessageId) => ({
       id: messageId,
       channel: 'email',
@@ -217,7 +217,7 @@ describe('EstimateDeliveryService', () => {
       bytes: Buffer.from('%PDF test')
     });
     expect(customerDocumentStorageService.writeEstimatePdf).not.toHaveBeenCalled();
-    expect(customerDeliveryRepository.createOutboundMessage).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.createEstimateSendIntent).not.toHaveBeenCalled();
     expect(customerDeliveryRepository.addEstimateDeliveryTimeline).not.toHaveBeenCalled();
     expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
   });
@@ -366,12 +366,63 @@ describe('EstimateDeliveryService', () => {
   });
 
   it('blocks accidental duplicate estimate sends inside the short retry window', async () => {
-    const { service, customerDeliveryRepository, emailProviderService } = createDeliveryService();
-    customerDeliveryRepository.hasRecentEstimateEmail.mockResolvedValue(true);
+    const {
+      service,
+      customerDeliveryRepository,
+      emailProviderService,
+      estimatePdfRendererService
+    } = createDeliveryService();
+    customerDeliveryRepository.createEstimateSendIntent.mockResolvedValue(null);
 
     await expect(
       service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(estimatePdfRendererService.renderEstimatePdf).not.toHaveBeenCalled();
+    expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+  });
+
+  it('creates the send intent before rendering so concurrent sends are covered', async () => {
+    const { service, customerDeliveryRepository, estimatePdfRendererService } =
+      createDeliveryService();
+    const callOrder: string[] = [];
+    customerDeliveryRepository.createEstimateSendIntent.mockImplementation(async (input) => {
+      callOrder.push('intent');
+      return { ...input };
+    });
+    estimatePdfRendererService.renderEstimatePdf.mockImplementation(async () => {
+      callOrder.push('render');
+      return Buffer.from('%PDF test');
+    });
+
+    await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(callOrder).toEqual(['intent', 'render']);
+    expect(customerDeliveryRepository.setOutboundMessageDocumentSnapshot).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String)
+    );
+  });
+
+  it('marks the intent failed when PDF rendering fails, so retries are not blocked', async () => {
+    const {
+      service,
+      customerDeliveryRepository,
+      estimatePdfRendererService,
+      emailProviderService
+    } = createDeliveryService();
+    estimatePdfRendererService.renderEstimatePdf.mockRejectedValue(new Error('render exploded'));
+
+    await expect(
+      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toThrow('render exploded');
+    expect(customerDeliveryRepository.markOutboundMessageFailed).toHaveBeenCalledWith(
+      expect.any(String),
+      'Estimate PDF could not be generated.',
+      expect.any(String)
+    );
     expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
   });
 });

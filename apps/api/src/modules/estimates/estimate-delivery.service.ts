@@ -133,78 +133,95 @@ export class EstimateDeliveryService {
     this.requireSendableEstimate(estimate);
 
     const recipientEmail = normalizeEmail(request.recipientEmail);
-    if (
-      await this.customerDeliveryRepository.hasRecentEstimateEmail({
-        estimateId,
-        recipientEmail,
-        since: new Date(Date.now() - 60_000).toISOString()
-      })
-    ) {
-      throw new ConflictException(
-        'This estimate was just sent to that recipient. Wait a moment before trying again.'
-      );
-    }
-
     const generatedAt = new Date().toISOString();
     const { job, settings, location, billToCustomer } =
       await this.loadEstimateDocumentContext(estimate);
-    const pdfBytes = await this.estimatePdfRendererService.renderEstimatePdf({
-      estimate,
-      settings,
-      job,
-      location,
-      billToCustomer,
-      generatedAt
-    });
-    if (pdfBytes.byteLength > 15_000_000) {
-      throw new BadRequestException('Estimate PDF is too large to email.');
-    }
-
-    const snapshotId = randomUUID();
-    const filename = estimatePdfFilename(estimate);
-    const stored = await this.customerDocumentStorageService.writeEstimatePdf({
-      jobId: estimate.jobId,
-      estimateId: estimate.id,
-      snapshotId,
-      bytes: pdfBytes
-    });
-    const documentSnapshot = await this.customerDeliveryRepository.createDocumentSnapshot({
-      id: snapshotId,
-      documentType: 'estimate',
-      jobId: estimate.jobId,
-      estimateId: estimate.id,
-      sourceVersion: estimate.version,
-      filename,
-      contentType: 'application/pdf',
-      storagePath: stored.storagePath,
-      sha256: stored.sha256,
-      byteSize: stored.byteSize,
-      generatedByEmployeeId: actor.id,
-      generatedByName: actor.displayName,
-      generatedAt
-    });
-
     const emailContent = buildEstimateEmailContent(
       settings,
       buildEstimateEmailTokens(settings, estimate, job, location, billToCustomer),
       request
     );
+
+    // The intent row goes in before the expensive render/provider work so a
+    // concurrent send for the same estimate and recipient is blocked for the
+    // whole window, not just after rendering finishes.
     const outboundMessageId = randomUUID();
-    await this.customerDeliveryRepository.createOutboundMessage({
+    const intent = await this.customerDeliveryRepository.createEstimateSendIntent({
       id: outboundMessageId,
       channel: 'email',
       provider: 'resend',
       status: 'queued',
       jobId: estimate.jobId,
       estimateId: estimate.id,
-      documentSnapshotId: documentSnapshot.id,
       recipientEmail,
       subject: emailContent.subject,
       bodyText: emailContent.bodyText,
       sentByEmployeeId: actor.id,
       sentByName: actor.displayName,
-      queuedAt: generatedAt
+      queuedAt: generatedAt,
+      dedupeSince: new Date(Date.now() - 60_000).toISOString()
     });
+    if (!intent) {
+      throw new ConflictException(
+        'This estimate was just sent to that recipient. Wait a moment before trying again.'
+      );
+    }
+
+    const filename = estimatePdfFilename(estimate);
+    let documentSnapshot: CustomerDocumentSnapshotRecord;
+    let pdfBytes: Buffer;
+    try {
+      pdfBytes = await this.estimatePdfRendererService.renderEstimatePdf({
+        estimate,
+        settings,
+        job,
+        location,
+        billToCustomer,
+        generatedAt
+      });
+      if (pdfBytes.byteLength > 15_000_000) {
+        throw new BadRequestException('Estimate PDF is too large to email.');
+      }
+
+      const snapshotId = randomUUID();
+      const stored = await this.customerDocumentStorageService.writeEstimatePdf({
+        jobId: estimate.jobId,
+        estimateId: estimate.id,
+        snapshotId,
+        bytes: pdfBytes
+      });
+      documentSnapshot = await this.customerDeliveryRepository.createDocumentSnapshot({
+        id: snapshotId,
+        documentType: 'estimate',
+        jobId: estimate.jobId,
+        estimateId: estimate.id,
+        sourceVersion: estimate.version,
+        filename,
+        contentType: 'application/pdf',
+        storagePath: stored.storagePath,
+        sha256: stored.sha256,
+        byteSize: stored.byteSize,
+        generatedByEmployeeId: actor.id,
+        generatedByName: actor.displayName,
+        generatedAt
+      });
+      await this.customerDeliveryRepository.setOutboundMessageDocumentSnapshot(
+        outboundMessageId,
+        documentSnapshot.id,
+        new Date().toISOString()
+      );
+    } catch (error) {
+      // The email never reached the provider; keep the audit row truthful so
+      // the failed intent does not block a retry.
+      await this.customerDeliveryRepository
+        .markOutboundMessageFailed(
+          outboundMessageId,
+          'Estimate PDF could not be generated.',
+          new Date().toISOString()
+        )
+        .catch(() => undefined);
+      throw error;
+    }
 
     const providerResult = await this.sendEstimateEmailSafely(
       buildEmailProviderInput(settings, {

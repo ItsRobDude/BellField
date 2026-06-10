@@ -55,7 +55,8 @@ export type CreateOutboundMessageInput = {
   jobId: string;
   estimateId?: string;
   invoiceId?: string;
-  documentSnapshotId: string;
+  /** Attached after the PDF snapshot is rendered; the intent row precedes it. */
+  documentSnapshotId?: string;
   recipientEmail: string;
   subject: string;
   bodyText: string;
