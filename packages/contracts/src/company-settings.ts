@@ -3,6 +3,8 @@ export interface CompanySettings {
   replyToEmail?: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  chargesSalesTax: boolean;
+  defaultSalesTaxBasisPoints: number;
   updatedAt?: string;
   updatedByName?: string;
 }
@@ -16,4 +18,6 @@ export interface UpdateCompanySettingsRequest {
   replyToEmail?: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  chargesSalesTax: boolean;
+  defaultSalesTaxBasisPoints: number;
 }

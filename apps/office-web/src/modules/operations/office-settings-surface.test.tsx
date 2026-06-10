@@ -17,7 +17,9 @@ function arrange() {
       companyName: 'BellField',
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
-      estimateEmailBody: 'Attached is your estimate.'
+      estimateEmailBody: 'Attached is your estimate.',
+      chargesSalesTax: true,
+      defaultSalesTaxBasisPoints: 825
     }
   });
   mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
@@ -33,7 +35,9 @@ function arrange() {
       companyName: 'BellField HVAC',
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
-      estimateEmailBody: 'Attached is your estimate.'
+      estimateEmailBody: 'Attached is your estimate.',
+      chargesSalesTax: true,
+      defaultSalesTaxBasisPoints: 875
     }
   });
 }
@@ -62,6 +66,9 @@ describe('OfficeSettingsSurface', () => {
     fireEvent.change(await screen.findByLabelText('Company name'), {
       target: { value: 'BellField HVAC' }
     });
+    fireEvent.change(screen.getByLabelText('Default sales tax rate'), {
+      target: { value: '8.75' }
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
 
     await waitFor(() => {
@@ -69,7 +76,9 @@ describe('OfficeSettingsSurface', () => {
         expect.objectContaining({
           apiBaseUrl: 'http://api.test',
           sessionToken: 'session-token',
-          companyName: 'BellField HVAC'
+          companyName: 'BellField HVAC',
+          chargesSalesTax: true,
+          defaultSalesTaxBasisPoints: 875
         })
       );
     });
@@ -80,6 +89,8 @@ describe('OfficeSettingsSurface', () => {
     renderSurface();
 
     expect(await screen.findByLabelText('Reply-to email')).toHaveValue('office@example.com');
+    expect(screen.getByLabelText('Charge sales tax')).toBeChecked();
+    expect(screen.getByLabelText('Default sales tax rate')).toHaveValue(8.25);
     expect(screen.queryByLabelText('Estimate email from address')).toBeNull();
     expect(screen.queryByLabelText(/api key/i)).toBeNull();
     expect(screen.queryByText(/resend/i)).toBeNull();
@@ -90,6 +101,8 @@ describe('OfficeSettingsSurface', () => {
     renderSurface(false);
 
     expect(await screen.findByLabelText('Company name')).toBeDisabled();
+    expect(screen.getByLabelText('Charge sales tax')).toBeDisabled();
+    expect(screen.getByLabelText('Default sales tax rate')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();
     expect(screen.queryByLabelText(/api key/i)).toBeNull();
   });

@@ -56,6 +56,8 @@ function normalizeSettings(
   const replyToEmail = request.replyToEmail?.trim().toLowerCase();
   const estimateEmailSubject = request.estimateEmailSubject.trim();
   const estimateEmailBody = request.estimateEmailBody.trim();
+  const chargesSalesTax = request.chargesSalesTax === true;
+  const defaultSalesTaxBasisPoints = chargesSalesTax ? request.defaultSalesTaxBasisPoints : 0;
 
   if (!companyName) {
     throw new BadRequestException('Company name is required.');
@@ -66,11 +68,20 @@ function normalizeSettings(
   if (!estimateEmailBody) {
     throw new BadRequestException('Estimate email body is required.');
   }
+  if (
+    !Number.isInteger(defaultSalesTaxBasisPoints) ||
+    defaultSalesTaxBasisPoints < 0 ||
+    defaultSalesTaxBasisPoints > 2500
+  ) {
+    throw new BadRequestException('Default sales tax rate must be between 0% and 25%.');
+  }
 
   return {
     companyName,
     replyToEmail: replyToEmail || undefined,
     estimateEmailSubject,
-    estimateEmailBody
+    estimateEmailBody,
+    chargesSalesTax,
+    defaultSalesTaxBasisPoints
   };
 }

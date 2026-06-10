@@ -1,4 +1,14 @@
-import { IsEmail, IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsEmail,
+  IsInt,
+  IsOptional,
+  IsString,
+  Max,
+  MaxLength,
+  Min,
+  MinLength
+} from 'class-validator';
 import type { UpdateCompanySettingsRequestDto } from './company-settings.types';
 
 export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySettingsRequestDto {
@@ -21,4 +31,12 @@ export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySetting
   @MinLength(1)
   @MaxLength(4000)
   estimateEmailBody!: string;
+
+  @IsBoolean()
+  chargesSalesTax!: boolean;
+
+  @IsInt()
+  @Min(0)
+  @Max(2500)
+  defaultSalesTaxBasisPoints!: number;
 }

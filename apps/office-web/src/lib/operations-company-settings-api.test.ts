@@ -34,7 +34,9 @@ describe('operations-company-settings-api', () => {
       apiBaseUrl: 'http://api.test',
       companyName: 'BellField',
       estimateEmailSubject: 'Estimate from BellField',
-      estimateEmailBody: 'Attached.'
+      estimateEmailBody: 'Attached.',
+      chargesSalesTax: true,
+      defaultSalesTaxBasisPoints: 825
     });
     await getOfficeEstimateEmailDeliveryStatus({
       sessionToken: 'session-token',

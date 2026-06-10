@@ -98,7 +98,9 @@ function createService() {
     getSettings: jest.fn().mockResolvedValue({
       companyName: 'BellField',
       estimateEmailSubject: 'Estimate from {companyName}',
-      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.'
+      estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
+      chargesSalesTax: false,
+      defaultSalesTaxBasisPoints: 0
     })
   };
   const customerDeliveryRepository = {

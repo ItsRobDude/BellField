@@ -19,13 +19,17 @@ type SettingsDraft = {
   replyToEmail: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  chargesSalesTax: boolean;
+  defaultSalesTaxRatePercent: string;
 };
 
 const emptyDraft: SettingsDraft = {
   companyName: '',
   replyToEmail: '',
   estimateEmailSubject: '',
-  estimateEmailBody: ''
+  estimateEmailBody: '',
+  chargesSalesTax: false,
+  defaultSalesTaxRatePercent: '0'
 };
 
 export function OfficeSettingsSurface({
@@ -59,6 +63,15 @@ export function OfficeSettingsSurface({
   }, [load]);
 
   async function saveSettings() {
+    const defaultSalesTaxBasisPoints = parsePercentToBasisPoints(
+      draft.defaultSalesTaxRatePercent,
+      draft.chargesSalesTax
+    );
+    if (defaultSalesTaxBasisPoints === null) {
+      setErrorMessage('Default sales tax rate must be between 0% and 25%.');
+      return;
+    }
+
     setIsSaving(true);
     setNoticeMessage(null);
     setErrorMessage(null);
@@ -69,7 +82,9 @@ export function OfficeSettingsSurface({
         companyName: draft.companyName,
         replyToEmail: draft.replyToEmail.trim() || undefined,
         estimateEmailSubject: draft.estimateEmailSubject,
-        estimateEmailBody: draft.estimateEmailBody
+        estimateEmailBody: draft.estimateEmailBody,
+        chargesSalesTax: draft.chargesSalesTax,
+        defaultSalesTaxBasisPoints
       });
       setSettings(response.settings);
       setDraft(toDraft(response.settings));
@@ -153,20 +168,54 @@ export function OfficeSettingsSurface({
                 style={{ ...styles.textarea, minHeight: '12rem' }}
               />
             </label>
-            {canConfigure ? (
-              <button
-                type="button"
-                style={styles.primaryButton}
-                disabled={isSaving}
-                onClick={() => void saveSettings()}
-              >
-                {isSaving ? 'Saving...' : 'Save settings'}
-              </button>
-            ) : null}
+          </section>
+          <section style={styles.panel} aria-label="Billing and tax settings">
+            <h2 style={styles.sectionHeading}>Billing & tax</h2>
+            <label style={styles.inlineLabel}>
+              <input
+                aria-label="Charge sales tax"
+                type="checkbox"
+                checked={draft.chargesSalesTax}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    chargesSalesTax: event.target.checked
+                  }))
+                }
+              />
+              Charge sales tax
+            </label>
+            <label style={styles.fieldLabel}>
+              Default sales tax rate (%)
+              <input
+                aria-label="Default sales tax rate"
+                type="number"
+                min="0"
+                max="25"
+                step="0.01"
+                value={draft.defaultSalesTaxRatePercent}
+                disabled={!canConfigure || !draft.chargesSalesTax}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'defaultSalesTaxRatePercent', event.target.value)
+                }
+                style={styles.input}
+              />
+            </label>
           </section>
         </div>
       ) : isLoading ? (
         <p style={styles.notice}>Loading settings...</p>
+      ) : null}
+      {settings && canConfigure ? (
+        <button
+          type="button"
+          style={styles.primaryButton}
+          disabled={isSaving}
+          onClick={() => void saveSettings()}
+        >
+          {isSaving ? 'Saving...' : 'Save settings'}
+        </button>
       ) : null}
     </section>
   );
@@ -177,7 +226,9 @@ function toDraft(settings: CompanySettings): SettingsDraft {
     companyName: settings.companyName,
     replyToEmail: settings.replyToEmail ?? '',
     estimateEmailSubject: settings.estimateEmailSubject,
-    estimateEmailBody: settings.estimateEmailBody
+    estimateEmailBody: settings.estimateEmailBody,
+    chargesSalesTax: settings.chargesSalesTax,
+    defaultSalesTaxRatePercent: basisPointsToPercentString(settings.defaultSalesTaxBasisPoints)
   };
 }
 
@@ -187,4 +238,19 @@ function setDraftValue(
   value: string
 ) {
   setDraft((current) => ({ ...current, [key]: value }));
+}
+
+function parsePercentToBasisPoints(value: string, isEnabled: boolean): number | null {
+  if (!isEnabled) {
+    return 0;
+  }
+  const percent = Number(value);
+  if (!Number.isFinite(percent) || percent < 0 || percent > 25) {
+    return null;
+  }
+  return Math.round(percent * 100);
+}
+
+function basisPointsToPercentString(basisPoints: number): string {
+  return String(basisPoints / 100);
 }

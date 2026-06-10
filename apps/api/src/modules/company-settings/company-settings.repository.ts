@@ -9,6 +9,8 @@ type CompanySettingsRow = {
   replyToEmail: string | null;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  chargesSalesTax: boolean;
+  defaultSalesTaxBasisPoints: number;
   updatedByName: string | null;
   updatedAt: string | Date;
 };
@@ -25,6 +27,8 @@ export class CompanySettingsRepository {
           reply_to_email as "replyToEmail",
           estimate_email_subject as "estimateEmailSubject",
           estimate_email_body as "estimateEmailBody",
+          charges_sales_tax as "chargesSalesTax",
+          default_sales_tax_basis_points as "defaultSalesTaxBasisPoints",
           updated_by_name as "updatedByName",
           updated_at as "updatedAt"
         from company_settings
@@ -42,6 +46,8 @@ export class CompanySettingsRepository {
       replyToEmail: row.replyToEmail ?? undefined,
       estimateEmailSubject: row.estimateEmailSubject,
       estimateEmailBody: row.estimateEmailBody,
+      chargesSalesTax: row.chargesSalesTax,
+      defaultSalesTaxBasisPoints: row.defaultSalesTaxBasisPoints,
       updatedAt: toIsoString(row.updatedAt),
       updatedByName: row.updatedByName ?? undefined
     };
@@ -56,14 +62,17 @@ export class CompanySettingsRepository {
       `
         insert into company_settings (
           id, company_name, reply_to_email, estimate_email_subject, estimate_email_body,
+          charges_sales_tax, default_sales_tax_basis_points,
           updated_by_employee_id, updated_by_name, created_at, updated_at
         )
-        values ('default', $1, $2, $3, $4, $5, $6, $7, $7)
+        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
         on conflict (id) do update set
           company_name = excluded.company_name,
           reply_to_email = excluded.reply_to_email,
           estimate_email_subject = excluded.estimate_email_subject,
           estimate_email_body = excluded.estimate_email_body,
+          charges_sales_tax = excluded.charges_sales_tax,
+          default_sales_tax_basis_points = excluded.default_sales_tax_basis_points,
           updated_by_employee_id = excluded.updated_by_employee_id,
           updated_by_name = excluded.updated_by_name,
           updated_at = excluded.updated_at
@@ -73,6 +82,8 @@ export class CompanySettingsRepository {
         input.replyToEmail ?? null,
         input.estimateEmailSubject,
         input.estimateEmailBody,
+        input.chargesSalesTax,
+        input.defaultSalesTaxBasisPoints,
         actor.id,
         actor.displayName,
         now
