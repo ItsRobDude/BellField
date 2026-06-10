@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { CatalogItem } from '@/lib/operations-api';
+import type { CatalogCategory, CatalogItem } from '@/lib/operations-api';
 import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import type { EstimateLineDraft } from './job-estimate-types';
 
@@ -22,8 +22,21 @@ function catalogItem(overrides: Partial<CatalogItem> = {}): CatalogItem {
   };
 }
 
+function catalogCategory(overrides: Partial<CatalogCategory> = {}): CatalogCategory {
+  return {
+    id: 'category-1',
+    name: 'Diagnostics',
+    sortOrder: 10,
+    isActive: true,
+    createdAt: '2026-06-10T00:00:00.000Z',
+    updatedAt: '2026-06-10T00:00:00.000Z',
+    ...overrides
+  };
+}
+
 function renderPicker(input: {
   items: CatalogItem[];
+  categories?: CatalogCategory[];
   searchText?: string;
   onAddLine?: (line: EstimateLineDraft) => void;
 }) {
@@ -32,6 +45,7 @@ function renderPicker(input: {
   render(
     <EstimateCatalogPicker
       items={input.items}
+      categories={input.categories ?? []}
       searchText={input.searchText ?? ''}
       isLoading={false}
       onSearchChange={onSearchChange}
@@ -56,6 +70,34 @@ describe('EstimateCatalogPicker', () => {
     expect(screen.getByRole('button', { name: /Fees\s*1 items/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Materials\s*1 items/i })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Cooling diagnostic/i })).toBeNull();
+  });
+
+  it('uses managed category order and routes inactive-category items to the fallback bucket', () => {
+    renderPicker({
+      categories: [
+        catalogCategory({ id: 'diagnostics', name: 'Diagnostics', sortOrder: 20 }),
+        catalogCategory({ id: 'after-hours', name: 'After hours', sortOrder: 10 }),
+        catalogCategory({ id: 'old', name: 'Old category', sortOrder: 30, isActive: false })
+      ],
+      items: [
+        catalogItem({ id: 'diagnostic', name: 'Cooling diagnostic', category: 'Diagnostics' }),
+        catalogItem({ id: 'after-hours', name: 'After-hours labor', category: 'After hours' }),
+        catalogItem({ id: 'old-item', name: 'Old stocked part', category: 'Old category' })
+      ]
+    });
+
+    const categoryButtons = screen
+      .getAllByRole('button')
+      .map((button) => button.textContent ?? '')
+      .filter((text) => text.includes('items'));
+    expect(categoryButtons[0]).toMatch(/After hours/);
+    expect(categoryButtons[1]).toMatch(/Diagnostics/);
+    expect(categoryButtons[2]).toMatch(/Uncategorized/);
+    expect(screen.queryByRole('button', { name: /Old category\s*1 items/i })).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: /Uncategorized\s*1 items/i }));
+
+    expect(screen.getByRole('button', { name: /Old stocked part/i })).toBeInTheDocument();
   });
 
   it('opens one category before adding an item', () => {

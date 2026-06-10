@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CatalogItem, EstimateSummary } from '@/lib/operations-api';
+import type { CatalogCategory, CatalogItem, EstimateSummary } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
 import * as downloadFile from '@/lib/download-file';
 import { JobEstimatesSection } from './job-estimates-section';
@@ -12,6 +12,7 @@ vi.mock('@/lib/operations-api', () => ({
   declineOfficeEstimate: vi.fn(),
   downloadOfficeEstimateDocument: vi.fn(),
   downloadOfficeEstimatePdf: vi.fn(),
+  getOfficeCatalogCategories: vi.fn(),
   getOfficeEstimateOutboundMessages: vi.fn(),
   getOfficeEstimateSendPreview: vi.fn(),
   getOfficeCatalogItems: vi.fn(),
@@ -83,11 +84,24 @@ function catalogItem(overrides: Partial<CatalogItem> = {}): CatalogItem {
   };
 }
 
+function catalogCategory(overrides: Partial<CatalogCategory> = {}): CatalogCategory {
+  return {
+    id: 'category-1',
+    name: 'Diagnostics',
+    sortOrder: 10,
+    isActive: true,
+    createdAt: '2026-06-10T00:00:00.000Z',
+    updatedAt: '2026-06-10T00:00:00.000Z',
+    ...overrides
+  };
+}
+
 describe('JobEstimatesSection', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [estimate] });
     mockedApi.getOfficeCatalogItems.mockResolvedValue({ items: [] });
+    mockedApi.getOfficeCatalogCategories.mockResolvedValue({ categories: [] });
     mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({ outboundMessages: [] });
     mockedApi.getOfficeEstimateSendPreview.mockResolvedValue({
       preview: {
@@ -309,6 +323,9 @@ describe('JobEstimatesSection', () => {
         })
       ]
     });
+    mockedApi.getOfficeCatalogCategories.mockResolvedValue({
+      categories: [catalogCategory({ id: 'materials', name: 'Materials', sortOrder: 10 })]
+    });
     mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
 
     render(
@@ -384,6 +401,9 @@ describe('JobEstimatesSection', () => {
           defaultSalePrice: 18
         })
       ]
+    });
+    mockedApi.getOfficeCatalogCategories.mockResolvedValue({
+      categories: [catalogCategory({ id: 'materials', name: 'Materials', sortOrder: 10 })]
     });
 
     render(

@@ -2,12 +2,18 @@
 
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
-import type { CatalogItem, CatalogItemKind, CatalogLineSnapshot } from '@/lib/operations-api';
+import type {
+  CatalogCategory,
+  CatalogItem,
+  CatalogItemKind,
+  CatalogLineSnapshot
+} from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type { EstimateLineDraft } from './job-estimate-types';
 
 type EstimateCatalogPickerProps = {
   items: CatalogItem[];
+  categories: CatalogCategory[];
   searchText: string;
   isLoading: boolean;
   onSearchChange: (value: string) => void;
@@ -17,6 +23,7 @@ type EstimateCatalogPickerProps = {
 
 export function EstimateCatalogPicker({
   items,
+  categories: catalogCategories,
   searchText,
   isLoading,
   onSearchChange,
@@ -26,12 +33,19 @@ export function EstimateCatalogPicker({
   const [activeCategoryKey, setActiveCategoryKey] = useState<string | null>(null);
   const quoteableItems = getQuoteableItems(items);
   const search = searchText.trim();
-  const categories = summarizeCatalogCategories(quoteableItems);
+  const activeManagedCategoryKeys = new Set(
+    catalogCategories
+      .filter((category) => category.isActive)
+      .map((category) => categoryKey(category.name))
+  );
+  const categories = summarizeCatalogCategories(quoteableItems, catalogCategories);
   const activeCategory = categories.find((category) => category.key === activeCategoryKey);
   const matchingCatalogItems = search
     ? filterCatalogItems(quoteableItems, search)
     : activeCategory
-      ? quoteableItems.filter((item) => categoryKey(item.category) === activeCategory.key)
+      ? quoteableItems.filter((item) =>
+          itemMatchesCatalogCategory(item, activeCategory, activeManagedCategoryKeys)
+        )
       : [];
   const showCategories = !isLoading && !search && !activeCategory && categories.length > 0;
 
@@ -135,9 +149,52 @@ function filterCatalogItems(items: CatalogItem[], searchText: string): CatalogIt
 }
 
 function summarizeCatalogCategories(
-  items: CatalogItem[]
-): Array<{ key: string; name: string; count: number }> {
-  const categoryMap = new Map<string, { key: string; name: string; count: number }>();
+  items: CatalogItem[],
+  catalogCategories: CatalogCategory[]
+): CatalogCategorySummary[] {
+  const activeManagedCategories = catalogCategories
+    .filter((category) => category.isActive)
+    .sort(compareManagedCategories);
+  const managedCategoryMap = new Map<string, CatalogCategorySummary>();
+  for (const category of activeManagedCategories) {
+    managedCategoryMap.set(categoryKey(category.name), {
+      key: categoryKey(category.name),
+      name: category.name,
+      count: 0,
+      isFallback: false,
+      sortOrder: category.sortOrder
+    });
+  }
+
+  if (managedCategoryMap.size === 0) {
+    return summarizeUnmanagedCatalogCategories(items);
+  }
+
+  const fallbackCategory: CatalogCategorySummary = {
+    key: uncategorizedCategoryKey,
+    name: 'Uncategorized',
+    count: 0,
+    isFallback: true,
+    sortOrder: Number.MAX_SAFE_INTEGER
+  };
+  for (const item of items) {
+    const key = categoryKey(item.category);
+    const managedCategory = managedCategoryMap.get(key);
+    if (managedCategory) {
+      managedCategory.count += 1;
+    } else {
+      fallbackCategory.count += 1;
+    }
+  }
+  const summaries = [...managedCategoryMap.values()].filter((category) => category.count > 0);
+  if (fallbackCategory.count > 0) {
+    summaries.push(fallbackCategory);
+  }
+  return summaries.sort(compareCatalogCategories);
+}
+
+function summarizeUnmanagedCatalogCategories(items: CatalogItem[]): CatalogCategorySummary[] {
+  const categoryMap = new Map<string, CatalogCategorySummary>();
   for (const item of items) {
     const key = categoryKey(item.category);
     const existing = categoryMap.get(key);
@@ -147,7 +204,9 @@ function summarizeCatalogCategories(
       categoryMap.set(key, {
         key,
         name: normalizeCategoryName(item.category),
-        count: 1
+        count: 1,
+        isFallback: key === uncategorizedCategoryKey,
+        sortOrder: Number.MAX_SAFE_INTEGER
       });
     }
   }
@@ -163,19 +222,36 @@ function normalizeCategoryName(category: string | undefined): string {
   return trimmed || 'Uncategorized';
 }
 
-function compareCatalogCategories(
-  left: { key: string; name: string; count: number },
-  right: { key: string; name: string; count: number }
-): number {
-  const leftOrder = preferredCategoryOrder.indexOf(left.key);
-  const rightOrder = preferredCategoryOrder.indexOf(right.key);
-  if (leftOrder !== -1 || rightOrder !== -1) {
-    return (
-      (leftOrder === -1 ? Number.MAX_SAFE_INTEGER : leftOrder) -
-      (rightOrder === -1 ? Number.MAX_SAFE_INTEGER : rightOrder)
-    );
+function compareManagedCategories(left: CatalogCategory, right: CatalogCategory): number {
+  if (left.sortOrder !== right.sortOrder) {
+    return left.sortOrder - right.sortOrder;
   }
   return left.name.localeCompare(right.name);
+}
+
+function compareCatalogCategories(
+  left: CatalogCategorySummary,
+  right: CatalogCategorySummary
+): number {
+  if (left.isFallback !== right.isFallback) {
+    return left.isFallback ? 1 : -1;
+  }
+  if (left.sortOrder !== right.sortOrder) {
+    return left.sortOrder - right.sortOrder;
+  }
+  return left.name.localeCompare(right.name);
+}
+
+function itemMatchesCatalogCategory(
+  item: CatalogItem,
+  category: CatalogCategorySummary,
+  activeCategoryKeys: Set<string>
+): boolean {
+  const itemCategoryKey = categoryKey(item.category);
+  if (category.isFallback) {
+    return !activeCategoryKeys.has(itemCategoryKey);
+  }
+  return itemCategoryKey === category.key;
 }
 
 function createCatalogEstimateLine(item: CatalogItem): EstimateLineDraft {
@@ -244,21 +320,15 @@ const kindLabels: Record<CatalogItemKind, string> = {
   other: 'Other'
 };
 
-const preferredCategoryOrder = [
-  'maintenance',
-  'service',
-  'diagnostics',
-  'repairs',
-  'after hours',
-  'labor',
-  'fees',
-  'materials',
-  'equipment',
-  'agreements',
-  'discounts',
-  'other',
-  'uncategorized'
-];
+type CatalogCategorySummary = {
+  key: string;
+  name: string;
+  count: number;
+  isFallback: boolean;
+  sortOrder: number;
+};
+
+const uncategorizedCategoryKey = 'uncategorized';
 
 const catalogPickerGridStyle: CSSProperties = {
   display: 'grid',

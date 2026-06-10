@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import type { CatalogItem } from '@/lib/operations-api';
+import type { CatalogCategory, CatalogItem } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import {
@@ -16,6 +16,7 @@ type EstimateEditorProps = {
   isEditing: boolean;
   canViewCatalog: boolean;
   catalogItems: CatalogItem[];
+  catalogCategories: CatalogCategory[];
   catalogSearchText: string;
   isCatalogLoading: boolean;
   onChange: (draft: EstimateDraft) => void;
@@ -33,6 +34,7 @@ export function EstimateEditor({
   isEditing,
   canViewCatalog,
   catalogItems,
+  catalogCategories,
   catalogSearchText,
   isCatalogLoading,
   onChange,
@@ -266,6 +268,7 @@ export function EstimateEditor({
         {canViewCatalog ? (
           <EstimateCatalogPicker
             items={catalogItems}
+            categories={catalogCategories}
             searchText={catalogSearchText}
             isLoading={isCatalogLoading}
             onSearchChange={onCatalogSearchChange}

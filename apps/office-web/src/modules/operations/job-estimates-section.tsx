@@ -7,12 +7,14 @@ import {
   createOfficeEstimate,
   declineOfficeEstimate,
   downloadOfficeEstimatePdf,
+  getOfficeCatalogCategories,
   getOfficeEstimateOutboundMessages,
   getOfficeEstimateSendPreview,
   getOfficeCatalogItems,
   getOfficeEstimatesForJob,
   sendOfficeEstimate,
   updateOfficeEstimate,
+  type CatalogCategory,
   type CatalogItem,
   type EstimateSummary,
   type OutboundMessageSummary
@@ -62,6 +64,7 @@ export function JobEstimatesSection({
 }: JobEstimatesSectionProps) {
   const [estimates, setEstimates] = useState<EstimateSummary[]>([]);
   const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([]);
+  const [catalogCategories, setCatalogCategories] = useState<CatalogCategory[]>([]);
   const [catalogSearchText, setCatalogSearchText] = useState('');
   const [catalogLoadStatus, setCatalogLoadStatus] = useState<CatalogLoadStatus>('idle');
   const [isLoading, setIsLoading] = useState(true);
@@ -114,8 +117,12 @@ export function JobEstimatesSection({
     }
     setCatalogLoadStatus('loading');
     try {
-      const response = await getOfficeCatalogItems({ apiBaseUrl, sessionToken });
-      setCatalogItems(response.items);
+      const [itemsResponse, categoriesResponse] = await Promise.all([
+        getOfficeCatalogItems({ apiBaseUrl, sessionToken }),
+        getOfficeCatalogCategories({ apiBaseUrl, sessionToken })
+      ]);
+      setCatalogItems(itemsResponse.items);
+      setCatalogCategories(categoriesResponse.categories);
       setCatalogLoadStatus('loaded');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load the Catalog.');
@@ -404,6 +411,7 @@ export function JobEstimatesSection({
           isEditing={editingEstimateId !== null}
           canViewCatalog={canViewCatalog}
           catalogItems={catalogItems}
+          catalogCategories={catalogCategories}
           catalogSearchText={catalogSearchText}
           isCatalogLoading={catalogLoadStatus === 'loading'}
           onChange={setDraft}
