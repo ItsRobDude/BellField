@@ -449,6 +449,15 @@ For estimate and invoice email delivery:
   sending-domain verification inside BellField
 - BellField stores only the operational result it needs, such as send status,
   document snapshot, recipient, actor, failure summary, or provider reference
+- provider API keys never ship to customer-owned servers in any form (shared or
+  per-install). Sold installs send through a BellField-hosted delivery relay,
+  authenticated by the install's license token; the relay holds the only
+  provider key. See the key-custody section of
+  [customer-comms-and-delivery.md](./customer-comms-and-delivery.md).
+- sent documents transit that relay transiently — the same content the delivery
+  provider already receives. The relay is a pass-through, not storage; it does
+  not change the "customer-owned data, no BellField-hosted business records"
+  posture.
 
 Optional SMS, payment, accounting, or workflow integrations may get their own
 ownership model later. User-facing APIs are for automating shop workflows, not

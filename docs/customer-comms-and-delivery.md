@@ -104,6 +104,40 @@ change implementation details without rewriting estimate workflows. That adapter
 boundary is internal product infrastructure, not a customer configuration
 surface.
 
+### Key custody: the BellField delivery relay
+
+Decided 2026-06-10. Provider API keys are BellField infrastructure secrets and
+must never be distributed to customer-owned servers — not as a shared key and
+not as per-install scoped keys. A self-hosted server is extractable by
+definition, so no form of provider credential may live on sold installs.
+
+The only sanctioned end-state is a BellField-hosted delivery relay:
+
+- a customer install authenticates to the relay with its install/license token
+- the install submits the rendered subject, body, and document; the relay holds
+  the only provider key, performs the send, and returns the same sanitized
+  result shape the internal adapter already exposes
+- the relay enforces per-install send quotas and the suppression list, making
+  per-send cost and abuse control real rather than honor-system
+- provider webhooks (delivered, bounced, complained) terminate at the relay;
+  installs poll the relay for delivery state, preserving the rule that customer
+  servers need no inbound reachability
+- revoking one install's token cuts off abuse without touching other installs
+  or rotating anything on customer hardware
+- the relay is the same BellField-hosted public surface that estimate
+  acceptance links and payment links require later; build them on the same
+  host, auth, and audit posture
+
+Privacy carve-out, stated plainly because the self-hosted posture promises "no
+BellField-hosted customer data": sent documents transit the relay transiently.
+This is exactly the content the delivery provider already receives today; the
+relay must not become storage of customer business data, and the deployment
+docs must say so wherever the self-hosted posture is described.
+
+Until the relay exists, the direct provider adapter configured by a server-owned
+environment key is an interim implementation for BellField-operated installs
+only. It must not ship to sold installs.
+
 ---
 
 ## 5. Settings Direction
@@ -302,7 +336,9 @@ the implementation is intentionally re-scoped.
 - whether a minimal settings screen must land before the first send action or in
   the same slice
 - document branding fields required for the first pilot
-- provider webhook handling order for delivery status
+- ~~provider webhook handling order for delivery status~~ — resolved 2026-06-10:
+  webhooks terminate at the BellField delivery relay (see §4); installs poll the
+  relay for delivery state
 
 The default answer should stay conservative: build the adapter and audit trail
 first, then widen only when the operational loop needs it.
