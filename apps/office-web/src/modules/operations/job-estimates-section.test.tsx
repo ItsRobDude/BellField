@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { EstimateSummary } from '@/lib/operations-api';
+import type { CatalogItem, EstimateSummary } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
 import * as downloadFile from '@/lib/download-file';
 import { JobEstimatesSection } from './job-estimates-section';
@@ -64,6 +64,24 @@ const estimate: EstimateSummary = {
   updatedAt: '2026-06-01T00:00:00.000Z',
   version: 1
 };
+
+function catalogItem(overrides: Partial<CatalogItem> = {}): CatalogItem {
+  return {
+    id: 'catalog-1',
+    name: 'Cooling diagnostic',
+    kind: 'service',
+    category: 'Diagnostics',
+    tradeTags: [],
+    taxableDefault: true,
+    defaultSalePrice: 129,
+    fieldVisible: true,
+    isActive: true,
+    registerUsageCount: 0,
+    createdAt: '2026-06-10T00:00:00.000Z',
+    updatedAt: '2026-06-10T00:00:00.000Z',
+    ...overrides
+  };
+}
 
 describe('JobEstimatesSection', () => {
   beforeEach(() => {
@@ -205,7 +223,7 @@ describe('JobEstimatesSection', () => {
     expect(screen.queryByText(/Duct sealing/)).not.toBeInTheDocument();
   });
 
-  it('keeps manual estimate line kind in details and defaults it to service item', async () => {
+  it('starts without blank line fields and adds custom lines intentionally', async () => {
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
     mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
 
@@ -225,12 +243,27 @@ describe('JobEstimatesSection', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'New estimate' }));
 
+    expect(screen.getByText('Choose a Catalog item or add a custom line.')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Description')).toBeNull();
+    expect(screen.queryByLabelText('Qty')).toBeNull();
+    expect(screen.queryByLabelText('Unit price')).toBeNull();
+    expect(screen.queryByLabelText('Unit cost')).toBeNull();
+    expect(screen.queryByLabelText('Taxable')).toBeNull();
+    expect(screen.queryByLabelText('Kind')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add custom line' }));
+
+    expect(screen.getByLabelText('Description')).toBeInTheDocument();
+    expect(screen.getByLabelText('Qty')).toHaveValue(1);
+    expect(screen.getByLabelText('Unit price')).toHaveValue(null);
+    expect(screen.getByLabelText('Unit cost')).toHaveValue(null);
+    expect(screen.getByLabelText('Taxable')).toBeChecked();
     expect(screen.queryByLabelText('Kind')).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'More details' }));
 
-    expect(screen.getByLabelText('Kind')).toHaveValue('serviceItem');
     expect(screen.getByLabelText('Unit')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Kind')).toBeNull();
 
     fireEvent.change(screen.getByLabelText('Title'), {
       target: { value: 'Maintenance quote' }
@@ -251,6 +284,86 @@ describe('JobEstimatesSection', () => {
               description: 'Diagnostic visit',
               quantity: 1,
               unitPrice: 129
+            })
+          ]
+        })
+      )
+    );
+  });
+
+  it('adds Catalog lines with hidden classification and a preserved snapshot', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({ estimates: [] });
+    mockedApi.getOfficeCatalogItems.mockResolvedValue({
+      items: [
+        catalogItem({
+          id: 'filter',
+          name: '16x20x1 filter',
+          category: 'Materials',
+          kind: 'part',
+          code: 'MAT-FILTER-16X20X1',
+          description: 'Replace customer filter.',
+          defaultSalePrice: 18,
+          costHint: 5,
+          unitOfMeasure: 'each',
+          taxableDefault: false
+        })
+      ]
+    });
+    mockedApi.createOfficeEstimate.mockResolvedValue({ estimate });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New estimate' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Materials\s*1 items/i }));
+    fireEvent.click(screen.getByRole('button', { name: /16x20x1 filter/i }));
+
+    expect(screen.getByLabelText('Description')).toHaveValue('Replace customer filter.');
+    expect(screen.getByLabelText('Unit price')).toHaveValue(18);
+    expect(screen.getByLabelText('Unit cost')).toHaveValue(5);
+    expect(screen.queryByLabelText('Kind')).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'More details' }));
+
+    expect(screen.getByLabelText('Unit')).toHaveValue('each');
+    expect(screen.queryByLabelText('Kind')).toBeNull();
+
+    fireEvent.change(screen.getByLabelText('Title'), {
+      target: { value: 'Filter quote' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create estimate' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeEstimate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          jobId: 'job-1',
+          lineItems: [
+            expect.objectContaining({
+              kind: 'part',
+              catalogItemId: 'filter',
+              description: 'Replace customer filter.',
+              quantity: 1,
+              unitPrice: 18,
+              unitCost: 5,
+              taxable: false,
+              catalogSnapshot: expect.objectContaining({
+                catalogItemId: 'filter',
+                kind: 'part',
+                name: '16x20x1 filter',
+                selectedUnitPrice: 18,
+                taxable: false
+              })
             })
           ]
         })

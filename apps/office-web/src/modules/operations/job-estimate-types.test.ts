@@ -3,7 +3,6 @@ import {
   buildEstimateDraftFromSummary,
   createDefaultEstimateOptionGroup,
   createEmptyEstimateDraft,
-  isUntouchedBlankEstimateLine,
   parseEstimateDraft,
   type EstimateDraft
 } from './job-estimate-types';
@@ -291,14 +290,15 @@ describe('parseEstimateDraft', () => {
   });
 });
 
-describe('isUntouchedBlankEstimateLine', () => {
-  it('detects only the service-item starter blank line', () => {
-    const starterLine = createEmptyEstimateDraft().lineItems[0]!;
+describe('createEmptyEstimateDraft', () => {
+  it('starts without a fake starter line', () => {
+    const draft = createEmptyEstimateDraft();
 
-    expect(starterLine.kind).toBe('serviceItem');
-    expect(isUntouchedBlankEstimateLine(starterLine)).toBe(true);
-    expect(isUntouchedBlankEstimateLine({ ...starterLine, description: 'Started' })).toBe(false);
-    expect(isUntouchedBlankEstimateLine({ ...starterLine, kind: 'part' })).toBe(false);
+    expect(draft.lineItems).toEqual([]);
+    expect(parseEstimateDraft({ ...draft, title: 'Quote' })).toEqual({
+      ok: false,
+      message: 'Add at least one line item.'
+    });
   });
 });
 

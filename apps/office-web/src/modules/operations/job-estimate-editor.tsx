@@ -6,9 +6,6 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import {
   createDefaultEstimateOptionGroup,
-  estimateLineItemKindLabels,
-  estimateLineItemKindOptions,
-  isUntouchedBlankEstimateLine,
   type EstimateDraft,
   type EstimateLineDraft
 } from './job-estimate-types';
@@ -87,7 +84,7 @@ export function EstimateEditor({
     setActiveTargetId(group.options[0]?.id ?? 'base');
   }
 
-  function addLine() {
+  function addCustomLine() {
     onChange({
       ...draft,
       lineItems: [
@@ -112,10 +109,7 @@ export function EstimateEditor({
     const targetedLine = withTarget(line, activeTarget);
     onChange({
       ...draft,
-      lineItems:
-        draft.lineItems.length === 1 && isUntouchedBlankEstimateLine(draft.lineItems[0])
-          ? [targetedLine]
-          : [...draft.lineItems, targetedLine]
+      lineItems: [...draft.lineItems, targetedLine]
     });
   }
 
@@ -211,9 +205,6 @@ export function EstimateEditor({
                 Add options
               </button>
             )}
-            <button type="button" style={styles.button} onClick={addLine}>
-              Add line
-            </button>
           </div>
         </div>
 
@@ -266,111 +257,106 @@ export function EstimateEditor({
           />
         ) : null}
 
-        {visibleLines.length === 0 ? (
-          <p style={styles.tinyMuted}>Add at least one line item.</p>
-        ) : (
-          visibleLines.map(({ line, index }) => (
-            <div key={index} style={styles.subpanel}>
-              <div style={styles.formGridCompact}>
-                <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
-                  <span>Description</span>
-                  <input
-                    style={styles.input}
-                    value={line.description}
-                    onChange={(event) => patchLine(index, { description: event.target.value })}
-                  />
-                </label>
-              </div>
-              <div style={styles.formGridCompact}>
-                <label style={styles.fieldLabel}>
-                  <span>Qty</span>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    step="0.01"
-                    value={line.quantity}
-                    onChange={(event) => patchLine(index, { quantity: event.target.value })}
-                  />
-                </label>
-                <label style={styles.fieldLabel}>
-                  <span>Unit price</span>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    step="0.01"
-                    value={line.unitPrice}
-                    onChange={(event) => patchLine(index, { unitPrice: event.target.value })}
-                  />
-                </label>
-                <label style={styles.fieldLabel}>
-                  <span>Unit cost</span>
-                  <input
-                    style={styles.input}
-                    type="number"
-                    step="0.01"
-                    value={line.unitCost}
-                    onChange={(event) => patchLine(index, { unitCost: event.target.value })}
-                  />
-                </label>
-                <label style={styles.inlineLabel}>
-                  <input
-                    type="checkbox"
-                    checked={line.taxable}
-                    onChange={(event) => patchLine(index, { taxable: event.target.checked })}
-                  />
-                  <span>Taxable</span>
-                </label>
-              </div>
-              {expandedLineIndexes.has(index) ? (
+        <div style={{ display: 'grid', gap: '0.65rem' }}>
+          <div style={styles.row}>
+            <h5 style={styles.sectionHeading}>Estimate lines</h5>
+            <button type="button" style={styles.button} onClick={addCustomLine}>
+              Add custom line
+            </button>
+          </div>
+
+          {visibleLines.length === 0 ? (
+            <p style={styles.tinyMuted}>Choose a Catalog item or add a custom line.</p>
+          ) : (
+            visibleLines.map(({ line, index }) => (
+              <div key={index} style={styles.panel}>
                 <div style={styles.formGridCompact}>
-                  <label style={styles.fieldLabel}>
-                    <span>Kind</span>
-                    <select
-                      style={styles.input}
-                      value={line.kind}
-                      onChange={(event) =>
-                        patchLine(index, { kind: event.target.value as EstimateLineDraft['kind'] })
-                      }
-                    >
-                      {estimateLineItemKindOptions.map((kind) => (
-                        <option key={kind} value={kind}>
-                          {estimateLineItemKindLabels[kind]}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label style={styles.fieldLabel}>
-                    <span>Unit</span>
+                  <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
+                    <span>Description</span>
                     <input
                       style={styles.input}
-                      value={line.unitOfMeasure}
-                      onChange={(event) => patchLine(index, { unitOfMeasure: event.target.value })}
+                      value={line.description}
+                      onChange={(event) => patchLine(index, { description: event.target.value })}
                     />
                   </label>
                 </div>
-              ) : null}
-              <div style={styles.row}>
-                <span style={styles.tinyMuted}>Line {index + 1}</span>
-                <div style={styles.inlineActionBar}>
-                  <button
-                    type="button"
-                    style={styles.button}
-                    onClick={() => toggleLineDetails(index)}
-                  >
-                    {expandedLineIndexes.has(index) ? 'Hide details' : 'More details'}
-                  </button>
-                  <button
-                    type="button"
-                    style={styles.dangerButton}
-                    onClick={() => removeLine(index)}
-                  >
-                    Remove
-                  </button>
+                <div style={styles.formGridCompact}>
+                  <label style={styles.fieldLabel}>
+                    <span>Qty</span>
+                    <input
+                      style={styles.input}
+                      type="number"
+                      step="0.01"
+                      value={line.quantity}
+                      onChange={(event) => patchLine(index, { quantity: event.target.value })}
+                    />
+                  </label>
+                  <label style={styles.fieldLabel}>
+                    <span>Unit price</span>
+                    <input
+                      style={styles.input}
+                      type="number"
+                      step="0.01"
+                      value={line.unitPrice}
+                      onChange={(event) => patchLine(index, { unitPrice: event.target.value })}
+                    />
+                  </label>
+                  <label style={styles.fieldLabel}>
+                    <span>Unit cost</span>
+                    <input
+                      style={styles.input}
+                      type="number"
+                      step="0.01"
+                      value={line.unitCost}
+                      onChange={(event) => patchLine(index, { unitCost: event.target.value })}
+                    />
+                  </label>
+                  <label style={styles.inlineLabel}>
+                    <input
+                      type="checkbox"
+                      checked={line.taxable}
+                      onChange={(event) => patchLine(index, { taxable: event.target.checked })}
+                    />
+                    <span>Taxable</span>
+                  </label>
+                </div>
+                {expandedLineIndexes.has(index) ? (
+                  <div style={styles.formGridCompact}>
+                    <label style={styles.fieldLabel}>
+                      <span>Unit</span>
+                      <input
+                        style={styles.input}
+                        value={line.unitOfMeasure}
+                        onChange={(event) =>
+                          patchLine(index, { unitOfMeasure: event.target.value })
+                        }
+                      />
+                    </label>
+                  </div>
+                ) : null}
+                <div style={styles.row}>
+                  <span style={styles.tinyMuted}>Line {index + 1}</span>
+                  <div style={styles.inlineActionBar}>
+                    <button
+                      type="button"
+                      style={styles.button}
+                      onClick={() => toggleLineDetails(index)}
+                    >
+                      {expandedLineIndexes.has(index) ? 'Hide details' : 'More details'}
+                    </button>
+                    <button
+                      type="button"
+                      style={styles.dangerButton}
+                      onClick={() => removeLine(index)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))
-        )}
+            ))
+          )}
+        </div>
       </div>
 
       <div style={styles.inlineActionBar}>

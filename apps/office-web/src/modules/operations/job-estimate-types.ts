@@ -61,15 +61,6 @@ export const estimateStatusLabels: Record<EstimateStatus, string> = {
   declined: 'Declined'
 };
 
-export const estimateLineItemKindOptions: EstimateLineItemKind[] = [
-  'labor',
-  'serviceItem',
-  'part',
-  'equipment',
-  'membership',
-  'other'
-];
-
 export const estimateLineItemKindLabels: Record<EstimateLineItemKind, string> = {
   labor: 'Labor',
   serviceItem: 'Service item',
@@ -87,34 +78,8 @@ export function createEmptyEstimateDraft(): EstimateDraft {
     validUntil: '',
     optionGroups: [],
     selectedOptionId: '',
-    lineItems: [
-      {
-        kind: 'serviceItem',
-        description: '',
-        quantity: '1',
-        unitOfMeasure: '',
-        unitPrice: '',
-        unitCost: '',
-        taxable: true
-      }
-    ]
+    lineItems: []
   };
-}
-
-export function isUntouchedBlankEstimateLine(line: EstimateLineDraft): boolean {
-  return (
-    line.kind === 'serviceItem' &&
-    line.description.trim() === '' &&
-    line.quantity === '1' &&
-    line.unitOfMeasure.trim() === '' &&
-    line.unitPrice.trim() === '' &&
-    line.unitCost.trim() === '' &&
-    line.taxable &&
-    !line.catalogItemId &&
-    !line.catalogSnapshot &&
-    !line.optionGroupId &&
-    !line.optionId
-  );
 }
 
 export function buildEstimateDraftFromSummary(estimate: EstimateSummary): EstimateDraft {
