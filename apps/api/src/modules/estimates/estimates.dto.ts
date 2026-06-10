@@ -10,6 +10,7 @@ import {
   IsObject,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength,
@@ -145,6 +146,7 @@ export class CreateEstimateRequestBodyDto implements CreateEstimateRequest {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(2500)
   taxRateBasisPoints?: number;
 
   @IsOptional()
@@ -187,6 +189,7 @@ export class UpdateEstimateRequestBodyDto implements UpdateEstimateRequest {
   @IsOptional()
   @IsInt()
   @Min(0)
+  @Max(2500)
   taxRateBasisPoints?: number;
 
   @IsOptional()

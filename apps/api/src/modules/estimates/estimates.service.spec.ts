@@ -338,6 +338,28 @@ describe('EstimatesService', () => {
     expect(writeInput.totals.tax).toBe(10);
   });
 
+  it('rejects an explicit create tax rate above the company settings maximum', async () => {
+    const { service, estimatesRepository } = createService();
+
+    await expect(
+      service.createEstimate('token', 'job-1', {
+        title: 'Diagnostic',
+        taxRateBasisPoints: 2501,
+        lineItems: [
+          {
+            kind: 'serviceItem',
+            description: 'Diagnostic',
+            quantity: 1,
+            unitPrice: 100,
+            taxable: true
+          }
+        ]
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(estimatesRepository.createEstimate).not.toHaveBeenCalled();
+  });
+
   it('rejects an estimate with no line items', async () => {
     const { service } = createService();
     await expect(
@@ -698,6 +720,17 @@ describe('EstimatesService', () => {
     await expect(
       service.updateEstimate('token', 'estimate-1', { title: 'Changed' })
     ).rejects.toBeInstanceOf(ConflictException);
+    expect(estimatesRepository.replaceEstimate).not.toHaveBeenCalled();
+  });
+
+  it('rejects an explicit update tax rate above the company settings maximum', async () => {
+    const { service, estimatesRepository } = createService();
+    estimatesRepository.getEstimateById.mockResolvedValue(pendingEstimate());
+
+    await expect(
+      service.updateEstimate('token', 'estimate-1', { taxRateBasisPoints: 2501 })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
     expect(estimatesRepository.replaceEstimate).not.toHaveBeenCalled();
   });
 

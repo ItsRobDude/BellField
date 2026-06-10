@@ -373,7 +373,7 @@ export class EstimatesService {
       throw new BadRequestException('An estimate needs at least one line item.');
     }
 
-    const resolvedTaxRate = taxRateBasisPoints ?? 0;
+    const resolvedTaxRate = normalizeTaxRateBasisPoints(taxRateBasisPoints);
     // Defensively validate the discount shape. The DTO only checks that it is an
     // object, so a malformed payload like { kind: 'bogus', amount: 50 } reaches
     // here; normalize it into a known discriminated union or reject it, rather
@@ -460,10 +460,12 @@ export class EstimatesService {
 
   private async resolveCreateTaxRate(taxRateBasisPoints: number | undefined): Promise<number> {
     if (taxRateBasisPoints !== undefined) {
-      return taxRateBasisPoints;
+      return normalizeTaxRateBasisPoints(taxRateBasisPoints);
     }
     const settings = await this.companySettingsRepository.getSettings();
-    return settings.chargesSalesTax ? settings.defaultSalesTaxBasisPoints : 0;
+    return normalizeTaxRateBasisPoints(
+      settings.chargesSalesTax ? settings.defaultSalesTaxBasisPoints : 0
+    );
   }
 
   private async requireEstimate(estimateId: string): Promise<EstimateRecord> {
@@ -658,6 +660,14 @@ function toEngineDiscount(discount: EstimateDiscountValue | undefined): EngineDi
     return { kind: 'percent', basisPoints: discount.basisPoints };
   }
   return { kind: 'fixed', amountDollars: discount.amount };
+}
+
+function normalizeTaxRateBasisPoints(taxRateBasisPoints: number | undefined): number {
+  const resolvedTaxRate = taxRateBasisPoints ?? 0;
+  if (!Number.isInteger(resolvedTaxRate) || resolvedTaxRate < 0 || resolvedTaxRate > 2500) {
+    throw new BadRequestException('Estimate sales tax rate must be between 0% and 25%.');
+  }
+  return resolvedTaxRate;
 }
 
 function toLineInput(line: {
