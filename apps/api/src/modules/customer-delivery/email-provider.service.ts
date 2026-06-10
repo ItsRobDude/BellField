@@ -4,7 +4,6 @@ import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import type { EmailProviderSendInput, EmailProviderSendResult } from './customer-delivery.types';
 
 export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
-const bellfieldEstimateEmailFromName = 'BellField Estimates';
 export const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
 export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
@@ -41,7 +40,7 @@ export class EmailProviderService {
       },
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
-        from: formatFrom(bellfieldEstimateEmailFromName, bellfieldEstimateEmailFromAddress),
+        from: formatFrom(input.fromName, bellfieldEstimateEmailFromAddress),
         to: [input.to],
         reply_to: input.replyToEmail ? [input.replyToEmail] : undefined,
         subject: input.subject,
@@ -128,17 +127,28 @@ export class EmailProviderService {
 }
 
 export function buildEmailProviderInput(
-  settings: Pick<CompanySettings, 'replyToEmail'>,
-  input: Omit<EmailProviderSendInput, 'replyToEmail'>
+  settings: Pick<CompanySettings, 'companyName' | 'replyToEmail'>,
+  input: Omit<EmailProviderSendInput, 'fromName' | 'replyToEmail'>
 ): EmailProviderSendInput {
   return {
     ...input,
+    // Homeowners are the shop's customers; the shop's name fronts the email.
+    fromName: settings.companyName,
     replyToEmail: settings.replyToEmail
   };
 }
 
+// The display name lands in a mail header and is shop-edited content, so strip
+// quotes and any control characters that could break or extend the header.
 function formatFrom(name: string, email: string): string {
-  const safeName = name.replaceAll('"', '').trim();
+  const safeName = [...name]
+    .filter((character) => {
+      const code = character.charCodeAt(0);
+      return code >= 32 && code !== 127;
+    })
+    .join('')
+    .replaceAll('"', '')
+    .trim();
   return safeName ? `${safeName} <${email}>` : email;
 }
 

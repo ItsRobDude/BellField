@@ -254,11 +254,13 @@ describe('EstimateDeliveryService', () => {
         attachment: expect.objectContaining({ filename: expect.stringMatching(/\.pdf$/) })
       })
     );
+    // The shop's company name fronts the email; the From address itself is
+    // never caller- or shop-supplied.
     expect(emailProviderService.sendEstimateEmail.mock.calls[0]?.[0]).not.toHaveProperty(
       'fromEmail'
     );
-    expect(emailProviderService.sendEstimateEmail.mock.calls[0]?.[0]).not.toHaveProperty(
-      'fromName'
+    expect(emailProviderService.sendEstimateEmail.mock.calls[0]?.[0]).toEqual(
+      expect.objectContaining({ fromName: 'BellField' })
     );
     expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
       expect.objectContaining({

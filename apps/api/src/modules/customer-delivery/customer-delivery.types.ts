@@ -67,6 +67,8 @@ export type CreateOutboundMessageInput = {
 
 export type EmailProviderSendInput = {
   to: string;
+  /** From display name; the shop fronts the email, never BellField branding. */
+  fromName: string;
   replyToEmail?: string;
   subject: string;
   bodyText: string;

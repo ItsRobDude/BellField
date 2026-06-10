@@ -22,7 +22,7 @@ describe('EmailProviderService', () => {
     });
   });
 
-  it('always sends from the BellField estimate address and passes shop reply-to only', async () => {
+  it('sends from the BellField address with the shop name fronting the email', async () => {
     process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
     const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
       new Response(JSON.stringify({ id: 'resend-message-1' }), {
@@ -48,7 +48,7 @@ describe('EmailProviderService', () => {
     expect(request.headers).toEqual(
       expect.objectContaining({ Authorization: 'Bearer server-owned-key' })
     );
-    expect(body.from).toBe(`BellField Estimates <${bellfieldEstimateEmailFromAddress}>`);
+    expect(body.from).toBe(`Acme Heating <${bellfieldEstimateEmailFromAddress}>`);
     expect(body.reply_to).toEqual(['office@example.com']);
     expect(body.attachments[0]?.content).toBe(Buffer.from('%PDF test').toString('base64'));
   });
@@ -134,6 +134,7 @@ function sendInput(
 ) {
   return {
     to: 'customer@example.com',
+    fromName: 'Acme Heating',
     subject: 'Estimate from BellField',
     bodyText: 'Attached is your estimate.',
     attachment: {
