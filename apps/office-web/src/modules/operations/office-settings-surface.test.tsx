@@ -113,11 +113,43 @@ describe('OfficeSettingsSurface', () => {
     });
   });
 
-  it('rejects a blank default tax rate instead of saving it as zero', async () => {
+  it('rejects a blank default tax rate with a message about the blank, not the range', async () => {
     renderSurface();
 
     fireEvent.change(await screen.findByLabelText('Default sales tax rate'), {
       target: { value: '' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    expect(
+      await screen.findByText(
+        'Enter a default sales tax rate (use 0 if the company does not charge tax).'
+      )
+    ).toBeInTheDocument();
+    expect(mockedApi.updateOfficeCompanySettings).not.toHaveBeenCalled();
+  });
+
+  it('rejects sub-basis-point tax input instead of silently rounding it', async () => {
+    renderSurface();
+
+    fireEvent.change(await screen.findByLabelText('Default sales tax rate'), {
+      target: { value: '8.255' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
+
+    expect(
+      await screen.findByText(
+        'Default sales tax rate supports up to two decimal places (e.g. 8.25).'
+      )
+    ).toBeInTheDocument();
+    expect(mockedApi.updateOfficeCompanySettings).not.toHaveBeenCalled();
+  });
+
+  it('rejects an out-of-range default tax rate', async () => {
+    renderSurface();
+
+    fireEvent.change(await screen.findByLabelText('Default sales tax rate'), {
+      target: { value: '26' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
 

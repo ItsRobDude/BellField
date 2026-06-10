@@ -63,11 +63,18 @@ export function OfficeSettingsSurface({
   }, [load]);
 
   async function saveSettings() {
-    const defaultSalesTaxBasisPoints = parsePercentToBasisPoints(draft.defaultSalesTaxRatePercent);
-    if (defaultSalesTaxBasisPoints === null) {
-      setErrorMessage('Default sales tax rate must be between 0% and 25%.');
+    const parsedTaxRate = parsePercentToBasisPoints(draft.defaultSalesTaxRatePercent);
+    if (parsedTaxRate.kind !== 'ok') {
+      setErrorMessage(
+        parsedTaxRate.kind === 'empty'
+          ? 'Enter a default sales tax rate (use 0 if the company does not charge tax).'
+          : parsedTaxRate.kind === 'tooPrecise'
+            ? 'Default sales tax rate supports up to two decimal places (e.g. 8.25).'
+            : 'Default sales tax rate must be between 0% and 25%.'
+      );
       return;
     }
+    const defaultSalesTaxBasisPoints = parsedTaxRate.basisPoints;
 
     setIsSaving(true);
     setNoticeMessage(null);
@@ -237,16 +244,28 @@ function setDraftValue(
   setDraft((current) => ({ ...current, [key]: value }));
 }
 
-function parsePercentToBasisPoints(value: string): number | null {
+type ParsedTaxRate =
+  | { kind: 'ok'; basisPoints: number }
+  | { kind: 'empty' }
+  | { kind: 'outOfRange' }
+  | { kind: 'tooPrecise' };
+
+function parsePercentToBasisPoints(value: string): ParsedTaxRate {
   const trimmedValue = value.trim();
   if (!trimmedValue) {
-    return null;
+    return { kind: 'empty' };
   }
   const percent = Number(trimmedValue);
   if (!Number.isFinite(percent) || percent < 0 || percent > 25) {
-    return null;
+    return { kind: 'outOfRange' };
   }
-  return Math.round(percent * 100);
+  const basisPoints = percent * 100;
+  // Reject sub-basis-point input ("8.255") rather than silently rounding the
+  // user's rate to 8.26%.
+  if (!Number.isInteger(Number(basisPoints.toFixed(6)))) {
+    return { kind: 'tooPrecise' };
+  }
+  return { kind: 'ok', basisPoints: Math.round(basisPoints) };
 }
 
 function basisPointsToPercentString(basisPoints: number): string {
