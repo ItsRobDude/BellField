@@ -9,6 +9,26 @@ export interface SystemDiagnosticsCheck {
   detail?: string;
 }
 
+export interface BackupRunSummary {
+  status: 'running' | 'succeeded' | 'failed';
+  startedAt: string;
+  completedAt: string | null;
+  backupSetPath: string | null;
+  errorMessage?: string;
+}
+
+export interface BackupDiagnosticsSummary {
+  enabled: boolean;
+  backupRootPath: string;
+  retentionCount: number;
+  staleAfterHours: number;
+  latestRun: BackupRunSummary | null;
+  latestSuccessfulAt: string | null;
+  latestSuccessfulBackupSetPath: string | null;
+  stale: boolean;
+  error?: string;
+}
+
 /** Health/readiness snapshot for the System surface. Every sub-check is best-effort: a failure
  * sets its `ok=false` (+ `error`) rather than failing the whole response. */
 export interface SystemDiagnosticsResponse {
@@ -38,6 +58,7 @@ export interface SystemDiagnosticsResponse {
     readable: boolean;
     error?: string;
   };
+  backups: BackupDiagnosticsSummary;
   /** Rollup of the above as flat checks for a green/red UI. */
   checks: SystemDiagnosticsCheck[];
 }
@@ -54,6 +75,10 @@ export interface SupportExportConfigSummary {
   mediaMaxBytes: number;
   /** Whether a media token secret is configured — never its value. */
   mediaTokenSecretConfigured: boolean;
+  backupEnabled: boolean;
+  backupRootPath: string;
+  backupRetentionCount: number;
+  backupStaleAfterHours: number;
 }
 
 /** Local-first support bundle: a privacy-safe status + config snapshot the operator downloads. */

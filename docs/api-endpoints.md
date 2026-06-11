@@ -276,10 +276,10 @@ Owner/Admin trust + support surface. Read-only and privacy-conscious: never retu
 data, and never returns secrets (only health, versions, counts, and the presence or non-secret
 values of configuration). See `docs/m10-trust-admin-plan.md`.
 
-| Method | Path                     | Surface | Permission gate             | Purpose                                                                                                                                                                                                              |
-| ------ | ------------------------ | ------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/system/diagnostics`    | office  | `supportLogsBackups:view`   | Readiness snapshot: database reachability + latency, applied-migration count/latest, media-root read/write probe, app version/nodeEnv/serverTime. Best-effort — a failed sub-check reports red rather than erroring. |
-| `GET`  | `/system/support-export` | office  | `supportLogsBackups:export` | Downloadable JSON support bundle: the diagnostics snapshot plus a non-secret config summary (nodeEnv, port, DB host/name without credentials, media root path, max bytes, token-secret presence flag).               |
+| Method | Path                     | Surface | Permission gate             | Purpose                                                                                                                                                                                                                                               |
+| ------ | ------------------------ | ------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/system/diagnostics`    | office  | `supportLogsBackups:view`   | Readiness snapshot: database reachability + latency, applied-migration count/latest, media-root read/write probe, backup freshness/history status, app version/nodeEnv/serverTime. Best-effort — a failed sub-check reports red rather than erroring. |
+| `GET`  | `/system/support-export` | office  | `supportLogsBackups:export` | Downloadable JSON support bundle: the diagnostics snapshot plus a non-secret config summary (nodeEnv, port, DB host/name without credentials, media root path, backup config, max bytes, token-secret presence flag).                                 |
 
 `supportLogsBackups:view`/`:export` belong to Owner and Admin in the default role templates;
 `:configure` is Owner-only.

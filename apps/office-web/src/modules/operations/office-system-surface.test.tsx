@@ -15,6 +15,22 @@ vi.mock('@/lib/operations-company-settings-api', () => ({
 const mockedApi = vi.mocked(systemApi);
 const mockedCompanySettingsApi = vi.mocked(companySettingsApi);
 
+const currentBackups = {
+  enabled: true,
+  backupRootPath: 'C:\\BellField\\data\\backups',
+  retentionCount: 7,
+  staleAfterHours: 36,
+  latestRun: {
+    status: 'succeeded' as const,
+    startedAt: '2026-06-06T00:00:00.000Z',
+    completedAt: '2026-06-06T00:02:00.000Z',
+    backupSetPath: 'C:\\BellField\\data\\backups\\bellfield-backup-20260606-000000Z'
+  },
+  latestSuccessfulAt: '2026-06-06T00:02:00.000Z',
+  latestSuccessfulBackupSetPath: 'C:\\BellField\\data\\backups\\bellfield-backup-20260606-000000Z',
+  stale: false
+};
+
 function arrange() {
   mockedCompanySettingsApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
     deliveryStatus: {
@@ -34,6 +50,7 @@ function arrange() {
       latestAppliedAt: '2026-06-05T00:00:00.000Z'
     },
     mediaRoot: { path: '/var/bellfield/media', exists: true, writable: true, readable: true },
+    backups: currentBackups,
     checks: []
   });
 }
@@ -65,6 +82,9 @@ describe('OfficeSystemSurface', () => {
       screen.getByText('20260601_029_register_client_operation_id.up.sql')
     ).toBeInTheDocument();
     expect(screen.getByText('Read/write OK')).toBeInTheDocument();
+    expect(screen.getByText('Backups')).toBeInTheDocument();
+    expect(screen.getByText('Current')).toBeInTheDocument();
+    expect(screen.getByText('C:\\BellField\\data\\backups')).toBeInTheDocument();
     expect(screen.getByText(/BellField API v0\.0\.1/)).toBeInTheDocument();
   });
 
@@ -120,8 +140,20 @@ describe('OfficeSystemSurface', () => {
         latestAppliedAt: '2026-06-10T00:00:00.000Z'
       },
       mediaRoot: { path: '/var/bellfield/media', exists: true, writable: true, readable: true },
+      backups: {
+        ...currentBackups,
+        latestRun: null,
+        latestSuccessfulAt: null,
+        latestSuccessfulBackupSetPath: null,
+        stale: true
+      },
       checks: [
         { key: 'database', ok: true },
+        {
+          key: 'backups',
+          ok: false,
+          detail: 'No successful backup has been recorded.'
+        },
         {
           key: 'estimateTaxRates',
           ok: false,
@@ -132,6 +164,7 @@ describe('OfficeSystemSurface', () => {
     renderSurface();
 
     expect(await screen.findByText('Needs attention')).toBeInTheDocument();
+    expect(screen.getByText('No successful backup has been recorded.')).toBeInTheDocument();
     expect(
       screen.getByText('2 estimate(s) carry a stored sales tax rate above 25%.')
     ).toBeInTheDocument();

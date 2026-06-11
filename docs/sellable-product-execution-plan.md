@@ -39,8 +39,9 @@ Primary references:
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.
-- Backup/restore: zero code. The `supportLogsBackups` permission gates a
-  capability that does not exist.
+- Backup/restore: Phase 2 repo-side foundation now exists. The worker owns a
+  scheduled backup job, backup run history, backup-set retention, and a
+  packaged restore helper; the scratch-machine restore gate remains unclaimed.
 - Update path: none. All versions are a frozen `0.0.1`; no release-date
   stamping, which the update-entitlement moat requires.
 - Licensing: zero code; posture fully decided in
@@ -265,6 +266,15 @@ dated.
 
 Parallel-safe with late Phase 1. Includes the worker's job-runner substrate so
 Phase 5 reuses it instead of inventing one.
+
+Status: repo-side Phase 2 implementation landed 2026-06-11. This includes the
+worker job-runner substrate, scheduled `pg_dump` + media backups, `backup_runs`
+history, System backup freshness visibility, support-bundle config summary,
+retention, and `docs/restore-runbook.md`. A nondestructive same-machine
+validation pass is recorded in
+[phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md).
+The Phase 2 gate remains a separate scratch-machine restore drill from a real
+backup set, performed and dated.
 
 ### 2.1 Worker job-runner substrate
 

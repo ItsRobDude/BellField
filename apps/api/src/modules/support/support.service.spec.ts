@@ -12,6 +12,16 @@ const diagnostics: SystemDiagnosticsResponse = {
     latestAppliedAt: '2026-06-05T00:00:00.000Z'
   },
   mediaRoot: { path: '/tmp/media', exists: true, writable: true, readable: true },
+  backups: {
+    enabled: true,
+    backupRootPath: '/tmp/backups',
+    retentionCount: 7,
+    staleAfterHours: 36,
+    latestRun: null,
+    latestSuccessfulAt: null,
+    latestSuccessfulBackupSetPath: null,
+    stale: true
+  },
   checks: []
 };
 
@@ -77,6 +87,8 @@ describe('SupportService', () => {
     expect(bundle.config.databaseHost).not.toContain('@');
     expect(bundle.config.databaseHost).not.toMatch(/:.*:/); // no embedded credentials
     expect(bundle.config.mediaTokenSecretConfigured).toEqual(expect.any(Boolean));
+    expect(bundle.config.backupEnabled).toBe(true);
+    expect(bundle.config.backupRetentionCount).toBe(7);
 
     const serialized = JSON.stringify(bundle);
     expect(serialized).not.toContain('://'); // no raw connection string anywhere

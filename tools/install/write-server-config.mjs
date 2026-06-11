@@ -34,6 +34,7 @@ if (existsSync(outputPath) && !force) {
 const templatePath = join(repoRoot, 'bellfield-server.env.example');
 const template = readFileSync(templatePath, 'utf8');
 const mediaRoot = join(installRoot, 'data', 'media');
+const backupRoot = join(installRoot, 'data', 'backups');
 const licensePath = join(installRoot, 'data', 'license', 'bellfield-license.json');
 const databasePassword = randomSecret();
 const mediaSecret = randomSecret();
@@ -41,11 +42,13 @@ const mediaSecret = randomSecret();
 const config = template
   .replace('CHANGE_ME@127.0.0.1:5432', `${encodeURIComponent(databasePassword)}@127.0.0.1:5432`)
   .replace('C:\\BellField\\data\\media', mediaRoot)
+  .replace('C:\\BellField\\data\\backups', backupRoot)
   .replace('CHANGE_ME_TO_AT_LEAST_32_RANDOM_CHARACTERS', mediaSecret)
   .replace('C:\\BellField\\data\\license\\bellfield-license.json', licensePath);
 
 mkdirSync(dirname(outputPath), { recursive: true });
 mkdirSync(mediaRoot, { recursive: true });
+mkdirSync(backupRoot, { recursive: true });
 mkdirSync(dirname(licensePath), { recursive: true });
 writeFileSync(outputPath, config);
 

@@ -10,9 +10,12 @@ function sanitizeContext(context: WorkerLogContext | undefined): WorkerLogContex
       const normalized = key.toLowerCase();
 
       if (
+        normalized.includes('databaseurl') ||
+        normalized.includes('password') ||
         normalized.includes('payload') ||
         normalized.includes('token') ||
-        normalized.includes('secret')
+        normalized.includes('secret') ||
+        normalized.includes('credential')
       ) {
         return [key, '[REDACTED]'];
       }

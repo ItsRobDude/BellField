@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import type { SupportExportBundle, SupportExportConfigSummary } from '@bellfield/contracts';
 import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import { MediaConfigService } from '../media/media-config.service';
@@ -56,7 +58,37 @@ export class SupportService {
       mediaRootPath: this.mediaConfigService.getMediaRoot(),
       mediaMaxBytes: this.mediaConfigService.getMaxByteSize(),
       // Presence only — never the secret value.
-      mediaTokenSecretConfigured: Boolean(process.env.BELLFIELD_MEDIA_TOKEN_SECRET?.trim())
+      mediaTokenSecretConfigured: Boolean(process.env.BELLFIELD_MEDIA_TOKEN_SECRET?.trim()),
+      backupEnabled: getBoolean(process.env.BELLFIELD_BACKUP_ENABLED, true),
+      backupRootPath: resolve(
+        process.env.BELLFIELD_BACKUP_ROOT?.trim() || join(tmpdir(), 'bellfield-backups-dev')
+      ),
+      backupRetentionCount: getPositiveInteger(process.env.BELLFIELD_BACKUP_RETENTION_COUNT, 7),
+      backupStaleAfterHours: getPositiveInteger(process.env.BELLFIELD_BACKUP_STALE_AFTER_HOURS, 36)
     };
   }
+}
+
+function getBoolean(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return defaultValue;
+}
+
+function getPositiveInteger(value: string | undefined, defaultValue: number): number {
+  if (!value?.trim()) {
+    return defaultValue;
+  }
+
+  const parsed = Number(value.trim());
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
 }

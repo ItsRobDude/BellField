@@ -1,5 +1,6 @@
 import { readFileSync, unlinkSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { SystemDiagnosticsResponse } from '@bellfield/contracts';
@@ -8,6 +9,9 @@ import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import { MediaConfigService } from '../media/media-config.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
+
+const defaultBackupRetentionCount = 7;
+const defaultBackupStaleAfterHours = 36;
 
 /** Best-effort app version from the api package.json (cwd at runtime); never throws. */
 function readAppVersion(): string {
@@ -47,6 +51,7 @@ export class SystemDiagnosticsService {
     const database = await this.checkDatabase();
     const migrations = await this.checkMigrations();
     const mediaRoot = this.checkMediaRoot();
+    const backups = await this.checkBackups();
     const estimateTaxRates = await this.checkEstimateTaxRates();
     const seededAccounts = await this.checkSeededAccounts();
 
@@ -60,6 +65,7 @@ export class SystemDiagnosticsService {
       database,
       migrations,
       mediaRoot,
+      backups,
       checks: [
         { key: 'database', ok: database.reachable, detail: database.error },
         {
@@ -71,6 +77,15 @@ export class SystemDiagnosticsService {
           key: 'mediaRoot',
           ok: mediaRoot.writable && mediaRoot.readable,
           detail: mediaRoot.error
+        },
+        {
+          key: 'backups',
+          ok:
+            backups.enabled &&
+            !backups.stale &&
+            !backups.error &&
+            backups.latestRun?.status !== 'failed',
+          detail: backupCheckDetail(backups)
         },
         estimateTaxRates,
         seededAccounts
@@ -185,4 +200,159 @@ export class SystemDiagnosticsService {
       }
     }
   }
+
+  private async checkBackups(): Promise<SystemDiagnosticsResponse['backups']> {
+    const enabled = getBoolean(process.env.BELLFIELD_BACKUP_ENABLED, true);
+    const backupRootPath = resolve(
+      process.env.BELLFIELD_BACKUP_ROOT?.trim() || join(tmpdir(), 'bellfield-backups-dev')
+    );
+    const retentionCount = getPositiveInteger(
+      process.env.BELLFIELD_BACKUP_RETENTION_COUNT,
+      defaultBackupRetentionCount
+    );
+    const staleAfterHours = getPositiveInteger(
+      process.env.BELLFIELD_BACKUP_STALE_AFTER_HOURS,
+      defaultBackupStaleAfterHours
+    );
+
+    if (!enabled) {
+      return {
+        enabled,
+        backupRootPath,
+        retentionCount,
+        staleAfterHours,
+        latestRun: null,
+        latestSuccessfulAt: null,
+        latestSuccessfulBackupSetPath: null,
+        stale: true,
+        error: 'Scheduled backups are disabled.'
+      };
+    }
+
+    try {
+      const latestRunResult = await this.databaseService.query<BackupRunRow>(
+        `select status,
+                started_at as "startedAt",
+                completed_at as "completedAt",
+                backup_set_path as "backupSetPath",
+                error_message as "errorMessage"
+           from backup_runs
+          order by started_at desc
+          limit 1`
+      );
+      const latestSuccessfulResult = await this.databaseService.query<{
+        completedAt: string | Date;
+        backupSetPath: string;
+      }>(
+        `select completed_at as "completedAt",
+                backup_set_path as "backupSetPath"
+           from backup_runs
+          where status = 'succeeded'
+            and backup_set_deleted_at is null
+          order by completed_at desc
+          limit 1`
+      );
+
+      const latestRun = latestRunResult.rows[0];
+      const latestSuccessful = latestSuccessfulResult.rows[0];
+      const latestSuccessfulAt = latestSuccessful
+        ? toIsoString(latestSuccessful.completedAt)
+        : null;
+
+      return {
+        enabled,
+        backupRootPath,
+        retentionCount,
+        staleAfterHours,
+        latestRun: latestRun ? mapBackupRun(latestRun) : null,
+        latestSuccessfulAt,
+        latestSuccessfulBackupSetPath: latestSuccessful?.backupSetPath ?? null,
+        stale: isBackupStale(latestSuccessfulAt, staleAfterHours)
+      };
+    } catch {
+      return {
+        enabled,
+        backupRootPath,
+        retentionCount,
+        staleAfterHours,
+        latestRun: null,
+        latestSuccessfulAt: null,
+        latestSuccessfulBackupSetPath: null,
+        stale: true,
+        error: 'Backup run history is unavailable.'
+      };
+    }
+  }
+}
+
+type BackupRunRow = {
+  status: 'running' | 'succeeded' | 'failed';
+  startedAt: string | Date;
+  completedAt: string | Date | null;
+  backupSetPath: string | null;
+  errorMessage: string | null;
+};
+
+function mapBackupRun(row: BackupRunRow): SystemDiagnosticsResponse['backups']['latestRun'] {
+  return {
+    status: row.status,
+    startedAt: toIsoString(row.startedAt),
+    completedAt: row.completedAt ? toIsoString(row.completedAt) : null,
+    backupSetPath: row.backupSetPath,
+    errorMessage: row.errorMessage ?? undefined
+  };
+}
+
+function isBackupStale(latestSuccessfulAt: string | null, staleAfterHours: number): boolean {
+  if (!latestSuccessfulAt) {
+    return true;
+  }
+
+  const ageMs = Date.now() - new Date(latestSuccessfulAt).getTime();
+  return ageMs > staleAfterHours * 60 * 60 * 1_000;
+}
+
+function backupCheckDetail(backups: SystemDiagnosticsResponse['backups']): string | undefined {
+  if (backups.error) {
+    return backups.error;
+  }
+  if (!backups.enabled) {
+    return 'Scheduled backups are disabled.';
+  }
+  if (!backups.latestSuccessfulAt) {
+    return 'No successful backup has been recorded.';
+  }
+  if (backups.stale) {
+    return `Last successful backup is older than ${backups.staleAfterHours} hours.`;
+  }
+  if (backups.latestRun?.status === 'failed') {
+    return backups.latestRun.errorMessage
+      ? `Latest backup failed: ${backups.latestRun.errorMessage}`
+      : 'Latest backup failed.';
+  }
+  return undefined;
+}
+
+function getBoolean(value: string | undefined, defaultValue: boolean): boolean {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return defaultValue;
+}
+
+function getPositiveInteger(value: string | undefined, defaultValue: number): number {
+  if (!value?.trim()) {
+    return defaultValue;
+  }
+
+  const parsed = Number(value.trim());
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : defaultValue;
 }

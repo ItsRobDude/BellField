@@ -163,6 +163,7 @@ Operational and sequencing docs:
 
 - [docs/deployment-model.md](./docs/deployment-model.md) - self-hosted deployment constraints and hosting posture
 - [docs/self-hosted-installation-strategy.md](./docs/self-hosted-installation-strategy.md) - supported install posture, pilot setup boundary, and installer/runbook readiness gates
+- [docs/restore-runbook.md](./docs/restore-runbook.md) - Phase 2 backup-set shape, restore helper usage, and restore-drill boundary
 - [docs/milestone-implementation-plan.md](./docs/milestone-implementation-plan.md) - build order and milestone discipline
 - [docs/whats-shipped.md](./docs/whats-shipped.md) - current shipped/open/not-started snapshot
 - [docs/repo-map.md](./docs/repo-map.md) - compact repo orientation for engineers and AI contributors

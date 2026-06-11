@@ -4,7 +4,23 @@ import { ForbiddenException } from '@nestjs/common';
 import { SystemDiagnosticsService } from './system-diagnostics.service';
 
 function createService(
-  overrides: { mediaRoot?: string; estimateTaxRateCount?: number; seededAccountCount?: number } = {}
+  overrides: {
+    mediaRoot?: string;
+    estimateTaxRateCount?: number;
+    seededAccountCount?: number;
+    backupRunsUnavailable?: boolean;
+    latestBackupRun?: {
+      status: 'running' | 'succeeded' | 'failed';
+      startedAt: Date;
+      completedAt: Date | null;
+      backupSetPath: string | null;
+      errorMessage: string | null;
+    };
+    latestSuccessfulBackup?: {
+      completedAt: Date;
+      backupSetPath: string;
+    };
+  } = {}
 ) {
   const identityAccessService = {
     getAuthorizedEmployee: jest.fn().mockResolvedValue({
@@ -16,6 +32,19 @@ function createService(
   };
   const databaseService = {
     query: jest.fn(async (sql: string) => {
+      if (sql.includes('from backup_runs')) {
+        if (overrides.backupRunsUnavailable) {
+          throw new Error('relation backup_runs does not exist');
+        }
+        if (sql.includes("where status = 'succeeded'")) {
+          return {
+            rows: overrides.latestSuccessfulBackup ? [overrides.latestSuccessfulBackup] : []
+          };
+        }
+        return {
+          rows: overrides.latestBackupRun ? [overrides.latestBackupRun] : []
+        };
+      }
       if (sql.includes('order by id desc')) {
         return {
           rows: [
@@ -86,6 +115,8 @@ describe('SystemDiagnosticsService', () => {
     );
     expect(result.migrations.latestAppliedAt).toBe('2026-06-05T00:00:00.000Z');
     expect(result.app.name).toBe('BellField API');
+    expect(result.backups.stale).toBe(true);
+    expect(result.checks.find((c) => c.key === 'backups')?.ok).toBe(false);
     expect(result.checks.find((c) => c.key === 'database')?.ok).toBe(true);
   });
 
@@ -131,5 +162,41 @@ describe('SystemDiagnosticsService', () => {
     expect(result.mediaRoot.writable).toBe(false);
     expect(result.mediaRoot.error).toBeTruthy();
     expect(result.checks.find((c) => c.key === 'mediaRoot')?.ok).toBe(false);
+  });
+
+  it('reports a current successful backup as green', async () => {
+    const { service } = createService({
+      latestBackupRun: {
+        status: 'succeeded',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        backupSetPath: 'C:\\BellField\\data\\backups\\bellfield-backup-current',
+        errorMessage: null
+      },
+      latestSuccessfulBackup: {
+        completedAt: new Date(),
+        backupSetPath: 'C:\\BellField\\data\\backups\\bellfield-backup-current'
+      }
+    });
+
+    const result = await service.collectDiagnostics();
+
+    expect(result.backups.latestRun?.status).toBe('succeeded');
+    expect(result.backups.latestSuccessfulAt).toEqual(expect.any(String));
+    expect(result.backups.stale).toBe(false);
+    expect(result.checks.find((c) => c.key === 'backups')?.ok).toBe(true);
+  });
+
+  it('reports backup history failures without throwing diagnostics', async () => {
+    const { service } = createService({ backupRunsUnavailable: true });
+
+    const result = await service.collectDiagnostics();
+
+    expect(result.backups.error).toBe('Backup run history is unavailable.');
+    expect(result.checks.find((c) => c.key === 'backups')).toEqual({
+      key: 'backups',
+      ok: false,
+      detail: 'Backup run history is unavailable.'
+    });
   });
 });

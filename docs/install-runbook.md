@@ -14,6 +14,14 @@ Validated on the development machine:
 - worker runs from compiled `dist`
 - office-web builds as a Next standalone app
 - release assembly and Windows service manifest tooling exist
+- worker scheduled backup foundation exists: backup run table, configured
+  backup directory, `pg_dump` + media backup set creation, retention, and
+  System-surface freshness status
+- packaged restore helper exists; see [restore-runbook.md](./restore-runbook.md)
+- local Phase 2 validation passed on 2026-06-11 for worker tests, release
+  packaging, backup migration smoke, restore-helper refusal behavior, and
+  compiled-worker boot; see
+  [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md)
 - local compiled-release smoke passed on 2026-06-11: release API, worker,
   office-web standalone, release-packaged migrations, first-owner setup, health,
   and a scheduled-job creation path all ran against an isolated temporary
@@ -26,7 +34,8 @@ Not yet validated in this repo:
 - WinSW binary placed in `release/tools/winsw/WinSW-x64.exe`
 - reboot/service recovery proof
 - second office desktop and Android field-device proof
-- backup/restore/update gates
+- scratch-machine backup/restore drill
+- update gate
 
 ## Build The Release Folder
 
@@ -56,6 +65,15 @@ On the server, choose a fixed install root such as `C:\BellField`.
 ```
 
 This writes `C:\BellField\bellfield-server.env`, creates local data directories, and generates secrets. Do not commit or share that file.
+
+Backup defaults written by the config helper:
+
+- `BELLFIELD_BACKUP_ROOT=C:\BellField\data\backups`
+- `BELLFIELD_BACKUP_INTERVAL_MINUTES=1440`
+- `BELLFIELD_BACKUP_RETENTION_COUNT=7`
+- `BELLFIELD_BACKUP_STALE_AFTER_HOURS=36`
+
+Use a local/server-owned backup directory first. A network path is allowed only after a dated backup and restore drill from that exact path.
 
 ## Provision PostgreSQL
 
@@ -139,6 +157,25 @@ Expected shape:
 ```
 
 `degraded` means the API could not confirm database reachability, bundled migration readability, or zero pending migrations. Detailed diagnostics remain behind the authenticated System surface.
+
+## Backup And Restore
+
+The worker creates scheduled backup sets under `BELLFIELD_BACKUP_ROOT`.
+Each set includes:
+
+- `database.dump` from PostgreSQL custom-format `pg_dump`
+- a recursive copy of `BELLFIELD_MEDIA_ROOT`
+- `manifest.json`
+
+The System surface shows the latest successful backup and warns when it is stale.
+
+Restore is assisted and destructive. Use:
+
+```powershell
+.\release\runtime\node\node.exe .\release\tools\install\restore-backup.mjs --release-root=.\release --install-root=C:\BellField --backup-set=<backup-set-path> --confirm=RESTORE
+```
+
+See [restore-runbook.md](./restore-runbook.md) before running a restore.
 
 ## Uninstall / Repair Notes
 

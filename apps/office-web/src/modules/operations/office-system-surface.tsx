@@ -35,6 +35,38 @@ const gridStyle: CSSProperties = {
 const labelStyle: CSSProperties = { fontSize: 12, color: '#5b6672', textTransform: 'uppercase' };
 const valueStyle: CSSProperties = { fontSize: 14, color: '#1f2933', marginTop: 4 };
 
+function formatDateTime(value: string | null): string {
+  if (!value) {
+    return 'Never';
+  }
+  return new Date(value).toLocaleString();
+}
+
+function backupStatusText(backups: SystemDiagnosticsResponse['backups']): string {
+  if (!backups.enabled) {
+    return 'Disabled';
+  }
+  if (backups.error) {
+    return 'Needs attention';
+  }
+  if (backups.latestRun?.status === 'running') {
+    return 'Running';
+  }
+  if (backups.latestRun?.status === 'failed') {
+    return 'Last run failed';
+  }
+  if (backups.stale) {
+    return 'Stale';
+  }
+  return 'Current';
+}
+
+function backupStatusOk(backups: SystemDiagnosticsResponse['backups']): boolean {
+  return (
+    backups.enabled && !backups.error && !backups.stale && backups.latestRun?.status !== 'failed'
+  );
+}
+
 // Any red rollup check renders here, so data-audit checks that have no card
 // of their own (e.g. legacy estimate tax rates) are still owner-visible
 // instead of living only in the support bundle.
@@ -195,6 +227,19 @@ export function OfficeSystemSurface({
               </div>
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
                 {diagnostics.mediaRoot.path}
+              </div>
+            </div>
+            <div style={cardStyle}>
+              <div style={labelStyle}>Backups</div>
+              <div style={valueStyle}>
+                <StatusDot ok={backupStatusOk(diagnostics.backups)} />
+                {backupStatusText(diagnostics.backups)}
+              </div>
+              <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
+                Last successful: {formatDateTime(diagnostics.backups.latestSuccessfulAt)}
+              </div>
+              <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
+                {diagnostics.backups.backupRootPath}
               </div>
             </div>
             <div style={cardStyle}>

@@ -126,6 +126,26 @@ Read when: assembling or testing a BellField server release artifact, or checkin
 
 Does not own: the broader install posture (`self-hosted-installation-strategy.md`) or deployment philosophy (`deployment-model.md`). It is not yet proof that the stranger install gate has passed.
 
+### [restore-runbook.md](./restore-runbook.md)
+
+Audience: contributors and assisted-install operators validating backup and restore.
+
+Purpose: Phase 2 backup-set shape, supported backup destination boundary, restore helper usage, post-restore checks, and remaining scratch-machine gate.
+
+Read when: changing backup/restore code, testing recovery, or deciding whether a backup destination has been proven.
+
+Does not own: the broader install posture (`self-hosted-installation-strategy.md`) or update rollback flow.
+
+### [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md)
+
+Audience: contributors checking what Phase 2 backup/restore validation has actually been run.
+
+Purpose: dated evidence for the nondestructive same-machine Phase 2 validation: worker tests, release packaging, migration smoke, restore-helper refusal behavior, and compiled-worker boot, plus the host PostgreSQL-tool limitation.
+
+Read when: deciding whether Phase 2 repo-side backup/restore foundations are ready to build on, or distinguishing local proof from the unclaimed scratch-machine restore gate.
+
+Does not own: the restore recipe (`restore-runbook.md`) or broader install posture (`self-hosted-installation-strategy.md`).
+
 ### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Audience: contributors checking what Phase 1 install validation has actually been run.

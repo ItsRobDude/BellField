@@ -1,19 +1,70 @@
 import { getWorkerRuntimeConfig } from './common/config/runtime-config';
+import { WorkerDatabase } from './common/database';
 import { workerLog } from './common/logger';
+import { BackupRunsRepository } from './jobs/backup/backup-runs.repository';
+import { createScheduledBackupJob } from './jobs/backup/backup-job';
+import { BackupService } from './jobs/backup/backup-service';
+import { JobRunner, type WorkerJob } from './jobs/job-runner';
 
 const heartbeatMs = 60_000;
 
 function startWorker(): void {
   const runtimeConfig = getWorkerRuntimeConfig();
+  const database = new WorkerDatabase(runtimeConfig.databaseUrl);
+  const jobs: WorkerJob[] = [
+    {
+      name: 'heartbeat',
+      intervalMs: heartbeatMs,
+      runOnStart: true,
+      run: () => {
+        workerLog('info', 'Worker heartbeat.');
+      }
+    }
+  ];
+
+  if (runtimeConfig.backup.enabled) {
+    const backupRepository = new BackupRunsRepository(database);
+    const backupService = new BackupService(
+      {
+        databaseUrl: runtimeConfig.databaseUrl,
+        mediaRoot: runtimeConfig.mediaRoot,
+        backupRoot: runtimeConfig.backup.root,
+        retentionCount: runtimeConfig.backup.retentionCount,
+        postgresBin: runtimeConfig.backup.postgresBin,
+        pgDumpPath: runtimeConfig.backup.pgDumpPath
+      },
+      backupRepository
+    );
+    jobs.push(
+      createScheduledBackupJob({
+        backupService,
+        intervalMs: runtimeConfig.backup.intervalMs
+      })
+    );
+  }
+
+  const runner = new JobRunner(jobs);
 
   workerLog('info', 'Worker started.', {
     pid: process.pid,
-    nodeEnv: runtimeConfig.nodeEnv
+    nodeEnv: runtimeConfig.nodeEnv,
+    backupEnabled: runtimeConfig.backup.enabled,
+    backupIntervalMs: runtimeConfig.backup.intervalMs,
+    backupRetentionCount: runtimeConfig.backup.retentionCount
   });
 
-  setInterval(() => {
-    workerLog('info', 'Worker heartbeat.');
-  }, heartbeatMs);
+  runner.start();
+
+  async function shutdown(signalName: string): Promise<void> {
+    workerLog('info', 'Worker shutdown requested.', { signalName });
+    await runner.stop();
+    await database.close();
+    workerLog('info', 'Worker stopped.');
+    process.exit(0);
+  }
+
+  process.on('SIGTERM', () => void shutdown('SIGTERM'));
+  process.on('SIGINT', () => void shutdown('SIGINT'));
 }
 
 process.on('unhandledRejection', (reason) => {

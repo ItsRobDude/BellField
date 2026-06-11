@@ -146,6 +146,8 @@ Current Phase 1 implementation note: the repo now contains an assisted install r
 
 A same-machine compiled-release smoke passed on 2026-06-11 and is recorded in [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md). Because all available Windows machines have some existing development tooling, the clean-machine gate remains a later confidence gate rather than a blocker for continued product work.
 
+Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
+
 ---
 
 ## 7. Minimum Readiness Gates

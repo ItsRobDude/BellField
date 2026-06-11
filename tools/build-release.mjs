@@ -105,6 +105,7 @@ writeFileSync(
     '2. Run tools\\install\\write-server-config.mjs to create install-local paths when needed.',
     '3. Run apps\\api\\scripts\\migrations\\up.mjs after PostgreSQL is provisioned.',
     '4. Register services with tools\\install\\install-windows-services.ps1.',
+    '5. Restore, when needed, with tools\\install\\restore-backup.mjs and docs/restore-runbook.md.',
     '',
     'See docs/install-runbook.md in the source tree for the current supported runbook.'
   ].join('\r\n')
