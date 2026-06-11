@@ -14,6 +14,10 @@ Validated on the development machine:
 - worker runs from compiled `dist`
 - office-web builds as a Next standalone app
 - release assembly and Windows service manifest tooling exist
+- local compiled-release smoke passed on 2026-06-11: release API, worker,
+  office-web standalone, release-packaged migrations, first-owner setup, health,
+  and a scheduled-job creation path all ran against an isolated temporary
+  database; see [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Not yet validated in this repo:
 

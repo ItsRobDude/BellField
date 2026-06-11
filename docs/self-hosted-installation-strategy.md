@@ -144,6 +144,8 @@ The customer should not need to know the repo's package manager or development c
 
 Current Phase 1 implementation note: the repo now contains an assisted install runbook and release/service tooling in [install-runbook.md](./install-runbook.md). That is a repo-side install path, not yet a passed clean-machine self-serve installer gate.
 
+A same-machine compiled-release smoke passed on 2026-06-11 and is recorded in [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md). Because all available Windows machines have some existing development tooling, the clean-machine gate remains a later confidence gate rather than a blocker for continued product work.
+
 ---
 
 ## 7. Minimum Readiness Gates

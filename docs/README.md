@@ -126,6 +126,16 @@ Read when: assembling or testing a BellField server release artifact, or checkin
 
 Does not own: the broader install posture (`self-hosted-installation-strategy.md`) or deployment philosophy (`deployment-model.md`). It is not yet proof that the stranger install gate has passed.
 
+### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
+
+Audience: contributors checking what Phase 1 install validation has actually been run.
+
+Purpose: dated evidence for the nondestructive same-machine compiled-release smoke: release API, worker, office-web standalone, release migrations, first-owner setup, health readiness, and scheduled-job creation against an isolated temporary database.
+
+Read when: deciding whether Phase 1 repo-side install foundations are ready to build on, or distinguishing local smoke proof from the unclaimed clean-machine stranger gate.
+
+Does not own: the install recipe (`install-runbook.md`) or the broader install posture (`self-hosted-installation-strategy.md`).
+
 ### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
 
 Audience: contributors working on licensing, distribution, updates, or commercial protection posture.

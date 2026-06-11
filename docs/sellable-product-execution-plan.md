@@ -163,8 +163,12 @@ Status: repo-side Phase 1 implementation landed 2026-06-11. This includes
 first-owner setup, meaningful health/schema readiness, compiled worker and
 office standalone build wiring, release assembly, unified server-config
 template, Windows service manifests, PostgreSQL provisioning helper, and
-`docs/install-runbook.md`. The clean-machine stranger gate remains deliberately
-unclaimed because only the development machine was available for validation.
+`docs/install-runbook.md`. A nondestructive same-machine compiled-release
+smoke passed on 2026-06-11; see
+[phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md).
+The clean-machine stranger gate remains deliberately unclaimed because only
+machines with some existing development tooling were available. That later
+gate should not block continued product work.
 
 ### 1.1 First-admin setup flow (parallel-safe; pure product code)
 
