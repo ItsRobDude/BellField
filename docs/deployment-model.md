@@ -218,12 +218,14 @@ The API now stores media blobs on the server filesystem.
 
 Runtime configuration:
 
+- `BOOTSTRAP_SEED_DATA` - explicit development-only seed toggle; production startup refuses `true`
+- `BELLFIELD_OFFICE_ORIGINS` - comma-separated office-web origins allowed to call the API in production
 - `BELLFIELD_MEDIA_ROOT` - absolute path where uploaded media blobs are stored
 - `BELLFIELD_MEDIA_TOKEN_SECRET` - long random secret used to sign upload/download tokens
 - `BELLFIELD_MEDIA_MAX_BYTES` - optional raw upload size limit, default 50 MB
 - `BELLFIELD_MEDIA_TOKEN_TTL_SECONDS` - optional signed token lifetime, default 300 seconds
 
-Production must set `BELLFIELD_MEDIA_ROOT` and `BELLFIELD_MEDIA_TOKEN_SECRET`.
+Production must set `BELLFIELD_OFFICE_ORIGINS`, `BELLFIELD_MEDIA_ROOT`, and `BELLFIELD_MEDIA_TOKEN_SECRET`.
 The token secret must be at least 32 characters and cannot be the dev fallback
 or sample placeholder value.
 Development and test runs may fall back to temporary local values, but that fallback is not a deployment posture.

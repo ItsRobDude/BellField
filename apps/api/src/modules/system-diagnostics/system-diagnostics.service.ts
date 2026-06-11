@@ -48,6 +48,7 @@ export class SystemDiagnosticsService {
     const migrations = await this.checkMigrations();
     const mediaRoot = this.checkMediaRoot();
     const estimateTaxRates = await this.checkEstimateTaxRates();
+    const seededAccounts = await this.checkSeededAccounts();
 
     return {
       serverTime: new Date().toISOString(),
@@ -71,9 +72,36 @@ export class SystemDiagnosticsService {
           ok: mediaRoot.writable && mediaRoot.readable,
           detail: mediaRoot.error
         },
-        estimateTaxRates
+        estimateTaxRates,
+        seededAccounts
       ]
     };
+  }
+
+  /**
+   * Seeded local accounts are useful in development but dangerous if they make
+   * it to a production-like machine. Surface them without exposing names.
+   */
+  private async checkSeededAccounts(): Promise<SystemDiagnosticsResponse['checks'][number]> {
+    try {
+      const result = await this.databaseService.query<{ count: number }>(
+        `select count(*)::int as count
+         from employees
+         where is_active = true
+           and lower(email) like '%@bellfield.local'`
+      );
+      const count = Number(result.rows[0]?.count ?? 0);
+      return count === 0
+        ? { key: 'seededAccounts', ok: true }
+        : {
+            key: 'seededAccounts',
+            ok: false,
+            detail: `${count} active seeded BellField account(s) still exist.`
+          };
+    } catch {
+      // Connectivity problems are already reported by the database check.
+      return { key: 'seededAccounts', ok: true };
+    }
   }
 
   /**

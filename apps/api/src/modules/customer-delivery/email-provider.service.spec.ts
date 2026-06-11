@@ -17,8 +17,10 @@ describe('EmailProviderService', () => {
     const service = new EmailProviderService();
 
     await expect(service.sendEstimateEmail(sendInput())).resolves.toEqual({
-      kind: 'notConfigured',
-      message: 'BellField estimate email delivery is not configured.'
+      kind: 'failed',
+      code: 'notConfigured',
+      retryable: false,
+      message: 'BellField estimate email delivery failed. Try again or contact support.'
     });
   });
 
@@ -97,7 +99,9 @@ describe('EmailProviderService', () => {
     const service = new EmailProviderService();
 
     await expect(service.sendEstimateEmail(sendInput())).resolves.toEqual({
-      kind: 'error',
+      kind: 'failed',
+      code: 'deliveryRejected',
+      retryable: false,
       message: 'BellField estimate email delivery failed. Try again or contact support.'
     });
   });

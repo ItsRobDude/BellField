@@ -4,7 +4,6 @@ import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import type { EmailProviderSendInput, EmailProviderSendResult } from './customer-delivery.types';
 
 export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
-export const deliveryNotConfiguredMessage = 'BellField estimate email delivery is not configured.';
 export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
 const safeNeedsSetupMessage =
@@ -23,12 +22,18 @@ type ResendDomainSummary = {
 
 @Injectable()
 export class EmailProviderService {
+  readonly providerKey = 'resend' as const;
   private readonly logger = new Logger(EmailProviderService.name);
 
   async sendEstimateEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
     const apiKey = getApiRuntimeConfig().estimateEmailResendApiKey;
     if (!apiKey) {
-      return { kind: 'notConfigured', message: deliveryNotConfiguredMessage };
+      return {
+        kind: 'failed',
+        code: 'notConfigured',
+        retryable: false,
+        message: deliveryFailedMessage
+      };
     }
 
     const response = await fetch('https://api.resend.com/emails', {
@@ -56,11 +61,18 @@ export class EmailProviderService {
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Email provider request failed.';
       this.logger.warn(`BellField estimate email delivery request failed: ${message}`);
-      return { error: deliveryFailedMessage };
+      return {
+        failed: {
+          kind: 'failed' as const,
+          code: 'deliveryUnavailable' as const,
+          retryable: true,
+          message: deliveryFailedMessage
+        }
+      };
     });
 
-    if ('error' in response) {
-      return { kind: 'error', message: response.error };
+    if ('failed' in response) {
+      return response.failed;
     }
 
     const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
@@ -69,7 +81,9 @@ export class EmailProviderService {
         `BellField estimate email delivery returned HTTP ${response.status}: ${body.message ?? 'no response message'}`
       );
       return {
-        kind: 'error',
+        kind: 'failed',
+        code: response.status >= 500 ? 'deliveryUnavailable' : 'deliveryRejected',
+        retryable: response.status >= 500,
         message: deliveryFailedMessage
       };
     }
@@ -139,7 +153,7 @@ export function buildEmailProviderInput(
 }
 
 // The display name lands in a mail header and is shop-edited content, so strip
-// quotes and any control characters that could break or extend the header.
+// control characters and quote/escape characters that could break the header.
 function formatFrom(name: string, email: string): string {
   const safeName = [...name]
     .filter((character) => {

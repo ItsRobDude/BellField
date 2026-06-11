@@ -3,7 +3,9 @@ import { join } from 'node:path';
 import { ForbiddenException } from '@nestjs/common';
 import { SystemDiagnosticsService } from './system-diagnostics.service';
 
-function createService(overrides: { mediaRoot?: string } = {}) {
+function createService(
+  overrides: { mediaRoot?: string; estimateTaxRateCount?: number; seededAccountCount?: number } = {}
+) {
   const identityAccessService = {
     getAuthorizedEmployee: jest.fn().mockResolvedValue({
       id: 'owner-1',
@@ -14,9 +16,6 @@ function createService(overrides: { mediaRoot?: string } = {}) {
   };
   const databaseService = {
     query: jest.fn(async (sql: string) => {
-      if (sql.includes('count(*)')) {
-        return { rows: [{ count: 29 }] };
-      }
       if (sql.includes('order by id desc')) {
         return {
           rows: [
@@ -26,6 +25,15 @@ function createService(overrides: { mediaRoot?: string } = {}) {
             }
           ]
         };
+      }
+      if (sql.includes('from schema_migrations')) {
+        return { rows: [{ count: 29 }] };
+      }
+      if (sql.includes('from estimates')) {
+        return { rows: [{ count: overrides.estimateTaxRateCount ?? 0 }] };
+      }
+      if (sql.includes('from employees')) {
+        return { rows: [{ count: overrides.seededAccountCount ?? 0 }] };
       }
       return { rows: [] }; // select 1
     })
@@ -79,6 +87,18 @@ describe('SystemDiagnosticsService', () => {
     expect(result.migrations.latestAppliedAt).toBe('2026-06-05T00:00:00.000Z');
     expect(result.app.name).toBe('BellField API');
     expect(result.checks.find((c) => c.key === 'database')?.ok).toBe(true);
+  });
+
+  it('surfaces active seeded BellField accounts as an owner-visible check', async () => {
+    const { service } = createService({ seededAccountCount: 2 });
+
+    const result = await service.collectDiagnostics();
+
+    expect(result.checks.find((check) => check.key === 'seededAccounts')).toEqual({
+      key: 'seededAccounts',
+      ok: false,
+      detail: '2 active seeded BellField account(s) still exist.'
+    });
   });
 
   it('never throws when the database is unreachable — reports it instead', async () => {

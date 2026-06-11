@@ -53,6 +53,8 @@ Root runtime settings:
 - Copy `.env.example` values into your local shell or app-specific `.env` files when running the API or worker.
 - `DATABASE_URL` is required for API runtime and migration scripts.
 - `PORT` controls the local API listen port.
+- `BOOTSTRAP_SEED_DATA=true` opts local development into seeded demo accounts; omitted means no seed bootstrap.
+- `BELLFIELD_OFFICE_ORIGINS` lists allowed office-web origins in production. Development/test are permissive when it is omitted.
 - `BELLFIELD_MEDIA_ROOT` controls where uploaded media blobs are stored.
 - `BELLFIELD_MEDIA_TOKEN_SECRET` signs short-lived upload/download tokens for media blobs.
 - `BELLFIELD_MEDIA_MAX_BYTES` controls the raw blob upload limit. The default is 50 MB.

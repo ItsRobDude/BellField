@@ -59,6 +59,7 @@ export type ApiRuntimeConfig = {
   port: number;
   databaseUrl: string;
   bootstrapSeedData: boolean;
+  officeOrigins: string[] | true;
   estimateEmailResendApiKey?: string;
 };
 
@@ -88,6 +89,16 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
   }
 
   const port = resolvePort(process.env.PORT, isProduction, problems);
+  const bootstrapSeedData = getBoolean(process.env.BOOTSTRAP_SEED_DATA, false);
+  const officeOrigins = resolveOfficeOrigins(
+    process.env.BELLFIELD_OFFICE_ORIGINS,
+    isProduction,
+    problems
+  );
+
+  if (isProduction && bootstrapSeedData) {
+    problems.push('BOOTSTRAP_SEED_DATA must not be true in production.');
+  }
 
   if (problems.length > 0) {
     throw new Error(
@@ -103,8 +114,33 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     nodeEnv,
     port,
     databaseUrl,
-    bootstrapSeedData: getBoolean(process.env.BOOTSTRAP_SEED_DATA, nodeEnv !== 'production'),
+    bootstrapSeedData,
+    officeOrigins,
     estimateEmailResendApiKey:
       process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY?.trim() || undefined
   };
+}
+
+function resolveOfficeOrigins(
+  value: string | undefined,
+  isProduction: boolean,
+  problems: string[]
+): string[] | true {
+  const origins =
+    value
+      ?.split(',')
+      .map((origin) => origin.trim())
+      .filter(Boolean) ?? [];
+
+  if (origins.length > 0) {
+    return origins;
+  }
+
+  if (isProduction) {
+    problems.push(
+      'BELLFIELD_OFFICE_ORIGINS must list the allowed office-web origin(s) in production.'
+    );
+  }
+
+  return true;
 }

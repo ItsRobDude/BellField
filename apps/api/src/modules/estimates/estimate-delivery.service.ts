@@ -6,6 +6,7 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
+import { estimateEmailMaxAttachmentBytes } from '@bellfield/contracts';
 import type {
   CompanySettings,
   CustomerDocumentSnapshotSummary,
@@ -24,7 +25,7 @@ import type {
 import { CustomerDocumentStorageService } from '../customer-delivery/customer-document-storage.service';
 import {
   buildEmailProviderInput,
-  deliveryNotConfiguredMessage,
+  deliveryFailedMessage,
   EmailProviderService
 } from '../customer-delivery/email-provider.service';
 import { EstimatePdfRendererService } from '../customer-delivery/estimate-pdf-renderer.service';
@@ -152,7 +153,7 @@ export class EstimateDeliveryService {
     const intent = await this.customerDeliveryRepository.createEstimateSendIntent({
       id: outboundMessageId,
       channel: 'email',
-      provider: 'resend',
+      provider: this.emailProviderService.providerKey,
       status: 'queued',
       jobId: estimate.jobId,
       estimateId: estimate.id,
@@ -182,7 +183,7 @@ export class EstimateDeliveryService {
         billToCustomer,
         generatedAt
       });
-      if (pdfBytes.byteLength > 15_000_000) {
+      if (pdfBytes.byteLength > estimateEmailMaxAttachmentBytes) {
         throw new BadRequestException('Estimate PDF is too large to email.');
       }
 
@@ -267,7 +268,7 @@ export class EstimateDeliveryService {
     } else {
       outboundMessage = await this.customerDeliveryRepository.markOutboundMessageFailed(
         outboundMessageId,
-        providerResult.message,
+        providerResult.code,
         completedAt
       );
     }
@@ -340,8 +341,10 @@ export class EstimateDeliveryService {
       return await this.emailProviderService.sendEstimateEmail(input);
     } catch (error) {
       return {
-        kind: 'error' as const,
-        message: error instanceof Error ? error.message : 'Email delivery failed.'
+        kind: 'failed' as const,
+        code: 'deliveryUnavailable' as const,
+        retryable: true,
+        message: error instanceof Error ? error.message : deliveryFailedMessage
       };
     }
   }
@@ -461,13 +464,22 @@ function deliveryFailureCode(
   if (record.status !== 'failed') {
     return undefined;
   }
-  if (record.providerError === deliveryNotConfiguredMessage) {
-    return 'notConfigured';
+  return (
+    parseFailureCode(record.providerError) ??
+    (record.providerError ? 'deliveryUnavailable' : 'unknown')
+  );
+}
+
+function parseFailureCode(value: string | undefined): OutboundMessageFailureCode | undefined {
+  if (
+    value === 'notConfigured' ||
+    value === 'deliveryUnavailable' ||
+    value === 'deliveryRejected' ||
+    value === 'unknown'
+  ) {
+    return value;
   }
-  if (record.providerError) {
-    return 'deliveryUnavailable';
-  }
-  return 'unknown';
+  return undefined;
 }
 
 function deliverySummaryMessage(

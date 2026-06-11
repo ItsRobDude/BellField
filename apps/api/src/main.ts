@@ -18,8 +18,8 @@ async function bootstrap() {
   const runtimeConfig = getApiRuntimeConfig();
   const mediaConfig = app.get(MediaConfigService);
 
-  // Keep local app-to-api wiring simple while the persistent auth/session layer is still forming.
-  app.enableCors({ origin: true });
+  // Dev/test stay permissive; production uses the configured office-web origin allowlist.
+  app.enableCors({ origin: runtimeConfig.officeOrigins });
   app.useBodyParser('raw', {
     type: 'application/octet-stream',
     limit: mediaConfig.getMaxByteSize()

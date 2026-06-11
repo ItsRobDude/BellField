@@ -121,7 +121,8 @@ Narrow by design. The relay is not a generic email API:
 
 - authenticate: relay token → shop identity + entitlement
 - `send estimate document`: rendered subject, body text, recipient, and the
-  PDF; the relay composes the actual MIME message itself in the BellField
+  PDF, bounded by the shared `estimateEmailMaxAttachmentBytes` contract
+  constant; the relay composes the actual MIME message itself in the BellField
   shape — callers cannot construct arbitrary email
 - `delivery status`: poll per outbound message; returns sent / delivered /
   bounced / complained / failed with sanitized summaries

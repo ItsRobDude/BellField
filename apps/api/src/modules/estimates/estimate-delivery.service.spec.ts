@@ -104,6 +104,7 @@ function createDeliveryService() {
     })
   };
   const emailProviderService = {
+    providerKey: 'resend' as const,
     sendEstimateEmail: jest.fn().mockResolvedValue({
       kind: 'sent',
       providerMessageId: 'resend-message-1'
@@ -343,7 +344,9 @@ describe('EstimateDeliveryService', () => {
   it('marks provider failures as failed delivery records with a timeline entry', async () => {
     const { service, emailProviderService, customerDeliveryRepository } = createDeliveryService();
     emailProviderService.sendEstimateEmail.mockResolvedValue({
-      kind: 'error',
+      kind: 'failed',
+      code: 'deliveryRejected',
+      retryable: false,
       message: 'Provider rejected request.'
     });
 
@@ -353,14 +356,14 @@ describe('EstimateDeliveryService', () => {
 
     expect(customerDeliveryRepository.markOutboundMessageFailed).toHaveBeenCalledWith(
       expect.any(String),
-      'Provider rejected request.',
+      'deliveryRejected',
       expect.any(String)
     );
     expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'estimateDeliveryFailed' })
     );
     expect(result.outboundMessage.status).toBe('failed');
-    expect(result.outboundMessage.failureCode).toBe('deliveryUnavailable');
+    expect(result.outboundMessage.failureCode).toBe('deliveryRejected');
     expect(result.outboundMessage.deliveryMessage).toBe(
       'Email was not delivered. Try again or contact BellField support.'
     );
@@ -452,7 +455,9 @@ describe('EstimateDeliveryService', () => {
   it('still fails loudly when recording breaks after a provider failure', async () => {
     const { service, customerDeliveryRepository, emailProviderService } = createDeliveryService();
     emailProviderService.sendEstimateEmail.mockResolvedValue({
-      kind: 'error',
+      kind: 'failed',
+      code: 'deliveryUnavailable',
+      retryable: true,
       message: 'Provider rejected request.'
     });
     customerDeliveryRepository.addEstimateDeliveryTimeline.mockRejectedValue(

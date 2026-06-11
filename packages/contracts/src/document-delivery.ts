@@ -1,6 +1,7 @@
 export type CustomerDocumentType = 'estimate' | 'invoice';
 export type OutboundMessageChannel = 'email';
 export type OutboundMessageProvider = 'resend';
+export const estimateEmailMaxAttachmentBytes = 15_000_000;
 export type OutboundMessageStatus =
   | 'queued'
   | 'sent'

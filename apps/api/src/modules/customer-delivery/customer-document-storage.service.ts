@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { createHash } from 'node:crypto';
-import { mkdir, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import * as path from 'node:path';
 import { MediaConfigService } from '../media/media-config.service';
 
@@ -27,9 +27,19 @@ export class CustomerDocumentStorageService {
     await writeFile(absolutePath, input.bytes);
     return {
       storagePath: relativePath,
-      sha256: createHash('sha256').update(input.bytes).digest('hex'),
+      sha256: sha256(input.bytes),
       byteSize: input.bytes.byteLength
     };
+  }
+
+  async readEstimatePdf(storagePath: string, expectedSha256: string): Promise<Buffer> {
+    const absolutePath = this.resolveUnderMediaRoot(storagePath);
+    const bytes = await readFile(absolutePath);
+    const actualSha256 = sha256(bytes);
+    if (actualSha256 !== expectedSha256) {
+      throw new Error('Stored estimate PDF hash did not match its delivery snapshot.');
+    }
+    return bytes;
   }
 
   private resolveUnderMediaRoot(relativePath: string): string {
@@ -41,6 +51,10 @@ export class CustomerDocumentStorageService {
     }
     return candidate;
   }
+}
+
+function sha256(bytes: Buffer): string {
+  return createHash('sha256').update(bytes).digest('hex');
 }
 
 function safePathSegment(value: string, label: string): string {

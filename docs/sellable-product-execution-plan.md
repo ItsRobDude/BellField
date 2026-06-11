@@ -30,14 +30,14 @@ Primary references:
   [milestone-implementation-plan.md](./milestone-implementation-plan.md); this
   plan owns sellability infrastructure only.
 
-## Current reality (audited 2026-06-10)
+## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11)
 
 - No deployable artifact: no installer, Dockerfile, service registration, or
   release CI job. `apps/api` `start` runs `nest start` (dev toolchain at
   runtime); `apps/worker` runs via `tsx`.
-- First-user paradox: with seeding off a fresh install has zero accounts and
-  no way to create one; with `NODE_ENV` unset the API defaults to development
-  and seeds owner logins with publicly-known `bellfield-*` passwords.
+- First-user paradox is now narrowed to account creation: seed bootstrap is
+  explicit opt-in and production refuses it, but a fresh install still has zero
+  accounts and no first-owner setup flow until Phase 1.1.
 - Backup/restore: zero code. The `supportLogsBackups` permission gates a
   capability that does not exist.
 - Update path: none. All versions are a frozen `0.0.1`; no release-date
@@ -45,18 +45,22 @@ Primary references:
 - Licensing: zero code; posture fully decided in
   `asset-protection-and-licensing.md`.
 - `apps/worker`: a heartbeat stub — no DB access, no dependencies, no jobs.
-- Live contradictions: CORS `origin: true` in all environments
-  (`apps/api/src/main.ts`); nothing enforces that the interim Resend key stays
-  off sold installs.
-- Genuinely ready: the email adapter seam, outbound-message status vocabulary,
-  and snapshot-at-queue-time semantics already match the relay plan.
+- Live contradictions after Phase 0: the interim Resend key remains a
+  BellField-operated-only bridge until Phase 5, and there is still no
+  installable artifact until Phase 1.
+- Genuinely ready: explicit seed posture, production CORS allowlist,
+  structured email failure codes, provider-key seam, shared email attachment
+  cap, snapshot-at-queue-time semantics, and snapshot read/verify path.
 
 ---
 
-## Phase 0 — Contradiction closures and relay prep
+## Phase 0 — Contradiction closures and relay prep (completed 2026-06-11)
 
 Small, independent code slices. No installer or licensing dependencies. All
 can land on one branch.
+
+Status: completed in this repo. The slice details below are retained as the
+implementation record and as regression criteria for future changes.
 
 ### 0.1 Seed-data and dev-mode guard
 

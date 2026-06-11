@@ -1,6 +1,7 @@
 import type {
   CustomerDocumentSnapshotSummary,
   CustomerDocumentType,
+  OutboundMessageFailureCode,
   OutboundMessageProvider,
   OutboundMessageStatus
 } from '@bellfield/contracts';
@@ -82,5 +83,9 @@ export type EmailProviderSendInput = {
 
 export type EmailProviderSendResult =
   | { kind: 'sent'; providerMessageId?: string }
-  | { kind: 'notConfigured'; message: string }
-  | { kind: 'error'; message: string };
+  | {
+      kind: 'failed';
+      code: OutboundMessageFailureCode;
+      retryable: boolean;
+      message: string;
+    };

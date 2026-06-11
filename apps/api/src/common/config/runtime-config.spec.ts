@@ -9,6 +9,7 @@ describe('getApiRuntimeConfig', () => {
     'PORT',
     'DATABASE_URL',
     'BOOTSTRAP_SEED_DATA',
+    'BELLFIELD_OFFICE_ORIGINS',
     'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY'
   ] as const;
   const original: Record<string, string | undefined> = {};
@@ -37,7 +38,8 @@ describe('getApiRuntimeConfig', () => {
     expect(config.nodeEnv).toBe('development');
     expect(config.port).toBe(3001);
     expect(config.databaseUrl).toBe(defaultDatabaseUrl);
-    expect(config.bootstrapSeedData).toBe(true);
+    expect(config.bootstrapSeedData).toBe(false);
+    expect(config.officeOrigins).toBe(true);
     expect(config.estimateEmailResendApiKey).toBeUndefined();
   });
 
@@ -48,6 +50,16 @@ describe('getApiRuntimeConfig', () => {
 
     expect(config.nodeEnv).toBe('test');
     expect(config.databaseUrl).toBe(defaultDatabaseUrl);
+    expect(config.bootstrapSeedData).toBe(false);
+    expect(config.officeOrigins).toBe(true);
+  });
+
+  it('runs seed bootstrap only when explicitly enabled outside production', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.BOOTSTRAP_SEED_DATA = 'true';
+
+    const config = getApiRuntimeConfig();
+
     expect(config.bootstrapSeedData).toBe(true);
   });
 
@@ -55,6 +67,7 @@ describe('getApiRuntimeConfig', () => {
     process.env.NODE_ENV = 'production';
     process.env.PORT = '8080';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com, http://server.local:3000';
 
     const config = getApiRuntimeConfig();
 
@@ -62,11 +75,16 @@ describe('getApiRuntimeConfig', () => {
     expect(config.port).toBe(8080);
     expect(config.databaseUrl).toBe(validProductionDatabaseUrl);
     expect(config.bootstrapSeedData).toBe(false);
+    expect(config.officeOrigins).toEqual([
+      'https://office.example.com',
+      'http://server.local:3000'
+    ]);
   });
 
   it('reads the server-owned estimate email resend key when configured', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
     process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = '  re_server_owned  ';
 
     const config = getApiRuntimeConfig();
@@ -76,6 +94,7 @@ describe('getApiRuntimeConfig', () => {
 
   it('refuses to start in production when DATABASE_URL is missing', () => {
     process.env.NODE_ENV = 'production';
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
 
     expect(() => getApiRuntimeConfig()).toThrow(/DATABASE_URL must be set/);
   });
@@ -83,6 +102,7 @@ describe('getApiRuntimeConfig', () => {
   it('treats a blank DATABASE_URL as missing in production', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = '   ';
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
 
     expect(() => getApiRuntimeConfig()).toThrow(/DATABASE_URL must be set/);
   });
@@ -90,17 +110,25 @@ describe('getApiRuntimeConfig', () => {
   it('refuses to start in production when PORT is set but invalid', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
     process.env.PORT = 'not-a-port';
 
     expect(() => getApiRuntimeConfig()).toThrow(/PORT must be a positive integer/);
   });
 
+  it('refuses to start in production when the office origin allowlist is missing', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+
+    expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_OFFICE_ORIGINS/);
+  });
+
   it('aggregates multiple production configuration problems into one error', () => {
     process.env.NODE_ENV = 'production';
     process.env.PORT = '-1';
-    // DATABASE_URL intentionally left unset.
+    // DATABASE_URL and BELLFIELD_OFFICE_ORIGINS intentionally left unset.
 
-    expect(() => getApiRuntimeConfig()).toThrow(/2 configuration problem/);
+    expect(() => getApiRuntimeConfig()).toThrow(/3 configuration problem/);
 
     try {
       getApiRuntimeConfig();
@@ -109,6 +137,7 @@ describe('getApiRuntimeConfig', () => {
       const message = error instanceof Error ? error.message : String(error);
       expect(message).toContain('DATABASE_URL');
       expect(message).toContain('PORT');
+      expect(message).toContain('BELLFIELD_OFFICE_ORIGINS');
     }
   });
 
@@ -121,13 +150,12 @@ describe('getApiRuntimeConfig', () => {
     expect(config.port).toBe(3001);
   });
 
-  it('honors an explicit BOOTSTRAP_SEED_DATA override in production', () => {
+  it('refuses an explicit BOOTSTRAP_SEED_DATA override in production', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
     process.env.BOOTSTRAP_SEED_DATA = 'true';
 
-    const config = getApiRuntimeConfig();
-
-    expect(config.bootstrapSeedData).toBe(true);
+    expect(() => getApiRuntimeConfig()).toThrow(/BOOTSTRAP_SEED_DATA must not be true/);
   });
 });
