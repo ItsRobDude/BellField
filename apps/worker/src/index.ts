@@ -28,6 +28,7 @@ function startWorker(): void {
       {
         databaseUrl: runtimeConfig.databaseUrl,
         mediaRoot: runtimeConfig.mediaRoot,
+        licensePath: runtimeConfig.licensePath,
         backupRoot: runtimeConfig.backup.root,
         retentionCount: runtimeConfig.backup.retentionCount,
         postgresBin: runtimeConfig.backup.postgresBin,

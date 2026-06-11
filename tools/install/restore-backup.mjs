@@ -117,6 +117,30 @@ function assertSafeReplaceDirectory(path, label) {
   return absolute;
 }
 
+function assertSafeFilePath(path, label) {
+  const absolute = resolve(path);
+  const root = parse(absolute).root;
+  if (absolute === root || absolute.length < root.length + 8) {
+    throw new Error(`${label} is too broad to replace safely: ${absolute}`);
+  }
+  return absolute;
+}
+
+function getBoolean(value, defaultValue) {
+  if (value === undefined) {
+    return defaultValue;
+  }
+
+  const normalized = String(value).trim().toLowerCase();
+  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'off'].includes(normalized)) {
+    return false;
+  }
+  return defaultValue;
+}
+
 const args = readArgs();
 if (args.confirm !== 'RESTORE') {
   throw new Error('Refusing to restore without --confirm=RESTORE.');
@@ -137,6 +161,10 @@ if (!env.BELLFIELD_MEDIA_ROOT) {
   throw new Error(`BELLFIELD_MEDIA_ROOT is missing from ${envPath}.`);
 }
 const mediaRoot = assertSafeReplaceDirectory(env.BELLFIELD_MEDIA_ROOT, 'BELLFIELD_MEDIA_ROOT');
+const licenseRequired = getBoolean(env.BELLFIELD_LICENSE_REQUIRED, false);
+const licensePath = env.BELLFIELD_LICENSE_PATH
+  ? assertSafeFilePath(env.BELLFIELD_LICENSE_PATH, 'BELLFIELD_LICENSE_PATH')
+  : null;
 const postgresBin = env.BELLFIELD_POSTGRES_BIN
   ? resolve(env.BELLFIELD_POSTGRES_BIN)
   : resolve(releaseRoot, 'postgres', 'bin');
@@ -150,12 +178,21 @@ const migrationsScript = join(releaseRoot, 'apps', 'api', 'scripts', 'migrations
 const manifestPath = join(backupSetPath, 'manifest.json');
 const dumpPath = join(backupSetPath, 'database.dump');
 const backupMediaPath = join(backupSetPath, 'media');
+const backupLicensePath = join(backupSetPath, 'license', 'bellfield-license.json');
 
 if (!databaseUrl) {
   throw new Error(`DATABASE_URL is missing from ${envPath}.`);
 }
 if (!existsSync(manifestPath) || !existsSync(dumpPath) || !existsSync(backupMediaPath)) {
   throw new Error('Backup set must contain manifest.json, database.dump, and media/.');
+}
+if (licenseRequired && !licensePath) {
+  throw new Error('BELLFIELD_LICENSE_PATH is required when BELLFIELD_LICENSE_REQUIRED=true.');
+}
+if (licenseRequired && !existsSync(backupLicensePath)) {
+  throw new Error(
+    'Backup set does not include license/bellfield-license.json. Install a re-issued license or choose a Phase 3 backup set before restoring a license-required server.'
+  );
 }
 
 const { env: pgEnv, databaseName } = databaseEnv(databaseUrl);
@@ -175,6 +212,11 @@ run(pgTool('pg_restore', postgresBin), ['--dbname', databaseName, '--no-owner', 
 rmSync(mediaRoot, { force: true, recursive: true });
 mkdirSync(dirname(mediaRoot), { recursive: true });
 cpSync(backupMediaPath, mediaRoot, { recursive: true });
+
+if (licensePath && existsSync(backupLicensePath)) {
+  mkdirSync(dirname(licensePath), { recursive: true });
+  cpSync(backupLicensePath, licensePath);
+}
 
 run(nodeExe, [migrationsScript], { env: restoreEnv, cwd: releaseRoot });
 startAppServices(skipServices);

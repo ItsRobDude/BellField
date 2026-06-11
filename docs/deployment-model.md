@@ -225,11 +225,14 @@ Runtime configuration:
 - `BELLFIELD_MEDIA_TOKEN_SECRET` - long random secret used to sign upload/download tokens
 - `BELLFIELD_MEDIA_MAX_BYTES` - optional raw upload size limit, default 50 MB
 - `BELLFIELD_MEDIA_TOKEN_TTL_SECONDS` - optional signed token lifetime, default 300 seconds
+- `BELLFIELD_LICENSE_REQUIRED` - whether this runtime must refuse startup without a valid signed license file
+- `BELLFIELD_LICENSE_PATH` - absolute path to the signed offline BellField license file
 
 Production must set `BELLFIELD_OFFICE_ORIGINS`, `BELLFIELD_MEDIA_ROOT`, and `BELLFIELD_MEDIA_TOKEN_SECRET`.
 The token secret must be at least 32 characters and cannot be the dev fallback
 or sample placeholder value.
 Development and test runs may fall back to temporary local values, but that fallback is not a deployment posture.
+Sold-shaped installs set `BELLFIELD_LICENSE_REQUIRED=true` and point `BELLFIELD_LICENSE_PATH` at the app-owned data directory. Missing or invalid licenses block API startup; expired update windows do not.
 
 The assisted server install path uses one generated `bellfield-server.env` for all server services. The committed template is `bellfield-server.env.example`; customer-specific generated config must stay outside source control. The current runbook lives in [install-runbook.md](./install-runbook.md).
 
@@ -241,6 +244,7 @@ The current v1 filesystem layout stores blobs under:
 
 The database stores media metadata and relative storage paths.
 Backups must include both the PostgreSQL database and the media root; backing up only the database will preserve the records but lose the actual uploaded files.
+Licensed installs also need the signed license file included so a restore onto a replacement machine can start without online activation.
 
 ### File types
 

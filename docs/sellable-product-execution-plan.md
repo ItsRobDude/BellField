@@ -44,8 +44,10 @@ Primary references:
   packaged restore helper; the scratch-machine restore gate remains unclaimed.
 - Update path: none. All versions are a frozen `0.0.1`; no release-date
   stamping, which the update-entitlement moat requires.
-- Licensing: zero code; posture fully decided in
-  `asset-protection-and-licensing.md`.
+- Licensing: Phase 3 repo-side primitive now exists: signed offline license
+  file design, API startup verification behind a license-required runtime flag,
+  System/support visibility, private issuance tooling, and backup/restore
+  coverage for the license file.
 - `apps/worker`: a heartbeat stub — no DB access, no dependencies, no jobs.
 - Live contradictions after Phase 1 repo work: the interim Resend key remains a
   BellField-operated-only bridge until Phase 5, and the release/runbook path is
@@ -308,6 +310,15 @@ backup set, performed and dated.
 ## Phase 3 — Licensing primitive
 
 Consumed by the updater (Phase 4) and the relay (Phase 5). Design before code.
+
+Status: repo-side Phase 3 implementation landed 2026-06-11. This includes
+the license design doc, offline Ed25519 license verifier, API startup refusal
+when `BELLFIELD_LICENSE_REQUIRED=true` and the configured file is missing or
+invalid, System/support license visibility, private BellField-side issuance
+scripts, and backup/restore handling for the license file. Phase 4 still owns
+release-date stamping and updater entitlement enforcement; Phase 5 still owns
+relay-token service behavior. Local nondestructive validation is recorded in
+[phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md).
 
 ### 3.1 License design doc
 

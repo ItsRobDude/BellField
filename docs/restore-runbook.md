@@ -28,11 +28,14 @@ Each backup set is written under `BELLFIELD_BACKUP_ROOT` as:
 bellfield-backup-YYYYMMDD-HHMMSSZ\
   database.dump
   media\
+  license\
+    bellfield-license.json
   manifest.json
 ```
 
 The database dump is PostgreSQL custom format from `pg_dump --format=custom`.
 The `media` directory is a recursive copy of `BELLFIELD_MEDIA_ROOT`.
+The `license` file is copied from `BELLFIELD_LICENSE_PATH` when configured so licensed restores can start without online activation.
 
 Retention keeps the newest `BELLFIELD_BACKUP_RETENTION_COUNT` successful backup sets. The default is `7`.
 
@@ -86,10 +89,13 @@ What the helper does:
 3. Drops and recreates the configured BellField database.
 4. Restores `database.dump` with `pg_restore`.
 5. Replaces `BELLFIELD_MEDIA_ROOT` with the backup set's `media` directory.
-6. Runs packaged migrations.
-7. Starts API, worker, and office-web.
+6. Restores `license\bellfield-license.json` to `BELLFIELD_LICENSE_PATH` when present.
+7. Runs packaged migrations.
+8. Starts API, worker, and office-web.
 
 For a scratch drill without Windows services, pass `--skip-services=true`.
+
+If `BELLFIELD_LICENSE_REQUIRED=true`, the helper checks for `license\bellfield-license.json` before stopping services or replacing data. Use a Phase 3 backup set or install a re-issued license before restoring a license-required server.
 
 ## After Restore
 
@@ -102,6 +108,7 @@ Invoke-RestMethod http://localhost:3001/health
 Then sign in and verify:
 
 - System diagnostics load
+- the System License card shows the expected shop name and update-window end
 - Backups card can read the restored `backup_runs` history
 - recent customer/location/job records are present
 - media attachments or customer documents open when expected

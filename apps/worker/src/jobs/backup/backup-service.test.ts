@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -48,8 +48,10 @@ test('BackupService writes a dump, copies media, records success, and writes a m
   try {
     const mediaRoot = join(root, 'media');
     const backupRoot = join(root, 'backups');
+    const licensePath = join(root, 'bellfield-license.json');
     mkdirSync(mediaRoot, { recursive: true });
     writeFileSync(join(mediaRoot, 'photo.txt'), 'media bytes', { flag: 'wx' });
+    writeFileSync(licensePath, '{"license":"fixture"}', { flag: 'wx' });
 
     const repository = new InMemoryBackupRunsRepository();
     const processRunner: ProcessRunner = (_command, args, options) => {
@@ -65,6 +67,7 @@ test('BackupService writes a dump, copies media, records success, and writes a m
       {
         databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
         mediaRoot,
+        licensePath,
         backupRoot,
         retentionCount: 7
       },
@@ -83,6 +86,13 @@ test('BackupService writes a dump, copies media, records success, and writes a m
     assert.ok(existsSync(success.databaseDumpPath));
     assert.ok(existsSync(join(success.mediaBackupPath, 'photo.txt')));
     assert.ok(existsSync(success.manifestPath));
+    assert.ok(existsSync(join(success.backupSetPath, 'license', 'bellfield-license.json')));
+    const manifest = JSON.parse(readFileSync(success.manifestPath, 'utf8'));
+    assert.deepEqual(manifest.license, {
+      included: true,
+      sourcePath: licensePath,
+      file: 'license/bellfield-license.json'
+    });
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

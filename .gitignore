@@ -26,3 +26,8 @@ artifacts/
 tmp-codex-*.txt
 # Codex smoke-test artifacts: screenshots and generated documents from local runs.
 .codex-smoke/
+
+# Locally generated BellField-side license signing material and issuance ledgers.
+license-keys/
+tools/license/*.pem
+tools/license/*.jsonl

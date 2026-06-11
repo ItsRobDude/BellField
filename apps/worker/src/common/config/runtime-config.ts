@@ -57,6 +57,7 @@ export type WorkerRuntimeConfig = {
   nodeEnv: NodeEnvironment;
   databaseUrl: string;
   mediaRoot: string;
+  licensePath?: string;
   backup: {
     enabled: boolean;
     root: string;
@@ -86,6 +87,7 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
   }
 
   const backupEnabled = getBoolean(process.env.BELLFIELD_BACKUP_ENABLED, true);
+  const configuredLicensePath = process.env.BELLFIELD_LICENSE_PATH?.trim();
   const configuredBackupRoot = process.env.BELLFIELD_BACKUP_ROOT?.trim();
   const backupRoot = resolve(configuredBackupRoot || join(tmpdir(), 'bellfield-backups-dev'));
   if (isProduction && backupEnabled && !configuredBackupRoot) {
@@ -125,6 +127,7 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
     nodeEnv,
     databaseUrl,
     mediaRoot,
+    licensePath: configuredLicensePath ? resolve(configuredLicensePath) : undefined,
     backup: {
       enabled: backupEnabled,
       root: backupRoot,

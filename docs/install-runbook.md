@@ -18,10 +18,17 @@ Validated on the development machine:
   backup directory, `pg_dump` + media backup set creation, retention, and
   System-surface freshness status
 - packaged restore helper exists; see [restore-runbook.md](./restore-runbook.md)
+- Phase 3 signed-license runtime verification exists: sold-shaped API startup
+  requires a valid offline license file, and the System surface shows license
+  identity/update-window status
 - local Phase 2 validation passed on 2026-06-11 for worker tests, release
   packaging, backup migration smoke, restore-helper refusal behavior, and
   compiled-worker boot; see
   [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md)
+- local Phase 3 validation passed on 2026-06-11 for license verifier tests,
+  issuance tooling smoke, release packaging, System/support/UI visibility,
+  worker license backup inclusion, and restore-helper missing-license refusal;
+  see [phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md)
 - local compiled-release smoke passed on 2026-06-11: release API, worker,
   office-web standalone, release-packaged migrations, first-owner setup, health,
   and a scheduled-job creation path all ran against an isolated temporary
@@ -66,6 +73,13 @@ On the server, choose a fixed install root such as `C:\BellField`.
 
 This writes `C:\BellField\bellfield-server.env`, creates local data directories, and generates secrets. Do not commit or share that file.
 
+License defaults written by the config helper:
+
+- `BELLFIELD_LICENSE_REQUIRED=true`
+- `BELLFIELD_LICENSE_PATH=C:\BellField\data\license\bellfield-license.json`
+
+Development/source runs use `BELLFIELD_LICENSE_REQUIRED=false`; customer-shaped server configs require the license file.
+
 Backup defaults written by the config helper:
 
 - `BELLFIELD_BACKUP_ROOT=C:\BellField\data\backups`
@@ -97,6 +111,25 @@ After PostgreSQL is running, create the `bellfield` database/user from `bellfiel
 $env:DATABASE_URL = "<value from C:\BellField\bellfield-server.env>"
 .\release\runtime\node\node.exe .\release\apps\api\scripts\migrations\up.mjs
 ```
+
+## Install License File
+
+Before starting the API service for a customer-shaped install, place the BellField-issued license file at the configured path:
+
+```text
+C:\BellField\data\license\bellfield-license.json
+```
+
+The API verifies this file offline. It refuses to start when `BELLFIELD_LICENSE_REQUIRED=true` and the file is missing, malformed, or signed by the wrong key. It does not refuse startup because the update window has expired.
+
+License issuance is BellField-side only:
+
+```powershell
+node tools\license\generate-keypair.mjs --output-dir=<private-bellfield-key-dir>
+node tools\license\issue-license.mjs --private-key=<private-key.pem> --license-id=<id> --shop-name="<Shop Name>" --update-window-end=YYYY-MM-DD --output=<license-file-path>
+```
+
+Do not copy private signing keys into the release folder or a customer machine.
 
 ## Register Windows Services
 
@@ -165,6 +198,7 @@ Each set includes:
 
 - `database.dump` from PostgreSQL custom-format `pg_dump`
 - a recursive copy of `BELLFIELD_MEDIA_ROOT`
+- `license\bellfield-license.json` when `BELLFIELD_LICENSE_PATH` is configured
 - `manifest.json`
 
 The System surface shows the latest successful backup and warns when it is stale.

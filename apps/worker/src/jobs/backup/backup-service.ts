@@ -16,6 +16,7 @@ import { workerLog } from '../../common/logger';
 export type BackupJobConfig = {
   databaseUrl: string;
   mediaRoot: string;
+  licensePath?: string;
   backupRoot: string;
   retentionCount: number;
   postgresBin?: string;
@@ -48,6 +49,8 @@ type RunBackupInput = {
 const backupManifestFilename = 'manifest.json';
 const databaseDumpFilename = 'database.dump';
 const mediaBackupDirectoryName = 'media';
+const licenseBackupDirectoryName = 'license';
+const licenseBackupFilename = 'bellfield-license.json';
 
 export class BackupService {
   private readonly now: () => Date;
@@ -85,6 +88,9 @@ export class BackupService {
       throwIfAborted(input.signal);
       this.copyMediaRoot(mediaBackupPath);
 
+      throwIfAborted(input.signal);
+      const licenseBackupPath = this.copyLicenseFile(backupSetPath);
+
       const completedAt = this.now();
       const manifest = {
         schemaVersion: 1,
@@ -100,6 +106,17 @@ export class BackupService {
           sourceRoot: resolve(this.config.mediaRoot),
           directory: mediaBackupDirectoryName
         },
+        license: licenseBackupPath
+          ? {
+              included: true,
+              sourcePath: resolve(this.config.licensePath ?? ''),
+              file: `${licenseBackupDirectoryName}/${licenseBackupFilename}`
+            }
+          : {
+              included: false,
+              sourcePath: this.config.licensePath ? resolve(this.config.licensePath) : null,
+              file: null
+            },
         retention: {
           keepSuccessful: this.config.retentionCount
         },
@@ -170,6 +187,29 @@ export class BackupService {
     }
 
     cpSync(mediaRoot, mediaBackupPath, { recursive: true });
+  }
+
+  private copyLicenseFile(backupSetPath: string): string | null {
+    if (!this.config.licensePath) {
+      return null;
+    }
+
+    const sourcePath = resolve(this.config.licensePath);
+    if (!existsSync(sourcePath)) {
+      throw new Error(`License file is configured but does not exist: ${sourcePath}`);
+    }
+    if (!statSync(sourcePath).isFile()) {
+      throw new Error(`License path is not a file: ${sourcePath}`);
+    }
+
+    const licenseBackupPath = join(
+      backupSetPath,
+      licenseBackupDirectoryName,
+      licenseBackupFilename
+    );
+    mkdirSync(join(backupSetPath, licenseBackupDirectoryName), { recursive: true });
+    cpSync(sourcePath, licenseBackupPath);
+    return licenseBackupPath;
   }
 
   private async applyRetention(): Promise<void> {

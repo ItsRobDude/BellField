@@ -146,6 +146,16 @@ Read when: deciding whether Phase 2 repo-side backup/restore foundations are rea
 
 Does not own: the restore recipe (`restore-runbook.md`) or broader install posture (`self-hosted-installation-strategy.md`).
 
+### [phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md)
+
+Audience: contributors checking what Phase 3 license validation has actually been run.
+
+Purpose: dated evidence for the nondestructive same-machine Phase 3 validation: license verifier tests, System/support/UI status, worker license backup inclusion, issuance tooling smoke, restore-helper missing-license refusal, and release artifact spot checks.
+
+Read when: deciding whether Phase 3 repo-side licensing foundations are ready to build on, or distinguishing local proof from clean-machine sold-install and updater/relay gates.
+
+Does not own: the license format (`license-design.md`), install recipe (`install-runbook.md`), restore recipe (`restore-runbook.md`), or Phase 4/5 gates.
+
 ### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Audience: contributors checking what Phase 1 install validation has actually been run.
