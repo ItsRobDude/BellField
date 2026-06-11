@@ -475,6 +475,9 @@ function parseFailureCode(value: string | undefined): OutboundMessageFailureCode
     value === 'notConfigured' ||
     value === 'deliveryUnavailable' ||
     value === 'deliveryRejected' ||
+    value === 'recipientUnavailable' ||
+    value === 'sendingLimitReached' ||
+    value === 'expired' ||
     value === 'unknown'
   ) {
     return value;
@@ -491,6 +494,15 @@ function deliverySummaryMessage(
   }
   if (failureCode === 'notConfigured') {
     return 'Email was not sent. Contact BellField support.';
+  }
+  if (failureCode === 'recipientUnavailable') {
+    return 'Email was not sent: this recipient is not able to receive email.';
+  }
+  if (failureCode === 'sendingLimitReached') {
+    return 'Email was not sent: the monthly sending limit was reached. Contact BellField support.';
+  }
+  if (failureCode === 'expired') {
+    return 'Email was not sent before it expired. Send it again if it is still needed.';
   }
   return 'Email was not delivered. Try again or contact BellField support.';
 }

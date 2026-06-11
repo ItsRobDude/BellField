@@ -29,7 +29,7 @@ type CustomerDocumentSnapshotRow = {
 type OutboundMessageRow = {
   id: string;
   channel: 'email';
-  provider: 'resend';
+  provider: OutboundMessageRecord['provider'];
   status: OutboundMessageRecord['status'];
   jobId: string;
   estimateId: string | null;

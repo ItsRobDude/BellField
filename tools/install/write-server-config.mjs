@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readArgs } from './install-utils.mjs';
@@ -27,13 +27,18 @@ const backupRoot = join(installRoot, 'data', 'backups');
 const licensePath = join(installRoot, 'data', 'license', 'bellfield-license.json');
 const databasePassword = randomSecret();
 const mediaSecret = randomSecret();
+// Identifies this physical server to the delivery relay (single-active
+// binding). Deliberately not part of backup sets: a replacement machine gets
+// a fresh id from rerunning this helper, and the relay rebinds automatically.
+const serverInstanceId = randomUUID();
 
 const config = template
   .replace('CHANGE_ME@127.0.0.1:5432', `${encodeURIComponent(databasePassword)}@127.0.0.1:5432`)
   .replace('C:\\BellField\\data\\media', mediaRoot)
   .replace('C:\\BellField\\data\\backups', backupRoot)
   .replace('CHANGE_ME_TO_AT_LEAST_32_RANDOM_CHARACTERS', mediaSecret)
-  .replace('C:\\BellField\\data\\license\\bellfield-license.json', licensePath);
+  .replace('C:\\BellField\\data\\license\\bellfield-license.json', licensePath)
+  .replace('GENERATED_SERVER_INSTANCE_ID', serverInstanceId);
 
 mkdirSync(dirname(outputPath), { recursive: true });
 mkdirSync(mediaRoot, { recursive: true });

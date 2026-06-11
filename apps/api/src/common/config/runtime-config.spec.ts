@@ -30,7 +30,9 @@ describe('getApiRuntimeConfig', () => {
     'BELLFIELD_BUILD_MANIFEST_PATH',
     'BELLFIELD_LICENSE_REQUIRED',
     'BELLFIELD_LICENSE_PATH',
-    'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY'
+    'BELLFIELD_RELAY_BASE_URL',
+    'BELLFIELD_RELAY_TOKEN',
+    'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
   ] as const;
   const original: Record<string, string | undefined> = {};
 
@@ -63,7 +65,7 @@ describe('getApiRuntimeConfig', () => {
     expect(config.licenseRequired).toBe(false);
     expect(config.licensePath).toBeUndefined();
     expect(config.buildManifest).toBeNull();
-    expect(config.estimateEmailResendApiKey).toBeUndefined();
+    expect(config.relay).toBeUndefined();
   });
 
   it('treats the test environment as non-production and forgiving', () => {
@@ -117,15 +119,49 @@ describe('getApiRuntimeConfig', () => {
     expect(config.port).toBe(4040);
   });
 
-  it('reads the server-owned estimate email resend key when configured', () => {
+  it('reads the relay client config when all three values are set', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
     process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
-    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = '  re_server_owned  ';
+    process.env.BELLFIELD_RELAY_BASE_URL = 'https://relay.bellfield.app/';
+    process.env.BELLFIELD_RELAY_TOKEN = '  bfrt1_token_value  ';
+    process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID = 'instance-uuid-1';
 
     const config = getApiRuntimeConfig();
 
-    expect(config.estimateEmailResendApiKey).toBe('re_server_owned');
+    expect(config.relay).toEqual({
+      baseUrl: 'https://relay.bellfield.app',
+      token: 'bfrt1_token_value',
+      serverInstanceId: 'instance-uuid-1'
+    });
+  });
+
+  it('treats fully absent relay config as not configured', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+
+    const config = getApiRuntimeConfig();
+
+    expect(config.relay).toBeUndefined();
+  });
+
+  it('refuses partial relay config in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+    process.env.BELLFIELD_RELAY_BASE_URL = 'https://relay.bellfield.app';
+
+    expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_RELAY_TOKEN/);
+  });
+
+  it('treats partial relay config as not configured outside production', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.BELLFIELD_RELAY_BASE_URL = 'http://localhost:3201';
+
+    const config = getApiRuntimeConfig();
+
+    expect(config.relay).toBeUndefined();
   });
 
   it('refuses to start in production when DATABASE_URL is missing', () => {

@@ -43,7 +43,9 @@ try {
       'BELLFIELD_BACKUP_INTERVAL_MINUTES=1440',
       'BELLFIELD_BACKUP_RETENTION_COUNT=7',
       'BELLFIELD_BACKUP_STALE_AFTER_HOURS=36',
-      'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY=resend-secret'
+      'BELLFIELD_RELAY_BASE_URL=https://relay.bellfield.app',
+      'BELLFIELD_RELAY_TOKEN=CHANGE_ME',
+      'BELLFIELD_RELAY_SERVER_INSTANCE_ID=00000000-0000-4000-8000-000000000000'
     ].join('\n')
   );
 
@@ -97,6 +99,10 @@ try {
     !officeXml.includes('BELLFIELD_MEDIA_TOKEN_SECRET')
   );
   check('office keeps public API URL', officeXml.includes('NEXT_PUBLIC_API_BASE_URL'));
+  check('api keeps relay token', apiXml.includes('BELLFIELD_RELAY_TOKEN'));
+  check('worker keeps relay token', workerXml.includes('BELLFIELD_RELAY_TOKEN'));
+  check('postgres does not receive relay token', !postgresXml.includes('BELLFIELD_RELAY_TOKEN'));
+  check('office does not receive relay token', !officeXml.includes('BELLFIELD_RELAY_TOKEN'));
 
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';

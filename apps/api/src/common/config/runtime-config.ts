@@ -57,6 +57,12 @@ function getBoolean(value: string | undefined, defaultValue: boolean): boolean {
   return defaultValue;
 }
 
+export type ApiRelayConfig = {
+  baseUrl: string;
+  token: string;
+  serverInstanceId: string;
+};
+
 export type ApiRuntimeConfig = {
   nodeEnv: NodeEnvironment;
   port: number;
@@ -66,7 +72,12 @@ export type ApiRuntimeConfig = {
   licenseRequired: boolean;
   licensePath?: string;
   buildManifest: RuntimeBuildManifest | null;
-  estimateEmailResendApiKey?: string;
+  /**
+   * BellField delivery relay client credentials. Absent means relay-backed
+   * features (estimate email) report not configured; the software runs fine.
+   * No provider API key ever exists on an install (docs/delivery-relay-plan.md §1).
+   */
+  relay?: ApiRelayConfig;
 };
 
 /**
@@ -119,6 +130,8 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     problems.push('BELLFIELD_LICENSE_PATH must be set when BELLFIELD_LICENSE_REQUIRED=true.');
   }
 
+  const relay = resolveRelayConfig(isProduction, problems);
+
   if (problems.length > 0) {
     throw new Error(
       [
@@ -138,9 +151,34 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     licenseRequired,
     licensePath,
     buildManifest,
-    estimateEmailResendApiKey:
-      process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY?.trim() || undefined
+    relay
   };
+}
+
+/**
+ * The relay client is configured by three values that only make sense
+ * together. All absent means relay features are simply not set up (valid);
+ * a partial set is a misconfiguration and fails fast in production.
+ */
+function resolveRelayConfig(isProduction: boolean, problems: string[]): ApiRelayConfig | undefined {
+  const baseUrl = process.env.BELLFIELD_RELAY_BASE_URL?.trim().replace(/\/+$/, '');
+  const token = process.env.BELLFIELD_RELAY_TOKEN?.trim();
+  const serverInstanceId = process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID?.trim();
+
+  if (!baseUrl && !token && !serverInstanceId) {
+    return undefined;
+  }
+
+  if (!baseUrl || !token || !serverInstanceId) {
+    if (isProduction) {
+      problems.push(
+        'BELLFIELD_RELAY_BASE_URL, BELLFIELD_RELAY_TOKEN, and BELLFIELD_RELAY_SERVER_INSTANCE_ID must all be set together (or all left empty).'
+      );
+    }
+    return undefined;
+  }
+
+  return { baseUrl, token, serverInstanceId };
 }
 
 function resolveOfficeOrigins(

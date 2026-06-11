@@ -1,185 +1,285 @@
-import { bellfieldEstimateEmailFromAddress, EmailProviderService } from './email-provider.service';
+import { EmailProviderService } from './email-provider.service';
+import type { EmailProviderSendInput } from './customer-delivery.types';
 
-const originalResendKey = process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY;
+const originalFetch = global.fetch;
+const relayEnvKeys = [
+  'BELLFIELD_RELAY_BASE_URL',
+  'BELLFIELD_RELAY_TOKEN',
+  'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
+] as const;
+const originalRelayEnv = relayEnvKeys.map((key) => [key, process.env[key]] as const);
 
-describe('EmailProviderService', () => {
-  afterEach(() => {
-    if (originalResendKey === undefined) {
-      delete process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY;
+function configureRelayEnv() {
+  process.env.BELLFIELD_RELAY_BASE_URL = 'https://relay.bellfield.app';
+  process.env.BELLFIELD_RELAY_TOKEN = 'bfrt1_0123456789abcdef_' + 'a'.repeat(64);
+  process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID = 'instance-uuid-1';
+}
+
+function clearRelayEnv() {
+  for (const key of relayEnvKeys) {
+    delete process.env[key];
+  }
+}
+
+function makeInput(): EmailProviderSendInput {
+  return {
+    to: 'homeowner@example.com',
+    fromName: 'Acme Heating',
+    replyToEmail: 'office@acmeheating.example',
+    subject: 'Your estimate',
+    bodyText: 'Estimate attached.',
+    attachment: {
+      filename: 'estimate.pdf',
+      contentType: 'application/pdf',
+      bytes: Buffer.from('%PDF-1.7 test')
+    },
+    idempotencyKey: 'estimate-send-msg-1'
+  };
+}
+
+afterEach(() => {
+  global.fetch = originalFetch;
+  for (const [key, value] of originalRelayEnv) {
+    if (value === undefined) {
+      delete process.env[key];
     } else {
-      process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = originalResendKey;
+      process.env[key] = value;
     }
-    jest.restoreAllMocks();
-  });
+  }
+});
 
-  it('does not send when the server-owned BellField key is missing', async () => {
-    delete process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY;
+describe('EmailProviderService.sendEstimateEmail', () => {
+  it('fails as notConfigured when relay credentials are absent', async () => {
+    clearRelayEnv();
     const service = new EmailProviderService();
 
-    await expect(service.sendEstimateEmail(sendInput())).resolves.toEqual({
-      kind: 'failed',
-      code: 'notConfigured',
-      retryable: false,
-      message: 'BellField estimate email delivery failed. Try again or contact support.'
-    });
+    const result = await service.sendEstimateEmail(makeInput());
+
+    expect(result).toMatchObject({ kind: 'failed', code: 'notConfigured', retryable: false });
   });
 
-  it('sends from the BellField address with the shop name fronting the email', async () => {
-    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
-    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ id: 'resend-message-1' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200
+  it('posts the document send to the relay with auth and instance headers', async () => {
+    configureRelayEnv();
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        result: { kind: 'sent', relayMessageId: 'relay-1', providerMessageId: 'prov-1' }
       })
-    );
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
     const service = new EmailProviderService();
 
-    await expect(
-      service.sendEstimateEmail(sendInput({ replyToEmail: 'office@example.com' }))
-    ).resolves.toEqual({
-      kind: 'sent',
-      providerMessageId: 'resend-message-1'
-    });
+    const result = await service.sendEstimateEmail(makeInput());
 
-    const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
-    const body = JSON.parse(String(request.body)) as {
-      from: string;
-      reply_to?: string[];
-      attachments: Array<{ content: string }>;
+    expect(result).toEqual({ kind: 'sent', providerMessageId: 'prov-1' });
+    const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe('https://relay.bellfield.app/v1/messages/estimate');
+    const headers = options.headers as Record<string, string>;
+    expect(headers.Authorization).toBe(`Bearer ${process.env.BELLFIELD_RELAY_TOKEN}`);
+    expect(headers['x-bellfield-server-instance']).toBe('instance-uuid-1');
+    const body = JSON.parse(String(options.body)) as {
+      idempotencyKey: string;
+      recipientEmail: string;
+      fromName: string;
+      document: { filename: string; contentType: string; bytesBase64: string };
     };
-    expect(request.headers).toEqual(
-      expect.objectContaining({ Authorization: 'Bearer server-owned-key' })
-    );
-    expect(body.from).toBe(`"Acme Heating" <${bellfieldEstimateEmailFromAddress}>`);
-    expect(body.reply_to).toEqual(['office@example.com']);
-    expect(body.attachments[0]?.content).toBe(Buffer.from('%PDF test').toString('base64'));
+    expect(body.idempotencyKey).toBe('estimate-send-msg-1');
+    expect(body.recipientEmail).toBe('homeowner@example.com');
+    expect(body.fromName).toBe('Acme Heating');
+    expect(Buffer.from(body.document.bytesBase64, 'base64').toString('utf8')).toBe('%PDF-1.7 test');
   });
 
-  it('emits an RFC 5322 quoted display name so ordinary shop names cannot break the header', async () => {
-    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
-    const fetchMock = jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ id: 'resend-message-1' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200
-      })
-    );
-    const service = new EmailProviderService();
-
-    const fromFor = async (fromName: string) => {
-      fetchMock.mockClear();
-      await service.sendEstimateEmail(sendInput({ fromName }));
-      const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
-      return (JSON.parse(String(request.body)) as { from: string }).from;
-    };
-
-    // Commas are routine in legal names and are RFC 5322 specials.
-    expect(await fromFor('Acme Heating, LLC')).toBe(
-      `"Acme Heating, LLC" <${bellfieldEstimateEmailFromAddress}>`
-    );
-    // Angle brackets must not be able to forge or malform the address part.
-    expect(await fromFor('Acme <North>')).toBe(
-      `"Acme <North>" <${bellfieldEstimateEmailFromAddress}>`
-    );
-    // Embedded quotes and backslashes are escaped, not dropped.
-    expect(await fromFor('Bob\'s "Best" HVAC')).toBe(
-      `"Bob's \\"Best\\" HVAC" <${bellfieldEstimateEmailFromAddress}>`
-    );
-    // An all-control/whitespace name falls back to the bare address.
-    expect(await fromFor('   ')).toBe(bellfieldEstimateEmailFromAddress);
-  });
-
-  it('returns a user-safe failure instead of provider internals', async () => {
-    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ message: 'The bellfield.app domain is not verified.' }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 403
-      })
-    );
-    const service = new EmailProviderService();
-
-    await expect(service.sendEstimateEmail(sendInput())).resolves.toEqual({
-      kind: 'failed',
-      code: 'deliveryRejected',
-      retryable: false,
-      message: 'BellField estimate email delivery failed. Try again or contact support.'
-    });
-  });
-
-  it('reports estimate delivery as needing setup when the server-owned key is missing', async () => {
-    delete process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY;
-    const service = new EmailProviderService();
-
-    await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
-      configured: false,
-      ready: false,
-      status: 'needsSetup',
-      message: 'Estimate email is not available on this server. Contact BellField support.'
-    });
-  });
-
-  it('reports estimate delivery as ready when the sending domain is verified', async () => {
-    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          data: [
-            {
-              name: 'bellfield.app',
-              status: 'verified',
-              capabilities: { sending: 'enabled' }
-            }
-          ]
-        }),
-        {
-          headers: { 'Content-Type': 'application/json' },
-          status: 200
+  it('passes through relay failure codes and retryability', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        result: {
+          kind: 'failed',
+          code: 'sendingLimitReached',
+          retryable: false,
+          message: 'limit'
         }
-      )
-    );
+      })
+    }) as unknown as typeof fetch;
     const service = new EmailProviderService();
 
-    await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
-      configured: true,
-      ready: true,
-      status: 'ready',
-      message: 'Estimate email is ready.'
+    const result = await service.sendEstimateEmail(makeInput());
+
+    expect(result).toMatchObject({
+      kind: 'failed',
+      code: 'sendingLimitReached',
+      retryable: false
     });
   });
 
-  it('reports estimate delivery as needing setup when the sending domain is not verified', async () => {
-    process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY = 'server-owned-key';
-    jest.spyOn(globalThis, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ data: [{ name: 'bellfield.app', status: 'not_started' }] }), {
-        headers: { 'Content-Type': 'application/json' },
-        status: 200
+  it('maps relay-side notConfigured to unavailability, not install misconfig', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        result: { kind: 'failed', code: 'notConfigured', retryable: true, message: 'ops' }
       })
-    );
+    }) as unknown as typeof fetch;
     const service = new EmailProviderService();
 
-    await expect(service.getEstimateEmailDeliveryStatus()).resolves.toEqual({
-      configured: true,
-      ready: false,
-      status: 'needsSetup',
-      message: 'Estimate email is not available on this server. Contact BellField support.'
-    });
+    const result = await service.sendEstimateEmail(makeInput());
+
+    expect(result).toMatchObject({ kind: 'failed', code: 'deliveryUnavailable', retryable: true });
+  });
+
+  it('treats 401 and 403 as non-retryable credential rejection', async () => {
+    configureRelayEnv();
+    for (const status of [401, 403]) {
+      global.fetch = jest.fn().mockResolvedValue({
+        ok: false,
+        status,
+        json: async () => ({})
+      }) as unknown as typeof fetch;
+      const service = new EmailProviderService();
+
+      const result = await service.sendEstimateEmail(makeInput());
+
+      expect(result).toMatchObject({ kind: 'failed', code: 'deliveryRejected', retryable: false });
+    }
+  });
+
+  it('treats relay 5xx as retryable unavailability', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 502,
+      json: async () => ({})
+    }) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const result = await service.sendEstimateEmail(makeInput());
+
+    expect(result).toMatchObject({ kind: 'failed', code: 'deliveryUnavailable', retryable: true });
+  });
+
+  it('treats network failure as retryable unavailability', async () => {
+    configureRelayEnv();
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('socket hang up')) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const result = await service.sendEstimateEmail(makeInput());
+
+    expect(result).toMatchObject({ kind: 'failed', code: 'deliveryUnavailable', retryable: true });
+  });
+
+  it('fails closed on an unrecognized relay response shape', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ something: 'else' })
+    }) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const result = await service.sendEstimateEmail(makeInput());
+
+    expect(result).toMatchObject({ kind: 'failed', code: 'unknown', retryable: false });
   });
 });
 
-function sendInput(
-  overrides: Partial<Parameters<EmailProviderService['sendEstimateEmail']>[0]> = {}
-) {
-  return {
-    to: 'customer@example.com',
-    fromName: 'Acme Heating',
-    subject: 'Estimate from BellField',
-    bodyText: 'Attached is your estimate.',
-    attachment: {
-      filename: 'estimate.pdf',
-      contentType: 'application/pdf' as const,
-      bytes: Buffer.from('%PDF test')
-    },
-    idempotencyKey: 'estimate-send-1',
-    ...overrides
-  };
-}
+describe('EmailProviderService.getEstimateEmailDeliveryStatus', () => {
+  it('reports needsSetup and not configured without relay credentials', async () => {
+    clearRelayEnv();
+    const service = new EmailProviderService();
+
+    const status = await service.getEstimateEmailDeliveryStatus();
+
+    expect(status).toMatchObject({ configured: false, ready: false, status: 'needsSetup' });
+    expect(status.message).not.toMatch(/relay|resend|token/i);
+  });
+
+  it('reports ready from relay entitlement', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        shopId: 'shop_1',
+        sendingState: 'ready',
+        monthlySendQuota: 100,
+        remainingThisMonth: 90
+      })
+    }) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const status = await service.getEstimateEmailDeliveryStatus();
+
+    expect(status).toMatchObject({ configured: true, ready: true, status: 'ready' });
+  });
+
+  it('reports quotaExhausted from relay entitlement', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        shopId: 'shop_1',
+        sendingState: 'quotaExhausted',
+        monthlySendQuota: 100,
+        remainingThisMonth: 0
+      })
+    }) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const status = await service.getEstimateEmailDeliveryStatus();
+
+    expect(status).toMatchObject({ configured: true, ready: false, status: 'quotaExhausted' });
+    expect(status.message).not.toMatch(/relay|resend|token/i);
+  });
+
+  it('reports suspended on relay 403', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      json: async () => ({})
+    }) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const status = await service.getEstimateEmailDeliveryStatus();
+
+    expect(status).toMatchObject({ configured: true, ready: false, status: 'suspended' });
+    expect(status.message).not.toMatch(/relay|resend|token/i);
+  });
+
+  it('reports needsSetup on relay 401', async () => {
+    configureRelayEnv();
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({})
+    }) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const status = await service.getEstimateEmailDeliveryStatus();
+
+    expect(status).toMatchObject({ configured: true, ready: false, status: 'needsSetup' });
+  });
+
+  it('reports temporarilyUnavailable when the relay is unreachable', async () => {
+    configureRelayEnv();
+    global.fetch = jest
+      .fn()
+      .mockRejectedValue(new Error('connect ECONNREFUSED')) as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const status = await service.getEstimateEmailDeliveryStatus();
+
+    expect(status).toMatchObject({
+      configured: true,
+      ready: false,
+      status: 'temporarilyUnavailable'
+    });
+  });
+});

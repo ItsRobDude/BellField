@@ -104,7 +104,7 @@ function createDeliveryService() {
     })
   };
   const emailProviderService = {
-    providerKey: 'resend' as const,
+    providerKey: 'relay' as const,
     sendEstimateEmail: jest.fn().mockResolvedValue({
       kind: 'sent',
       providerMessageId: 'resend-message-1'

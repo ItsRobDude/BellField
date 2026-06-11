@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CompanySettings, EstimateEmailDeliveryStatus } from '@bellfield/contracts';
-import { getApiRuntimeConfig } from '../../common/config/runtime-config';
+import { relayServerInstanceHeader } from '@bellfield/contracts';
+import type {
+  CompanySettings,
+  EstimateEmailDeliveryStatus,
+  OutboundMessageFailureCode,
+  RelayEntitlementResponse,
+  RelaySendEstimateDocumentResponse
+} from '@bellfield/contracts';
+import { getApiRuntimeConfig, type ApiRelayConfig } from '../../common/config/runtime-config';
 import type { EmailProviderSendInput, EmailProviderSendResult } from './customer-delivery.types';
 
 export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
@@ -10,24 +17,25 @@ const safeNeedsSetupMessage =
   'Estimate email is not available on this server. Contact BellField support.';
 const safeTemporarilyUnavailableMessage =
   'Estimate email availability could not be confirmed. Contact BellField support.';
+const safeQuotaExhaustedMessage =
+  'Estimate email has reached its sending limit. Contact BellField support.';
+const safeSuspendedMessage = 'Estimate email is paused for this server. Contact BellField support.';
 
-type ResendDomainSummary = {
-  id?: string;
-  name?: string;
-  status?: string;
-  capabilities?: {
-    sending?: string;
-  };
-};
-
+/**
+ * Relay client for customer-facing email. Sold installs hold no provider
+ * credentials; every send goes through the BellField-hosted delivery relay
+ * authenticated by the shop's relay token (docs/delivery-relay-plan.md,
+ * docs/relay-token-design.md). The exported contract is unchanged from the
+ * interim direct-provider adapter it replaces.
+ */
 @Injectable()
 export class EmailProviderService {
-  readonly providerKey = 'resend' as const;
+  readonly providerKey = 'relay' as const;
   private readonly logger = new Logger(EmailProviderService.name);
 
   async sendEstimateEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
-    const apiKey = getApiRuntimeConfig().estimateEmailResendApiKey;
-    if (!apiKey) {
+    const relay = getApiRuntimeConfig().relay;
+    if (!relay) {
       return {
         kind: 'failed',
         code: 'notConfigured',
@@ -36,30 +44,25 @@ export class EmailProviderService {
       };
     }
 
-    const response = await fetch('https://api.resend.com/emails', {
+    const response = await fetch(`${relay.baseUrl}/v1/messages/estimate`, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-        'Idempotency-Key': input.idempotencyKey
-      },
-      signal: AbortSignal.timeout(15_000),
+      headers: relayHeaders(relay, { 'Content-Type': 'application/json' }),
+      signal: AbortSignal.timeout(30_000),
       body: JSON.stringify({
-        from: formatFrom(input.fromName, bellfieldEstimateEmailFromAddress),
-        to: [input.to],
-        reply_to: input.replyToEmail ? [input.replyToEmail] : undefined,
+        idempotencyKey: input.idempotencyKey,
+        recipientEmail: input.to,
+        fromName: input.fromName,
+        replyToEmail: input.replyToEmail,
         subject: input.subject,
-        text: input.bodyText,
-        attachments: [
-          {
-            filename: input.attachment.filename,
-            content: input.attachment.bytes.toString('base64'),
-            content_type: input.attachment.contentType
-          }
-        ]
+        bodyText: input.bodyText,
+        document: {
+          filename: input.attachment.filename,
+          contentType: input.attachment.contentType,
+          bytesBase64: input.attachment.bytes.toString('base64')
+        }
       })
     }).catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : 'Email provider request failed.';
+      const message = error instanceof Error ? error.message : 'Relay request failed.';
       this.logger.warn(`BellField estimate email delivery request failed: ${message}`);
       return {
         failed: {
@@ -75,11 +78,23 @@ export class EmailProviderService {
       return response.failed;
     }
 
-    const body = (await response.json().catch(() => ({}))) as { id?: string; message?: string };
-    if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      // Revoked or unaccepted credentials, or a suspended shop. Retrying
+      // without BellField support intervention cannot succeed.
       this.logger.warn(
-        `BellField estimate email delivery returned HTTP ${response.status}: ${body.message ?? 'no response message'}`
+        `BellField delivery relay rejected this server's credentials (HTTP ${response.status}).`
       );
+      return {
+        kind: 'failed',
+        code: 'deliveryRejected',
+        retryable: false,
+        message: deliveryFailedMessage
+      };
+    }
+
+    const body = (await response.json().catch(() => ({}))) as RelaySendEstimateDocumentResponse;
+    if (!response.ok) {
+      this.logger.warn(`BellField delivery relay returned HTTP ${response.status}.`);
       return {
         kind: 'failed',
         code: response.status >= 500 ? 'deliveryUnavailable' : 'deliveryRejected',
@@ -88,12 +103,30 @@ export class EmailProviderService {
       };
     }
 
-    return { kind: 'sent', providerMessageId: body.id };
+    const result = body.result;
+    if (result?.kind === 'sent') {
+      return { kind: 'sent', providerMessageId: result.providerMessageId };
+    }
+    if (result?.kind === 'failed') {
+      return {
+        kind: 'failed',
+        code: mapRelayFailureCode(result.code),
+        retryable: result.retryable === true,
+        message: deliveryFailedMessage
+      };
+    }
+    this.logger.warn('BellField delivery relay returned an unrecognized send result.');
+    return {
+      kind: 'failed',
+      code: 'unknown',
+      retryable: false,
+      message: deliveryFailedMessage
+    };
   }
 
   async getEstimateEmailDeliveryStatus(): Promise<EstimateEmailDeliveryStatus> {
-    const apiKey = getApiRuntimeConfig().estimateEmailResendApiKey;
-    if (!apiKey) {
+    const relay = getApiRuntimeConfig().relay;
+    if (!relay) {
       return {
         configured: false,
         ready: false,
@@ -102,36 +135,51 @@ export class EmailProviderService {
       };
     }
 
-    const sendingDomain = bellfieldEstimateEmailFromAddress.split('@')[1];
     try {
-      const response = await fetch('https://api.resend.com/domains', {
-        headers: { Authorization: `Bearer ${apiKey}` },
+      const response = await fetch(`${relay.baseUrl}/v1/entitlement`, {
+        headers: relayHeaders(relay),
         signal: AbortSignal.timeout(5_000)
       });
+      if (response.status === 401) {
+        return {
+          configured: true,
+          ready: false,
+          status: 'needsSetup',
+          message: safeNeedsSetupMessage
+        };
+      }
+      if (response.status === 403) {
+        return {
+          configured: true,
+          ready: false,
+          status: 'suspended',
+          message: safeSuspendedMessage
+        };
+      }
       if (!response.ok) {
         this.logger.warn(
           `BellField estimate email delivery status check returned HTTP ${response.status}.`
         );
         return deliveryStatusUnavailable();
       }
-      const body = (await response.json().catch(() => ({}))) as {
-        data?: ResendDomainSummary[];
-      };
-      const domain = body.data?.find((item) => item.name === sendingDomain);
-      if (!domain) {
-        return deliveryStatusNeedsSetup();
+      const body = (await response.json().catch(() => ({}))) as RelayEntitlementResponse;
+      if (body.sendingState === 'ready') {
+        return {
+          configured: true,
+          ready: true,
+          status: 'ready',
+          message: 'Estimate email is ready.'
+        };
       }
-      const sendingEnabled = domain.capabilities?.sending !== 'disabled';
-      const verifiedForSending =
-        (domain.status === 'verified' || domain.status === 'partially_verified') && sendingEnabled;
-      return verifiedForSending
-        ? {
-            configured: true,
-            ready: true,
-            status: 'ready',
-            message: 'Estimate email is ready.'
-          }
-        : deliveryStatusNeedsSetup();
+      if (body.sendingState === 'quotaExhausted') {
+        return {
+          configured: true,
+          ready: false,
+          status: 'quotaExhausted',
+          message: safeQuotaExhaustedMessage
+        };
+      }
+      return deliveryStatusUnavailable();
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Delivery status check failed.';
       this.logger.warn(`BellField estimate email delivery status check failed: ${message}`);
@@ -152,33 +200,34 @@ export function buildEmailProviderInput(
   };
 }
 
-// The display name lands in a mail header and is shop-edited content, so strip
-// control characters and quote/escape characters that could break the header.
-function formatFrom(name: string, email: string): string {
-  const safeName = [...name]
-    .filter((character) => {
-      const code = character.charCodeAt(0);
-      return code >= 32 && code !== 127;
-    })
-    .join('')
-    .trim();
-  if (!safeName) {
-    return email;
-  }
-  // RFC 5322: display names containing specials (commas in "Acme Heating,
-  // LLC", angle brackets, semicolons) must be a quoted-string or the header
-  // is malformed. Always quote, escaping backslashes and double quotes.
-  const escapedName = safeName.replaceAll('\\', '\\\\').replaceAll('"', '\\"');
-  return `"${escapedName}" <${email}>`;
+function relayHeaders(
+  relay: ApiRelayConfig,
+  extra: Record<string, string> = {}
+): Record<string, string> {
+  return {
+    Authorization: `Bearer ${relay.token}`,
+    [relayServerInstanceHeader]: relay.serverInstanceId,
+    ...extra
+  };
 }
 
-function deliveryStatusNeedsSetup(): EstimateEmailDeliveryStatus {
-  return {
-    configured: true,
-    ready: false,
-    status: 'needsSetup',
-    message: safeNeedsSetupMessage
-  };
+function mapRelayFailureCode(code: string | undefined): OutboundMessageFailureCode {
+  switch (code) {
+    case 'deliveryUnavailable':
+      return 'deliveryUnavailable';
+    case 'deliveryRejected':
+      return 'deliveryRejected';
+    case 'recipientUnavailable':
+      return 'recipientUnavailable';
+    case 'sendingLimitReached':
+      return 'sendingLimitReached';
+    case 'notConfigured':
+      // Relay-side provider config is a BellField ops problem, not install
+      // misconfiguration; surface it as unavailability.
+      return 'deliveryUnavailable';
+    default:
+      return 'unknown';
+  }
 }
 
 function deliveryStatusUnavailable(): EstimateEmailDeliveryStatus {
