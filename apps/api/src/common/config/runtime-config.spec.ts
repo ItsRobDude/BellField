@@ -7,6 +7,7 @@ describe('getApiRuntimeConfig', () => {
   const envKeys = [
     'NODE_ENV',
     'PORT',
+    'BELLFIELD_API_PORT',
     'DATABASE_URL',
     'BOOTSTRAP_SEED_DATA',
     'BELLFIELD_OFFICE_ORIGINS',
@@ -65,7 +66,7 @@ describe('getApiRuntimeConfig', () => {
 
   it('reads explicit valid values in production', () => {
     process.env.NODE_ENV = 'production';
-    process.env.PORT = '8080';
+    process.env.BELLFIELD_API_PORT = '8080';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
     process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com, http://server.local:3000';
 
@@ -79,6 +80,15 @@ describe('getApiRuntimeConfig', () => {
       'https://office.example.com',
       'http://server.local:3000'
     ]);
+  });
+
+  it('keeps PORT as the backward-compatible local port fallback', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.PORT = '4040';
+
+    const config = getApiRuntimeConfig();
+
+    expect(config.port).toBe(4040);
   });
 
   it('reads the server-owned estimate email resend key when configured', () => {

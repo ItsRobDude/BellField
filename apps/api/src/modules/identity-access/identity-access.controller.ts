@@ -1,6 +1,7 @@
 import { Body, Controller, Get, Headers, Param, Patch, Post } from '@nestjs/common';
 import {
   CreateEmployeeRequestBodyDto,
+  CreateFirstOwnerRequestBodyDto,
   LoginRequestBodyDto,
   ResetEmployeePasswordRequestBodyDto,
   UpdateEmployeeRequestBodyDto
@@ -14,6 +15,16 @@ export class IdentityAccessController {
   @Post('auth/login')
   async login(@Body() loginRequest: LoginRequestBodyDto) {
     return this.identityAccessService.login(loginRequest);
+  }
+
+  @Get('setup/status')
+  async getSetupStatus() {
+    return this.identityAccessService.getSetupStatus();
+  }
+
+  @Post('setup/first-owner')
+  async createFirstOwner(@Body() createFirstOwnerRequest: CreateFirstOwnerRequestBodyDto) {
+    return this.identityAccessService.createFirstOwner(createFirstOwnerRequest);
   }
 
   @Get('auth/me')

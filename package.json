@@ -48,6 +48,7 @@
     "start:api": "pnpm --filter @bellfield/api start",
     "start:worker": "pnpm --filter @bellfield/worker start",
     "build": "pnpm -r --if-present build",
+    "build:release": "node tools/build-release.mjs",
     "check:architecture": "node tools/check-architecture.mjs",
     "check:file-size": "node tools/check-file-size.mjs",
     "check:ui-copy": "node tools/check-ui-copy.mjs",

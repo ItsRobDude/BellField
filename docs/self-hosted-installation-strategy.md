@@ -142,6 +142,8 @@ The production install experience should eventually provide:
 
 The customer should not need to know the repo's package manager or development commands.
 
+Current Phase 1 implementation note: the repo now contains an assisted install runbook and release/service tooling in [install-runbook.md](./install-runbook.md). That is a repo-side install path, not yet a passed clean-machine self-serve installer gate.
+
 ---
 
 ## 7. Minimum Readiness Gates

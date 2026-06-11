@@ -2,11 +2,15 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
+  OnModuleInit,
   UnauthorizedException
 } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type {
   EmployeeAdminDetailResponse,
   EmployeeSessionsResponse,
@@ -21,8 +25,10 @@ import type {
   AdminAuditEntry,
   AuthorizedEmployee,
   CreateEmployeeRequestDto,
+  CreateFirstOwnerRequestDto,
   EmployeeRecord,
   EmployeeSummary,
+  IdentitySetupStatusResponseDto,
   LoginSurface,
   LoginRequestDto,
   LoginResponseDto,
@@ -41,11 +47,95 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 @Injectable()
-export class IdentityAccessService {
+export class IdentityAccessService implements OnModuleInit {
+  private readonly logger = new Logger(IdentityAccessService.name);
+  private setupTokenHash: Buffer | null = null;
+  private setupTokenConsumed = false;
+  private setupFailedAttempts = 0;
+  private setupFailureWindowStartedAt = 0;
+  private setupBlockedUntil = 0;
+
   constructor(private readonly identityAccessRepository: IdentityAccessRepository) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      await this.ensureSetupTokenForFreshInstall();
+    } catch {
+      this.logger.warn('First-owner setup token check skipped; database is not ready yet.');
+    }
+  }
 
   getRoleTemplates(): RoleTemplate[] {
     return Object.values(defaultRoleTemplates);
+  }
+
+  async getSetupStatus(): Promise<IdentitySetupStatusResponseDto> {
+    const setupRequired = await this.ensureSetupTokenForFreshInstall();
+    return { setupRequired };
+  }
+
+  async createFirstOwner(request: CreateFirstOwnerRequestDto): Promise<LoginResponseDto> {
+    const setupRequired = await this.ensureSetupTokenForFreshInstall();
+    if (!setupRequired) {
+      throw new NotFoundException('First-owner setup is not available.');
+    }
+
+    this.assertSetupRateLimit();
+
+    if (!this.verifySetupToken(request.setupToken.trim())) {
+      this.recordFailedSetupAttempt();
+      throw new UnauthorizedException('Invalid setup token.');
+    }
+
+    const email = request.email.trim();
+    const existing = await this.identityAccessRepository.findEmployeeByEmail(email.toLowerCase());
+    if (existing) {
+      throw new ConflictException('An employee with this email already exists.');
+    }
+
+    const employee: EmployeeRecord = {
+      id: randomUUID(),
+      email,
+      displayName: request.displayName.trim(),
+      roleId: 'owner',
+      isActive: true,
+      password: await hashPassword(request.password),
+      permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+    };
+
+    try {
+      const created =
+        await this.identityAccessRepository.createFirstOwnerIfNoActiveEmployees(employee);
+      if (!created) {
+        this.clearSetupToken();
+        throw new NotFoundException('First-owner setup is not available.');
+      }
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        throw new ConflictException('An employee with this email already exists.');
+      }
+      throw error;
+    }
+
+    this.setupTokenConsumed = true;
+    this.clearSetupToken();
+    this.resetSetupRateLimit();
+    this.logger.log('First-owner setup completed; setup token permanently consumed.');
+
+    const sessionToken = randomUUID();
+    await this.identityAccessRepository.createSession({
+      token: sessionToken,
+      id: randomUUID(),
+      employeeId: employee.id,
+      surface: 'office-web',
+      deviceLabel: 'First Owner Setup',
+      issuedAt: new Date().toISOString()
+    });
+
+    return {
+      sessionToken,
+      employee: this.toEmployeeSummary(employee)
+    };
   }
 
   async login(loginRequest: LoginRequestDto): Promise<LoginResponseDto> {
@@ -595,6 +685,69 @@ export class IdentityAccessService {
 
   private uniquePermissionKeys(permissionKeys: PermissionKey[]): PermissionKey[] {
     return [...new Set(permissionKeys)].sort();
+  }
+
+  private async ensureSetupTokenForFreshInstall(): Promise<boolean> {
+    const activeEmployeeCount = await this.identityAccessRepository.countActiveEmployees();
+    if (activeEmployeeCount > 0 || this.setupTokenConsumed) {
+      this.clearSetupToken();
+      return false;
+    }
+
+    if (!this.setupTokenHash) {
+      const setupToken = randomBytes(24).toString('base64url');
+      this.setupTokenHash = this.hashSetupToken(setupToken);
+      this.logger.warn(
+        `BellField first-owner setup token: ${setupToken}. Use it once at /identity/setup/first-owner; it is not shown in the browser.`
+      );
+    }
+
+    return true;
+  }
+
+  private verifySetupToken(candidate: string): boolean {
+    if (!this.setupTokenHash) {
+      return false;
+    }
+
+    const candidateHash = this.hashSetupToken(candidate);
+    return timingSafeEqual(candidateHash, this.setupTokenHash);
+  }
+
+  private hashSetupToken(token: string): Buffer {
+    return createHash('sha256').update(token, 'utf8').digest();
+  }
+
+  private assertSetupRateLimit(): void {
+    if (Date.now() < this.setupBlockedUntil) {
+      throw new HttpException(
+        'Too many invalid setup attempts. Try again shortly.',
+        HttpStatus.TOO_MANY_REQUESTS
+      );
+    }
+  }
+
+  private recordFailedSetupAttempt(): void {
+    const now = Date.now();
+    if (now - this.setupFailureWindowStartedAt > 10 * 60 * 1000) {
+      this.setupFailureWindowStartedAt = now;
+      this.setupFailedAttempts = 0;
+    }
+
+    this.setupFailedAttempts += 1;
+    if (this.setupFailedAttempts >= 5) {
+      this.setupBlockedUntil = now + 5 * 60 * 1000;
+    }
+  }
+
+  private resetSetupRateLimit(): void {
+    this.setupFailedAttempts = 0;
+    this.setupFailureWindowStartedAt = 0;
+    this.setupBlockedUntil = 0;
+  }
+
+  private clearSetupToken(): void {
+    this.setupTokenHash = null;
   }
 
   private buildSurfaceErrorMessage(allowedSurfaces: LoginSurface[]): string {

@@ -77,6 +77,20 @@ export interface LoginResponse {
   employee: EmployeeSummary;
 }
 
+export interface IdentitySetupStatusResponse {
+  /** True only while there are zero active employees and the in-memory setup token is valid. */
+  setupRequired: boolean;
+}
+
+export interface CreateFirstOwnerRequest {
+  /** One-time token printed to the API/server log at startup. Never rendered by the UI. */
+  setupToken: string;
+  email: string;
+  displayName: string;
+  /** Initial owner password (stored hashed; never returned). */
+  password: string;
+}
+
 export interface CurrentSessionResponse {
   employee: EmployeeSummary;
 }

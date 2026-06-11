@@ -5,6 +5,7 @@ import { AppModule } from './modules/app.module';
 import { GlobalExceptionFilter } from './common/global-exception.filter';
 import { log } from './common/logger';
 import { getApiRuntimeConfig } from './common/config/runtime-config';
+import { MigrationReadinessService } from './database/migration-readiness.service';
 import { MediaConfigService } from './modules/media/media-config.service';
 
 async function bootstrap() {
@@ -35,6 +36,10 @@ async function bootstrap() {
       }
     })
   );
+
+  if (runtimeConfig.nodeEnv === 'production') {
+    await app.get(MigrationReadinessService).assertReadyToServe();
+  }
 
   await app.listen(runtimeConfig.port);
 

@@ -14,6 +14,7 @@ import {
   loginSurfaces,
   permissionKeys,
   type CreateEmployeeRequestDto,
+  type CreateFirstOwnerRequestDto,
   type EmployeeRoleId,
   type LoginRequestDto,
   type PermissionKey,
@@ -36,6 +37,27 @@ export class LoginRequestBodyDto implements LoginRequestDto {
   @IsString()
   @MaxLength(120)
   deviceLabel?: string;
+}
+
+export class CreateFirstOwnerRequestBodyDto implements CreateFirstOwnerRequestDto {
+  @IsString()
+  @MinLength(16)
+  @MaxLength(200)
+  setupToken!: string;
+
+  @IsEmail()
+  @MaxLength(200)
+  email!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(120)
+  displayName!: string;
+
+  @IsString()
+  @MinLength(8)
+  @MaxLength(200)
+  password!: string;
 }
 
 export class UpdateEmployeeRequestBodyDto implements UpdateEmployeeRequestDto {

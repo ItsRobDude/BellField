@@ -53,6 +53,7 @@ Root runtime settings:
 - Copy `.env.example` values into your local shell or app-specific `.env` files when running the API or worker.
 - `DATABASE_URL` is required for API runtime and migration scripts.
 - `PORT` controls the local API listen port.
+- `BELLFIELD_API_PORT` is the production/server-config API port override; it takes precedence over `PORT` when set.
 - `BOOTSTRAP_SEED_DATA=true` opts local development into seeded demo accounts; omitted means no seed bootstrap.
 - `BELLFIELD_OFFICE_ORIGINS` lists allowed office-web origins in production. Development/test are permissive when it is omitted.
 - `BELLFIELD_MEDIA_ROOT` controls where uploaded media blobs are stored.
@@ -114,6 +115,8 @@ pnpm start:api
 pnpm start:worker
 ```
 
+`pnpm start:worker` now expects `apps/worker/dist` to exist. Run `pnpm --filter @bellfield/worker build` first when using the production-style start command.
+
 Field mobile convenience targets:
 
 ```powershell
@@ -138,6 +141,14 @@ pnpm lint
 pnpm test
 pnpm build
 ```
+
+Production-style release assembly:
+
+```powershell
+pnpm build:release
+```
+
+This creates a generated `release/` folder with compiled API/worker output, the office-web standalone server, migration scripts, install helpers, and the bundled Node runtime from the current machine. See [install-runbook.md](./install-runbook.md) for the assisted install flow and current validation boundaries.
 
 Current testing posture:
 

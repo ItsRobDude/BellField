@@ -116,6 +116,16 @@ Read when: deciding whether a deployment assumption is supportable, planning a p
 
 Does not own: general hosting philosophy; use `deployment-model.md` for that. Does not mean the production installer already exists.
 
+### [install-runbook.md](./install-runbook.md)
+
+Audience: contributors and assisted-install operators validating the current Windows server install path.
+
+Purpose: Phase 1 release-folder runbook covering build assembly, unified server config, PostgreSQL provisioning, Windows service manifests, first-owner setup, health checks, and current validation boundaries.
+
+Read when: assembling or testing a BellField server release artifact, or checking what the current installer path can and cannot claim.
+
+Does not own: the broader install posture (`self-hosted-installation-strategy.md`) or deployment philosophy (`deployment-model.md`). It is not yet proof that the stranger install gate has passed.
+
 ### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
 
 Audience: contributors working on licensing, distribution, updates, or commercial protection posture.

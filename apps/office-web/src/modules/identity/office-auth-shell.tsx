@@ -1,9 +1,14 @@
 'use client';
 
 import type { CSSProperties, FormEvent } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { getInitialOfficeApiBaseUrl } from '@/lib/api-base-url';
-import { loginToOfficeApi, type EmployeeSummary } from '@/lib/identity-api';
+import {
+  createFirstOwner,
+  getOfficeSetupStatus,
+  loginToOfficeApi,
+  type EmployeeSummary
+} from '@/lib/identity-api';
 import { OfficeWorkspaceShell } from '@/modules/operations/office-workspace-shell';
 import {
   resolveInitialLoginCredentials,
@@ -30,10 +35,40 @@ export function OfficeAuthShell() {
   const [apiBaseUrl, setApiBaseUrl] = useState(getInitialOfficeApiBaseUrl());
   const [email, setEmail] = useState(initialCredentials.email);
   const [password, setPassword] = useState(initialCredentials.password);
+  const [displayName, setDisplayName] = useState('');
+  const [setupToken, setSetupToken] = useState('');
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [isCheckingSetup, setIsCheckingSetup] = useState(false);
   const [sessionToken, setSessionToken] = useState<string | null>(null);
   const [employee, setEmployee] = useState<EmployeeSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    let isCurrent = true;
+    setIsCheckingSetup(true);
+
+    getOfficeSetupStatus({ apiBaseUrl })
+      .then((status) => {
+        if (isCurrent) {
+          setSetupRequired(status.setupRequired);
+        }
+      })
+      .catch(() => {
+        if (isCurrent) {
+          setSetupRequired(false);
+        }
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setIsCheckingSetup(false);
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [apiBaseUrl]);
 
   async function handleLogin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -52,6 +87,33 @@ export function OfficeAuthShell() {
       setEmployee(response.employee);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to sign in.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleCreateFirstOwner(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+
+    try {
+      const response = await createFirstOwner({
+        setupToken,
+        displayName,
+        email,
+        password,
+        apiBaseUrl
+      });
+
+      setSetupRequired(false);
+      setSetupToken('');
+      setSessionToken(response.sessionToken);
+      setEmployee(response.employee);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to create the owner account.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -76,9 +138,13 @@ export function OfficeAuthShell() {
     <main style={styles.page}>
       <section style={styles.card}>
         <div style={styles.kicker}>BellField Office</div>
-        <h1 style={styles.title}>Sign in</h1>
-        <p style={styles.muted}>Use your office account to manage dispatch, jobs, and customers.</p>
-        <form onSubmit={handleLogin} style={styles.form}>
+        <h1 style={styles.title}>{setupRequired ? 'Create owner account' : 'Sign in'}</h1>
+        <p style={styles.muted}>
+          {setupRequired
+            ? 'Start BellField with the first active owner account.'
+            : 'Use your office account to manage dispatch, jobs, and customers.'}
+        </p>
+        <form onSubmit={setupRequired ? handleCreateFirstOwner : handleLogin} style={styles.form}>
           <label style={styles.fieldLabel}>
             <span>Server URL</span>
             <input
@@ -89,6 +155,23 @@ export function OfficeAuthShell() {
             />
           </label>
           <p style={styles.helperText}>Enter the BellField API address for this office server.</p>
+          {setupRequired ? (
+            <>
+              <input
+                aria-label="Setup token"
+                value={setupToken}
+                onChange={(event) => setSetupToken(event.target.value)}
+                style={styles.input}
+                type="password"
+              />
+              <input
+                aria-label="Display name"
+                value={displayName}
+                onChange={(event) => setDisplayName(event.target.value)}
+                style={styles.input}
+              />
+            </>
+          ) : null}
           <input
             aria-label="Email"
             value={email}
@@ -103,10 +186,17 @@ export function OfficeAuthShell() {
             style={styles.input}
           />
           <button type="submit" disabled={isSubmitting} style={styles.button}>
-            {isSubmitting ? 'Signing in...' : 'Sign in'}
+            {setupRequired
+              ? isSubmitting
+                ? 'Creating owner...'
+                : 'Create owner'
+              : isSubmitting
+                ? 'Signing in...'
+                : 'Sign in'}
           </button>
         </form>
-        {showDemoAccounts ? (
+        {isCheckingSetup ? <p style={styles.helperText}>Checking server setup status...</p> : null}
+        {showDemoAccounts && !setupRequired ? (
           <div style={styles.demoList}>
             {demoAccounts.map((account) => (
               <button

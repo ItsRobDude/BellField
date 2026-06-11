@@ -1,5 +1,5 @@
 export interface HealthStatus {
-  status: 'ok';
+  status: 'ok' | 'degraded';
   timestamp: string;
 }
 

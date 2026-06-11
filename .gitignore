@@ -2,6 +2,7 @@ node_modules
 .pnpm-store
 .npm
 coverage
+release
 *.log
 .DS_Store
 

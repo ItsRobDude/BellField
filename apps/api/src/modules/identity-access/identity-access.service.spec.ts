@@ -642,4 +642,91 @@ describe('IdentityAccessService', () => {
       })
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
+
+  function firstOwnerSetupRepo(opts: { activeEmployeeCount?: number; created?: boolean } = {}) {
+    return {
+      countActiveEmployees: jest.fn().mockResolvedValue(opts.activeEmployeeCount ?? 0),
+      findEmployeeByEmail: jest.fn().mockResolvedValue(null),
+      createFirstOwnerIfNoActiveEmployees: jest.fn().mockResolvedValue(opts.created ?? true),
+      createSession: jest.fn().mockResolvedValue(undefined)
+    };
+  }
+
+  async function issueSetupToken(service: IdentityAccessService): Promise<string> {
+    const warn = jest.spyOn(service['logger'], 'warn').mockImplementation(() => undefined);
+
+    await service.getSetupStatus();
+    const message = String(warn.mock.calls[0]?.[0] ?? '');
+    warn.mockRestore();
+
+    const match = message.match(/setup token: ([A-Za-z0-9_-]+)\./);
+    if (!match) {
+      throw new Error(`Unable to extract setup token from log: ${message}`);
+    }
+    return match[1];
+  }
+
+  it('reports setup mode and creates the first owner with a hashed password/session', async () => {
+    const repo = firstOwnerSetupRepo();
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    const setupToken = await issueSetupToken(service);
+
+    const result = await service.createFirstOwner({
+      setupToken,
+      email: 'Owner@Example.com',
+      displayName: 'First Owner',
+      password: 'first-owner-pass'
+    });
+
+    expect(result.employee.roleId).toBe('owner');
+    expect(result.employee.email).toBe('Owner@Example.com');
+    expect(result).not.toHaveProperty('setupToken');
+    const createdEmployee = repo.createFirstOwnerIfNoActiveEmployees.mock.calls[0][0] as {
+      password: string;
+      roleId: string;
+      isActive: boolean;
+    };
+    expect(createdEmployee.roleId).toBe('owner');
+    expect(createdEmployee.isActive).toBe(true);
+    expect(isHashed(createdEmployee.password)).toBe(true);
+    expect(createdEmployee.password).not.toContain('first-owner-pass');
+    expect(repo.createSession).toHaveBeenCalledWith(
+      expect.objectContaining({ employeeId: result.employee.id, surface: 'office-web' })
+    );
+  });
+
+  it('hides first-owner setup once an active employee exists', async () => {
+    const repo = firstOwnerSetupRepo({ activeEmployeeCount: 1 });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+
+    await expect(service.getSetupStatus()).resolves.toEqual({ setupRequired: false });
+    await expect(
+      service.createFirstOwner({
+        setupToken: 'wrong-token-but-long-enough',
+        email: 'owner@example.com',
+        displayName: 'Owner',
+        password: 'first-owner-pass'
+      })
+    ).rejects.toBeInstanceOf(NotFoundException);
+    expect(repo.createFirstOwnerIfNoActiveEmployees).not.toHaveBeenCalled();
+  });
+
+  it('rate-limits repeated invalid first-owner setup tokens', async () => {
+    const repo = firstOwnerSetupRepo();
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await issueSetupToken(service);
+    const request = {
+      setupToken: 'wrong-token-but-long-enough',
+      email: 'owner@example.com',
+      displayName: 'Owner',
+      password: 'first-owner-pass'
+    };
+
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      await expect(service.createFirstOwner(request)).rejects.toBeInstanceOf(UnauthorizedException);
+    }
+
+    await expect(service.createFirstOwner(request)).rejects.toHaveProperty('status', 429);
+    expect(repo.createFirstOwnerIfNoActiveEmployees).not.toHaveBeenCalled();
+  });
 });

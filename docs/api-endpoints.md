@@ -13,6 +13,8 @@ Most endpoints expect:
 
 | Method  | Path                                                         | Surface         | Permission gate                  | Purpose                                                                                                                                                                                                  |
 | ------- | ------------------------------------------------------------ | --------------- | -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`   | `/identity/setup/status`                                     | office install  | none                             | Return `{ setupRequired }`; true only while no active employee exists and the API has an in-memory first-owner setup token.                                                                              |
+| `POST`  | `/identity/setup/first-owner`                                | office install  | setup token                      | Create the first active Owner account on a fresh install. Rate-limited, token single-use, returns 404 after any active employee exists.                                                                  |
 | `POST`  | `/identity/auth/login`                                       | office or field | none                             | Create a session for an employee and selected surface.                                                                                                                                                   |
 | `GET`   | `/identity/auth/me`                                          | office or field | active session                   | Return current employee summary and effective permissions.                                                                                                                                               |
 | `GET`   | `/identity/roles`                                            | office          | `employeesPermissions:view`      | List default role templates.                                                                                                                                                                             |
@@ -261,6 +263,12 @@ secondary gate; CSV export adds `reports:export` (enforced server-side, not UI-o
 `reports:view` → Owner, Admin, Dispatcher, BookKeeping; `reports:export` → Owner, Admin, BookKeeping. The
 secondary gates make the surface per-report: e.g. Dispatcher sees only AR (no `jobCosting:view`/
 `inventory:view`/`reports:export`).
+
+## Platform Health
+
+| Method | Path      | Surface         | Permission gate | Purpose                                                                                                                         |
+| ------ | --------- | --------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/health` | install/monitor | none            | Return `{ status: "ok" \| "degraded", timestamp }` from DB reachability and pending-migration readiness; no details or secrets. |
 
 ## System (Milestone 10)
 

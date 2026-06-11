@@ -32,12 +32,13 @@ Primary references:
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11)
 
-- No deployable artifact: no installer, Dockerfile, service registration, or
-  release CI job. `apps/api` `start` runs `nest start` (dev toolchain at
-  runtime); `apps/worker` runs via `tsx`.
-- First-user paradox is now narrowed to account creation: seed bootstrap is
-  explicit opt-in and production refuses it, but a fresh install still has zero
-  accounts and no first-owner setup flow until Phase 1.1.
+- Release artifact scaffolding now exists: `tools/build-release.mjs` assembles
+  compiled API/worker output, office-web standalone output, migration scripts,
+  install helpers, and a bundled Node runtime into `release/`. The clean-machine
+  install gate has not yet been run.
+- First-user paradox is closed in code: when a fresh database has zero active
+  employees, the API logs a one-time first-owner setup token and office-web
+  switches to owner-account setup.
 - Backup/restore: zero code. The `supportLogsBackups` permission gates a
   capability that does not exist.
 - Update path: none. All versions are a frozen `0.0.1`; no release-date
@@ -45,9 +46,9 @@ Primary references:
 - Licensing: zero code; posture fully decided in
   `asset-protection-and-licensing.md`.
 - `apps/worker`: a heartbeat stub — no DB access, no dependencies, no jobs.
-- Live contradictions after Phase 0: the interim Resend key remains a
-  BellField-operated-only bridge until Phase 5, and there is still no
-  installable artifact until Phase 1.
+- Live contradictions after Phase 1 repo work: the interim Resend key remains a
+  BellField-operated-only bridge until Phase 5, and the release/runbook path is
+  not yet clean-machine certified.
 - Genuinely ready: explicit seed posture, production CORS allowlist,
   structured email failure codes, provider-key seam, shared email attachment
   cap, snapshot-at-queue-time semantics, and snapshot read/verify path.
@@ -157,6 +158,13 @@ between code and `deployment-model.md` remains except the interim email key
 Goal: one supported install path matching
 `self-hosted-installation-strategy.md`. Customer never needs git, Node, pnpm,
 Docker knowledge, or a terminal beyond running the installer.
+
+Status: repo-side Phase 1 implementation landed 2026-06-11. This includes
+first-owner setup, meaningful health/schema readiness, compiled worker and
+office standalone build wiring, release assembly, unified server-config
+template, Windows service manifests, PostgreSQL provisioning helper, and
+`docs/install-runbook.md`. The clean-machine stranger gate remains deliberately
+unclaimed because only the development machine was available for validation.
 
 ### 1.1 First-admin setup flow (parallel-safe; pure product code)
 

@@ -111,6 +111,14 @@ export class IdentityAccessRepository {
     return this.listEmployeesWithin(this.databaseService);
   }
 
+  async countActiveEmployees(): Promise<number> {
+    const result = await this.databaseService.query<{ count: number }>(
+      'select count(*)::int as count from employees where is_active = true'
+    );
+
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
   private async listEmployeesWithin(queryable: QueryExecutor): Promise<EmployeeRecord[]> {
     const result = await queryable.query<EmployeeRow>(
       `
@@ -334,6 +342,22 @@ export class IdentityAccessRepository {
       const auditEntry = prepare({ actor });
       await this.insertEmployeeWithin(queryable, employee);
       await this.insertAuditEntryWithin(queryable, auditEntry);
+    });
+  }
+
+  async createFirstOwnerIfNoActiveEmployees(employee: EmployeeRecord): Promise<boolean> {
+    return this.databaseService.transaction(async (queryable) => {
+      await this.acquireIdentityAdminLock(queryable);
+      const activeEmployees = await queryable.query<{ count: number }>(
+        'select count(*)::int as count from employees where is_active = true'
+      );
+
+      if (Number(activeEmployees.rows[0]?.count ?? 0) > 0) {
+        return false;
+      }
+
+      await this.insertEmployeeWithin(queryable, employee);
+      return true;
     });
   }
 

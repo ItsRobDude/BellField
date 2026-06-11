@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createFirstOwner,
   createOfficeEmployee,
+  getOfficeSetupStatus,
   resetOfficeEmployeePassword,
   revokeOfficeEmployeeSession,
   updateOfficeEmployee
@@ -29,6 +31,34 @@ function firstCall() {
 }
 
 describe('identity-api employee admin helpers', () => {
+  it('getOfficeSetupStatus GETs the unauthenticated setup status route', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ setupRequired: true }) });
+    const result = await getOfficeSetupStatus({ apiBaseUrl: 'http://api.test' });
+    const call = firstCall();
+    expect(call.url).toBe('http://api.test/identity/setup/status');
+    expect(call.method).toBeUndefined();
+    expect(result.setupRequired).toBe(true);
+  });
+
+  it('createFirstOwner POSTs the one-time setup token without returning it locally', async () => {
+    await createFirstOwner({
+      apiBaseUrl: 'http://api.test',
+      setupToken: 'setup-token',
+      email: 'owner@example.com',
+      displayName: 'First Owner',
+      password: 'owner-password'
+    });
+    const call = firstCall();
+    expect(call.url).toBe('http://api.test/identity/setup/first-owner');
+    expect(call.method).toBe('POST');
+    expect(call.body).toEqual({
+      setupToken: 'setup-token',
+      email: 'owner@example.com',
+      displayName: 'First Owner',
+      password: 'owner-password'
+    });
+  });
+
   it('updateOfficeEmployee PATCHes role/active/overrides to the employee route', async () => {
     await updateOfficeEmployee({
       employeeId: 'e1',

@@ -88,7 +88,11 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     );
   }
 
-  const port = resolvePort(process.env.PORT, isProduction, problems);
+  const port = resolvePort(
+    process.env.BELLFIELD_API_PORT ?? process.env.PORT,
+    isProduction,
+    problems
+  );
   const bootstrapSeedData = getBoolean(process.env.BOOTSTRAP_SEED_DATA, false);
   const officeOrigins = resolveOfficeOrigins(
     process.env.BELLFIELD_OFFICE_ORIGINS,

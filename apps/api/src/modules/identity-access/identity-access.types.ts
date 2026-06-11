@@ -1,8 +1,10 @@
 import type {
   CreateEmployeeRequest,
+  CreateFirstOwnerRequest,
   EmployeeRoleId as ContractEmployeeRoleId,
   EmployeePermissionOverrides as ContractEmployeePermissionOverrides,
   EmployeeSummary as ContractEmployeeSummary,
+  IdentitySetupStatusResponse,
   LoginRequest,
   LoginResponse,
   PermissionAction as ContractPermissionAction,
@@ -99,6 +101,10 @@ export type AuthorizedEmployee = EmployeeSummary & {
 export type LoginRequestDto = LoginRequest;
 
 export type LoginResponseDto = LoginResponse;
+
+export type IdentitySetupStatusResponseDto = IdentitySetupStatusResponse;
+
+export type CreateFirstOwnerRequestDto = CreateFirstOwnerRequest;
 
 export type UpdateEmployeeRequestDto = UpdateEmployeeRequest;
 

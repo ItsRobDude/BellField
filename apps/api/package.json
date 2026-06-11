@@ -7,6 +7,7 @@
     "dev": "nest start --watch --entryFile apps/api/src/main",
     "prestart": "pnpm --filter @bellfield/estimating build",
     "start": "nest start --entryFile apps/api/src/main",
+    "start:prod": "node dist/apps/api/src/main.js",
     "prebuild": "pnpm --filter @bellfield/estimating build",
     "build": "nest build",
     "lint": "eslint \"src/**/*.ts\"",

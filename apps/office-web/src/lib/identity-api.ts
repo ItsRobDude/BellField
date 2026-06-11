@@ -1,10 +1,12 @@
 import type {
+  CreateFirstOwnerRequest,
   CurrentSessionResponse,
   EmployeeAdminDetailResponse,
   EmployeeListResponse,
   EmployeeRoleId,
   EmployeeSessionSummary,
   EmployeeSummary,
+  IdentitySetupStatusResponse,
   LoginResponse,
   PermissionKey,
   ResetEmployeePasswordResponse,
@@ -19,6 +21,7 @@ export type {
   EmployeeRoleId,
   EmployeeSessionSummary,
   EmployeeSummary,
+  IdentitySetupStatusResponse,
   LoginResponse,
   PermissionKey,
   ResetEmployeePasswordResponse,
@@ -64,6 +67,31 @@ export async function loginToOfficeApi(input: {
       password: input.password,
       surface: 'office-web',
       deviceLabel: input.deviceLabel
+    })
+  });
+}
+
+export async function getOfficeSetupStatus(input: {
+  apiBaseUrl?: string;
+}): Promise<IdentitySetupStatusResponse> {
+  return requestJson<IdentitySetupStatusResponse>('/identity/setup/status', {
+    apiBaseUrl: input.apiBaseUrl
+  });
+}
+
+export async function createFirstOwner(
+  input: CreateFirstOwnerRequest & {
+    apiBaseUrl?: string;
+  }
+): Promise<LoginResponse> {
+  return requestJson<LoginResponse>('/identity/setup/first-owner', {
+    apiBaseUrl: input.apiBaseUrl,
+    method: 'POST',
+    body: JSON.stringify({
+      setupToken: input.setupToken,
+      email: input.email,
+      displayName: input.displayName,
+      password: input.password
     })
   });
 }

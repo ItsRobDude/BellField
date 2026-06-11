@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, readFileSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
@@ -9,7 +9,22 @@ const { Client } = pg;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-export const migrationsDir = path.resolve(__dirname, '../../src/database/migrations');
+function resolveMigrationsDir() {
+  const candidates = [
+    path.resolve(__dirname, '../../src/database/migrations'),
+    path.resolve(__dirname, '../../database/migrations'),
+    path.resolve(process.cwd(), 'apps/api/src/database/migrations'),
+    path.resolve(process.cwd(), 'src/database/migrations'),
+    path.resolve(process.cwd(), 'database/migrations')
+  ];
+
+  return (
+    candidates.find((candidate) => existsSync(candidate)) ??
+    path.resolve(__dirname, '../../src/database/migrations')
+  );
+}
+
+export const migrationsDir = resolveMigrationsDir();
 
 mkdirSync(migrationsDir, { recursive: true });
 

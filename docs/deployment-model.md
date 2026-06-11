@@ -219,6 +219,7 @@ The API now stores media blobs on the server filesystem.
 Runtime configuration:
 
 - `BOOTSTRAP_SEED_DATA` - explicit development-only seed toggle; production startup refuses `true`
+- `BELLFIELD_API_PORT` - production/server-config API port override; falls back to `PORT`
 - `BELLFIELD_OFFICE_ORIGINS` - comma-separated office-web origins allowed to call the API in production
 - `BELLFIELD_MEDIA_ROOT` - absolute path where uploaded media blobs are stored
 - `BELLFIELD_MEDIA_TOKEN_SECRET` - long random secret used to sign upload/download tokens
@@ -229,6 +230,8 @@ Production must set `BELLFIELD_OFFICE_ORIGINS`, `BELLFIELD_MEDIA_ROOT`, and `BEL
 The token secret must be at least 32 characters and cannot be the dev fallback
 or sample placeholder value.
 Development and test runs may fall back to temporary local values, but that fallback is not a deployment posture.
+
+The assisted server install path uses one generated `bellfield-server.env` for all server services. The committed template is `bellfield-server.env.example`; customer-specific generated config must stay outside source control. The current runbook lives in [install-runbook.md](./install-runbook.md).
 
 The current v1 filesystem layout stores blobs under:
 
