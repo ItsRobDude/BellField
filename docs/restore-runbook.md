@@ -84,14 +84,16 @@ Run:
 
 What the helper does:
 
-1. Stops the BellField app services: office-web, worker, API.
-2. Leaves PostgreSQL running so the restore tools can connect.
-3. Drops and recreates the configured BellField database.
-4. Restores `database.dump` with `pg_restore`.
-5. Replaces `BELLFIELD_MEDIA_ROOT` with the backup set's `media` directory.
-6. Restores `license\bellfield-license.json` to `BELLFIELD_LICENSE_PATH` when present.
-7. Runs packaged migrations.
-8. Starts API, worker, and office-web.
+1. Copies the backup set's `media` directory to a same-parent staging path.
+2. Copies `license\bellfield-license.json` to a same-parent staging path when present.
+3. Stops the BellField app services: office-web, worker, API.
+4. Leaves PostgreSQL running so the restore tools can connect.
+5. Drops and recreates the configured BellField database.
+6. Restores `database.dump` with `pg_restore`.
+7. Renames the existing `BELLFIELD_MEDIA_ROOT` to a timestamped rollback directory, then renames the staged media directory into place.
+8. Replaces `BELLFIELD_LICENSE_PATH` from the staged license file when present, preserving the previous license file as a timestamped rollback file.
+9. Runs packaged migrations.
+10. Starts API, worker, and office-web.
 
 For a scratch drill without Windows services, pass `--skip-services=true`.
 
@@ -121,3 +123,20 @@ It replaces the configured BellField database and media root.
 Do not run it against a production server unless the operator has selected the backup set and approved the restore.
 
 Do not promise support for a network backup destination until backup creation and restore have both been tested from that destination.
+
+## Halfway-Failure Recovery
+
+The helper stages media and license files before stopping services or touching the database. If staging fails, the live database, media root, and license file have not been replaced.
+
+If the database restore fails before the media swap, the app services may be stopped and the database may be dropped or partially restored, but the live media root is still in its original path. Fix the PostgreSQL/tooling problem and rerun the same restore, or restore the database manually from the same `database.dump`.
+
+If the media swap fails, the helper attempts to rename the previous media root back into place before it exits. Check the console output for paths ending in:
+
+```text
+.restore-stage-YYYYMMDD-HHMMSSZ
+.restore-rollback-YYYYMMDD-HHMMSSZ
+```
+
+If the target media path is missing but a rollback directory exists, stop the app services and rename the rollback directory back to the configured `BELLFIELD_MEDIA_ROOT`.
+
+If migrations or service startup fail after the media swap, the restored media is already in place and the previous media root/license are preserved as rollback paths printed by the helper. Keep those rollback paths until the operator has confirmed the restored system works, then remove them manually after a fresh backup succeeds.

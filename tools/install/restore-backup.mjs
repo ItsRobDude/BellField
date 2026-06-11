@@ -1,7 +1,14 @@
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, parse, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  stageDirectoryRestore,
+  stageFileRestore,
+  swapStagedDirectory,
+  swapStagedFile,
+  timestampForRestorePath
+} from './restore-staging.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultReleaseRoot = resolve(scriptDir, '..', '..');
@@ -179,6 +186,7 @@ const manifestPath = join(backupSetPath, 'manifest.json');
 const dumpPath = join(backupSetPath, 'database.dump');
 const backupMediaPath = join(backupSetPath, 'media');
 const backupLicensePath = join(backupSetPath, 'license', 'bellfield-license.json');
+const restoreStamp = timestampForRestorePath();
 
 if (!databaseUrl) {
   throw new Error(`DATABASE_URL is missing from ${envPath}.`);
@@ -197,8 +205,27 @@ if (licenseRequired && !existsSync(backupLicensePath)) {
 
 const { env: pgEnv, databaseName } = databaseEnv(databaseUrl);
 const restoreEnv = { ...process.env, ...env, DATABASE_URL: databaseUrl };
+const stagedMediaPath = stageDirectoryRestore({
+  sourcePath: backupMediaPath,
+  targetPath: mediaRoot,
+  stamp: restoreStamp,
+  sourceLabel: 'backup media directory'
+});
+const stagedLicensePath =
+  licensePath && existsSync(backupLicensePath)
+    ? stageFileRestore({
+        sourcePath: backupLicensePath,
+        targetPath: licensePath,
+        stamp: restoreStamp,
+        sourceLabel: 'backup license file'
+      })
+    : null;
 
 console.log(`Restoring BellField backup from ${backupSetPath}`);
+console.log(`Staged media restore at ${stagedMediaPath}`);
+if (stagedLicensePath) {
+  console.log(`Staged license restore at ${stagedLicensePath}`);
+}
 stopAppServices(skipServices);
 
 run(pgTool('dropdb', postgresBin), ['--if-exists', '--force', databaseName], {
@@ -209,16 +236,28 @@ run(pgTool('pg_restore', postgresBin), ['--dbname', databaseName, '--no-owner', 
   env: pgEnv
 });
 
-rmSync(mediaRoot, { force: true, recursive: true });
-mkdirSync(dirname(mediaRoot), { recursive: true });
-cpSync(backupMediaPath, mediaRoot, { recursive: true });
+const mediaRollbackPath = swapStagedDirectory({
+  stagePath: stagedMediaPath,
+  targetPath: mediaRoot,
+  stamp: restoreStamp
+});
 
-if (licensePath && existsSync(backupLicensePath)) {
-  mkdirSync(dirname(licensePath), { recursive: true });
-  cpSync(backupLicensePath, licensePath);
-}
+const licenseRollbackPath =
+  licensePath && stagedLicensePath
+    ? swapStagedFile({
+        stagePath: stagedLicensePath,
+        targetPath: licensePath,
+        stamp: restoreStamp
+      })
+    : null;
 
 run(nodeExe, [migrationsScript], { env: restoreEnv, cwd: releaseRoot });
 startAppServices(skipServices);
 
 console.log('BellField restore completed.');
+if (mediaRollbackPath) {
+  console.log(`Previous media root preserved for rollback cleanup: ${mediaRollbackPath}`);
+}
+if (licenseRollbackPath) {
+  console.log(`Previous license file preserved for rollback cleanup: ${licenseRollbackPath}`);
+}
