@@ -122,6 +122,11 @@ The Phase 3 issuance tooling is private BellField-side tooling:
 - issue signed license files
 - append a non-secret issued-license ledger entry
 
+The default update window for a new license is **one year from issuance**
+(decided 2026-06-11): the software runs forever, updates are included for 12
+months, and the window is renewable. `--update-window-end` stays explicit at
+issuance time so support cases and renewals can set any date.
+
 The issued-license ledger is bookkeeping, not runtime enforcement. Per-shop single-active behavior is enforced by the Phase 5 relay, not by the offline license file.
 
 ## Relay Credential Boundary

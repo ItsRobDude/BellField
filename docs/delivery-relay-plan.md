@@ -55,7 +55,10 @@ Rules that follow:
 - when relay entitlement is missing or exhausted, the office sees the standard
   generic copy ("Estimate email is not available..." / a clear sending-limit
   message); never billing plumbing or provider details
-- unit rates and the markup level: business detail, set before pilot
+- unit rate (decided 2026-06-11): **$0.03 per send**, billed monthly from
+  relay metering; manual invoicing during the pilot, and the pilot shop may be
+  comped. Default per-shop quota is **1,000 sends/month** (a safety cap, not
+  the bill), overridable per shop via the issuance CLI
 
 ---
 
@@ -235,9 +238,15 @@ billing ledger), and an external uptime monitor alerts on the health endpoint.
 A dedicated host or VPS is required before Phase 6 ships — acceptance and
 payment links make relay downtime visible to shops' own customers.
 
+Resolved 2026-06-11 (owner decisions, second round): unit pricing — $0.03 per
+send billed monthly from relay metering, default quota 1,000 sends/month per
+shop (§2); the office-facing entitlement and failure copy set — approved as
+implemented in the install adapter and delivery summary messages (needs-setup,
+temporarily-unavailable, quota-exhausted, suspended, recipient-unavailable,
+sending-limit, expired, already-queued, and the 5.5 "Queued — will send
+automatically" notice); and, in the licensing lane, a **1-year default update
+window** for new licenses.
+
 Still open:
 
-- unit pricing and markup rates (business detail, set before pilot)
 - pilot uptime target (informal until Phase 6 forces a real one)
-- exact office-facing copy set for entitlement states (configured, ready,
-  quota exhausted, suspended) — must follow the no-internal-leakage rule
