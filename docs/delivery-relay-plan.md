@@ -220,9 +220,18 @@ Resolved 2026-06-10: pricing model (usage-based with markup, §2), queue expiry
 (24 hours, §6), custom domains (subdomain-only, §4), and sender branding (shop
 fronts the email on both tiers, §4).
 
+Resolved 2026-06-11: hosting — the pilot relay runs on the owner's home Unraid
+server as Docker containers (relay + Postgres + cloudflared) behind a
+Cloudflare Tunnel: outbound-only connectivity, no inbound router ports, home
+IP hidden. Operating rules: relay containers are single-purpose and
+image-pinned, the relay database gets a nightly off-box `pg_dump` (it is the
+billing ledger), and an external uptime monitor alerts on the health endpoint.
+A dedicated host or VPS is required before Phase 6 ships — acceptance and
+payment links make relay downtime visible to shops' own customers.
+
 Still open:
 
 - unit pricing and markup rates (business detail, set before pilot)
-- relay hosting choice and uptime target
+- pilot uptime target (informal until Phase 6 forces a real one)
 - exact office-facing copy set for entitlement states (configured, ready,
   quota exhausted, suspended) — must follow the no-internal-leakage rule
