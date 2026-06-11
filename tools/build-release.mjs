@@ -11,6 +11,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readArgs } from './install/install-utils.mjs';
+import { writeSignedReleaseArtifact } from './update/release-artifact.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
@@ -188,6 +189,10 @@ copyFileRequired(
   join(releaseRoot, 'bellfield-server.env.example')
 );
 copyRequired(join(repoRoot, 'tools', 'install'), join(releaseRoot, 'tools', 'install'));
+copyFileRequired(
+  join(repoRoot, 'tools', 'update', 'release-artifact.mjs'),
+  join(releaseRoot, 'tools', 'update', 'release-artifact.mjs')
+);
 
 writeFileSync(
   join(releaseRoot, 'README.txt'),
@@ -201,9 +206,17 @@ writeFileSync(
     '3. Run apps\\api\\scripts\\migrations\\up.mjs after PostgreSQL is provisioned.',
     '4. Register services with tools\\install\\install-windows-services.ps1.',
     '5. Restore, when needed, with tools\\install\\restore-backup.mjs and docs/restore-runbook.md.',
+    '6. Update artifacts are signed with bellfield-update-manifest.json + bellfield-update-signature.json.',
     '',
     'See docs/install-runbook.md in the source tree for the current supported runbook.'
   ].join('\r\n')
 );
+
+const signedArtifact = writeSignedReleaseArtifact({
+  releaseRoot,
+  privateKeyPath:
+    args['release-private-key'] ?? process.env.BELLFIELD_RELEASE_PRIVATE_KEY_PATH ?? undefined
+});
+console.log(`Signed update artifact manifest at ${signedArtifact.manifestPath}`);
 
 console.log(`Release assembled at ${releaseRoot}`);
