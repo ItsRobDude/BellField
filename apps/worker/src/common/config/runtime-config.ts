@@ -53,6 +53,12 @@ function getPositiveInteger(
   return defaultValue;
 }
 
+export type WorkerRelayConfig = {
+  baseUrl: string;
+  token: string;
+  serverInstanceId: string;
+};
+
 export type WorkerRuntimeConfig = {
   nodeEnv: NodeEnvironment;
   databaseUrl: string;
@@ -66,6 +72,12 @@ export type WorkerRuntimeConfig = {
     staleAfterHours: number;
     postgresBin?: string;
     pgDumpPath?: string;
+  };
+  /** Delivery relay client; absent means delivery retry/status jobs stay off. */
+  relay?: WorkerRelayConfig;
+  delivery: {
+    retryIntervalMs: number;
+    statusIntervalMs: number;
   };
 };
 
@@ -113,6 +125,20 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
     problems
   );
 
+  const relay = resolveRelayConfig(isProduction, problems);
+  const deliveryRetryIntervalSeconds = getPositiveInteger(
+    'BELLFIELD_DELIVERY_RETRY_INTERVAL_SECONDS',
+    60,
+    isProduction,
+    problems
+  );
+  const deliveryStatusIntervalMinutes = getPositiveInteger(
+    'BELLFIELD_DELIVERY_STATUS_INTERVAL_MINUTES',
+    5,
+    isProduction,
+    problems
+  );
+
   if (problems.length > 0) {
     throw new Error(
       [
@@ -136,6 +162,37 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
       staleAfterHours,
       postgresBin: process.env.BELLFIELD_POSTGRES_BIN?.trim() || undefined,
       pgDumpPath: process.env.BELLFIELD_PG_DUMP_PATH?.trim() || undefined
+    },
+    relay,
+    delivery: {
+      retryIntervalMs: deliveryRetryIntervalSeconds * 1_000,
+      statusIntervalMs: deliveryStatusIntervalMinutes * 60_000
     }
   };
+}
+
+/**
+ * Mirrors the API's relay client config rules: all three values or none;
+ * a partial set is a misconfiguration reported in production.
+ */
+function resolveRelayConfig(
+  isProduction: boolean,
+  problems: string[]
+): WorkerRelayConfig | undefined {
+  const baseUrl = process.env.BELLFIELD_RELAY_BASE_URL?.trim().replace(/\/+$/, '');
+  const token = process.env.BELLFIELD_RELAY_TOKEN?.trim();
+  const serverInstanceId = process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID?.trim();
+
+  if (!baseUrl && !token && !serverInstanceId) {
+    return undefined;
+  }
+  if (!baseUrl || !token || !serverInstanceId) {
+    if (isProduction) {
+      problems.push(
+        'BELLFIELD_RELAY_BASE_URL, BELLFIELD_RELAY_TOKEN, and BELLFIELD_RELAY_SERVER_INSTANCE_ID must all be set together (or all left empty).'
+      );
+    }
+    return undefined;
+  }
+  return { baseUrl, token, serverInstanceId };
 }

@@ -72,7 +72,7 @@ describe('EmailProviderService.sendEstimateEmail', () => {
 
     const result = await service.sendEstimateEmail(makeInput());
 
-    expect(result).toEqual({ kind: 'sent', providerMessageId: 'prov-1' });
+    expect(result).toEqual({ kind: 'sent', providerMessageId: 'relay-1' });
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe('https://relay.bellfield.app/v1/messages/estimate');
     const headers = options.headers as Record<string, string>;

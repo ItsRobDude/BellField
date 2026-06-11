@@ -105,7 +105,16 @@ export class EmailProviderService {
 
     const result = body.result;
     if (result?.kind === 'sent') {
-      return { kind: 'sent', providerMessageId: result.providerMessageId };
+      // The relay is this install's provider: record the relay message id so
+      // delivery-status polling can ask the relay about this exact message.
+      // ('unrecorded' marks a relay-side bookkeeping failure — nothing to poll.)
+      return {
+        kind: 'sent',
+        providerMessageId:
+          result.relayMessageId && result.relayMessageId !== 'unrecorded'
+            ? result.relayMessageId
+            : undefined
+      };
     }
     if (result?.kind === 'failed') {
       return {

@@ -1,0 +1,194 @@
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { workerLog } from '../../common/logger';
+import { estimateEmailQueueExpiryMs, nextDeliveryRetryDelayMs } from './delivery-retry-policy';
+import type { DeliveryStore, DueQueuedDelivery, RelayDeliveryClient } from './delivery-types';
+
+const DUE_BATCH_SIZE = 10;
+const POLL_BATCH_SIZE = 20;
+const POLL_RECHECK_MS = 5 * 60_000;
+const POLL_WINDOW_MS = 7 * 24 * 60 * 60_000;
+
+export type ProcessDueResult = {
+  expired: number;
+  sent: number;
+  failed: number;
+  rescheduled: number;
+};
+
+export type PollStatusesResult = {
+  polled: number;
+  updated: number;
+};
+
+type DeliveryServiceOptions = {
+  now?: () => Date;
+};
+
+export class DeliveryService {
+  private readonly now: () => Date;
+
+  constructor(
+    private readonly config: { mediaRoot: string },
+    private readonly store: DeliveryStore,
+    private readonly relayClient: RelayDeliveryClient,
+    options?: DeliveryServiceOptions
+  ) {
+    this.now = options?.now ?? (() => new Date());
+  }
+
+  /** Expires overdue queued sends, then retries the due ones (relay plan §6). */
+  async processDueDeliveries(input?: { signal?: AbortSignal }): Promise<ProcessDueResult> {
+    const now = this.now();
+    const summary: ProcessDueResult = { expired: 0, sent: 0, failed: 0, rescheduled: 0 };
+
+    const expired = await this.store.expireDue(
+      now,
+      new Date(now.getTime() - estimateEmailQueueExpiryMs)
+    );
+    summary.expired = expired.length;
+    for (const message of expired) {
+      await this.store.addTimelineEntry({
+        jobId: message.jobId,
+        occurredAt: now,
+        actorName: message.sentByName,
+        kind: 'estimateDeliveryFailed',
+        message: `Estimate delivery failed for ${message.recipientEmail}: ${message.estimateTitle ?? 'estimate'}.`
+      });
+    }
+
+    const due = await this.store.listDueQueued(now, DUE_BATCH_SIZE);
+    for (const message of due) {
+      if (input?.signal?.aborted) {
+        break;
+      }
+      await this.attemptDelivery(message, summary);
+    }
+    return summary;
+  }
+
+  /** Polls the relay for delivered/bounced/complained on recently sent mail. */
+  async pollDeliveryStatuses(): Promise<PollStatusesResult> {
+    const now = this.now();
+    const pollable = await this.store.listPollable(
+      new Date(now.getTime() - POLL_RECHECK_MS),
+      new Date(now.getTime() - POLL_WINDOW_MS),
+      POLL_BATCH_SIZE
+    );
+
+    let updated = 0;
+    for (const message of pollable) {
+      const outcome = await this.relayClient.getMessageStatus(message.providerMessageId);
+      if (outcome.kind === 'unavailable') {
+        // Transient relay problem; leave untouched so the next run retries.
+        continue;
+      }
+      if (outcome.kind === 'notFound' || outcome.state === 'sent' || outcome.state === 'failed') {
+        await this.store.touchStatusChecked(message.id, now);
+        continue;
+      }
+      const applied = await this.store.applyDeliveryState(message.id, outcome.state, now);
+      if (applied) {
+        updated += 1;
+      } else {
+        await this.store.touchStatusChecked(message.id, now);
+      }
+    }
+    return { polled: pollable.length, updated };
+  }
+
+  private async attemptDelivery(
+    message: DueQueuedDelivery,
+    summary: ProcessDueResult
+  ): Promise<void> {
+    const occurredAt = this.now();
+
+    let pdfBytes: Buffer;
+    try {
+      pdfBytes = await this.readSnapshot(message.snapshotStoragePath, message.snapshotSha256);
+    } catch (error) {
+      workerLog('error', 'Queued estimate email snapshot could not be read.', {
+        outboundMessageId: message.id,
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
+      await this.store.markFailed(message.id, 'unknown', occurredAt);
+      await this.addOutcomeTimeline(message, 'estimateDeliveryFailed', occurredAt);
+      summary.failed += 1;
+      return;
+    }
+
+    const outcome = await this.relayClient.sendEstimateDocument({
+      // Same key the synchronous attempt used: the relay replays a recorded
+      // outcome instead of double-sending.
+      idempotencyKey: `estimate-send-${message.id}`,
+      recipientEmail: message.recipientEmail,
+      fromName: message.fromName ?? '',
+      replyToEmail: message.replyToEmail ?? undefined,
+      subject: message.subject,
+      bodyText: message.bodyText,
+      document: { filename: message.snapshotFilename, bytes: pdfBytes }
+    });
+
+    if (outcome.kind === 'sent') {
+      await this.store.markSent(
+        message.id,
+        outcome.relayMessageId && outcome.relayMessageId !== 'unrecorded'
+          ? outcome.relayMessageId
+          : null,
+        occurredAt
+      );
+      await this.addOutcomeTimeline(message, 'estimateSent', occurredAt);
+      summary.sent += 1;
+      return;
+    }
+
+    if (!outcome.retryable) {
+      await this.store.markFailed(message.id, outcome.code, occurredAt);
+      await this.addOutcomeTimeline(message, 'estimateDeliveryFailed', occurredAt);
+      summary.failed += 1;
+      return;
+    }
+
+    const failedAttemptNumber = message.attemptCount + 1;
+    await this.store.scheduleRetry(
+      message.id,
+      new Date(occurredAt.getTime() + nextDeliveryRetryDelayMs(failedAttemptNumber)),
+      occurredAt
+    );
+    summary.rescheduled += 1;
+  }
+
+  private async addOutcomeTimeline(
+    message: DueQueuedDelivery,
+    kind: 'estimateSent' | 'estimateDeliveryFailed',
+    occurredAt: Date
+  ): Promise<void> {
+    const title = message.estimateTitle ?? 'estimate';
+    await this.store.addTimelineEntry({
+      jobId: message.jobId,
+      occurredAt,
+      actorName: message.sentByName,
+      kind,
+      message:
+        kind === 'estimateSent'
+          ? `Estimate sent to ${message.recipientEmail}: ${title}.`
+          : `Estimate delivery failed for ${message.recipientEmail}: ${title}.`
+    });
+  }
+
+  private async readSnapshot(storagePath: string, expectedSha256: string): Promise<Buffer> {
+    const root = path.resolve(this.config.mediaRoot);
+    const candidate = path.resolve(root, storagePath);
+    const normalizedRoot = root.endsWith(path.sep) ? root : root + path.sep;
+    if (candidate !== root && !candidate.startsWith(normalizedRoot)) {
+      throw new Error('Snapshot path escaped the configured media root.');
+    }
+    const bytes = await readFile(candidate);
+    const actual = createHash('sha256').update(bytes).digest('hex');
+    if (actual !== expectedSha256) {
+      throw new Error('Stored estimate PDF hash did not match its delivery snapshot.');
+    }
+    return bytes;
+  }
+}

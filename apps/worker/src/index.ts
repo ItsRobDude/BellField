@@ -4,6 +4,10 @@ import { workerLog } from './common/logger';
 import { BackupRunsRepository } from './jobs/backup/backup-runs.repository';
 import { createScheduledBackupJob } from './jobs/backup/backup-job';
 import { BackupService } from './jobs/backup/backup-service';
+import { createDeliveryRetryJob, createDeliveryStatusJob } from './jobs/delivery/delivery-jobs';
+import { DeliveryRepository } from './jobs/delivery/delivery.repository';
+import { DeliveryService } from './jobs/delivery/delivery-service';
+import { RelayClient } from './jobs/delivery/relay-client';
 import { JobRunner, type WorkerJob } from './jobs/job-runner';
 
 const heartbeatMs = 60_000;
@@ -44,6 +48,24 @@ async function startWorker(): Promise<void> {
     );
   }
 
+  if (runtimeConfig.relay) {
+    const deliveryService = new DeliveryService(
+      { mediaRoot: runtimeConfig.mediaRoot },
+      new DeliveryRepository(database),
+      new RelayClient(runtimeConfig.relay)
+    );
+    jobs.push(
+      createDeliveryRetryJob({
+        deliveryService,
+        intervalMs: runtimeConfig.delivery.retryIntervalMs
+      }),
+      createDeliveryStatusJob({
+        deliveryService,
+        intervalMs: runtimeConfig.delivery.statusIntervalMs
+      })
+    );
+  }
+
   const runner = new JobRunner(jobs);
 
   workerLog('info', 'Worker started.', {
@@ -51,7 +73,8 @@ async function startWorker(): Promise<void> {
     nodeEnv: runtimeConfig.nodeEnv,
     backupEnabled: runtimeConfig.backup.enabled,
     backupIntervalMs: runtimeConfig.backup.intervalMs,
-    backupRetentionCount: runtimeConfig.backup.retentionCount
+    backupRetentionCount: runtimeConfig.backup.retentionCount,
+    deliveryJobsEnabled: Boolean(runtimeConfig.relay)
   });
 
   runner.start();
