@@ -16,6 +16,9 @@ async function bootstrap() {
     rawBody: true
   });
 
+  // A base64-encoded PDF at the shared attachment cap is ~20 MB of JSON; the
+  // Express default 100 kb limit would reject every real send.
+  app.useBodyParser('json', { limit: 25_000_000 });
   app.useGlobalFilters(new GlobalExceptionFilter());
   app.useGlobalPipes(
     new ValidationPipe({

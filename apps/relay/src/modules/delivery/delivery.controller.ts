@@ -1,0 +1,70 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  NotFoundException,
+  Param,
+  Post,
+  Req,
+  UseGuards
+} from '@nestjs/common';
+import type {
+  RelayEntitlementResponse,
+  RelayMessageStatusResponse,
+  RelaySendEstimateDocumentResponse
+} from '@bellfield/contracts';
+import {
+  getAuthenticatedShop,
+  RelayAuthGuard,
+  type RelayAuthenticatedRequest
+} from '../identity/relay-auth.guard';
+import { EntitlementService } from './entitlement.service';
+import { RELAY_MESSAGES_STORE, SendEstimateService } from './send-estimate.service';
+import { SendEstimateDocumentRequestDto } from './dto/send-estimate-document.dto';
+import type { RelayMessagesStore } from './relay-delivery.types';
+
+@Controller('v1')
+@UseGuards(RelayAuthGuard)
+export class DeliveryController {
+  constructor(
+    private readonly sendEstimateService: SendEstimateService,
+    private readonly entitlementService: EntitlementService,
+    @Inject(RELAY_MESSAGES_STORE) private readonly messagesStore: RelayMessagesStore
+  ) {}
+
+  @Post('messages/estimate')
+  async sendEstimateDocument(
+    @Req() request: RelayAuthenticatedRequest,
+    @Body() body: SendEstimateDocumentRequestDto
+  ): Promise<RelaySendEstimateDocumentResponse> {
+    const shop = getAuthenticatedShop(request);
+    const result = await this.sendEstimateService.sendEstimateDocument(shop, body);
+    return { result };
+  }
+
+  @Get('messages/:messageId/status')
+  async getMessageStatus(
+    @Req() request: RelayAuthenticatedRequest,
+    @Param('messageId') messageId: string
+  ): Promise<RelayMessageStatusResponse> {
+    const shop = getAuthenticatedShop(request);
+    const message = await this.messagesStore.findByIdForShop(messageId, shop.shopId);
+    if (!message) {
+      throw new NotFoundException('Message was not found.');
+    }
+    return {
+      relayMessageId: message.id,
+      state: message.status,
+      updatedAt: message.updatedAt.toISOString()
+    };
+  }
+
+  @Get('entitlement')
+  async getEntitlement(
+    @Req() request: RelayAuthenticatedRequest
+  ): Promise<RelayEntitlementResponse> {
+    const shop = getAuthenticatedShop(request);
+    return this.entitlementService.getEntitlement(shop);
+  }
+}

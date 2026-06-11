@@ -151,6 +151,14 @@ export class RelayIdentityRepository implements RelayIdentityStore {
     });
   }
 
+  async findActiveTokenIdForShop(shopId: string): Promise<string | null> {
+    const result = await this.database.query<{ id: string }>(
+      `SELECT id FROM relay_tokens WHERE shop_id = $1 AND status = 'active'`,
+      [shopId]
+    );
+    return result.rows[0]?.id ?? null;
+  }
+
   async createShop(input: {
     id: string;
     displayName: string;
