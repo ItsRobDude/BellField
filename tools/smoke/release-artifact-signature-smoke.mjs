@@ -9,6 +9,7 @@ import {
   verifyReleaseArtifact,
   writeSignedReleaseArtifact
 } from '../update/release-artifact.mjs';
+import { writeSmokeEvidence } from './smoke-evidence.mjs';
 
 const root = mkdtempSync(path.join(tmpdir(), 'bellfield-release-signature-smoke-'));
 const privateKeyPath = getArgValue('--private-key') || defaultReleasePrivateKeyPath;
@@ -71,11 +72,15 @@ try {
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
   console.log(JSON.stringify(evidence, null, 2));
+  console.log(`Evidence: ${writeSmokeEvidence(evidence, 'release-artifact-signature-smoke.json')}`);
 } catch (error) {
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'failed';
   evidence.error = error instanceof Error ? error.message : String(error);
   console.error(JSON.stringify(evidence, null, 2));
+  console.error(
+    `Evidence: ${writeSmokeEvidence(evidence, 'release-artifact-signature-smoke.json')}`
+  );
   throw error;
 } finally {
   rmSync(root, { force: true, recursive: true });

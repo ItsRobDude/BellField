@@ -243,6 +243,11 @@ See [restore-runbook.md](./restore-runbook.md) before running a restore.
 Run the updater from an extracted new release artifact, not from the installed
 current release root.
 
+Trust boundary: the artifact signature proves the integrity of a release that
+came from BellField — it is not a defense against running a hostile updater,
+because the updater itself ships inside the artifact. Only run updates
+downloaded from the BellField-provided channel.
+
 Example from the new release artifact directory:
 
 ```powershell

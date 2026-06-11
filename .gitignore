@@ -31,3 +31,5 @@ tmp-codex-*.txt
 license-keys/
 tools/license/*.pem
 tools/license/*.jsonl
+# Locally generated BellField-side release signing material.
+tools/update/*.pem

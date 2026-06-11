@@ -140,12 +140,17 @@ async function waitForHealth(input) {
       const response = await fetch(input.url);
       if (response.ok) {
         const body = await response.json().catch(() => null);
-        if (!body || body.status === 'ok' || body.status === 'degraded') {
+        // Post-update, "degraded" means the database or migration state is
+        // not ready — exactly what this check exists to catch. Keep polling
+        // until the API reports ok or the deadline passes.
+        if (body && body.status === 'ok') {
           console.log(`Health check reached ${input.url}.`);
           return;
         }
+        lastError = new Error(`API status ${body?.status ?? 'unreadable'}`);
+      } else {
+        lastError = new Error(`HTTP ${response.status}`);
       }
-      lastError = new Error(`HTTP ${response.status}`);
     } catch (error) {
       lastError = error;
     }

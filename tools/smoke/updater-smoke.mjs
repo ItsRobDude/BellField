@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { writeSignedReleaseArtifact } from '../update/release-artifact.mjs';
+import { writeSmokeEvidence } from './smoke-evidence.mjs';
 
 const root = mkdtempSync(path.join(tmpdir(), 'bellfield-updater-smoke-'));
 const defaultLicensePrivateKeyPath =
@@ -97,11 +98,13 @@ try {
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
   console.log(JSON.stringify(evidence, null, 2));
+  console.log(`Evidence: ${writeSmokeEvidence(evidence, 'updater-smoke.json')}`);
 } catch (error) {
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'failed';
   evidence.error = error instanceof Error ? error.message : String(error);
   console.error(JSON.stringify(evidence, null, 2));
+  console.error(`Evidence: ${writeSmokeEvidence(evidence, 'updater-smoke.json')}`);
   throw error;
 } finally {
   rmSync(root, { force: true, recursive: true });
