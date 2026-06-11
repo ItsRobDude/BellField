@@ -1,0 +1,42 @@
+{
+  "name": "@bellfield/relay",
+  "private": true,
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "nest start --watch --entryFile apps/relay/src/main",
+    "start": "nest start --entryFile apps/relay/src/main",
+    "start:prod": "node dist/apps/relay/src/main.js",
+    "build": "nest build",
+    "lint": "eslint \"src/**/*.ts\"",
+    "test": "jest --runInBand",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "migration:up": "node ./scripts/migrations/up.mjs",
+    "migration:down": "node ./scripts/migrations/down.mjs",
+    "relay-admin": "node dist/apps/relay/src/cli/relay-admin.js"
+  },
+  "dependencies": {
+    "@bellfield/contracts": "workspace:*",
+    "@nestjs/common": "11.1.24",
+    "@nestjs/core": "11.1.24",
+    "@nestjs/platform-express": "11.1.24",
+    "class-transformer": "0.5.1",
+    "class-validator": "0.14.2",
+    "pg": "8.13.1",
+    "reflect-metadata": "0.2.2",
+    "rxjs": "7.8.2"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "11.0.21",
+    "@nestjs/schematics": "11.1.0",
+    "@nestjs/testing": "11.1.24",
+    "@types/jest": "30.0.0",
+    "@types/node": "22.15.17",
+    "@types/pg": "8.20.0",
+    "@typescript-eslint/eslint-plugin": "8.31.0",
+    "@typescript-eslint/parser": "8.31.0",
+    "eslint": "9.39.4",
+    "jest": "30.0.5",
+    "ts-jest": "29.4.0",
+    "typescript": "5.8.3"
+  }
+}

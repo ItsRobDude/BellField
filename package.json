@@ -33,6 +33,8 @@
     "dev:field-mobile": "pnpm --filter @bellfield/field-mobile dev",
     "dev:api": "pnpm --filter @bellfield/api dev",
     "dev:worker": "pnpm --filter @bellfield/worker dev",
+    "dev:relay": "pnpm --filter @bellfield/relay dev",
+    "dev:relay:migrate": "pnpm --filter @bellfield/relay migration:up",
     "dev:postgres": "node tools/start-local-postgres.mjs",
     "dev:postgres:stop": "node tools/stop-local-postgres.mjs",
     "dev:postgres:docker": "docker compose up -d postgres",
