@@ -65,3 +65,26 @@ test('JobRunner isolates a throwing job from other jobs', async () => {
 
   assert.ok(healthyRunCount >= 2);
 });
+
+test('JobRunner honors an initial delay before falling back to the fixed interval', async () => {
+  let runCount = 0;
+  const runner = new JobRunner(
+    [
+      {
+        name: 'delayed',
+        intervalMs: 1_000,
+        initialDelayMs: 10,
+        run: () => {
+          runCount += 1;
+        }
+      }
+    ],
+    { log: () => undefined }
+  );
+
+  runner.start();
+  await waitFor(() => runCount === 1);
+  await runner.stop();
+
+  assert.equal(runCount, 1);
+});

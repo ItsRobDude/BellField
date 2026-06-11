@@ -22,15 +22,21 @@ export type BackupRunRetentionCandidate = {
   backupSetPath: string;
 };
 
-export interface BackupRunsWriter {
+export type LatestSuccessfulBackupRun = {
+  completedAt: string;
+};
+
+export interface BackupRunsStore {
   startRun(input: { id: string; runKind: BackupRunKind; startedAt: Date }): Promise<void>;
   markSucceeded(input: BackupRunSucceededInput): Promise<void>;
   markFailed(input: BackupRunFailedInput): Promise<void>;
   listSuccessfulBeyondRetention(retentionCount: number): Promise<BackupRunRetentionCandidate[]>;
   markRetentionDeleted(input: { id: string; deletedAt: Date }): Promise<void>;
+  findLatestSuccessfulRun(): Promise<LatestSuccessfulBackupRun | null>;
+  markRunningAsFailed(input: { completedAt: Date; errorMessage: string }): Promise<number>;
 }
 
-export class BackupRunsRepository implements BackupRunsWriter {
+export class BackupRunsRepository implements BackupRunsStore {
   constructor(private readonly database: QueryExecutor) {}
 
   async startRun(input: { id: string; runKind: BackupRunKind; startedAt: Date }): Promise<void> {
@@ -100,5 +106,29 @@ export class BackupRunsRepository implements BackupRunsWriter {
         where id = $1`,
       [input.id, input.deletedAt.toISOString()]
     );
+  }
+
+  async findLatestSuccessfulRun(): Promise<LatestSuccessfulBackupRun | null> {
+    const result = await this.database.query<LatestSuccessfulBackupRun>(
+      `select completed_at as "completedAt"
+         from backup_runs
+        where status = 'succeeded'
+          and backup_set_deleted_at is null
+        order by completed_at desc
+        limit 1`
+    );
+    return result.rows[0] ?? null;
+  }
+
+  async markRunningAsFailed(input: { completedAt: Date; errorMessage: string }): Promise<number> {
+    const result = await this.database.query(
+      `update backup_runs
+          set status = 'failed',
+              completed_at = $1,
+              error_message = $2
+        where status = 'running'`,
+      [input.completedAt.toISOString(), input.errorMessage]
+    );
+    return result.rowCount ?? 0;
   }
 }

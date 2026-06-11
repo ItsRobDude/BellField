@@ -7,6 +7,7 @@ export type WorkerJobRunContext = {
 export type WorkerJob = {
   name: string;
   intervalMs: number;
+  initialDelayMs?: number;
   runOnStart?: boolean;
   run: (context: WorkerJobRunContext) => Promise<void> | void;
 };
@@ -44,7 +45,7 @@ export class JobRunner {
 
     this.started = true;
     for (const job of this.jobs) {
-      this.schedule(job, job.runOnStart ? 0 : job.intervalMs);
+      this.schedule(job, job.runOnStart ? 0 : (job.initialDelayMs ?? job.intervalMs));
     }
   }
 

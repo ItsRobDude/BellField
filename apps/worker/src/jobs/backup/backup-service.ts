@@ -1,16 +1,17 @@
 import { randomUUID } from 'node:crypto';
-import { spawnSync, type SpawnSyncOptionsWithStringEncoding } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import {
-  cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   rmSync,
   statSync,
   writeFileSync
 } from 'node:fs';
-import { basename, join, resolve } from 'node:path';
-import type { BackupRunsWriter } from './backup-runs.repository';
+import { copyFile, lstat, mkdir, readdir } from 'node:fs/promises';
+import { basename, dirname, join, resolve } from 'node:path';
+import type { BackupRunsStore, LatestSuccessfulBackupRun } from './backup-runs.repository';
 import { workerLog } from '../../common/logger';
 
 export type BackupJobConfig = {
@@ -30,11 +31,16 @@ export type ProcessRunResult = {
   stderr?: string;
 };
 
+export type ProcessRunOptions = {
+  env: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
+};
+
 export type ProcessRunner = (
   command: string,
   args: string[],
-  options: SpawnSyncOptionsWithStringEncoding
-) => ProcessRunResult;
+  options: ProcessRunOptions
+) => Promise<ProcessRunResult>;
 
 export type BackupServiceOptions = {
   now?: () => Date;
@@ -58,7 +64,7 @@ export class BackupService {
 
   constructor(
     private readonly config: BackupJobConfig,
-    private readonly repository: BackupRunsWriter,
+    private readonly repository: BackupRunsStore,
     options: BackupServiceOptions = {}
   ) {
     this.now = options.now ?? (() => new Date());
@@ -83,13 +89,13 @@ export class BackupService {
       throwIfAborted(input.signal);
       mkdirSync(this.config.backupRoot, { recursive: true });
       mkdirSync(backupSetPath, { recursive: false });
-      this.dumpDatabase(databaseDumpPath);
+      await this.dumpDatabase(databaseDumpPath, input.signal);
 
       throwIfAborted(input.signal);
-      this.copyMediaRoot(mediaBackupPath);
+      await this.copyMediaRoot(mediaBackupPath, input.signal);
 
       throwIfAborted(input.signal);
-      const licenseBackupPath = this.copyLicenseFile(backupSetPath);
+      const licenseBackupPath = await this.copyLicenseFile(backupSetPath, input.signal);
 
       const completedAt = this.now();
       const manifest = {
@@ -154,17 +160,39 @@ export class BackupService {
     }
   }
 
-  private dumpDatabase(databaseDumpPath: string): void {
-    const command = resolvePgToolPath('pg_dump', this.config);
-    const result = this.processRunner(command, ['--format=custom', '--file', databaseDumpPath], {
-      encoding: 'utf8',
-      shell: false,
-      stdio: ['ignore', 'pipe', 'pipe'],
-      env: {
-        ...process.env,
-        ...pgEnvironmentFromDatabaseUrl(this.config.databaseUrl)
-      }
+  async prepareForScheduling(): Promise<{
+    latestSuccessfulRun: LatestSuccessfulBackupRun | null;
+    orphanedRunningRunsFailed: number;
+    removedPartialBackupSetPaths: string[];
+  }> {
+    const completedAt = this.now();
+    const orphanedRunningRunsFailed = await this.repository.markRunningAsFailed({
+      completedAt,
+      errorMessage: 'Backup run did not complete before worker restart.'
     });
+    const removedPartialBackupSetPaths = this.removeManifestlessPartialBackupSets();
+    const latestSuccessfulRun = await this.repository.findLatestSuccessfulRun();
+
+    return {
+      latestSuccessfulRun,
+      orphanedRunningRunsFailed,
+      removedPartialBackupSetPaths
+    };
+  }
+
+  private async dumpDatabase(databaseDumpPath: string, signal: AbortSignal | undefined) {
+    const command = resolvePgToolPath('pg_dump', this.config);
+    const result = await this.processRunner(
+      command,
+      ['--format=custom', '--file', databaseDumpPath],
+      {
+        env: {
+          ...process.env,
+          ...pgEnvironmentFromDatabaseUrl(this.config.databaseUrl)
+        },
+        signal
+      }
+    );
 
     if (result.error) {
       throw new Error(`${basename(command)} failed: ${result.error.message}`);
@@ -180,16 +208,22 @@ export class BackupService {
     }
   }
 
-  private copyMediaRoot(mediaBackupPath: string): void {
+  private async copyMediaRoot(
+    mediaBackupPath: string,
+    signal: AbortSignal | undefined
+  ): Promise<void> {
     const mediaRoot = resolve(this.config.mediaRoot);
     if (!existsSync(mediaRoot)) {
       throw new Error(`Media root does not exist: ${mediaRoot}`);
     }
 
-    cpSync(mediaRoot, mediaBackupPath, { recursive: true });
+    await copyDirectoryInterruptibly(mediaRoot, mediaBackupPath, signal);
   }
 
-  private copyLicenseFile(backupSetPath: string): string | null {
+  private async copyLicenseFile(
+    backupSetPath: string,
+    signal: AbortSignal | undefined
+  ): Promise<string | null> {
     if (!this.config.licensePath) {
       return null;
     }
@@ -207,8 +241,10 @@ export class BackupService {
       licenseBackupDirectoryName,
       licenseBackupFilename
     );
-    mkdirSync(join(backupSetPath, licenseBackupDirectoryName), { recursive: true });
-    cpSync(sourcePath, licenseBackupPath);
+    throwIfAborted(signal);
+    await mkdir(join(backupSetPath, licenseBackupDirectoryName), { recursive: true });
+    throwIfAborted(signal);
+    await copyFile(sourcePath, licenseBackupPath);
     return licenseBackupPath;
   }
 
@@ -225,14 +261,81 @@ export class BackupService {
       });
     }
   }
+
+  private removeManifestlessPartialBackupSets(): string[] {
+    const backupRoot = resolve(this.config.backupRoot);
+    if (!existsSync(backupRoot)) {
+      return [];
+    }
+
+    const removed: string[] = [];
+    for (const entry of readdirSync(backupRoot)) {
+      if (!entry.startsWith('bellfield-backup-')) {
+        continue;
+      }
+
+      const candidate = resolve(backupRoot, entry);
+      if (!isPathInsideDirectory(candidate, backupRoot)) {
+        continue;
+      }
+      if (!lstatSync(candidate).isDirectory()) {
+        continue;
+      }
+      if (existsSync(join(candidate, backupManifestFilename))) {
+        continue;
+      }
+
+      rmSync(candidate, { force: true, recursive: true });
+      removed.push(candidate);
+    }
+
+    return removed;
+  }
 }
 
-function defaultProcessRunner(
+async function defaultProcessRunner(
   command: string,
   args: string[],
-  options: SpawnSyncOptionsWithStringEncoding
-): ProcessRunResult {
-  return spawnSync(command, args, options);
+  options: ProcessRunOptions
+): Promise<ProcessRunResult> {
+  return await new Promise((resolve) => {
+    if (options.signal?.aborted) {
+      resolve({ status: null, error: new Error(`${basename(command)} canceled before start.`) });
+      return;
+    }
+
+    const child = spawn(command, args, {
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: options.env
+    });
+    let stdout = '';
+    let stderr = '';
+    let settled = false;
+
+    const finish = (result: ProcessRunResult) => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      options.signal?.removeEventListener('abort', abort);
+      resolve(result);
+    };
+    const abort = () => {
+      child.kill();
+      finish({ status: null, error: new Error(`${basename(command)} canceled during shutdown.`) });
+    };
+
+    options.signal?.addEventListener('abort', abort, { once: true });
+    child.stdout?.on('data', (chunk) => {
+      stdout += chunk.toString();
+    });
+    child.stderr?.on('data', (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on('error', (error) => finish({ status: null, error, stdout, stderr }));
+    child.on('close', (status) => finish({ status, stdout, stderr }));
+  });
 }
 
 function throwIfAborted(signal: AbortSignal | undefined): void {
@@ -298,6 +401,43 @@ function directorySizeBytes(path: string): number {
   return readdirSync(path).reduce((total, entry) => {
     return total + directorySizeBytes(join(path, entry));
   }, 0);
+}
+
+async function copyDirectoryInterruptibly(
+  source: string,
+  target: string,
+  signal: AbortSignal | undefined
+): Promise<void> {
+  throwIfAborted(signal);
+  const sourceStat = await lstat(source);
+  if (sourceStat.isSymbolicLink()) {
+    throw new Error(`Media copy does not support symbolic links: ${source}`);
+  }
+  if (sourceStat.isFile()) {
+    await mkdir(dirname(target), { recursive: true });
+    throwIfAborted(signal);
+    await copyFile(source, target);
+    return;
+  }
+  if (!sourceStat.isDirectory()) {
+    return;
+  }
+
+  await mkdir(target, { recursive: true });
+  for (const entry of await readdir(source)) {
+    throwIfAborted(signal);
+    await copyDirectoryInterruptibly(join(source, entry), join(target, entry), signal);
+  }
+}
+
+function isPathInsideDirectory(candidate: string, directory: string): boolean {
+  const normalizedDirectory = resolve(directory);
+  const normalizedCandidate = resolve(candidate);
+  return (
+    normalizedCandidate === normalizedDirectory ||
+    normalizedCandidate.startsWith(`${normalizedDirectory}\\`) ||
+    normalizedCandidate.startsWith(`${normalizedDirectory}/`)
+  );
 }
 
 function sanitizeErrorMessage(error: unknown): string {

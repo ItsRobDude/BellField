@@ -7,35 +7,48 @@ import { BackupService, type ProcessRunner } from './backup-service';
 import type {
   BackupRunFailedInput,
   BackupRunRetentionCandidate,
-  BackupRunsWriter,
-  BackupRunSucceededInput
+  BackupRunsStore,
+  BackupRunSucceededInput,
+  LatestSuccessfulBackupRun
 } from './backup-runs.repository';
 
-class InMemoryBackupRunsRepository implements BackupRunsWriter {
+class InMemoryBackupRunsRepository implements BackupRunsStore {
   started: string[] = [];
   succeeded: BackupRunSucceededInput[] = [];
   failed: BackupRunFailedInput[] = [];
   retentionCandidates: BackupRunRetentionCandidate[] = [];
   deletedIds: string[] = [];
+  latestSuccessfulRun: LatestSuccessfulBackupRun | null = null;
+  runningFailedCount = 0;
+  runningFailureInputs: Array<{ completedAt: Date; errorMessage: string }> = [];
 
-  async startRun(input: { id: string }): Promise<void> {
+  async startRun(input: { id: string; runKind: 'scheduled' | 'manual'; startedAt: Date }) {
     this.started.push(input.id);
   }
 
-  async markSucceeded(input: BackupRunSucceededInput): Promise<void> {
+  async markSucceeded(input: BackupRunSucceededInput) {
     this.succeeded.push(input);
   }
 
-  async markFailed(input: BackupRunFailedInput): Promise<void> {
+  async markFailed(input: BackupRunFailedInput) {
     this.failed.push(input);
   }
 
-  async listSuccessfulBeyondRetention(): Promise<BackupRunRetentionCandidate[]> {
+  async listSuccessfulBeyondRetention() {
     return this.retentionCandidates;
   }
 
-  async markRetentionDeleted(input: { id: string }): Promise<void> {
+  async markRetentionDeleted(input: { id: string }) {
     this.deletedIds.push(input.id);
+  }
+
+  async findLatestSuccessfulRun() {
+    return this.latestSuccessfulRun;
+  }
+
+  async markRunningAsFailed(input: { completedAt: Date; errorMessage: string }) {
+    this.runningFailureInputs.push(input);
+    return this.runningFailedCount;
   }
 }
 
@@ -54,7 +67,7 @@ test('BackupService writes a dump, copies media, records success, and writes a m
     writeFileSync(licensePath, '{"license":"fixture"}', { flag: 'wx' });
 
     const repository = new InMemoryBackupRunsRepository();
-    const processRunner: ProcessRunner = (_command, args, options) => {
+    const processRunner: ProcessRunner = async (_command, args, options) => {
       assert.equal(options.env?.PGDATABASE, 'bellfield');
       assert.equal(options.env?.PGUSER, 'postgres');
       assert.equal(options.env?.PGPASSWORD, 'postgres');
@@ -107,7 +120,7 @@ test('BackupService records failure and removes the partial backup set', async (
     writeFileSync(join(mediaRoot, 'photo.txt'), 'media bytes', { flag: 'wx' });
 
     const repository = new InMemoryBackupRunsRepository();
-    const processRunner: ProcessRunner = () => ({ status: 1, stderr: 'pg_dump failed' });
+    const processRunner: ProcessRunner = async () => ({ status: 1, stderr: 'pg_dump failed' });
     const service = new BackupService(
       {
         databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
@@ -146,7 +159,7 @@ test('BackupService applies retention after a successful backup', async () => {
 
     const repository = new InMemoryBackupRunsRepository();
     repository.retentionCandidates = [{ id: 'old-run', backupSetPath: oldBackupSetPath }];
-    const processRunner: ProcessRunner = (_command, args) => {
+    const processRunner: ProcessRunner = async (_command, args) => {
       writeFileSync(args[args.indexOf('--file') + 1], 'dump bytes');
       return { status: 0, stdout: '', stderr: '' };
     };
@@ -165,6 +178,51 @@ test('BackupService applies retention after a successful backup', async () => {
 
     assert.equal(existsSync(oldBackupSetPath), false);
     assert.deepEqual(repository.deletedIds, ['old-run']);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('BackupService startup preparation fails orphaned runs and removes manifest-less partial sets', async () => {
+  const root = createTempRoot();
+  try {
+    const mediaRoot = join(root, 'media');
+    const backupRoot = join(root, 'backups');
+    const partialBackupSetPath = join(backupRoot, 'bellfield-backup-partial');
+    const successfulBackupSetPath = join(backupRoot, 'bellfield-backup-successful');
+    mkdirSync(mediaRoot, { recursive: true });
+    mkdirSync(partialBackupSetPath, { recursive: true });
+    mkdirSync(successfulBackupSetPath, { recursive: true });
+    writeFileSync(join(partialBackupSetPath, 'database.dump'), 'partial', { flag: 'wx' });
+    writeFileSync(join(successfulBackupSetPath, 'manifest.json'), '{}', { flag: 'wx' });
+
+    const repository = new InMemoryBackupRunsRepository();
+    repository.runningFailedCount = 2;
+    repository.latestSuccessfulRun = { completedAt: '2026-06-11T01:00:00.000Z' };
+    const service = new BackupService(
+      {
+        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
+        mediaRoot,
+        backupRoot,
+        retentionCount: 7
+      },
+      repository,
+      { now: () => new Date('2026-06-11T02:00:00.000Z') }
+    );
+
+    const prepared = await service.prepareForScheduling();
+
+    assert.equal(prepared.orphanedRunningRunsFailed, 2);
+    assert.deepEqual(prepared.latestSuccessfulRun, repository.latestSuccessfulRun);
+    assert.deepEqual(repository.runningFailureInputs, [
+      {
+        completedAt: new Date('2026-06-11T02:00:00.000Z'),
+        errorMessage: 'Backup run did not complete before worker restart.'
+      }
+    ]);
+    assert.equal(existsSync(partialBackupSetPath), false);
+    assert.equal(existsSync(successfulBackupSetPath), true);
+    assert.deepEqual(prepared.removedPartialBackupSetPaths, [partialBackupSetPath]);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

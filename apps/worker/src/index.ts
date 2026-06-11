@@ -8,7 +8,7 @@ import { JobRunner, type WorkerJob } from './jobs/job-runner';
 
 const heartbeatMs = 60_000;
 
-function startWorker(): void {
+async function startWorker(): Promise<void> {
   const runtimeConfig = getWorkerRuntimeConfig();
   const database = new WorkerDatabase(runtimeConfig.databaseUrl);
   const jobs: WorkerJob[] = [
@@ -37,7 +37,7 @@ function startWorker(): void {
       backupRepository
     );
     jobs.push(
-      createScheduledBackupJob({
+      await createScheduledBackupJob({
         backupService,
         intervalMs: runtimeConfig.backup.intervalMs
       })
@@ -84,4 +84,9 @@ process.on('uncaughtException', (error) => {
   process.exit(1);
 });
 
-startWorker();
+void startWorker().catch((error) => {
+  workerLog('error', 'Worker failed to start.', {
+    errorMessage: error instanceof Error ? error.message : String(error)
+  });
+  process.exit(1);
+});
