@@ -67,6 +67,23 @@ function backupStatusOk(backups: SystemDiagnosticsResponse['backups']): boolean 
   );
 }
 
+function licenseStatusText(license: SystemDiagnosticsResponse['license']): string {
+  if (license.status === 'notRequired') {
+    return 'Not required';
+  }
+  if (license.status === 'valid') {
+    return 'Licensed';
+  }
+  if (license.status === 'missing') {
+    return 'Missing';
+  }
+  return 'Needs attention';
+}
+
+function licenseStatusOk(license: SystemDiagnosticsResponse['license']): boolean {
+  return license.status === 'valid' || license.status === 'notRequired';
+}
+
 // Any red rollup check renders here, so data-audit checks that have no card
 // of their own (e.g. legacy estimate tax rates) are still owner-visible
 // instead of living only in the support bundle.
@@ -240,6 +257,20 @@ export function OfficeSystemSurface({
               </div>
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
                 {diagnostics.backups.backupRootPath}
+              </div>
+            </div>
+            <div style={cardStyle}>
+              <div style={labelStyle}>License</div>
+              <div style={valueStyle}>
+                <StatusDot ok={licenseStatusOk(diagnostics.license)} />
+                {licenseStatusText(diagnostics.license)}
+              </div>
+              <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
+                {diagnostics.license.status === 'valid'
+                  ? `${diagnostics.license.shopName} · Updates through ${diagnostics.license.updateWindowEnd}`
+                  : (diagnostics.license.message ??
+                    diagnostics.license.path ??
+                    'Source/dev runtime')}
               </div>
             </div>
             <div style={cardStyle}>

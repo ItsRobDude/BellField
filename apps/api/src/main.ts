@@ -7,8 +7,12 @@ import { log } from './common/logger';
 import { getApiRuntimeConfig } from './common/config/runtime-config';
 import { MigrationReadinessService } from './database/migration-readiness.service';
 import { MediaConfigService } from './modules/media/media-config.service';
+import { assertRuntimeLicense } from './modules/licensing/license-verification';
 
 async function bootstrap() {
+  const runtimeConfig = getApiRuntimeConfig();
+  assertRuntimeLicense(runtimeConfig);
+
   // rawBody: true lets registered body parsers preserve the original buffer on
   // `req.rawBody`. JSON parsing stays unchanged; the explicit raw parser below
   // is needed for application/octet-stream media blob uploads.
@@ -16,7 +20,6 @@ async function bootstrap() {
     bufferLogs: true,
     rawBody: true
   });
-  const runtimeConfig = getApiRuntimeConfig();
   const mediaConfig = app.get(MediaConfigService);
 
   // Dev/test stay permissive; production uses the configured office-web origin allowlist.

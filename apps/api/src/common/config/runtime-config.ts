@@ -60,6 +60,8 @@ export type ApiRuntimeConfig = {
   databaseUrl: string;
   bootstrapSeedData: boolean;
   officeOrigins: string[] | true;
+  licenseRequired: boolean;
+  licensePath?: string;
   estimateEmailResendApiKey?: string;
 };
 
@@ -99,9 +101,15 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     isProduction,
     problems
   );
+  const licenseRequired = getBoolean(process.env.BELLFIELD_LICENSE_REQUIRED, false);
+  const licensePath = process.env.BELLFIELD_LICENSE_PATH?.trim() || undefined;
 
   if (isProduction && bootstrapSeedData) {
     problems.push('BOOTSTRAP_SEED_DATA must not be true in production.');
+  }
+
+  if (licenseRequired && !licensePath) {
+    problems.push('BELLFIELD_LICENSE_PATH must be set when BELLFIELD_LICENSE_REQUIRED=true.');
   }
 
   if (problems.length > 0) {
@@ -120,6 +128,8 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     databaseUrl,
     bootstrapSeedData,
     officeOrigins,
+    licenseRequired,
+    licensePath,
     estimateEmailResendApiKey:
       process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY?.trim() || undefined
   };

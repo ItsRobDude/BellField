@@ -31,6 +31,16 @@ const currentBackups = {
   stale: false
 };
 
+const license = {
+  required: true,
+  path: 'C:\\BellField\\data\\license\\bellfield-license.json',
+  status: 'valid' as const,
+  licenseId: 'lic_test_001',
+  shopName: 'Test Service Co.',
+  issuedAt: '2026-06-11T00:00:00.000Z',
+  updateWindowEnd: '2027-06-11'
+};
+
 function arrange() {
   mockedCompanySettingsApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
     deliveryStatus: {
@@ -51,6 +61,7 @@ function arrange() {
     },
     mediaRoot: { path: '/var/bellfield/media', exists: true, writable: true, readable: true },
     backups: currentBackups,
+    license,
     checks: []
   });
 }
@@ -85,6 +96,9 @@ describe('OfficeSystemSurface', () => {
     expect(screen.getByText('Backups')).toBeInTheDocument();
     expect(screen.getByText('Current')).toBeInTheDocument();
     expect(screen.getByText('C:\\BellField\\data\\backups')).toBeInTheDocument();
+    expect(screen.getByText('License')).toBeInTheDocument();
+    expect(screen.getByText('Licensed')).toBeInTheDocument();
+    expect(screen.getByText(/Updates through 2027-06-11/)).toBeInTheDocument();
     expect(screen.getByText(/BellField API v0\.0\.1/)).toBeInTheDocument();
   });
 
@@ -147,6 +161,7 @@ describe('OfficeSystemSurface', () => {
         latestSuccessfulBackupSetPath: null,
         stale: true
       },
+      license,
       checks: [
         { key: 'database', ok: true },
         {

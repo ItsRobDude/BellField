@@ -11,6 +11,8 @@ describe('getApiRuntimeConfig', () => {
     'DATABASE_URL',
     'BOOTSTRAP_SEED_DATA',
     'BELLFIELD_OFFICE_ORIGINS',
+    'BELLFIELD_LICENSE_REQUIRED',
+    'BELLFIELD_LICENSE_PATH',
     'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY'
   ] as const;
   const original: Record<string, string | undefined> = {};
@@ -41,6 +43,8 @@ describe('getApiRuntimeConfig', () => {
     expect(config.databaseUrl).toBe(defaultDatabaseUrl);
     expect(config.bootstrapSeedData).toBe(false);
     expect(config.officeOrigins).toBe(true);
+    expect(config.licenseRequired).toBe(false);
+    expect(config.licensePath).toBeUndefined();
     expect(config.estimateEmailResendApiKey).toBeUndefined();
   });
 
@@ -69,6 +73,8 @@ describe('getApiRuntimeConfig', () => {
     process.env.BELLFIELD_API_PORT = '8080';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
     process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com, http://server.local:3000';
+    process.env.BELLFIELD_LICENSE_REQUIRED = 'true';
+    process.env.BELLFIELD_LICENSE_PATH = 'C:\\BellField\\data\\license\\bellfield-license.json';
 
     const config = getApiRuntimeConfig();
 
@@ -80,6 +86,8 @@ describe('getApiRuntimeConfig', () => {
       'https://office.example.com',
       'http://server.local:3000'
     ]);
+    expect(config.licenseRequired).toBe(true);
+    expect(config.licensePath).toBe('C:\\BellField\\data\\license\\bellfield-license.json');
   });
 
   it('keeps PORT as the backward-compatible local port fallback', () => {
@@ -167,5 +175,14 @@ describe('getApiRuntimeConfig', () => {
     process.env.BOOTSTRAP_SEED_DATA = 'true';
 
     expect(() => getApiRuntimeConfig()).toThrow(/BOOTSTRAP_SEED_DATA must not be true/);
+  });
+
+  it('refuses license-required runtime without a license path', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+    process.env.BELLFIELD_LICENSE_REQUIRED = 'true';
+
+    expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_LICENSE_PATH/);
   });
 });

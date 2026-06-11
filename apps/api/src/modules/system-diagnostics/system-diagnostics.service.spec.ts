@@ -116,8 +116,10 @@ describe('SystemDiagnosticsService', () => {
     expect(result.migrations.latestAppliedAt).toBe('2026-06-05T00:00:00.000Z');
     expect(result.app.name).toBe('BellField API');
     expect(result.backups.stale).toBe(true);
+    expect(result.license.status).toBe('notRequired');
     expect(result.checks.find((c) => c.key === 'backups')?.ok).toBe(false);
     expect(result.checks.find((c) => c.key === 'database')?.ok).toBe(true);
+    expect(result.checks.find((c) => c.key === 'license')?.ok).toBe(true);
   });
 
   it('surfaces active seeded BellField accounts as an owner-visible check', async () => {
@@ -198,5 +200,35 @@ describe('SystemDiagnosticsService', () => {
       ok: false,
       detail: 'Backup run history is unavailable.'
     });
+  });
+
+  it('surfaces required missing license files as a red check', async () => {
+    const originalRequired = process.env.BELLFIELD_LICENSE_REQUIRED;
+    const originalPath = process.env.BELLFIELD_LICENSE_PATH;
+    process.env.BELLFIELD_LICENSE_REQUIRED = 'true';
+    process.env.BELLFIELD_LICENSE_PATH = join(tmpdir(), 'missing-bellfield-license.json');
+    try {
+      const { service } = createService();
+
+      const result = await service.collectDiagnostics();
+
+      expect(result.license.status).toBe('missing');
+      expect(result.checks.find((c) => c.key === 'license')).toEqual({
+        key: 'license',
+        ok: false,
+        detail: expect.stringContaining('License file was not found')
+      });
+    } finally {
+      if (originalRequired === undefined) {
+        delete process.env.BELLFIELD_LICENSE_REQUIRED;
+      } else {
+        process.env.BELLFIELD_LICENSE_REQUIRED = originalRequired;
+      }
+      if (originalPath === undefined) {
+        delete process.env.BELLFIELD_LICENSE_PATH;
+      } else {
+        process.env.BELLFIELD_LICENSE_PATH = originalPath;
+      }
+    }
   });
 });

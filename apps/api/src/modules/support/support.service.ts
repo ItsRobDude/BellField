@@ -64,7 +64,9 @@ export class SupportService {
         process.env.BELLFIELD_BACKUP_ROOT?.trim() || join(tmpdir(), 'bellfield-backups-dev')
       ),
       backupRetentionCount: getPositiveInteger(process.env.BELLFIELD_BACKUP_RETENTION_COUNT, 7),
-      backupStaleAfterHours: getPositiveInteger(process.env.BELLFIELD_BACKUP_STALE_AFTER_HOURS, 36)
+      backupStaleAfterHours: getPositiveInteger(process.env.BELLFIELD_BACKUP_STALE_AFTER_HOURS, 36),
+      licenseRequired: runtime.licenseRequired,
+      licensePath: runtime.licensePath ?? null
     };
   }
 }

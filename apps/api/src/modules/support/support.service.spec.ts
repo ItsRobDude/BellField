@@ -22,6 +22,11 @@ const diagnostics: SystemDiagnosticsResponse = {
     latestSuccessfulBackupSetPath: null,
     stale: true
   },
+  license: {
+    required: false,
+    path: null,
+    status: 'notRequired'
+  },
   checks: []
 };
 
@@ -89,6 +94,8 @@ describe('SupportService', () => {
     expect(bundle.config.mediaTokenSecretConfigured).toEqual(expect.any(Boolean));
     expect(bundle.config.backupEnabled).toBe(true);
     expect(bundle.config.backupRetentionCount).toBe(7);
+    expect(bundle.config.licenseRequired).toBe(false);
+    expect(bundle.config.licensePath).toBeNull();
 
     const serialized = JSON.stringify(bundle);
     expect(serialized).not.toContain('://'); // no raw connection string anywhere

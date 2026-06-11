@@ -9,6 +9,7 @@ import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import { MediaConfigService } from '../media/media-config.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
+import { verifyLicenseFile } from '../licensing/license-verification';
 
 const defaultBackupRetentionCount = 7;
 const defaultBackupStaleAfterHours = 36;
@@ -52,6 +53,7 @@ export class SystemDiagnosticsService {
     const migrations = await this.checkMigrations();
     const mediaRoot = this.checkMediaRoot();
     const backups = await this.checkBackups();
+    const license = this.checkLicense();
     const estimateTaxRates = await this.checkEstimateTaxRates();
     const seededAccounts = await this.checkSeededAccounts();
 
@@ -66,6 +68,7 @@ export class SystemDiagnosticsService {
       migrations,
       mediaRoot,
       backups,
+      license,
       checks: [
         { key: 'database', ok: database.reachable, detail: database.error },
         {
@@ -86,6 +89,11 @@ export class SystemDiagnosticsService {
             !backups.error &&
             backups.latestRun?.status !== 'failed',
           detail: backupCheckDetail(backups)
+        },
+        {
+          key: 'license',
+          ok: license.status === 'valid' || license.status === 'notRequired',
+          detail: licenseCheckDetail(license)
         },
         estimateTaxRates,
         seededAccounts
@@ -283,6 +291,38 @@ export class SystemDiagnosticsService {
       };
     }
   }
+
+  private checkLicense(): SystemDiagnosticsResponse['license'] {
+    const runtime = getApiRuntimeConfig();
+
+    if (!runtime.licenseRequired && !runtime.licensePath) {
+      return {
+        required: false,
+        path: null,
+        status: 'notRequired'
+      };
+    }
+
+    const verification = verifyLicenseFile({ licensePath: runtime.licensePath });
+    if (verification.status === 'valid') {
+      return {
+        required: runtime.licenseRequired,
+        path: runtime.licensePath ?? null,
+        status: 'valid',
+        licenseId: verification.license.licenseId,
+        shopName: verification.license.shopName,
+        issuedAt: verification.license.issuedAt,
+        updateWindowEnd: verification.license.updateWindowEnd
+      };
+    }
+
+    return {
+      required: runtime.licenseRequired,
+      path: runtime.licensePath ?? null,
+      status: verification.status,
+      message: verification.message
+    };
+  }
 }
 
 type BackupRunRow = {
@@ -331,6 +371,13 @@ function backupCheckDetail(backups: SystemDiagnosticsResponse['backups']): strin
       : 'Latest backup failed.';
   }
   return undefined;
+}
+
+function licenseCheckDetail(license: SystemDiagnosticsResponse['license']): string | undefined {
+  if (license.status === 'notRequired' || license.status === 'valid') {
+    return undefined;
+  }
+  return license.message ?? 'License needs attention.';
 }
 
 function getBoolean(value: string | undefined, defaultValue: boolean): boolean {

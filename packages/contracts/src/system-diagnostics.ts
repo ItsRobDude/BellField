@@ -29,6 +29,17 @@ export interface BackupDiagnosticsSummary {
   error?: string;
 }
 
+export interface LicenseDiagnosticsSummary {
+  required: boolean;
+  path: string | null;
+  status: 'notRequired' | 'valid' | 'missing' | 'invalid';
+  licenseId?: string;
+  shopName?: string;
+  issuedAt?: string;
+  updateWindowEnd?: string;
+  message?: string;
+}
+
 /** Health/readiness snapshot for the System surface. Every sub-check is best-effort: a failure
  * sets its `ok=false` (+ `error`) rather than failing the whole response. */
 export interface SystemDiagnosticsResponse {
@@ -59,6 +70,7 @@ export interface SystemDiagnosticsResponse {
     error?: string;
   };
   backups: BackupDiagnosticsSummary;
+  license: LicenseDiagnosticsSummary;
   /** Rollup of the above as flat checks for a green/red UI. */
   checks: SystemDiagnosticsCheck[];
 }
@@ -79,6 +91,8 @@ export interface SupportExportConfigSummary {
   backupRootPath: string;
   backupRetentionCount: number;
   backupStaleAfterHours: number;
+  licenseRequired: boolean;
+  licensePath: string | null;
 }
 
 /** Local-first support bundle: a privacy-safe status + config snapshot the operator downloads. */
