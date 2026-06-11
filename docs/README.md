@@ -166,6 +166,16 @@ Read when: touching licensing, the installer/updater, distribution, or any chang
 
 Does not own: general hosting philosophy (`deployment-model.md`) or installer/runbook shape (`self-hosted-installation-strategy.md`). Does not mean any licensing mechanism already exists.
 
+### [license-design.md](./license-design.md)
+
+Audience: contributors implementing or reviewing the Phase 3 licensing primitive.
+
+Purpose: signed license file format, canonical signing bytes, offline Ed25519 verification rules, startup-failure boundary, backup/restore boundary, issuance-tooling boundary, and relay-token separation.
+
+Read when: changing license verification, license issuance tooling, support diagnostics around licensing, updater entitlement checks, or restore behavior for licensed installs.
+
+Does not own: the commercial posture (`asset-protection-and-licensing.md`), the broader install posture (`self-hosted-installation-strategy.md`), or the Phase 4 update mechanism.
+
 ### [launch-readiness.md](./launch-readiness.md)
 
 Audience: contributors and the owner planning what BellField needs to ship to real customers as a company.
