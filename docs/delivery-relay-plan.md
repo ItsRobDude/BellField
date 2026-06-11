@@ -195,10 +195,12 @@ when acceptance links are designed.
    active server, activation/move/revoke. Prerequisite; designed first —
    done, see [relay-token-design.md](./relay-token-design.md).
 2. **Relay v1** — BellField-domain sending only: auth, narrow send API, quotas,
-   suppression, webhook termination, status polling.
+   suppression, webhook termination, status polling. **Built 2026-06-11**
+   (`apps/relay`); deployment to the pilot host is still ahead.
 3. **Install integration** — swap the internal email adapter to a relay client
    (the adapter boundary in `EmailProviderService` is the seam; office
-   workflows unchanged), plus queue-and-retry via the worker.
+   workflows unchanged), plus queue-and-retry via the worker. **Built
+   2026-06-11** (office UI for queued sends remains, execution plan 5.5).
 4. **Custom-domain add-on** — domain registration/verification flow and
    per-shop sender identity.
 5. **Acceptance links** (comms Phase 4) on the same host/auth, then payment
