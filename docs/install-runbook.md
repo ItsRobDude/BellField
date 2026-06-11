@@ -97,19 +97,23 @@ Phase 1 expects user-space PostgreSQL 16 binaries to exist at one of:
 - the path in `BELLFIELD_POSTGRES_BIN`
 - the path passed with `--postgres-bin`
 
-Initialize the data directory:
+Initialize the data directory and create the app role/database from `DATABASE_URL`:
 
 ```powershell
 .\release\runtime\node\node.exe .\release\tools\install\provision-postgres.mjs --install-root=C:\BellField
 ```
 
 If the data directory is already initialized, the helper exits without wiping it.
+On a fresh data directory, the helper starts a temporary local PostgreSQL server, creates or updates the app login role with the generated password from `DATABASE_URL`, creates the configured database when missing, changes host authentication from `trust` to `scram-sha-256`, then stops the temporary server.
 
-After PostgreSQL is running, create the `bellfield` database/user from `bellfield-server.env`, then run migrations:
+For the current assisted path, start PostgreSQL temporarily, run migrations, then stop it before registering services:
 
 ```powershell
+$postgresData = "C:\BellField\data\postgres"
+.\release\postgres\bin\pg_ctl.exe -D $postgresData -o "-h 127.0.0.1 -p 5432" -w start
 $env:DATABASE_URL = "<value from C:\BellField\bellfield-server.env>"
 .\release\runtime\node\node.exe .\release\apps\api\scripts\migrations\up.mjs
+.\release\postgres\bin\pg_ctl.exe -D $postgresData -m fast -w stop
 ```
 
 ## Install License File
@@ -150,6 +154,8 @@ Install services from an elevated PowerShell session:
 ```powershell
 .\release\tools\install\install-windows-services.ps1 -ReleaseRoot .\release
 ```
+
+The install script copies the WinSW executable beside each XML manifest, then restricts the service manifest directory and `C:\BellField\bellfield-server.env` to Administrators and LocalSystem before registering services.
 
 Service order:
 

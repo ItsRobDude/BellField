@@ -1,43 +1,10 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { escapeXml, parseEnvFile, pickEnv, readArgs } from './install-utils.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultReleaseRoot = resolve(scriptDir, '..', '..');
-
-function readArgs() {
-  return Object.fromEntries(
-    process.argv
-      .slice(2)
-      .filter((arg) => arg.startsWith('--'))
-      .map((arg) => {
-        const [key, ...value] = arg.slice(2).split('=');
-        return [key, value.join('=') || 'true'];
-      })
-  );
-}
-
-function parseEnvFile(path) {
-  return Object.fromEntries(
-    readFileSync(path, 'utf8')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'))
-      .map((line) => {
-        const index = line.indexOf('=');
-        return [line.slice(0, index), line.slice(index + 1)];
-      })
-  );
-}
-
-function escapeXml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&apos;');
-}
 
 function envXml(env) {
   return Object.entries(env)
@@ -60,7 +27,7 @@ function serviceXml(service) {
     '  <startmode>Automatic</startmode>',
     '  <onfailure action="restart" delay="10 sec" />',
     '  <log mode="roll-by-size">',
-    '    <sizeThreshold>10485760</sizeThreshold>',
+    '    <sizeThreshold>10240</sizeThreshold>',
     '    <keepFiles>10</keepFiles>',
     '  </log>',
     '</service>',
@@ -85,6 +52,44 @@ const officeServer = firstExisting([
   join(releaseRoot, 'apps', 'office-web', 'server.js'),
   join(releaseRoot, 'apps', 'office-web', 'apps', 'office-web', 'server.js')
 ]);
+const apiEnv = {
+  ...pickEnv(env, [
+    'NODE_ENV',
+    'BOOTSTRAP_SEED_DATA',
+    'DATABASE_URL',
+    'BELLFIELD_API_PORT',
+    'BELLFIELD_OFFICE_ORIGINS',
+    'BELLFIELD_MEDIA_ROOT',
+    'BELLFIELD_MEDIA_TOKEN_SECRET',
+    'BELLFIELD_MEDIA_MAX_BYTES',
+    'BELLFIELD_MEDIA_TOKEN_TTL_SECONDS',
+    'BELLFIELD_LICENSE_REQUIRED',
+    'BELLFIELD_LICENSE_PATH',
+    'BELLFIELD_BACKUP_ENABLED',
+    'BELLFIELD_BACKUP_ROOT',
+    'BELLFIELD_BACKUP_RETENTION_COUNT',
+    'BELLFIELD_BACKUP_STALE_AFTER_HOURS',
+    'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY'
+  ]),
+  PORT: env.BELLFIELD_API_PORT ?? '3001'
+};
+const workerEnv = pickEnv(env, [
+  'NODE_ENV',
+  'DATABASE_URL',
+  'BELLFIELD_MEDIA_ROOT',
+  'BELLFIELD_LICENSE_PATH',
+  'BELLFIELD_BACKUP_ENABLED',
+  'BELLFIELD_BACKUP_ROOT',
+  'BELLFIELD_BACKUP_INTERVAL_MINUTES',
+  'BELLFIELD_BACKUP_RETENTION_COUNT',
+  'BELLFIELD_BACKUP_STALE_AFTER_HOURS',
+  'BELLFIELD_POSTGRES_BIN',
+  'BELLFIELD_PG_DUMP_PATH'
+]);
+const officeEnv = {
+  ...pickEnv(env, ['NODE_ENV', 'BELLFIELD_OFFICE_WEB_PORT', 'NEXT_PUBLIC_API_BASE_URL']),
+  PORT: env.BELLFIELD_OFFICE_WEB_PORT ?? '3000'
+};
 
 mkdirSync(outputDir, { recursive: true });
 
@@ -97,7 +102,9 @@ const services = [
     arguments: `-D "${postgresData}"`,
     workingDirectory: postgresBin,
     depends: [],
-    env
+    env: {
+      PGDATA: postgresData
+    }
   },
   {
     id: 'bellfield-api',
@@ -107,7 +114,7 @@ const services = [
     arguments: 'dist\\apps\\api\\src\\main.js',
     workingDirectory: join(releaseRoot, 'apps', 'api'),
     depends: ['bellfield-postgres'],
-    env: { ...env, PORT: env.BELLFIELD_API_PORT ?? '3001' }
+    env: apiEnv
   },
   {
     id: 'bellfield-worker',
@@ -117,7 +124,7 @@ const services = [
     arguments: 'dist\\index.js',
     workingDirectory: join(releaseRoot, 'apps', 'worker'),
     depends: ['bellfield-api'],
-    env
+    env: workerEnv
   },
   {
     id: 'bellfield-office-web',
@@ -127,7 +134,7 @@ const services = [
     arguments: 'server.js',
     workingDirectory: dirname(officeServer),
     depends: ['bellfield-api'],
-    env: { ...env, PORT: env.BELLFIELD_OFFICE_WEB_PORT ?? '3000' }
+    env: officeEnv
   }
 ];
 

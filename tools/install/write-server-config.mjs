@@ -2,21 +2,10 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readArgs } from './install-utils.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(scriptDir, '..', '..');
-
-function readArgs() {
-  return Object.fromEntries(
-    process.argv
-      .slice(2)
-      .filter((arg) => arg.startsWith('--'))
-      .map((arg) => {
-        const [key, ...value] = arg.slice(2).split('=');
-        return [key, value.join('=') || 'true'];
-      })
-  );
-}
 
 function randomSecret() {
   return randomBytes(32).toString('base64url');

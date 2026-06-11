@@ -1,7 +1,8 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync } from 'node:fs';
 import { dirname, join, parse, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { databaseConfigFromUrl, getBoolean, parseEnvFile, readArgs } from './install-utils.mjs';
 import {
   stageDirectoryRestore,
   stageFileRestore,
@@ -15,47 +16,18 @@ const defaultReleaseRoot = resolve(scriptDir, '..', '..');
 const appServicesStopOrder = ['bellfield-office-web', 'bellfield-worker', 'bellfield-api'];
 const appServicesStartOrder = ['bellfield-api', 'bellfield-worker', 'bellfield-office-web'];
 
-function readArgs() {
-  return Object.fromEntries(
-    process.argv
-      .slice(2)
-      .filter((arg) => arg.startsWith('--'))
-      .map((arg) => {
-        const [key, ...value] = arg.slice(2).split('=');
-        return [key, value.join('=') || 'true'];
-      })
-  );
-}
-
-function parseEnvFile(path) {
-  return Object.fromEntries(
-    readFileSync(path, 'utf8')
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .filter((line) => line && !line.startsWith('#'))
-      .map((line) => {
-        const index = line.indexOf('=');
-        return [line.slice(0, index), line.slice(index + 1)];
-      })
-  );
-}
-
 function databaseEnv(databaseUrl) {
-  const url = new URL(databaseUrl);
-  const databaseName = decodeURIComponent(url.pathname.replace(/^\//, ''));
-  if (!databaseName) {
-    throw new Error('DATABASE_URL must include a database name.');
-  }
+  const database = databaseConfigFromUrl(databaseUrl);
 
   return {
     env: {
       ...process.env,
-      PGHOST: url.hostname,
-      PGPORT: url.port || undefined,
-      PGUSER: url.username ? decodeURIComponent(url.username) : undefined,
-      PGPASSWORD: url.password ? decodeURIComponent(url.password) : undefined
+      PGHOST: database.host,
+      PGPORT: database.port,
+      PGUSER: database.username,
+      PGPASSWORD: database.password
     },
-    databaseName
+    databaseName: database.databaseName
   };
 }
 
@@ -131,21 +103,6 @@ function assertSafeFilePath(path, label) {
     throw new Error(`${label} is too broad to replace safely: ${absolute}`);
   }
   return absolute;
-}
-
-function getBoolean(value, defaultValue) {
-  if (value === undefined) {
-    return defaultValue;
-  }
-
-  const normalized = String(value).trim().toLowerCase();
-  if (['1', 'true', 'yes', 'on'].includes(normalized)) {
-    return true;
-  }
-  if (['0', 'false', 'no', 'off'].includes(normalized)) {
-    return false;
-  }
-  return defaultValue;
 }
 
 const args = readArgs();
