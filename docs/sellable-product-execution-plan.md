@@ -23,12 +23,34 @@ Primary references:
 - Work the smallest slice that moves the phase gate. Do not start a later
   phase early just because it looks adjacent.
 - Every slice lists acceptance criteria. A slice is not done until they pass.
+- Gate rule (owner decision, 2026-06-11): phase gates that require hardware
+  the company does not have on hand — a scratch/clean Windows machine for the
+  stranger install, the restore drill, reboot survival, and the real
+  installed-services updater run — are **tracked validation debt, not
+  blockers**. Repo-side work on later phases continues; the open gates are
+  listed in §Open validation debt and every one of them must be performed and
+  dated before the first sold install or pilot.
 - Decisions are tagged `D#` and collected in §Decisions; a slice that names a
   decision is blocked until that decision is recorded here.
 - Product-feature work (invoice delivery, dispatch density, reporting polish)
   continues in parallel under
   [milestone-implementation-plan.md](./milestone-implementation-plan.md); this
   plan owns sellability infrastructure only.
+
+## Open validation debt
+
+Environmental gates currently open, all satisfiable in one scratch-machine
+session:
+
+- Phase 1: clean-machine stranger install (browser-based owner setup and job
+  booking included), service registration, reboot survival
+- Phase 2: restore drill onto a scratch machine from a real worker-produced
+  backup set
+- Phase 4: installed v(N) → v(N+1) update with real services and a real
+  pre-update `pg_dump` backup, plus a real refusal against an expired-window
+  license
+
+These must all be performed and dated before the first sold install or pilot.
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
