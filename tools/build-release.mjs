@@ -54,9 +54,14 @@ function deployWorkspacePackage(filter, target) {
   run('pnpm', ['--filter', filter, 'deploy', '--prod', '--legacy', target]);
 }
 
+function firstExisting(paths) {
+  return paths.find((candidate) => existsSync(candidate)) ?? null;
+}
+
 rmSync(releaseRoot, { force: true, recursive: true });
 mkdirSync(releaseRoot, { recursive: true });
 
+run('pnpm', ['--filter', '@bellfield/contracts', 'build']);
 run('pnpm', ['--filter', '@bellfield/api', 'build']);
 run('pnpm', ['--filter', '@bellfield/worker', 'build']);
 run('pnpm', ['--filter', '@bellfield/office-web', 'build']);
@@ -79,15 +84,21 @@ copyRequired(
   join(repoRoot, 'apps', 'office-web', '.next', 'standalone'),
   join(releaseRoot, 'apps', 'office-web')
 );
+
+const officeServer = firstExisting([
+  join(releaseRoot, 'apps', 'office-web', 'server.js'),
+  join(releaseRoot, 'apps', 'office-web', 'apps', 'office-web', 'server.js')
+]);
+if (!officeServer) {
+  throw new Error('Office standalone server.js was not found in the release artifact.');
+}
+const officeServerRoot = dirname(officeServer);
 copyRequired(
   join(repoRoot, 'apps', 'office-web', '.next', 'static'),
-  join(releaseRoot, 'apps', 'office-web', '.next', 'static')
+  join(officeServerRoot, '.next', 'static')
 );
 if (existsSync(join(repoRoot, 'apps', 'office-web', 'public'))) {
-  copyRequired(
-    join(repoRoot, 'apps', 'office-web', 'public'),
-    join(releaseRoot, 'apps', 'office-web', 'public')
-  );
+  copyRequired(join(repoRoot, 'apps', 'office-web', 'public'), join(officeServerRoot, 'public'));
 }
 
 copyFileRequired(

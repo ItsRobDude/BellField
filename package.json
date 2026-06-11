@@ -43,6 +43,7 @@
     "dev:field-smoke-data": "pnpm --filter @bellfield/api field-smoke:data",
     "smoke:m9": "node tools/smoke/m9-api-smoke.mjs",
     "smoke:jobs": "node tools/smoke/jobs-lifecycle-api-smoke.mjs",
+    "smoke:release-office-web": "node tools/smoke/release-office-web-assets-smoke.mjs",
     "start:office-web": "pnpm --filter @bellfield/office-web start",
     "start:field-mobile": "pnpm --filter @bellfield/field-mobile start",
     "start:api": "pnpm --filter @bellfield/api start",
