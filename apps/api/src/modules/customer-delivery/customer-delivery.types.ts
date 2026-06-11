@@ -22,9 +22,15 @@ export type OutboundMessageRecord = {
   recipientEmail: string;
   subject: string;
   bodyText: string;
+  /** D8: sender identity pinned at queue time so delayed retries send what the office saw. */
+  fromName?: string;
+  replyToEmail?: string;
   sentByName: string;
   queuedAt: string;
   sentAt?: string;
+  attemptCount: number;
+  nextAttemptAt?: string;
+  expiresAt?: string;
   providerMessageId?: string;
   providerError?: string;
 };
@@ -61,10 +67,19 @@ export type CreateOutboundMessageInput = {
   recipientEmail: string;
   subject: string;
   bodyText: string;
+  /** D8: pinned at queue time from company settings. */
+  fromName: string;
+  replyToEmail?: string;
   sentByEmployeeId: string;
   sentByName: string;
   queuedAt: string;
+  /** Queued sends expire to failed past this point (24h per the relay plan §6). */
+  expiresAt: string;
 };
+
+export type CreateEstimateSendIntentResult =
+  | { kind: 'created'; message: OutboundMessageRecord }
+  | { kind: 'blocked'; reason: 'alreadyQueued' | 'recentlySent' };
 
 export type EmailProviderSendInput = {
   to: string;

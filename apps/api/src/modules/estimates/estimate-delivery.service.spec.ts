@@ -58,10 +58,32 @@ function createDeliveryService() {
       generatedAt: input.generatedAt
     })),
     createEstimateSendIntent: jest.fn().mockImplementation(async (input) => ({
-      ...input,
-      sentByName: input.sentByName,
-      queuedAt: input.queuedAt
+      kind: 'created',
+      message: {
+        ...input,
+        attemptCount: 0,
+        sentByName: input.sentByName,
+        queuedAt: input.queuedAt
+      }
     })),
+    scheduleOutboundMessageRetry: jest
+      .fn()
+      .mockImplementation(async (messageId, nextAttemptAt) => ({
+        id: messageId,
+        channel: 'email',
+        provider: 'relay',
+        status: 'queued',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        documentSnapshotId: 'snapshot-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is AC replacement.',
+        sentByName: 'Dispatcher',
+        queuedAt: '2026-06-01T00:00:00.000Z',
+        attemptCount: 1,
+        nextAttemptAt
+      })),
     setOutboundMessageDocumentSnapshot: jest.fn(),
     markOutboundMessageSent: jest.fn().mockImplementation(async (messageId, providerMessageId) => ({
       id: messageId,
@@ -377,13 +399,64 @@ describe('EstimateDeliveryService', () => {
       emailProviderService,
       estimatePdfRendererService
     } = createDeliveryService();
-    customerDeliveryRepository.createEstimateSendIntent.mockResolvedValue(null);
+    customerDeliveryRepository.createEstimateSendIntent.mockResolvedValue({
+      kind: 'blocked',
+      reason: 'recentlySent'
+    });
 
     await expect(
       service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
-    ).rejects.toBeInstanceOf(ConflictException);
+    ).rejects.toThrow(/just sent/);
     expect(estimatePdfRendererService.renderEstimatePdf).not.toHaveBeenCalled();
     expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+  });
+
+  it('blocks duplicates with queued copy while a live queued send exists', async () => {
+    const { service, customerDeliveryRepository } = createDeliveryService();
+    customerDeliveryRepository.createEstimateSendIntent.mockResolvedValue({
+      kind: 'blocked',
+      reason: 'alreadyQueued'
+    });
+
+    await expect(
+      service.sendEstimate('token', 'estimate-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toThrow(/already queued/);
+  });
+
+  it('keeps the intent queued and schedules a retry on a retryable failure', async () => {
+    const { service, customerDeliveryRepository, emailProviderService } = createDeliveryService();
+    emailProviderService.sendEstimateEmail.mockResolvedValue({
+      kind: 'failed',
+      code: 'deliveryUnavailable',
+      retryable: true,
+      message: 'Relay unreachable.'
+    });
+
+    const result = await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(customerDeliveryRepository.scheduleOutboundMessageRetry).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String)
+    );
+    expect(customerDeliveryRepository.markOutboundMessageFailed).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).not.toHaveBeenCalled();
+    expect(result.outboundMessage.status).toBe('queued');
+  });
+
+  it('pins the sender identity and expiry on the intent row at queue time', async () => {
+    const { service, customerDeliveryRepository } = createDeliveryService();
+
+    await service.sendEstimate('token', 'estimate-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    const input = customerDeliveryRepository.createEstimateSendIntent.mock.calls[0][0];
+    expect(input.fromName).toBe('BellField');
+    expect(input.expiresAt).toBeDefined();
+    expect(Date.parse(input.expiresAt) - Date.parse(input.queuedAt)).toBe(24 * 60 * 60 * 1000);
   });
 
   it('creates the send intent before rendering so concurrent sends are covered', async () => {
@@ -392,7 +465,7 @@ describe('EstimateDeliveryService', () => {
     const callOrder: string[] = [];
     customerDeliveryRepository.createEstimateSendIntent.mockImplementation(async (input) => {
       callOrder.push('intent');
-      return { ...input };
+      return { kind: 'created', message: { ...input, attemptCount: 0 } };
     });
     estimatePdfRendererService.renderEstimatePdf.mockImplementation(async () => {
       callOrder.push('render');
@@ -456,8 +529,8 @@ describe('EstimateDeliveryService', () => {
     const { service, customerDeliveryRepository, emailProviderService } = createDeliveryService();
     emailProviderService.sendEstimateEmail.mockResolvedValue({
       kind: 'failed',
-      code: 'deliveryUnavailable',
-      retryable: true,
+      code: 'deliveryRejected',
+      retryable: false,
       message: 'Provider rejected request.'
     });
     customerDeliveryRepository.addEstimateDeliveryTimeline.mockRejectedValue(

@@ -24,6 +24,10 @@ import type {
 } from '../customer-delivery/customer-delivery.types';
 import { CustomerDocumentStorageService } from '../customer-delivery/customer-document-storage.service';
 import {
+  estimateEmailQueueExpiryMs,
+  nextDeliveryRetryDelayMs
+} from '../customer-delivery/delivery-retry';
+import {
   buildEmailProviderInput,
   deliveryFailedMessage,
   EmailProviderService
@@ -148,9 +152,11 @@ export class EstimateDeliveryService {
 
     // The intent row goes in before the expensive render/provider work so a
     // concurrent send for the same estimate and recipient is blocked for the
-    // whole window, not just after rendering finishes.
+    // whole window, not just after rendering finishes. Sender identity is
+    // pinned on the row at queue time (D8) so a retry hours later sends what
+    // the office saw, not drifted settings.
     const outboundMessageId = randomUUID();
-    const intent = await this.customerDeliveryRepository.createEstimateSendIntent({
+    const intentResult = await this.customerDeliveryRepository.createEstimateSendIntent({
       id: outboundMessageId,
       channel: 'email',
       provider: this.emailProviderService.providerKey,
@@ -160,16 +166,23 @@ export class EstimateDeliveryService {
       recipientEmail,
       subject: emailContent.subject,
       bodyText: emailContent.bodyText,
+      fromName: settings.companyName,
+      replyToEmail: settings.replyToEmail,
       sentByEmployeeId: actor.id,
       sentByName: actor.displayName,
       queuedAt: generatedAt,
-      dedupeSince: new Date(Date.now() - 60_000).toISOString()
+      expiresAt: new Date(Date.parse(generatedAt) + estimateEmailQueueExpiryMs).toISOString(),
+      dedupeSince: new Date(Date.now() - 60_000).toISOString(),
+      now: generatedAt
     });
-    if (!intent) {
+    if (intentResult.kind === 'blocked') {
       throw new ConflictException(
-        'This estimate was just sent to that recipient. Wait a moment before trying again.'
+        intentResult.reason === 'alreadyQueued'
+          ? 'This estimate is already queued to send to that recipient. It will send automatically.'
+          : 'This estimate was just sent to that recipient. Wait a moment before trying again.'
       );
     }
+    const intent = intentResult.message;
 
     const filename = estimatePdfFilename(estimate);
     let documentSnapshot: CustomerDocumentSnapshotRecord;
@@ -228,17 +241,24 @@ export class EstimateDeliveryService {
     }
 
     const providerResult = await this.sendEstimateEmailSafely(
-      buildEmailProviderInput(settings, {
-        to: recipientEmail,
-        subject: emailContent.subject,
-        bodyText: emailContent.bodyText,
-        attachment: {
-          filename,
-          contentType: 'application/pdf',
-          bytes: pdfBytes
+      buildEmailProviderInput(
+        // D8: send with the identity pinned on the intent row at queue time.
+        {
+          companyName: intent.fromName ?? settings.companyName,
+          replyToEmail: intent.replyToEmail ?? settings.replyToEmail
         },
-        idempotencyKey: `estimate-send-${outboundMessageId}`
-      })
+        {
+          to: recipientEmail,
+          subject: emailContent.subject,
+          bodyText: emailContent.bodyText,
+          attachment: {
+            filename,
+            contentType: 'application/pdf',
+            bytes: pdfBytes
+          },
+          idempotencyKey: `estimate-send-${outboundMessageId}`
+        }
+      )
     );
     const completedAt = new Date().toISOString();
     let outboundMessage: OutboundMessageRecord;
@@ -265,6 +285,14 @@ export class EstimateDeliveryService {
           providerMessageId: providerResult.providerMessageId
         };
       }
+    } else if (providerResult.retryable) {
+      // The intent stays queued; the worker retries it from the stored
+      // snapshot and the office is notified when it eventually sends.
+      outboundMessage = await this.customerDeliveryRepository.scheduleOutboundMessageRetry(
+        outboundMessageId,
+        new Date(Date.parse(completedAt) + nextDeliveryRetryDelayMs(1)).toISOString(),
+        completedAt
+      );
     } else {
       outboundMessage = await this.customerDeliveryRepository.markOutboundMessageFailed(
         outboundMessageId,
@@ -273,17 +301,20 @@ export class EstimateDeliveryService {
       );
     }
 
+    const queuedForRetry = outboundMessage.status === 'queued';
     try {
-      await this.customerDeliveryRepository.addEstimateDeliveryTimeline({
-        jobId: estimate.jobId,
-        occurredAt: completedAt,
-        actorName: actor.displayName,
-        kind: providerResult.kind === 'sent' ? 'estimateSent' : 'estimateDeliveryFailed',
-        message:
-          providerResult.kind === 'sent'
-            ? `Estimate sent to ${recipientEmail}: ${estimate.title}.`
-            : `Estimate delivery failed for ${recipientEmail}: ${estimate.title}.`
-      });
+      if (!queuedForRetry) {
+        await this.customerDeliveryRepository.addEstimateDeliveryTimeline({
+          jobId: estimate.jobId,
+          occurredAt: completedAt,
+          actorName: actor.displayName,
+          kind: providerResult.kind === 'sent' ? 'estimateSent' : 'estimateDeliveryFailed',
+          message:
+            providerResult.kind === 'sent'
+              ? `Estimate sent to ${recipientEmail}: ${estimate.title}.`
+              : `Estimate delivery failed for ${recipientEmail}: ${estimate.title}.`
+        });
+      }
     } catch (error) {
       if (providerResult.kind !== 'sent') {
         throw error;

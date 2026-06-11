@@ -5,6 +5,7 @@ import { toIsoString } from '../../database/database-row.utils';
 import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-utils';
 import type {
   CreateCustomerDocumentSnapshotInput,
+  CreateEstimateSendIntentResult,
   CreateOutboundMessageInput,
   CustomerDocumentSnapshotRecord,
   OutboundMessageRecord
@@ -38,9 +39,14 @@ type OutboundMessageRow = {
   recipientEmail: string;
   subject: string;
   bodyText: string;
+  fromName: string | null;
+  replyToEmail: string | null;
   sentByName: string;
   queuedAt: string | Date;
   sentAt: string | Date | null;
+  attemptCount: number;
+  nextAttemptAt: string | Date | null;
+  expiresAt: string | Date | null;
   providerMessageId: string | null;
   providerError: string | null;
 };
@@ -73,9 +79,14 @@ const OUTBOUND_COLUMNS = `
   recipient_email as "recipientEmail",
   subject,
   body_text as "bodyText",
+  from_name as "fromName",
+  reply_to_email as "replyToEmail",
   sent_by_name as "sentByName",
   queued_at as "queuedAt",
   sent_at as "sentAt",
+  attempt_count as "attemptCount",
+  next_attempt_at as "nextAttemptAt",
+  expires_at as "expiresAt",
   provider_message_id as "providerMessageId",
   provider_error as "providerError"
 `;
@@ -122,47 +133,79 @@ export class CustomerDeliveryRepository {
 
   /**
    * Write the queued outbound row (the send intent) before any expensive
-   * render or provider work. The recency re-check and insert run in one short
+   * render or provider work. The dedupe re-check and insert run in one short
    * transaction serialized per (estimate, recipient) by an advisory lock, so
-   * two concurrent sends cannot both pass the dedupe window. Returns null when
-   * a recent queued/sent message already covers this send.
+   * two concurrent sends cannot both pass the check. A live queued row blocks
+   * a duplicate regardless of age (it will send or expire); a just-sent row
+   * blocks only within the recency window. Legacy queued rows without an
+   * expiry only block inside the recency window — the expiry sweep heals them.
    */
   async createEstimateSendIntent(
-    input: CreateOutboundMessageInput & { dedupeSince: string }
-  ): Promise<OutboundMessageRecord | null> {
-    const { dedupeSince, ...message } = input;
-    const inserted = await this.databaseService.transaction(async (queryable) => {
+    input: CreateOutboundMessageInput & { dedupeSince: string; now: string }
+  ): Promise<CreateEstimateSendIntentResult> {
+    const { dedupeSince, now, ...message } = input;
+    const blockedReason = await this.databaseService.transaction(async (queryable) => {
       await queryable.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
         `estimate-email:${message.estimateId}:${message.recipientEmail.toLowerCase()}`
       ]);
-      const recent = await queryable.query<{ id: string }>(
+      const blocking = await queryable.query<{ status: 'queued' | 'sent' }>(
         `
-          select id
+          select status
           from outbound_messages
           where estimate_id = $1
             and lower(recipient_email) = lower($2)
             and channel = 'email'
-            and status in ('queued', 'sent')
-            and queued_at >= $3
+            and (
+              (status = 'queued' and (expires_at > $4 or (expires_at is null and queued_at >= $3)))
+              or (status = 'sent' and queued_at >= $3)
+            )
+          order by status asc
           limit 1
         `,
-        [message.estimateId, message.recipientEmail, dedupeSince]
+        [message.estimateId, message.recipientEmail, dedupeSince, now]
       );
-      if (recent.rows[0]) {
-        return false;
+      const row = blocking.rows[0];
+      if (row) {
+        return row.status === 'queued' ? ('alreadyQueued' as const) : ('recentlySent' as const);
       }
       await this.insertOutboundMessage(queryable, message);
-      return true;
+      return null;
     });
 
-    if (!inserted) {
-      return null;
+    if (blockedReason) {
+      return { kind: 'blocked', reason: blockedReason };
     }
     const record = await this.getOutboundMessageById(message.id);
     if (!record) {
       throw new Error('Created outbound message could not be loaded.');
     }
-    return record;
+    return { kind: 'created', message: record };
+  }
+
+  /**
+   * A retryable provider failure keeps the intent queued and schedules the
+   * next attempt instead of failing it (relay plan §6).
+   */
+  async scheduleOutboundMessageRetry(
+    messageId: string,
+    nextAttemptAt: string,
+    occurredAt: string
+  ): Promise<OutboundMessageRecord> {
+    await this.databaseService.query(
+      `
+        update outbound_messages
+        set attempt_count = attempt_count + 1,
+            next_attempt_at = $2,
+            updated_at = $3
+        where id = $1 and status = 'queued'
+      `,
+      [messageId, nextAttemptAt, occurredAt]
+    );
+    const message = await this.getOutboundMessageById(messageId);
+    if (!message) {
+      throw new Error('Outbound message could not be loaded after retry scheduling.');
+    }
+    return message;
   }
 
   async setOutboundMessageDocumentSnapshot(
@@ -193,6 +236,8 @@ export class CustomerDeliveryRepository {
             sent_at = $2,
             provider_message_id = $3,
             provider_error = null,
+            attempt_count = attempt_count + 1,
+            next_attempt_at = null,
             updated_at = $2
         where id = $1
       `,
@@ -215,6 +260,8 @@ export class CustomerDeliveryRepository {
         update outbound_messages
         set status = 'failed',
             provider_error = $2,
+            attempt_count = attempt_count + 1,
+            next_attempt_at = null,
             updated_at = $3
         where id = $1
       `,
@@ -274,10 +321,11 @@ export class CustomerDeliveryRepository {
       `
         insert into outbound_messages (
           id, channel, provider, status, job_id, estimate_id, invoice_id, document_snapshot_id,
-          recipient_email, subject, body_text, sent_by_employee_id, sent_by_name, queued_at,
+          recipient_email, subject, body_text, from_name, reply_to_email,
+          sent_by_employee_id, sent_by_name, queued_at, expires_at,
           created_at, updated_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14, $14)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $16)
       `,
       [
         input.id,
@@ -291,9 +339,12 @@ export class CustomerDeliveryRepository {
         input.recipientEmail,
         input.subject,
         input.bodyText,
+        input.fromName,
+        input.replyToEmail ?? null,
         input.sentByEmployeeId,
         input.sentByName,
-        input.queuedAt
+        input.queuedAt,
+        input.expiresAt
       ]
     );
   }
@@ -348,9 +399,14 @@ function toOutboundMessageRecord(row: OutboundMessageRow): OutboundMessageRecord
     recipientEmail: row.recipientEmail,
     subject: row.subject,
     bodyText: row.bodyText,
+    fromName: row.fromName ?? undefined,
+    replyToEmail: row.replyToEmail ?? undefined,
     sentByName: row.sentByName,
     queuedAt: toIsoString(row.queuedAt),
     sentAt: row.sentAt ? toIsoString(row.sentAt) : undefined,
+    attemptCount: row.attemptCount,
+    nextAttemptAt: row.nextAttemptAt ? toIsoString(row.nextAttemptAt) : undefined,
+    expiresAt: row.expiresAt ? toIsoString(row.expiresAt) : undefined,
     providerMessageId: row.providerMessageId ?? undefined,
     providerError: row.providerError ?? undefined
   };
