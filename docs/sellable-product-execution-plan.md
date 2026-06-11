@@ -30,25 +30,32 @@ Primary references:
   [milestone-implementation-plan.md](./milestone-implementation-plan.md); this
   plan owns sellability infrastructure only.
 
-## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11)
+## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11)
 
 - Release artifact scaffolding now exists: `tools/build-release.mjs` assembles
   compiled API/worker output, office-web standalone output, migration scripts,
-  install helpers, and a bundled Node runtime into `release/`. The clean-machine
-  install gate has not yet been run.
+  install helpers, deployed contracts, a release build manifest, and a bundled
+  Node runtime into `release/`. The office static asset copy now targets the
+  actual standalone server root and has a same-machine asset/browser smoke. The
+  clean-machine install gate has not yet been run.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.
 - Backup/restore: Phase 2 repo-side foundation now exists. The worker owns a
-  scheduled backup job, backup run history, backup-set retention, and a
-  packaged restore helper; the scratch-machine restore gate remains unclaimed.
+  scheduled backup job, startup due-check from latest successful backup,
+  orphaned-running cleanup, manifest-less partial-set cleanup, backup run
+  history, backup-set retention, and a packaged restore helper with staged
+  media/license replacement; the scratch-machine restore gate remains
+  unclaimed.
 - Update path: none. All versions are a frozen `0.0.1`; no release-date
   stamping, which the update-entitlement moat requires.
 - Licensing: Phase 3 repo-side primitive now exists: signed offline license
-  file design, API startup verification behind a license-required runtime flag,
-  System/support visibility, private issuance tooling, and backup/restore
-  coverage for the license file.
-- `apps/worker`: a heartbeat stub — no DB access, no dependencies, no jobs.
+  file design, API startup verification behind a license-required runtime flag
+  or release build manifest, System/support visibility, private issuance
+  tooling, v1 key ceremony docs, local-key smoke, and backup/restore coverage
+  for the license file.
+- `apps/worker`: real DB-backed job-runner footing now exists for heartbeat and
+  scheduled backups; Phase 5 can reuse it for delivery retry jobs.
 - Live contradictions after Phase 1 repo work: the interim Resend key remains a
   BellField-operated-only bridge until Phase 5, and the release/runbook path is
   not yet clean-machine certified.
@@ -164,10 +171,11 @@ Docker knowledge, or a terminal beyond running the installer.
 
 Status: repo-side Phase 1 implementation landed 2026-06-11. This includes
 first-owner setup, meaningful health/schema readiness, compiled worker and
-office standalone build wiring, release assembly, unified server-config
-template, Windows service manifests, PostgreSQL provisioning helper, and
-`docs/install-runbook.md`. A nondestructive same-machine compiled-release
-smoke passed on 2026-06-11; see
+office standalone build wiring, release assembly, deployed contracts, release
+build manifest, unified server-config template, scoped Windows service
+manifests, PostgreSQL provisioning helper, and `docs/install-runbook.md`. A
+nondestructive same-machine compiled-release smoke passed on 2026-06-11, with
+follow-up office asset/browser proof after release-packaging hardening; see
 [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md).
 The clean-machine stranger gate remains deliberately unclaimed because only
 machines with some existing development tooling were available. That later
@@ -271,8 +279,10 @@ Phase 5 reuses it instead of inventing one.
 
 Status: repo-side Phase 2 implementation landed 2026-06-11. This includes the
 worker job-runner substrate, scheduled `pg_dump` + media backups, `backup_runs`
-history, System backup freshness visibility, support-bundle config summary,
-retention, and `docs/restore-runbook.md`. A nondestructive same-machine
+history, startup due-check from latest successful backup, orphaned-running and
+manifest-less partial-set cleanup, System backup freshness visibility,
+support-bundle config summary, retention, staged restore media/license
+replacement, and `docs/restore-runbook.md`. A nondestructive same-machine
 validation pass is recorded in
 [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md).
 The Phase 2 gate remains a separate scratch-machine restore drill from a real
@@ -313,11 +323,13 @@ Consumed by the updater (Phase 4) and the relay (Phase 5). Design before code.
 
 Status: repo-side Phase 3 implementation landed 2026-06-11. This includes
 the license design doc, offline Ed25519 license verifier, API startup refusal
-when `BELLFIELD_LICENSE_REQUIRED=true` and the configured file is missing or
-invalid, System/support license visibility, private BellField-side issuance
-scripts, and backup/restore handling for the license file. Phase 4 still owns
-release-date stamping and updater entitlement enforcement; Phase 5 still owns
-relay-token service behavior. Local nondestructive validation is recorded in
+when `BELLFIELD_LICENSE_REQUIRED=true` or the release build manifest requires a
+license and the configured file is missing or invalid, System/support license
+visibility, private BellField-side issuance scripts, v1 key ceremony docs,
+local-key smoke, and backup/restore handling for the license file. Phase 4
+still owns release-date stamping and updater entitlement enforcement; Phase 5
+still owns relay-token service behavior. Local nondestructive validation is
+recorded in
 [phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md).
 
 ### 3.1 License design doc
@@ -335,8 +347,9 @@ license file never contains relay secrets.
 Build: API boot loads and verifies the license file (path from unified
 config). Refuse-to-start only when the file is missing or cryptographically
 invalid. Expired update window, clock skew, offline, restored-to-new-machine:
-all run. System surface shows licensee and update-window end. Dev/test builds
-run unlicensed by build flag — sold builds require the file.
+all run. System surface shows licensee and update-window end. Source/dev runs
+stay unlicensed by default; release artifacts carry a build manifest that
+requires the file regardless of the env flag.
 
 Acceptance: spec matrix covering valid / missing / tampered / expired-window /
 future-dated files; tampered and missing refuse with readable errors; expired
@@ -364,9 +377,9 @@ and runs forever with one, regardless of dates and connectivity.
 ### 4.1 Release stamping
 
 Build: CI release job producing the Phase-1 artifact with real version and
-release date stamped into a build manifest; `readAppVersion()` reads the
-manifest (not `package.json` at cwd); System surface and support bundle show
-version + release date.
+release date stamped into the existing build manifest; `readAppVersion()` reads
+the manifest (not `package.json` at cwd); System surface and support bundle
+show version + release date.
 
 ### 4.2 Distribution channel
 

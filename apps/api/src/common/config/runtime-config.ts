@@ -1,3 +1,6 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 type NodeEnvironment = 'development' | 'test' | 'production';
 
 const defaultPort = 3001;
@@ -101,7 +104,10 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     isProduction,
     problems
   );
-  const licenseRequired = getBoolean(process.env.BELLFIELD_LICENSE_REQUIRED, false);
+  const buildManifest = readRuntimeBuildManifest();
+  const licenseRequired =
+    buildManifest?.licenseRequired === true ||
+    getBoolean(process.env.BELLFIELD_LICENSE_REQUIRED, false);
   const licensePath = process.env.BELLFIELD_LICENSE_PATH?.trim() || undefined;
 
   if (isProduction && bootstrapSeedData) {
@@ -157,4 +163,45 @@ function resolveOfficeOrigins(
   }
 
   return true;
+}
+
+type RuntimeBuildManifest = {
+  schemaVersion: 1;
+  buildKind: 'source' | 'release';
+  licenseRequired: boolean;
+};
+
+function readRuntimeBuildManifest(): RuntimeBuildManifest | null {
+  const explicitPath = process.env.BELLFIELD_BUILD_MANIFEST_PATH?.trim();
+  const candidates = [
+    explicitPath,
+    join(process.cwd(), 'bellfield-build-manifest.json'),
+    join(process.cwd(), '..', '..', 'bellfield-build-manifest.json')
+  ].filter((candidate): candidate is string => Boolean(candidate));
+
+  for (const candidate of candidates) {
+    if (!existsSync(candidate)) {
+      if (candidate === explicitPath) {
+        throw new Error(`BellField build manifest was not found at ${candidate}.`);
+      }
+      continue;
+    }
+
+    const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as Partial<RuntimeBuildManifest>;
+    if (
+      parsed.schemaVersion !== 1 ||
+      (parsed.buildKind !== 'source' && parsed.buildKind !== 'release') ||
+      typeof parsed.licenseRequired !== 'boolean'
+    ) {
+      throw new Error(`BellField build manifest is invalid: ${candidate}`);
+    }
+
+    return {
+      schemaVersion: 1,
+      buildKind: parsed.buildKind,
+      licenseRequired: parsed.licenseRequired
+    };
+  }
+
+  return null;
 }

@@ -22,6 +22,21 @@ function run(command, args) {
   }
 }
 
+function runCapture(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    shell: process.platform === 'win32',
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  if (result.status !== 0 || result.error) {
+    return null;
+  }
+
+  return result.stdout.trim();
+}
+
 function copyRequired(source, target) {
   if (!existsSync(source)) {
     throw new Error(`Required release artifact is missing: ${relative(repoRoot, source)}`);
@@ -70,6 +85,21 @@ copyNodeRuntime();
 
 deployWorkspacePackage('@bellfield/api', join(releaseRoot, 'apps', 'api'));
 deployWorkspacePackage('@bellfield/worker', join(releaseRoot, 'apps', 'worker'));
+
+const buildManifest = {
+  schemaVersion: 1,
+  buildKind: 'release',
+  licenseRequired: true,
+  generatedAt: new Date().toISOString(),
+  sourceCommit: runCapture('git', ['rev-parse', '--short', 'HEAD'])
+};
+const buildManifestJson = `${JSON.stringify(buildManifest, null, 2)}\n`;
+writeFileSync(join(releaseRoot, 'bellfield-build-manifest.json'), buildManifestJson, 'utf8');
+writeFileSync(
+  join(releaseRoot, 'apps', 'api', 'bellfield-build-manifest.json'),
+  buildManifestJson,
+  'utf8'
+);
 
 copyRequired(
   join(repoRoot, 'apps', 'api', 'src', 'database', 'migrations'),

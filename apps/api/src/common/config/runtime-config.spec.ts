@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { getApiRuntimeConfig } from './runtime-config';
 
 const defaultDatabaseUrl = 'postgresql://postgres:postgres@localhost:5432/bellfield';
@@ -11,6 +14,7 @@ describe('getApiRuntimeConfig', () => {
     'DATABASE_URL',
     'BOOTSTRAP_SEED_DATA',
     'BELLFIELD_OFFICE_ORIGINS',
+    'BELLFIELD_BUILD_MANIFEST_PATH',
     'BELLFIELD_LICENSE_REQUIRED',
     'BELLFIELD_LICENSE_PATH',
     'BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY'
@@ -184,5 +188,59 @@ describe('getApiRuntimeConfig', () => {
     process.env.BELLFIELD_LICENSE_REQUIRED = 'true';
 
     expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_LICENSE_PATH/);
+  });
+
+  it('requires a license when the release build manifest requires one even if env disables it', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    try {
+      const manifestPath = join(root, 'bellfield-build-manifest.json');
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          buildKind: 'release',
+          licenseRequired: true
+        }),
+        'utf8'
+      );
+      process.env.NODE_ENV = 'production';
+      process.env.DATABASE_URL = validProductionDatabaseUrl;
+      process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+      process.env.BELLFIELD_BUILD_MANIFEST_PATH = manifestPath;
+      process.env.BELLFIELD_LICENSE_REQUIRED = 'false';
+
+      expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_LICENSE_PATH/);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('accepts a release build manifest when the required license path is configured', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    try {
+      const manifestPath = join(root, 'bellfield-build-manifest.json');
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          buildKind: 'release',
+          licenseRequired: true
+        }),
+        'utf8'
+      );
+      process.env.NODE_ENV = 'production';
+      process.env.DATABASE_URL = validProductionDatabaseUrl;
+      process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+      process.env.BELLFIELD_BUILD_MANIFEST_PATH = manifestPath;
+      process.env.BELLFIELD_LICENSE_REQUIRED = 'false';
+      process.env.BELLFIELD_LICENSE_PATH = 'C:\\BellField\\data\\license\\bellfield-license.json';
+
+      const config = getApiRuntimeConfig();
+
+      expect(config.licenseRequired).toBe(true);
+      expect(config.licensePath).toBe('C:\\BellField\\data\\license\\bellfield-license.json');
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 });

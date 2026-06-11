@@ -82,6 +82,12 @@ Cleanup check after the smoke:
 
 One first attempt failed at customer creation because the smoke used display label `Residential` instead of the actual supported account type value `residential`. No code change was needed; the rerun passed with the correct value.
 
+Follow-up hardening on 2026-06-11 corrected two gaps in the original release proof:
+
+- `tools/build-release.mjs` now builds `@bellfield/contracts` before API deployment, and the release artifact was checked for `release/apps/api/node_modules/@bellfield/contracts/dist/index.js`.
+- `pnpm smoke:release-office-web` now starts the packaged office standalone server and verifies referenced `/_next/static/*.js` assets return `200`.
+- A real in-app browser check loaded the packaged office server, showed the sign-in form, accepted typed input in the email field, and reported no browser console errors.
+
 ## Not Proven
 
 This smoke does not prove:
@@ -94,5 +100,6 @@ This smoke does not prove:
 - second office desktop access over LAN
 - Android field-device access
 - backup, restore, update, uninstall, or repair
+- a clean-machine fresh-clone build without the existing local pnpm store/cache
 
 Those remain later validation gates. They should not block continued product work now that the compiled release path, first-owner setup, health readiness, migrations, office serving, worker boot, and basic job booking path have passed locally.

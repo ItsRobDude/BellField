@@ -28,7 +28,7 @@ export const licenseKeyId = 'bellfield-license-v1';
 
 const embeddedLicensePublicKeyPem = [
   '-----BEGIN PUBLIC KEY-----',
-  'MCowBQYDK2VwAyEAu30OyI0Y21YTvTOpxCRp5Rt5WeqrUHNmuao7/xy8DNg=',
+  'MCowBQYDK2VwAyEAGhWH5l32n93V4AeHLgWnRN70ekYeRfkJFxJ0QHGBdgg=',
   '-----END PUBLIC KEY-----',
   ''
 ].join('\n');

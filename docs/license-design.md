@@ -84,7 +84,29 @@ BELLFIELD_LICENSE_PATH=C:\BellField\data\license\bellfield-license.json
 
 Development and tests default to `BELLFIELD_LICENSE_REQUIRED=false`.
 
+Release artifacts also include `bellfield-build-manifest.json` with `licenseRequired: true`. The API treats that build-manifest requirement as stronger than `BELLFIELD_LICENSE_REQUIRED=false`, so a sold release still requires a valid license file if an operator edits the env file. Source/dev runs have no build manifest by default and can remain unlicensed.
+
+This is an install/operator guard, not anti-tamper protection. A person deliberately modifying shipped code can still bypass local checks; BellField's protection posture remains acquisition, updates, and relay access, not a runtime kill switch.
+
 The public key is not a secret. The production public key is embedded in the product build. The private signing key is BellField-side only and must never be committed or shipped.
+
+## Production Key Ceremony
+
+Before first sale, BellField must perform and record a key ceremony:
+
+1. Generate the Ed25519 keypair on Rob's Windows PC or another offline-controlled BellField machine.
+2. Store the private key outside the repo under:
+
+   ```text
+   C:\Users\rober\Documents\API Keys\BellField\license-v1\bellfield-license-private-key.pem
+   ```
+
+3. Store the matching public key beside it for operator verification.
+4. Embed only the public key in `apps/api/src/modules/licensing/license-verification.ts`.
+5. Run `pnpm smoke:license-key` to prove a license issued with the private key verifies against the embedded public key.
+6. Back up the private key to BellField-controlled offline storage before issuing customer licenses.
+
+Private-key loss means BellField cannot issue additional licenses for that key version. Private-key exposure means a new `licenseKeyId` and embedded public key are required for future releases; existing offline installs keep running with their already-issued license files.
 
 ## Backup and Restore Boundary
 

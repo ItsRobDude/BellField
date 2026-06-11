@@ -26,7 +26,11 @@ Because host PostgreSQL client tools were unavailable, this smoke did not run a 
 
 - `pnpm --filter @bellfield/worker test`
   - worker runner runs fixed-interval jobs
+  - worker runner honors an initial startup delay
   - throwing jobs are isolated
+  - scheduled backups run immediately when no successful backup exists or the last success is overdue
+  - scheduled backups wait only the remaining interval after a recent success
+  - backup startup recovery marks orphaned `running` rows failed and removes manifest-less partial backup sets
   - backup service writes a dump/media/manifest through a fake process runner
   - failed backups are recorded and partial sets removed
   - retention deletes old backup sets and marks rows
@@ -40,6 +44,7 @@ Because host PostgreSQL client tools were unavailable, this smoke did not run a 
 - `pnpm check:ui-copy`
 - `git diff --check`
 - `pnpm build:release`
+- `pnpm smoke:restore-staging`
 
 Release artifact spot checks passed:
 
@@ -48,6 +53,13 @@ Release artifact spot checks passed:
 - worker test files are not emitted into `release/apps/worker/dist`
 - `release/tools/install/write-server-config.mjs` writes the backup env defaults
 - `restore-backup.mjs` refuses to run without `--confirm=RESTORE`
+
+Restore-staging smoke passed against scratch temp directories:
+
+- backup media was copied to a staging directory before swap
+- current media remained untouched before swap
+- staged media replaced the target only after copy succeeded
+- previous media root and license file were preserved as rollback paths
 
 Packaged migration smoke passed against an isolated Docker database:
 

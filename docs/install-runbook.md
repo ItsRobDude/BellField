@@ -13,11 +13,20 @@ Validated on the development machine:
 - API production boot refuses pending migrations
 - worker runs from compiled `dist`
 - office-web builds as a Next standalone app
+- release office-web static assets are copied beside the actual standalone
+  server root and covered by `pnpm smoke:release-office-web`
 - release assembly and Windows service manifest tooling exist
+- release assembly includes `@bellfield/contracts/dist` in deployed API deps
+- release assembly writes a build manifest that forces license-required mode in
+  sold-shaped artifacts
 - worker scheduled backup foundation exists: backup run table, configured
   backup directory, `pg_dump` + media backup set creation, retention, and
   System-surface freshness status
+- worker backup startup now runs immediately when no successful backup exists
+  or the last success is overdue, and waits only the remaining interval after a
+  recent success
 - packaged restore helper exists; see [restore-runbook.md](./restore-runbook.md)
+- packaged restore stages media/license replacement before swapping live paths
 - Phase 3 signed-license runtime verification exists: sold-shaped API startup
   requires a valid offline license file, and the System surface shows license
   identity/update-window status
@@ -40,6 +49,7 @@ Not yet validated in this repo:
 - bundled PostgreSQL binaries placed in `release/postgres/bin`
 - WinSW binary placed in `release/tools/winsw/WinSW-x64.exe`
 - reboot/service recovery proof
+- real Windows ACL readback after service install
 - second office desktop and Android field-device proof
 - scratch-machine backup/restore drill
 - update gate
@@ -79,6 +89,7 @@ License defaults written by the config helper:
 - `BELLFIELD_LICENSE_PATH=C:\BellField\data\license\bellfield-license.json`
 
 Development/source runs use `BELLFIELD_LICENSE_REQUIRED=false`; customer-shaped server configs require the license file.
+Release artifacts also include `bellfield-build-manifest.json` with `licenseRequired=true`, so the API still requires a license even if the env flag is edited to false.
 
 Backup defaults written by the config helper:
 
