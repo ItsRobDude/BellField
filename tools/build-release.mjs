@@ -193,6 +193,10 @@ copyFileRequired(
   join(repoRoot, 'tools', 'update', 'release-artifact.mjs'),
   join(releaseRoot, 'tools', 'update', 'release-artifact.mjs')
 );
+copyFileRequired(
+  join(repoRoot, 'tools', 'update', 'license-verification.mjs'),
+  join(releaseRoot, 'tools', 'update', 'license-verification.mjs')
+);
 
 writeFileSync(
   join(releaseRoot, 'README.txt'),

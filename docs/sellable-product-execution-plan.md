@@ -30,14 +30,15 @@ Primary references:
   [milestone-implementation-plan.md](./milestone-implementation-plan.md); this
   plan owns sellability infrastructure only.
 
-## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11)
+## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
 - Release artifact scaffolding now exists: `tools/build-release.mjs` assembles
   compiled API/worker output, office-web standalone output, migration scripts,
-  install helpers, deployed contracts, a release build manifest, and a bundled
-  Node runtime into `release/`. The office static asset copy now targets the
-  actual standalone server root and has a same-machine asset/browser smoke. The
-  clean-machine install gate has not yet been run.
+  install helpers, deployed contracts, a release build manifest, signed update
+  artifact manifest, updater helper, and a bundled Node runtime into
+  `release/`. The office static asset copy now targets the actual standalone
+  server root and has a same-machine asset/browser smoke. The clean-machine
+  install gate has not yet been run.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.
@@ -47,8 +48,13 @@ Primary references:
   history, backup-set retention, and a packaged restore helper with staged
   media/license replacement; the scratch-machine restore gate remains
   unclaimed.
-- Update path: none. All versions are a frozen `0.0.1`; no release-date
-  stamping, which the update-entitlement moat requires.
+- Update path: repo-side Phase 4 foundation now exists. Release builds are
+  stamped with version/release date, System/support read the manifest, release
+  artifacts are signed, the updater verifies artifact signature + license
+  update window, runs a hard-fail pre-update backup by default, stages/swaps
+  release folders, runs migrations, restarts services, and health-checks. A
+  scratch same-machine updater smoke passed; the real installed v(N) to v(N+1)
+  service update gate remains unclaimed.
 - Licensing: Phase 3 repo-side primitive now exists: signed offline license
   file design, API startup verification behind a license-required runtime flag
   or release build manifest, System/support visibility, private issuance
@@ -374,9 +380,17 @@ and runs forever with one, regardless of dates and connectivity.
 
 ## Phase 4 — Update channel
 
+Status: repo-side Phase 4 foundation landed 2026-06-11. Release stamping,
+signed update artifacts, update-window refusal, packaged updater, manual backup
+CLI, and scratch updater swap are covered by local same-machine validation; see
+[phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md).
+The full Phase 4 gate remains open until an installed v(N) machine updates to
+v(N+1) through the updater with real Windows services, real pre-update backup,
+health check, and a refused out-of-window build.
+
 ### 4.1 Release stamping
 
-Build: CI release job producing the Phase-1 artifact with real version and
+Build: release job producing the Phase-1 artifact with real version and
 release date stamped into the existing build manifest; `readAppVersion()` reads
 the manifest (not `package.json` at cwd); System surface and support bundle
 show version + release date.
@@ -397,7 +411,8 @@ machinery), stops services, lays files, runs migrations, restarts, health
 checks, and documents rollback (restore the pre-update backup).
 
 Phase 4 gate: an installed v(N) machine updates to v(N+1) via the updater with
-zero terminal use, and refuses a build dated past its window.
+zero terminal use, and refuses a build dated past its window. The repo-side
+script exists now, but the zero-terminal/customer-ready gate is not yet claimed.
 
 ---
 

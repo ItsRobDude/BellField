@@ -91,8 +91,13 @@ test('BackupService writes a dump, copies media, records success, and writes a m
       }
     );
 
-    await service.runBackup();
+    const result = await service.runBackup();
 
+    assert.equal(result.status, 'succeeded');
+    if (result.status !== 'succeeded') {
+      throw new Error('expected backup to succeed');
+    }
+    assert.equal(result.backupSetPath, join(backupRoot, 'bellfield-backup-20260611-011533Z'));
     assert.equal(repository.failed.length, 0);
     assert.equal(repository.succeeded.length, 1);
     const success = repository.succeeded[0];
@@ -135,12 +140,45 @@ test('BackupService records failure and removes the partial backup set', async (
       }
     );
 
-    await service.runBackup();
+    const result = await service.runBackup();
 
+    assert.equal(result.status, 'failed');
+    if (result.status !== 'failed') {
+      throw new Error('expected backup to fail');
+    }
+    assert.match(result.errorMessage, /pg_dump failed/);
     assert.equal(repository.succeeded.length, 0);
     assert.equal(repository.failed.length, 1);
     assert.match(repository.failed[0].errorMessage, /pg_dump failed/);
     assert.equal(existsSync(join(backupRoot, 'bellfield-backup-20260611-011533Z')), false);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('BackupService runBackupOrThrow rejects when the backup fails', async () => {
+  const root = createTempRoot();
+  try {
+    const mediaRoot = join(root, 'media');
+    const backupRoot = join(root, 'backups');
+    mkdirSync(mediaRoot, { recursive: true });
+    const repository = new InMemoryBackupRunsRepository();
+    const service = new BackupService(
+      {
+        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
+        mediaRoot,
+        backupRoot,
+        retentionCount: 7
+      },
+      repository,
+      {
+        processRunner: async () => ({ status: 1, stderr: 'pg_dump failed' }),
+        now: () => new Date('2026-06-11T01:15:33.000Z')
+      }
+    );
+
+    await assert.rejects(() => service.runBackupOrThrow({ runKind: 'manual' }), /pg_dump failed/);
+    assert.equal(repository.failed.length, 1);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

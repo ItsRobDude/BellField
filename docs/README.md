@@ -156,6 +156,16 @@ Read when: deciding whether Phase 3 repo-side licensing foundations are ready to
 
 Does not own: the license format (`license-design.md`), install recipe (`install-runbook.md`), restore recipe (`restore-runbook.md`), or Phase 4/5 gates.
 
+### [phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md)
+
+Audience: contributors checking what Phase 4 update-channel validation has actually been run.
+
+Purpose: dated evidence for the nondestructive same-machine Phase 4 validation: release-date stamping, signed update artifact verification, update-window refusal, scratch updater swap, and packaged updater contents.
+
+Read when: deciding whether Phase 4 repo-side updater foundations are ready to build on, or distinguishing local scratch proof from the unclaimed real installed v(N) to v(N+1) update gate.
+
+Does not own: the install recipe (`install-runbook.md`), license format (`license-design.md`), restore recipe (`restore-runbook.md`), or the future self-serve update UI.
+
 ### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Audience: contributors checking what Phase 1 install validation has actually been run.

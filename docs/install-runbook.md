@@ -18,7 +18,10 @@ Validated on the development machine:
 - release assembly and Windows service manifest tooling exist
 - release assembly includes `@bellfield/contracts/dist` in deployed API deps
 - release assembly writes a build manifest that forces license-required mode in
-  sold-shaped artifacts
+  sold-shaped artifacts, and stamps version + release date for update
+  entitlement checks
+- release assembly signs update artifacts with `bellfield-update-manifest.json`
+  and `bellfield-update-signature.json`
 - worker scheduled backup foundation exists: backup run table, configured
   backup directory, `pg_dump` + media backup set creation, retention, and
   System-surface freshness status
@@ -38,6 +41,10 @@ Validated on the development machine:
   issuance tooling smoke, release packaging, System/support/UI visibility,
   worker license backup inclusion, and restore-helper missing-license refusal;
   see [phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md)
+- local Phase 4 validation passed on 2026-06-11 for release stamping, signed
+  artifact verification, update-window refusal, scratch updater swap, and
+  packaged updater contents; see
+  [phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md)
 - local compiled-release smoke passed on 2026-06-11: release API, worker,
   office-web standalone, release-packaged migrations, first-owner setup, health,
   and a scheduled-job creation path all ran against an isolated temporary
@@ -52,7 +59,8 @@ Not yet validated in this repo:
 - real Windows ACL readback after service install
 - second office desktop and Android field-device proof
 - scratch-machine backup/restore drill
-- update gate
+- real installed v(N) to v(N+1) update with Windows services, real pre-update
+  `pg_dump`, health check, and reboot/service recovery proof
 
 ## Build The Release Folder
 
@@ -70,6 +78,8 @@ The script creates `release/` with:
 - API migration scripts and SQL files
 - `bellfield-server.env.example`
 - install helper scripts under `tools/install`
+- update verifier helpers under `tools/update`
+- signed update manifest files
 
 `release/` is a generated local artifact and is intentionally not committed.
 
@@ -227,6 +237,39 @@ Restore is assisted and destructive. Use:
 ```
 
 See [restore-runbook.md](./restore-runbook.md) before running a restore.
+
+## Update Existing Install
+
+Run the updater from an extracted new release artifact, not from the installed
+current release root.
+
+Example from the new release artifact directory:
+
+```powershell
+.\runtime\node\node.exe .\tools\install\update-bellfield.mjs `
+  --install-root=C:\BellField `
+  --current-release-root=C:\BellField\release `
+  --confirm=UPDATE
+```
+
+The updater:
+
+1. Verifies `bellfield-update-manifest.json` and `bellfield-update-signature.json`.
+2. Verifies the installed license file from `BELLFIELD_LICENSE_PATH`.
+3. Refuses the update when the artifact `releaseDate` is after the license `updateWindowEnd`.
+4. Stage-copies the new release beside the current release root.
+5. Runs a hard-fail pre-update backup through the packaged worker manual backup CLI.
+6. Stops app services.
+7. Swaps the staged release into `--current-release-root`, preserving the prior release as a timestamped rollback directory.
+8. Runs packaged migrations.
+9. Restarts services and waits for `/health`.
+
+For scratch validation only, the updater supports `--skip-services=true`,
+`--skip-health=true`, and `--skip-backup=true`. Do not use those skips for a
+customer update.
+
+If an update fails after the release swap, preserve the printed rollback release
+directory and restore the pre-update backup using [restore-runbook.md](./restore-runbook.md).
 
 ## Uninstall / Repair Notes
 

@@ -52,6 +52,21 @@ type RunBackupInput = {
   runKind?: 'scheduled' | 'manual';
 };
 
+export type BackupRunSuccess = {
+  status: 'succeeded';
+  backupSetPath: string;
+  databaseDumpPath: string;
+  mediaBackupPath: string;
+  manifestPath: string;
+};
+
+export type BackupRunFailure = {
+  status: 'failed';
+  errorMessage: string;
+};
+
+export type BackupRunResult = BackupRunSuccess | BackupRunFailure;
+
 const backupManifestFilename = 'manifest.json';
 const databaseDumpFilename = 'database.dump';
 const mediaBackupDirectoryName = 'media';
@@ -71,7 +86,7 @@ export class BackupService {
     this.processRunner = options.processRunner ?? defaultProcessRunner;
   }
 
-  async runBackup(input: RunBackupInput = {}): Promise<void> {
+  async runBackup(input: RunBackupInput = {}): Promise<BackupRunResult> {
     const runKind = input.runKind ?? 'scheduled';
     const startedAt = this.now();
     const backupId = randomUUID();
@@ -132,6 +147,13 @@ export class BackupService {
       };
       writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
+      const success = {
+        status: 'succeeded' as const,
+        backupSetPath,
+        databaseDumpPath,
+        mediaBackupPath,
+        manifestPath
+      };
       await this.repository.markSucceeded({
         id: backupId,
         completedAt,
@@ -147,6 +169,7 @@ export class BackupService {
         backupSetPath,
         retentionCount: this.config.retentionCount
       });
+      return success;
     } catch (error) {
       rmSync(backupSetPath, { force: true, recursive: true });
       const completedAt = this.now();
@@ -157,7 +180,19 @@ export class BackupService {
         errorMessage
       });
       workerLog('error', 'Backup failed.', { backupId, errorMessage });
+      return {
+        status: 'failed',
+        errorMessage
+      };
     }
+  }
+
+  async runBackupOrThrow(input: RunBackupInput = {}): Promise<BackupRunSuccess> {
+    const result = await this.runBackup(input);
+    if (result.status === 'failed') {
+      throw new Error(result.errorMessage);
+    }
+    return result;
   }
 
   async prepareForScheduling(): Promise<{

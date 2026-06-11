@@ -134,3 +134,19 @@ The relay token is issued alongside the license but remains separate:
 - never appears in the signed license file
 
 This keeps offline right-to-run proof separate from online relay access.
+
+## Update Artifact Signing Boundary
+
+Release artifacts use a separate Ed25519 keypair from license files.
+
+- License key: proves the installed copy has a perpetual right to run and carries the update window.
+- Release key: proves a downloaded update artifact is a BellField-built release folder.
+
+The release private key stays outside the repo under:
+
+```text
+C:\Users\rober\Documents\API Keys\BellField\release-v1\bellfield-release-private-key.pem
+```
+
+Only the release public key is embedded, currently in `tools/update/release-artifact.mjs`.
+Private release-key loss means BellField cannot sign updates with that key version. Private release-key exposure requires a new release key id and public key in future releases.

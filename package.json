@@ -48,6 +48,7 @@
     "smoke:service-manifests": "node tools/smoke/service-manifest-smoke.mjs",
     "smoke:license-key": "node tools/smoke/license-key-smoke.mjs",
     "smoke:release-artifact": "node tools/smoke/release-artifact-signature-smoke.mjs",
+    "smoke:updater": "node tools/smoke/updater-smoke.mjs",
     "start:office-web": "pnpm --filter @bellfield/office-web start",
     "start:field-mobile": "pnpm --filter @bellfield/field-mobile start",
     "start:api": "pnpm --filter @bellfield/api start",

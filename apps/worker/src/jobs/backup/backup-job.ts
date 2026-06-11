@@ -36,7 +36,9 @@ export async function createScheduledBackupJob(input: {
     name: 'scheduled-backup',
     intervalMs: input.intervalMs,
     initialDelayMs,
-    run: ({ signal }) => input.backupService.runBackup({ signal, runKind: 'scheduled' })
+    run: async ({ signal }) => {
+      await input.backupService.runBackup({ signal, runKind: 'scheduled' });
+    }
   };
 }
 

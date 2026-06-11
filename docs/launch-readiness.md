@@ -47,7 +47,7 @@ The single biggest gap: today BellField cannot be handed to a customer. There is
 Updates are a stated product value ("safe updates over aggressive updates", [deployment-model.md](./deployment-model.md) Section 13) but the mechanism does not exist.
 
 - [ ] update mechanism that does not require dev/repo commands
-- [ ] builds stamped with a readable release date (needed by update-entitlement gating)
+- [x] builds stamped with a readable release date (needed by update-entitlement gating)
 - [ ] "do not update unless safe" safety posture, configurable by the company
 - [ ] update tested build-to-build against existing data without loss
 - [ ] rollback / recovery story if an update goes wrong
