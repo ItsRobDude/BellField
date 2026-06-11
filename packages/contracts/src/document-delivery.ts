@@ -1,11 +1,12 @@
 export type CustomerDocumentType = 'estimate' | 'invoice';
 export type OutboundMessageChannel = 'email';
-export type OutboundMessageProvider = 'resend';
+export type OutboundMessageProvider = 'resend' | 'relay';
 export const estimateEmailMaxAttachmentBytes = 15_000_000;
 export type OutboundMessageStatus =
   | 'queued'
   | 'sent'
   | 'failed'
+  | 'canceled'
   | 'delivered'
   | 'bounced'
   | 'complained';
@@ -13,8 +14,16 @@ export type OutboundMessageFailureCode =
   | 'notConfigured'
   | 'deliveryUnavailable'
   | 'deliveryRejected'
+  | 'recipientUnavailable'
+  | 'sendingLimitReached'
+  | 'expired'
   | 'unknown';
-export type EstimateEmailDeliveryReadiness = 'ready' | 'needsSetup' | 'temporarilyUnavailable';
+export type EstimateEmailDeliveryReadiness =
+  | 'ready'
+  | 'needsSetup'
+  | 'temporarilyUnavailable'
+  | 'quotaExhausted'
+  | 'suspended';
 
 export interface CustomerDocumentSnapshotSummary {
   id: string;

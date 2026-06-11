@@ -21,3 +21,4 @@ export * from './history.js';
 export * from './reporting.js';
 export * from './company-settings.js';
 export * from './document-delivery.js';
+export * from './relay-delivery.js';
