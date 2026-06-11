@@ -74,7 +74,10 @@ Rules that follow:
 
 The license/identity primitive itself (issuance, storage, rotation, activation
 flow) is owned by the licensing lane and must be designed before the relay is
-implemented — the relay consumes it, it does not invent it.
+implemented — the relay consumes it, it does not invent it. That design is now
+pinned in [relay-token-design.md](./relay-token-design.md) (token format,
+single-active binding with automatic rebind + flap detection, issuance CLI,
+install-side config).
 
 ---
 
@@ -189,7 +192,8 @@ when acceptance links are designed.
 ## 10. Build Order
 
 1. **License/identity primitive** (licensing lane) — per-shop token, one
-   active server, activation/move/revoke. Prerequisite; designed first.
+   active server, activation/move/revoke. Prerequisite; designed first —
+   done, see [relay-token-design.md](./relay-token-design.md).
 2. **Relay v1** — BellField-domain sending only: auth, narrow send API, quotas,
    suppression, webhook termination, status polling.
 3. **Install integration** — swap the internal email adapter to a relay client
