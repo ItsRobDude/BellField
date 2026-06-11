@@ -279,6 +279,10 @@ export function OfficeSystemSurface({
                 {diagnostics.app.name} v{diagnostics.app.version}
               </div>
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
+                {diagnostics.app.releaseDate
+                  ? `Release ${diagnostics.app.releaseDate}`
+                  : diagnostics.app.buildKind}
+                {' · '}
                 {diagnostics.app.nodeEnv} · {new Date(diagnostics.serverTime).toLocaleString()}
               </div>
             </div>

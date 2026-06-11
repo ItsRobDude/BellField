@@ -1,4 +1,5 @@
 import { tmpdir } from 'node:os';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { ForbiddenException } from '@nestjs/common';
 import { SystemDiagnosticsService } from './system-diagnostics.service';
@@ -86,6 +87,30 @@ function createService(
 }
 
 describe('SystemDiagnosticsService', () => {
+  const manifestEnvKeys = [
+    'BELLFIELD_BUILD_MANIFEST_PATH',
+    'BELLFIELD_LICENSE_REQUIRED',
+    'BELLFIELD_LICENSE_PATH'
+  ] as const;
+  const originalEnv: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    for (const key of manifestEnvKeys) {
+      originalEnv[key] = process.env[key];
+      delete process.env[key];
+    }
+  });
+
+  afterEach(() => {
+    for (const key of manifestEnvKeys) {
+      if (originalEnv[key] === undefined) {
+        delete process.env[key];
+      } else {
+        process.env[key] = originalEnv[key];
+      }
+    }
+  });
+
   it('authorizes supportLogsBackups:view on the office surface', async () => {
     const { service, identityAccessService } = createService();
     await service.getDiagnostics('token');
@@ -115,11 +140,49 @@ describe('SystemDiagnosticsService', () => {
     );
     expect(result.migrations.latestAppliedAt).toBe('2026-06-05T00:00:00.000Z');
     expect(result.app.name).toBe('BellField API');
+    expect(result.app.releaseDate).toBeNull();
+    expect(result.app.buildKind).toBe('development');
     expect(result.backups.stale).toBe(true);
     expect(result.license.status).toBe('notRequired');
     expect(result.checks.find((c) => c.key === 'backups')?.ok).toBe(false);
     expect(result.checks.find((c) => c.key === 'database')?.ok).toBe(true);
     expect(result.checks.find((c) => c.key === 'license')?.ok).toBe(true);
+  });
+
+  it('reports release-stamped build information from the build manifest', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    try {
+      const manifestPath = join(root, 'bellfield-build-manifest.json');
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          schemaVersion: 1,
+          buildKind: 'release',
+          licenseRequired: true,
+          version: '1.2.3',
+          releaseDate: '2026-06-11',
+          generatedAt: '2026-06-11T12:00:00.000Z',
+          sourceCommit: 'abc1234'
+        }),
+        'utf8'
+      );
+      process.env.BELLFIELD_BUILD_MANIFEST_PATH = manifestPath;
+      process.env.BELLFIELD_LICENSE_PATH = join(tmpdir(), 'missing-bellfield-license.json');
+      const { service } = createService();
+
+      const result = await service.collectDiagnostics();
+
+      expect(result.app).toMatchObject({
+        name: 'BellField API',
+        version: '1.2.3',
+        releaseDate: '2026-06-11',
+        buildKind: 'release',
+        generatedAt: '2026-06-11T12:00:00.000Z',
+        sourceCommit: 'abc1234'
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
   });
 
   it('surfaces active seeded BellField accounts as an owner-visible check', async () => {

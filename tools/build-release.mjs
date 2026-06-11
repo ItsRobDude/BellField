@@ -1,10 +1,20 @@
-import { copyFileSync, cpSync, existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  copyFileSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { readArgs } from './install/install-utils.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
+const args = readArgs();
 
 function run(command, args) {
   const result = spawnSync(command, args, {
@@ -73,6 +83,36 @@ function firstExisting(paths) {
   return paths.find((candidate) => existsSync(candidate)) ?? null;
 }
 
+function readPackageVersion() {
+  const raw = JSON.parse(readFileSync(join(repoRoot, 'apps', 'api', 'package.json'), 'utf8'));
+  return raw.version;
+}
+
+function assertNonBlank(value, name) {
+  if (typeof value !== 'string' || value.trim().length === 0 || value.trim() !== value) {
+    throw new Error(`${name} must be a non-empty string without surrounding whitespace.`);
+  }
+  return value;
+}
+
+function assertIsoDate(value, name) {
+  const checked = assertNonBlank(value, name);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(checked)) {
+    throw new Error(`${name} must be a YYYY-MM-DD date.`);
+  }
+
+  const [year, month, day] = checked.split('-').map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    throw new Error(`${name} must be a real calendar date.`);
+  }
+  return checked;
+}
+
 rmSync(releaseRoot, { force: true, recursive: true });
 mkdirSync(releaseRoot, { recursive: true });
 
@@ -90,6 +130,18 @@ const buildManifest = {
   schemaVersion: 1,
   buildKind: 'release',
   licenseRequired: true,
+  version: assertNonBlank(
+    String(args.version ?? process.env.BELLFIELD_RELEASE_VERSION ?? readPackageVersion()),
+    'release version'
+  ),
+  releaseDate: assertIsoDate(
+    String(
+      args['release-date'] ??
+        process.env.BELLFIELD_RELEASE_DATE ??
+        new Date().toISOString().slice(0, 10)
+    ),
+    'release date'
+  ),
   generatedAt: new Date().toISOString(),
   sourceCommit: runCapture('git', ['rev-parse', '--short', 'HEAD'])
 };
@@ -141,6 +193,8 @@ writeFileSync(
   join(releaseRoot, 'README.txt'),
   [
     'BellField server release bundle',
+    `Version: ${buildManifest.version}`,
+    `Release date: ${buildManifest.releaseDate}`,
     '',
     '1. Copy bellfield-server.env.example to bellfield-server.env and edit the values.',
     '2. Run tools\\install\\write-server-config.mjs to create install-local paths when needed.',

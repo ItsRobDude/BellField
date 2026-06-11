@@ -52,7 +52,15 @@ function arrange() {
   });
   mockedApi.getSystemDiagnostics.mockResolvedValue({
     serverTime: '2026-06-06T00:00:00.000Z',
-    app: { name: 'BellField API', version: '0.0.1', nodeEnv: 'development' },
+    app: {
+      name: 'BellField API',
+      version: '0.0.1',
+      releaseDate: '2026-06-11',
+      buildKind: 'release',
+      generatedAt: '2026-06-11T00:00:00.000Z',
+      sourceCommit: 'abc1234',
+      nodeEnv: 'production'
+    },
     database: { reachable: true, latencyMs: 3 },
     migrations: {
       appliedCount: 41,
@@ -100,6 +108,7 @@ describe('OfficeSystemSurface', () => {
     expect(screen.getByText('Licensed')).toBeInTheDocument();
     expect(screen.getByText(/Updates through 2027-06-11/)).toBeInTheDocument();
     expect(screen.getByText(/BellField API v0\.0\.1/)).toBeInTheDocument();
+    expect(screen.getByText(/Release 2026-06-11/)).toBeInTheDocument();
   });
 
   it('shows the support-bundle download for an actor with export permission', async () => {
@@ -146,7 +155,15 @@ describe('OfficeSystemSurface', () => {
   it('surfaces failing rollup checks that have no card of their own', async () => {
     mockedApi.getSystemDiagnostics.mockResolvedValue({
       serverTime: '2026-06-06T00:00:00.000Z',
-      app: { name: 'BellField API', version: '0.0.1', nodeEnv: 'development' },
+      app: {
+        name: 'BellField API',
+        version: '0.0.1',
+        releaseDate: null,
+        buildKind: 'development',
+        generatedAt: null,
+        sourceCommit: null,
+        nodeEnv: 'development'
+      },
       database: { reachable: true, latencyMs: 3 },
       migrations: {
         appliedCount: 41,

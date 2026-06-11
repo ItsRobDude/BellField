@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import type { RuntimeBuildManifest } from './build-manifest';
+import { readRuntimeBuildManifest } from './build-manifest';
 
 type NodeEnvironment = 'development' | 'test' | 'production';
 
@@ -65,6 +65,7 @@ export type ApiRuntimeConfig = {
   officeOrigins: string[] | true;
   licenseRequired: boolean;
   licensePath?: string;
+  buildManifest: RuntimeBuildManifest | null;
   estimateEmailResendApiKey?: string;
 };
 
@@ -136,6 +137,7 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     officeOrigins,
     licenseRequired,
     licensePath,
+    buildManifest,
     estimateEmailResendApiKey:
       process.env.BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY?.trim() || undefined
   };
@@ -163,45 +165,4 @@ function resolveOfficeOrigins(
   }
 
   return true;
-}
-
-type RuntimeBuildManifest = {
-  schemaVersion: 1;
-  buildKind: 'source' | 'release';
-  licenseRequired: boolean;
-};
-
-function readRuntimeBuildManifest(): RuntimeBuildManifest | null {
-  const explicitPath = process.env.BELLFIELD_BUILD_MANIFEST_PATH?.trim();
-  const candidates = [
-    explicitPath,
-    join(process.cwd(), 'bellfield-build-manifest.json'),
-    join(process.cwd(), '..', '..', 'bellfield-build-manifest.json')
-  ].filter((candidate): candidate is string => Boolean(candidate));
-
-  for (const candidate of candidates) {
-    if (!existsSync(candidate)) {
-      if (candidate === explicitPath) {
-        throw new Error(`BellField build manifest was not found at ${candidate}.`);
-      }
-      continue;
-    }
-
-    const parsed = JSON.parse(readFileSync(candidate, 'utf8')) as Partial<RuntimeBuildManifest>;
-    if (
-      parsed.schemaVersion !== 1 ||
-      (parsed.buildKind !== 'source' && parsed.buildKind !== 'release') ||
-      typeof parsed.licenseRequired !== 'boolean'
-    ) {
-      throw new Error(`BellField build manifest is invalid: ${candidate}`);
-    }
-
-    return {
-      schemaVersion: 1,
-      buildKind: parsed.buildKind,
-      licenseRequired: parsed.licenseRequired
-    };
-  }
-
-  return null;
 }

@@ -4,6 +4,7 @@ import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import type { SystemDiagnosticsResponse } from '@bellfield/contracts';
+import { readAppBuildInfo } from '../../common/config/build-manifest';
 import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
@@ -13,17 +14,6 @@ import { verifyLicenseFile } from '../licensing/license-verification';
 
 const defaultBackupRetentionCount = 7;
 const defaultBackupStaleAfterHours = 36;
-
-/** Best-effort app version from the api package.json (cwd at runtime); never throws. */
-function readAppVersion(): string {
-  try {
-    const raw = readFileSync(join(process.cwd(), 'package.json'), 'utf8');
-    const parsed = JSON.parse(raw) as { version?: string };
-    return parsed.version ?? 'unknown';
-  } catch {
-    return process.env.npm_package_version ?? 'unknown';
-  }
-}
 
 @Injectable()
 export class SystemDiagnosticsService {
@@ -56,12 +46,17 @@ export class SystemDiagnosticsService {
     const license = this.checkLicense();
     const estimateTaxRates = await this.checkEstimateTaxRates();
     const seededAccounts = await this.checkSeededAccounts();
+    const build = readAppBuildInfo();
 
     return {
       serverTime: new Date().toISOString(),
       app: {
         name: 'BellField API',
-        version: readAppVersion(),
+        version: build.version,
+        releaseDate: build.releaseDate,
+        buildKind: build.buildKind,
+        generatedAt: build.generatedAt,
+        sourceCommit: build.sourceCommit,
         nodeEnv: getApiRuntimeConfig().nodeEnv
       },
       database,

@@ -6,6 +6,19 @@ import { getApiRuntimeConfig } from './runtime-config';
 const defaultDatabaseUrl = 'postgresql://postgres:postgres@localhost:5432/bellfield';
 const validProductionDatabaseUrl = 'postgresql://app:secret@db.internal:5432/bellfield';
 
+function buildManifest(overrides: Record<string, unknown> = {}) {
+  return {
+    schemaVersion: 1,
+    buildKind: 'release',
+    licenseRequired: true,
+    version: '0.0.1',
+    releaseDate: '2026-06-11',
+    generatedAt: '2026-06-11T00:00:00.000Z',
+    sourceCommit: 'abc1234',
+    ...overrides
+  };
+}
+
 describe('getApiRuntimeConfig', () => {
   const envKeys = [
     'NODE_ENV',
@@ -49,6 +62,7 @@ describe('getApiRuntimeConfig', () => {
     expect(config.officeOrigins).toBe(true);
     expect(config.licenseRequired).toBe(false);
     expect(config.licensePath).toBeUndefined();
+    expect(config.buildManifest).toBeNull();
     expect(config.estimateEmailResendApiKey).toBeUndefined();
   });
 
@@ -194,15 +208,7 @@ describe('getApiRuntimeConfig', () => {
     const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
     try {
       const manifestPath = join(root, 'bellfield-build-manifest.json');
-      writeFileSync(
-        manifestPath,
-        JSON.stringify({
-          schemaVersion: 1,
-          buildKind: 'release',
-          licenseRequired: true
-        }),
-        'utf8'
-      );
+      writeFileSync(manifestPath, JSON.stringify(buildManifest()), 'utf8');
       process.env.NODE_ENV = 'production';
       process.env.DATABASE_URL = validProductionDatabaseUrl;
       process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
@@ -219,15 +225,7 @@ describe('getApiRuntimeConfig', () => {
     const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
     try {
       const manifestPath = join(root, 'bellfield-build-manifest.json');
-      writeFileSync(
-        manifestPath,
-        JSON.stringify({
-          schemaVersion: 1,
-          buildKind: 'release',
-          licenseRequired: true
-        }),
-        'utf8'
-      );
+      writeFileSync(manifestPath, JSON.stringify(buildManifest()), 'utf8');
       process.env.NODE_ENV = 'production';
       process.env.DATABASE_URL = validProductionDatabaseUrl;
       process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
@@ -239,6 +237,29 @@ describe('getApiRuntimeConfig', () => {
 
       expect(config.licenseRequired).toBe(true);
       expect(config.licensePath).toBe('C:\\BellField\\data\\license\\bellfield-license.json');
+      expect(config.buildManifest).toMatchObject({
+        buildKind: 'release',
+        version: '0.0.1',
+        releaseDate: '2026-06-11',
+        licenseRequired: true
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('rejects a malformed release build manifest', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    try {
+      const manifestPath = join(root, 'bellfield-build-manifest.json');
+      writeFileSync(
+        manifestPath,
+        JSON.stringify(buildManifest({ releaseDate: '2026-99-99' })),
+        'utf8'
+      );
+      process.env.BELLFIELD_BUILD_MANIFEST_PATH = manifestPath;
+
+      expect(() => getApiRuntimeConfig()).toThrow(/build manifest is invalid/);
     } finally {
       rmSync(root, { force: true, recursive: true });
     }

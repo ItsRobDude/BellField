@@ -4,7 +4,15 @@ import { SupportService } from './support.service';
 
 const diagnostics: SystemDiagnosticsResponse = {
   serverTime: '2026-06-05T00:00:00.000Z',
-  app: { name: 'BellField API', version: '0.0.1', nodeEnv: 'test' },
+  app: {
+    name: 'BellField API',
+    version: '0.0.1',
+    releaseDate: null,
+    buildKind: 'development',
+    generatedAt: null,
+    sourceCommit: null,
+    nodeEnv: 'test'
+  },
   database: { reachable: true, latencyMs: 2 },
   migrations: {
     appliedCount: 29,

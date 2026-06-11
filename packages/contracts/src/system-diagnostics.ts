@@ -47,6 +47,10 @@ export interface SystemDiagnosticsResponse {
   app: {
     name: string;
     version: string;
+    releaseDate: string | null;
+    buildKind: 'source' | 'release' | 'development';
+    generatedAt: string | null;
+    sourceCommit: string | null;
     nodeEnv: string;
   };
   database: {
