@@ -14,8 +14,10 @@ export function EstimateDeliveryPanel({
   isHistoryLoading,
   isPreviewLoading,
   isSending,
+  cancelingMessageId,
   onChange,
-  onSend
+  onSend,
+  onCancelMessage
 }: {
   draft: EstimateDeliveryDraft;
   deliveryStatus: EstimateEmailDeliveryStatus | null;
@@ -23,8 +25,10 @@ export function EstimateDeliveryPanel({
   isHistoryLoading: boolean;
   isPreviewLoading: boolean;
   isSending: boolean;
+  cancelingMessageId: string | null;
   onChange: (patch: Partial<EstimateDeliveryDraft>) => void;
   onSend: () => void;
+  onCancelMessage: (outboundMessageId: string) => void;
 }) {
   const deliveryBlocked = deliveryStatus !== null && !deliveryStatus.ready;
   const recipientEmail = draft.recipientEmail.trim();
@@ -84,17 +88,26 @@ export function EstimateDeliveryPanel({
           {isSending ? 'Sending...' : 'Send email'}
         </button>
       </div>
-      <EstimateDeliveryHistory history={history} isLoading={isHistoryLoading} />
+      <EstimateDeliveryHistory
+        history={history}
+        isLoading={isHistoryLoading}
+        cancelingMessageId={cancelingMessageId}
+        onCancelMessage={onCancelMessage}
+      />
     </section>
   );
 }
 
 function EstimateDeliveryHistory({
   history,
-  isLoading
+  isLoading,
+  cancelingMessageId,
+  onCancelMessage
 }: {
   history: OutboundMessageSummary[];
   isLoading: boolean;
+  cancelingMessageId: string | null;
+  onCancelMessage: (outboundMessageId: string) => void;
 }) {
   if (isLoading) {
     return <p style={styles.tinyMuted}>Loading delivery history...</p>;
@@ -121,8 +134,23 @@ function EstimateDeliveryHistory({
             {' by '}
             {message.sentByName}
           </span>
+          {message.status === 'queued' ? (
+            <span style={styles.tinyMuted}>Will send automatically.</span>
+          ) : null}
           {message.deliveryMessage ? (
             <span style={styles.tinyMuted}>{message.deliveryMessage}</span>
+          ) : null}
+          {message.status === 'queued' ? (
+            <div>
+              <button
+                type="button"
+                style={styles.button}
+                disabled={cancelingMessageId === message.id}
+                onClick={() => onCancelMessage(message.id)}
+              >
+                {cancelingMessageId === message.id ? 'Canceling...' : 'Cancel send'}
+              </button>
+            </div>
           ) : null}
         </div>
       ))}
@@ -141,6 +169,7 @@ function formatDateTime(value: string): string {
 function deliveryStatusLabel(status: OutboundMessageSummary['status']): string {
   if (status === 'sent') return 'Sent';
   if (status === 'failed') return 'Failed';
+  if (status === 'canceled') return 'Canceled';
   if (status === 'delivered') return 'Delivered';
   if (status === 'bounced') return 'Bounced';
   if (status === 'complained') return 'Complaint';

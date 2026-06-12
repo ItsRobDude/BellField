@@ -7,6 +7,7 @@ import { JobEstimatesSection } from './job-estimates-section';
 
 vi.mock('@/lib/operations-api', () => ({
   approveOfficeEstimate: vi.fn(),
+  cancelOfficeEstimateOutboundMessage: vi.fn(),
   convertOfficeEstimateToInvoice: vi.fn(),
   createOfficeEstimate: vi.fn(),
   declineOfficeEstimate: vi.fn(),
@@ -849,6 +850,194 @@ describe('JobEstimatesSection', () => {
       apiBaseUrl: 'http://api.test',
       sessionToken: 'session-token'
     });
+  });
+
+  it('reports a queued send as a notice, not an error', async () => {
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.sendOfficeEstimate.mockResolvedValue({
+      outboundMessage: {
+        id: 'message-q1',
+        channel: 'email',
+        status: 'queued',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T00:00:00.000Z'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'estimate',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        sourceVersion: 1,
+        filename: 'estimate.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 64,
+        generatedByName: 'Olivia Owner',
+        generatedAt: '2026-06-01T00:00:00.000Z'
+      }
+    });
+    mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({
+      outboundMessages: [
+        {
+          id: 'message-q1',
+          channel: 'email',
+          status: 'queued',
+          jobId: 'job-1',
+          estimateId: 'estimate-1',
+          recipientEmail: 'customer@example.com',
+          subject: 'Estimate from BellField',
+          sentByName: 'Olivia Owner',
+          queuedAt: '2026-06-01T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
+    expect(await screen.findByLabelText('Estimate email subject')).toHaveValue(
+      'Estimate from BellField'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+
+    expect(await screen.findByText('Queued — will send automatically.')).toBeInTheDocument();
+    expect(screen.getByText('Queued')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel send' })).toBeInTheDocument();
+  });
+
+  it('cancels a queued send from the delivery history', async () => {
+    mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValueOnce({
+      outboundMessages: [
+        {
+          id: 'message-q1',
+          channel: 'email',
+          status: 'queued',
+          jobId: 'job-1',
+          estimateId: 'estimate-1',
+          recipientEmail: 'customer@example.com',
+          subject: 'Estimate from BellField',
+          sentByName: 'Olivia Owner',
+          queuedAt: '2026-06-01T00:00:00.000Z'
+        }
+      ]
+    });
+    mockedApi.cancelOfficeEstimateOutboundMessage.mockResolvedValue({
+      outboundMessage: {
+        id: 'message-q1',
+        channel: 'email',
+        status: 'canceled',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T00:00:00.000Z',
+        deliveryMessage: 'Canceled before sending.'
+      }
+    });
+    mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({
+      outboundMessages: [
+        {
+          id: 'message-q1',
+          channel: 'email',
+          status: 'canceled',
+          jobId: 'job-1',
+          estimateId: 'estimate-1',
+          recipientEmail: 'customer@example.com',
+          subject: 'Estimate from BellField',
+          sentByName: 'Olivia Owner',
+          queuedAt: '2026-06-01T00:00:00.000Z',
+          deliveryMessage: 'Canceled before sending.'
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancel send' }));
+
+    await waitFor(() => {
+      expect(mockedApi.cancelOfficeEstimateOutboundMessage).toHaveBeenCalledWith({
+        estimateId: 'estimate-1',
+        outboundMessageId: 'message-q1',
+        apiBaseUrl: 'http://api.test',
+        sessionToken: 'session-token'
+      });
+    });
+    expect(await screen.findByText('Queued email canceled.')).toBeInTheDocument();
+    expect(await screen.findByText('Canceled')).toBeInTheDocument();
+    expect(screen.getByText('Canceled before sending.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Cancel send' })).toBeNull();
+  });
+
+  it('explains a sending-limit block with the approved copy', async () => {
+    mockedApi.getOfficeEstimateSendPreview.mockResolvedValue({
+      preview: {
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is Replacement options.'
+      },
+      deliveryStatus: {
+        configured: true,
+        ready: false,
+        status: 'quotaExhausted',
+        message: 'Estimate email has reached its sending limit. Contact BellField support.'
+      }
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
+
+    expect(
+      await screen.findByText(
+        'Estimate email has reached its sending limit. Contact BellField support.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Send email' })).toBeDisabled();
   });
 
   it('disables sending and explains when estimate email is not available', async () => {

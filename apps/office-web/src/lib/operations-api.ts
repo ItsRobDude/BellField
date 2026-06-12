@@ -37,6 +37,7 @@ import type {
   EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
+  CancelOutboundMessageResponse,
   CreateEstimateRequest,
   ApproveEstimateRequest,
   DeclineEstimateRequest,
@@ -163,6 +164,7 @@ export type {
   EquipmentMutationResponse,
   EquipmentSummary,
   EquipmentWorkspaceResponse,
+  CancelOutboundMessageResponse,
   CreateEstimateRequest,
   ApproveEstimateRequest,
   DeclineEstimateRequest,
@@ -794,6 +796,22 @@ export async function getOfficeEstimateOutboundMessages(input: {
     {
       apiBaseUrl: input.apiBaseUrl,
       sessionToken: input.sessionToken
+    }
+  );
+}
+
+export async function cancelOfficeEstimateOutboundMessage(input: {
+  estimateId: string;
+  outboundMessageId: string;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<CancelOutboundMessageResponse> {
+  return requestJson<CancelOutboundMessageResponse>(
+    `/operations/estimates/${input.estimateId}/outbound-messages/${input.outboundMessageId}/cancel`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken,
+      method: 'POST'
     }
   );
 }

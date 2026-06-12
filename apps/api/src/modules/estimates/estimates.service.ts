@@ -27,6 +27,7 @@ import { renderEstimateDocument, type EstimateDocument } from './estimate-docume
 import { EstimatesRepository } from './estimates.repository';
 import type {
   ApproveEstimateRequestDto,
+  CancelOutboundMessageResponseDto,
   CreateEstimateRequestDto,
   DeclineEstimateRequestDto,
   EstimateRecord,
@@ -114,6 +115,18 @@ export class EstimatesService {
     estimateId: string
   ): Promise<OutboundMessagesResponseDto> {
     return this.estimateDeliveryService.listEstimateOutboundMessages(sessionToken, estimateId);
+  }
+
+  async cancelEstimateOutboundMessage(
+    sessionToken: string,
+    estimateId: string,
+    outboundMessageId: string
+  ): Promise<CancelOutboundMessageResponseDto> {
+    return this.estimateDeliveryService.cancelEstimateOutboundMessage(
+      sessionToken,
+      estimateId,
+      outboundMessageId
+    );
   }
 
   async getEstimateSendPreview(

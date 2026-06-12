@@ -287,11 +287,39 @@ export class CustomerDeliveryRepository {
     return result.rows.map(toOutboundMessageRecord);
   }
 
+  /**
+   * Cancels a queued send. Returns null when the message is no longer
+   * cancelable (already sent, failed, or canceled) — the worker's own
+   * transitions also guard on status='queued', so the loser of a race
+   * no-ops rather than overwriting.
+   */
+  async cancelOutboundMessage(
+    messageId: string,
+    estimateId: string,
+    canceledAt: string
+  ): Promise<OutboundMessageRecord | null> {
+    const result = await this.databaseService.query<{ id: string }>(
+      `
+        update outbound_messages
+        set status = 'canceled',
+            next_attempt_at = null,
+            updated_at = $3
+        where id = $1 and estimate_id = $2 and status = 'queued'
+        returning id
+      `,
+      [messageId, estimateId, canceledAt]
+    );
+    if (!result.rows[0]) {
+      return null;
+    }
+    return this.getOutboundMessageById(messageId);
+  }
+
   async addEstimateDeliveryTimeline(input: {
     jobId: string;
     occurredAt: string;
     actorName: string;
-    kind: 'estimateSent' | 'estimateDeliveryFailed';
+    kind: 'estimateSent' | 'estimateDeliveryFailed' | 'estimateSendCanceled';
     message: string;
   }): Promise<void> {
     await this.databaseService.transaction(async (queryable) => {

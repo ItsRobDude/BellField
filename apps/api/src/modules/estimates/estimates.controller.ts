@@ -184,4 +184,17 @@ export class EstimatesController {
       estimateId
     );
   }
+
+  @Post(':estimateId/outbound-messages/:outboundMessageId/cancel')
+  async cancelOutboundMessage(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('estimateId') estimateId: string,
+    @Param('outboundMessageId') outboundMessageId: string
+  ) {
+    return this.estimatesService.cancelEstimateOutboundMessage(
+      getBearerToken(authorizationHeader),
+      estimateId,
+      outboundMessageId
+    );
+  }
 }

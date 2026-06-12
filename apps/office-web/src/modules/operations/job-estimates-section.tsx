@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   approveOfficeEstimate,
+  cancelOfficeEstimateOutboundMessage,
   convertOfficeEstimateToInvoice,
   createOfficeEstimate,
   declineOfficeEstimate,
@@ -53,6 +54,10 @@ type JobEstimatesSectionProps = {
 
 type CatalogLoadStatus = 'idle' | 'loading' | 'loaded' | 'error';
 
+// While a queued send is visible, poll its history so the office sees the
+// worker's eventual outcome without a manual refresh.
+const queuedDeliveryPollIntervalMs = 15_000;
+
 type PendingEstimateAction = {
   estimateId: string;
   kind: 'approve' | 'decline' | 'convert' | 'download';
@@ -96,6 +101,7 @@ export function JobEstimatesSection({
   const [historyLoadingEstimateId, setHistoryLoadingEstimateId] = useState<string | null>(null);
   const [previewLoadingEstimateId, setPreviewLoadingEstimateId] = useState<string | null>(null);
   const [sendingEstimateId, setSendingEstimateId] = useState<string | null>(null);
+  const [cancelingMessageId, setCancelingMessageId] = useState<string | null>(null);
   const [deliveryStatusByEstimateId, setDeliveryStatusByEstimateId] = useState<
     Record<string, EstimateEmailDeliveryStatus>
   >({});
@@ -366,27 +372,69 @@ export function JobEstimatesSection({
     }
   }
 
-  async function loadDeliveryHistory(estimateId: string) {
-    setHistoryLoadingEstimateId(estimateId);
-    setErrorMessage(null);
-    try {
-      const response = await getOfficeEstimateOutboundMessages({
-        estimateId,
-        apiBaseUrl,
-        sessionToken
-      });
-      setOutboundMessagesByEstimateId((current) => ({
-        ...current,
-        [estimateId]: response.outboundMessages
-      }));
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to load estimate delivery history.'
-      );
-    } finally {
-      setHistoryLoadingEstimateId((current) => (current === estimateId ? null : current));
+  const loadDeliveryHistory = useCallback(
+    // Silent mode is for the queued-send poll: no spinner flicker, no wiping
+    // of user-visible messages, and a transient poll failure stays quiet.
+    async (estimateId: string, options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+        setHistoryLoadingEstimateId(estimateId);
+        setErrorMessage(null);
+      }
+      try {
+        const response = await getOfficeEstimateOutboundMessages({
+          estimateId,
+          apiBaseUrl,
+          sessionToken
+        });
+        setOutboundMessagesByEstimateId((current) => ({
+          ...current,
+          [estimateId]: response.outboundMessages
+        }));
+      } catch (error) {
+        if (!options?.silent) {
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Unable to load estimate delivery history.'
+          );
+        }
+      } finally {
+        if (!options?.silent) {
+          setHistoryLoadingEstimateId((current) => (current === estimateId ? null : current));
+        }
+      }
+    },
+    [apiBaseUrl, sessionToken]
+  );
+
+  // While the open panel shows a queued send, poll its history so the office
+  // sees the eventual outcome without refreshing; when the last queued row
+  // resolves, reload the estimate list so the Sent badge catches up.
+  const openPanelHistory = deliveryPanelEstimateId
+    ? (outboundMessagesByEstimateId[deliveryPanelEstimateId] ?? [])
+    : [];
+  const hasQueuedDelivery = openPanelHistory.some((message) => message.status === 'queued');
+  const hadQueuedDeliveryRef = useRef(false);
+
+  useEffect(() => {
+    if (!deliveryPanelEstimateId || !hasQueuedDelivery) {
+      return;
     }
-  }
+    const estimateId = deliveryPanelEstimateId;
+    const intervalId = window.setInterval(() => {
+      void loadDeliveryHistory(estimateId, { silent: true });
+    }, queuedDeliveryPollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [deliveryPanelEstimateId, hasQueuedDelivery, loadDeliveryHistory]);
+
+  useEffect(() => {
+    if (hasQueuedDelivery) {
+      hadQueuedDeliveryRef.current = true;
+      return;
+    }
+    if (hadQueuedDeliveryRef.current) {
+      hadQueuedDeliveryRef.current = false;
+      void loadEstimates();
+    }
+  }, [hasQueuedDelivery, loadEstimates]);
 
   async function loadSendPreview(estimateId: string) {
     setPreviewLoadingEstimateId(estimateId);
@@ -495,6 +543,10 @@ export function JobEstimatesSection({
         } else {
           setNoticeMessage('Estimate sent.');
         }
+      } else if (response.outboundMessage.status === 'queued') {
+        // A retryable delivery problem queued the send; this is a notice,
+        // not an error — it will send automatically.
+        setNoticeMessage('Queued — will send automatically.');
       } else {
         setErrorMessage(response.outboundMessage.deliveryMessage ?? 'Estimate delivery failed.');
       }
@@ -502,6 +554,28 @@ export function JobEstimatesSection({
       setErrorMessage(error instanceof Error ? error.message : 'Unable to send the estimate.');
     } finally {
       setSendingEstimateId((current) => (current === estimate.id ? null : current));
+    }
+  }
+
+  async function cancelQueuedMessage(estimateId: string, outboundMessageId: string) {
+    setCancelingMessageId(outboundMessageId);
+    setNoticeMessage(null);
+    try {
+      await cancelOfficeEstimateOutboundMessage({
+        estimateId,
+        outboundMessageId,
+        apiBaseUrl,
+        sessionToken
+      });
+      await loadDeliveryHistory(estimateId);
+      setNoticeMessage('Queued email canceled.');
+    } catch (error) {
+      // Refresh first so a row that completed in the meantime shows its real
+      // state; loadDeliveryHistory clears errorMessage, so set ours after.
+      await loadDeliveryHistory(estimateId, { silent: true });
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to cancel the email.');
+    } finally {
+      setCancelingMessageId((current) => (current === outboundMessageId ? null : current));
     }
   }
 
@@ -611,8 +685,12 @@ export function JobEstimatesSection({
                     isHistoryLoading={historyLoadingEstimateId === selectedEstimate.id}
                     isPreviewLoading={previewLoadingEstimateId === selectedEstimate.id}
                     isSending={sendingEstimateId === selectedEstimate.id}
+                    cancelingMessageId={cancelingMessageId}
                     onChange={(patch) => updateDeliveryDraft(selectedEstimate.id, patch)}
                     onSend={() => void sendEstimate(selectedEstimate)}
+                    onCancelMessage={(outboundMessageId) =>
+                      void cancelQueuedMessage(selectedEstimate.id, outboundMessageId)
+                    }
                   />
                 ) : null
               }

@@ -1,4 +1,5 @@
 import type {
+  CancelOutboundMessageResponse,
   CreateEstimateRequest,
   ApproveEstimateRequest,
   DeclineEstimateRequest,
@@ -33,6 +34,7 @@ export type SendEstimateRequestDto = SendEstimateRequest;
 export type SendEstimateResponseDto = SendEstimateResponse;
 export type EstimateSendPreviewResponseDto = EstimateSendPreviewResponse;
 export type OutboundMessagesResponseDto = OutboundMessagesResponse;
+export type CancelOutboundMessageResponseDto = CancelOutboundMessageResponse;
 export type EstimateLineItemInputValue = EstimateLineItemInput;
 export type EstimateDiscountValue = EstimateDiscount;
 export type EstimateOptionGroupInputValue = EstimateOptionGroupInput;

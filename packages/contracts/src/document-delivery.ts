@@ -78,6 +78,10 @@ export interface OutboundMessagesResponse {
   outboundMessages: OutboundMessageSummary[];
 }
 
+export interface CancelOutboundMessageResponse {
+  outboundMessage: OutboundMessageSummary;
+}
+
 export interface EstimateEmailDeliveryStatus {
   configured: boolean;
   ready: boolean;

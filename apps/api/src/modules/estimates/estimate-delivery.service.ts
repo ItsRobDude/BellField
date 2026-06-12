@@ -8,6 +8,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { estimateEmailMaxAttachmentBytes } from '@bellfield/contracts';
 import type {
+  CancelOutboundMessageResponse,
   CompanySettings,
   CustomerDocumentSnapshotSummary,
   OutboundMessageFailureCode,
@@ -76,6 +77,46 @@ export class EstimateDeliveryService {
     const outboundMessages =
       await this.customerDeliveryRepository.listOutboundMessagesForEstimate(estimateId);
     return { outboundMessages: outboundMessages.map(toOutboundMessageSummary) };
+  }
+
+  async cancelEstimateOutboundMessage(
+    sessionToken: string,
+    estimateId: string,
+    outboundMessageId: string
+  ): Promise<CancelOutboundMessageResponse> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'estimates:send',
+      ['office-web']
+    );
+    const estimate = await this.requireEstimate(estimateId);
+    const canceledAt = new Date().toISOString();
+    const canceled = await this.customerDeliveryRepository.cancelOutboundMessage(
+      outboundMessageId,
+      estimate.id,
+      canceledAt
+    );
+    if (!canceled) {
+      throw new ConflictException(
+        'This email can no longer be canceled. Refresh the delivery history for its latest status.'
+      );
+    }
+    try {
+      await this.customerDeliveryRepository.addEstimateDeliveryTimeline({
+        jobId: estimate.jobId,
+        occurredAt: canceledAt,
+        actorName: actor.displayName,
+        kind: 'estimateSendCanceled',
+        message: `Estimate send canceled for ${canceled.recipientEmail}: ${estimate.title}.`
+      });
+    } catch (error) {
+      // The cancel itself succeeded; a missing timeline entry is not worth
+      // confusing the office with an error.
+      this.logger.error(
+        `Estimate ${estimate.id} send was canceled but the timeline entry could not be written: ${describeError(error)}`
+      );
+    }
+    return { outboundMessage: toOutboundMessageSummary(canceled) };
   }
 
   async renderEstimatePdfDocument(
@@ -520,6 +561,9 @@ function deliverySummaryMessage(
   record: OutboundMessageRecord,
   failureCode: OutboundMessageFailureCode | undefined
 ): string | undefined {
+  if (record.status === 'canceled') {
+    return 'Canceled before sending.';
+  }
   if (!failureCode) {
     return undefined;
   }

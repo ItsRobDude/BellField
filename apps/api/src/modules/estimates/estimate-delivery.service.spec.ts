@@ -116,7 +116,22 @@ function createDeliveryService() {
       queuedAt: '2026-06-01T00:00:00.000Z',
       providerError
     })),
-    addEstimateDeliveryTimeline: jest.fn()
+    addEstimateDeliveryTimeline: jest.fn(),
+    cancelOutboundMessage: jest.fn().mockImplementation(async (messageId) => ({
+      id: messageId,
+      channel: 'email',
+      provider: 'relay',
+      status: 'canceled',
+      jobId: 'job-1',
+      estimateId: 'estimate-1',
+      documentSnapshotId: 'snapshot-1',
+      recipientEmail: 'customer@example.com',
+      subject: 'Estimate from BellField',
+      bodyText: 'Hello Acme, attached is AC replacement.',
+      sentByName: 'Dispatcher',
+      queuedAt: '2026-06-01T00:00:00.000Z',
+      attemptCount: 1
+    }))
   };
   const customerDocumentStorageService = {
     writeEstimatePdf: jest.fn().mockResolvedValue({
@@ -409,6 +424,49 @@ describe('EstimateDeliveryService', () => {
     ).rejects.toThrow(/just sent/);
     expect(estimatePdfRendererService.renderEstimatePdf).not.toHaveBeenCalled();
     expect(emailProviderService.sendEstimateEmail).not.toHaveBeenCalled();
+  });
+
+  it('cancels a queued send and records a timeline entry', async () => {
+    const { service, customerDeliveryRepository, identityAccessService } = createDeliveryService();
+
+    const result = await service.cancelEstimateOutboundMessage('token', 'estimate-1', 'msg-1');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'estimates:send',
+      ['office-web']
+    );
+    expect(customerDeliveryRepository.cancelOutboundMessage).toHaveBeenCalledWith(
+      'msg-1',
+      'estimate-1',
+      expect.any(String)
+    );
+    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: 'estimateSendCanceled' })
+    );
+    expect(result.outboundMessage.status).toBe('canceled');
+    expect(result.outboundMessage.deliveryMessage).toBe('Canceled before sending.');
+  });
+
+  it('refuses to cancel a message that already completed', async () => {
+    const { service, customerDeliveryRepository } = createDeliveryService();
+    customerDeliveryRepository.cancelOutboundMessage.mockResolvedValue(null);
+
+    await expect(
+      service.cancelEstimateOutboundMessage('token', 'estimate-1', 'msg-1')
+    ).rejects.toBeInstanceOf(ConflictException);
+    expect(customerDeliveryRepository.addEstimateDeliveryTimeline).not.toHaveBeenCalled();
+  });
+
+  it('still reports a successful cancel when the timeline write fails', async () => {
+    const { service, customerDeliveryRepository } = createDeliveryService();
+    customerDeliveryRepository.addEstimateDeliveryTimeline.mockRejectedValue(
+      new Error('database unavailable')
+    );
+
+    const result = await service.cancelEstimateOutboundMessage('token', 'estimate-1', 'msg-1');
+
+    expect(result.outboundMessage.status).toBe('canceled');
   });
 
   it('blocks duplicates with queued copy while a live queued send exists', async () => {
