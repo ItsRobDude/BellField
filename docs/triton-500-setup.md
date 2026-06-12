@@ -15,51 +15,63 @@ stack deployment that follows it is scripted/remote work.
 
 ---
 
-## Phase 0 — Prep on the dev PC (before touching the laptop)
+## Phase 0 — Check the disk layout (1 minute, inside current Windows)
 
-- [ ] Two USB sticks (8GB+), or one reused between acts:
-  - Windows 11 installer — Microsoft Media Creation Tool
-  - Ubuntu Server 24.04 LTS — write the ISO with Rufus or balenaEtcher
-- [ ] Confirm nothing on the laptop needs saving (both disks get wiped).
-- [ ] Optional but smart while the bottom panel is off someday: battery
-      swelling check. A healthy battery is the relay's free built-in UPS.
+Before anything: `Win+X` → **Disk Management**. Expected: **two separate
+~954GB disks**. If instead one ~1.9TB disk appears, the drives are striped in
+RAID 0 — that array must be broken in BIOS (destroys everything, forces the
+USB install path for Windows too); stop and handle that first. Two separate
+disks means the easy path below applies and the BIOS barely matters.
 
-## Phase 1 — One BIOS visit (F2 at the Predator logo)
+Also confirm nothing on the laptop needs saving — both disks get wiped.
 
-- [ ] **Storage mode: if the two NVMe drives are in RAID 0, break the array
-      and set the controller to AHCI/non-RAID.** Some PT515-51 units shipped
-      striped; Ubuntu needs the disks individually, and changing this after
-      Windows is installed breaks its boot. If the drives already show as two
-      separate 1TB disks, change nothing.
-- [ ] Leave Secure Boot **on** (Windows 11 wants it; Ubuntu 24.04 supports it).
-- [ ] Note F12 is the one-time boot menu — it is how you pick Windows vs
-      Ubuntu later, and how you boot the USB now.
-- [ ] If a "power on after AC loss" or wake-on-AC option exists, enable it
-      (relay duty); many laptops lack it — the battery covers short outages.
+## Phase 1 — Act 1: factory-reset the existing Windows 11 (no USB needed)
 
-## Phase 2 — Act 1: Windows 11 on disk 1 (the scratch machine)
+The built-in reset produces exactly the clean stranger's PC the gate needs:
 
-1. Boot the Windows USB (F12). Custom install → delete every partition on
-   **one** disk → install there. (Both disks are being repurposed, so disk
-   mix-ups at this stage are harmless — whichever disk Windows lands on is
-   "disk 1" from now on.)
-2. **Local account, no Microsoft account** (it's a scratch machine):
-   at the account screen press `Shift+F10` and run `start ms-cxh:localonly`
-   (older builds: `oobe\bypassnro` then reboot and choose "I don't have
-   internet").
-3. Let Windows Update run to completion now, so gate day isn't fighting it.
-4. Install **nothing else**. No Node, no Git, no editors — the entire value
+1. Settings → System → Recovery → **Reset this PC** → **Remove everything**.
+2. Choose **Local reinstall** (fall back to Cloud download if it fails),
+   **"Only the drive where Windows is installed"** if asked, and **"Just
+   remove files"** (the slow secure-wipe is for selling the machine).
+3. After reset, Windows runs first-time setup again. **Local account, no
+   Microsoft account**: at the account screen press `Shift+F10` and run
+   `start ms-cxh:localonly` (older builds: `oobe\bypassnro`, reboot, then
+   "I don't have internet").
+4. Let Windows Update run to completion now, so gate day isn't fighting it.
+   OEM/Acer preloads may reinstall themselves — that's fine; a stranger's PC
+   has those too.
+5. Install **nothing else**. No Node, no Git, no editors — the entire value
    of this machine is that it's a stranger's PC. Edge is the browser a
    stranger would have; use it.
-5. Settings → System → Power: set lid-close action to **Do nothing** (plugged
+6. Settings → System → Power: set lid-close action to **Do nothing** (plugged
    in), so the machine can sit closed on a shelf between uses.
-6. Note the machine name and LAN IP in the gate-day evidence notes.
+7. Note the machine name and LAN IP in the gate-day evidence notes.
+
+Activation: the digital license is tied to the hardware; reset (and even a
+later clean USB install) re-activates automatically.
+
+## Phase 1b — Booting install media on a locked-down Acer BIOS
+
+Only Ubuntu needs a USB stick (Ubuntu Server 24.04 ISO via Rufus). Two ways
+to boot it, in order of preference:
+
+- **No BIOS at all:** in Windows, Settings → System → Recovery → **Advanced
+  startup → Restart now** → **Use a device** → pick the USB. This works even
+  when the BIOS hides everything.
+- **BIOS route (F2 at the Predator logo):** Acer disables the F12 boot menu
+  by default — enable **F12 Boot Menu** under the Main tab. If options are
+  greyed out, set a **Supervisor Password** under Security first (Acer hides
+  settings until one exists) — write it down; losing it bricks BIOS access.
+
+Leave Secure Boot **on** (Windows wants it; Ubuntu 24.04 supports it). If a
+"power on after AC loss" option exists anywhere, enable it for relay duty;
+most laptops lack it and the battery covers short outages.
 
 **Stop here.** Gate day itself runs from
 [gate-day-checklist.md](./gate-day-checklist.md) — artifacts, licenses, and
 runbooks all come prepared from the dev machine on a USB stick.
 
-## Phase 3 — Act 2: Ubuntu Server 24.04 on disk 2 (the relay host)
+## Phase 2 — Act 2: Ubuntu Server 24.04 on disk 2 (the relay host)
 
 Do this after gate day if possible (gate day wants exclusive use of the
 machine; the relay wants to never be rebooted casually once live).
@@ -91,7 +103,7 @@ GRUB's os-prober will list Windows in its boot menu; the BIOS F12 menu also
 switches disks. Default boot should be Ubuntu — relay duty is the resting
 state; Windows is the occasional gate-day guest.
 
-## Phase 4 — Relay stack deployment (scripted; not hand-typed)
+## Phase 3 — Relay stack deployment (scripted; not hand-typed)
 
 Owned by the relay deployment work, not this page: a Dockerfile and compose
 file for `apps/relay` + Postgres 16 + cloudflared (to be added to the repo),
