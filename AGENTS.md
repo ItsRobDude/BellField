@@ -111,11 +111,35 @@ Also read:
 
 - `docs/deployment-model.md`
 
+### If the task involves customer email/SMS, estimate or invoice delivery, acceptance links, or the delivery relay
+
+Also read:
+
+- `docs/customer-comms-and-delivery.md`
+- `docs/delivery-relay-plan.md` when touching relay behavior, relay tokens, or install-to-relay wiring
+- `docs/acceptance-links-design.md` when touching customer acceptance links
+
+### If the task involves licensing, releases, the installer, the updater, or sellability infrastructure
+
+Also read:
+
+- `docs/sellable-product-execution-plan.md`
+- `docs/license-design.md` for license verification or issuance
+- `docs/install-runbook.md` / `docs/restore-runbook.md` for the install and restore recipes
+
+### If the task involves market positioning, pricing, remote access, or what BellField sells
+
+Also read:
+
+- `docs/positioning-and-pricing.md`
+- `docs/remote-access-plan.md` for the managed/BYO remote-access tiers
+
 ### If the task involves implementation order or deciding what should come next
 
 Also read:
 
-- `docs/milestone-implementation-plan.md`
+- `docs/milestone-implementation-plan.md` for feature milestones
+- `docs/sellable-product-execution-plan.md` for sellability-infrastructure phases
 
 If a task does not touch one of these areas, do not pull in extra docs.
 
@@ -230,10 +254,13 @@ Expected top-level structure:
 - `apps/field-mobile`
 - `apps/api`
 - `apps/worker`
+- `apps/relay` (BellField-hosted delivery relay; own database and migrations)
 - `packages/contracts`
 - `packages/estimating`
 - `packages/validation`
 - `packages/utils`
+- `tools/` (release assembly, install/license/update helpers, smoke scripts)
+- `deploy/` (production deployment artifacts for BellField-hosted services)
 - `docs/`
 
 Keep file and folder names boring and obvious.

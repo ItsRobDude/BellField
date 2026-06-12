@@ -4,7 +4,18 @@ This document defines the recommended order for building BellField.
 
 Its purpose is to turn BellField's product vision, workflow rules, deployment rules, and engineering standards into a practical implementation sequence.
 
-This is the build-order source of truth.
+This is the build-order source of truth **for feature milestones**.
+
+> **Division of labor (2026-06-12).** Three planning spines now coexist:
+> this document owns the feature-milestone sequence (M1–M12);
+> [sellable-product-execution-plan.md](./sellable-product-execution-plan.md)
+> owns the sellability-infrastructure phases (install, backup/restore,
+> licensing, updates, the delivery relay, acceptance links) and runs in
+> parallel rather than waiting for a milestone slot; and
+> [positioning-and-pricing.md](./positioning-and-pricing.md) owns what
+> BellField is in the market — scope decisions are checked against it before
+> any competitor scorecard. The pre-pilot punch list consolidating all three
+> is [launch-readiness.md](./launch-readiness.md).
 
 It should answer:
 

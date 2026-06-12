@@ -57,8 +57,9 @@ BellField already has enough operational structure to support this lane later:
 - `companySettings` exists as a permission area with an office settings surface
   for company name, reply-to, and estimate email template defaults.
 
-Estimate PDF attachment delivery has started. This document continues to define
-the guardrails for the next delivery slices.
+Estimate PDF email delivery has shipped and rides the production relay with
+queue/retry/cancel semantics (status stamps in §10). This document continues to
+define the guardrails for the next delivery slices.
 
 ---
 
@@ -136,9 +137,12 @@ This is exactly the content the delivery provider already receives today; the
 relay must not become storage of customer business data, and the deployment
 docs must say so wherever the self-hosted posture is described.
 
-Until the relay exists, the direct provider adapter configured by a server-owned
-environment key is an interim implementation for BellField-operated installs
-only. It must not ship to sold installs.
+**Status 2026-06-12: the relay exists and is deployed to production**
+(`relay.bellfield.app`; see `relay-deployment-2026-06-12.md`). Installs send
+through the relay-client adapter using a per-shop relay token; the first real
+end-to-end delivered email is on record. The direct provider adapter remains in
+the codebase only as the internal adapter boundary behind the relay — provider
+keys live solely on the relay host and must never ship to sold installs.
 
 The controlling design for the relay itself — business model, relay-token
 semantics, sender identity tiers, API shape, queueing, and build order — is
@@ -266,7 +270,7 @@ Customer links should support future revocation and resend.
 
 ## 10. Phase Order
 
-### Phase 1 - Communications Foundation
+### Phase 1 - Communications Foundation — SHIPPED
 
 - add BellField-operated email adapter boundary
 - add customer-facing content settings
@@ -274,34 +278,45 @@ Customer links should support future revocation and resend.
 - add job timeline entries for send/failure results
 - support email first
 
-### Phase 2 - Estimate Email Delivery
+### Phase 2 - Estimate Email Delivery — SHIPPED
 
 - office sends or resends an estimate
 - BellField delivers a professional PDF or secure PDF link
 - recipient, actor, timestamp, provider reference, and failure state are recorded
 - no customer acceptance action yet unless explicitly included in a later slice
 
-### Phase 3 - Invoice Email Delivery
+Shipped beyond the original scope: relay-backed delivery with queue/retry on
+retryable failure, office Cancel for queued sends, and worker
+retry/expiry/status-poll jobs.
+
+### Phase 3 - Invoice Email Delivery — NOT STARTED (queued behind acceptance links)
 
 - office or bookkeeping sends posted invoice documents
 - delivery state is logged
 - behavior respects invoice posting and correction rules
 
-### Phase 4 - Estimate Acceptance Link
+### Phase 4 - Estimate Acceptance Link — DESIGNED, NEXT BUILD LANE
+
+The controlling design is [acceptance-links-design.md](./acceptance-links-design.md)
+(slices 6a.1–6a.3 in `sellable-product-execution-plan.md`).
 
 - customer approves or declines through a secure link
 - captured name/signature, timestamp, selected option, and immutable estimate
   meaning are preserved
 - office still controls scheduling and conversion
 
-### Phase 5 - Payment Links
+### Phase 5 - Payment Links — NOT STARTED
 
 - payment links are allowed only for posted invoices
 - payments are recorded from confirmed gateway state
 - BellField stores provider reference and operational result
 - payments remain online-only in v1
 
-### Phase 6 - SMS Reminders and On-My-Way
+### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
+
+Booking confirmation, job reminder, and on-my-way messages ship email-first on
+the existing relay — logged, person-triggered, per-job suppressible. SMS is
+deferred as a separate provider decision.
 
 - optional SMS adapter
 - customer opt-in and opt-out behavior
@@ -311,9 +326,10 @@ Customer links should support future revocation and resend.
 
 ---
 
-## 11. First Implementation Slice
+## 11. First Implementation Slice — COMPLETE
 
-The first code slice should be estimate email delivery.
+The first code slice was estimate email delivery; every acceptance criterion
+below is met (permission gate is `estimates:send`).
 
 Acceptance criteria:
 
@@ -335,13 +351,15 @@ the implementation is intentionally re-scoped.
 
 ## 12. Open Decisions Before Coding
 
-- whether first PDF delivery uses generated PDF attachments, secure PDF links, or
-  link-first plus attachment when safe
-- exact permission name for sending customer-facing estimate and invoice
-  documents
-- whether a minimal settings screen must land before the first send action or in
-  the same slice
-- document branding fields required for the first pilot
+- ~~whether first PDF delivery uses generated PDF attachments, secure PDF links,
+  or link-first plus attachment when safe~~ — resolved: v1 sends a generated PDF
+  attachment; secure links arrive with acceptance links (Phase 4)
+- ~~exact permission name for sending customer-facing estimate and invoice
+  documents~~ — resolved: `estimates:send`
+- ~~whether a minimal settings screen must land before the first send action or
+  in the same slice~~ — resolved: the company Settings surface shipped alongside
+  delivery
+- document branding fields required for the first pilot (still open)
 - ~~provider webhook handling order for delivery status~~ — resolved 2026-06-10:
   webhooks terminate at the BellField delivery relay (see §4); installs poll the
   relay for delivery state

@@ -22,6 +22,7 @@ Current apps:
 - `apps/field-mobile` - Expo / React Native field app
 - `apps/api` - NestJS API
 - `apps/worker` - TypeScript worker
+- `apps/relay` - NestJS BellField-hosted delivery relay (own `bellfield_relay` database; only needed locally when working on relay or delivery code)
 
 Current shared packages:
 
@@ -68,6 +69,12 @@ Media config notes:
 - Development and test runs fall back to an OS temp media folder and a weak dev-only token secret if those values are omitted.
 - Use an absolute Windows-friendly path such as `C:\BellFieldData\media` for local server-style testing.
 
+Relay settings (only when working on delivery/relay code):
+
+- The API's relay client needs all three of `BELLFIELD_RELAY_BASE_URL`, `BELLFIELD_RELAY_TOKEN`, and `BELLFIELD_RELAY_SERVER_INSTANCE` — set all or none. With none set, estimate sends report delivery as not configured.
+- The relay app itself reads `BELLFIELD_RELAY_DATABASE_URL` (its own `bellfield_relay` database), `BELLFIELD_RELAY_RESEND_API_KEY`, `BELLFIELD_RELAY_FROM_ADDRESS`, `BELLFIELD_RELAY_WEBHOOK_SIGNING_SECRET`, and optionally `BELLFIELD_RELAY_PORT`, `BELLFIELD_RELAY_DEFAULT_MONTHLY_QUOTA`, and `BELLFIELD_RELAY_ARTIFACTS_ROOT` (release-download storage).
+- Production relay deployment lives under `deploy/relay/` (compose stack, env template, backup script); see `docs/relay-deployment-2026-06-12.md` for the live-host record.
+
 Client runtime settings:
 
 - `apps/office-web/.env.example` defines `NEXT_PUBLIC_API_BASE_URL`
@@ -86,6 +93,13 @@ pnpm dev:office-web
 pnpm dev:field-mobile
 pnpm dev:api
 pnpm dev:worker
+```
+
+Relay (only when working on relay code; it needs its own `bellfield_relay` database and `BELLFIELD_RELAY_*` env values from Section 4):
+
+```powershell
+pnpm dev:relay:migrate
+pnpm dev:relay
 ```
 
 Local database helpers:
@@ -180,6 +194,7 @@ Important notes:
 - the default migration driver is the repository-owned Node runner plus the PostgreSQL driver
 - `psql` is optional unless you intentionally use the `:psql` commands
 - migration SQL files live under `apps/api/src/database/migrations`
+- the relay keeps its own migrations under `apps/relay` (`pnpm --filter @bellfield/relay migration:up` / `migration:down`, or `pnpm dev:relay:migrate` from the root) against `BELLFIELD_RELAY_DATABASE_URL`
 
 See [database-migrations.md](./database-migrations.md) for the full migration workflow and safety rules.
 

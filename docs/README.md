@@ -24,7 +24,37 @@ Important interpretation rules:
 - If a focused doc and a planning doc overlap, prefer the focused doc.
 - If a doc describes future-state architecture, do not assume every listed app, package, or module already exists.
 
+## Strategy and Planning Reading Order
+
+Three layers, read top-down when deciding what BellField should do next:
+
+1. **Identity:** [positioning-and-pricing.md](./positioning-and-pricing.md) — what BellField is in the market, what it costs, and the sacred never-stops-working line. Scope decisions are checked here before any competitor scorecard.
+2. **The two planning spines, in parallel:** [milestone-implementation-plan.md](./milestone-implementation-plan.md) owns feature milestones; [sellable-product-execution-plan.md](./sellable-product-execution-plan.md) owns sellability infrastructure (install, backup, license, update, relay, acceptance links).
+3. **Design docs per lane:** the focused canonical docs below, opened only when a task touches their area.
+
+[launch-readiness.md](./launch-readiness.md) consolidates all three into the pre-pilot punch list, and [whats-shipped.md](./whats-shipped.md) is the current-state snapshot.
+
 ## Canonical Docs
+
+### [positioning-and-pricing.md](./positioning-and-pricing.md)
+
+Audience: the owner and contributors making scope, pricing, or market-facing decisions.
+
+Purpose: the controlling statement of what BellField is in the market — the ownership deal, the one-liner, differentiation rules, pricing anchors, and the supported-path support philosophy.
+
+Read when: deciding whether something belongs in the product, setting prices, writing customer-facing copy, or weighing a competitor comparison.
+
+Does not own: implementation order (`milestone-implementation-plan.md`, `sellable-product-execution-plan.md`) or feature behavior.
+
+### [remote-access-plan.md](./remote-access-plan.md)
+
+Audience: contributors planning remote access to a shop's BellField server.
+
+Purpose: the two day-1 tiers — BellField-managed `shopname.bellfield.app` (paid, cloudflared) and guided bring-your-own Tailscale — plus the security prerequisites that gate the managed tier and the never-port-forwarding rule.
+
+Read when: planning remote access, field-mobile off-LAN sync, login/session hardening for internet exposure, or per-shop tunnel provisioning.
+
+Does not own: pricing (`positioning-and-pricing.md`) or hosting philosophy (`deployment-model.md`).
 
 ### [engineering-standards.md](./engineering-standards.md)
 
@@ -198,13 +228,23 @@ Does not own: the commercial posture (`asset-protection-and-licensing.md`), the 
 
 ### [launch-readiness.md](./launch-readiness.md)
 
-Audience: contributors and the owner planning what BellField needs to ship to real customers as a company.
+Audience: contributors and the owner planning the path to the first paid assisted pilot.
 
-Purpose: the cross-cutting launch punch list — install, update, license, backup/restore, observability, operator/support controls, security harness, validation evidence, and legal/commercial surface — mapped to milestones, with an explicit "no SaaS cargo-culting" boundary.
+Purpose: the lean pre-pilot punch list — done-work pointers, the gate-day validation gates, pre-pilot security items, BellField-side ops leftovers, legal/company surface, and the "no SaaS cargo-culting" boundary.
 
-Read when: planning Milestone 10/11 work, scoping company-readiness tasks, or deciding whether a launch concern is being tracked.
+Read when: scoping company-readiness tasks, checking what still blocks a pilot, or deciding whether a launch concern is being tracked.
 
 Does not own: the install recipe itself (`self-hosted-installation-strategy.md`), licensing posture (`asset-protection-and-licensing.md`), or hosting philosophy (`deployment-model.md`). It is a consolidating checklist, not the source of truth for any single area.
+
+### [gate-day-checklist.md](./gate-day-checklist.md)
+
+Audience: the owner and contributors running the batched clean-machine validation day.
+
+Purpose: the deferred hands-on proofs — clean-machine stranger install, scratch restore, real v(N)→v(N+1) update, sold-shaped relay send, second-device checks — collected so build lanes never block on them.
+
+Read when: planning gate day, or checking which formal validation gates remain open.
+
+Does not own: the recipes being validated (`install-runbook.md`, `restore-runbook.md`) or phase definitions (`sellable-product-execution-plan.md`).
 
 ### [customer-comms-and-delivery.md](./customer-comms-and-delivery.md)
 
@@ -235,6 +275,36 @@ Purpose: the controlling plan for relay key custody, the per-shop single-active 
 Read when: designing or building the relay, changing how installs send customer email, or touching delivery entitlement behavior.
 
 Does not own: the communications lane phases (`customer-comms-and-delivery.md`), licensing posture (`asset-protection-and-licensing.md`), or hosting philosophy (`deployment-model.md`).
+
+### [relay-token-design.md](./relay-token-design.md)
+
+Audience: contributors implementing or reviewing relay authentication.
+
+Purpose: the relay-token format, hashing/verification rules, single-active binding with auto-rebind and flap-detection suspension, and the identity-only verification path used by downloads.
+
+Read when: changing relay auth, token issuance/revocation, binding behavior, or anything that consumes relay tokens.
+
+Does not own: the relay's business design (`delivery-relay-plan.md`) or the license file (`license-design.md` — deliberately separate credentials).
+
+### [acceptance-links-design.md](./acceptance-links-design.md)
+
+Audience: contributors building customer-facing estimate acceptance links (Phase 6a).
+
+Purpose: the controlling design for `/a/<token>` acceptance pages — token format, shop-fronted server-rendered page, option selection, version pinning, poll/ack delivery of decisions, office-wins race rules, and expiry.
+
+Read when: building or reviewing acceptance-link slices, or deciding how customer decisions flow back to the install.
+
+Does not own: estimate lifecycle rules (`workflows-and-state-machines.md`) or the relay transport (`delivery-relay-plan.md`).
+
+### [relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)
+
+Audience: contributors and the operator checking how the production relay is actually deployed.
+
+Purpose: dated record of the live relay host — stack shape, tunnel, webhook wiring, backup cron, verification evidence including the first production end-to-end delivered email, open ops items, and deployment gotchas.
+
+Read when: operating, redeploying, or debugging the production relay, or picking up the open ops leftovers.
+
+Does not own: relay design (`delivery-relay-plan.md`) or token semantics (`relay-token-design.md`). It is evidence, not a plan.
 
 ### [validation-playbook.md](./validation-playbook.md)
 
@@ -410,25 +480,25 @@ Read when: running a fresh competitive score, discussing market gaps, or decidin
 
 Does not own: BellField behavior; product and workflow docs remain source of truth.
 
-### [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md)
+### [fsm-comparison-servicetitan-2026-06-12.md](./fsm-comparison-servicetitan-2026-06-12.md)
 
 Audience: contributors and product reviewers checking the current competitive score.
 
-Purpose: current Chrome/source/public-reference scorecard after Catalog, optioned estimates, estimate PDF delivery, company Settings, tax-setting, and estimate-editor cleanup.
+Purpose: current scorecard from the 2026-06-12 live-tenant ServiceTitan walk after the relay arc, including design recipes (dispatch density, unsold-estimates worklist, comms-on-rails, owner KPI landing, QuickBooks export) and re-ranked recommendations.
 
-Read when: asking where BellField stands against the mature FSM market today.
+Read when: asking where BellField stands against the mature FSM market today, or pulling the next gap-closing recipe. Remember the rule in `positioning-and-pricing.md`: comparison docs measure; they do not steer.
 
 Does not own: implementation order or product behavior. Use it as an evaluation snapshot.
 
 ## Legacy and Planning Context
 
-### [fsm-comparison-servicetitan-2026-06.md](./fsm-comparison-servicetitan-2026-06.md)
+### [fsm-comparison-servicetitan-2026-06.md](./fsm-comparison-servicetitan-2026-06.md) and [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md)
 
-Status: historical comparison snapshot.
+Status: historical comparison snapshots (2026-06-08 and 2026-06-10 runs).
 
-Use it for: understanding the 2026-06-08 Chrome scoring run before later Catalog, agreement, estimate delivery, Settings, and tax-setting work.
+Use them for: understanding how the score moved across the Catalog, agreement, delivery, and relay arcs.
 
-Do not use it for: current BellField scoring. Use `fsm-comparison-servicetitan-2026-06-10.md` instead.
+Do not use them for: current BellField scoring. Use `fsm-comparison-servicetitan-2026-06-12.md` instead.
 
 ### [product-shape-plan.md](./product-shape-plan.md)
 
@@ -437,6 +507,22 @@ Status: historical planning context.
 Use it for: understanding earlier product framing and planning thought process.
 
 Do not use it for: overriding `product-rules.md`, `screen-behavior-spec.md`, `workflows-and-state-machines.md`, `offline-sync.md`, or `milestone-implementation-plan.md`.
+
+### [m9-office-ui-plan.md](./m9-office-ui-plan.md), [m10-trust-admin-plan.md](./m10-trust-admin-plan.md), [inventory-job-costing-plan.md](./inventory-job-costing-plan.md), and [job-costing-from-field-capture-spec.md](./job-costing-from-field-capture-spec.md)
+
+Status: historical lane plans for work that has since shipped (M9 office surfaces, M10 trust/admin, inventory and job costing, field-capture costing).
+
+Use them for: understanding why those lanes are shaped the way they are.
+
+Do not use them for: current state — `whats-shipped.md`, `api-endpoints.md`, and the code win.
+
+### [triton-500-setup.md](./triton-500-setup.md)
+
+Status: machine-specific operator notes for the relay host laptop (Ubuntu install, Intel RST/AHCI switch, SSH setup).
+
+Use it for: reworking or recovering that specific machine.
+
+Do not use it for: general deployment guidance — `relay-deployment-2026-06-12.md` and `deploy/relay/` own the relay deployment shape.
 
 ## Practical Reading Paths
 
@@ -472,13 +558,26 @@ For deployment or hosting changes:
 For customer document delivery, communications, or BellField-operated delivery infrastructure:
 
 - `customer-comms-and-delivery.md`
+- `delivery-relay-plan.md` and `relay-token-design.md` for relay behavior and auth
+- `acceptance-links-design.md` for customer acceptance links
 - `product-rules.md`
 - `workflows-and-state-machines.md` for estimate, invoice, payment, or acceptance behavior
 - `permissions-model.md` for send/configure/payment permissions
 
+For licensing, releases, installer, updater, or sellability infrastructure:
+
+- `sellable-product-execution-plan.md`
+- `license-design.md`, `install-runbook.md`, `restore-runbook.md` as the area recipes
+- `launch-readiness.md` and `gate-day-checklist.md` for what still blocks a pilot
+
+For market positioning, pricing, or remote access:
+
+- `positioning-and-pricing.md`
+- `remote-access-plan.md`
+
 For planning what belongs in scope:
 
-- `milestone-implementation-plan.md`
+- `positioning-and-pricing.md` first (identity), then the two spines: `milestone-implementation-plan.md` (features) and `sellable-product-execution-plan.md` (sellability)
 - `crm-job-intake-phase-plan.md` for the CRM/contact-method/New Job intake correction lane and its stop rule
 - `whats-shipped.md` for current repo status
 - `maintainability-refactor-plan.md` for cleanup that repairs weak structure without adding product scope
