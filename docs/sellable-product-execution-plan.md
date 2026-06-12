@@ -576,6 +576,16 @@ constraints are sketched in the design doc.
 
 ---
 
+## Phase 7 — Remote access (lane opened 2026-06-12, not yet sliced)
+
+Decided: in scope, managed tier (`shopname.bellfield.app`, ~$15/mo) from day
+1 plus guided bring-your-own (Tailscale walkthrough). Controlling plan:
+[remote-access-plan.md](./remote-access-plan.md). Security prerequisites
+(login throttling, password posture, session review) gate the managed tier;
+positioning/pricing context in
+[positioning-and-pricing.md](./positioning-and-pricing.md). Slicing happens
+when the lane opens for build.
+
 ## Decisions
 
 All eight decided by the owner on 2026-06-10.
