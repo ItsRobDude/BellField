@@ -7,6 +7,7 @@ const validSettings: UpdateCompanySettingsRequestDto = {
   replyToEmail: 'Office@Example.COM',
   estimateEmailSubject: 'Estimate from {companyName}',
   estimateEmailBody: 'Attached is your estimate.',
+  acceptanceLinkExpiryDays: 30,
   chargesSalesTax: true,
   defaultSalesTaxBasisPoints: 825
 };
@@ -74,5 +75,23 @@ describe('CompanySettingsService', () => {
     ).rejects.toBeInstanceOf(BadRequestException);
 
     expect(companySettingsRepository.upsertSettings).not.toHaveBeenCalled();
+  });
+
+  it('accepts acceptance-link expiry only within the 7-90 day bounds', async () => {
+    const { service, companySettingsRepository } = createService();
+
+    for (const invalid of [6, 91, 30.5]) {
+      await expect(
+        service.updateSettings('token', {
+          ...validSettings,
+          acceptanceLinkExpiryDays: invalid
+        })
+      ).rejects.toBeInstanceOf(BadRequestException);
+    }
+    expect(companySettingsRepository.upsertSettings).not.toHaveBeenCalled();
+
+    await service.updateSettings('token', { ...validSettings, acceptanceLinkExpiryDays: 7 });
+    await service.updateSettings('token', { ...validSettings, acceptanceLinkExpiryDays: 90 });
+    expect(companySettingsRepository.upsertSettings).toHaveBeenCalledTimes(2);
   });
 });

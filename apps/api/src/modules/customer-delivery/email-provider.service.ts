@@ -59,7 +59,8 @@ export class EmailProviderService {
           filename: input.attachment.filename,
           contentType: input.attachment.contentType,
           bytesBase64: input.attachment.bytes.toString('base64')
-        }
+        },
+        acceptance: input.acceptance
       })
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Relay request failed.';
@@ -113,7 +114,9 @@ export class EmailProviderService {
         providerMessageId:
           result.relayMessageId && result.relayMessageId !== 'unrecorded'
             ? result.relayMessageId
-            : undefined
+            : undefined,
+        acceptanceLinkId: result.acceptanceLinkId,
+        acceptanceUrl: result.acceptanceUrl
       };
     }
     if (result?.kind === 'failed') {

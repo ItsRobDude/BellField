@@ -351,6 +351,7 @@ describe('SendEstimateService', () => {
     expect(result.kind).toBe('sent');
     if (result.kind === 'sent') {
       expect(result.acceptanceUrl).toMatch(/^https:\/\/relay\.test\/a\/[0-9a-f]{40}$/);
+      expect(result.acceptanceLinkId).toBe(acceptanceStore.records[0]?.id);
       expect(adapter.calls[0].bodyText).toBe(`Review here: ${result.acceptanceUrl}\nThanks!`);
       expect(adapter.calls[0].bodyText).not.toContain('{acceptanceLink}');
     }

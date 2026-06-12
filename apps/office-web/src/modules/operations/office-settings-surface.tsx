@@ -19,6 +19,7 @@ type SettingsDraft = {
   replyToEmail: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  acceptanceLinkExpiryDays: string;
   chargesSalesTax: boolean;
   defaultSalesTaxRatePercent: string;
 };
@@ -28,6 +29,7 @@ const emptyDraft: SettingsDraft = {
   replyToEmail: '',
   estimateEmailSubject: '',
   estimateEmailBody: '',
+  acceptanceLinkExpiryDays: '30',
   chargesSalesTax: false,
   defaultSalesTaxRatePercent: '0'
 };
@@ -76,6 +78,16 @@ export function OfficeSettingsSurface({
     }
     const defaultSalesTaxBasisPoints = parsedTaxRate.basisPoints;
 
+    const acceptanceLinkExpiryDays = Number(draft.acceptanceLinkExpiryDays.trim());
+    if (
+      !Number.isInteger(acceptanceLinkExpiryDays) ||
+      acceptanceLinkExpiryDays < 7 ||
+      acceptanceLinkExpiryDays > 90
+    ) {
+      setErrorMessage('Approval link expiry must be a whole number between 7 and 90 days.');
+      return;
+    }
+
     setIsSaving(true);
     setNoticeMessage(null);
     setErrorMessage(null);
@@ -87,6 +99,7 @@ export function OfficeSettingsSurface({
         replyToEmail: draft.replyToEmail.trim() || undefined,
         estimateEmailSubject: draft.estimateEmailSubject,
         estimateEmailBody: draft.estimateEmailBody,
+        acceptanceLinkExpiryDays,
         chargesSalesTax: draft.chargesSalesTax,
         defaultSalesTaxBasisPoints
       });
@@ -172,6 +185,22 @@ export function OfficeSettingsSurface({
                 style={{ ...styles.textarea, minHeight: '12rem' }}
               />
             </label>
+            <label style={styles.fieldLabel}>
+              Approval link expiry (days)
+              <input
+                aria-label="Approval link expiry days"
+                type="number"
+                min="7"
+                max="90"
+                step="1"
+                value={draft.acceptanceLinkExpiryDays}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'acceptanceLinkExpiryDays', event.target.value)
+                }
+                style={styles.input}
+              />
+            </label>
           </section>
           <section style={styles.panel} aria-label="Billing and tax settings">
             <h2 style={styles.sectionHeading}>Billing & tax</h2>
@@ -231,6 +260,7 @@ function toDraft(settings: CompanySettings): SettingsDraft {
     replyToEmail: settings.replyToEmail ?? '',
     estimateEmailSubject: settings.estimateEmailSubject,
     estimateEmailBody: settings.estimateEmailBody,
+    acceptanceLinkExpiryDays: String(settings.acceptanceLinkExpiryDays),
     chargesSalesTax: settings.chargesSalesTax,
     defaultSalesTaxRatePercent: basisPointsToPercentString(settings.defaultSalesTaxBasisPoints)
   };

@@ -9,6 +9,7 @@ type CompanySettingsRow = {
   replyToEmail: string | null;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  acceptanceLinkExpiryDays: number;
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
   updatedByName: string | null;
@@ -27,6 +28,7 @@ export class CompanySettingsRepository {
           reply_to_email as "replyToEmail",
           estimate_email_subject as "estimateEmailSubject",
           estimate_email_body as "estimateEmailBody",
+          acceptance_link_expiry_days as "acceptanceLinkExpiryDays",
           charges_sales_tax as "chargesSalesTax",
           default_sales_tax_basis_points as "defaultSalesTaxBasisPoints",
           updated_by_name as "updatedByName",
@@ -46,6 +48,7 @@ export class CompanySettingsRepository {
       replyToEmail: row.replyToEmail ?? undefined,
       estimateEmailSubject: row.estimateEmailSubject,
       estimateEmailBody: row.estimateEmailBody,
+      acceptanceLinkExpiryDays: row.acceptanceLinkExpiryDays,
       chargesSalesTax: row.chargesSalesTax,
       defaultSalesTaxBasisPoints: row.defaultSalesTaxBasisPoints,
       updatedAt: toIsoString(row.updatedAt),
@@ -62,15 +65,16 @@ export class CompanySettingsRepository {
       `
         insert into company_settings (
           id, company_name, reply_to_email, estimate_email_subject, estimate_email_body,
-          charges_sales_tax, default_sales_tax_basis_points,
+          acceptance_link_expiry_days, charges_sales_tax, default_sales_tax_basis_points,
           updated_by_employee_id, updated_by_name, created_at, updated_at
         )
-        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
         on conflict (id) do update set
           company_name = excluded.company_name,
           reply_to_email = excluded.reply_to_email,
           estimate_email_subject = excluded.estimate_email_subject,
           estimate_email_body = excluded.estimate_email_body,
+          acceptance_link_expiry_days = excluded.acceptance_link_expiry_days,
           charges_sales_tax = excluded.charges_sales_tax,
           default_sales_tax_basis_points = excluded.default_sales_tax_basis_points,
           updated_by_employee_id = excluded.updated_by_employee_id,
@@ -82,6 +86,7 @@ export class CompanySettingsRepository {
         input.replyToEmail ?? null,
         input.estimateEmailSubject,
         input.estimateEmailBody,
+        input.acceptanceLinkExpiryDays,
         input.chargesSalesTax,
         input.defaultSalesTaxBasisPoints,
         actor.id,

@@ -6,13 +6,14 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
-import { estimateEmailMaxAttachmentBytes } from '@bellfield/contracts';
+import { estimateEmailMaxAttachmentBytes, relayAcceptanceExpiryDays } from '@bellfield/contracts';
 import type {
   CancelOutboundMessageResponse,
   CompanySettings,
   CustomerDocumentSnapshotSummary,
   OutboundMessageFailureCode,
-  OutboundMessageSummary
+  OutboundMessageSummary,
+  RelayAcceptancePayload
 } from '@bellfield/contracts';
 import { CompanySettingsRepository } from '../company-settings/company-settings.repository';
 import { JobsDataService } from '../company-data/jobs-data.service';
@@ -213,6 +214,9 @@ export class EstimateDeliveryService {
       sentByName: actor.displayName,
       queuedAt: generatedAt,
       expiresAt: new Date(Date.parse(generatedAt) + estimateEmailQueueExpiryMs).toISOString(),
+      // Frozen at queue time like the sender identity: a worker retry mints
+      // the link (options, version pin, expiry) the office saw when it sent.
+      acceptancePayload: buildEstimateAcceptancePayload(estimate, settings),
       dedupeSince: new Date(Date.now() - 60_000).toISOString(),
       now: generatedAt
     });
@@ -297,7 +301,8 @@ export class EstimateDeliveryService {
             contentType: 'application/pdf',
             bytes: pdfBytes
           },
-          idempotencyKey: `estimate-send-${outboundMessageId}`
+          idempotencyKey: `estimate-send-${outboundMessageId}`,
+          acceptance: intent.acceptancePayload
         }
       )
     );
@@ -309,7 +314,14 @@ export class EstimateDeliveryService {
         outboundMessage = await this.customerDeliveryRepository.markOutboundMessageSent(
           outboundMessageId,
           providerResult.providerMessageId,
-          completedAt
+          completedAt,
+          {
+            linkId: providerResult.acceptanceLinkId,
+            url: providerResult.acceptanceUrl,
+            expiresAt: providerResult.acceptanceUrl
+              ? acceptanceLinkExpiryFrom(completedAt, intent.acceptancePayload?.expiresInDays)
+              : undefined
+          }
         );
       } catch (error) {
         // The customer already has the email. Reporting failure here would
@@ -487,6 +499,54 @@ function renderTemplate(template: string, tokens: Record<string, string>): strin
   return template.replace(/\{([A-Za-z0-9_]+)\}/g, (match, tokenName: string) => {
     return tokens[tokenName] ?? match;
   });
+}
+
+/**
+ * The acceptance payload the relay mints the customer link from. Pending
+ * estimates send every option (the homeowner's choice IS the approval);
+ * approved estimates being re-sent carry only the selected path. A
+ * non-optioned estimate sends one entry whose id is the estimate id — the
+ * decision poller treats that sentinel as "no option selection".
+ */
+function buildEstimateAcceptancePayload(
+  estimate: EstimateRecord,
+  settings: CompanySettings
+): RelayAcceptancePayload {
+  const allOptions = (estimate.optionGroups ?? []).flatMap((group) => group.options);
+  let options = allOptions.map((option) => ({
+    id: option.id,
+    label: option.label,
+    totalCents: Math.round(option.totals.total * 100)
+  }));
+  if (estimate.status === 'approved' && estimate.selectedOptionId) {
+    options = options.filter((option) => option.id === estimate.selectedOptionId);
+  }
+  if (options.length === 0) {
+    options = [
+      {
+        id: estimate.id,
+        label: estimate.title,
+        totalCents: Math.round(estimate.totals.total * 100)
+      }
+    ];
+  }
+  return {
+    estimateRef: estimate.id,
+    estimateVersion: estimate.version,
+    title: estimate.title,
+    options,
+    expiresInDays: settings.acceptanceLinkExpiryDays
+  };
+}
+
+function acceptanceLinkExpiryFrom(sentAt: string, expiresInDays: number | undefined): string {
+  const days = Number.isInteger(expiresInDays)
+    ? Math.min(
+        relayAcceptanceExpiryDays.max,
+        Math.max(relayAcceptanceExpiryDays.min, expiresInDays as number)
+      )
+    : relayAcceptanceExpiryDays.default;
+  return new Date(Date.parse(sentAt) + days * 24 * 60 * 60 * 1000).toISOString();
 }
 
 function toDocumentSnapshotSummary(

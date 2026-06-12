@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
-import type { PermissionKey } from '@bellfield/contracts';
+import { relayAcceptanceExpiryDays, type PermissionKey } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { EmailProviderService } from '../customer-delivery/email-provider.service';
 import { CompanySettingsRepository } from './company-settings.repository';
@@ -56,6 +56,7 @@ function normalizeSettings(
   const replyToEmail = request.replyToEmail?.trim().toLowerCase();
   const estimateEmailSubject = request.estimateEmailSubject.trim();
   const estimateEmailBody = request.estimateEmailBody.trim();
+  const acceptanceLinkExpiryDays = request.acceptanceLinkExpiryDays;
   const chargesSalesTax = request.chargesSalesTax === true;
   const defaultSalesTaxBasisPoints = request.defaultSalesTaxBasisPoints;
 
@@ -67,6 +68,15 @@ function normalizeSettings(
   }
   if (!estimateEmailBody) {
     throw new BadRequestException('Estimate email body is required.');
+  }
+  if (
+    !Number.isInteger(acceptanceLinkExpiryDays) ||
+    acceptanceLinkExpiryDays < relayAcceptanceExpiryDays.min ||
+    acceptanceLinkExpiryDays > relayAcceptanceExpiryDays.max
+  ) {
+    throw new BadRequestException(
+      `Approval link expiry must be between ${relayAcceptanceExpiryDays.min} and ${relayAcceptanceExpiryDays.max} days.`
+    );
   }
   if (
     !Number.isInteger(defaultSalesTaxBasisPoints) ||
@@ -81,6 +91,7 @@ function normalizeSettings(
     replyToEmail: replyToEmail || undefined,
     estimateEmailSubject,
     estimateEmailBody,
+    acceptanceLinkExpiryDays,
     chargesSalesTax,
     defaultSalesTaxBasisPoints
   };

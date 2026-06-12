@@ -32,6 +32,11 @@ export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySetting
   @MaxLength(4000)
   estimateEmailBody!: string;
 
+  @IsInt()
+  @Min(7)
+  @Max(90)
+  acceptanceLinkExpiryDays!: number;
+
   @IsBoolean()
   chargesSalesTax!: boolean;
 

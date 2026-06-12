@@ -18,6 +18,7 @@ function arrange() {
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.',
+      acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
       defaultSalesTaxBasisPoints: 825
     }
@@ -36,6 +37,7 @@ function arrange() {
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.',
+      acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
       defaultSalesTaxBasisPoints: 875
     }

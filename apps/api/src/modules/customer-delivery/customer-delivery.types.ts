@@ -3,7 +3,8 @@ import type {
   CustomerDocumentType,
   OutboundMessageFailureCode,
   OutboundMessageProvider,
-  OutboundMessageStatus
+  OutboundMessageStatus,
+  RelayAcceptancePayload
 } from '@bellfield/contracts';
 
 export type CustomerDocumentTypeValue = CustomerDocumentType;
@@ -33,6 +34,13 @@ export type OutboundMessageRecord = {
   expiresAt?: string;
   providerMessageId?: string;
   providerError?: string;
+  /** Frozen at queue time so worker retries mint the link the office saw. */
+  acceptancePayload?: RelayAcceptancePayload;
+  acceptanceLinkId?: string;
+  acceptanceUrl?: string;
+  acceptanceLinkExpiresAt?: string;
+  /** Set once the customer's online decision was applied; dedupes relay redelivery. */
+  acceptanceDecisionAppliedAt?: string;
 };
 export type OutboundMessageStatusValue = OutboundMessageStatus;
 export type OutboundMessageProviderValue = OutboundMessageProvider;
@@ -75,6 +83,7 @@ export type CreateOutboundMessageInput = {
   queuedAt: string;
   /** Queued sends expire to failed past this point (24h per the relay plan §6). */
   expiresAt: string;
+  acceptancePayload?: RelayAcceptancePayload;
 };
 
 export type CreateEstimateSendIntentResult =
@@ -94,10 +103,12 @@ export type EmailProviderSendInput = {
     bytes: Buffer;
   };
   idempotencyKey: string;
+  /** When present the relay mints an acceptance link and splices it into bodyText. */
+  acceptance?: RelayAcceptancePayload;
 };
 
 export type EmailProviderSendResult =
-  | { kind: 'sent'; providerMessageId?: string }
+  | { kind: 'sent'; providerMessageId?: string; acceptanceLinkId?: string; acceptanceUrl?: string }
   | {
       kind: 'failed';
       code: OutboundMessageFailureCode;

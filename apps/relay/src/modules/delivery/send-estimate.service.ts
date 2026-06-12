@@ -157,18 +157,13 @@ export class SendEstimateService {
         acceptedAt: now
       });
       if (providerResult.kind === 'sent') {
-        const acceptanceUrl = await this.recordAcceptanceLink(
-          shop,
-          input.acceptance,
-          acceptanceLink,
-          record.id,
-          now
-        );
+        await this.recordAcceptanceLink(shop, input.acceptance, acceptanceLink, record.id, now);
         return {
           kind: 'sent',
           relayMessageId: record.id,
           providerMessageId: record.providerMessageId ?? undefined,
-          acceptanceUrl
+          acceptanceUrl: acceptanceLink?.url,
+          acceptanceLinkId: acceptanceLink?.linkId
         };
       }
       return providerResult;
@@ -204,9 +199,9 @@ export class SendEstimateService {
     acceptanceLink: PreparedAcceptanceLink | undefined,
     relayMessageId: string,
     now: Date
-  ): Promise<string | undefined> {
+  ): Promise<void> {
     if (!acceptance || !acceptanceLink) {
-      return undefined;
+      return;
     }
     try {
       await this.acceptanceLinksService.recordMintedLink({
@@ -223,7 +218,6 @@ export class SendEstimateService {
         error
       });
     }
-    return acceptanceLink.url;
   }
 }
 

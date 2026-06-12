@@ -49,6 +49,11 @@ type OutboundMessageRow = {
   expiresAt: string | Date | null;
   providerMessageId: string | null;
   providerError: string | null;
+  acceptancePayload: OutboundMessageRecord['acceptancePayload'] | null;
+  acceptanceLinkId: string | null;
+  acceptanceUrl: string | null;
+  acceptanceLinkExpiresAt: string | Date | null;
+  acceptanceDecisionAppliedAt: string | Date | null;
 };
 
 const SNAPSHOT_COLUMNS = `
@@ -88,7 +93,12 @@ const OUTBOUND_COLUMNS = `
   next_attempt_at as "nextAttemptAt",
   expires_at as "expiresAt",
   provider_message_id as "providerMessageId",
-  provider_error as "providerError"
+  provider_error as "providerError",
+  acceptance_payload as "acceptancePayload",
+  acceptance_link_id as "acceptanceLinkId",
+  acceptance_url as "acceptanceUrl",
+  acceptance_link_expires_at as "acceptanceLinkExpiresAt",
+  acceptance_decision_applied_at as "acceptanceDecisionAppliedAt"
 `;
 
 @Injectable()
@@ -227,7 +237,8 @@ export class CustomerDeliveryRepository {
   async markOutboundMessageSent(
     messageId: string,
     providerMessageId: string | undefined,
-    sentAt: string
+    sentAt: string,
+    acceptance?: { linkId?: string; url?: string; expiresAt?: string }
   ): Promise<OutboundMessageRecord> {
     await this.databaseService.query(
       `
@@ -238,10 +249,20 @@ export class CustomerDeliveryRepository {
             provider_error = null,
             attempt_count = attempt_count + 1,
             next_attempt_at = null,
+            acceptance_link_id = coalesce($4, acceptance_link_id),
+            acceptance_url = coalesce($5, acceptance_url),
+            acceptance_link_expires_at = coalesce($6, acceptance_link_expires_at),
             updated_at = $2
         where id = $1
       `,
-      [messageId, sentAt, providerMessageId ?? null]
+      [
+        messageId,
+        sentAt,
+        providerMessageId ?? null,
+        acceptance?.linkId ?? null,
+        acceptance?.url ?? null,
+        acceptance?.expiresAt ?? null
+      ]
     );
     const message = await this.getOutboundMessageById(messageId);
     if (!message) {
@@ -350,10 +371,10 @@ export class CustomerDeliveryRepository {
         insert into outbound_messages (
           id, channel, provider, status, job_id, estimate_id, invoice_id, document_snapshot_id,
           recipient_email, subject, body_text, from_name, reply_to_email,
-          sent_by_employee_id, sent_by_name, queued_at, expires_at,
+          sent_by_employee_id, sent_by_name, queued_at, expires_at, acceptance_payload,
           created_at, updated_at
         )
-        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $16, $16)
+        values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $16, $16)
       `,
       [
         input.id,
@@ -372,7 +393,8 @@ export class CustomerDeliveryRepository {
         input.sentByEmployeeId,
         input.sentByName,
         input.queuedAt,
-        input.expiresAt
+        input.expiresAt,
+        input.acceptancePayload ? JSON.stringify(input.acceptancePayload) : null
       ]
     );
   }
@@ -436,6 +458,15 @@ function toOutboundMessageRecord(row: OutboundMessageRow): OutboundMessageRecord
     nextAttemptAt: row.nextAttemptAt ? toIsoString(row.nextAttemptAt) : undefined,
     expiresAt: row.expiresAt ? toIsoString(row.expiresAt) : undefined,
     providerMessageId: row.providerMessageId ?? undefined,
-    providerError: row.providerError ?? undefined
+    providerError: row.providerError ?? undefined,
+    acceptancePayload: row.acceptancePayload ?? undefined,
+    acceptanceLinkId: row.acceptanceLinkId ?? undefined,
+    acceptanceUrl: row.acceptanceUrl ?? undefined,
+    acceptanceLinkExpiresAt: row.acceptanceLinkExpiresAt
+      ? toIsoString(row.acceptanceLinkExpiresAt)
+      : undefined,
+    acceptanceDecisionAppliedAt: row.acceptanceDecisionAppliedAt
+      ? toIsoString(row.acceptanceDecisionAppliedAt)
+      : undefined
   };
 }

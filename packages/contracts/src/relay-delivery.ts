@@ -25,6 +25,8 @@ export type RelaySendResult =
        * email itself always contains the link.
        */
       acceptanceUrl?: string;
+      /** The minted link's id; decisions from the poll endpoint carry the same id. */
+      acceptanceLinkId?: string;
     }
   | { kind: 'failed'; code: RelaySendFailureCode; retryable: boolean; message: string };
 
