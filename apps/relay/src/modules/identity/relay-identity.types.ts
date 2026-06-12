@@ -1,6 +1,12 @@
 export type RelayShopStatus = 'active' | 'suspended';
 export type RelayTokenStatus = 'active' | 'revoked';
-export type RelayTokenEventKind = 'issued' | 'revoked' | 'bound' | 'rebound' | 'suspended';
+export type RelayTokenEventKind =
+  | 'issued'
+  | 'revoked'
+  | 'bound'
+  | 'rebound'
+  | 'suspended'
+  | 'reactivated';
 
 export type RelayShopRecord = {
   id: string;

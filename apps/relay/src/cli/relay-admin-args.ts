@@ -2,6 +2,7 @@ export type RelayAdminCommand =
   | { command: 'create-shop'; displayName: string; licenseId: string; monthlySendQuota?: number }
   | { command: 'issue-token'; shopId: string }
   | { command: 'revoke-token'; shopId: string }
+  | { command: 'reactivate-shop'; shopId: string }
   | { command: 'inspect'; shopId: string };
 
 export type RelayAdminParseResult =
@@ -13,6 +14,7 @@ export const relayAdminUsage = [
   '  relay-admin create-shop --name="Shop Name" --license-id=<licenseId> [--quota=<monthlySends>]',
   '  relay-admin issue-token --shop-id=<shopId>',
   '  relay-admin revoke-token --shop-id=<shopId>',
+  '  relay-admin reactivate-shop --shop-id=<shopId>',
   '  relay-admin inspect --shop-id=<shopId>'
 ].join('\n');
 
@@ -48,7 +50,12 @@ export function parseRelayAdminArgs(args: string[]): RelayAdminParseResult {
     return { ok: true, parsed: { command: 'create-shop', displayName, licenseId } };
   }
 
-  if (command === 'issue-token' || command === 'revoke-token' || command === 'inspect') {
+  if (
+    command === 'issue-token' ||
+    command === 'revoke-token' ||
+    command === 'reactivate-shop' ||
+    command === 'inspect'
+  ) {
     const shopId = getFlag(rest, 'shop-id')?.trim();
     if (!shopId) {
       return { ok: false, error: `${command} requires --shop-id.` };

@@ -151,6 +151,40 @@ export class RelayIdentityRepository implements RelayIdentityStore {
     });
   }
 
+  /**
+   * Lifts a suspension (flap or reputation). Returns false when the shop is
+   * not suspended. If the dual-running or bounce problem persists, the same
+   * detection that suspended the shop will simply suspend it again.
+   */
+  async reactivateShop(shopId: string, occurredAt: Date): Promise<boolean> {
+    return this.database.transaction(async (queryable) => {
+      const updated = await queryable.query<{ id: string }>(
+        `UPDATE relay_shops
+         SET status = 'active', suspended_reason = NULL, updated_at = $2
+         WHERE id = $1 AND status = 'suspended'
+         RETURNING id`,
+        [shopId, occurredAt]
+      );
+      if (!updated.rows[0]) {
+        return false;
+      }
+      const activeToken = await queryable.query<{ id: string }>(
+        `SELECT id FROM relay_tokens WHERE shop_id = $1 AND status = 'active'`,
+        [shopId]
+      );
+      if (activeToken.rows[0]) {
+        await this.insertEvent(queryable, {
+          shopId,
+          tokenId: activeToken.rows[0].id,
+          kind: 'reactivated',
+          instanceId: null,
+          occurredAt
+        });
+      }
+      return true;
+    });
+  }
+
   async findActiveTokenIdForShop(shopId: string): Promise<string | null> {
     const result = await this.database.query<{ id: string }>(
       `SELECT id FROM relay_tokens WHERE shop_id = $1 AND status = 'active'`,

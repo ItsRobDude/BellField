@@ -82,6 +82,16 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    if (input.command === 'reactivate-shop') {
+      const reactivated = await repository.reactivateShop(shop.id, now);
+      if (!reactivated) {
+        console.error(`Error: shop "${shop.id}" is not suspended.`);
+        return 1;
+      }
+      printResult({ command: input.command, shopId: shop.id, status: 'active' });
+      return 0;
+    }
+
     const tokens = await repository.listTokensForShop(shop.id);
     const events = await repository.listRecentEvents(shop.id, 20);
     printResult({

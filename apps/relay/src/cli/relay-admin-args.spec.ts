@@ -51,7 +51,7 @@ describe('parseRelayAdminArgs', () => {
     ).toMatchObject({ ok: false });
   });
 
-  it.each(['issue-token', 'revoke-token', 'inspect'] as const)(
+  it.each(['issue-token', 'revoke-token', 'reactivate-shop', 'inspect'] as const)(
     'parses %s with --shop-id',
     (command) => {
       expect(parseRelayAdminArgs([command, '--shop-id=shop_abc123'])).toEqual({
