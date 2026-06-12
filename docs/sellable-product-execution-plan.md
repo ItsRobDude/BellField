@@ -540,7 +540,39 @@ Constraints already decided: acceptance records transit the relay until polled
 (durable BellField receipt deferred); payment pages never touch card data or
 shop processor keys — the shop's server creates processor-hosted checkout
 sessions outbound, and payment confirmation follows webhook-at-relay /
-poll-from-install. Detailed slicing happens when this phase opens.
+poll-from-install.
+
+Controlling design (drafted 2026-06-12):
+[acceptance-links-design.md](./acceptance-links-design.md). Headlines: opaque
+hashed link tokens minted in the send call, a shop-fronted server-rendered
+decision page (PDF stays in the email — the relay still stores no documents),
+option-group choice as the approval itself, version-pinned links so an edited
+estimate is never auto-approved stale, at-least-once poll/ack delivery to the
+install, and office-action-wins race rules.
+
+### 6a.1 Relay acceptance surface
+
+Build: acceptance_links schema, link minting in `POST /v1/messages/estimate`,
+public `GET /a/:token` page + `POST /a/:token/decision` (rate-limited,
+escaped, idempotent), poll/ack endpoints for installs.
+
+### 6a.2 Install integration
+
+Build: send-flow `acceptance` payload + `{acceptanceLink}` template token
+(auto-appended when missing), worker decision poller applying the
+version-guarded approval/decline rules with "Customer" as the timeline actor.
+
+### 6a.3 Office surfacing
+
+Build: acceptance state on the estimate panel and history ("Awaiting customer
+response", "Customer approved online"), copy per the no-leakage rule.
+
+Owner decisions before 6a.1 merges: expiry default (30 days proposed),
+homeowner notes (proposed yes, timeline-only), page copy set. Shipping gate:
+the D7 hosting revisit — acceptance downtime is homeowner-visible, so the
+relay host must be genuinely dedicated (or a VPS) before a real homeowner
+sees a link. Phase 6b (payment links) is design-deferred until 6a ships; its
+constraints are sketched in the design doc.
 
 ---
 
