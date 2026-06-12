@@ -55,7 +55,10 @@ proofs are deliberately batched. Owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
 - [ ] clean-machine stranger install from the runbook (service/reboot/ACL
-      proof, real `pg_dump`/`pg_restore` on the Windows host)
+      proof, real `pg_dump`/`pg_restore` on the Windows host). This gate is
+      also the definition of done for the QuickBooks-Desktop-grade install
+      bar ([positioning-and-pricing.md](./positioning-and-pricing.md) §The
+      install bar) — the owner does not perform installs.
 - [ ] scratch-machine restore from a real backup set
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
 - [ ] sold-shaped install sends through the production relay end to end
@@ -108,7 +111,11 @@ Mostly business work, much of it long-lead:
 - [ ] pilot agreement template
       ([self-hosted-installation-strategy.md](./self-hosted-installation-strategy.md) §4)
 - [ ] code-signing certificate procurement (long lead time — start early)
-- [ ] public site and pricing page (pricing itself is decided)
+- [ ] public site: pre-release page first (copy drafted in
+      [prerelease-site-draft.md](./prerelease-site-draft.md), founding
+      pricing published, waitlist), grown into the launch site later
+- [ ] start-to-finish install video (doubles as marketing proof of the
+      install bar)
 - [ ] customer-facing install/restore docs distinct from internal engineering
       docs
 - [ ] Android field-app distribution decision (Play Store with per-customer

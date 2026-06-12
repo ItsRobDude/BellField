@@ -46,6 +46,16 @@ Read when: deciding whether something belongs in the product, setting prices, wr
 
 Does not own: implementation order (`milestone-implementation-plan.md`, `sellable-product-execution-plan.md`) or feature behavior.
 
+### [prerelease-site-draft.md](./prerelease-site-draft.md)
+
+Audience: the owner and contributors working on the public web presence.
+
+Purpose: draft copy and visual direction for the pre-release page at bellfield.app — hero, the deal, honest status, founding pricing, waitlist, and the founder story — plus the open items before build.
+
+Read when: building or revising the public site, or drafting launch/marketing copy that must match the approved voice.
+
+Does not own: the go-to-market strategy or pricing (`positioning-and-pricing.md` §Go-to-market controls; this is the working copy deck).
+
 ### [remote-access-plan.md](./remote-access-plan.md)
 
 Audience: contributors planning remote access to a shop's BellField server.
