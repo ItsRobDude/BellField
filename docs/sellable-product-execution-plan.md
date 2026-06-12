@@ -456,17 +456,22 @@ The relay service itself plus the install-side work. Controlling design:
 [delivery-relay-plan.md](./delivery-relay-plan.md). Decision D7 (relay hosting
 and codebase location) blocks the service work.
 
-Status: slices 5.1–5.4 landed 2026-06-11. `apps/relay` exists (token auth with
+Status: slices 5.1–5.5 landed 2026-06-11; **relay deployed to production
+2026-06-12** at `https://relay.bellfield.app`
+([relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)). `apps/relay` exists (token auth with
 single-active binding + flap detection per
 [relay-token-design.md](./relay-token-design.md), issuance CLI, narrow send
 API with idempotent replay, quotas, suppression, webhook termination, status
 and entitlement endpoints, reputation autothrottle); the install adapter is a
 relay client with no provider key anywhere on installs; queued sends retry on
 a backoff schedule with D8-pinned sender identity, 24h expiry, and widened
-dedupe; the worker runs the retry/expiry/status-poll jobs. Open: 5.5 (queued
-send office UI, Cancel, entitlement-state copy) and deploying the relay to its
-pilot host. Local validation: relay unit suites + live HTTP smoke (auth,
-entitlement, rebind, send path, webhook refusal) against the dev database.
+dedupe; the worker runs the retry/expiry/status-poll jobs; 5.5 shipped the
+queued-send office UI (notice branch, Cancel with its endpoint, history
+polling, entitlement surfacing with the approved copy — verified live in the
+browser against the running app). Local validation: relay unit suites + live
+HTTP smoke (auth, entitlement, rebind, send path, webhook refusal) against
+the dev database. Remaining for the Phase 5 gate: a sold-shaped install
+sending end to end through the production relay.
 
 ### 5.1 Relay service v1 (BellField-hosted)
 

@@ -229,14 +229,19 @@ Resolved 2026-06-10: pricing model (usage-based with markup, §2), queue expiry
 (24 hours, §6), custom domains (subdomain-only, §4), and sender branding (shop
 fronts the email on both tiers, §4).
 
-Resolved 2026-06-11: hosting — the pilot relay runs on the owner's home Unraid
-server as Docker containers (relay + Postgres + cloudflared) behind a
+Resolved 2026-06-11: hosting — the pilot relay runs on owner-operated home
+hardware as Docker containers (relay + Postgres + cloudflared) behind a
 Cloudflare Tunnel: outbound-only connectivity, no inbound router ports, home
 IP hidden. Operating rules: relay containers are single-purpose and
 image-pinned, the relay database gets a nightly off-box `pg_dump` (it is the
 billing ledger), and an external uptime monitor alerts on the health endpoint.
 A dedicated host or VPS is required before Phase 6 ships — acceptance and
 payment links make relay downtime visible to shops' own customers.
+
+**Deployed 2026-06-12**: live at `https://relay.bellfield.app` on the
+dual-purpose laptop's Ubuntu disk (the planned host changed from the Unraid
+box to the dedicated machine). Evidence and open operational items:
+[relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md).
 
 Resolved 2026-06-11 (owner decisions, second round): unit pricing — $0.03 per
 send billed monthly from relay metering, default quota 1,000 sends/month per
