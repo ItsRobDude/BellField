@@ -51,6 +51,30 @@ tunnel token, and the webhook signing secret.
 - Backup script run once successfully (custom-format `pg_dump`, ~20KB) and
   installed as a nightly cron (02:15).
 
+## End-to-end production send (same day)
+
+The first real estimate email went through the complete production path on
+2026-06-12:
+
+1. Shop `BellField Dev` created on the production relay (quota 100, update
+   window 2027-06-12); relay token issued and stored in the owner's local
+   secrets folder, never in any repo or database.
+2. A development install was configured with only the three relay client
+   values (base URL, token, server instance id) — no provider key anywhere.
+3. Send-preview reported `ready` from the production entitlement endpoint
+   (first authenticated call also performed the activation binding).
+4. `POST /operations/estimates/:id/send` to a real Gmail recipient returned
+   `status: "sent"`.
+5. The relay's message record flipped to **`delivered`** within seconds —
+   meaning Resend's webhook traveled back through the tunnel, passed
+   signature verification, and the status pipeline applied it.
+
+Install → tunnel → relay → provider → inbox, and the delivery receipt all
+the way back: every Phase 5 mechanism verified in production with a real
+email. This closes the practical core of the Phase 5 gate; the formal
+gate still wants the same flow from a sold-shaped (licensed, packaged)
+install, which folds into gate day.
+
 ## Open operational items
 
 - **Off-box backups**: nightly dumps currently land on the box itself
