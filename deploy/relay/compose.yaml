@@ -1,0 +1,75 @@
+# BellField relay host stack (D7): relay + Postgres + cloudflared behind a
+# Cloudflare Tunnel. Outbound-only — no inbound router ports, ever.
+#
+#   cp relay-host.env.example relay-host.env   # fill in the secrets
+#   docker compose up -d --build
+#
+# Images are pinned on purpose; bump them deliberately, never with :latest.
+
+name: bellfield-relay
+
+services:
+  relay-postgres:
+    image: postgres:16.6
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bellfield_relay
+      POSTGRES_USER: relay
+      POSTGRES_PASSWORD: ${RELAY_DB_PASSWORD:?set RELAY_DB_PASSWORD in relay-host.env}
+    env_file:
+      - relay-host.env
+    volumes:
+      - relay-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U relay -d bellfield_relay']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  relay-migrate:
+    build:
+      context: ../..
+      dockerfile: apps/relay/Dockerfile
+    restart: 'no'
+    command: ['node', 'scripts/migrations/up.mjs']
+    env_file:
+      - relay-host.env
+    depends_on:
+      relay-postgres:
+        condition: service_healthy
+
+  relay:
+    build:
+      context: ../..
+      dockerfile: apps/relay/Dockerfile
+    restart: unless-stopped
+    env_file:
+      - relay-host.env
+    ports:
+      # Loopback only, for on-box debugging; public traffic enters through
+      # the tunnel on the internal network.
+      - '127.0.0.1:3201:3201'
+    depends_on:
+      relay-postgres:
+        condition: service_healthy
+      relay-migrate:
+        condition: service_completed_successfully
+
+  cloudflared:
+    image: cloudflare/cloudflared:2025.5.0
+    restart: unless-stopped
+    command:
+      [
+        'tunnel',
+        '--no-autoupdate',
+        'run',
+        '--token',
+        '${TUNNEL_TOKEN:?set TUNNEL_TOKEN in relay-host.env}'
+      ]
+    env_file:
+      - relay-host.env
+    depends_on:
+      - relay
+
+volumes:
+  relay-postgres-data:

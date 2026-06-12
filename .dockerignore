@@ -1,0 +1,12 @@
+**/node_modules
+**/dist
+**/.next
+**/.expo
+**/.turbo
+.git
+release
+artifacts
+coverage
+.codex-smoke
+deploy/relay/relay-host.env
+**/*.log

@@ -105,15 +105,30 @@ state; Windows is the occasional gate-day guest.
 
 ## Phase 3 — Relay stack deployment (scripted; not hand-typed)
 
-Owned by the relay deployment work, not this page: a Dockerfile and compose
-file for `apps/relay` + Postgres 16 + cloudflared (to be added to the repo),
-the Cloudflare Tunnel (created via API; the tunnel token is the only secret
-pasted on the box besides the relay env), `BELLFIELD_RELAY_RESEND_API_KEY`
-from the dedicated BellField Resend account, the Resend webhook (created only
-once `relay.bellfield.app` resolves; its signing secret goes into the relay
-env), the nightly off-box `pg_dump`, and the external uptime monitor on
-`/health`. The pilot shop + relay token are then issued with the relay-admin
-CLI and the end-to-end send is smoked from a real install.
+The deployment artifacts live in the repo under [deploy/relay/](../deploy/relay/):
+`compose.yaml` (relay + pinned Postgres 16.6 + pinned cloudflared, built from
+`apps/relay/Dockerfile`), `relay-host.env.example` (every secret the box
+needs), and `backup-relay-db.sh` (nightly off-box `pg_dump` for cron). The
+image build and containerized boot were verified locally on 2026-06-11.
+
+On the relay host:
+
+```bash
+git clone https://github.com/ItsRobDude/BellField.git ~/bellfield
+cd ~/bellfield/deploy/relay
+cp relay-host.env.example relay-host.env   # fill in every CHANGE_ME
+docker compose up -d --build
+curl http://127.0.0.1:3201/health           # expect status ok
+```
+
+Then, in order: confirm `https://relay.bellfield.app/health` answers through
+the tunnel; create the Resend webhook pointing at
+`https://relay.bellfield.app/webhooks/resend` and put its signing secret in
+`relay-host.env` (restart the relay container); add the backup script to
+cron with an off-box target; point an external uptime monitor at the health
+URL; issue the pilot shop + relay token with the relay-admin CLI
+(`docker compose exec relay node dist/apps/relay/src/cli/relay-admin.js ...`)
+and smoke an end-to-end estimate send from a real install.
 
 Prerequisites already satisfied (2026-06-11): `bellfield.app` is a verified
 sending domain in the dedicated BellField Resend account; DNS is on
