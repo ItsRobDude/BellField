@@ -4,7 +4,11 @@ import { workerLog } from './common/logger';
 import { BackupRunsRepository } from './jobs/backup/backup-runs.repository';
 import { createScheduledBackupJob } from './jobs/backup/backup-job';
 import { BackupService } from './jobs/backup/backup-service';
-import { createDeliveryRetryJob, createDeliveryStatusJob } from './jobs/delivery/delivery-jobs';
+import {
+  createAcceptanceDecisionsJob,
+  createDeliveryRetryJob,
+  createDeliveryStatusJob
+} from './jobs/delivery/delivery-jobs';
 import { DeliveryRepository } from './jobs/delivery/delivery.repository';
 import { DeliveryService } from './jobs/delivery/delivery-service';
 import { RelayClient } from './jobs/delivery/relay-client';
@@ -62,6 +66,10 @@ async function startWorker(): Promise<void> {
       createDeliveryStatusJob({
         deliveryService,
         intervalMs: runtimeConfig.delivery.statusIntervalMs
+      }),
+      createAcceptanceDecisionsJob({
+        deliveryService,
+        intervalMs: runtimeConfig.delivery.acceptanceDecisionsIntervalMs
       })
     );
   }

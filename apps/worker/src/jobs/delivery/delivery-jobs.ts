@@ -39,3 +39,25 @@ export function createDeliveryStatusJob(input: {
     }
   };
 }
+
+/**
+ * Polls the relay for customer acceptance decisions and applies them as
+ * actor "Customer". Short interval: the homeowner expects the shop to know
+ * quickly (acceptance-links-design.md, 6a.2).
+ */
+export function createAcceptanceDecisionsJob(input: {
+  deliveryService: DeliveryService;
+  intervalMs: number;
+}): WorkerJob {
+  return {
+    name: 'acceptance-decisions',
+    intervalMs: input.intervalMs,
+    initialDelayMs: 20_000,
+    run: async () => {
+      const summary = await input.deliveryService.pollAcceptanceDecisions();
+      if (summary.fetched) {
+        workerLog('info', 'Acceptance decision poll completed.', { ...summary });
+      }
+    }
+  };
+}

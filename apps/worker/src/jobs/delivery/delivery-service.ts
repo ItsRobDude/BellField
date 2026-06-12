@@ -98,6 +98,36 @@ export class DeliveryService {
     return { polled: pollable.length, updated };
   }
 
+  /**
+   * Fetches undelivered customer decisions from the relay, applies each with
+   * the 6a rules (actor "Customer", version guard, office-wins), and acks.
+   * An apply failure skips the ack so the relay redelivers; the applied-at
+   * stamp makes redelivery idempotent.
+   */
+  async pollAcceptanceDecisions(): Promise<{ fetched: number; applied: number }> {
+    const outcome = await this.relayClient.getAcceptanceDecisions();
+    if (outcome.kind === 'unavailable') {
+      return { fetched: 0, applied: 0 };
+    }
+    let applied = 0;
+    for (const decision of outcome.decisions) {
+      try {
+        const result = await this.store.applyAcceptanceDecision(decision, this.now());
+        if (result === 'applied') {
+          applied += 1;
+        }
+      } catch (error) {
+        workerLog('error', 'Customer acceptance decision could not be applied; will retry.', {
+          acceptanceLinkId: decision.acceptanceLinkId,
+          errorMessage: error instanceof Error ? error.message : String(error)
+        });
+        continue;
+      }
+      await this.relayClient.acknowledgeAcceptanceDecision(decision.acceptanceLinkId);
+    }
+    return { fetched: outcome.decisions.length, applied };
+  }
+
   private async attemptDelivery(
     message: DueQueuedDelivery,
     summary: ProcessDueResult
@@ -127,7 +157,9 @@ export class DeliveryService {
       replyToEmail: message.replyToEmail ?? undefined,
       subject: message.subject,
       bodyText: message.bodyText,
-      document: { filename: message.snapshotFilename, bytes: pdfBytes }
+      document: { filename: message.snapshotFilename, bytes: pdfBytes },
+      // Frozen at queue time: the retry mints the link the office saw.
+      acceptance: message.acceptancePayload ?? undefined
     });
 
     if (outcome.kind === 'sent') {
@@ -136,7 +168,10 @@ export class DeliveryService {
         outcome.relayMessageId && outcome.relayMessageId !== 'unrecorded'
           ? outcome.relayMessageId
           : null,
-        occurredAt
+        occurredAt,
+        outcome.acceptanceLinkId && outcome.acceptanceUrl
+          ? { linkId: outcome.acceptanceLinkId, url: outcome.acceptanceUrl }
+          : undefined
       );
       await this.addOutcomeTimeline(message, 'estimateSent', occurredAt);
       summary.sent += 1;

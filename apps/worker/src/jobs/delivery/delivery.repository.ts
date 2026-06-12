@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { QueryExecutor } from '../../common/database';
+import type { TransactionalQueryExecutor } from '../../common/database';
 import type {
+  AcceptanceApplyOutcome,
+  AcceptanceDecision,
+  AcceptancePayload,
   DeliveryStore,
   DeliveryTimelineEntry,
   DueQueuedDelivery,
@@ -23,6 +26,7 @@ type DueRow = {
   sha256: string;
   filename: string;
   estimate_title: string | null;
+  acceptance_payload: AcceptancePayload | null;
 };
 
 type ExpiredRow = {
@@ -34,7 +38,7 @@ type ExpiredRow = {
 };
 
 export class DeliveryRepository implements DeliveryStore {
-  constructor(private readonly database: QueryExecutor) {}
+  constructor(private readonly database: TransactionalQueryExecutor) {}
 
   async listDueQueued(now: Date, limit: number): Promise<DueQueuedDelivery[]> {
     // next_attempt_at is set by a retryable failure. A queued row with no
@@ -45,6 +49,7 @@ export class DeliveryRepository implements DeliveryStore {
       `
         select om.id, om.job_id, om.recipient_email, om.subject, om.body_text,
                om.from_name, om.reply_to_email, om.sent_by_name, om.attempt_count, om.expires_at,
+               om.acceptance_payload,
                cds.storage_path, cds.sha256, cds.filename,
                (select title from estimates e where e.id = om.estimate_id) as estimate_title
         from outbound_messages om
@@ -74,11 +79,17 @@ export class DeliveryRepository implements DeliveryStore {
       snapshotStoragePath: row.storage_path,
       snapshotSha256: row.sha256,
       snapshotFilename: row.filename,
-      estimateTitle: row.estimate_title
+      estimateTitle: row.estimate_title,
+      acceptancePayload: row.acceptance_payload
     }));
   }
 
-  async markSent(id: string, providerMessageId: string | null, sentAt: Date): Promise<void> {
+  async markSent(
+    id: string,
+    providerMessageId: string | null,
+    sentAt: Date,
+    acceptance?: { linkId: string; url: string }
+  ): Promise<void> {
     await this.database.query(
       `
         update outbound_messages
@@ -88,10 +99,12 @@ export class DeliveryRepository implements DeliveryStore {
             provider_error = null,
             attempt_count = attempt_count + 1,
             next_attempt_at = null,
+            acceptance_link_id = coalesce($4, acceptance_link_id),
+            acceptance_url = coalesce($5, acceptance_url),
             updated_at = $2
         where id = $1 and status = 'queued'
       `,
-      [id, sentAt, providerMessageId]
+      [id, sentAt, providerMessageId, acceptance?.linkId ?? null, acceptance?.url ?? null]
     );
   }
 
@@ -213,4 +226,213 @@ export class DeliveryRepository implements DeliveryStore {
       at
     ]);
   }
+
+  async applyAcceptanceDecision(
+    decision: AcceptanceDecision,
+    occurredAt: Date
+  ): Promise<AcceptanceApplyOutcome> {
+    return this.database.transaction(async (tx) => {
+      // The outbound row is the dedupe ledger for at-least-once delivery:
+      // locked first so a concurrent poller run waits, and a stamped
+      // applied_at makes redelivery a no-op.
+      const outboundResult = await tx.query<{
+        id: string;
+        acceptance_decision_applied_at: Date | null;
+      }>(
+        `select id, acceptance_decision_applied_at from outbound_messages
+         where acceptance_link_id = $1
+         for update`,
+        [decision.acceptanceLinkId]
+      );
+      const outbound = outboundResult.rows[0];
+      if (outbound?.acceptance_decision_applied_at) {
+        return 'alreadyApplied';
+      }
+      const markApplied = async () => {
+        if (outbound) {
+          await tx.query(
+            `update outbound_messages
+             set acceptance_decision_applied_at = $2, updated_at = $2
+             where id = $1`,
+            [outbound.id, occurredAt]
+          );
+        }
+      };
+
+      const estimateResult = await tx.query<{
+        id: string;
+        job_id: string;
+        title: string;
+        status: string;
+        version: number;
+        option_groups: OptionGroupSnapshot[] | null;
+      }>(
+        `select id, job_id, title, status, version, option_groups
+         from estimates where id = $1
+         for update`,
+        [decision.estimateRef]
+      );
+      const estimate = estimateResult.rows[0];
+      if (!estimate) {
+        await markApplied();
+        return 'estimateMissing';
+      }
+
+      const addTimeline = async (kind: string, message: string) => {
+        await tx.query('update jobs set updated_at = $2 where id = $1', [
+          estimate.job_id,
+          occurredAt
+        ]);
+        await tx.query(
+          `insert into job_timeline_entries (id, job_id, occurred_at, actor_name, kind, message)
+           values ($1, $2, $3, 'Customer', $4, $5)`,
+          [randomUUID(), estimate.job_id, occurredAt, kind, message]
+        );
+      };
+
+      const noteSuffix = decision.note ? ` Customer note: ${decision.note}` : '';
+      const reasonsText = formatDeclineReasons(decision.declineReasons);
+
+      // Office action wins races: a settled estimate gets a note, no change.
+      if (estimate.status !== 'pending') {
+        await addTimeline(
+          decision.decision === 'approved' ? 'estimateApproved' : 'estimateDeclined',
+          `Customer also responded online (${decision.decision}) to ${estimate.title}, which was already settled in the office. No change was made.${noteSuffix}`
+        );
+        await markApplied();
+        return 'alreadySettled';
+      }
+
+      // Version pinned at mint time: an edited estimate is never auto-approved
+      // stale (the existing edited-since-sent honesty rule).
+      if (estimate.version !== decision.estimateVersion) {
+        await addTimeline(
+          decision.decision === 'approved' ? 'estimateApproved' : 'estimateDeclined',
+          `Customer ${decision.decision} an earlier version of ${estimate.title} online — review required before this takes effect.${noteSuffix}${reasonsText}`
+        );
+        await markApplied();
+        return 'versionMismatch';
+      }
+
+      if (decision.decision === 'approved') {
+        // The estimate-id sentinel means a non-optioned estimate: no option
+        // selection, no totals change.
+        const selectedOptionId =
+          decision.selectedOptionId && decision.selectedOptionId !== estimate.id
+            ? decision.selectedOptionId
+            : null;
+        const optionTotals = selectedOptionId
+          ? findOptionTotals(estimate.option_groups, selectedOptionId)
+          : null;
+        const selectedLabel = selectedOptionId
+          ? findOptionLabel(estimate.option_groups, selectedOptionId)
+          : null;
+        await tx.query(
+          `update estimates
+           set status = 'approved', approved_at = $2, approved_by_employee_id = null,
+               approved_by_name = 'Customer',
+               selected_option_id = coalesce($3, selected_option_id),
+               subtotal_amount = coalesce($4, subtotal_amount),
+               discount_amount_applied = coalesce($5, discount_amount_applied),
+               taxable_base_amount = coalesce($6, taxable_base_amount),
+               tax_amount = coalesce($7, tax_amount),
+               total_amount = coalesce($8, total_amount),
+               total_cost_amount = coalesce($9, total_cost_amount),
+               profit_amount = coalesce($10, profit_amount),
+               margin_basis_points = coalesce($11, margin_basis_points),
+               cost_complete = coalesce($12, cost_complete),
+               updated_at = $2, version = version + 1
+           where id = $1 and status = 'pending'`,
+          [
+            estimate.id,
+            occurredAt,
+            selectedOptionId,
+            optionTotals?.subtotal ?? null,
+            optionTotals?.discount ?? null,
+            optionTotals?.taxableBase ?? null,
+            optionTotals?.tax ?? null,
+            optionTotals?.total ?? null,
+            optionTotals?.totalCost ?? null,
+            optionTotals?.profit ?? null,
+            optionTotals?.marginBasisPoints ?? null,
+            optionTotals?.costComplete ?? null
+          ]
+        );
+        await addTimeline(
+          'estimateApproved',
+          selectedLabel
+            ? `Customer approved online: ${estimate.title} — ${selectedLabel}.${noteSuffix}`
+            : `Customer approved online: ${estimate.title}.${noteSuffix}`
+        );
+      } else {
+        await tx.query(
+          `update estimates
+           set status = 'declined', declined_at = $2, declined_by_employee_id = null,
+               declined_by_name = 'Customer', updated_at = $2, version = version + 1
+           where id = $1 and status = 'pending'`,
+          [estimate.id, occurredAt]
+        );
+        await addTimeline(
+          'estimateDeclined',
+          `Customer declined online: ${estimate.title}.${reasonsText}${noteSuffix}`
+        );
+      }
+      await markApplied();
+      return 'applied';
+    });
+  }
+}
+
+type OptionTotalsSnapshot = {
+  subtotal: number;
+  discount: number;
+  taxableBase: number;
+  tax: number;
+  total: number;
+  totalCost: number;
+  profit: number;
+  marginBasisPoints: number | null;
+  costComplete: boolean;
+};
+
+type OptionGroupSnapshot = {
+  options?: { id: string; label?: string; totals?: OptionTotalsSnapshot }[];
+};
+
+function findOptionTotals(
+  groups: OptionGroupSnapshot[] | null,
+  optionId: string
+): OptionTotalsSnapshot | null {
+  for (const group of groups ?? []) {
+    const option = group.options?.find((candidate) => candidate.id === optionId);
+    if (option?.totals) {
+      return option.totals;
+    }
+  }
+  return null;
+}
+
+function findOptionLabel(groups: OptionGroupSnapshot[] | null, optionId: string): string | null {
+  for (const group of groups ?? []) {
+    const option = group.options?.find((candidate) => candidate.id === optionId);
+    if (option?.label) {
+      return option.label;
+    }
+  }
+  return null;
+}
+
+const declineReasonLabels: Record<string, string> = {
+  price: 'price',
+  otherCompany: 'going with another company',
+  postponing: 'not moving forward right now',
+  questions: 'has questions first'
+};
+
+function formatDeclineReasons(reasons: string[]): string {
+  if (reasons.length === 0) {
+    return '';
+  }
+  const labels = reasons.map((reason) => declineReasonLabels[reason] ?? reason);
+  return ` Reasons: ${labels.join(', ')}.`;
 }

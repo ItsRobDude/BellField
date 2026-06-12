@@ -6,11 +6,14 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { DeliveryService } from './delivery-service';
 import type {
+  AcceptanceApplyOutcome,
+  AcceptanceDecision,
   DeliveryStore,
   DeliveryTimelineEntry,
   DueQueuedDelivery,
   ExpiredDelivery,
   PollableDelivery,
+  RelayDecisionsOutcome,
   RelayDeliveryClient,
   RelaySendOutcome,
   RelayStatusOutcome
@@ -21,19 +24,31 @@ class InMemoryDeliveryStore implements DeliveryStore {
   expired: ExpiredDelivery[] = [];
   pollable: PollableDelivery[] = [];
   timeline: DeliveryTimelineEntry[] = [];
-  sentCalls: { id: string; providerMessageId: string | null }[] = [];
+  sentCalls: {
+    id: string;
+    providerMessageId: string | null;
+    acceptance?: { linkId: string; url: string };
+  }[] = [];
   failedCalls: { id: string; code: string }[] = [];
   retryCalls: { id: string; nextAttemptAt: Date }[] = [];
   appliedStates: { id: string; state: string }[] = [];
   touched: string[] = [];
   applyResult = true;
+  decisionApplyCalls: AcceptanceDecision[] = [];
+  decisionApplyOutcome: AcceptanceApplyOutcome = 'applied';
+  failDecisionApply = false;
 
   async listDueQueued(): Promise<DueQueuedDelivery[]> {
     return this.due;
   }
 
-  async markSent(id: string, providerMessageId: string | null): Promise<void> {
-    this.sentCalls.push({ id, providerMessageId });
+  async markSent(
+    id: string,
+    providerMessageId: string | null,
+    _sentAt: Date,
+    acceptance?: { linkId: string; url: string }
+  ): Promise<void> {
+    this.sentCalls.push({ id, providerMessageId, ...(acceptance ? { acceptance } : {}) });
   }
 
   async markFailed(id: string, code: string): Promise<void> {
@@ -64,12 +79,22 @@ class InMemoryDeliveryStore implements DeliveryStore {
   async touchStatusChecked(id: string): Promise<void> {
     this.touched.push(id);
   }
+
+  async applyAcceptanceDecision(decision: AcceptanceDecision): Promise<AcceptanceApplyOutcome> {
+    if (this.failDecisionApply) {
+      throw new Error('apply failed');
+    }
+    this.decisionApplyCalls.push(decision);
+    return this.decisionApplyOutcome;
+  }
 }
 
 class StubRelayClient implements RelayDeliveryClient {
   sendOutcome: RelaySendOutcome = { kind: 'sent', relayMessageId: 'relay-1' };
   statusOutcome: RelayStatusOutcome = { kind: 'status', state: 'delivered' };
+  decisionsOutcome: RelayDecisionsOutcome = { kind: 'decisions', decisions: [] };
   sendCalls: unknown[] = [];
+  ackCalls: string[] = [];
 
   async sendEstimateDocument(input: unknown): Promise<RelaySendOutcome> {
     this.sendCalls.push(input);
@@ -78,6 +103,15 @@ class StubRelayClient implements RelayDeliveryClient {
 
   async getMessageStatus(): Promise<RelayStatusOutcome> {
     return this.statusOutcome;
+  }
+
+  async getAcceptanceDecisions(): Promise<RelayDecisionsOutcome> {
+    return this.decisionsOutcome;
+  }
+
+  async acknowledgeAcceptanceDecision(acceptanceLinkId: string): Promise<boolean> {
+    this.ackCalls.push(acceptanceLinkId);
+    return true;
   }
 }
 
@@ -113,7 +147,22 @@ function makeDue(storagePath: string, sha256: string): DueQueuedDelivery {
     snapshotStoragePath: storagePath,
     snapshotSha256: sha256,
     snapshotFilename: 'estimate.pdf',
-    estimateTitle: 'AC replacement'
+    estimateTitle: 'AC replacement',
+    acceptancePayload: null
+  };
+}
+
+function makeDecision(overrides?: Partial<AcceptanceDecision>): AcceptanceDecision {
+  return {
+    acceptanceLinkId: 'link-1',
+    estimateRef: 'estimate-1',
+    estimateVersion: 2,
+    decision: 'declined',
+    selectedOptionId: null,
+    declineReasons: ['price'],
+    note: null,
+    decidedAt: '2026-06-11T11:00:00Z',
+    ...overrides
   };
 }
 
@@ -260,4 +309,90 @@ void test('touches unknown relay message ids so they are not hammered', async ()
   await service.pollDeliveryStatuses();
 
   assert.deepEqual(store.touched, ['msg-1']);
+});
+
+void test('forwards the frozen acceptance payload on retry and records the link on sent', async () => {
+  await withMediaRoot(async (mediaRoot, storagePath, sha256) => {
+    const store = new InMemoryDeliveryStore();
+    const relay = new StubRelayClient();
+    relay.sendOutcome = {
+      kind: 'sent',
+      relayMessageId: 'relay-2',
+      acceptanceLinkId: 'link-9',
+      acceptanceUrl: 'https://relay.test/a/abc'
+    };
+    const due = makeDue(storagePath, sha256);
+    due.acceptancePayload = {
+      estimateRef: 'estimate-1',
+      estimateVersion: 2,
+      title: 'AC replacement',
+      options: [{ id: 'opt-1', label: 'Repair', totalCents: 84500 }],
+      expiresInDays: 30
+    };
+    store.due = [due];
+    const service = new DeliveryService({ mediaRoot }, store, relay, { now: fixedNow });
+
+    await service.processDueDeliveries();
+
+    const sendCall = relay.sendCalls[0] as { acceptance?: unknown };
+    assert.deepEqual(sendCall.acceptance, due.acceptancePayload);
+    assert.deepEqual(store.sentCalls[0]?.acceptance, {
+      linkId: 'link-9',
+      url: 'https://relay.test/a/abc'
+    });
+  });
+});
+
+void test('applies polled decisions and acks each applied one', async () => {
+  const store = new InMemoryDeliveryStore();
+  const relay = new StubRelayClient();
+  relay.decisionsOutcome = {
+    kind: 'decisions',
+    decisions: [makeDecision(), makeDecision({ acceptanceLinkId: 'link-2', decision: 'approved' })]
+  };
+  const service = new DeliveryService({ mediaRoot: 'unused' }, store, relay, { now: fixedNow });
+
+  const summary = await service.pollAcceptanceDecisions();
+
+  assert.equal(summary.fetched, 2);
+  assert.equal(summary.applied, 2);
+  assert.deepEqual(relay.ackCalls, ['link-1', 'link-2']);
+});
+
+void test('acks non-applied outcomes too, since the decision was consumed', async () => {
+  const store = new InMemoryDeliveryStore();
+  store.decisionApplyOutcome = 'alreadySettled';
+  const relay = new StubRelayClient();
+  relay.decisionsOutcome = { kind: 'decisions', decisions: [makeDecision()] };
+  const service = new DeliveryService({ mediaRoot: 'unused' }, store, relay, { now: fixedNow });
+
+  const summary = await service.pollAcceptanceDecisions();
+
+  assert.equal(summary.applied, 0);
+  assert.deepEqual(relay.ackCalls, ['link-1']);
+});
+
+void test('skips the ack when applying a decision throws, so the relay redelivers', async () => {
+  const store = new InMemoryDeliveryStore();
+  store.failDecisionApply = true;
+  const relay = new StubRelayClient();
+  relay.decisionsOutcome = { kind: 'decisions', decisions: [makeDecision()] };
+  const service = new DeliveryService({ mediaRoot: 'unused' }, store, relay, { now: fixedNow });
+
+  const summary = await service.pollAcceptanceDecisions();
+
+  assert.equal(summary.applied, 0);
+  assert.deepEqual(relay.ackCalls, []);
+});
+
+void test('does nothing when the relay decisions endpoint is unavailable', async () => {
+  const store = new InMemoryDeliveryStore();
+  const relay = new StubRelayClient();
+  relay.decisionsOutcome = { kind: 'unavailable' };
+  const service = new DeliveryService({ mediaRoot: 'unused' }, store, relay, { now: fixedNow });
+
+  const summary = await service.pollAcceptanceDecisions();
+
+  assert.deepEqual(summary, { fetched: 0, applied: 0 });
+  assert.deepEqual(relay.ackCalls, []);
 });

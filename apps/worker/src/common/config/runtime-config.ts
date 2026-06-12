@@ -78,6 +78,7 @@ export type WorkerRuntimeConfig = {
   delivery: {
     retryIntervalMs: number;
     statusIntervalMs: number;
+    acceptanceDecisionsIntervalMs: number;
   };
 };
 
@@ -138,6 +139,12 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
     isProduction,
     problems
   );
+  const acceptanceDecisionsIntervalSeconds = getPositiveInteger(
+    'BELLFIELD_ACCEPTANCE_DECISIONS_INTERVAL_SECONDS',
+    60,
+    isProduction,
+    problems
+  );
 
   if (problems.length > 0) {
     throw new Error(
@@ -166,7 +173,8 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
     relay,
     delivery: {
       retryIntervalMs: deliveryRetryIntervalSeconds * 1_000,
-      statusIntervalMs: deliveryStatusIntervalMinutes * 60_000
+      statusIntervalMs: deliveryStatusIntervalMinutes * 60_000,
+      acceptanceDecisionsIntervalMs: acceptanceDecisionsIntervalSeconds * 1_000
     }
   };
 }

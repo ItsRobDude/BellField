@@ -1,6 +1,13 @@
 import type { WorkerRelayConfig } from '../../common/config/runtime-config';
 import { workerLog } from '../../common/logger';
-import type { RelayDeliveryClient, RelaySendOutcome, RelayStatusOutcome } from './delivery-types';
+import type {
+  AcceptanceDecision,
+  AcceptancePayload,
+  RelayDecisionsOutcome,
+  RelayDeliveryClient,
+  RelaySendOutcome,
+  RelayStatusOutcome
+} from './delivery-types';
 
 const relayServerInstanceHeader = 'x-bellfield-server-instance';
 
@@ -20,6 +27,7 @@ export class RelayClient implements RelayDeliveryClient {
     subject: string;
     bodyText: string;
     document: { filename: string; bytes: Buffer };
+    acceptance?: AcceptancePayload;
   }): Promise<RelaySendOutcome> {
     let response: Response;
     try {
@@ -38,7 +46,8 @@ export class RelayClient implements RelayDeliveryClient {
             filename: input.document.filename,
             contentType: 'application/pdf',
             bytesBase64: input.document.bytes.toString('base64')
-          }
+          },
+          acceptance: input.acceptance
         })
       });
     } catch (error) {
@@ -54,7 +63,12 @@ export class RelayClient implements RelayDeliveryClient {
 
     const body = (await response.json().catch(() => ({}))) as {
       result?:
-        | { kind: 'sent'; relayMessageId?: string }
+        | {
+            kind: 'sent';
+            relayMessageId?: string;
+            acceptanceLinkId?: string;
+            acceptanceUrl?: string;
+          }
         | { kind: 'failed'; code?: string; retryable?: boolean };
     };
     if (!response.ok) {
@@ -67,7 +81,12 @@ export class RelayClient implements RelayDeliveryClient {
 
     const result = body.result;
     if (result?.kind === 'sent') {
-      return { kind: 'sent', relayMessageId: result.relayMessageId };
+      return {
+        kind: 'sent',
+        relayMessageId: result.relayMessageId,
+        acceptanceLinkId: result.acceptanceLinkId,
+        acceptanceUrl: result.acceptanceUrl
+      };
     }
     if (result?.kind === 'failed') {
       return {
@@ -110,6 +129,41 @@ export class RelayClient implements RelayDeliveryClient {
       return { kind: 'status', state: body.state };
     }
     return { kind: 'unavailable' };
+  }
+
+  async getAcceptanceDecisions(): Promise<RelayDecisionsOutcome> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/v1/acceptance-decisions`, {
+        headers: this.headers(),
+        signal: AbortSignal.timeout(10_000)
+      });
+    } catch {
+      return { kind: 'unavailable' };
+    }
+    if (!response.ok) {
+      return { kind: 'unavailable' };
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      decisions?: AcceptanceDecision[];
+    };
+    return { kind: 'decisions', decisions: Array.isArray(body.decisions) ? body.decisions : [] };
+  }
+
+  async acknowledgeAcceptanceDecision(acceptanceLinkId: string): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `${this.config.baseUrl}/v1/acceptance-decisions/${encodeURIComponent(acceptanceLinkId)}/ack`,
+        {
+          method: 'POST',
+          headers: this.headers(),
+          signal: AbortSignal.timeout(10_000)
+        }
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
   }
 
   private headers(extra: Record<string, string> = {}): Record<string, string> {
