@@ -1,14 +1,23 @@
 import { Type } from 'class-transformer';
 import {
+  ArrayMaxSize,
+  ArrayMinSize,
   Equals,
+  IsArray,
   IsEmail,
+  IsInt,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
+  Min,
   ValidateNested
 } from 'class-validator';
-import type { RelaySendEstimateDocumentRequest } from '@bellfield/contracts';
+import type {
+  RelayAcceptanceOptionInput,
+  RelayAcceptancePayload,
+  RelaySendEstimateDocumentRequest
+} from '@bellfield/contracts';
 
 export class SendEstimateDocumentFileDto {
   @IsString()
@@ -22,6 +31,52 @@ export class SendEstimateDocumentFileDto {
   @IsString()
   @IsNotEmpty()
   bytesBase64!: string;
+}
+
+export class AcceptanceOptionDto implements RelayAcceptanceOptionInput {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  id!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(300)
+  label!: string;
+
+  @IsInt()
+  @Min(0)
+  totalCents!: number;
+}
+
+export class AcceptancePayloadDto implements RelayAcceptancePayload {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(200)
+  estimateRef!: string;
+
+  @IsInt()
+  @Min(0)
+  estimateVersion!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(300)
+  title!: string;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(10)
+  @ValidateNested({ each: true })
+  @Type(() => AcceptanceOptionDto)
+  options!: AcceptanceOptionDto[];
+
+  // Out-of-range values are clamped to the 7-90 day bounds in the service,
+  // not rejected; the DTO only requires a sane integer.
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  expiresInDays?: number;
 }
 
 export class SendEstimateDocumentRequestDto implements RelaySendEstimateDocumentRequest {
@@ -55,4 +110,9 @@ export class SendEstimateDocumentRequestDto implements RelaySendEstimateDocument
   @ValidateNested()
   @Type(() => SendEstimateDocumentFileDto)
   document!: SendEstimateDocumentFileDto;
+
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => AcceptancePayloadDto)
+  acceptance?: AcceptancePayloadDto;
 }

@@ -14,8 +14,56 @@ export type RelaySendFailureCode =
   | 'unknown';
 
 export type RelaySendResult =
-  | { kind: 'sent'; relayMessageId: string; providerMessageId?: string }
+  | {
+      kind: 'sent';
+      relayMessageId: string;
+      providerMessageId?: string;
+      /**
+       * Present when the send minted an acceptance link. Only the first
+       * (minting) response carries it — the plaintext token is never stored
+       * relay-side, so idempotent replays cannot reconstruct the URL. The
+       * email itself always contains the link.
+       */
+      acceptanceUrl?: string;
+    }
   | { kind: 'failed'; code: RelaySendFailureCode; retryable: boolean; message: string };
+
+/** Bounds for the per-shop acceptance-link expiry setting (days). */
+export const relayAcceptanceExpiryDays = { min: 7, max: 90, default: 30 } as const;
+
+/**
+ * Fixed decline-reason codes shown as checkboxes on the acceptance page.
+ * Fixed enums are what make decline reasons safe to store structured and
+ * aggregate; free text from the public page stays timeline-only.
+ */
+export const relayAcceptanceDeclineReasonCodes = [
+  'price',
+  'otherCompany',
+  'postponing',
+  'questions'
+] as const;
+
+export type RelayAcceptanceDeclineReason = (typeof relayAcceptanceDeclineReasonCodes)[number];
+
+export interface RelayAcceptanceOptionInput {
+  /** Install-side option id, opaque to the relay. */
+  id: string;
+  label: string;
+  /** Display-only money; the relay never recomputes totals. */
+  totalCents: number;
+}
+
+export interface RelayAcceptancePayload {
+  /** Install-side estimate id, opaque to the relay. */
+  estimateRef: string;
+  /** Pinned at mint time so an edited estimate is never auto-approved stale. */
+  estimateVersion: number;
+  title: string;
+  /** Single-option estimates send exactly one entry; the choice is the approval. */
+  options: RelayAcceptanceOptionInput[];
+  /** From the shop's settings; the relay clamps to relayAcceptanceExpiryDays. */
+  expiresInDays?: number;
+}
 
 export interface RelaySendEstimateDocumentRequest {
   /** Install-side idempotency key; the relay returns the recorded outcome on replays. */
@@ -32,6 +80,8 @@ export interface RelaySendEstimateDocumentRequest {
     /** Base64-encoded PDF bytes, bounded by estimateEmailMaxAttachmentBytes when decoded. */
     bytesBase64: string;
   };
+  /** When present, the relay mints an acceptance link and splices it into bodyText. */
+  acceptance?: RelayAcceptancePayload;
 }
 
 export interface RelaySendEstimateDocumentResponse {
@@ -53,4 +103,26 @@ export interface RelayEntitlementResponse {
   sendingState: RelaySendingState;
   monthlySendQuota: number;
   remainingThisMonth: number;
+}
+
+/** A homeowner decision awaiting install pickup, delivered at-least-once until acked. */
+export interface RelayAcceptanceDecisionRecord {
+  acceptanceLinkId: string;
+  estimateRef: string;
+  /** The version pinned at mint time; the install guards application against it. */
+  estimateVersion: number;
+  decision: 'approved' | 'declined';
+  selectedOptionId: string | null;
+  declineReasons: RelayAcceptanceDeclineReason[];
+  /** Free text from the homeowner; install-side it is timeline-only. */
+  note: string | null;
+  decidedAt: string;
+}
+
+export interface RelayAcceptanceDecisionsResponse {
+  decisions: RelayAcceptanceDecisionRecord[];
+}
+
+export interface RelayAcceptanceDecisionAckResponse {
+  acknowledged: boolean;
 }

@@ -550,11 +550,19 @@ option-group choice as the approval itself, version-pinned links so an edited
 estimate is never auto-approved stale, at-least-once poll/ack delivery to the
 install, and office-action-wins race rules.
 
-### 6a.1 Relay acceptance surface
+### 6a.1 Relay acceptance surface — BUILT 2026-06-12
 
 Build: acceptance_links schema, link minting in `POST /v1/messages/estimate`,
 public `GET /a/:token` page + `POST /a/:token/decision` (rate-limited,
 escaped, idempotent), poll/ack endpoints for installs.
+
+Status: landed (migration `20260612_105`, `apps/relay/src/modules/acceptance`).
+Verified end to end with curl against a local relay and a real Resend send:
+mint + template splice into the email, open page render, option/reason
+validation, first-decision-wins decline with structured reasons + note,
+409 on the second decision, poll → ack → empty, 404 on unknown tokens, and
+429s from the per-link rate limit. Page copy awaits owner sign-off; prod
+relay deploy happens alongside or before 6a.2.
 
 ### 6a.2 Install integration
 

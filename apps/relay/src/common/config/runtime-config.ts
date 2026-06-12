@@ -4,6 +4,7 @@ const DEFAULT_FROM_ADDRESS = 'estimates@bellfield.app';
 const DEFAULT_MONTHLY_SEND_QUOTA = 1000;
 const DEFAULT_REBIND_FLAP_THRESHOLD = 5;
 const DEFAULT_REBIND_FLAP_WINDOW_MINUTES = 60;
+const DEFAULT_PUBLIC_BASE_URL = 'https://relay.bellfield.app';
 
 export type RelayNodeEnv = 'development' | 'test' | 'production';
 
@@ -20,6 +21,8 @@ export type RelayRuntimeConfig = {
   rebindFlapWindowMinutes: number;
   /** Directory holding published release artifacts; unset disables downloads. */
   artifactsRoot?: string;
+  /** Origin used to compose public acceptance-link URLs. */
+  publicBaseUrl: string;
 };
 
 function getNodeEnv(): RelayNodeEnv {
@@ -94,6 +97,9 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     defaultMonthlySendQuota,
     rebindFlapThreshold,
     rebindFlapWindowMinutes,
-    artifactsRoot: process.env.BELLFIELD_RELAY_ARTIFACTS_ROOT?.trim() || undefined
+    artifactsRoot: process.env.BELLFIELD_RELAY_ARTIFACTS_ROOT?.trim() || undefined,
+    publicBaseUrl: (process.env.BELLFIELD_RELAY_PUBLIC_BASE_URL?.trim() || DEFAULT_PUBLIC_BASE_URL)
+      // A trailing slash would produce //a/<token> URLs.
+      .replace(/\/+$/, '')
   };
 }

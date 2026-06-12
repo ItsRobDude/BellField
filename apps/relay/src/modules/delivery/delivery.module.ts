@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AcceptanceModule } from '../acceptance/acceptance.module';
 import { IdentityModule } from '../identity/identity.module';
 import { DeliveryController } from './delivery.controller';
 import { EntitlementService } from './entitlement.service';
@@ -13,7 +14,7 @@ import {
 } from './send-estimate.service';
 
 @Module({
-  imports: [IdentityModule],
+  imports: [IdentityModule, AcceptanceModule],
   controllers: [DeliveryController, ProviderWebhookController],
   providers: [
     RelayMessagesRepository,

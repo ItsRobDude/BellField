@@ -2,11 +2,17 @@ import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
   estimateEmailMaxAttachmentBytes,
+  type RelayAcceptancePayload,
   type RelaySendFailureCode,
   type RelaySendResult
 } from '@bellfield/contracts';
 import { log } from '../../common/logger';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
+import {
+  AcceptanceLinksService,
+  spliceAcceptanceUrl,
+  type PreparedAcceptanceLink
+} from '../acceptance/acceptance.service';
 import type { EmailSendAdapter, RelayMessagesStore } from './relay-delivery.types';
 
 export const RELAY_MESSAGES_STORE = 'RELAY_MESSAGES_STORE';
@@ -24,6 +30,7 @@ export type SendEstimateDocumentInput = {
     contentType: 'application/pdf';
     bytesBase64: string;
   };
+  acceptance?: RelayAcceptancePayload;
 };
 
 const recipientUnavailableMessage = 'This recipient is not currently able to receive email.';
@@ -35,6 +42,7 @@ export class SendEstimateService {
   constructor(
     @Inject(RELAY_MESSAGES_STORE) private readonly messagesStore: RelayMessagesStore,
     @Inject(EMAIL_SEND_ADAPTER) private readonly emailAdapter: EmailSendAdapter,
+    private readonly acceptanceLinksService: AcceptanceLinksService,
     @Optional() private readonly now: () => Date = () => new Date()
   ) {}
 
@@ -46,6 +54,8 @@ export class SendEstimateService {
 
     // Replays return the recorded outcome instead of re-sending; the install
     // reuses its idempotency key across worker retries of the same intent.
+    // No acceptanceUrl on replays: the plaintext token is never stored, so
+    // the URL cannot be reconstructed — the sent email always carries it.
     const replayed = await this.messagesStore.findByIdempotencyKey(
       shop.shopId,
       input.idempotencyKey
@@ -102,12 +112,22 @@ export class SendEstimateService {
       };
     }
 
+    // The link must be minted before the send because its URL goes into the
+    // email body. Nothing is persisted yet: a retryable failure below drops
+    // the token entirely and the retry mints a fresh one.
+    let acceptanceLink: PreparedAcceptanceLink | undefined;
+    let bodyText = input.bodyText;
+    if (input.acceptance) {
+      acceptanceLink = this.acceptanceLinksService.prepareLink();
+      bodyText = spliceAcceptanceUrl(bodyText, acceptanceLink.url);
+    }
+
     const providerResult = await this.emailAdapter.send({
       fromName: input.fromName,
       to: input.recipientEmail,
       replyToEmail: input.replyToEmail,
       subject: input.subject,
-      bodyText: input.bodyText,
+      bodyText,
       attachment: {
         filename: input.document.filename,
         contentType: input.document.contentType,
@@ -137,10 +157,18 @@ export class SendEstimateService {
         acceptedAt: now
       });
       if (providerResult.kind === 'sent') {
+        const acceptanceUrl = await this.recordAcceptanceLink(
+          shop,
+          input.acceptance,
+          acceptanceLink,
+          record.id,
+          now
+        );
         return {
           kind: 'sent',
           relayMessageId: record.id,
-          providerMessageId: record.providerMessageId ?? undefined
+          providerMessageId: record.providerMessageId ?? undefined,
+          acceptanceUrl
         };
       }
       return providerResult;
@@ -161,6 +189,41 @@ export class SendEstimateService {
       }
       return providerResult;
     }
+  }
+
+  /**
+   * Persisted only after the message recorded as sent: a failed message has
+   * no email in the world, so it needs no link. When this write fails the
+   * email is already out with a now-dead link — the homeowner sees the
+   * neutral not-found page and the shop resends; log loudly, same
+   * lesser-harm posture as an unrecorded message.
+   */
+  private async recordAcceptanceLink(
+    shop: AuthenticatedRelayShop,
+    acceptance: RelayAcceptancePayload | undefined,
+    acceptanceLink: PreparedAcceptanceLink | undefined,
+    relayMessageId: string,
+    now: Date
+  ): Promise<string | undefined> {
+    if (!acceptance || !acceptanceLink) {
+      return undefined;
+    }
+    try {
+      await this.acceptanceLinksService.recordMintedLink({
+        prepared: acceptanceLink,
+        shopId: shop.shopId,
+        relayMessageId,
+        acceptance,
+        now
+      });
+    } catch (error) {
+      log('error', 'Relay failed to record an acceptance link for a sent message.', {
+        shopId: shop.shopId,
+        relayMessageId,
+        error
+      });
+    }
+    return acceptanceLink.url;
   }
 }
 

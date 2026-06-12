@@ -120,9 +120,10 @@ declineReasons?, note? }`; idempotent per link; first decision wins.
 
 Decline reasons (decided 2026-06-12): a **fixed, trade-neutral, multi-select
 checkbox list** rather than a bare text box — people decline for price _and_
-timing, and many won't type. v1 list: `price` ("Price"), `other_company`
+timing, and many won't type. v1 list (codes as shipped in
+`@bellfield/contracts`): `price` ("The price"), `otherCompany`
 ("Going with another company"), `postponing` ("Not moving forward right
-now"), `questions` ("Have questions first"), plus "Other" which opens the
+now"), `questions` ("I have questions first"), plus "Other" via the
 free-text note. The codes are fixed enum values BellField defines, which is
 what makes them safe: free text from a public page can only ever be
 timeline-only, but enum selections can be stored structured and aggregated —
@@ -227,7 +228,9 @@ piloting 6a does not wait on any host change.
 
 1. **6a.1 Relay**: schema + link minting in the send path + the public
    decision page and endpoint + poll/ack API + rate limiting. Testable
-   end to end with curl before any install work.
+   end to end with curl before any install work. — **BUILT 2026-06-12**,
+   curl-verified end to end against a real send (see
+   `sellable-product-execution-plan.md` §6a.1 for the evidence summary).
 2. **6a.2 Install**: send-flow extension ({acceptanceLink} token, version
    pinning), worker poller with the application rules above.
 3. **6a.3 Office surfacing**: acceptance state on the estimate panel and
