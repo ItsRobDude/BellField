@@ -67,6 +67,26 @@ Leave Secure Boot **on** (Windows wants it; Ubuntu 24.04 supports it). If a
 "power on after AC loss" option exists anywhere, enable it for relay duty;
 most laptops lack it and the battery covers short outages.
 
+**If the Ubuntu installer "can't discover disks" (hit 2026-06-11):** the
+controller is in Intel RST/Optane mode — RAID-flavored from the factory even
+with no array configured. Windows sees the drives through the RST driver;
+the Linux installer refuses to. Fix, in this exact order so Windows survives
+the switch:
+
+1. In Windows, admin terminal: `bcdedit /set "{current}" safeboot minimal`,
+   then shut down (forces the next boot into Safe Mode, which re-detects
+   storage drivers).
+2. BIOS (F2) → Main tab → **SATA Mode** → AHCI. Acer hides this entry:
+   press **Ctrl+S** on the Main tab to reveal it (set a Supervisor Password
+   under Security first if it still refuses). F10 save.
+3. Windows boots into Safe Mode; admin terminal:
+   `bcdedit /deletevalue "{current}" safeboot`, restart. Windows now runs on
+   AHCI normally.
+4. Re-run the Ubuntu installer — both NVMe drives appear.
+
+Fully reversible: if Windows ever bluescreens on this, flip the BIOS back to
+RST, boot Windows, and start over from step 1.
+
 **Stop here.** Gate day itself runs from
 [gate-day-checklist.md](./gate-day-checklist.md) — artifacts, licenses, and
 runbooks all come prepared from the dev machine on a USB stick.
