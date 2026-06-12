@@ -85,6 +85,11 @@ install, which folds into gate day.
 - **DHCP reservation** for the host's LAN address.
 - **Harden SSH** to key-only (`PasswordAuthentication no`) — password auth
   is still enabled and the console password is weak.
+- **Laptop-as-server hardening** (decided 2026-06-12: this host stays until
+  the first paying customer has acceptance links live — no VPS pre-revenue):
+  verify lid-close/sleep is fully disabled; run a deliberate power-loss
+  reboot test proving Docker and both containers return unattended; prefer
+  ethernet over Wi-Fi if the port reaches.
 - Gate day (Windows disk) remains tracked validation debt; the relay being
   live does not block it, but reboots for gate work take the relay down —
   fine until a pilot shop depends on it.

@@ -23,8 +23,8 @@ makes "Customer approved" a literal statement.
 - No-internal-leakage copy rules apply to every customer-facing string.
 - Message bodies and PDFs are never stored relay-side (relay plan §8) — this
   design works within that rule rather than weakening it.
-- D7: shipping Phase 6 requires the relay hosting decision to be revisited,
-  because acceptance-page downtime is homeowner-visible (§11 below).
+- D7 hosting revisit: resolved 2026-06-12 — the laptop stays until the first
+  paying customer has links live (see "Shipping prerequisite" below).
 
 ## The flow
 
@@ -35,6 +35,8 @@ makes "Customer approved" a literal statement.
    shop-fronted page showing the shop's name, the estimate title, the total
    (or the option choices), and Approve / Decline buttons. The PDF stays in
    their email — the page is a decision surface, not a document store.
+   Declining reveals a multi-select list of common reasons plus an "Other"
+   text box; approving offers an optional note ("gate code is 1234").
 3. The decision is recorded relay-side and the page confirms it ("Thanks —
    Acme HVAC has been notified.").
 4. The install's worker polls the relay, applies the decision to the
@@ -51,8 +53,15 @@ makes "Customer approved" a literal statement.
 - One link per outbound send. Resending an estimate mints a fresh link and
   revokes the prior one (the old email's link shows "This estimate was sent
   again — use the newest email.").
-- Links expire (default **30 days**, configurable per shop later). Expired
-  links render a neutral "ask the shop to resend" page.
+- Links expire. Expiry is **per-shop configurable, 7–90 days, default 30**
+  (decided 2026-06-12) — a Company Settings field beside the estimate email
+  template settings, `companySettings:configure`-gated, sent as the TTL when
+  the link is minted, so the relay holds no per-shop config. The floor exists
+  because sub-week links manufacture dead-link support calls; the ceiling
+  because a link is a standing credential and months-old approvals at
+  months-old prices are a fight BellField shouldn't enable. The relay clamps
+  out-of-range values as a second wall. Expired links render a neutral "ask
+  the shop to resend" page.
 - A used link becomes read-only: revisiting shows the recorded decision.
 
 ## Send-API extension (relay contract)
@@ -71,7 +80,7 @@ makes "Customer approved" a literal statement.
       { "id": "opt-good", "label": "Good — repair", "totalCents": 84500 },
       { "id": "opt-best", "label": "Best — replace", "totalCents": 412000 }
     ],
-    "expiresInDays": 30
+    "expiresInDays": 30 // from the shop's Company Settings; relay clamps to 7–90
   }
 }
 ```
@@ -94,8 +103,8 @@ New tables (names indicative):
 - `acceptance_links` — id, shop id, token hash, relay_message id, estimate
   ref + version, title, options JSON, status
   (`open | approved | declined | expired | superseded`), decision fields
-  (option id, homeowner note ≤500 chars, decided_at, requester IP for abuse
-  forensics), expires_at, created_at.
+  (option id, decline reason codes, homeowner note ≤500 chars, decided_at,
+  requester IP for abuse forensics), expires_at, created_at.
 - Decisions are delivered to the install at-least-once:
   `GET /v1/acceptance-decisions` returns undelivered decisions for the shop;
   `POST /v1/acceptance-decisions/:id/ack` marks delivery. Rows are retained
@@ -107,7 +116,20 @@ Public (unauthenticated) surface, aggressively narrow:
 - `GET /a/:token` — the decision page (server-rendered HTML from the relay,
   no client framework; shop name + title + options + two buttons).
 - `POST /a/:token/decision` — `{ decision: approve|decline, optionId?,
-note? }`; idempotent per link; first decision wins.
+declineReasons?, note? }`; idempotent per link; first decision wins.
+
+Decline reasons (decided 2026-06-12): a **fixed, trade-neutral, multi-select
+checkbox list** rather than a bare text box — people decline for price _and_
+timing, and many won't type. v1 list: `price` ("Price"), `other_company`
+("Going with another company"), `postponing` ("Not moving forward right
+now"), `questions` ("Have questions first"), plus "Other" which opens the
+free-text note. The codes are fixed enum values BellField defines, which is
+what makes them safe: free text from a public page can only ever be
+timeline-only, but enum selections can be stored structured and aggregated —
+they feed the future unsold-estimates worklist ("8 of 12 declines said
+price"). Per-shop customizable reason lists are deliberately later, if ever;
+a fixed list keeps reporting comparable across time. The free-text note
+(decline "Other" or the optional approve note) stays timeline-only.
 
 Install-authenticated surface (existing guard):
 
@@ -138,8 +160,14 @@ nothing but shop-supplied display strings (HTML-escaped).
   3. Estimate already approved/declined/converted → timeline note only
      ("Customer also responded online: ..."). No state change; office
      action wins races.
-- **Applying a decline**: pending → `declined` with actor "Customer" and the
-  note in the timeline; otherwise note-only, as above.
+- **Applying a decline**: pending → `declined` with actor "Customer", the
+  selected reason codes stored structured on the decline (for later
+  worklist aggregation) and rendered readable in the timeline ("Customer
+  declined online: Price, Have questions first"), with any "Other"/note
+  text timeline-only; otherwise note-only, as above.
+- **Settings**: 6a.2 adds the acceptance-link expiry field (7–90 days,
+  default 30) to the existing Company Settings surface and the
+  send flow reads it at mint time.
 - Office UI: the estimate panel shows the acceptance state surfaced from the
   outbound message row ("Awaiting customer response · link expires Jun 30",
   "Customer approved online Jun 14"). No new screens — it lands in the
@@ -174,15 +202,26 @@ left for the 6b design: session expiry vs invoice validity, partial
 payments/deposits, and whether the relay needs any role at all in the happy
 path.
 
-## Shipping prerequisite (owner decision required)
+## Shipping prerequisite (D7 — resolved 2026-06-12)
 
-D7 requires "a dedicated host or VPS before Phase 6 ships" because
-acceptance-page downtime is homeowner-visible. Since that decision, the
-relay moved to the dual-purpose laptop — dedicated in practice except for
-gate-day reboots. Before 6a goes in front of a real homeowner, the owner
-decides: promote the laptop to genuinely dedicated (gate days move to other
-hardware), or move the relay to a small VPS. Building 6a does not wait on
-this.
+D7 required "a dedicated host or VPS before Phase 6 ships" because
+acceptance-page downtime is homeowner-visible. Owner decision: **the Triton
+laptop stays the relay host until the first paying customer has acceptance
+links live** — no VPS and no new hardware on a maybe; pre-revenue the
+hosting budget is $0, which matches BellField's own no-bills-on-maybes
+positioning. The laptop is already the strongest free option (NVMe, 64GB,
+battery as built-in UPS, deployed and proven end to end).
+
+Instead of spending, squeeze the free reliability out of it (tracked in
+[relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)): uptime
+monitor, DHCP reservation, off-box backups, verify lid-close/sleep is fully
+disabled, a deliberate power-loss reboot test proving the containers return
+unattended, and ethernet over Wi-Fi if the port reaches.
+
+The revisit trigger is an event, not a date: when a paying customer's
+homeowner-facing links go live, a small VPS stops being a bill on a maybe
+and becomes noise against a sale — re-decide then. Building and even
+piloting 6a does not wait on any host change.
 
 ## Build order
 
@@ -194,7 +233,9 @@ this.
 3. **6a.3 Office surfacing**: acceptance state on the estimate panel and
    history; copy per the no-leakage rule.
 
-Owner decisions to confirm before 6a.1 merges: link expiry default (30
-days proposed), homeowner note allowed on decline/approve (proposed: yes,
-≤500 chars, shown only in the job timeline), and the exact customer-facing
-page copy set (drafted during 6a.1 review like the 5.5 copy was).
+Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
+7–90 days defaulting to 30; declines use the fixed multi-select reason list
+plus "Other" free text; an optional note is allowed on approve; free text is
+timeline-only (≤500 chars) while reason codes store structured. One item
+remains open by design: the exact customer-facing page copy set, drafted
+during 6a.1 review like the 5.5 copy was.
