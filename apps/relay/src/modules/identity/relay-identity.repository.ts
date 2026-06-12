@@ -18,6 +18,7 @@ type ShopRow = {
   status: RelayShopStatus;
   monthly_send_quota: number;
   suspended_reason: string | null;
+  update_window_end: string | null;
   created_at: Date;
 };
 
@@ -30,6 +31,7 @@ type ActiveTokenRow = {
   shop_display_name: string;
   shop_status: RelayShopStatus;
   monthly_send_quota: number;
+  update_window_end: string | null;
 };
 
 type TokenSummaryRow = {
@@ -64,7 +66,8 @@ export class RelayIdentityRepository implements RelayIdentityStore {
          s.id AS shop_id,
          s.display_name AS shop_display_name,
          s.status AS shop_status,
-         s.monthly_send_quota
+         s.monthly_send_quota,
+         s.update_window_end
        FROM relay_tokens t
        JOIN relay_shops s ON s.id = t.shop_id
        WHERE t.id = $1 AND t.status = 'active'`,
@@ -82,8 +85,16 @@ export class RelayIdentityRepository implements RelayIdentityStore {
       shopId: row.shop_id,
       shopDisplayName: row.shop_display_name,
       shopStatus: row.shop_status,
-      monthlySendQuota: row.monthly_send_quota
+      monthlySendQuota: row.monthly_send_quota,
+      updateWindowEnd: row.update_window_end
     };
+  }
+
+  async setShopUpdateWindow(shopId: string, updateWindowEnd: string): Promise<void> {
+    await this.database.query(
+      `UPDATE relay_shops SET update_window_end = $2, updated_at = NOW() WHERE id = $1`,
+      [shopId, updateWindowEnd]
+    );
   }
 
   async bindToken(input: {
@@ -209,7 +220,8 @@ export class RelayIdentityRepository implements RelayIdentityStore {
 
   async findShopById(shopId: string): Promise<RelayShopRecord | null> {
     const result = await this.database.query<ShopRow>(
-      `SELECT id, display_name, license_id, status, monthly_send_quota, suspended_reason, created_at
+      `SELECT id, display_name, license_id, status, monthly_send_quota, suspended_reason,
+              update_window_end, created_at
        FROM relay_shops
        WHERE id = $1`,
       [shopId]
@@ -225,6 +237,7 @@ export class RelayIdentityRepository implements RelayIdentityStore {
       status: row.status,
       monthlySendQuota: row.monthly_send_quota,
       suspendedReason: row.suspended_reason,
+      updateWindowEnd: row.update_window_end,
       createdAt: row.created_at
     };
   }

@@ -178,3 +178,8 @@ Pinned loosely; exact migrations are Phase 5.1 implementation detail:
   `401/403` to non-retryable failure codes.
 - License issuance flow (Phase 3 tooling) is unchanged; the only coupling is
   copying `licenseId` into the shop record at issuance time.
+- Execution plan 4.2 (release downloads) authenticates with the same token
+  but through **identity-only verification: no instance header, no binding,
+  no rebind, no flap input**. Downloading a release from a support machine
+  must never move the shop's activation; single-active semantics exist to
+  catch dual _sending_ servers, not artifact transfers.

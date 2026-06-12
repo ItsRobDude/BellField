@@ -423,6 +423,18 @@ Decision D6. Smallest viable: per-customer credentialed download (static
 hosting + issued credentials tracked with the license). A portal is later
 polish, not a launch need.
 
+Status: built 2026-06-11 on the relay. `GET /v1/releases` and
+`GET /v1/releases/:id/download` authenticate with the shop's relay token via
+**identity-only verification (no activation binding)** so a support download
+from another machine never moves or flaps the shop's activation. Each shop
+record carries its license's `update-window-end`
+(`relay-admin set-update-window`); releases dated past it refuse with renewal
+copy — the installed updater remains the second wall. Artifacts live on a
+read-only volume and are registered with `relay-admin publish-release`
+(sha256 + size recorded); every download is logged per shop. Verified live:
+listing entitlement flags, byte-exact entitled download, out-of-window 403,
+unauthenticated 401, and an unchanged token-event count across downloads.
+
 ### 4.3 Updater
 
 Build: updater (part of the installed product) that: verifies the new

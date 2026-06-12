@@ -12,6 +12,7 @@ type StoredShop = {
   status: RelayShopStatus;
   monthlySendQuota: number;
   suspendedReason: string | null;
+  updateWindowEnd?: string | null;
 };
 
 type StoredToken = {
@@ -52,7 +53,8 @@ class InMemoryIdentityStore implements RelayIdentityStore {
       shopId: shop.id,
       shopDisplayName: shop.displayName,
       shopStatus: shop.status,
-      monthlySendQuota: shop.monthlySendQuota
+      monthlySendQuota: shop.monthlySendQuota,
+      updateWindowEnd: shop.updateWindowEnd ?? null
     };
   }
 
@@ -274,5 +276,59 @@ describe('RelayAuthService', () => {
     const { service } = setup();
 
     expect((await service.authenticate('not-a-token', 'instance-a')).outcome).toBe('unauthorized');
+  });
+});
+
+describe('RelayAuthService.verifyToken', () => {
+  it('identifies the shop without binding or recording any event', async () => {
+    const { service, store, token } = setup();
+    const shop = store.shops.get('shop_1');
+    if (shop) {
+      shop.updateWindowEnd = '2027-06-11';
+    }
+
+    const result = await service.verifyToken(token);
+
+    expect(result.outcome).toBe('identified');
+    if (result.outcome === 'identified') {
+      expect(result.shop).toEqual({
+        shopId: 'shop_1',
+        displayName: 'Acme HVAC',
+        updateWindowEnd: '2027-06-11'
+      });
+    }
+    // The whole point: no bind, no rebind, no flap input.
+    expect(store.events).toHaveLength(0);
+    expect(store.tokens.values().next().value?.boundInstanceId).toBeNull();
+  });
+
+  it('does not move an existing binding', async () => {
+    const { service, store, token, tokenId } = setup();
+    await service.authenticate(token, 'instance-a');
+
+    await service.verifyToken(token);
+
+    expect(store.tokens.get(tokenId)?.boundInstanceId).toBe('instance-a');
+    expect(store.events.filter((event) => event.kind === 'rebound')).toHaveLength(0);
+  });
+
+  it('rejects unknown, forged, and missing tokens', async () => {
+    const { service, tokenId } = setup();
+    const forged = `bfrt1_${tokenId}_${'a'.repeat(64)}`;
+
+    expect((await service.verifyToken(undefined)).outcome).toBe('unauthorized');
+    expect((await service.verifyToken('garbage')).outcome).toBe('unauthorized');
+    expect((await service.verifyToken(forged)).outcome).toBe('unauthorized');
+  });
+
+  it('rejects a suspended shop', async () => {
+    const { service, store, token } = setup();
+    const shop = store.shops.get('shop_1');
+    if (shop) {
+      shop.status = 'suspended';
+      shop.suspendedReason = 'manual';
+    }
+
+    expect((await service.verifyToken(token)).outcome).toBe('suspended');
   });
 });

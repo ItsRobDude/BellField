@@ -45,6 +45,12 @@ services:
     restart: unless-stopped
     env_file:
       - relay-host.env
+    environment:
+      BELLFIELD_RELAY_ARTIFACTS_ROOT: /app/artifacts
+    volumes:
+      # Published release artifacts: drop zips in ./artifacts on the host,
+      # register them with relay-admin publish-release.
+      - ./artifacts:/app/artifacts:ro
     ports:
       # Loopback only, for on-box debugging; public traffic enters through
       # the tunnel on the internal network.

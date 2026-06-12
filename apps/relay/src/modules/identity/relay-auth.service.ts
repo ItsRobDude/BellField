@@ -3,7 +3,11 @@ import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
 import { log } from '../../common/logger';
 import { RelayIdentityRepository } from './relay-identity.repository';
 import { parseRelayToken, relayTokenHashMatches } from './relay-token.util';
-import type { AuthenticatedRelayShop, RelayIdentityStore } from './relay-identity.types';
+import type {
+  AuthenticatedRelayShop,
+  RelayIdentityStore,
+  RelayShopIdentity
+} from './relay-identity.types';
 
 export const RELAY_IDENTITY_STORE = 'RELAY_IDENTITY_STORE';
 
@@ -12,6 +16,11 @@ const FLAP_SUSPENSION_REASON = 'activation-flapping';
 
 export type RelayAuthResult =
   | { outcome: 'authenticated'; shop: AuthenticatedRelayShop }
+  | { outcome: 'unauthorized' }
+  | { outcome: 'suspended' };
+
+export type RelayIdentityResult =
+  | { outcome: 'identified'; shop: RelayShopIdentity }
   | { outcome: 'unauthorized' }
   | { outcome: 'suspended' };
 
@@ -118,6 +127,37 @@ export class RelayAuthService {
         monthlySendQuota: record.monthlySendQuota,
         tokenId: record.tokenId,
         instanceId
+      }
+    };
+  }
+
+  /**
+   * Verifies token identity WITHOUT activation binding (no instance header,
+   * no bind/rebind, no flap counting). Used by release downloads, where a
+   * support download from another machine must never move the shop's
+   * activation (docs/relay-token-design.md).
+   */
+  async verifyToken(bearerToken: string | undefined): Promise<RelayIdentityResult> {
+    if (!bearerToken) {
+      return { outcome: 'unauthorized' };
+    }
+    const parsed = parseRelayToken(bearerToken);
+    if (!parsed) {
+      return { outcome: 'unauthorized' };
+    }
+    const record = await this.identityStore.findActiveTokenWithShop(parsed.tokenId);
+    if (!record || !relayTokenHashMatches(bearerToken, record.tokenHash)) {
+      return { outcome: 'unauthorized' };
+    }
+    if (record.shopStatus === 'suspended') {
+      return { outcome: 'suspended' };
+    }
+    return {
+      outcome: 'identified',
+      shop: {
+        shopId: record.shopId,
+        displayName: record.shopDisplayName,
+        updateWindowEnd: record.updateWindowEnd
       }
     };
   }

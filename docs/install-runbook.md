@@ -238,6 +238,25 @@ Restore is assisted and destructive. Use:
 
 See [restore-runbook.md](./restore-runbook.md) before running a restore.
 
+## Download A Release
+
+Sold installs fetch release artifacts from the BellField relay using the
+shop's relay token. Downloads verify token identity only — they never affect
+the shop's delivery activation — and refuse releases dated past the license's
+update window.
+
+```powershell
+# List releases and entitlement:
+Invoke-RestMethod https://relay.bellfield.app/v1/releases -Headers @{ Authorization = "Bearer <relay token>" }
+# Download an entitled release:
+Invoke-WebRequest https://relay.bellfield.app/v1/releases/<releaseId>/download -Headers @{ Authorization = "Bearer <relay token>" } -OutFile bellfield-release.zip
+```
+
+BellField-side publishing: copy the zip into the relay host's `artifacts/`
+volume, then `relay-admin publish-release --file=<name> --version=<v>
+--release-date=YYYY-MM-DD`; record each shop's window with
+`relay-admin set-update-window`.
+
 ## Update Existing Install
 
 Run the updater from an extracted new release artifact, not from the installed

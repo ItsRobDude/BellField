@@ -15,6 +15,8 @@ export type RelayShopRecord = {
   status: RelayShopStatus;
   monthlySendQuota: number;
   suspendedReason: string | null;
+  /** YYYY-MM-DD from the shop's license; gates release downloads. */
+  updateWindowEnd: string | null;
   createdAt: Date;
 };
 
@@ -27,6 +29,7 @@ export type ActiveTokenWithShop = {
   shopDisplayName: string;
   shopStatus: RelayShopStatus;
   monthlySendQuota: number;
+  updateWindowEnd: string | null;
 };
 
 export type RelayTokenSummary = {
@@ -54,6 +57,17 @@ export type AuthenticatedRelayShop = {
   monthlySendQuota: number;
   tokenId: string;
   instanceId: string;
+};
+
+/**
+ * Token-verified shop identity WITHOUT activation binding — used by release
+ * downloads so a support download from another machine never rebinds or
+ * flaps the shop's activation.
+ */
+export type RelayShopIdentity = {
+  shopId: string;
+  displayName: string;
+  updateWindowEnd: string | null;
 };
 
 export interface RelayIdentityStore {

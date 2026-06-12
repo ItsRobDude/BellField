@@ -1,8 +1,12 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createReadStream } from 'node:fs';
+import { stat } from 'node:fs/promises';
+import * as path from 'node:path';
 import { getRelayRuntimeConfig } from '../common/config/runtime-config';
 import { DatabaseService } from '../database/database.service';
 import { RelayIdentityRepository } from '../modules/identity/relay-identity.repository';
 import { generateRelayToken } from '../modules/identity/relay-token.util';
+import { RelayReleasesRepository } from '../modules/releases/releases.repository';
 import { parseRelayAdminArgs, relayAdminUsage } from './relay-admin-args';
 
 // BellField-side issuance tooling (docs/relay-token-design.md). Runs against
@@ -39,6 +43,57 @@ async function main(): Promise<number> {
         displayName: input.displayName,
         licenseId: input.licenseId,
         monthlySendQuota
+      });
+      return 0;
+    }
+
+    if (input.command === 'publish-release') {
+      const releasesRepository = new RelayReleasesRepository(database);
+      const artifactsRoot = getRelayRuntimeConfig().artifactsRoot;
+      if (!artifactsRoot) {
+        console.error('Error: BELLFIELD_RELAY_ARTIFACTS_ROOT is not configured.');
+        return 1;
+      }
+      const root = path.resolve(artifactsRoot);
+      const absolute = path.resolve(root, input.file);
+      if (!absolute.startsWith(root + path.sep) && absolute !== root) {
+        console.error('Error: --file must live under the artifacts root.');
+        return 1;
+      }
+      let fileStat;
+      try {
+        fileStat = await stat(absolute);
+      } catch {
+        console.error(`Error: artifact file was not found: ${absolute}`);
+        return 1;
+      }
+      if (!fileStat.isFile() || fileStat.size <= 0) {
+        console.error('Error: artifact file is empty or not a regular file.');
+        return 1;
+      }
+      const existing = await releasesRepository.findReleaseByVersion(input.version);
+      if (existing) {
+        console.error(`Error: version "${input.version}" is already published.`);
+        return 1;
+      }
+      const sha256 = await hashFile(absolute);
+      const releaseId = randomUUID();
+      await releasesRepository.publishRelease({
+        id: releaseId,
+        version: input.version,
+        releaseDate: input.releaseDate,
+        filename: path.relative(root, absolute).split(path.sep).join('/'),
+        sha256,
+        byteSize: fileStat.size
+      });
+      printResult({
+        command: input.command,
+        releaseId,
+        version: input.version,
+        releaseDate: input.releaseDate,
+        filename: path.relative(root, absolute).split(path.sep).join('/'),
+        sha256,
+        byteSize: fileStat.size
       });
       return 0;
     }
@@ -92,6 +147,16 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    if (input.command === 'set-update-window') {
+      await repository.setShopUpdateWindow(shop.id, input.updateWindowEnd);
+      printResult({
+        command: input.command,
+        shopId: shop.id,
+        updateWindowEnd: input.updateWindowEnd
+      });
+      return 0;
+    }
+
     const tokens = await repository.listTokensForShop(shop.id);
     const events = await repository.listRecentEvents(shop.id, 20);
     printResult({
@@ -103,6 +168,7 @@ async function main(): Promise<number> {
         status: shop.status,
         monthlySendQuota: shop.monthlySendQuota,
         suspendedReason: shop.suspendedReason,
+        updateWindowEnd: shop.updateWindowEnd,
         createdAt: shop.createdAt.toISOString()
       },
       tokens: tokens.map((token) => ({
@@ -129,6 +195,16 @@ async function main(): Promise<number> {
 
 function printResult(result: Record<string, unknown>): void {
   console.log(JSON.stringify(result, null, 2));
+}
+
+function hashFile(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash('sha256');
+    createReadStream(filePath)
+      .on('error', reject)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('end', () => resolve(hash.digest('hex')));
+  });
 }
 
 main()

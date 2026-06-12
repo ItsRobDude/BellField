@@ -3,6 +3,8 @@ export type RelayAdminCommand =
   | { command: 'issue-token'; shopId: string }
   | { command: 'revoke-token'; shopId: string }
   | { command: 'reactivate-shop'; shopId: string }
+  | { command: 'set-update-window'; shopId: string; updateWindowEnd: string }
+  | { command: 'publish-release'; file: string; version: string; releaseDate: string }
   | { command: 'inspect'; shopId: string };
 
 export type RelayAdminParseResult =
@@ -15,8 +17,12 @@ export const relayAdminUsage = [
   '  relay-admin issue-token --shop-id=<shopId>',
   '  relay-admin revoke-token --shop-id=<shopId>',
   '  relay-admin reactivate-shop --shop-id=<shopId>',
+  '  relay-admin set-update-window --shop-id=<shopId> --end=YYYY-MM-DD',
+  '  relay-admin publish-release --file=<path-under-artifacts-root> --version=<v> --release-date=YYYY-MM-DD',
   '  relay-admin inspect --shop-id=<shopId>'
 ].join('\n');
+
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 function getFlag(args: string[], name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -61,6 +67,34 @@ export function parseRelayAdminArgs(args: string[]): RelayAdminParseResult {
       return { ok: false, error: `${command} requires --shop-id.` };
     }
     return { ok: true, parsed: { command, shopId } };
+  }
+
+  if (command === 'set-update-window') {
+    const shopId = getFlag(rest, 'shop-id')?.trim();
+    const updateWindowEnd = getFlag(rest, 'end')?.trim();
+    if (!shopId) {
+      return { ok: false, error: 'set-update-window requires --shop-id.' };
+    }
+    if (!updateWindowEnd || !ISO_DATE_PATTERN.test(updateWindowEnd)) {
+      return { ok: false, error: 'set-update-window requires --end=YYYY-MM-DD.' };
+    }
+    return { ok: true, parsed: { command, shopId, updateWindowEnd } };
+  }
+
+  if (command === 'publish-release') {
+    const file = getFlag(rest, 'file')?.trim();
+    const version = getFlag(rest, 'version')?.trim();
+    const releaseDate = getFlag(rest, 'release-date')?.trim();
+    if (!file) {
+      return { ok: false, error: 'publish-release requires --file.' };
+    }
+    if (!version) {
+      return { ok: false, error: 'publish-release requires --version.' };
+    }
+    if (!releaseDate || !ISO_DATE_PATTERN.test(releaseDate)) {
+      return { ok: false, error: 'publish-release requires --release-date=YYYY-MM-DD.' };
+    }
+    return { ok: true, parsed: { command, file, version, releaseDate } };
   }
 
   return { ok: false, error: command ? `Unknown command "${command}".` : 'No command given.' };

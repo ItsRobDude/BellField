@@ -18,6 +18,8 @@ export type RelayRuntimeConfig = {
   defaultMonthlySendQuota: number;
   rebindFlapThreshold: number;
   rebindFlapWindowMinutes: number;
+  /** Directory holding published release artifacts; unset disables downloads. */
+  artifactsRoot?: string;
 };
 
 function getNodeEnv(): RelayNodeEnv {
@@ -91,6 +93,7 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     webhookSigningSecret,
     defaultMonthlySendQuota,
     rebindFlapThreshold,
-    rebindFlapWindowMinutes
+    rebindFlapWindowMinutes,
+    artifactsRoot: process.env.BELLFIELD_RELAY_ARTIFACTS_ROOT?.trim() || undefined
   };
 }

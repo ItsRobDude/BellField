@@ -62,6 +62,54 @@ describe('parseRelayAdminArgs', () => {
     }
   );
 
+  it('parses set-update-window with a valid date', () => {
+    expect(
+      parseRelayAdminArgs(['set-update-window', '--shop-id=shop_1', '--end=2027-06-11'])
+    ).toEqual({
+      ok: true,
+      parsed: { command: 'set-update-window', shopId: 'shop_1', updateWindowEnd: '2027-06-11' }
+    });
+    expect(parseRelayAdminArgs(['set-update-window', '--shop-id=shop_1'])).toMatchObject({
+      ok: false
+    });
+    expect(
+      parseRelayAdminArgs(['set-update-window', '--shop-id=shop_1', '--end=June-2027'])
+    ).toMatchObject({ ok: false });
+  });
+
+  it('parses publish-release with file, version, and date', () => {
+    expect(
+      parseRelayAdminArgs([
+        'publish-release',
+        '--file=bellfield-1.2.3.zip',
+        '--version=1.2.3',
+        '--release-date=2026-06-11'
+      ])
+    ).toEqual({
+      ok: true,
+      parsed: {
+        command: 'publish-release',
+        file: 'bellfield-1.2.3.zip',
+        version: '1.2.3',
+        releaseDate: '2026-06-11'
+      }
+    });
+    expect(
+      parseRelayAdminArgs(['publish-release', '--version=1.2.3', '--release-date=2026-06-11'])
+    ).toMatchObject({ ok: false });
+    expect(
+      parseRelayAdminArgs(['publish-release', '--file=a.zip', '--release-date=2026-06-11'])
+    ).toMatchObject({ ok: false });
+    expect(
+      parseRelayAdminArgs([
+        'publish-release',
+        '--file=a.zip',
+        '--version=1.2.3',
+        '--release-date=soon'
+      ])
+    ).toMatchObject({ ok: false });
+  });
+
   it('rejects unknown or missing commands', () => {
     expect(parseRelayAdminArgs(['frobnicate'])).toMatchObject({ ok: false });
     expect(parseRelayAdminArgs([])).toMatchObject({ ok: false });
