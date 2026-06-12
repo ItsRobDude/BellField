@@ -10,7 +10,9 @@ target_dir="${1:?usage: backup-relay-db.sh <target-dir>}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 mkdir -p "$target_dir"
 
-docker compose -f "$(dirname "$0")/compose.yaml" exec -T relay-postgres \
+script_dir="$(dirname "$0")"
+docker compose -f "$script_dir/compose.yaml" --env-file "$script_dir/relay-host.env" \
+  exec -T relay-postgres \
   pg_dump -U relay -d bellfield_relay --format=custom \
   > "$target_dir/bellfield-relay-$stamp.dump"
 
