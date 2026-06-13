@@ -1,4 +1,5 @@
 import { Pressable, Text, View } from 'react-native';
+import { createBellFieldTranslator, type BellFieldLocale } from '@bellfield/i18n';
 import { formatPendingOperation } from './field-pending-replay';
 import { shouldOfferQueueResolution } from './field-queue-resolution';
 import type { PendingOperation } from './field-sync-types';
@@ -9,6 +10,7 @@ import type { FieldEquipmentRecord, FieldJob } from './field-workspace-types';
 type JobSyncTabProps = {
   equipment: FieldEquipmentRecord[];
   job: FieldJob;
+  locale: BellFieldLocale;
   pendingOperations: PendingOperation[];
   syncLastSuccessfulAt: string | null;
   onConfirmDiscardQueuedOperation: (operation: PendingOperation) => void;
@@ -18,18 +20,20 @@ type JobSyncTabProps = {
 export function JobSyncTab({
   equipment,
   job,
+  locale,
   pendingOperations,
   syncLastSuccessfulAt,
   onConfirmDiscardQueuedOperation,
   onRetryQueuedOperation
 }: JobSyncTabProps) {
+  const t = createBellFieldTranslator(locale);
   const jobOperations = getPendingOperationsForJob(job, equipment, pendingOperations);
 
   return (
     <View style={styles.block}>
-      <Text style={styles.sectionTitleSmall}>Queued work for this job</Text>
+      <Text style={styles.sectionTitleSmall}>{t('fieldWorkspace.syncQueuedJobTitle')}</Text>
       {jobOperations.length === 0 ? (
-        <Text style={styles.summaryText}>No local changes waiting for this job.</Text>
+        <Text style={styles.summaryText}>{t('fieldWorkspace.syncQueuedJobEmpty')}</Text>
       ) : (
         jobOperations.map((operation) => (
           <View key={operation.id} style={styles.queueItem}>
@@ -40,13 +44,17 @@ export function JobSyncTab({
                   onPress={() => onRetryQueuedOperation(operation.id)}
                   style={styles.secondaryButton}
                 >
-                  <Text style={styles.secondaryButtonText}>Retry on next sync</Text>
+                  <Text style={styles.secondaryButtonText}>
+                    {t('fieldWorkspace.actions.retryOnNextSync')}
+                  </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => onConfirmDiscardQueuedOperation(operation)}
                   style={styles.dangerButton}
                 >
-                  <Text style={styles.dangerButtonText}>Discard local change</Text>
+                  <Text style={styles.dangerButtonText}>
+                    {t('fieldWorkspace.actions.discardLocalChange')}
+                  </Text>
                 </Pressable>
               </View>
             ) : null}
@@ -54,7 +62,8 @@ export function JobSyncTab({
         ))
       )}
       <Text style={styles.summaryText}>
-        Last successful sync: {syncLastSuccessfulAt ?? 'Not synced yet'}
+        {t('fieldWorkspace.syncLastSuccessful')}:{' '}
+        {syncLastSuccessfulAt ?? t('fieldWorkspace.syncNotSyncedYet')}
       </Text>
     </View>
   );

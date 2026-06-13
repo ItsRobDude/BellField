@@ -10,6 +10,7 @@ import {
   View
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { createBellFieldTranslator, type BellFieldLocale } from '@bellfield/i18n';
 import {
   getAssignedFieldWork,
   getFieldTruckStock,
@@ -63,6 +64,7 @@ import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
 type Props = {
   apiBaseUrl: string;
   employee: EmployeeSummary;
+  locale: BellFieldLocale;
   sessionToken: string;
   onSignOut: () => void;
   onSessionAccessLost: (message: string) => void;
@@ -97,11 +99,13 @@ async function syncTruckStock(
 export function TechnicianWorkspaceScreen({
   apiBaseUrl,
   employee,
+  locale,
   sessionToken,
   onSignOut,
   onSessionAccessLost
 }: Props) {
   const safeAreaInsets = useSafeAreaInsets();
+  const t = useMemo(() => createBellFieldTranslator(locale), [locale]);
   const [serverSnapshot, setServerSnapshot] = useState<AssignedWorkSnapshot | null>(null);
   const [truckStock, setTruckStock] = useState<TruckStockSnapshot | null>(null);
   const [pendingOperations, setPendingOperations] = useState<PendingOperation[]>([]);
@@ -169,8 +173,7 @@ export function TechnicianWorkspaceScreen({
 
   const clearLocalStateForSessionAccessLoss = useCallback(
     async (serverMessage: string) => {
-      const message =
-        'Device access ended. BellField cleared local field data from this device. Sign in again if access has been restored.';
+      const message = t('fieldWorkspace.deviceAccessEnded');
 
       await clearFieldDeviceLocalStorage();
       setServerSnapshot(null);
@@ -180,7 +183,7 @@ export function TechnicianWorkspaceScreen({
       setErrorMessage(serverMessage);
       onSessionAccessLost(message);
     },
-    [onSessionAccessLost]
+    [onSessionAccessLost, t]
   );
 
   useEffect(() => {
@@ -221,13 +224,13 @@ export function TechnicianWorkspaceScreen({
       } catch (error) {
         if (isFieldSessionAccessLostError(error)) {
           await clearLocalStateForSessionAccessLoss(
-            error instanceof Error ? error.message : 'This device session is no longer valid.'
+            error instanceof Error ? error.message : t('fieldWorkspace.deviceAccessEnded')
           );
           return;
         }
 
         setErrorMessage(
-          error instanceof Error ? error.message : 'Unable to load BellField field storage.'
+          error instanceof Error ? error.message : t('fieldWorkspace.unableToLoadStorage')
         );
       } finally {
         setIsInitializing(false);
@@ -235,7 +238,7 @@ export function TechnicianWorkspaceScreen({
     }
 
     void initializeWorkspace();
-  }, [apiBaseUrl, clearLocalStateForSessionAccessLoss, sessionToken]);
+  }, [apiBaseUrl, clearLocalStateForSessionAccessLoss, sessionToken, t]);
 
   async function refreshAssignedWork(showSpinner = true, metadataOverride?: SyncMetadata) {
     if (showSpinner) {
@@ -262,12 +265,12 @@ export function TechnicianWorkspaceScreen({
     } catch (error) {
       if (isFieldSessionAccessLostError(error)) {
         await clearLocalStateForSessionAccessLoss(
-          error instanceof Error ? error.message : 'This device session is no longer valid.'
+          error instanceof Error ? error.message : t('fieldWorkspace.deviceAccessEnded')
         );
         return;
       }
 
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to refresh assigned work.');
+      setErrorMessage(error instanceof Error ? error.message : t('fieldWorkspace.unableToRefresh'));
     } finally {
       if (showSpinner) {
         setIsRefreshing(false);
@@ -464,14 +467,14 @@ export function TechnicianWorkspaceScreen({
       return;
     }
 
-    Alert.alert(
-      'Unsynced work',
-      'This device still has BellField field changes stored locally that have not fully synced. Sign out anyway?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Sign out', style: 'destructive', onPress: onSignOut }
-      ]
-    );
+    Alert.alert(t('fieldWorkspace.signOutUnsyncedTitle'), t('fieldWorkspace.signOutUnsyncedBody'), [
+      { text: t('fieldWorkspace.actions.cancel'), style: 'cancel' },
+      {
+        text: t('fieldWorkspace.actions.signOut'),
+        style: 'destructive',
+        onPress: onSignOut
+      }
+    ]);
   }
 
   if (isInitializing) {
@@ -479,7 +482,7 @@ export function TechnicianWorkspaceScreen({
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingState}>
           <ActivityIndicator color="#1c6b57" />
-          <Text style={styles.summaryText}>Preparing BellField field storage...</Text>
+          <Text style={styles.summaryText}>{t('fieldWorkspace.loadingStorage')}</Text>
         </View>
       </SafeAreaView>
     );
@@ -499,6 +502,7 @@ export function TechnicianWorkspaceScreen({
             employee={employee}
             isRefreshing={isRefreshing}
             isSyncing={isSyncing}
+            locale={locale}
             onRefresh={() => void refreshAssignedWork()}
             onSignOut={handleSignOut}
             onSyncNow={() => void syncNow()}
@@ -507,12 +511,12 @@ export function TechnicianWorkspaceScreen({
             syncMetadata={syncMetadata}
           />
 
-          <FieldOfficeChangeNotice messages={officeChangeMessages} />
+          <FieldOfficeChangeNotice locale={locale} messages={officeChangeMessages} />
 
           {errorMessage ? <Text style={styles.errorText}>{errorMessage}</Text> : null}
 
           {activeWorkspaceTab === 'jobs' && scheduledJobs.length === 0 ? (
-            <FieldNoAssignedJobsCard />
+            <FieldNoAssignedJobsCard locale={locale} />
           ) : null}
 
           {activeWorkspaceTab === 'jobs' ? (
@@ -524,6 +528,7 @@ export function TechnicianWorkspaceScreen({
               canReplaceRemoveEquipment={canReplaceRemoveEquipment}
               currentEmployeeId={employee.id}
               customerLookup={customerLookup}
+              locale={locale}
               locationLookup={locationLookup}
               onChangeDetailTab={setActiveDetailTab}
               onCommitFinishReview={queueAppointmentFinishReview}
@@ -553,6 +558,7 @@ export function TechnicianWorkspaceScreen({
               assignedWork={assignedWork}
               isRefreshing={isRefreshing}
               isSyncing={isSyncing}
+              locale={locale}
               onDiscardQueuedOperation={confirmDiscardQueuedOperation}
               onRefresh={() => void refreshAssignedWork()}
               onRetryQueuedOperation={(operationId) => void retryQueuedOperation(operationId)}
@@ -563,13 +569,18 @@ export function TechnicianWorkspaceScreen({
             />
           ) : null}
 
-          {activeWorkspaceTab === 'messages' ? <FieldUnavailableSurface kind="messages" /> : null}
+          {activeWorkspaceTab === 'messages' ? (
+            <FieldUnavailableSurface kind="messages" locale={locale} />
+          ) : null}
 
-          {activeWorkspaceTab === 'settings' ? <FieldUnavailableSurface kind="settings" /> : null}
+          {activeWorkspaceTab === 'settings' ? (
+            <FieldUnavailableSurface kind="settings" locale={locale} />
+          ) : null}
         </View>
       </ScrollView>
       <FieldWorkspaceBottomNav
         activeTab={activeWorkspaceTab}
+        locale={locale}
         onChangeTab={setActiveWorkspaceTab}
         safeAreaBottom={safeAreaInsets.bottom}
       />

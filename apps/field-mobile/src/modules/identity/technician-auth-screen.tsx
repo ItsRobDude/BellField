@@ -70,6 +70,7 @@ export function TechnicianAuthScreen() {
       <TechnicianWorkspaceScreen
         apiBaseUrl={apiBaseUrl}
         employee={employee}
+        locale={locale}
         sessionToken={sessionToken}
         onSessionAccessLost={(message) => {
           setSessionToken(null);

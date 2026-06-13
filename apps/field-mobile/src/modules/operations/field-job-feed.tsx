@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
+import { createBellFieldTranslator, type BellFieldLocale } from '@bellfield/i18n';
 import type {
   AppointmentFinishOutcome,
   AppointmentStatus,
@@ -43,6 +44,11 @@ import {
   summarizeJobQueueBadge,
   type FieldDetailTab
 } from './field-workspace-layout';
+import {
+  formatFieldDetailTabLabel,
+  formatQueueBadgeLabel,
+  QueueBadge
+} from './field-job-feed-labels';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
 import type {
   FieldAgreementCoverage,
@@ -73,6 +79,7 @@ type FieldJobFeedProps = {
   canReplaceRemoveEquipment: boolean;
   currentEmployeeId: string;
   customerLookup: Map<string, FieldCustomer>;
+  locale: BellFieldLocale;
   locationLookup: Map<string, FieldLocation>;
   pendingOperations: PendingOperation[];
   scheduledJobs: FieldJob[];
@@ -115,6 +122,7 @@ export function FieldJobFeed({
   canReplaceRemoveEquipment,
   currentEmployeeId,
   customerLookup,
+  locale,
   locationLookup,
   pendingOperations,
   scheduledJobs,
@@ -137,6 +145,7 @@ export function FieldJobFeed({
   onReturnToHome,
   onCommitFinishReview
 }: FieldJobFeedProps) {
+  const t = createBellFieldTranslator(locale);
   const [noteDrafts, setNoteDrafts] = useState<Record<string, string>>({});
   const [mediaCaptionDrafts, setMediaCaptionDrafts] = useState<Record<string, string>>({});
   const [registerCreateDrafts, setRegisterCreateDrafts] = useState<
@@ -388,6 +397,7 @@ export function FieldJobFeed({
         const jobAgreementCoverage = getAgreementCoverageForJob(job, agreementCoverage);
         const workOrderLine = formatWorkOrderLine(job);
         const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
+        const queueBadgeLabel = formatQueueBadgeLabel(queueBadge, t);
         const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
         const cardMetadata = buildFieldJobCardMetadata({
           currentEmployeeId,
@@ -411,10 +421,10 @@ export function FieldJobFeed({
                   <Text style={styles.jobCardSummary}>{cardMetadata.summaryLine}</Text>
                   {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
                 </View>
-                <QueueBadge label={queueBadge.label} tone={queueBadge.tone} />
+                <QueueBadge label={queueBadgeLabel} tone={queueBadge.tone} />
               </View>
               <Text style={styles.jobLocationLine}>{cardMetadata.locationLine}</Text>
-              <Text style={styles.pendingText}>Open details</Text>
+              <Text style={styles.pendingText}>{t('fieldWorkspace.openDetails')}</Text>
             </Pressable>
           );
         }
@@ -423,16 +433,20 @@ export function FieldJobFeed({
           <View key={job.id} style={styles.expandedJobCard}>
             <View style={styles.detailHeaderRow}>
               <Pressable onPress={onReturnToHome} style={styles.secondaryButton}>
-                <Text style={styles.secondaryButtonText}>Collapse</Text>
+                <Text style={styles.secondaryButtonText}>
+                  {t('fieldWorkspace.actions.collapse')}
+                </Text>
               </Pressable>
-              <QueueBadge label={queueBadge.label} tone={queueBadge.tone} />
+              <QueueBadge label={queueBadgeLabel} tone={queueBadge.tone} />
             </View>
             <Text style={styles.scheduleLabel}>{cardMetadata.scheduleLabel}</Text>
             <Text style={styles.jobCardTitle}>{cardMetadata.title}</Text>
             <Text style={styles.jobCardSummary}>{cardMetadata.summaryLine}</Text>
             {workOrderLine ? <Text style={styles.summaryText}>{workOrderLine}</Text> : null}
             <Text style={styles.jobLocationLine}>{cardMetadata.locationLine}</Text>
-            <Text style={styles.summaryText}>Bill to: {job.billToCustomerName}</Text>
+            <Text style={styles.summaryText}>
+              {t('fieldWorkspace.billTo')}: {job.billToCustomerName}
+            </Text>
 
             <ScrollView
               horizontal
@@ -455,7 +469,7 @@ export function FieldJobFeed({
                       activeDetailTab === tab.id ? styles.segmentButtonTextActive : null
                     ]}
                   >
-                    {tab.label}
+                    {formatFieldDetailTabLabel(tab.id, t)}
                   </Text>
                 </Pressable>
               ))}
@@ -735,6 +749,7 @@ export function FieldJobFeed({
                 job={job}
                 pendingOperations={pendingOperations}
                 syncLastSuccessfulAt={syncLastSuccessfulAt}
+                locale={locale}
                 onConfirmDiscardQueuedOperation={onConfirmDiscardQueuedOperation}
                 onRetryQueuedOperation={onRetryQueuedOperation}
               />
@@ -767,22 +782,5 @@ export function FieldJobFeed({
         );
       })}
     </>
-  );
-}
-
-function QueueBadge({ label, tone }: { label: string; tone: 'quiet' | 'attention' | 'alert' }) {
-  return (
-    <Text
-      style={[
-        styles.queueBadge,
-        tone === 'alert'
-          ? styles.queueBadgeAlert
-          : tone === 'attention'
-            ? styles.queueBadgeAttention
-            : styles.queueBadgeQuiet
-      ]}
-    >
-      {label}
-    </Text>
   );
 }
