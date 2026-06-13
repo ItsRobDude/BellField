@@ -70,7 +70,8 @@
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm exec lint-staged"
+    "pre-commit": "pnpm exec lint-staged",
+    "pre-push": "pnpm test"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}": "prettier --write"
