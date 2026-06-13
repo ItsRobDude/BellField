@@ -39,12 +39,31 @@ function firstExisting(paths) {
   return paths.find((candidate) => existsSync(candidate)) ?? paths[0];
 }
 
+function isTruthy(value) {
+  return ['1', 'true', 'yes', 'on'].includes(
+    String(value ?? '')
+      .trim()
+      .toLowerCase()
+  );
+}
+
+function assertProductionServiceEnv(env) {
+  if (env.NODE_ENV && env.NODE_ENV.trim() !== 'production') {
+    throw new Error('Windows service manifests must run BellField with NODE_ENV=production.');
+  }
+
+  if (isTruthy(env.BOOTSTRAP_SEED_DATA)) {
+    throw new Error('Windows service manifests must not enable BOOTSTRAP_SEED_DATA.');
+  }
+}
+
 const args = readArgs();
 const releaseRoot = resolve(String(args['release-root'] ?? defaultReleaseRoot));
 const installRoot = resolve(String(args['install-root'] ?? 'C:\\BellField'));
 const envPath = resolve(String(args.env ?? join(installRoot, 'bellfield-server.env')));
 const outputDir = resolve(String(args.output ?? join(releaseRoot, 'services')));
 const env = parseEnvFile(envPath);
+assertProductionServiceEnv(env);
 const nodeExe = join(releaseRoot, 'runtime', 'node', 'node.exe');
 const postgresBin = env.BELLFIELD_POSTGRES_BIN ?? join(releaseRoot, 'postgres', 'bin');
 const postgresData = env.BELLFIELD_POSTGRES_DATA ?? join(installRoot, 'data', 'postgres');
@@ -54,8 +73,6 @@ const officeServer = firstExisting([
 ]);
 const apiEnv = {
   ...pickEnv(env, [
-    'NODE_ENV',
-    'BOOTSTRAP_SEED_DATA',
     'DATABASE_URL',
     'BELLFIELD_API_PORT',
     'BELLFIELD_OFFICE_ORIGINS',
@@ -73,28 +90,33 @@ const apiEnv = {
     'BELLFIELD_RELAY_TOKEN',
     'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
   ]),
+  NODE_ENV: 'production',
+  BOOTSTRAP_SEED_DATA: 'false',
   PORT: env.BELLFIELD_API_PORT ?? '3001'
 };
 // The worker shares the relay client credentials for delivery retry and
 // status polling jobs.
-const workerEnv = pickEnv(env, [
-  'NODE_ENV',
-  'DATABASE_URL',
-  'BELLFIELD_MEDIA_ROOT',
-  'BELLFIELD_LICENSE_PATH',
-  'BELLFIELD_BACKUP_ENABLED',
-  'BELLFIELD_BACKUP_ROOT',
-  'BELLFIELD_BACKUP_INTERVAL_MINUTES',
-  'BELLFIELD_BACKUP_RETENTION_COUNT',
-  'BELLFIELD_BACKUP_STALE_AFTER_HOURS',
-  'BELLFIELD_POSTGRES_BIN',
-  'BELLFIELD_PG_DUMP_PATH',
-  'BELLFIELD_RELAY_BASE_URL',
-  'BELLFIELD_RELAY_TOKEN',
-  'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
-]);
+const workerEnv = {
+  ...pickEnv(env, [
+    'DATABASE_URL',
+    'BELLFIELD_MEDIA_ROOT',
+    'BELLFIELD_LICENSE_PATH',
+    'BELLFIELD_BACKUP_ENABLED',
+    'BELLFIELD_BACKUP_ROOT',
+    'BELLFIELD_BACKUP_INTERVAL_MINUTES',
+    'BELLFIELD_BACKUP_RETENTION_COUNT',
+    'BELLFIELD_BACKUP_STALE_AFTER_HOURS',
+    'BELLFIELD_POSTGRES_BIN',
+    'BELLFIELD_PG_DUMP_PATH',
+    'BELLFIELD_RELAY_BASE_URL',
+    'BELLFIELD_RELAY_TOKEN',
+    'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
+  ]),
+  NODE_ENV: 'production'
+};
 const officeEnv = {
-  ...pickEnv(env, ['NODE_ENV', 'BELLFIELD_OFFICE_WEB_PORT', 'NEXT_PUBLIC_API_BASE_URL']),
+  ...pickEnv(env, ['BELLFIELD_OFFICE_WEB_PORT', 'NEXT_PUBLIC_API_BASE_URL']),
+  NODE_ENV: 'production',
   PORT: env.BELLFIELD_OFFICE_WEB_PORT ?? '3000'
 };
 

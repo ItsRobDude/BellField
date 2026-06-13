@@ -50,6 +50,9 @@ Built, tested, and (where marked) deployed. Each line names its evidence.
 - **Security harness in CI** — secret scanning, blocking prod dependency
   audit (currently zero known vulnerabilities), `SECURITY.md` +
   `security@bellfield.app`, prod env-var startup validation, Dependabot
+- **Release runtime-mode guard** — release build manifests now refuse API
+  startup unless `NODE_ENV=production`; Windows service manifest rendering
+  emits production mode for API/worker/office and rejects bootstrap seeding
 - **Commercial inputs decided** — pricing, update-window default, relay rate
   — [positioning-and-pricing.md](./positioning-and-pricing.md)
 
@@ -78,11 +81,10 @@ Gate day is validation debt, not build debt — it never blocks build lanes.
 
 ## 3. Security before pilot
 
-- [ ] the release artifact must refuse to run in development mode: with
-      `NODE_ENV` unset it currently defaults to development, which enables
-      bootstrap seeding (publicly-known `bellfield-*` passwords) and weak dev
-      fallbacks. Refuse to start, or hard-disable seeding and fallbacks,
-      unless explicitly production.
+- [x] the release artifact must refuse to run in development mode. Closed
+      2026-06-13: release build manifests require API
+      `NODE_ENV=production`, and Windows service manifests force production
+      mode with seed bootstrap disabled.
 - [ ] a real security review before the first pilot
 - [ ] the managed-remote-access prerequisites in
       [remote-access-plan.md](./remote-access-plan.md) — login throttling,

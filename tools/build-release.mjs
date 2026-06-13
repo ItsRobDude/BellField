@@ -3,6 +3,7 @@ import {
   cpSync,
   existsSync,
   mkdirSync,
+  readdirSync,
   readFileSync,
   rmSync,
   writeFileSync
@@ -16,11 +17,121 @@ import { writeSignedReleaseArtifact } from './update/release-artifact.mjs';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
 const args = readArgs();
+let cachedPnpmExecutable;
+
+function expectedPnpmVersion() {
+  const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
+  const match = /^pnpm@(.+)$/.exec(String(packageJson.packageManager ?? ''));
+  return match?.[1] ?? null;
+}
+
+function collectPnpmExecutables(directory, results = []) {
+  if (!directory || !existsSync(directory)) {
+    return results;
+  }
+
+  for (const entry of readdirSync(directory, { withFileTypes: true })) {
+    const entryPath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      collectPnpmExecutables(entryPath, results);
+    } else if (entry.isFile() && entry.name.toLowerCase() === 'pnpm.exe') {
+      results.push(entryPath);
+    }
+  }
+
+  return results;
+}
+
+function readExecutableVersion(executable) {
+  const result = spawnSync(executable, ['--version'], {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+  return result.status === 0 ? result.stdout.trim() : null;
+}
+
+function pathEntries() {
+  return (process.env.PATH ?? process.env.Path ?? '')
+    .split(';')
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function findPnpmExecutable() {
+  if (cachedPnpmExecutable) {
+    return cachedPnpmExecutable;
+  }
+
+  const expected = expectedPnpmVersion();
+  const searchRoots = [
+    process.env.PNPM_HOME,
+    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'pnpm') : null
+  ].filter(Boolean);
+  const candidates = [
+    ...searchRoots.flatMap((root) => collectPnpmExecutables(join(root, '.tools'))),
+    ...pathEntries()
+      .map((entry) => join(entry, 'pnpm.exe'))
+      .filter((candidate) => existsSync(candidate))
+  ];
+
+  for (const candidate of candidates) {
+    if (!expected || readExecutableVersion(candidate) === expected) {
+      cachedPnpmExecutable = candidate;
+      return cachedPnpmExecutable;
+    }
+  }
+
+  if (candidates[0]) {
+    cachedPnpmExecutable = candidates[0];
+    return cachedPnpmExecutable;
+  }
+
+  return null;
+}
+
+function resolveCommandInvocation(command, args) {
+  if (process.platform !== 'win32') {
+    return { executable: command, args, env: process.env };
+  }
+
+  if (command === 'pnpm') {
+    const pnpmExecutable = findPnpmExecutable();
+    if (pnpmExecutable) {
+      return { executable: pnpmExecutable, args, env: process.env };
+    }
+
+    const corepackPnpm = join(
+      dirname(process.execPath),
+      'node_modules',
+      'corepack',
+      'dist',
+      'pnpm.js'
+    );
+    if (!existsSync(corepackPnpm)) {
+      throw new Error('Could not find a pnpm.exe on PATH/PNPM_HOME or a Corepack pnpm entrypoint.');
+    }
+    return {
+      executable: process.execPath,
+      args: [corepackPnpm, ...args],
+      env: { ...process.env, COREPACK_ENABLE_DOWNLOAD_PROMPT: '0' }
+    };
+  }
+
+  if (command === 'git') {
+    return { executable: 'git.exe', args, env: process.env };
+  }
+
+  return { executable: command, args, env: process.env };
+}
 
 function run(command, args) {
-  const result = spawnSync(command, args, {
+  const invocation = resolveCommandInvocation(command, args);
+  const result = spawnSync(invocation.executable, invocation.args, {
     cwd: repoRoot,
-    shell: process.platform === 'win32',
+    env: invocation.env,
+    shell: false,
     stdio: 'inherit'
   });
 
@@ -34,9 +145,11 @@ function run(command, args) {
 }
 
 function runCapture(command, args) {
-  const result = spawnSync(command, args, {
+  const invocation = resolveCommandInvocation(command, args);
+  const result = spawnSync(invocation.executable, invocation.args, {
     cwd: repoRoot,
-    shell: process.platform === 'win32',
+    env: invocation.env,
+    shell: false,
     encoding: 'utf8',
     stdio: ['ignore', 'pipe', 'pipe']
   });

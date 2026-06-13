@@ -20,6 +20,9 @@ Validated on the development machine:
 - release assembly writes a build manifest that forces license-required mode in
   sold-shaped artifacts, and stamps version + release date for update
   entitlement checks
+- release build manifests force the API to run with `NODE_ENV=production`; the
+  Windows service renderer emits production mode for API/worker/office and
+  refuses bootstrap seed data
 - release assembly signs update artifacts with `bellfield-update-manifest.json`
   and `bellfield-update-signature.json`
 - worker scheduled backup foundation exists: backup run table, configured
@@ -100,6 +103,9 @@ License defaults written by the config helper:
 
 Development/source runs use `BELLFIELD_LICENSE_REQUIRED=false`; customer-shaped server configs require the license file.
 Release artifacts also include `bellfield-build-manifest.json` with `licenseRequired=true`, so the API still requires a license even if the env flag is edited to false.
+The same release manifest also refuses API startup unless `NODE_ENV=production`.
+The service-manifest renderer writes `NODE_ENV=production` for API, worker, and
+office-web services, and refuses `BOOTSTRAP_SEED_DATA=true`.
 
 Backup defaults written by the config helper:
 

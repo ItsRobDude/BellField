@@ -90,7 +90,8 @@ These must all be performed and dated before the first sold install or pilot.
 - Live contradictions after Phase 1 repo work: the interim Resend key remains a
   BellField-operated-only bridge until Phase 5, and the release/runbook path is
   not yet clean-machine certified.
-- Genuinely ready: explicit seed posture, production CORS allowlist,
+- Genuinely ready: explicit seed posture, release-manifest production-mode
+  enforcement, production CORS allowlist,
   structured email failure codes, provider-key seam, shared email attachment
   cap, snapshot-at-queue-time semantics, and snapshot read/verify path.
 

@@ -29,6 +29,7 @@ try {
     envPath,
     [
       'NODE_ENV=production',
+      'BOOTSTRAP_SEED_DATA=false',
       'DATABASE_URL=postgresql://bellfield:CHANGE_ME@127.0.0.1:5432/bellfield',
       'BELLFIELD_API_PORT=3001',
       'BELLFIELD_OFFICE_WEB_PORT=3000',
@@ -82,8 +83,20 @@ try {
   }
 
   check('api keeps database URL', apiXml.includes('DATABASE_URL'));
+  check(
+    'api runs in production mode',
+    apiXml.includes('<env name="NODE_ENV" value="production" />')
+  );
+  check(
+    'api disables bootstrap seed data',
+    apiXml.includes('<env name="BOOTSTRAP_SEED_DATA" value="false" />')
+  );
   check('api keeps media token secret', apiXml.includes('BELLFIELD_MEDIA_TOKEN_SECRET'));
   check('worker keeps database URL', workerXml.includes('DATABASE_URL'));
+  check(
+    'worker runs in production mode',
+    workerXml.includes('<env name="NODE_ENV" value="production" />')
+  );
   check(
     'worker does not receive media token secret',
     !workerXml.includes('BELLFIELD_MEDIA_TOKEN_SECRET')
@@ -95,6 +108,10 @@ try {
   );
   check('office does not receive database URL', !officeXml.includes('DATABASE_URL'));
   check(
+    'office runs in production mode',
+    officeXml.includes('<env name="NODE_ENV" value="production" />')
+  );
+  check(
     'office does not receive media token secret',
     !officeXml.includes('BELLFIELD_MEDIA_TOKEN_SECRET')
   );
@@ -103,6 +120,30 @@ try {
   check('worker keeps relay token', workerXml.includes('BELLFIELD_RELAY_TOKEN'));
   check('postgres does not receive relay token', !postgresXml.includes('BELLFIELD_RELAY_TOKEN'));
   check('office does not receive relay token', !officeXml.includes('BELLFIELD_RELAY_TOKEN'));
+
+  writeFileSync(
+    envPath,
+    readFileSync(envPath, 'utf8').replace('NODE_ENV=production', 'NODE_ENV=development')
+  );
+  const developmentResult = renderServiceManifests();
+  check('renderer rejects non-production service NODE_ENV', developmentResult.status !== 0);
+  check(
+    'renderer explains non-production service NODE_ENV refusal',
+    `${developmentResult.stderr}${developmentResult.stdout}`.includes('NODE_ENV=production')
+  );
+
+  writeFileSync(
+    envPath,
+    readFileSync(envPath, 'utf8')
+      .replace('NODE_ENV=development', 'NODE_ENV=production')
+      .replace('BOOTSTRAP_SEED_DATA=false', 'BOOTSTRAP_SEED_DATA=true')
+  );
+  const seedResult = renderServiceManifests();
+  check('renderer rejects bootstrap seed data for service manifests', seedResult.status !== 0);
+  check(
+    'renderer explains bootstrap seed data refusal',
+    `${seedResult.stderr}${seedResult.stdout}`.includes('BOOTSTRAP_SEED_DATA')
+  );
 
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
@@ -123,6 +164,20 @@ function readManifest(serviceId) {
     throw new Error(`Missing service manifest: ${serviceId}`);
   }
   return readFileSync(pathName, 'utf8');
+}
+
+function renderServiceManifests() {
+  return spawnSync(
+    process.execPath,
+    [
+      renderScript,
+      `--release-root=${releaseRoot}`,
+      `--install-root=${installRoot}`,
+      `--env=${envPath}`,
+      `--output=${outputDir}`
+    ],
+    { encoding: 'utf8', shell: false }
+  );
 }
 
 function check(name, passed) {

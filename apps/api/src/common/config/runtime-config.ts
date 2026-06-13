@@ -122,6 +122,10 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     getBoolean(process.env.BELLFIELD_LICENSE_REQUIRED, false);
   const licensePath = process.env.BELLFIELD_LICENSE_PATH?.trim() || undefined;
 
+  if (buildManifest?.buildKind === 'release' && !isProduction) {
+    problems.push('Release artifacts must run with NODE_ENV=production.');
+  }
+
   if (isProduction && bootstrapSeedData) {
     problems.push('BOOTSTRAP_SEED_DATA must not be true in production.');
   }

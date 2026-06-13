@@ -257,6 +257,35 @@ describe('getApiRuntimeConfig', () => {
     }
   });
 
+  it('refuses a release build manifest when NODE_ENV is not production', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    try {
+      const manifestPath = join(root, 'bellfield-build-manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(buildManifest()), 'utf8');
+      process.env.NODE_ENV = 'development';
+      process.env.BELLFIELD_BUILD_MANIFEST_PATH = manifestPath;
+      process.env.BELLFIELD_LICENSE_PATH = 'C:\\BellField\\data\\license\\bellfield-license.json';
+
+      expect(() => getApiRuntimeConfig()).toThrow(/NODE_ENV=production/);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('refuses a release build manifest when NODE_ENV is unset', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    try {
+      const manifestPath = join(root, 'bellfield-build-manifest.json');
+      writeFileSync(manifestPath, JSON.stringify(buildManifest()), 'utf8');
+      process.env.BELLFIELD_BUILD_MANIFEST_PATH = manifestPath;
+      process.env.BELLFIELD_LICENSE_PATH = 'C:\\BellField\\data\\license\\bellfield-license.json';
+
+      expect(() => getApiRuntimeConfig()).toThrow(/NODE_ENV=production/);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
   it('accepts a release build manifest when the required license path is configured', () => {
     const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
     try {
