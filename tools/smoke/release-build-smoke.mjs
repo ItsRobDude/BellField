@@ -1,5 +1,6 @@
-import { existsSync, readFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { dirname, join, relative, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeSmokeEvidence } from './smoke-evidence.mjs';
 
@@ -23,6 +24,8 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 try {
   check('release root exists', existsSync(releaseRoot), { releaseRoot });
+  const expectedSourceCommit =
+    getArgValue('--expected-source-commit') ?? runCapture('git', ['rev-parse', '--short', 'HEAD']);
 
   const manifestPath = join(releaseRoot, 'bellfield-build-manifest.json');
   check('build manifest exists', existsSync(manifestPath));
@@ -46,6 +49,14 @@ try {
     typeof manifest.sourceCommit === 'string' && manifest.sourceCommit.length > 0,
     {
       sourceCommit: manifest.sourceCommit
+    }
+  );
+  check(
+    'manifest source commit matches current checkout',
+    manifest.sourceCommit === expectedSourceCommit,
+    {
+      sourceCommit: manifest.sourceCommit,
+      expectedSourceCommit
     }
   );
 
@@ -76,9 +87,36 @@ try {
     'worker dist index exists',
     existsSync(join(releaseRoot, 'apps', 'worker', 'dist', 'index.js'))
   );
+  const officeServer = firstExisting([
+    join(releaseRoot, 'apps', 'office-web', 'server.js'),
+    join(releaseRoot, 'apps', 'office-web', 'apps', 'office-web', 'server.js')
+  ]);
+  check('office-web standalone server exists', Boolean(officeServer), {
+    officeServer: officeServer ? relative(repoRoot, officeServer) : null
+  });
+  const officeServerRoot = dirname(officeServer);
+  const officeStaticRoot = join(officeServerRoot, '.next', 'static');
+  check('office-web static assets are beside the standalone server', existsSync(officeStaticRoot), {
+    officeServerRoot: relative(repoRoot, officeServerRoot),
+    officeStaticRoot: relative(repoRoot, officeStaticRoot)
+  });
   check(
-    'office-web standalone server exists',
-    existsSync(join(releaseRoot, 'apps', 'office-web', 'apps', 'office-web', 'server.js'))
+    'office-web static JavaScript assets are packaged',
+    hasFileMatching(officeStaticRoot, /\.js$/),
+    {
+      officeStaticRoot: relative(repoRoot, officeStaticRoot)
+    }
+  );
+  const officeSourcePublicRoot = join(repoRoot, 'apps', 'office-web', 'public');
+  const officeReleasePublicRoot = join(officeServerRoot, 'public');
+  check(
+    'office-web public assets are packaged when present',
+    !existsSync(officeSourcePublicRoot) || existsSync(officeReleasePublicRoot),
+    {
+      officeSourcePublicRoot: relative(repoRoot, officeSourcePublicRoot),
+      officeReleasePublicRoot: relative(repoRoot, officeReleasePublicRoot),
+      sourcePublicExists: existsSync(officeSourcePublicRoot)
+    }
   );
   check(
     'api migrations are packaged',
@@ -133,4 +171,42 @@ function check(name, passed, details = {}) {
   if (!passed) {
     throw new Error(name);
   }
+}
+
+function firstExisting(paths) {
+  return paths.find((candidate) => existsSync(candidate));
+}
+
+function hasFileMatching(root, pattern) {
+  if (!existsSync(root)) {
+    return false;
+  }
+
+  for (const entry of readdirSync(root)) {
+    const entryPath = join(root, entry);
+    const stats = statSync(entryPath);
+    if (stats.isDirectory() && hasFileMatching(entryPath, pattern)) {
+      return true;
+    }
+    if (stats.isFile() && pattern.test(entry)) {
+      return true;
+    }
+  }
+
+  return false;
+}
+
+function runCapture(command, args) {
+  const result = spawnSync(command, args, {
+    cwd: repoRoot,
+    encoding: 'utf8',
+    shell: false,
+    stdio: ['ignore', 'pipe', 'pipe']
+  });
+
+  if (result.status !== 0 || result.error) {
+    throw new Error(`Failed to run ${command} ${args.join(' ')}`);
+  }
+
+  return result.stdout.trim();
 }
