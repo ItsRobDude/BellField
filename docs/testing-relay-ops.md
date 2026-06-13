@@ -87,6 +87,24 @@ For this testing relay, the acceptable baseline is:
 test-host convenience, not a permanent-host standard. A permanent relay should
 use a narrower operator account and documented break-glass path.
 
+## Hardening Readback
+
+Verified on 2026-06-13 UTC:
+
+- `sshd -T` reports `passwordauthentication no` and
+  `authenticationmethods publickey`.
+- A fresh key-based SSH connection from the owner dev PC succeeds.
+- A password-only SSH attempt fails with `Permission denied (publickey)`.
+- UFW is active with default incoming `deny`, outgoing `allow`, and one SSH
+  rule: `192.168.50.0/24 -> 22/tcp`.
+- `bellfield-relay-backup.timer` is enabled and active.
+- The backup service was started manually once and wrote a dump successfully.
+- Existing backup dumps under `/home/rob/relay-backups` are mode 600.
+
+Still open: the backup target is on the same disk. Move
+`BELLFIELD_RELAY_BACKUP_TARGET` to an off-box mount once the Unraid/share/bucket
+destination is chosen and verified.
+
 ## Persistent Backup Timer
 
 The systemd templates live under `deploy/relay/systemd/`. On the test host the

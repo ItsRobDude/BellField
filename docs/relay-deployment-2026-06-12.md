@@ -83,13 +83,18 @@ install, which folds into gate day.
 
 - **Off-box backups**: nightly dumps currently land on the box itself
   (`~/relay-backups`) — a stopgap. Relay plan §11 requires an off-box copy;
-  re-point the cron target when the destination is chosen.
+  re-point the systemd timer target when the destination is chosen.
 - **External uptime monitor** on the health URL (requires an owner account
   at the monitoring service).
 - **DHCP reservation** for the host's LAN address.
-- **Harden SSH** to key-only (`PasswordAuthentication no`) — completed on
-  2026-06-12 for remote SSH; the console password remains a local break-glass
-  path for this testing host.
+- **SSH/firewall hardening**: completed 2026-06-13 UTC. Remote SSH is key-only
+  (`PasswordAuthentication no`, `AuthenticationMethods publickey`), UFW denies
+  incoming by default, and SSH is allowed only from `192.168.50.0/24`. The
+  console password remains a local break-glass path for this testing host.
+- **Backup scheduling hardening**: completed 2026-06-13 UTC. Cron was replaced
+  with `bellfield-relay-backup.timer` (`Persistent=true`) and existing dump
+  files were tightened to mode 600. The target is still on-box until off-box
+  storage is chosen.
 - **Laptop-as-server hardening** (decided 2026-06-12: this host stays until
   the first paying customer has acceptance links live — no VPS pre-revenue):
   verify lid-close/sleep is fully disabled; run a deliberate power-loss
