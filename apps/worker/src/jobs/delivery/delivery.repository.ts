@@ -37,33 +37,59 @@ type ExpiredRow = {
   estimate_title: string | null;
 };
 
+const dueQueuedClaimLeaseMs = 10 * 60 * 1000;
+
 export class DeliveryRepository implements DeliveryStore {
   constructor(private readonly database: TransactionalQueryExecutor) {}
 
-  async listDueQueued(now: Date, limit: number): Promise<DueQueuedDelivery[]> {
+  async claimDueQueued(now: Date, limit: number): Promise<DueQueuedDelivery[]> {
     // next_attempt_at is set by a retryable failure. A queued row with no
     // next_attempt_at and an old queued_at is an interrupted synchronous send
     // (API crashed mid-flight); after a grace period the worker picks it up —
-    // the relay's idempotent replay makes a duplicate attempt harmless.
+    // relay idempotency still protects a recovered send if the API died after
+    // reaching the relay.
+    //
+    // Claiming pushes next_attempt_at into the near future before returning
+    // rows, so another worker process cannot pick up the same send while this
+    // process is reading the snapshot and calling the relay. If this process
+    // dies mid-attempt, the row naturally becomes due again after the lease.
+    const leaseUntil = new Date(now.getTime() + dueQueuedClaimLeaseMs);
     const result = await this.database.query<DueRow>(
       `
-        select om.id, om.job_id, om.recipient_email, om.subject, om.body_text,
-               om.from_name, om.reply_to_email, om.sent_by_name, om.attempt_count, om.expires_at,
-               om.acceptance_payload,
-               cds.storage_path, cds.sha256, cds.filename,
-               (select title from estimates e where e.id = om.estimate_id) as estimate_title
-        from outbound_messages om
-        join customer_document_snapshots cds on cds.id = om.document_snapshot_id
-        where om.status = 'queued'
-          and (om.expires_at is null or om.expires_at > $1)
-          and (
-            (om.next_attempt_at is not null and om.next_attempt_at <= $1)
-            or (om.next_attempt_at is null and om.queued_at <= $1::timestamptz - interval '10 minutes')
-          )
-        order by om.next_attempt_at asc nulls last
-        limit $2
+        update outbound_messages claimed
+        set next_attempt_at = $3,
+            updated_at = $1
+        from (
+          select om.id
+          from outbound_messages om
+          where om.status = 'queued'
+            and (om.expires_at is null or om.expires_at > $1)
+            and (
+              (om.next_attempt_at is not null and om.next_attempt_at <= $1)
+              or (om.next_attempt_at is null and om.queued_at <= $1::timestamptz - interval '10 minutes')
+            )
+          order by om.next_attempt_at asc nulls last
+          limit $2
+          for update skip locked
+        ) due
+        where claimed.id = due.id
+        returning
+          claimed.id, claimed.job_id, claimed.recipient_email, claimed.subject,
+          claimed.body_text, claimed.from_name, claimed.reply_to_email,
+          claimed.sent_by_name, claimed.attempt_count, claimed.expires_at,
+          claimed.acceptance_payload,
+          (select cds.storage_path
+             from customer_document_snapshots cds
+            where cds.id = claimed.document_snapshot_id) as storage_path,
+          (select cds.sha256
+             from customer_document_snapshots cds
+            where cds.id = claimed.document_snapshot_id) as sha256,
+          (select cds.filename
+             from customer_document_snapshots cds
+            where cds.id = claimed.document_snapshot_id) as filename,
+          (select title from estimates e where e.id = claimed.estimate_id) as estimate_title
       `,
-      [now, limit]
+      [now, limit, leaseUntil]
     );
     return result.rows.map((row) => ({
       id: row.id,

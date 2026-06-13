@@ -58,7 +58,7 @@ export class DeliveryService {
       });
     }
 
-    const due = await this.store.listDueQueued(now, DUE_BATCH_SIZE);
+    const due = await this.store.claimDueQueued(now, DUE_BATCH_SIZE);
     for (const message of due) {
       if (input?.signal?.aborted) {
         break;

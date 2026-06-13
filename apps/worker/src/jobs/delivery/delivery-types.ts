@@ -73,7 +73,7 @@ export type AcceptanceApplyOutcome =
   | 'alreadyApplied';
 
 export interface DeliveryStore {
-  listDueQueued(now: Date, limit: number): Promise<DueQueuedDelivery[]>;
+  claimDueQueued(now: Date, limit: number): Promise<DueQueuedDelivery[]>;
   markSent(
     id: string,
     providerMessageId: string | null,

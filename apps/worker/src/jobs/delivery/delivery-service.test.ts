@@ -38,7 +38,7 @@ class InMemoryDeliveryStore implements DeliveryStore {
   decisionApplyOutcome: AcceptanceApplyOutcome = 'applied';
   failDecisionApply = false;
 
-  async listDueQueued(): Promise<DueQueuedDelivery[]> {
+  async claimDueQueued(): Promise<DueQueuedDelivery[]> {
     return this.due;
   }
 
