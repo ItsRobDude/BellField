@@ -39,6 +39,7 @@ type EstimateRow = {
   declinedAt: string | Date | null;
   declinedByEmployeeId: string | null;
   declinedByName: string | null;
+  declineReasonCodes: EstimateRecord['declineReasonCodes'] | null;
   sourceEstimateId: string | null;
   supersededByEstimateId: string | null;
   convertedToInvoiceId: string | null;
@@ -46,6 +47,8 @@ type EstimateRow = {
   selectedOptionId: string | null;
   lastSentAt: string | Date | null;
   lastSentSourceVersion: number | null;
+  latestAcceptanceLinkExpiresAt: string | Date | null;
+  latestAcceptanceDecisionAppliedAt: string | Date | null;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string | Date;
@@ -102,6 +105,7 @@ const ESTIMATE_COLUMNS = `
   declined_at as "declinedAt",
   declined_by_employee_id as "declinedByEmployeeId",
   declined_by_name as "declinedByName",
+  decline_reason_codes as "declineReasonCodes",
   source_estimate_id as "sourceEstimateId",
   superseded_by_estimate_id as "supersededByEstimateId",
   converted_to_invoice_id as "convertedToInvoiceId",
@@ -122,6 +126,20 @@ const ESTIMATE_COLUMNS = `
     order by om.sent_at desc
     limit 1
   ) as "lastSentSourceVersion",
+  (
+    select om.acceptance_link_expires_at
+    from outbound_messages om
+    where om.estimate_id = estimates.id and om.acceptance_url is not null
+    order by om.sent_at desc nulls last, om.queued_at desc
+    limit 1
+  ) as "latestAcceptanceLinkExpiresAt",
+  (
+    select om.acceptance_decision_applied_at
+    from outbound_messages om
+    where om.estimate_id = estimates.id and om.acceptance_url is not null
+    order by om.sent_at desc nulls last, om.queued_at desc
+    limit 1
+  ) as "latestAcceptanceDecisionAppliedAt",
   created_by_employee_id as "createdByEmployeeId",
   created_by_name as "createdByName",
   created_at as "createdAt",
@@ -585,6 +603,7 @@ export class EstimatesRepository {
       declinedAt: row.declinedAt ? toIsoString(row.declinedAt) : undefined,
       declinedByEmployeeId: row.declinedByEmployeeId ?? undefined,
       declinedByName: row.declinedByName ?? undefined,
+      declineReasonCodes: row.declineReasonCodes ?? undefined,
       sourceEstimateId: row.sourceEstimateId ?? undefined,
       supersededByEstimateId: row.supersededByEstimateId ?? undefined,
       convertedToInvoiceId: row.convertedToInvoiceId ?? undefined,
@@ -592,6 +611,12 @@ export class EstimatesRepository {
       selectedOptionId: row.selectedOptionId ?? undefined,
       lastSentAt: row.lastSentAt ? toIsoString(row.lastSentAt) : undefined,
       lastSentSourceVersion: row.lastSentSourceVersion ?? undefined,
+      latestAcceptanceLinkExpiresAt: row.latestAcceptanceLinkExpiresAt
+        ? toIsoString(row.latestAcceptanceLinkExpiresAt)
+        : undefined,
+      latestAcceptanceDecisionAppliedAt: row.latestAcceptanceDecisionAppliedAt
+        ? toIsoString(row.latestAcceptanceDecisionAppliedAt)
+        : undefined,
       createdByEmployeeId: row.createdByEmployeeId,
       createdByName: row.createdByName,
       createdAt: toIsoString(row.createdAt),

@@ -17,6 +17,7 @@ export function EstimateList({
       <div style={styles.estimateListScroll}>
         {estimates.map((estimate) => {
           const isSelected = estimate.id === selectedEstimateId;
+          const acceptanceBadgeLabel = estimateAcceptanceBadgeLabel(estimate);
           return (
             <button
               key={estimate.id}
@@ -47,6 +48,11 @@ export function EstimateList({
                   </span>
                 ) : null}
                 {estimate.lastSentAt ? <span style={styles.badge}>Sent</span> : null}
+                {acceptanceBadgeLabel ? (
+                  <span style={estimate.status === 'declined' ? styles.dangerBadge : styles.badge}>
+                    {acceptanceBadgeLabel}
+                  </span>
+                ) : null}
                 {wasEditedSinceLastSend(estimate) ? (
                   <span style={styles.dangerBadge}>Edited since sent</span>
                 ) : null}
@@ -96,6 +102,7 @@ export function EstimateDetailPanel({
   onToggleDelivery: () => void;
 }) {
   const isPending = estimate.status === 'pending';
+  const acceptanceDetailText = estimateAcceptanceDetailText(estimate);
 
   return (
     <article
@@ -110,6 +117,7 @@ export function EstimateDetailPanel({
             {formatCurrency(estimate.totals.total)}
             {estimate.validUntil ? ` · valid until ${formatDateOnly(estimate.validUntil)}` : ''}
           </p>
+          {acceptanceDetailText ? <p style={styles.tinyMuted}>{acceptanceDetailText}</p> : null}
         </div>
         <div style={styles.badgeRow}>
           {estimate.lastSentAt ? (
@@ -355,6 +363,49 @@ function wasEditedSinceLastSend(estimate: EstimateSummary): boolean {
     estimate.lastSentSourceVersion !== undefined &&
     estimate.lastSentSourceVersion !== estimate.version
   );
+}
+
+function estimateAcceptanceBadgeLabel(estimate: EstimateSummary): string | null {
+  if (estimate.latestAcceptanceDecisionAppliedAt) {
+    if (estimate.status === 'approved' && estimate.approvedByName === 'Customer') {
+      return 'Customer approved';
+    }
+    if (estimate.status === 'declined' && estimate.declinedByName === 'Customer') {
+      return 'Customer declined';
+    }
+    return 'Customer responded';
+  }
+  if (!estimate.latestAcceptanceLinkExpiresAt) {
+    return null;
+  }
+  return isPastDateTime(estimate.latestAcceptanceLinkExpiresAt)
+    ? 'Link expired'
+    : 'Awaiting customer';
+}
+
+function estimateAcceptanceDetailText(estimate: EstimateSummary): string | null {
+  if (estimate.latestAcceptanceDecisionAppliedAt) {
+    const at = formatSentDate(estimate.latestAcceptanceDecisionAppliedAt);
+    if (estimate.status === 'approved' && estimate.approvedByName === 'Customer') {
+      return `Customer approved online ${at}.`;
+    }
+    if (estimate.status === 'declined' && estimate.declinedByName === 'Customer') {
+      return `Customer declined online ${at}.`;
+    }
+    return `Customer response recorded ${at}.`;
+  }
+  if (!estimate.latestAcceptanceLinkExpiresAt) {
+    return null;
+  }
+  const at = formatSentDate(estimate.latestAcceptanceLinkExpiresAt);
+  return isPastDateTime(estimate.latestAcceptanceLinkExpiresAt)
+    ? `Customer response link expired ${at}.`
+    : `Awaiting customer response · link expires ${at}.`;
+}
+
+function isPastDateTime(value: string): boolean {
+  const date = new Date(value);
+  return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
 }
 
 function formatSentDate(value: string): string {

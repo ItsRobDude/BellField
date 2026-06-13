@@ -114,7 +114,7 @@ export class DeliveryRepository implements DeliveryStore {
     id: string,
     providerMessageId: string | null,
     sentAt: Date,
-    acceptance?: { linkId: string; url: string }
+    acceptance?: { linkId: string; url: string; expiresAt: Date }
   ): Promise<void> {
     await this.database.query(
       `
@@ -127,10 +127,18 @@ export class DeliveryRepository implements DeliveryStore {
             next_attempt_at = null,
             acceptance_link_id = coalesce($4, acceptance_link_id),
             acceptance_url = coalesce($5, acceptance_url),
+            acceptance_link_expires_at = coalesce($6, acceptance_link_expires_at),
             updated_at = $2
         where id = $1 and status = 'queued'
       `,
-      [id, sentAt, providerMessageId, acceptance?.linkId ?? null, acceptance?.url ?? null]
+      [
+        id,
+        sentAt,
+        providerMessageId,
+        acceptance?.linkId ?? null,
+        acceptance?.url ?? null,
+        acceptance?.expiresAt ?? null
+      ]
     );
   }
 
@@ -317,7 +325,8 @@ export class DeliveryRepository implements DeliveryStore {
       };
 
       const noteSuffix = decision.note ? ` Customer note: ${decision.note}` : '';
-      const reasonsText = formatDeclineReasons(decision.declineReasons);
+      const declineReasonCodes = normalizeDeclineReasons(decision.declineReasons);
+      const reasonsText = formatDeclineReasons(declineReasonCodes);
 
       // Office action wins races: a settled estimate gets a note, no change.
       if (estimate.status !== 'pending') {
@@ -394,9 +403,14 @@ export class DeliveryRepository implements DeliveryStore {
         await tx.query(
           `update estimates
            set status = 'declined', declined_at = $2, declined_by_employee_id = null,
-               declined_by_name = 'Customer', updated_at = $2, version = version + 1
+               declined_by_name = 'Customer', decline_reason_codes = $3,
+               updated_at = $2, version = version + 1
            where id = $1 and status = 'pending'`,
-          [estimate.id, occurredAt]
+          [
+            estimate.id,
+            occurredAt,
+            declineReasonCodes.length > 0 ? JSON.stringify(declineReasonCodes) : null
+          ]
         );
         await addTimeline(
           'estimateDeclined',
@@ -448,17 +462,35 @@ function findOptionLabel(groups: OptionGroupSnapshot[] | null, optionId: string)
   return null;
 }
 
-const declineReasonLabels: Record<string, string> = {
-  price: 'price',
-  otherCompany: 'going with another company',
-  postponing: 'not moving forward right now',
-  questions: 'has questions first'
+const declineReasonCodes = ['price', 'otherCompany', 'postponing', 'questions'] as const;
+
+type DeclineReasonCode = (typeof declineReasonCodes)[number];
+
+const declineReasonLabels: Record<DeclineReasonCode, string> = {
+  price: 'Price',
+  otherCompany: 'Going with another company',
+  postponing: 'Not moving forward right now',
+  questions: 'Has questions first'
 };
 
-function formatDeclineReasons(reasons: string[]): string {
+function normalizeDeclineReasons(reasons: string[]): DeclineReasonCode[] {
+  const normalized: DeclineReasonCode[] = [];
+  for (const reason of reasons) {
+    if (isDeclineReasonCode(reason) && !normalized.includes(reason)) {
+      normalized.push(reason);
+    }
+  }
+  return normalized;
+}
+
+function isDeclineReasonCode(reason: string): reason is DeclineReasonCode {
+  return (declineReasonCodes as readonly string[]).includes(reason);
+}
+
+function formatDeclineReasons(reasons: DeclineReasonCode[]): string {
   if (reasons.length === 0) {
     return '';
   }
-  const labels = reasons.map((reason) => declineReasonLabels[reason] ?? reason);
+  const labels = reasons.map((reason) => declineReasonLabels[reason]);
   return ` Reasons: ${labels.join(', ')}.`;
 }

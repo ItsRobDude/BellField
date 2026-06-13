@@ -730,6 +730,7 @@ describe('JobEstimatesSection', () => {
           ...estimate,
           lastSentAt: '2026-06-09T18:00:00.000Z',
           lastSentSourceVersion: 1,
+          latestAcceptanceLinkExpiresAt: '2099-07-01T00:00:00.000Z',
           version: 2
         }
       ]
@@ -750,8 +751,52 @@ describe('JobEstimatesSection', () => {
     );
 
     expect((await screen.findAllByText('Sent')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Awaiting customer')).toBeInTheDocument();
+    expect(screen.getByText(/Awaiting customer response/)).toBeInTheDocument();
     expect(screen.getAllByText('Edited since sent').length).toBeGreaterThan(0);
     expect(screen.getByText(/Last sent/)).toBeInTheDocument();
+  });
+
+  it('shows customer acceptance state in delivery history', async () => {
+    mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({
+      outboundMessages: [
+        {
+          id: 'message-1',
+          channel: 'email',
+          status: 'sent',
+          jobId: 'job-1',
+          estimateId: 'estimate-1',
+          documentSnapshotId: 'snapshot-1',
+          recipientEmail: 'customer@example.com',
+          subject: 'Estimate from BellField',
+          sentByName: 'Olivia Owner',
+          queuedAt: '2026-06-01T00:00:00.000Z',
+          sentAt: '2026-06-01T00:00:01.000Z',
+          acceptanceUrl: 'https://relay.test/a/link-1',
+          acceptanceLinkExpiresAt: '2099-07-01T00:00:00.000Z'
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+        billToCustomerEmail="customer@example.com"
+      />
+    );
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email estimate' }));
+
+    expect(await screen.findByText(/Awaiting customer response. Link expires/)).toBeInTheDocument();
+    expect(screen.queryByText('https://relay.test/a/link-1')).toBeNull();
   });
 
   it('offers sending on a pending estimate so the customer can review before approval', async () => {

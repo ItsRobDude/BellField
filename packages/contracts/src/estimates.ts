@@ -1,4 +1,5 @@
 import type { CatalogLineSnapshot } from './catalog.js';
+import type { RelayAcceptanceDeclineReason } from './relay-delivery.js';
 
 // Estimate lines add 'equipment' to the register kinds: estimates routinely quote
 // replacement equipment, which captured field work does not.
@@ -115,6 +116,8 @@ export interface EstimateSummary {
   declinedAt?: string;
   declinedByEmployeeId?: string;
   declinedByName?: string;
+  /** Fixed customer decline reason codes from online acceptance links, when present. */
+  declineReasonCodes?: RelayAcceptanceDeclineReason[];
   /** Set when this estimate was cloned from an earlier one to revise it. */
   sourceEstimateId?: string;
   /** Set on an older estimate that a newer one has replaced. */
@@ -125,6 +128,10 @@ export interface EstimateSummary {
   lastSentAt?: string;
   /** Estimate version captured by that send's document snapshot. */
   lastSentSourceVersion?: number;
+  /** Latest relay-hosted customer acceptance link expiry for this estimate, if any. */
+  latestAcceptanceLinkExpiresAt?: string;
+  /** Set once the latest customer acceptance decision has been applied locally. */
+  latestAcceptanceDecisionAppliedAt?: string;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string;

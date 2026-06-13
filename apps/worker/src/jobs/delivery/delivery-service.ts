@@ -170,7 +170,14 @@ export class DeliveryService {
           : null,
         occurredAt,
         outcome.acceptanceLinkId && outcome.acceptanceUrl
-          ? { linkId: outcome.acceptanceLinkId, url: outcome.acceptanceUrl }
+          ? {
+              linkId: outcome.acceptanceLinkId,
+              url: outcome.acceptanceUrl,
+              expiresAt: acceptanceLinkExpiryFrom(
+                occurredAt,
+                message.acceptancePayload?.expiresInDays
+              )
+            }
           : undefined
       );
       await this.addOutcomeTimeline(message, 'estimateSent', occurredAt);
@@ -226,4 +233,20 @@ export class DeliveryService {
     }
     return bytes;
   }
+}
+
+const acceptanceExpiryDays = {
+  min: 7,
+  max: 90,
+  default: 30
+} as const;
+
+function acceptanceLinkExpiryFrom(sentAt: Date, expiresInDays: number | undefined): Date {
+  const days = Number.isInteger(expiresInDays)
+    ? Math.min(
+        acceptanceExpiryDays.max,
+        Math.max(acceptanceExpiryDays.min, expiresInDays as number)
+      )
+    : acceptanceExpiryDays.default;
+  return new Date(sentAt.getTime() + days * 24 * 60 * 60 * 1000);
 }

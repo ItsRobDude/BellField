@@ -232,9 +232,10 @@ piloting 6a does not wait on any host change.
    curl-verified end to end against a real send (see
    `sellable-product-execution-plan.md` §6a.1 for the evidence summary).
 2. **6a.2 Install**: send-flow extension ({acceptanceLink} token, version
-   pinning), worker poller with the application rules above.
+   pinning), worker poller with the application rules above. — **BUILT
+   2026-06-13**.
 3. **6a.3 Office surfacing**: acceptance state on the estimate panel and
-   history; copy per the no-leakage rule.
+   history; copy per the no-leakage rule. — **BUILT 2026-06-13**.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 7–90 days defaulting to 30; declines use the fixed multi-select reason list

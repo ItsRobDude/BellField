@@ -55,6 +55,12 @@ export interface OutboundMessageSummary {
   sentAt?: string;
   failureCode?: OutboundMessageFailureCode;
   deliveryMessage?: string;
+  /** Customer acceptance URL minted by the relay, when this send supports online response. */
+  acceptanceUrl?: string;
+  /** Expiry timestamp for the relay-hosted customer acceptance link. */
+  acceptanceLinkExpiresAt?: string;
+  /** Set once BellField applied the customer's online approve/decline decision. */
+  acceptanceDecisionAppliedAt?: string;
 }
 
 export interface SendEstimateRequest {

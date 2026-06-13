@@ -7,18 +7,20 @@ import { DeliveryRepository } from './delivery.repository';
 class CapturingDatabase implements TransactionalQueryExecutor {
   queries: Array<{ text: string; values?: unknown[] }> = [];
   rows: QueryResultRow[] = [];
+  rowQueue: QueryResultRow[][] = [];
 
   async query<T extends QueryResultRow = QueryResultRow>(
     text: string,
     values?: unknown[]
   ): Promise<QueryResult<T>> {
     this.queries.push({ text, values });
+    const rows = this.rowQueue.length > 0 ? (this.rowQueue.shift() ?? []) : this.rows;
     return {
       command: 'UPDATE',
-      rowCount: this.rows.length,
+      rowCount: rows.length,
       oid: 0,
       fields: [],
-      rows: this.rows as T[]
+      rows: rows as T[]
     };
   }
 
@@ -87,4 +89,50 @@ test('DeliveryRepository claimDueQueued leases due rows with skip-locked semanti
       }
     }
   ]);
+});
+
+test('DeliveryRepository stores fixed decline reason codes when applying a customer decline', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [{ id: 'message-1', acceptance_decision_applied_at: null }],
+    [
+      {
+        id: 'estimate-1',
+        job_id: 'job-1',
+        title: 'AC replacement',
+        status: 'pending',
+        version: 2,
+        option_groups: null
+      }
+    ]
+  ];
+  const repository = new DeliveryRepository(database);
+  const occurredAt = new Date('2026-06-12T18:00:00Z');
+
+  const outcome = await repository.applyAcceptanceDecision(
+    {
+      acceptanceLinkId: 'link-1',
+      estimateRef: 'estimate-1',
+      estimateVersion: 2,
+      decision: 'declined',
+      selectedOptionId: null,
+      declineReasons: ['price', 'questions', 'not-a-code'],
+      note: 'Please call me.',
+      decidedAt: occurredAt.toISOString()
+    },
+    occurredAt
+  );
+
+  assert.equal(outcome, 'applied');
+  const estimateUpdate = database.queries.find((query) =>
+    /set status = 'declined'/i.test(query.text)
+  );
+  assert.equal(estimateUpdate?.values?.[2], JSON.stringify(['price', 'questions']));
+  const timelineInsert = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.match(
+    String(timelineInsert?.values?.[4]),
+    /Reasons: Price, Has questions first\. Customer note: Please call me\./
+  );
 });

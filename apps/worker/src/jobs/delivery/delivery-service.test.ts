@@ -27,7 +27,7 @@ class InMemoryDeliveryStore implements DeliveryStore {
   sentCalls: {
     id: string;
     providerMessageId: string | null;
-    acceptance?: { linkId: string; url: string };
+    acceptance?: { linkId: string; url: string; expiresAt: Date };
   }[] = [];
   failedCalls: { id: string; code: string }[] = [];
   retryCalls: { id: string; nextAttemptAt: Date }[] = [];
@@ -46,7 +46,7 @@ class InMemoryDeliveryStore implements DeliveryStore {
     id: string,
     providerMessageId: string | null,
     _sentAt: Date,
-    acceptance?: { linkId: string; url: string }
+    acceptance?: { linkId: string; url: string; expiresAt: Date }
   ): Promise<void> {
     this.sentCalls.push({ id, providerMessageId, ...(acceptance ? { acceptance } : {}) });
   }
@@ -338,7 +338,8 @@ void test('forwards the frozen acceptance payload on retry and records the link 
     assert.deepEqual(sendCall.acceptance, due.acceptancePayload);
     assert.deepEqual(store.sentCalls[0]?.acceptance, {
       linkId: 'link-9',
-      url: 'https://relay.test/a/abc'
+      url: 'https://relay.test/a/abc',
+      expiresAt: new Date('2026-07-11T12:00:00.000Z')
     });
   });
 });

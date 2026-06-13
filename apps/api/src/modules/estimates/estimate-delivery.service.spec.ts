@@ -47,7 +47,8 @@ function createDeliveryService() {
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Hello {customerName}, attached is {estimateTitle}.',
       chargesSalesTax: false,
-      defaultSalesTaxBasisPoints: 0
+      defaultSalesTaxBasisPoints: 0,
+      acceptanceLinkExpiryDays: 30
     })
   };
   const customerDeliveryRepository = {
@@ -85,22 +86,27 @@ function createDeliveryService() {
         nextAttemptAt
       })),
     setOutboundMessageDocumentSnapshot: jest.fn(),
-    markOutboundMessageSent: jest.fn().mockImplementation(async (messageId, providerMessageId) => ({
-      id: messageId,
-      channel: 'email',
-      provider: 'resend',
-      status: 'sent',
-      jobId: 'job-1',
-      estimateId: 'estimate-1',
-      documentSnapshotId: 'snapshot-1',
-      recipientEmail: 'customer@example.com',
-      subject: 'Estimate from BellField',
-      bodyText: 'Hello Acme, attached is AC replacement.',
-      sentByName: 'Dispatcher',
-      queuedAt: '2026-06-01T00:00:00.000Z',
-      sentAt: '2026-06-01T00:00:01.000Z',
-      providerMessageId
-    })),
+    markOutboundMessageSent: jest
+      .fn()
+      .mockImplementation(async (messageId, providerMessageId, sentAt, acceptance) => ({
+        id: messageId,
+        channel: 'email',
+        provider: 'resend',
+        status: 'sent',
+        jobId: 'job-1',
+        estimateId: 'estimate-1',
+        documentSnapshotId: 'snapshot-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Estimate from BellField',
+        bodyText: 'Hello Acme, attached is AC replacement.',
+        sentByName: 'Dispatcher',
+        queuedAt: '2026-06-01T00:00:00.000Z',
+        sentAt,
+        providerMessageId,
+        acceptanceLinkId: acceptance?.linkId,
+        acceptanceUrl: acceptance?.url,
+        acceptanceLinkExpiresAt: acceptance?.expiresAt
+      })),
     markOutboundMessageFailed: jest.fn().mockImplementation(async (messageId, providerError) => ({
       id: messageId,
       channel: 'email',
@@ -268,6 +274,12 @@ describe('EstimateDeliveryService', () => {
       emailProviderService,
       estimatePdfRendererService
     } = createDeliveryService();
+    emailProviderService.sendEstimateEmail.mockResolvedValue({
+      kind: 'sent',
+      providerMessageId: 'relay-message-1',
+      acceptanceLinkId: 'link-1',
+      acceptanceUrl: 'https://relay.test/a/link-1'
+    });
 
     const result = await service.sendEstimate('token', 'estimate-1', {
       recipientEmail: 'Customer@Example.com'
@@ -289,7 +301,14 @@ describe('EstimateDeliveryService', () => {
     expect(emailProviderService.sendEstimateEmail).toHaveBeenCalledWith(
       expect.objectContaining({
         to: 'customer@example.com',
-        attachment: expect.objectContaining({ filename: expect.stringMatching(/\.pdf$/) })
+        attachment: expect.objectContaining({ filename: expect.stringMatching(/\.pdf$/) }),
+        acceptance: {
+          estimateRef: 'estimate-1',
+          estimateVersion: 1,
+          title: 'AC replacement',
+          options: [{ id: 'estimate-1', label: 'AC replacement', totalCents: 10000 }],
+          expiresInDays: 30
+        }
       })
     );
     // The shop's company name fronts the email; the From address itself is
@@ -308,6 +327,17 @@ describe('EstimateDeliveryService', () => {
       })
     );
     expect(result.outboundMessage.status).toBe('sent');
+    const markSentCall = customerDeliveryRepository.markOutboundMessageSent.mock.calls[0];
+    expect(markSentCall[3]).toEqual({
+      linkId: 'link-1',
+      url: 'https://relay.test/a/link-1',
+      expiresAt: expect.any(String)
+    });
+    expect(Date.parse(markSentCall[3].expiresAt) - Date.parse(markSentCall[2])).toBe(
+      30 * 24 * 60 * 60 * 1000
+    );
+    expect(result.outboundMessage.acceptanceUrl).toBe('https://relay.test/a/link-1');
+    expect(result.outboundMessage.acceptanceLinkExpiresAt).toBe(markSentCall[3].expiresAt);
     expect(result.outboundMessage).not.toHaveProperty('bodyText');
     expect(result.outboundMessage).not.toHaveProperty('provider');
     expect(result.outboundMessage).not.toHaveProperty('providerMessageId');

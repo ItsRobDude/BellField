@@ -564,16 +564,35 @@ validation, first-decision-wins decline with structured reasons + note,
 429s from the per-link rate limit. Page copy awaits owner sign-off; prod
 relay deploy happens alongside or before 6a.2.
 
-### 6a.2 Install integration
+### 6a.2 Install integration — BUILT 2026-06-13
 
 Build: send-flow `acceptance` payload + `{acceptanceLink}` template token
 (auto-appended when missing), worker decision poller applying the
 version-guarded approval/decline rules with "Customer" as the timeline actor.
 
-### 6a.3 Office surfacing
+Status: landed. The install send path pins the estimate version, shop expiry
+setting, and structured option payload on the outbound row; immediate sends
+and worker retries persist relay acceptance URL/id/expiry when minted. The
+worker poller applies pending matching-version customer decisions, stores
+fixed decline reason codes structured on the estimate, writes timeline notes
+for stale/already-settled responses, and acks consumed relay decisions.
+
+Evidence: `pnpm --filter @bellfield/worker test -- --runInBand`, `pnpm
+--filter @bellfield/api test -- estimate-delivery.service.spec.ts --runInBand`,
+`pnpm --filter @bellfield/office-web test -- job-estimates-section.test.tsx
+--runInBand`, full `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm
+format:check`, `pnpm check:architecture`, `pnpm check:ui-copy`, and `git diff
+--check` all passed locally on 2026-06-13.
+
+### 6a.3 Office surfacing — BUILT 2026-06-13
 
 Build: acceptance state on the estimate panel and history ("Awaiting customer
 response", "Customer approved online"), copy per the no-leakage rule.
+
+Status: initial office surfacing landed in the existing estimate review panel
+and delivery history. It shows awaiting/expired/recorded customer-response
+state without exposing the raw customer approval link as a normal office
+action.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use

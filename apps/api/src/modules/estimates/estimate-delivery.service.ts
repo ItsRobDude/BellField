@@ -586,7 +586,10 @@ function toOutboundMessageSummary(record: OutboundMessageRecord): OutboundMessag
     queuedAt: record.queuedAt,
     sentAt: record.sentAt,
     failureCode,
-    deliveryMessage
+    deliveryMessage,
+    acceptanceUrl: record.acceptanceUrl,
+    acceptanceLinkExpiresAt: record.acceptanceLinkExpiresAt,
+    acceptanceDecisionAppliedAt: record.acceptanceDecisionAppliedAt
   };
 }
 

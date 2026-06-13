@@ -78,7 +78,7 @@ export interface DeliveryStore {
     id: string,
     providerMessageId: string | null,
     sentAt: Date,
-    acceptance?: { linkId: string; url: string }
+    acceptance?: { linkId: string; url: string; expiresAt: Date }
   ): Promise<void>;
   markFailed(id: string, code: string, failedAt: Date): Promise<void>;
   scheduleRetry(id: string, nextAttemptAt: Date, occurredAt: Date): Promise<void>;

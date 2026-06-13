@@ -73,11 +73,14 @@ export type EstimateRecord = {
   declinedAt?: string;
   declinedByEmployeeId?: string;
   declinedByName?: string;
+  declineReasonCodes?: EstimateSummary['declineReasonCodes'];
   sourceEstimateId?: string;
   supersededByEstimateId?: string;
   convertedToInvoiceId?: string;
   lastSentAt?: string;
   lastSentSourceVersion?: number;
+  latestAcceptanceLinkExpiresAt?: string;
+  latestAcceptanceDecisionAppliedAt?: string;
   createdByEmployeeId: string;
   createdByName: string;
   createdAt: string;

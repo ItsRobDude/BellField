@@ -118,42 +118,46 @@ function EstimateDeliveryHistory({
 
   return (
     <div style={styles.listCompact} aria-label="Estimate delivery history">
-      {history.map((message) => (
-        <div key={message.id} style={styles.deliveryHistoryItem}>
-          <div style={styles.row}>
-            <span>
-              To <strong>{message.recipientEmail}</strong>
-            </span>
-            <span style={message.status === 'failed' ? styles.dangerBadge : styles.badge}>
-              {deliveryStatusLabel(message.status)}
-            </span>
-          </div>
-          <span style={styles.tinyMuted}>
-            {message.sentAt ? 'Sent' : 'Queued'}{' '}
-            {formatDateTime(message.sentAt ?? message.queuedAt)}
-            {' by '}
-            {message.sentByName}
-          </span>
-          {message.status === 'queued' ? (
-            <span style={styles.tinyMuted}>Will send automatically.</span>
-          ) : null}
-          {message.deliveryMessage ? (
-            <span style={styles.tinyMuted}>{message.deliveryMessage}</span>
-          ) : null}
-          {message.status === 'queued' ? (
-            <div>
-              <button
-                type="button"
-                style={styles.button}
-                disabled={cancelingMessageId === message.id}
-                onClick={() => onCancelMessage(message.id)}
-              >
-                {cancelingMessageId === message.id ? 'Canceling...' : 'Cancel send'}
-              </button>
+      {history.map((message) => {
+        const acceptanceMessage = acceptanceHistoryMessage(message);
+        return (
+          <div key={message.id} style={styles.deliveryHistoryItem}>
+            <div style={styles.row}>
+              <span>
+                To <strong>{message.recipientEmail}</strong>
+              </span>
+              <span style={message.status === 'failed' ? styles.dangerBadge : styles.badge}>
+                {deliveryStatusLabel(message.status)}
+              </span>
             </div>
-          ) : null}
-        </div>
-      ))}
+            <span style={styles.tinyMuted}>
+              {message.sentAt ? 'Sent' : 'Queued'}{' '}
+              {formatDateTime(message.sentAt ?? message.queuedAt)}
+              {' by '}
+              {message.sentByName}
+            </span>
+            {message.status === 'queued' ? (
+              <span style={styles.tinyMuted}>Will send automatically.</span>
+            ) : null}
+            {message.deliveryMessage ? (
+              <span style={styles.tinyMuted}>{message.deliveryMessage}</span>
+            ) : null}
+            {acceptanceMessage ? <span style={styles.tinyMuted}>{acceptanceMessage}</span> : null}
+            {message.status === 'queued' ? (
+              <div>
+                <button
+                  type="button"
+                  style={styles.button}
+                  disabled={cancelingMessageId === message.id}
+                  onClick={() => onCancelMessage(message.id)}
+                >
+                  {cancelingMessageId === message.id ? 'Canceling...' : 'Cancel send'}
+                </button>
+              </div>
+            ) : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -164,6 +168,21 @@ function formatDateTime(value: string): string {
     return value;
   }
   return date.toLocaleString();
+}
+
+function acceptanceHistoryMessage(message: OutboundMessageSummary): string | null {
+  if (message.acceptanceDecisionAppliedAt) {
+    return `Customer response recorded ${formatDateTime(message.acceptanceDecisionAppliedAt)}.`;
+  }
+  if (!message.acceptanceLinkExpiresAt) {
+    return null;
+  }
+  const expiresAt = new Date(message.acceptanceLinkExpiresAt);
+  const prefix =
+    !Number.isNaN(expiresAt.getTime()) && expiresAt.getTime() < Date.now()
+      ? 'Customer response link expired'
+      : 'Awaiting customer response. Link expires';
+  return `${prefix} ${formatDateTime(message.acceptanceLinkExpiresAt)}.`;
 }
 
 function deliveryStatusLabel(status: OutboundMessageSummary['status']): string {
