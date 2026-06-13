@@ -38,7 +38,8 @@ Built, tested, and (where marked) deployed. Each line names its evidence.
 - **Delivery relay, deployed to production** (per-shop tokens, quotas,
   suppression, webhooks, credentialed release downloads; first real
   end-to-end delivered email; SSH/firewall hardening and off-box relay backups
-  completed on the testing host) —
+  completed on the testing host; DHCP reservations, controlled reboot proof,
+  and external uptime monitoring in place) —
   [delivery-relay-plan.md](./delivery-relay-plan.md),
   [relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)
 - **Security harness in CI** — secret scanning, blocking prod dependency
@@ -91,8 +92,10 @@ Gate day is validation debt, not build debt — it never blocks build lanes.
 Small, owner-actionable; details in
 [relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md):
 
-- [ ] DHCP reservation for the relay host (192.168.50.243)
-- [ ] external uptime monitoring on `relay.bellfield.app`
+- [ ] optional hard power-loss/AC-loss proof for the laptop relay if we want
+      hardware-level evidence beyond the completed controlled reboot proof
+- [ ] permanent relay-host cutover decision when a paying customer's
+      homeowner-facing links go live
 
 ---
 

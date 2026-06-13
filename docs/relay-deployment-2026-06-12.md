@@ -13,10 +13,9 @@ Operator procedures and credential locations live in
 - Acer Predator Triton 500 (PT515-51), Ubuntu Server 24.04.4 LTS on NVMe
   disk 2 (Windows 11 scratch environment for gate day remains untouched on
   disk 1; GRUB default-boots Ubuntu).
-- LAN `192.168.50.243` (DHCP reservation still to be set on the router),
-  wired Ethernet. Operator access: SSH key only in practice
-  (`bellfield-relay-operator` keypair from the owner's dev PC), passwordless
-  sudo for the operator user.
+- DHCP-reserved LAN `192.168.50.243`, wired Ethernet. Operator access: SSH
+  key only in practice (`bellfield-relay-operator` keypair from the owner's
+  dev PC), passwordless sudo for the operator user.
 - Headless posture applied: lid-switch ignored (runs closed), `nouveau`
   blacklisted (the RTX stays powered down), unattended security upgrades on,
   Docker Engine 29.5.3 from Docker's official channel.
@@ -82,9 +81,12 @@ install, which folds into gate day.
 
 ## Operational items
 
-- **External uptime monitor** on the health URL (requires an owner account
-  at the monitoring service).
-- **DHCP reservation** for the host's LAN address.
+- **External uptime monitor**: completed 2026-06-13 UTC. UptimeRobot monitor
+  `803288217` checks `https://relay.bellfield.app/health` as an HTTP monitor
+  every 5 minutes. No public status page was created.
+- **DHCP reservations**: completed 2026-06-13 UTC. The relay laptop
+  `bellfieldtest` is reserved at `192.168.50.243`; the Unraid backup box
+  `Tower` is reserved at `192.168.50.78`.
 - **SSH/firewall hardening**: completed 2026-06-13 UTC. Remote SSH is key-only
   (`PasswordAuthentication no`, `AuthenticationMethods publickey`), UFW denies
   incoming by default, and SSH is allowed only from `192.168.50.0/24`. The
@@ -99,11 +101,16 @@ install, which folds into gate day.
   `bellfield-relay-20260613T044857Z.dump` (25,142 bytes). Credential
   locations and readback commands live in
   [testing-relay-ops.md](./testing-relay-ops.md).
+- **Controlled reboot proof**: completed 2026-06-13 UTC. After a remote
+  `systemctl reboot`, SSH returned, the Docker relay/Postgres/cloudflared
+  stack returned, `https://relay.bellfield.app/health` returned
+  `"status":"ok"`, the Unraid backup path automounted, and a manual backup
+  wrote `bellfield-relay-20260613T051229Z.dump` (25,142 bytes).
 - **Laptop-as-server hardening** (decided 2026-06-12: this host stays until
   the first paying customer has acceptance links live — no VPS pre-revenue):
-  verify lid-close/sleep is fully disabled; run a deliberate power-loss
-  reboot test proving Docker and both containers return unattended; prefer
-  ethernet over Wi-Fi if the port reaches.
+  verify lid-close/sleep is fully disabled and, if we want hardware-level
+  evidence beyond the controlled reboot, run a deliberate AC-loss/power-loss
+  test; ethernet is already the active route.
 - Gate day (Windows disk) remains tracked validation debt; the relay being
   live does not block it, but reboots for gate work take the relay down —
   fine until a pilot shop depends on it.

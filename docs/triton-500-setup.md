@@ -128,7 +128,8 @@ state; Windows is the occasional gate-day guest.
 The deployment artifacts live in the repo under [deploy/relay/](../deploy/relay/):
 `compose.yaml` (relay + pinned Postgres 16.6 + pinned cloudflared, built from
 `apps/relay/Dockerfile`), `relay-host.env.example` (every secret the box
-needs), and `backup-relay-db.sh` (nightly off-box `pg_dump` for cron). The
+needs), and `backup-relay-db.sh` (off-box `pg_dump` helper used by the
+systemd backup timer). The
 image build and containerized boot were verified locally on 2026-06-11.
 
 On the relay host:
@@ -144,12 +145,18 @@ curl http://127.0.0.1:3201/health           # expect status ok
 Then, in order: confirm `https://relay.bellfield.app/health` answers through
 the tunnel; create the Resend webhook pointing at
 `https://relay.bellfield.app/webhooks/resend` and put its signing secret in
-`relay-host.env` (restart the relay container); add the backup script to
-cron with an off-box target; point an external uptime monitor at the health
-URL; issue the pilot shop + relay token with the relay-admin CLI
+`relay-host.env` (restart the relay container); install the systemd backup
+timer with an off-box target; point an external uptime monitor at the health
+URL; add DHCP reservations for the relay host and off-box backup target; issue
+the pilot shop + relay token with the relay-admin CLI
 (`docker compose exec relay node dist/apps/relay/src/cli/relay-admin.js ...`)
 and smoke an end-to-end estimate send from a real install.
 
 Prerequisites already satisfied (2026-06-11): `bellfield.app` is a verified
 sending domain in the dedicated BellField Resend account; DNS is on
 Cloudflare with API access.
+
+Current testing-relay status (2026-06-13): the systemd backup timer, Unraid
+off-box target, DHCP reservations, external UptimeRobot monitor, and controlled
+reboot proof are complete. See
+[testing-relay-ops.md](./testing-relay-ops.md) for the live operator map.

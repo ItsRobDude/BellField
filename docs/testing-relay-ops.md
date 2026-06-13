@@ -11,7 +11,7 @@ sold-release publishing route.
 ## Current Test Host
 
 - Hostname: `bellfieldtest`
-- LAN address: `192.168.50.243/24`
+- DHCP-reserved LAN address: `192.168.50.243/24`
 - OS: Ubuntu Server 24.04 LTS on the Triton 500 Ubuntu disk
 - Operator account: `rob`
 - App path on host: `/home/rob/bellfield/deploy/relay`
@@ -22,6 +22,18 @@ sold-release publishing route.
 The Windows disk on the same laptop remains gate-day scratch-machine territory.
 Rebooting into Windows takes the test relay down; that is acceptable while it
 is a testing relay, and unacceptable for the eventual permanent relay.
+
+## Network Anchors
+
+The current relay backup mount depends on stable LAN addresses. The ASUS router
+has DHCP reservations for:
+
+- Relay laptop: `bellfieldtest`, MAC `30:65:EC:C6:1A:96`, IP
+  `192.168.50.243`
+- Unraid box: `Tower`, MAC `F0:B2:B9:24:11:D5`, IP `192.168.50.78`
+
+If either NIC changes, update the reservation and the relay host's
+`/etc/fstab` backup mount together.
 
 ## Credential Inventory
 
@@ -88,6 +100,7 @@ For this testing relay, the acceptable baseline is:
 - Docker services use `restart: unless-stopped`.
 - Nightly relay DB backups run through a persistent systemd timer.
 - Backup files are private by default (`umask 077`).
+- External monitoring checks `https://relay.bellfield.app/health`.
 
 `rob` currently has broad passwordless sudo and Docker-group access. That is a
 test-host convenience, not a permanent-host standard. A permanent relay should
@@ -112,6 +125,18 @@ Verified on 2026-06-13 UTC:
   `/mnt/bellfield-backups`.
 - Existing historical backup dumps under `/home/rob/relay-backups` are mode
   600 and are not the active target.
+- ASUS router DHCP reservations are in place for the relay laptop
+  (`192.168.50.243`) and the Unraid box (`192.168.50.78`).
+- A controlled relay reboot returned unattended: SSH returned in about one
+  minute, `uptime -s` reported `2026-06-13 05:11:27`, the Docker relay,
+  Postgres, and Cloudflare Tunnel containers came back up, the public health
+  URL returned `"status":"ok"`, and the Unraid backup path automounted.
+- A post-reboot backup run wrote
+  `/mnt/bellfield-backups/relay/bellfield-relay-20260613T051229Z.dump`
+  successfully.
+- UptimeRobot monitor `803288217` checks
+  `https://relay.bellfield.app/health` as an HTTP monitor every 5 minutes.
+  It was created without a public status page and showed `Up` after creation.
 
 ## Persistent Backup Timer
 
@@ -158,3 +183,10 @@ findmnt /mnt/bellfield-backups -o SOURCE,TARGET,FSTYPE,OPTIONS --noheadings
 sudo systemctl start bellfield-relay-backup.service
 find /mnt/bellfield-backups/relay -maxdepth 1 -type f -printf "%f %s bytes\n" | sort
 ```
+
+UptimeRobot readback:
+
+- Dashboard monitor URL:
+  `https://dashboard.uptimerobot.com/monitors/803288217`
+- Expected target: `https://relay.bellfield.app/health`
+- Expected interval: 5-minute HTTP checks
