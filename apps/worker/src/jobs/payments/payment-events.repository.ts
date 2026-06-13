@@ -68,6 +68,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
           sessionCurrency: session.currency,
           eventCurrency: event.currency
         });
+        throw new Error('Online payment event did not match its local session.');
       }
 
       await this.lockJob(tx, jobId);

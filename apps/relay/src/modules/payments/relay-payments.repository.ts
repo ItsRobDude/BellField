@@ -150,6 +150,66 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
     return existing;
   }
 
+  async refreshExpiredSession(input: Parameters<RelayPaymentsStore['refreshExpiredSession']>[0]) {
+    const refreshed = await this.database.query<PaymentSessionRow>(
+      `update relay_payment_sessions
+       set job_ref = $4,
+           invoice_ref = $5,
+           amount_cents = $6,
+           currency = $7,
+           description = $8,
+           customer_email = $9,
+           success_url = $10,
+           cancel_url = $11,
+           stripe_connected_account_id = $12,
+           stripe_checkout_session_id = $13,
+           stripe_payment_intent_id = $14,
+           checkout_url = $15,
+           status = 'created',
+           application_fee_cents = $16,
+           expires_at = $17,
+           paid_at = null,
+           updated_at = $18
+       where id = $1
+         and shop_id = $2
+         and idempotency_key = $3
+         and status = 'created'
+         and expires_at <= $18
+       returning ${PAYMENT_SESSION_COLUMNS}`,
+      [
+        input.id,
+        input.shopId,
+        input.request.idempotencyKey,
+        input.request.jobRef,
+        input.request.invoiceRef ?? null,
+        input.request.amountCents,
+        input.request.currency.toUpperCase(),
+        input.request.description,
+        input.request.customerEmail ?? null,
+        input.successUrl,
+        input.cancelUrl,
+        input.stripeConnectedAccountId,
+        input.stripeCheckoutSessionId,
+        input.stripePaymentIntentId,
+        input.checkoutUrl,
+        input.applicationFeeCents,
+        input.expiresAt,
+        input.refreshedAt
+      ]
+    );
+    if (refreshed.rows[0]) {
+      return toSessionRecord(refreshed.rows[0]);
+    }
+    const existing = await this.findSessionByIdempotencyKey(
+      input.shopId,
+      input.request.idempotencyKey
+    );
+    if (!existing) {
+      throw new Error('Expired payment session refresh found no session.');
+    }
+    return existing;
+  }
+
   async recordPaidEvent(
     input: Parameters<RelayPaymentsStore['recordPaidEvent']>[0]
   ): Promise<RecordPaidEventOutcome> {

@@ -1,6 +1,11 @@
 import { RelayPaymentsService } from './payments.service';
 import type { StripeWebhookEvent } from './stripe-payments.service';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
+import type {
+  RecordPaidEventOutcome,
+  RelayPaymentSessionRecord,
+  RelayPaymentsStore
+} from './payments.types';
 
 const shop: AuthenticatedRelayShop = {
   shopId: 'shop_1',
@@ -11,16 +16,18 @@ const shop: AuthenticatedRelayShop = {
 };
 
 function makeService(overrides?: {
-  recordPaidEvent?: (input: unknown) => Promise<string>;
+  existingSession?: RelayPaymentSessionRecord | null;
+  recordPaidEvent?: (input: unknown) => Promise<RecordPaidEventOutcome>;
   config?: { paymentsStatus?: 'enabled' | 'disabled'; connectedAccount?: string | null };
 }) {
   const recordPaidEventCalls: unknown[] = [];
-  let recordSessionInput: Record<string, unknown> | undefined;
+  let recordSessionInput: Parameters<RelayPaymentsStore['recordSession']>[0] | undefined;
+  let refreshSessionInput: Parameters<RelayPaymentsStore['refreshExpiredSession']>[0] | undefined;
   let createCheckoutInput: Record<string, unknown> | undefined;
 
-  const store = {
-    withPaymentSessionLock: (_shopId: string, _key: string, cb: () => Promise<unknown>) => cb(),
-    findSessionByIdempotencyKey: async () => null,
+  const store: RelayPaymentsStore = {
+    withPaymentSessionLock: async <T>(_shopId: string, _key: string, cb: () => Promise<T>) => cb(),
+    findSessionByIdempotencyKey: async () => overrides?.existingSession ?? null,
     findShopPaymentsConfig: async () => ({
       shopId: 'shop_1',
       paymentsStatus: overrides?.config?.paymentsStatus ?? 'enabled',
@@ -29,16 +36,35 @@ function makeService(overrides?: {
           ? 'acct_1'
           : overrides.config.connectedAccount
     }),
-    recordSession: async (input: Record<string, unknown>) => {
+    recordSession: async (input) => {
       recordSessionInput = input;
-      return {
-        id: 'pay_sess_1',
-        checkoutUrl: 'https://stripe.test/checkout',
-        expiresAt: new Date('2026-06-14T00:00:00.000Z'),
-        amountCents: input.request ? (input.request as { amountCents: number }).amountCents : 0,
-        currency: 'USD',
-        applicationFeeCents: input.applicationFeeCents
-      };
+      return makeSession({
+        id: input.id,
+        shopId: input.shopId,
+        idempotencyKey: input.request.idempotencyKey,
+        checkoutUrl: input.checkoutUrl,
+        amountCents: input.request.amountCents,
+        currency: input.request.currency.toUpperCase(),
+        applicationFeeCents: input.applicationFeeCents,
+        expiresAt: input.expiresAt,
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt
+      });
+    },
+    refreshExpiredSession: async (input) => {
+      refreshSessionInput = input;
+      return makeSession({
+        id: input.id,
+        shopId: input.shopId,
+        idempotencyKey: input.request.idempotencyKey,
+        checkoutUrl: input.checkoutUrl,
+        amountCents: input.request.amountCents,
+        currency: input.request.currency.toUpperCase(),
+        applicationFeeCents: input.applicationFeeCents,
+        expiresAt: input.expiresAt,
+        createdAt: overrides?.existingSession?.createdAt,
+        updatedAt: input.refreshedAt
+      });
     },
     recordPaidEvent: async (input: unknown) => {
       recordPaidEventCalls.push(input);
@@ -73,7 +99,36 @@ function makeService(overrides?: {
     stripe,
     getRecordPaidEventCalls: () => recordPaidEventCalls,
     getRecordSessionInput: () => recordSessionInput,
+    getRefreshSessionInput: () => refreshSessionInput,
     getCreateCheckoutInput: () => createCheckoutInput
+  };
+}
+
+function makeSession(overrides?: Partial<RelayPaymentSessionRecord>): RelayPaymentSessionRecord {
+  const createdAt = new Date('2026-06-13T12:00:00.000Z');
+  return {
+    id: 'pay_sess_existing',
+    shopId: 'shop_1',
+    idempotencyKey: 'invoice-payment:job-1:84500',
+    jobRef: 'job-1',
+    invoiceRef: 'inv-1',
+    amountCents: 84_500,
+    currency: 'USD',
+    description: 'BellField invoice 1001',
+    customerEmail: null,
+    successUrl: 'https://relay.example/payment-return/success',
+    cancelUrl: 'https://relay.example/payment-return/canceled',
+    stripeConnectedAccountId: 'acct_1',
+    stripeCheckoutSessionId: 'cs_existing',
+    stripePaymentIntentId: null,
+    checkoutUrl: 'https://stripe.test/existing',
+    status: 'created',
+    applicationFeeCents: 845,
+    expiresAt: new Date(Date.now() + 60_000),
+    paidAt: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
   };
 }
 
@@ -115,6 +170,49 @@ describe('RelayPaymentsService.createPaymentSession', () => {
       expect(result.code).toBe('invalidAmount');
     }
     expect(ctx.getCreateCheckoutInput()).toBeUndefined();
+  });
+
+  it('reuses an unexpired created session without touching Stripe', async () => {
+    const existing = makeSession({
+      id: 'pay_sess_reusable',
+      checkoutUrl: 'https://stripe.test/reusable',
+      expiresAt: new Date(Date.now() + 3_600_000)
+    });
+    const ctx = makeService({ existingSession: existing });
+
+    const result = await ctx.service.createPaymentSession(shop, baseRequest);
+
+    expect(result.kind).toBe('created');
+    if (result.kind !== 'created') {
+      throw new Error('Expected an existing payment session.');
+    }
+    expect(result.paymentSessionId).toBe('pay_sess_reusable');
+    expect(result.checkoutUrl).toBe('https://stripe.test/reusable');
+    expect(ctx.getCreateCheckoutInput()).toBeUndefined();
+    expect(ctx.getRecordSessionInput()).toBeUndefined();
+    expect(ctx.getRefreshSessionInput()).toBeUndefined();
+  });
+
+  it('refreshes an expired created session instead of returning a dead checkout link', async () => {
+    const existing = makeSession({
+      id: 'pay_sess_expired',
+      checkoutUrl: 'https://stripe.test/expired',
+      expiresAt: new Date(Date.now() - 60_000)
+    });
+    const ctx = makeService({ existingSession: existing });
+
+    const result = await ctx.service.createPaymentSession(shop, baseRequest);
+
+    expect(result.kind).toBe('created');
+    if (result.kind !== 'created') {
+      throw new Error('Expected a refreshed payment session.');
+    }
+    expect(result.paymentSessionId).toBe('pay_sess_expired');
+    expect(result.checkoutUrl).toBe('https://stripe.test/checkout');
+    expect(ctx.getCreateCheckoutInput()).toBeDefined();
+    expect(ctx.getRecordSessionInput()).toBeUndefined();
+    expect(ctx.getRefreshSessionInput()?.id).toBe('pay_sess_expired');
+    expect(ctx.getRefreshSessionInput()?.checkoutUrl).toBe('https://stripe.test/checkout');
   });
 });
 

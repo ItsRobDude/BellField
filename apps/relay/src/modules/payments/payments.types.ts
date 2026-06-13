@@ -81,6 +81,21 @@ export interface RelayPaymentsStore {
     expiresAt: Date;
     createdAt: Date;
   }): Promise<RelayPaymentSessionRecord>;
+  refreshExpiredSession(input: {
+    id: string;
+    shopId: string;
+    request: RelayCreatePaymentSessionRequest;
+    /** Relay-generated customer redirect URLs (not from the request). */
+    successUrl: string;
+    cancelUrl: string;
+    stripeConnectedAccountId: string;
+    stripeCheckoutSessionId: string;
+    stripePaymentIntentId: string | null;
+    checkoutUrl: string;
+    applicationFeeCents: number;
+    expiresAt: Date;
+    refreshedAt: Date;
+  }): Promise<RelayPaymentSessionRecord>;
   recordPaidEvent(input: {
     stripeEventId: string;
     stripeCheckoutSessionId: string;

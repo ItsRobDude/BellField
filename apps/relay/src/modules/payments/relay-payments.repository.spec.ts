@@ -20,14 +20,29 @@ function scriptedDatabase(handlers: Array<{ match: RegExp; rows?: unknown[]; row
 }
 
 function storedSession(overrides?: Partial<Record<string, unknown>>) {
+  const createdAt = new Date('2026-06-13T00:00:00.000Z');
   return {
     id: 'pay_sess_1',
     shop_id: 'shop_1',
+    idempotency_key: 'invoice-payment:job-1:84500',
+    job_ref: 'job-1',
+    invoice_ref: 'inv-1',
     amount_cents: 84_500,
     currency: 'USD',
+    description: 'BellField invoice 1001',
+    customer_email: null,
+    success_url: 'https://relay.example/payment-return/success',
+    cancel_url: 'https://relay.example/payment-return/canceled',
     stripe_connected_account_id: 'acct_good',
-    application_fee_cents: 250,
+    stripe_checkout_session_id: 'cs_1',
     stripe_payment_intent_id: null,
+    checkout_url: 'https://stripe.test/checkout',
+    status: 'created',
+    application_fee_cents: 250,
+    expires_at: new Date('2026-06-13T01:00:00.000Z'),
+    paid_at: null,
+    created_at: createdAt,
+    updated_at: createdAt,
     ...overrides
   };
 }
@@ -50,6 +65,55 @@ function repoWith(handlers: Array<{ match: RegExp; rows?: unknown[]; rowCount?: 
   const { database, calls } = scriptedDatabase(handlers);
   return { repo: new RelayPaymentsRepository(database as never), calls };
 }
+
+describe('RelayPaymentsRepository.refreshExpiredSession', () => {
+  it('refreshes only the matching expired created row and clears stale paid fields', async () => {
+    const refreshedRow = storedSession({
+      stripe_checkout_session_id: 'cs_new',
+      checkout_url: 'https://stripe.test/new',
+      expires_at: new Date('2026-06-14T00:00:00.000Z'),
+      updated_at: new Date('2026-06-13T12:00:00.000Z')
+    });
+    const { repo, calls } = repoWith([
+      { match: /update relay_payment_sessions/i, rows: [refreshedRow], rowCount: 1 }
+    ]);
+
+    const refreshed = await repo.refreshExpiredSession({
+      id: 'pay_sess_1',
+      shopId: 'shop_1',
+      request: {
+        idempotencyKey: 'invoice-payment:job-1:84500',
+        jobRef: 'job-1',
+        invoiceRef: 'inv-1',
+        amountCents: 84_500,
+        currency: 'usd',
+        description: 'BellField invoice 1001'
+      },
+      successUrl: 'https://relay.example/payment-return/success',
+      cancelUrl: 'https://relay.example/payment-return/canceled',
+      stripeConnectedAccountId: 'acct_good',
+      stripeCheckoutSessionId: 'cs_new',
+      stripePaymentIntentId: null,
+      checkoutUrl: 'https://stripe.test/new',
+      applicationFeeCents: 250,
+      expiresAt: new Date('2026-06-14T00:00:00.000Z'),
+      refreshedAt: new Date('2026-06-13T12:00:00.000Z')
+    });
+
+    expect(refreshed.checkoutUrl).toBe('https://stripe.test/new');
+    const update = calls.find((c) => /update relay_payment_sessions/i.test(c.sql));
+    expect(update?.sql).toMatch(/status = 'created'/i);
+    expect(update?.sql).toMatch(/paid_at = null/i);
+    expect(update?.sql).toMatch(/and status = 'created'/i);
+    expect(update?.sql).toMatch(/and expires_at <= \$18/i);
+    expect(update?.params.slice(0, 3)).toEqual([
+      'pay_sess_1',
+      'shop_1',
+      'invoice-payment:job-1:84500'
+    ]);
+    expect(update?.params[6]).toBe('USD');
+  });
+});
 
 describe('RelayPaymentsRepository.recordPaidEvent', () => {
   it('records a matching paid event', async () => {
