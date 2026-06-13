@@ -19,12 +19,15 @@ export type DispatchContextMenuPosition = {
   y: number;
 };
 
+export type DispatchTimelineCardSpaceTier = 'narrow' | 'standard' | 'wide';
+
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
   activeScheduleEditor: DispatchScheduleEditorState | null;
   dragState: DispatchTimelineDragState | null;
   hasScheduleConflict?: boolean;
   placementStyle?: CSSProperties;
+  spaceTier?: DispatchTimelineCardSpaceTier;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail: () => void;
   onOpenScheduleEditor?: (card: DispatchAppointmentCard) => void;
@@ -53,6 +56,7 @@ export function DispatchCardButton({
   dragState,
   hasScheduleConflict = false,
   placementStyle,
+  spaceTier = 'standard',
   technicians,
   onOpenJobDetail,
   onOpenScheduleEditor,
@@ -69,11 +73,14 @@ export function DispatchCardButton({
   const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
   const overlapLabel = hasScheduleConflict ? ', overlaps another appointment' : '';
   const hasOverlapWarning = hasScheduleConflict || Boolean(dragState?.overlapWarning);
-  const canResize = Boolean(
-    onResizeStart &&
-      card.scheduledDate &&
-      parseDispatchTimeToMinutes(card.scheduledStartTime) !== null
-  );
+  const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
+  const endMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
+  const usesOverlayEdit = Boolean(onOpenScheduleEditor && spaceTier === 'narrow');
+  const detailLine =
+    spaceTier === 'wide' && startMinutes !== null && endMinutes !== null
+      ? `${formatDispatchResizePreview(startMinutes, endMinutes)} · ${statusLabel} · ${address}`
+      : address;
+  const canResize = Boolean(onResizeStart && card.scheduledDate && startMinutes !== null);
   const canDrag = Boolean(onDragStart);
   const dragStatusText = dragState ? formatDispatchDragPreview(dragState) : null;
 
@@ -128,13 +135,21 @@ export function DispatchCardButton({
       >
         <span aria-hidden="true" style={getTimelineCardRailStyle(card)} />
         <div style={timelineCardBodyStyle}>
-          <div style={timelineCardTitleRowStyle}>
+          <div
+            style={{
+              ...timelineCardTitleRowStyle,
+              ...(usesOverlayEdit ? timelineCardTitleRowWithOverlayEditStyle : null)
+            }}
+          >
             <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
             <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
+            {spaceTier === 'wide' && card.jobSummary ? (
+              <span style={timelineCardSummaryStyle}>· {card.jobSummary}</span>
+            ) : null}
             {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
             {hasScheduleConflict ? <span style={timelineOverlapChipStyle}>Overlap</span> : null}
           </div>
-          <span style={timelineCardAddressStyle}>{address}</span>
+          <span style={timelineCardAddressStyle}>{detailLine}</span>
         </div>
       </button>
       {onOpenScheduleEditor ? (
@@ -145,7 +160,11 @@ export function DispatchCardButton({
             event.stopPropagation();
             onOpenScheduleEditor(card);
           }}
-          style={timelineCardEditButtonStyle}
+          style={
+            usesOverlayEdit
+              ? { ...timelineCardEditButtonStyle, ...timelineCardEditOverlayStyle }
+              : timelineCardEditButtonStyle
+          }
         >
           Edit
         </button>
@@ -182,6 +201,25 @@ export function DispatchCardButton({
       ) : null}
     </div>
   );
+}
+
+/**
+ * The row passes the visible grid span after timeline clamping. Raw duration
+ * is not enough: a late-day 3-hour appointment can render as a short card.
+ */
+export function getDispatchTimelineCardSpaceTier(
+  visibleColumnSpan: number
+): DispatchTimelineCardSpaceTier {
+  if (!Number.isFinite(visibleColumnSpan) || visibleColumnSpan <= 0) {
+    return 'standard';
+  }
+  if (visibleColumnSpan <= 6) {
+    return 'narrow';
+  }
+  if (visibleColumnSpan >= 12) {
+    return 'wide';
+  }
+  return 'standard';
 }
 
 export function formatDispatchCardAddress(card: DispatchAppointmentCard): string {
@@ -283,6 +321,19 @@ const timelineCardMovingButtonStyle: CSSProperties = {
   cursor: 'grabbing'
 };
 
+/**
+ * Narrow cards have no width to spare for an inline Edit slot: float the
+ * button over the card's top-right corner instead, clear of the resize
+ * handle (width 0.55rem, zIndex 3).
+ */
+const timelineCardEditOverlayStyle: CSSProperties = {
+  position: 'absolute',
+  right: '0.65rem',
+  top: '0.2rem',
+  zIndex: 4,
+  marginRight: 0
+};
+
 const timelineCardEditButtonStyle: CSSProperties = {
   alignSelf: 'center',
   background: '#ffffff',
@@ -377,6 +428,10 @@ const timelineCardTitleRowStyle: CSSProperties = {
   minWidth: 0
 };
 
+const timelineCardTitleRowWithOverlayEditStyle: CSSProperties = {
+  paddingRight: '3.1rem'
+};
+
 const timelineJobChipStyle: CSSProperties = {
   alignItems: 'center',
   background: '#ffffff',
@@ -421,12 +476,24 @@ const timelineOverlapChipStyle: CSSProperties = {
 
 const timelineCardLocationStyle: CSSProperties = {
   display: 'block',
-  flex: '1 1 auto',
+  flex: '0 1 auto',
   fontSize: '0.78rem',
   height: timelineCardTextLineHeight,
   lineHeight: timelineCardTextLineHeight,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
+};
+
+const timelineCardSummaryStyle: CSSProperties = {
+  color: '#475569',
+  display: 'block',
+  flex: '1 1 auto',
+  fontSize: '0.74rem',
+  height: timelineCardTextLineHeight,
+  lineHeight: timelineCardTextLineHeight,
+  overflow: 'hidden',
+  textOverflow: 'ellipsis',
+  whiteSpace: 'nowrap'
 };
 
 const timelineCardAddressStyle: CSSProperties = {

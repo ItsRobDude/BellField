@@ -259,6 +259,54 @@ describe('DispatchBoardPanel', () => {
     });
   });
 
+  it('uses extra card space for wide appointments', () => {
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        scheduledStartTime: '08:00',
+        scheduledEndTime: '11:00'
+      })
+    ]);
+
+    render(<DispatchBoardPanel dispatchBoard={dispatchBoard} viewDate="2026-05-22" />);
+
+    const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
+
+    expect(within(taylorRegion).getByText('· No cooling')).toBeInTheDocument();
+    expect(
+      within(taylorRegion).getByText('8:00 AM - 11:00 AM · Scheduled · 123 Main, Blaine, WA')
+    ).toBeInTheDocument();
+  });
+
+  it('uses the visible clamped span for late-day card density', () => {
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+    const dispatchBoard = buildDispatchBoard([
+      buildDispatchAppointment({
+        jobSummary: 'After-hours repair',
+        scheduledStartTime: '17:00',
+        scheduledEndTime: '20:00'
+      })
+    ]);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={dispatchBoard}
+        viewDate="2026-05-22"
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+      />
+    );
+
+    const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
+    const locationName = within(taylorRegion).getByText('Main Shop');
+    const editButton = within(taylorRegion).getByRole('button', {
+      name: 'Edit schedule for job 1001'
+    });
+
+    expect(within(taylorRegion).queryByText(/After-hours repair/)).not.toBeInTheDocument();
+    expect(within(taylorRegion).queryByText(/5:00 PM - 8:00 PM/)).not.toBeInTheDocument();
+    expect(editButton).toHaveStyle({ position: 'absolute', right: '0.65rem' });
+    expect(locationName.parentElement).toHaveStyle({ paddingRight: '3.1rem' });
+  });
+
   it('opens a calendar picker and commits the selected dispatch date', () => {
     const onViewDateChange = vi.fn();
 

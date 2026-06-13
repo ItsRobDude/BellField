@@ -3,7 +3,12 @@
 import { useMemo, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
-import { DispatchCardButton, type DispatchContextMenuPosition } from './dispatch-timeline-card';
+import {
+  DispatchCardButton,
+  getDispatchTimelineCardSpaceTier,
+  type DispatchContextMenuPosition,
+  type DispatchTimelineCardSpaceTier
+} from './dispatch-timeline-card';
 import {
   buildDispatchOverlapLookup,
   getDispatchCardTimeRange,
@@ -441,38 +446,43 @@ export function DispatchTimelineRow({
           }}
         >
           {cards.length === 0 ? <span style={emptyTimelineStyle}>None</span> : null}
-          {cards.map((card, index) => (
-            <DispatchCardButton
-              key={card.appointmentId}
-              card={card}
-              activeScheduleEditor={
-                activeScheduleEditor?.appointmentId === card.appointmentId
-                  ? activeScheduleEditor
-                  : null
-              }
-              dragState={dragState?.appointmentId === card.appointmentId ? dragState : null}
-              hasScheduleConflict={
-                showScheduleConflicts && Boolean(overlapLookup.get(card.appointmentId)?.size)
-              }
-              placementStyle={getTimelineCardPlacementStyle(
-                card,
-                index,
-                laneLayout,
-                dragState?.appointmentId === card.appointmentId
-                  ? activeDragPlacementPreview
-                  : undefined
-              )}
-              technicians={technicians}
-              onOpenJobDetail={() => handleOpenCardDetail(card)}
-              onOpenScheduleEditor={onOpenScheduleEditor}
-              onOpenContextMenu={onOpenContextMenu}
-              onDragStart={onScheduleUpdate ? handleCardDragStart : undefined}
-              onResizeStart={onScheduleUpdate ? handleResizeStart : undefined}
-              onScheduleDraftChange={onScheduleDraftChange}
-              onScheduleEditorCancel={onScheduleEditorCancel}
-              onScheduleEditorSave={onScheduleEditorSave}
-            />
-          ))}
+          {cards.map((card, index) => {
+            const cardPlacement = getTimelineCardPlacement(
+              card,
+              index,
+              laneLayout,
+              dragState?.appointmentId === card.appointmentId
+                ? activeDragPlacementPreview
+                : undefined
+            );
+
+            return (
+              <DispatchCardButton
+                key={card.appointmentId}
+                card={card}
+                activeScheduleEditor={
+                  activeScheduleEditor?.appointmentId === card.appointmentId
+                    ? activeScheduleEditor
+                    : null
+                }
+                dragState={dragState?.appointmentId === card.appointmentId ? dragState : null}
+                hasScheduleConflict={
+                  showScheduleConflicts && Boolean(overlapLookup.get(card.appointmentId)?.size)
+                }
+                placementStyle={cardPlacement.style}
+                spaceTier={cardPlacement.spaceTier}
+                technicians={technicians}
+                onOpenJobDetail={() => handleOpenCardDetail(card)}
+                onOpenScheduleEditor={onOpenScheduleEditor}
+                onOpenContextMenu={onOpenContextMenu}
+                onDragStart={onScheduleUpdate ? handleCardDragStart : undefined}
+                onResizeStart={onScheduleUpdate ? handleResizeStart : undefined}
+                onScheduleDraftChange={onScheduleDraftChange}
+                onScheduleEditorCancel={onScheduleEditorCancel}
+                onScheduleEditorSave={onScheduleEditorSave}
+              />
+            );
+          })}
         </div>
       </div>
     </section>
@@ -492,20 +502,29 @@ export function createDispatchScheduleDraft(
   };
 }
 
-function getTimelineCardPlacementStyle(
+type TimelineCardPlacement = {
+  style: CSSProperties;
+  spaceTier: DispatchTimelineCardSpaceTier;
+};
+
+function getTimelineCardPlacement(
   card: DispatchAppointmentCard,
   index: number,
   laneLayout: DispatchTimelineLaneLayout,
   preview?: { startMinutes?: number; endMinutes?: number }
-): CSSProperties {
+): TimelineCardPlacement {
   const startMinutes = preview?.startMinutes ?? parseDispatchTimeToMinutes(card.scheduledStartTime);
   const endMinutes = preview?.endMinutes ?? parseDispatchTimeToMinutes(card.scheduledEndTime);
   const gridRow = `${laneLayout.cardRows.get(card.appointmentId) ?? Math.max(1, index + 1)}`;
 
   if (startMinutes === null) {
+    const visibleColumnSpan = 8;
     return {
-      gridColumn: `${timelineSlotCount + 1} / span 8`,
-      gridRow
+      style: {
+        gridColumn: `${timelineSlotCount + 1} / span ${visibleColumnSpan}`,
+        gridRow
+      },
+      spaceTier: getDispatchTimelineCardSpaceTier(visibleColumnSpan)
     };
   }
 
@@ -521,8 +540,11 @@ function getTimelineCardPlacementStyle(
   const durationSlots = Math.max(4, Math.ceil((clampedEnd - clampedStart) / timelineSlotMinutes));
 
   return {
-    gridColumn: `${startSlot} / span ${durationSlots}`,
-    gridRow
+    style: {
+      gridColumn: `${startSlot} / span ${durationSlots}`,
+      gridRow
+    },
+    spaceTier: getDispatchTimelineCardSpaceTier(durationSlots)
   };
 }
 
