@@ -34,6 +34,16 @@ tools/license/*.jsonl
 # Locally generated BellField-side release signing material.
 tools/update/*.pem
 
+# Local BellField operator secrets. Canonical storage is outside the repo under
+# C:\Users\rober\Documents\API Keys\BellField or C:\Users\rober\.ssh.
+deploy/relay/relay-host.env
+deploy/relay/*.env.local
+bellfield-relay-operator
+bellfield-relay-operator.key
+resend-bellfield.txt
+relay-token*.txt
+bellfield-relay-token*.txt
+
 # wrangler local state
 site/.wrangler/
 

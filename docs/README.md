@@ -308,13 +308,33 @@ Does not own: estimate lifecycle rules (`workflows-and-state-machines.md`) or th
 
 ### [relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)
 
-Audience: contributors and the operator checking how the production relay is actually deployed.
+Audience: contributors and the operator checking how the current testing relay is actually deployed.
 
-Purpose: dated record of the live relay host — stack shape, tunnel, webhook wiring, backup cron, verification evidence including the first production end-to-end delivered email, open ops items, and deployment gotchas.
+Purpose: dated record of the live testing relay host — stack shape, tunnel, webhook wiring, backup job, verification evidence including the first end-to-end delivered email, open ops items, and deployment gotchas.
 
-Read when: operating, redeploying, or debugging the production relay, or picking up the open ops leftovers.
+Read when: operating, redeploying, or debugging the current testing relay, or picking up the open ops leftovers.
 
 Does not own: relay design (`delivery-relay-plan.md`) or token semantics (`relay-token-design.md`). It is evidence, not a plan.
+
+### [testing-relay-ops.md](./testing-relay-ops.md)
+
+Audience: the owner and contributors operating the current relay test host.
+
+Purpose: machine-specific test-relay runbook, credential path inventory, safe deploy commands, host hardening baseline, and backup timer setup.
+
+Read when: connecting to the relay laptop, checking where local operator keys live, hardening the host, or deploying code to the current testing relay.
+
+Does not own: the permanent release route (`release-operator-route.md`) or the relay product design (`delivery-relay-plan.md`).
+
+### [release-operator-route.md](./release-operator-route.md)
+
+Audience: the owner and contributors producing signed release artifacts or publishing them through a relay.
+
+Purpose: separate sold-release route: local signing-key locations, release build checks, artifact publication through the relay, and permanent-relay cutover criteria.
+
+Read when: building a sold-shaped release, publishing a release artifact, or separating permanent release operations from the current testing relay.
+
+Does not own: the test relay host posture (`testing-relay-ops.md`) or the Windows install recipe (`install-runbook.md`).
 
 ### [validation-playbook.md](./validation-playbook.md)
 

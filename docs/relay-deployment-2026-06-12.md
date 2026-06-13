@@ -1,8 +1,12 @@
-# Relay Production Deployment — 2026-06-12
+# Testing Relay Deployment — 2026-06-12
 
 The BellField delivery relay went live on 2026-06-12 at
 `https://relay.bellfield.app`, completing the D7 pilot hosting decision and
-the deployment half of Phase 5. This document is the dated evidence record.
+the deployment half of Phase 5. This document is the dated evidence record for
+the current **testing relay**. It is not the permanent relay-hosting route.
+Operator procedures and credential locations live in
+[testing-relay-ops.md](./testing-relay-ops.md); release publishing lives in
+[release-operator-route.md](./release-operator-route.md).
 
 ## Host
 
@@ -83,8 +87,9 @@ install, which folds into gate day.
 - **External uptime monitor** on the health URL (requires an owner account
   at the monitoring service).
 - **DHCP reservation** for the host's LAN address.
-- **Harden SSH** to key-only (`PasswordAuthentication no`) — password auth
-  is still enabled and the console password is weak.
+- **Harden SSH** to key-only (`PasswordAuthentication no`) — completed on
+  2026-06-12 for remote SSH; the console password remains a local break-glass
+  path for this testing host.
 - **Laptop-as-server hardening** (decided 2026-06-12: this host stays until
   the first paying customer has acceptance links live — no VPS pre-revenue):
   verify lid-close/sleep is fully disabled; run a deliberate power-loss

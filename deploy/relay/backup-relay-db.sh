@@ -5,6 +5,7 @@
 # Point the target at storage that does not live on this machine (NFS/SMB
 # mount, rclone'd bucket, or scp in a wrapper script).
 set -euo pipefail
+umask 077
 
 target_dir="${1:?usage: backup-relay-db.sh <target-dir>}"
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"

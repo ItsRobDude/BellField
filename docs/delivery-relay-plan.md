@@ -238,10 +238,14 @@ billing ledger), and an external uptime monitor alerts on the health endpoint.
 A dedicated host or VPS is required before Phase 6 ships — acceptance and
 payment links make relay downtime visible to shops' own customers.
 
-**Deployed 2026-06-12**: live at `https://relay.bellfield.app` on the
-dual-purpose laptop's Ubuntu disk (the planned host changed from the Unraid
-box to the dedicated machine). Evidence and open operational items:
-[relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md).
+**Testing relay deployed 2026-06-12**: live at
+`https://relay.bellfield.app` on the dual-purpose laptop's Ubuntu disk (the
+planned host changed from the Unraid box to the dedicated machine). This is a
+testing/pilot relay, not the permanent relay route. Evidence and open
+operational items:
+[relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md). Operator
+steps live in [testing-relay-ops.md](./testing-relay-ops.md); release artifact
+publication lives in [release-operator-route.md](./release-operator-route.md).
 
 Resolved 2026-06-11 (owner decisions, second round): unit pricing — $0.03 per
 send billed monthly from relay metering, default quota 1,000 sends/month per
