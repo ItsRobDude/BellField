@@ -138,20 +138,41 @@ export interface JobInvoiceBalance {
 /** How a manually recorded payment was tendered. */
 export type PaymentMethod = 'cash' | 'check' | 'card' | 'ach' | 'other';
 
+export type PaymentSource = 'manual' | 'bellfieldPayments';
+
+export type PaymentProvider = 'stripe';
+
+export interface PaymentAllocation {
+  invoiceId: string;
+  invoiceKind: InvoiceKind;
+  amount: number;
+}
+
 /**
- * A payment received against a posted invoice. An append-only ledger entry: it never
- * changes invoice totals; the job's amount due is derived as net billed − non-void
- * payments. A correction is a void (`isVoid`), not an edit of the amount.
+ * A payment received for a job. It is an append-only ledger entry: it never changes
+ * invoice totals; the job's amount due is derived as net billed − non-void payments.
+ * `allocations` records how the receipt applies to posted charge invoices. A
+ * correction is a void (`isVoid`), not an edit of the amount.
  */
 export interface Payment {
   id: string;
-  invoiceId: string;
+  jobId: string;
+  /** Legacy/display anchor for older/manual flows; allocations are authoritative. */
+  invoiceId?: string;
   amount: number;
   method: PaymentMethod;
+  source: PaymentSource;
+  provider?: PaymentProvider;
+  currency: string;
   receivedAt: string;
   reference?: string;
   memo?: string;
   recordedByName: string;
+  processorFee?: number;
+  applicationFee?: number;
+  providerPaymentId?: string;
+  providerSessionId?: string;
+  allocations: PaymentAllocation[];
   isVoid: boolean;
   voidReason?: string;
   voidedByName?: string;
@@ -183,6 +204,30 @@ export interface PaymentResponse {
 export interface JobPaymentsResponse {
   payments: Payment[];
 }
+
+export type OnlinePaymentLinkState =
+  | 'paymentsNotConfigured'
+  | 'paymentsDisabled'
+  | 'created'
+  | 'providerError';
+
+export interface CreateOnlinePaymentLinkRequest {
+  customerEmail?: string;
+}
+
+export type OnlinePaymentLinkResponse =
+  | {
+      state: 'created';
+      checkoutUrl: string;
+      paymentSessionId: string;
+      amount: number;
+      currency: string;
+      expiresAt: string;
+    }
+  | {
+      state: Exclude<OnlinePaymentLinkState, 'created'>;
+      message?: string;
+    };
 
 /** A manual invoice line the office adds, or the shape it edits a line into. */
 export interface InvoiceLineItemInput {

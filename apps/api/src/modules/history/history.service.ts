@@ -15,9 +15,9 @@ const MAX_LIMIT = 200;
 /**
  * Read-only union over existing timelines/ledgers, projected to a common shape:
  *   record_type, source_id, occurred_at, actor_employee_id, actor_name, detail, job_id
- * Payments resolve their job through invoices.job_id (a direct existing relationship); equipment
- * history is equipment-scoped and carries no job. `detail` is the most descriptive single field per
- * source; the human summary is built from it in TypeScript.
+ * Payments carry their job directly; equipment history is equipment-scoped and carries no job.
+ * `detail` is the most descriptive single field per source; the human summary is built from it
+ * in TypeScript.
  */
 const HISTORY_UNION_SQL = `
   select 'jobTimeline' as record_type, id as source_id, occurred_at, null::text as actor_employee_id,
@@ -33,9 +33,8 @@ const HISTORY_UNION_SQL = `
   select 'jobCostEvent', id, occurred_at, actor_employee_id, actor_name, description, job_id
     from job_cost_events
   union all
-  select 'payment', p.id, p.received_at, p.recorded_by_employee_id, p.recorded_by_name, p.method, i.job_id
+  select 'payment', p.id, p.received_at, p.recorded_by_employee_id, p.recorded_by_name, p.method, p.job_id
     from payments p
-    join invoices i on i.id = p.invoice_id
   union all
   select 'equipmentHistory', id, occurred_at, null::text, actor_name, message, null::text
     from equipment_history_entries

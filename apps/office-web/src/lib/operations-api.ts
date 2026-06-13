@@ -68,6 +68,8 @@ import type {
   JobAdjustmentsResponse,
   JobInvoiceBalance,
   JobPaymentsResponse,
+  CreateOnlinePaymentLinkRequest,
+  OnlinePaymentLinkResponse,
   Payment,
   PaymentMethod,
   PaymentResponse,
@@ -195,6 +197,8 @@ export type {
   JobAdjustmentsResponse,
   JobInvoiceBalance,
   JobPaymentsResponse,
+  CreateOnlinePaymentLinkRequest,
+  OnlinePaymentLinkResponse,
   Payment,
   PaymentMethod,
   PaymentResponse,
@@ -1003,6 +1007,27 @@ export async function recordOfficePayment(
     method: 'POST',
     body: JSON.stringify(payload)
   });
+}
+
+/** Create a Stripe-hosted payment link for the full outstanding job balance. */
+export async function createOfficeOnlinePaymentLink(
+  input: CreateOnlinePaymentLinkRequest & {
+    invoiceId: string;
+    sessionToken: string;
+    apiBaseUrl?: string;
+  }
+): Promise<OnlinePaymentLinkResponse> {
+  const { invoiceId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<OnlinePaymentLinkResponse>(
+    `/operations/invoices/${invoiceId}/payments/online-link`,
+    {
+      apiBaseUrl,
+      sessionToken,
+      method: 'POST',
+      body: JSON.stringify(payload)
+    }
+  );
 }
 
 /** Void a payment by id (the correction path; payments are never edited in place). */

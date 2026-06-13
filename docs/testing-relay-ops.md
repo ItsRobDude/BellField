@@ -89,6 +89,34 @@ curl.exe -fsS https://relay.bellfield.app/health
 
 Expected health response contains `"status":"ok"`.
 
+## Payment-Link Operations
+
+Stripe Connect payment links require relay-side Stripe credentials in
+`/home/rob/bellfield/deploy/relay/relay-host.env`:
+
+```bash
+BELLFIELD_RELAY_STRIPE_SECRET_KEY=sk_...
+BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET=whsec_...
+BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS=100
+```
+
+Those secrets stay on the relay host only. Customer installs keep only their
+relay token triplet and poll payment events from the relay.
+
+Enable a shop after a Stripe connected account exists:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
+  "cd /home/rob/bellfield && pnpm --filter @bellfield/relay relay-admin -- set-payments-account --shop-id=<shop_id> --stripe-account-id=acct_..."
+```
+
+Disable payment links for a shop:
+
+```powershell
+ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
+  "cd /home/rob/bellfield && pnpm --filter @bellfield/relay relay-admin -- disable-payments --shop-id=<shop_id>"
+```
+
 ## Host Hardening Baseline
 
 For this testing relay, the acceptable baseline is:

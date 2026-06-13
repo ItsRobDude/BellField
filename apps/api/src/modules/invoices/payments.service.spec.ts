@@ -35,12 +35,16 @@ function createService() {
 function paymentRecord(overrides: Partial<PaymentRecord> = {}): PaymentRecord {
   return {
     id: 'pay-1',
+    jobId: 'job-1',
     invoiceId: 'inv-main',
     amount: 100,
     method: 'card',
+    source: 'manual',
+    currency: 'USD',
     receivedAt: '2026-06-02T00:00:00.000Z',
     recordedByEmployeeId: 'office-1',
     recordedByName: 'Bea Bookkeeper',
+    allocations: [{ invoiceId: 'inv-main', invoiceKind: 'main', amount: 100 }],
     isVoid: false,
     createdAt: '2026-06-02T00:00:00.000Z',
     updatedAt: '2026-06-02T00:00:00.000Z',

@@ -199,19 +199,30 @@ estimate in front of a customer.
 - No durable BellField receipts (deferred, unchanged).
 - No payment collection — that is 6b.
 
-## Payment links (Phase 6b sketch — constraints only)
+## Payment links (Phase 6b)
 
 Decided posture: BellField pages never touch card data or shop processor
-keys. The shape to design for Phase 6b: the install creates a
-processor-hosted checkout session (e.g. Stripe Checkout) **outbound** at
-invoice-send time and the email links straight to the processor's page;
-payment confirmation reaches the install either via the processor's own
-outbound-poll API (install polls the session status — no relay involvement
-at all) or, if webhooks prove necessary, via the established
-webhook-at-relay/poll-from-install pattern. Open questions deliberately
-left for the 6b design: session expiry vs invoice validity, partial
-payments/deposits, and whether the relay needs any role at all in the happy
-path.
+keys. Phase 6b uses Stripe Connect through the relay:
+
+- the office creates a payment link only from a posted invoice surface
+- the amount is the full current job balance, not a partial amount or deposit
+- the install asks the relay to create a Stripe Checkout Session on the shop's
+  connected Stripe account
+- BellField applies the same platform fee to every shop (default **100 basis
+  points / 1.0%**), in addition to Stripe's own processor fees
+- the customer pays on Stripe-hosted Checkout, then lands on a plain relay
+  return page
+- Stripe webhooks terminate at the relay; the install worker polls confirmed
+  payment events and records them into the local append-only payment ledger
+- local payment posting is idempotent by provider + provider payment id and
+  auto-allocates the receipt across posted main/adjustment invoices
+
+Intentionally not included in this slice: refunds, deposits, estimate
+payments, partial payments in the UI, customer surcharge math, stored cards,
+processor fee reconciliation beyond the application fee, and invoice email
+delivery. Online provider payments cannot be voided through the manual
+payment-void button; any refund/correction workflow must be designed against
+the processor before local ledger correction is exposed.
 
 ## Shipping prerequisite (D7 — resolved 2026-06-12)
 

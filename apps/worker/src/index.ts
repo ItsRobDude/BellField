@@ -13,6 +13,9 @@ import { DeliveryRepository } from './jobs/delivery/delivery.repository';
 import { DeliveryService } from './jobs/delivery/delivery-service';
 import { RelayClient } from './jobs/delivery/relay-client';
 import { JobRunner, type WorkerJob } from './jobs/job-runner';
+import { createPaymentEventsJob } from './jobs/payments/payment-events-job';
+import { PaymentEventsRepository } from './jobs/payments/payment-events.repository';
+import { PaymentEventsService } from './jobs/payments/payment-events-service';
 
 const heartbeatMs = 60_000;
 
@@ -53,10 +56,15 @@ async function startWorker(): Promise<void> {
   }
 
   if (runtimeConfig.relay) {
+    const relayClient = new RelayClient(runtimeConfig.relay);
     const deliveryService = new DeliveryService(
       { mediaRoot: runtimeConfig.mediaRoot },
       new DeliveryRepository(database),
-      new RelayClient(runtimeConfig.relay)
+      relayClient
+    );
+    const paymentEventsService = new PaymentEventsService(
+      new PaymentEventsRepository(database),
+      relayClient
     );
     jobs.push(
       createDeliveryRetryJob({
@@ -70,6 +78,10 @@ async function startWorker(): Promise<void> {
       createAcceptanceDecisionsJob({
         deliveryService,
         intervalMs: runtimeConfig.delivery.acceptanceDecisionsIntervalMs
+      }),
+      createPaymentEventsJob({
+        paymentEventsService,
+        intervalMs: runtimeConfig.payments.eventIntervalMs
       })
     );
   }

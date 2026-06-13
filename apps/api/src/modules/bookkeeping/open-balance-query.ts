@@ -87,11 +87,10 @@ export async function queryOpenBalanceRows(
        group by i.job_id
      ),
      paid as (
-       select inv.job_id, coalesce(sum(p.amount), 0) as paid_total
+       select p.job_id, coalesce(sum(p.amount), 0) as paid_total
        from payments p
-       join invoices inv on inv.id = p.invoice_id
        where p.is_void = false
-       group by inv.job_id
+       group by p.job_id
      )
      select
        j.id as "jobId",

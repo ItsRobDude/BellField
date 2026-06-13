@@ -75,15 +75,20 @@ const POSTED_INVOICE_CSV_COLUMNS: CsvColumn<PostedInvoiceExportRow>[] = [
 
 const PAYMENT_LEDGER_CSV_COLUMNS: CsvColumn<PaymentLedgerExportRow>[] = [
   { header: 'Payment ID', value: (row) => row.paymentId },
-  { header: 'Invoice ID', value: (row) => row.invoiceId },
+  { header: 'Invoice IDs', value: (row) => row.invoiceIds.join('; ') },
   { header: 'Job #', value: (row) => row.jobNumber },
   { header: 'Customer', value: (row) => row.customerName },
   { header: 'Amount', value: (row) => row.amount },
   { header: 'Method', value: (row) => row.method },
+  { header: 'Source', value: (row) => row.source },
   { header: 'Received at', value: (row) => row.receivedAt },
   { header: 'Reference', value: (row) => row.reference ?? '' },
   { header: 'Memo', value: (row) => row.memo ?? '' },
   { header: 'Recorded by', value: (row) => row.recordedByName },
+  { header: 'Provider', value: (row) => row.provider ?? '' },
+  { header: 'Provider payment ID', value: (row) => row.providerPaymentId ?? '' },
+  { header: 'Processor fee', value: (row) => row.processorFee ?? '' },
+  { header: 'BellField fee', value: (row) => row.applicationFee ?? '' },
   { header: 'Void', value: (row) => (row.isVoid ? 'yes' : 'no') },
   { header: 'Voided at', value: (row) => row.voidedAt ?? '' },
   { header: 'Void reason', value: (row) => row.voidReason ?? '' }
@@ -380,11 +385,10 @@ export class ReportingService {
          group by i.job_id
        ),
        paid as (
-         select inv.job_id, coalesce(sum(p.amount), 0) as paid_total
+         select p.job_id, coalesce(sum(p.amount), 0) as paid_total
          from payments p
-         join invoices inv on inv.id = p.invoice_id
          where p.is_void = false
-         group by inv.job_id
+         group by p.job_id
        )
        select
          j.id as "jobId",
@@ -511,54 +515,74 @@ export class ReportingService {
   private async queryPaymentLedgerExportRows(): Promise<PaymentLedgerExportRow[]> {
     const result = await this.databaseService.query<{
       paymentId: string;
-      invoiceId: string;
+      invoiceIds: string[] | null;
       jobId: string;
       jobNumber: string;
       customerName: string;
       amount: string | number;
       method: string;
+      source: 'manual' | 'bellfield_payments';
       receivedAt: string | Date;
       reference: string | null;
       memo: string | null;
       recordedByName: string;
+      provider: string | null;
+      providerPaymentId: string | null;
+      processorFee: string | number | null;
+      applicationFee: string | number | null;
       isVoid: boolean;
       voidedAt: string | Date | null;
       voidReason: string | null;
     }>(
       `select
          p.id as "paymentId",
-         p.invoice_id as "invoiceId",
-         i.job_id as "jobId",
+         array_remove(array_agg(pa.invoice_id order by pa.invoice_id), null) as "invoiceIds",
+         p.job_id as "jobId",
          j.job_number as "jobNumber",
          c.name as "customerName",
          p.amount,
          p.method,
+         p.source,
          p.received_at as "receivedAt",
          p.reference,
          p.memo,
          p.recorded_by_name as "recordedByName",
+         p.provider,
+         p.provider_payment_id as "providerPaymentId",
+         p.processor_fee_amount as "processorFee",
+         p.application_fee_amount as "applicationFee",
          p.is_void as "isVoid",
          p.voided_at as "voidedAt",
          p.void_reason as "voidReason"
        from payments p
-       join invoices i on i.id = p.invoice_id
-       join jobs j on j.id = i.job_id
+       join jobs j on j.id = p.job_id
        join customers c on c.id = j.bill_to_customer_id
+       left join payment_allocations pa on pa.payment_id = p.id
+       group by
+         p.id, p.job_id, j.job_number, c.name, p.amount, p.method, p.source,
+         p.received_at, p.reference, p.memo, p.recorded_by_name, p.provider,
+         p.provider_payment_id, p.processor_fee_amount, p.application_fee_amount,
+         p.is_void, p.voided_at, p.void_reason
        order by p.received_at desc, p.id asc`
     );
 
     return result.rows.map((row) => ({
       paymentId: row.paymentId,
-      invoiceId: row.invoiceId,
+      invoiceIds: row.invoiceIds ?? [],
       jobId: row.jobId,
       jobNumber: row.jobNumber,
       customerName: row.customerName,
       amount: roundMoney(row.amount),
       method: row.method,
+      source: row.source === 'bellfield_payments' ? 'bellfieldPayments' : 'manual',
       receivedAt: new Date(row.receivedAt).toISOString(),
       reference: row.reference ?? undefined,
       memo: row.memo ?? undefined,
       recordedByName: row.recordedByName,
+      provider: row.provider ?? undefined,
+      providerPaymentId: row.providerPaymentId ?? undefined,
+      processorFee: row.processorFee === null ? undefined : roundMoney(row.processorFee),
+      applicationFee: row.applicationFee === null ? undefined : roundMoney(row.applicationFee),
       isVoid: row.isVoid,
       voidedAt: row.voidedAt ? new Date(row.voidedAt).toISOString() : undefined,
       voidReason: row.voidReason ?? undefined

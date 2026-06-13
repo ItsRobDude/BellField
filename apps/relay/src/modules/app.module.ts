@@ -4,6 +4,7 @@ import { AcceptanceModule } from './acceptance/acceptance.module';
 import { DeliveryModule } from './delivery/delivery.module';
 import { HealthModule } from './health/health.module';
 import { IdentityModule } from './identity/identity.module';
+import { PaymentsModule } from './payments/payments.module';
 import { ReleasesModule } from './releases/releases.module';
 
 @Module({
@@ -13,6 +14,7 @@ import { ReleasesModule } from './releases/releases.module';
     IdentityModule,
     AcceptanceModule,
     DeliveryModule,
+    PaymentsModule,
     ReleasesModule
   ]
 })

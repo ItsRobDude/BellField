@@ -1,7 +1,10 @@
 import type {
   JobPaymentsResponse,
   Payment,
+  PaymentAllocation,
+  PaymentProvider,
   PaymentMethod,
+  PaymentSource,
   PaymentResponse,
   RecordPaymentRequest,
   VoidPaymentRequest
@@ -10,6 +13,9 @@ import type {
 // Re-export the contract shapes the payments controller/service speak in, mirroring
 // how the rest of the invoices module aliases its DTOs to shared contract types.
 export type PaymentMethodValue = PaymentMethod;
+export type PaymentSourceValue = PaymentSource;
+export type PaymentProviderValue = PaymentProvider;
+export type PaymentAllocationRecord = PaymentAllocation;
 export type PaymentSummaryDto = Payment;
 export type PaymentResponseDto = PaymentResponse;
 export type JobPaymentsResponseDto = JobPaymentsResponse;
@@ -30,14 +36,23 @@ export const paymentMethods = [
  */
 export type PaymentRecord = {
   id: string;
-  invoiceId: string;
+  jobId: string;
+  invoiceId?: string;
   amount: number;
   method: PaymentMethodValue;
+  source: PaymentSourceValue;
+  provider?: PaymentProviderValue;
+  currency: string;
   receivedAt: string;
   reference?: string;
   memo?: string;
-  recordedByEmployeeId: string;
+  recordedByEmployeeId?: string;
   recordedByName: string;
+  processorFee?: number;
+  applicationFee?: number;
+  providerPaymentId?: string;
+  providerSessionId?: string;
+  allocations: PaymentAllocationRecord[];
   isVoid: boolean;
   voidReason?: string;
   voidedByName?: string;
@@ -54,4 +69,18 @@ export type PaymentWriteInput = {
   reference?: string;
   memo?: string;
   actor: { id: string; displayName: string };
+};
+
+export type ProviderPaymentWriteInput = {
+  jobId: string;
+  amount: number;
+  currency: string;
+  provider: PaymentProviderValue;
+  providerPaymentId: string;
+  providerSessionId?: string;
+  processorFee?: number;
+  applicationFee?: number;
+  receivedAt: string;
+  reference?: string;
+  memo?: string;
 };

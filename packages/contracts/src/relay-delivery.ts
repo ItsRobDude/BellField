@@ -128,3 +128,66 @@ export interface RelayAcceptanceDecisionsResponse {
 export interface RelayAcceptanceDecisionAckResponse {
   acknowledged: boolean;
 }
+
+// --- Payment links (Phase 6b) ---------------------------------------------------
+
+export type RelayPaymentSessionResult =
+  | {
+      kind: 'created';
+      paymentSessionId: string;
+      checkoutUrl: string;
+      expiresAt: string;
+      amountCents: number;
+      currency: string;
+      applicationFeeCents: number;
+    }
+  | {
+      kind: 'failed';
+      code: 'paymentsNotConfigured' | 'paymentsDisabled' | 'invalidAmount' | 'providerError';
+      retryable: boolean;
+      message: string;
+    };
+
+export interface RelayCreatePaymentSessionRequest {
+  /** Install-side idempotency key. Replays return the same recorded session. */
+  idempotencyKey: string;
+  /** Install-side job id, opaque to the relay and returned in paid events. */
+  jobRef: string;
+  /** Optional initiating invoice id; allocations remain install-side. */
+  invoiceRef?: string;
+  amountCents: number;
+  currency: string;
+  description: string;
+  customerEmail?: string;
+  // The customer-facing success/cancel URLs are NOT install-supplied: the relay
+  // owns the public origin and mints them from its own publicBaseUrl, so an
+  // install can never point the post-checkout redirect at an internal/wrong host.
+}
+
+export interface RelayCreatePaymentSessionResponse {
+  result: RelayPaymentSessionResult;
+}
+
+/** A confirmed payment awaiting install pickup, delivered at-least-once until acked. */
+export interface RelayPaymentEventRecord {
+  paymentEventId: string;
+  paymentSessionId: string;
+  jobRef: string;
+  invoiceRef: string | null;
+  provider: 'stripe';
+  providerPaymentId: string;
+  providerSessionId: string;
+  amountCents: number;
+  currency: string;
+  applicationFeeCents: number;
+  processorFeeCents: number | null;
+  paidAt: string;
+}
+
+export interface RelayPaymentEventsResponse {
+  events: RelayPaymentEventRecord[];
+}
+
+export interface RelayPaymentEventAckResponse {
+  acknowledged: boolean;
+}

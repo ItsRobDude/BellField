@@ -21,7 +21,7 @@ export interface HistoryEntry {
   actorName: string | null;
   /** Human-readable line derived server-side from fields already visible to a permitted user. */
   summary: string;
-  /** Resolved job (payments resolve theirs via invoice → invoices.job_id); null for equipment. */
+  /** Resolved job; null for equipment. */
   jobId: string | null;
 }
 

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   addOfficeInvoiceLineById,
   createOfficeJobAdjustment,
+  createOfficeOnlinePaymentLink,
   editOfficeInvoiceLine,
   getOfficeJobInvoiceBalance,
   listOfficeJobAdjustments,
@@ -16,6 +17,7 @@ import {
   type InvoiceLineItemSummary,
   type InvoiceSummary,
   type JobInvoiceBalance,
+  type OnlinePaymentLinkResponse,
   type Payment,
   type PaymentMethod
 } from '@/lib/operations-api';
@@ -99,6 +101,11 @@ export function JobInvoiceCorrections({
   } | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
+  const [onlinePaymentLink, setOnlinePaymentLink] = useState<Extract<
+    OnlinePaymentLinkResponse,
+    { state: 'created' }
+  > | null>(null);
 
   const canViewPayments = paymentPermissions.canView;
 
@@ -264,6 +271,39 @@ export function JobInvoiceCorrections({
     }
   }
 
+  async function createPaymentLink() {
+    if (!balance || balance.amountDue <= 0) {
+      setErrorMessage('This job does not have an outstanding balance.');
+      return;
+    }
+    setIsCreatingPaymentLink(true);
+    try {
+      const response = await createOfficeOnlinePaymentLink({
+        invoiceId: mainInvoiceId,
+        apiBaseUrl,
+        sessionToken
+      });
+      if (response.state !== 'created') {
+        setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+        return;
+      }
+      setOnlinePaymentLink(response);
+      setErrorMessage(null);
+      let copied = false;
+      try {
+        await navigator.clipboard?.writeText(response.checkoutUrl);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
+    } finally {
+      setIsCreatingPaymentLink(false);
+    }
+  }
+
   async function voidPayment(payment: Payment) {
     // Voiding a payment is a money-ledger correction; capture an optional reason
     // for the audit trail. A null return means the user cancelled.
@@ -396,8 +436,12 @@ export function JobInvoiceCorrections({
           canRecord={paymentPermissions.canRecord}
           canVoid={paymentPermissions.canVoid}
           isSaving={isSaving}
+          isCreatingPaymentLink={isCreatingPaymentLink}
+          amountDue={balance?.amountDue ?? 0}
+          onlinePaymentLink={onlinePaymentLink}
           paymentDraft={paymentDraft}
           onStartRecord={() => setPaymentDraft(emptyPaymentDraft())}
+          onCreatePaymentLink={() => void createPaymentLink()}
           onCancelRecord={() => setPaymentDraft(null)}
           onChangeDraft={setPaymentDraft}
           onSavePayment={() => void savePayment()}
@@ -544,8 +588,12 @@ function PaymentsBlock({
   canRecord,
   canVoid,
   isSaving,
+  isCreatingPaymentLink,
+  amountDue,
+  onlinePaymentLink,
   paymentDraft,
   onStartRecord,
+  onCreatePaymentLink,
   onCancelRecord,
   onChangeDraft,
   onSavePayment,
@@ -555,8 +603,12 @@ function PaymentsBlock({
   canRecord: boolean;
   canVoid: boolean;
   isSaving: boolean;
+  isCreatingPaymentLink: boolean;
+  amountDue: number;
+  onlinePaymentLink: Extract<OnlinePaymentLinkResponse, { state: 'created' }> | null;
   paymentDraft: PaymentDraft | null;
   onStartRecord: () => void;
+  onCreatePaymentLink: () => void;
   onCancelRecord: () => void;
   onChangeDraft: (draft: PaymentDraft) => void;
   onSavePayment: () => void;
@@ -573,11 +625,36 @@ function PaymentsBlock({
       <div style={styles.row}>
         <h3 style={styles.sectionHeading}>Payments</h3>
         {canRecord && !paymentDraft ? (
-          <button type="button" style={styles.button} disabled={isSaving} onClick={onStartRecord}>
-            Record payment
-          </button>
+          <div style={styles.badgeRow}>
+            {amountDue > 0 ? (
+              <button
+                type="button"
+                style={styles.primaryButton}
+                disabled={isSaving || isCreatingPaymentLink}
+                onClick={onCreatePaymentLink}
+              >
+                {isCreatingPaymentLink ? 'Creating…' : 'Create payment link'}
+              </button>
+            ) : null}
+            <button type="button" style={styles.button} disabled={isSaving} onClick={onStartRecord}>
+              Record payment
+            </button>
+          </div>
         ) : null}
       </div>
+
+      {onlinePaymentLink ? (
+        <div style={styles.drawerPanel}>
+          <label style={styles.fieldLabel}>
+            <span>Payment link</span>
+            <input style={styles.input} value={onlinePaymentLink.checkoutUrl} readOnly />
+          </label>
+          <p style={styles.tinyMuted}>
+            {formatCurrency(onlinePaymentLink.amount)} · expires{' '}
+            {onlinePaymentLink.expiresAt.slice(0, 10)}
+          </p>
+        </div>
+      ) : null}
 
       {paymentDraft ? (
         <div style={styles.drawerPanel}>
@@ -651,7 +728,7 @@ function PaymentsBlock({
           <div key={payment.id} style={styles.row}>
             <div style={{ minWidth: 0 }}>
               <span style={payment.isVoid ? { textDecoration: 'line-through' } : undefined}>
-                {formatCurrency(payment.amount)} · {paymentMethodLabels[payment.method]}
+                {formatCurrency(payment.amount)} · {paymentLabel(payment)}
               </span>
               <p style={styles.tinyMuted}>
                 {payment.receivedAt.slice(0, 10)}
@@ -662,7 +739,7 @@ function PaymentsBlock({
               </p>
             </div>
             <div style={styles.badgeRow}>
-              {canVoid && !payment.isVoid ? (
+              {canVoid && !payment.isVoid && payment.source === 'manual' ? (
                 <button
                   type="button"
                   style={styles.dangerButton}
@@ -678,4 +755,11 @@ function PaymentsBlock({
       )}
     </div>
   );
+}
+
+function paymentLabel(payment: Payment): string {
+  if (payment.source === 'bellfieldPayments') {
+    return 'Online card';
+  }
+  return paymentMethodLabels[payment.method];
 }

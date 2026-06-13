@@ -87,16 +87,21 @@ export interface PostedInvoiceExportRow {
 
 export interface PaymentLedgerExportRow {
   paymentId: string;
-  invoiceId: string;
+  invoiceIds: string[];
   jobId: string;
   jobNumber: string;
   customerName: string;
   amount: number;
   method: string;
+  source: 'manual' | 'bellfieldPayments';
   receivedAt: string;
   reference?: string;
   memo?: string;
   recordedByName: string;
+  provider?: string;
+  providerPaymentId?: string;
+  processorFee?: number;
+  applicationFee?: number;
   isVoid: boolean;
   voidedAt?: string;
   voidReason?: string;
