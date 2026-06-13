@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@bellfield/contracts": "workspace:*",
+    "@bellfield/i18n": "workspace:*",
     "next": "15.5.19",
     "react": "19.1.0",
     "react-dom": "19.1.0"

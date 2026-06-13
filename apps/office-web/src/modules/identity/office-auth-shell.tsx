@@ -2,6 +2,14 @@
 
 import type { CSSProperties, FormEvent } from 'react';
 import { useEffect, useState } from 'react';
+import {
+  createBellFieldTranslator,
+  defaultBellFieldLocale,
+  getBellFieldLocaleLabel,
+  resolveBellFieldLocale,
+  supportedBellFieldLocales,
+  type BellFieldLocale
+} from '@bellfield/i18n';
 import { getInitialOfficeApiBaseUrl } from '@/lib/api-base-url';
 import {
   createFirstOwner,
@@ -43,6 +51,19 @@ export function OfficeAuthShell() {
   const [employee, setEmployee] = useState<EmployeeSummary | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [locale, setLocale] = useState<BellFieldLocale>(defaultBellFieldLocale);
+  const t = createBellFieldTranslator(locale);
+
+  useEffect(() => {
+    const browserLanguages =
+      typeof navigator === 'undefined'
+        ? undefined
+        : navigator.languages.length > 0
+          ? navigator.languages
+          : navigator.language;
+
+    setLocale(resolveBellFieldLocale(browserLanguages));
+  }, []);
 
   useEffect(() => {
     let isCurrent = true;
@@ -86,7 +107,7 @@ export function OfficeAuthShell() {
       setSessionToken(response.sessionToken);
       setEmployee(response.employee);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to sign in.');
+      setErrorMessage(error instanceof Error ? error.message : t('common.unableToSignIn'));
     } finally {
       setIsSubmitting(false);
     }
@@ -111,9 +132,7 @@ export function OfficeAuthShell() {
       setSessionToken(response.sessionToken);
       setEmployee(response.employee);
     } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to create the owner account.'
-      );
+      setErrorMessage(error instanceof Error ? error.message : t('officeAuth.unableToCreateOwner'));
     } finally {
       setIsSubmitting(false);
     }
@@ -137,16 +156,16 @@ export function OfficeAuthShell() {
   return (
     <main style={styles.page}>
       <section style={styles.card}>
-        <div style={styles.kicker}>BellField Office</div>
-        <h1 style={styles.title}>{setupRequired ? 'Create owner account' : 'Sign in'}</h1>
+        <div style={styles.kicker}>{t('officeAuth.productName')}</div>
+        <h1 style={styles.title}>
+          {setupRequired ? t('officeAuth.createOwnerAccount') : t('common.signIn')}
+        </h1>
         <p style={styles.muted}>
-          {setupRequired
-            ? 'Start BellField with the first active owner account.'
-            : 'Use your office account to manage dispatch, jobs, and customers.'}
+          {setupRequired ? t('officeAuth.startOwnerIntro') : t('officeAuth.signInIntro')}
         </p>
         <form onSubmit={setupRequired ? handleCreateFirstOwner : handleLogin} style={styles.form}>
           <label style={styles.fieldLabel}>
-            <span>Server URL</span>
+            <span>{t('common.serverUrl')}</span>
             <input
               value={apiBaseUrl}
               onChange={(event) => setApiBaseUrl(event.target.value)}
@@ -154,18 +173,34 @@ export function OfficeAuthShell() {
               style={styles.input}
             />
           </label>
-          <p style={styles.helperText}>Enter the BellField API address for this office server.</p>
+          <p style={styles.helperText}>{t('officeAuth.serverUrlHelp')}</p>
+          <label style={styles.fieldLabel}>
+            <span>{t('common.languageLabel')}</span>
+            <select
+              value={locale}
+              onChange={(event) => setLocale(resolveBellFieldLocale(event.target.value))}
+              style={styles.input}
+            >
+              {supportedBellFieldLocales.map((optionLocale) => (
+                <option key={optionLocale} value={optionLocale}>
+                  {getBellFieldLocaleLabel(optionLocale, locale)}
+                </option>
+              ))}
+            </select>
+          </label>
           {setupRequired ? (
             <>
               <input
-                aria-label="Setup token"
+                aria-label={t('officeAuth.setupToken')}
+                placeholder={t('officeAuth.setupToken')}
                 value={setupToken}
                 onChange={(event) => setSetupToken(event.target.value)}
                 style={styles.input}
                 type="password"
               />
               <input
-                aria-label="Display name"
+                aria-label={t('officeAuth.displayName')}
+                placeholder={t('officeAuth.displayName')}
                 value={displayName}
                 onChange={(event) => setDisplayName(event.target.value)}
                 style={styles.input}
@@ -173,13 +208,15 @@ export function OfficeAuthShell() {
             </>
           ) : null}
           <input
-            aria-label="Email"
+            aria-label={t('common.email')}
+            placeholder={t('common.email')}
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             style={styles.input}
           />
           <input
-            aria-label="Password"
+            aria-label={t('common.password')}
+            placeholder={t('common.password')}
             value={password}
             onChange={(event) => setPassword(event.target.value)}
             type="password"
@@ -188,16 +225,19 @@ export function OfficeAuthShell() {
           <button type="submit" disabled={isSubmitting} style={styles.button}>
             {setupRequired
               ? isSubmitting
-                ? 'Creating owner...'
-                : 'Create owner'
+                ? t('officeAuth.creatingOwner')
+                : t('officeAuth.createOwner')
               : isSubmitting
-                ? 'Signing in...'
-                : 'Sign in'}
+                ? t('common.signingIn')
+                : t('common.signIn')}
           </button>
         </form>
-        {isCheckingSetup ? <p style={styles.helperText}>Checking server setup status...</p> : null}
+        {isCheckingSetup ? (
+          <p style={styles.helperText}>{t('officeAuth.serverSetupStatus')}</p>
+        ) : null}
         {showDemoAccounts && !setupRequired ? (
           <div style={styles.demoList}>
+            <p style={styles.helperText}>{t('common.demoAccounts')}</p>
             {demoAccounts.map((account) => (
               <button
                 key={account.email}

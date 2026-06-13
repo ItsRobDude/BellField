@@ -1,6 +1,14 @@
 import { useState } from 'react';
 import { StatusBar } from 'expo-status-bar';
 import {
+  createBellFieldTranslator,
+  defaultBellFieldLocale,
+  getBellFieldLocaleLabel,
+  resolveBellFieldLocale,
+  supportedBellFieldLocales,
+  type BellFieldLocale
+} from '@bellfield/i18n';
+import {
   ActivityIndicator,
   Pressable,
   ScrollView,
@@ -33,6 +41,8 @@ export function TechnicianAuthScreen() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [locale, setLocale] = useState<BellFieldLocale>(defaultBellFieldLocale);
+  const t = createBellFieldTranslator(locale);
 
   async function handleLogin() {
     setIsSubmitting(true);
@@ -49,7 +59,7 @@ export function TechnicianAuthScreen() {
       setSessionToken(response.sessionToken);
       setEmployee(response.employee);
     } catch (error) {
-      setErrorMessage(error instanceof Error ? error.message : 'Unable to sign in.');
+      setErrorMessage(error instanceof Error ? error.message : t('common.unableToSignIn'));
     } finally {
       setIsSubmitting(false);
     }
@@ -79,47 +89,74 @@ export function TechnicianAuthScreen() {
     <SafeAreaView style={styles.container}>
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.card}>
-          <Text style={styles.kicker}>BellField Field</Text>
-          <Text style={styles.title}>Sign in</Text>
-          <Text style={styles.subtitle}>
-            Use your field account to view assigned work and sync completed updates.
-          </Text>
+          <Text style={styles.kicker}>{t('fieldAuth.productName')}</Text>
+          <Text style={styles.title}>{t('common.signIn')}</Text>
+          <Text style={styles.subtitle}>{t('fieldAuth.signInIntro')}</Text>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Server URL</Text>
+            <Text style={styles.label}>{t('common.serverUrl')}</Text>
             <TextInput
               value={apiBaseUrl}
               onChangeText={setApiBaseUrl}
               autoCapitalize="none"
+              accessibilityLabel={t('common.serverUrl')}
               placeholder="https://office-pc:3001"
               style={styles.input}
             />
-            <Text style={styles.helperText}>
-              Enter the BellField API address for this office server.
-            </Text>
+            <Text style={styles.helperText}>{t('fieldAuth.serverUrlHelp')}</Text>
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Email</Text>
+            <Text style={styles.label}>{t('common.languageLabel')}</Text>
+            <View style={styles.localeOptions}>
+              {supportedBellFieldLocales.map((optionLocale) => {
+                const isSelected = locale === optionLocale;
+
+                return (
+                  <Pressable
+                    key={optionLocale}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isSelected }}
+                    onPress={() => setLocale(resolveBellFieldLocale(optionLocale))}
+                    style={[styles.localeButton, isSelected ? styles.localeButtonSelected : null]}
+                  >
+                    <Text
+                      style={[
+                        styles.localeButtonText,
+                        isSelected ? styles.localeButtonTextSelected : null
+                      ]}
+                    >
+                      {getBellFieldLocaleLabel(optionLocale, locale)}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          </View>
+
+          <View style={styles.formGroup}>
+            <Text style={styles.label}>{t('common.email')}</Text>
             <TextInput
               value={email}
               onChangeText={setEmail}
               autoCapitalize="none"
+              accessibilityLabel={t('common.email')}
               style={styles.input}
             />
           </View>
 
           <View style={styles.formGroup}>
-            <Text style={styles.label}>Password</Text>
+            <Text style={styles.label}>{t('common.password')}</Text>
             <TextInput
               value={password}
               onChangeText={setPassword}
               autoCapitalize="none"
+              accessibilityLabel={t('common.password')}
               secureTextEntry={!showPassword}
               style={styles.input}
             />
             <View style={styles.switchRow}>
-              <Text style={styles.switchLabel}>Show password</Text>
+              <Text style={styles.switchLabel}>{t('fieldAuth.showPassword')}</Text>
               <Switch value={showPassword} onValueChange={setShowPassword} />
             </View>
           </View>
@@ -128,7 +165,7 @@ export function TechnicianAuthScreen() {
             {isSubmitting ? (
               <ActivityIndicator color="#ffffff" />
             ) : (
-              <Text style={styles.primaryButtonText}>Sign in</Text>
+              <Text style={styles.primaryButtonText}>{t('common.signIn')}</Text>
             )}
           </Pressable>
 
@@ -136,7 +173,7 @@ export function TechnicianAuthScreen() {
 
           {showDemoAccounts ? (
             <View style={styles.demoCard}>
-              <Text style={styles.sectionTitle}>Demo accounts</Text>
+              <Text style={styles.sectionTitle}>{t('common.demoAccounts')}</Text>
               {demoAccounts.map((account) => (
                 <Pressable
                   key={account.email}
@@ -191,6 +228,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 12
   },
+  localeOptions: { flexDirection: 'row', gap: 8 },
+  localeButton: {
+    borderColor: '#d9c8ad',
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 14,
+    paddingVertical: 8
+  },
+  localeButtonSelected: { backgroundColor: '#1c6b57', borderColor: '#1c6b57' },
+  localeButtonText: { color: '#1f2933', fontSize: 14, fontWeight: '600' },
+  localeButtonTextSelected: { color: '#ffffff' },
   switchRow: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
   switchLabel: { color: '#52606d', fontSize: 14 },
   primaryButton: {

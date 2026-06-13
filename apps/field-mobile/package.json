@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@bellfield/contracts": "workspace:*",
+    "@bellfield/i18n": "workspace:*",
     "@expo/metro-runtime": "~56.0.13",
     "expo": "~56.0.8",
     "expo-constants": "~56.0.16",

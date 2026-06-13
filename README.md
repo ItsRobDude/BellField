@@ -34,6 +34,7 @@ Current shared packages:
 
 - `packages/contracts` - shared request and response contracts
 - `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
+- `packages/i18n` - shared locale catalog and translation helpers for user-facing app copy
 - `packages/validation` - shared validation helpers
 - `packages/utils` - shared utility code
 

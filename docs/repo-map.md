@@ -16,6 +16,7 @@ workflow rules, API endpoint docs, or architecture guardrails.
 
 - `packages/contracts` - shared request/response contracts and cross-app types.
 - `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers.
+- `packages/i18n` - shared locale catalog and translation helpers for user-facing app copy.
 - `packages/validation` - shared validation helpers.
 - `packages/utils` - low-level shared utilities.
 

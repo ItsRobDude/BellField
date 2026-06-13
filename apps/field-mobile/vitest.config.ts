@@ -5,7 +5,8 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, 'src'),
-      '@bellfield/contracts': path.resolve(__dirname, '../../packages/contracts/src/index.ts')
+      '@bellfield/contracts': path.resolve(__dirname, '../../packages/contracts/src/index.ts'),
+      '@bellfield/i18n': path.resolve(__dirname, '../../packages/i18n/src/index.ts')
     }
   },
   test: {

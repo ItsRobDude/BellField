@@ -132,6 +132,9 @@ importers:
       '@bellfield/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@bellfield/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       '@expo/metro-runtime':
         specifier: ~56.0.13
         version: 56.0.13(@expo/log-box@56.0.12)(expo@56.0.8)(react-dom@19.2.3(react@19.2.3))(react-native@0.85.3(@babel/core@7.29.0)(@react-native/metro-config@0.85.3(@babel/core@7.29.0))(@types/react@19.2.15)(react@19.2.3))(react@19.2.3)
@@ -208,6 +211,9 @@ importers:
       '@bellfield/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      '@bellfield/i18n':
+        specifier: workspace:*
+        version: link:../../packages/i18n
       next:
         specifier: 15.5.19
         version: 15.5.19(babel-plugin-react-compiler@1.0.0)(react-dom@19.1.0(react@19.1.0))(react@19.1.0)
@@ -370,6 +376,12 @@ importers:
       ts-jest:
         specifier: 29.4.0
         version: 29.4.0(@babel/core@7.29.0)(@jest/transform@30.0.5)(@jest/types@30.3.0)(babel-jest@30.0.5(@babel/core@7.29.0))(jest-util@30.3.0)(jest@30.0.5)(typescript@5.8.3)
+      typescript:
+        specifier: 5.8.3
+        version: 5.8.3
+
+  packages/i18n:
+    devDependencies:
       typescript:
         specifier: 5.8.3
         version: 5.8.3
