@@ -1,0 +1,63 @@
+name: Release build
+
+# Non-blocking safety net: assembles a real Windows release with
+# `pnpm build:release` and validates the packaged manifest + layout, so a
+# broken builder (or a layout drift) is caught here instead of on gate day.
+# Not a required status check — it informs, it does not gate merges.
+#
+# Runs on windows-latest on purpose: it is the real artifact target and the
+# only place the build runner's win32 pnpm/git resolution path executes.
+# Path-filtered so docs-only changes skip the (slow, 2x-minutes) Windows build.
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/release-build.yml'
+  pull_request:
+    paths:
+      - 'apps/**'
+      - 'packages/**'
+      - 'tools/**'
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/release-build.yml'
+
+jobs:
+  release-build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10.13.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Assemble release with an ephemeral signing key
+        shell: pwsh
+        run: |
+          $keyPath = Join-Path $env:RUNNER_TEMP 'bellfield-release-ci-key.pem'
+          node -e "const c=require('node:crypto');const fs=require('node:fs');const {privateKey}=c.generateKeyPairSync('ed25519');fs.writeFileSync(process.argv[1],privateKey.export({type:'pkcs8',format:'pem'}));" $keyPath
+          $env:BELLFIELD_RELEASE_PRIVATE_KEY_PATH = $keyPath
+          pnpm build:release
+
+      - name: Validate packaged release
+        run: pnpm smoke:release-build
