@@ -12,15 +12,24 @@ framework needed. Real product screenshots, not illustrations. The waitlist
 form posts to a simple email-capture endpoint (decide at build: Cloudflare
 Pages function writing to a KV list is the zero-dependency option).
 
-## Visual direction
+## Visual direction (refined after the v2 mockup, 2026-06-12)
 
-Calm and plain, like a well-made shop tool — deliberately the opposite of
-SaaS gradient-blob sites. Light page, sturdy type (system stack or one
-workhorse face), generous whitespace, a restrained two-color palette drawn
-from the office app so product screenshots look native on the page. No stock
-photos of smiling technicians, no illustrations, no animation. The product
-screenshots are the visuals: dispatch board, estimate builder, the
-Bookkeeping surface.
+Calm and plain, like a premium tool catalog — deliberately the opposite of
+SaaS gradient-blob sites. Plain must read as _chosen_, never careless; the
+guards against "plain site = basic software" are depth evidence (the
+What's-inside list, multiple real screenshots) and craft signals, not
+decoration:
+
+- **Serif display face for the headline, price figures, and section
+  lead-ins** — shifts the register from cold-minimal to trade-print.
+  Body stays a sturdy sans.
+- **Green rhythm**: the deep green accent (#1f6f43 family, shared with the
+  customer acceptance page) recurs down the scroll — thin top rule,
+  section kickers, icons, status box, button — rationed, never flooded.
+- Warm paper background, near-black ink, generous whitespace, big type.
+- Real product screenshots are the visuals and supply most of the color
+  (the dispatch timeline with its status accents is genuinely colorful).
+  No stock photos, no illustrations, no animation.
 
 ---
 
@@ -44,8 +53,13 @@ Bookkeeping surface.
 > **Your data stays yours.** Customers, jobs, invoices, and photos live on
 > your server, in your office. Internet down? Keep working.
 >
-> **Your money stays yours.** Card payments run through your own processor
-> at your own rates. We never sit in the middle of your revenue.
+> **Your money stays yours.** Card payments can run through your own
+> processor at your own rates — nobody forces a percentage on you.
+
+(Copy rule, owner-decided 2026-06-12: never print "we never sit in the
+middle of your revenue" or any absolute that forecloses the future optional
+BellField-facilitated processing tier. The promise is "never forced," not
+"never offered.")
 
 ### How it works
 
@@ -55,6 +69,17 @@ Bookkeeping surface.
 > your customers estimates they can approve from their phone.
 
 [Screenshot: estimate with approval link / field app]
+
+### What's inside (anti-"basic" depth proof; compact two-column list)
+
+> Dispatch board with a live technician timeline · Good/better/best
+> estimates customers approve from their phone · Invoicing with posting,
+> adjustments, and a real payment ledger · Inventory, purchase orders, and
+> job costing · Service agreements and maintenance plans · Reports with CSV
+> export · Roles and permissions that actually hold · A field app that
+> works offline and syncs back
+
+[Screenshot: estimate builder or inventory surface]
 
 ### Honest status block
 

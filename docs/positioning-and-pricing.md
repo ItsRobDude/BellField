@@ -98,6 +98,21 @@ Held in reserve, not built: a finance-to-own payment plan (the MobiLogic
 footnote) for shops that can't write the check — same positioning, easier
 swallow. Pilot shops may be discounted or comped for evidence/testimonials.
 
+## Payments stance (owner-updated 2026-06-12)
+
+Bring-your-own-processor remains the identity default: the shop's own
+account, their rates, nobody forced into a skim. **In addition**, the owner
+wants an optional BellField-facilitated processing tier (platform model,
+e.g. Stripe Connect — BellField is never itself a regulated payments
+company) with a transparent fee, for shops that don't want to set up their
+own — the same managed-vs-BYO pattern as the relay and remote access.
+Guardrails when Phase 6b designs this: BYO stays first-class and switchable
+both directions; the fee is published; leaving the managed tier never costs
+the shop anything but that convenience (sacred line); the fee must be priced
+to cover payments-support noise (payout holds and chargebacks generate the
+loudest support traffic there is). Marketing copy must say "never forced" —
+never "we never touch your money," which would foreclose this.
+
 ## Go-to-market posture (decided 2026-06-12)
 
 The buyer is a small service-business owner, not someone who lives online —
