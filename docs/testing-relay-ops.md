@@ -38,6 +38,8 @@ On this Windows PC:
   `C:\Users\rober\Documents\API Keys\BellField\license-v1`
 - BellField release signing key folder:
   `C:\Users\rober\Documents\API Keys\BellField\release-v1`
+- Test-relay Unraid SMB backup credential:
+  `C:\Users\rober\Documents\API Keys\BellField\relay-test\unraid-bellfieldrelay-smb.txt`
 
 On the test relay host:
 
@@ -45,7 +47,11 @@ On the test relay host:
   `/home/rob/bellfield/deploy/relay/relay-host.env`
 - Authorized SSH key file:
   `/home/rob/.ssh/authorized_keys`
-- Current backup target:
+- Unraid SMB mount credential, root-only:
+  `/etc/bellfield/unraid-bellfield-backups.smbcredentials`
+- Current backup target, mounted from Unraid:
+  `/mnt/bellfield-backups/relay`
+- Historical on-box backup directory, kept only as local fallback evidence:
   `/home/rob/relay-backups`
 
 The repo ignores common local operator secret filenames, including
@@ -58,7 +64,7 @@ Run this only after local changes are committed and pushed.
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
-  "cd /home/rob/bellfield/deploy/relay && ./backup-relay-db.sh /home/rob/relay-backups"
+  "cd /home/rob/bellfield/deploy/relay && ./backup-relay-db.sh /mnt/bellfield-backups/relay"
 
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
   "git -C /home/rob/bellfield pull --ff-only"
@@ -98,12 +104,14 @@ Verified on 2026-06-13 UTC:
 - UFW is active with default incoming `deny`, outgoing `allow`, and one SSH
   rule: `192.168.50.0/24 -> 22/tcp`.
 - `bellfield-relay-backup.timer` is enabled and active.
-- The backup service was started manually once and wrote a dump successfully.
-- Existing backup dumps under `/home/rob/relay-backups` are mode 600.
-
-Still open: the backup target is on the same disk. Move
-`BELLFIELD_RELAY_BACKUP_TARGET` to an off-box mount once the Unraid/share/bucket
-destination is chosen and verified.
+- The backup service was started manually once against the off-box target and
+  wrote `/mnt/bellfield-backups/relay/bellfield-relay-20260613T044857Z.dump`
+  successfully.
+- The backup target is now the Unraid share
+  `//192.168.50.78/bellfield-backups`, mounted at
+  `/mnt/bellfield-backups`.
+- Existing historical backup dumps under `/home/rob/relay-backups` are mode
+  600 and are not the active target.
 
 ## Persistent Backup Timer
 
@@ -114,7 +122,7 @@ environment file is:
 sudo mkdir -p /etc/bellfield
 sudo tee /etc/bellfield/relay-backup.env >/dev/null <<'EOF'
 BELLFIELD_RELAY_DIR=/home/rob/bellfield/deploy/relay
-BELLFIELD_RELAY_BACKUP_TARGET=/home/rob/relay-backups
+BELLFIELD_RELAY_BACKUP_TARGET=/mnt/bellfield-backups/relay
 EOF
 sudo chmod 600 /etc/bellfield/relay-backup.env
 ```
@@ -128,6 +136,25 @@ sudo systemctl enable --now bellfield-relay-backup.timer
 systemctl list-timers bellfield-relay-backup.timer
 ```
 
-This still writes to the host disk until an off-box target is configured. The
-off-box destination should be Unraid, a second server, or a managed bucket with
-credentials stored outside the repo.
+The active off-box destination is the Unraid share
+`//192.168.50.78/bellfield-backups`, mounted on the relay host at
+`/mnt/bellfield-backups`. The persistent mount line in `/etc/fstab` is:
+
+```fstab
+//192.168.50.78/bellfield-backups /mnt/bellfield-backups cifs credentials=/etc/bellfield/unraid-bellfield-backups.smbcredentials,vers=3.0,iocharset=utf8,uid=1000,gid=1000,file_mode=0600,dir_mode=0700,noserverino,nofail,x-systemd.automount,x-systemd.idle-timeout=60 0 0
+```
+
+The Unraid share is SMB-exported as private. The dedicated Unraid user is
+`bellfieldrelay`, with read/write access only to `bellfield-backups`; the
+password is stored only in the Windows credential inventory file listed above
+and in the relay host's root-only CIFS credential file.
+
+Manual readback commands:
+
+```bash
+sudo cat /etc/bellfield/relay-backup.env
+grep -n "bellfield-backups" /etc/fstab
+findmnt /mnt/bellfield-backups -o SOURCE,TARGET,FSTYPE,OPTIONS --noheadings
+sudo systemctl start bellfield-relay-backup.service
+find /mnt/bellfield-backups/relay -maxdepth 1 -type f -printf "%f %s bytes\n" | sort
+```

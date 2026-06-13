@@ -37,7 +37,8 @@ Built, tested, and (where marked) deployed. Each line names its evidence.
   [phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md)
 - **Delivery relay, deployed to production** (per-shop tokens, quotas,
   suppression, webhooks, credentialed release downloads; first real
-  end-to-end delivered email) —
+  end-to-end delivered email; SSH/firewall hardening and off-box relay backups
+  completed on the testing host) —
   [delivery-relay-plan.md](./delivery-relay-plan.md),
   [relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)
 - **Security harness in CI** — secret scanning, blocking prod dependency
@@ -92,9 +93,6 @@ Small, owner-actionable; details in
 
 - [ ] DHCP reservation for the relay host (192.168.50.243)
 - [ ] external uptime monitoring on `relay.bellfield.app`
-- [ ] off-box backup target for the relay database (nightly on-box cron is a
-      stopgap)
-- [ ] SSH key-only hardening on the relay host
 
 ---
 

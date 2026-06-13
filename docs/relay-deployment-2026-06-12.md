@@ -52,8 +52,9 @@ tunnel token, and the webhook signing secret.
 - Resend webhook created via API (delivered/bounced/complained →
   `https://relay.bellfield.app/webhooks/resend`), signing secret installed,
   relay restarted healthy.
-- Backup script run once successfully (custom-format `pg_dump`, ~20KB) and
-  installed as a nightly cron (02:15).
+- Backup script run once successfully (custom-format `pg_dump`, ~20KB). It was
+  later moved from cron/on-box storage to the persistent systemd timer and the
+  Unraid off-box target recorded below.
 
 ## End-to-end production send (same day)
 
@@ -79,11 +80,8 @@ email. This closes the practical core of the Phase 5 gate; the formal
 gate still wants the same flow from a sold-shaped (licensed, packaged)
 install, which folds into gate day.
 
-## Open operational items
+## Operational items
 
-- **Off-box backups**: nightly dumps currently land on the box itself
-  (`~/relay-backups`) — a stopgap. Relay plan §11 requires an off-box copy;
-  re-point the systemd timer target when the destination is chosen.
 - **External uptime monitor** on the health URL (requires an owner account
   at the monitoring service).
 - **DHCP reservation** for the host's LAN address.
@@ -93,8 +91,14 @@ install, which folds into gate day.
   console password remains a local break-glass path for this testing host.
 - **Backup scheduling hardening**: completed 2026-06-13 UTC. Cron was replaced
   with `bellfield-relay-backup.timer` (`Persistent=true`) and existing dump
-  files were tightened to mode 600. The target is still on-box until off-box
-  storage is chosen.
+  files were tightened to mode 600.
+- **Off-box backups**: completed 2026-06-13 UTC. Unraid share
+  `//192.168.50.78/bellfield-backups` is mounted on the relay host at
+  `/mnt/bellfield-backups`; the active target is
+  `/mnt/bellfield-backups/relay`. The first verified off-box dump was
+  `bellfield-relay-20260613T044857Z.dump` (25,142 bytes). Credential
+  locations and readback commands live in
+  [testing-relay-ops.md](./testing-relay-ops.md).
 - **Laptop-as-server hardening** (decided 2026-06-12: this host stays until
   the first paying customer has acceptance links live — no VPS pre-revenue):
   verify lid-close/sleep is fully disabled; run a deliberate power-loss
