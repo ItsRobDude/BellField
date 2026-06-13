@@ -119,6 +119,7 @@ BellField-facilitated processing tier. The promise is "never forced," not
 
 > Built inside a working HVAC office, for shops like yours.
 > Questions: [contact mailbox — create in Google Workspace; support@ or
+>
 > > founders@; hello@ does not exist yet]
 
 ---
