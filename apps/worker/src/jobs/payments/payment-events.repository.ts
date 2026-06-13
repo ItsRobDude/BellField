@@ -53,14 +53,15 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       // local session — never event.invoiceRef, which could point at an invoice
       // on a different job. A missing session is recorded (the customer did pay)
       // and surfaced, never dropped.
-      const jobId = session?.jobId ?? event.jobRef;
-      const invoiceId = session?.invoiceId ?? null;
-
-      if (
+      const sessionMismatch = Boolean(
         session &&
-        (session.amountCents !== event.amountCents ||
-          session.currency.toUpperCase() !== event.currency.trim().toUpperCase())
-      ) {
+          (session.amountCents !== event.amountCents ||
+            session.currency.toUpperCase() !== event.currency.trim().toUpperCase())
+      );
+      const jobId = sessionMismatch ? event.jobRef : (session?.jobId ?? event.jobRef);
+      const invoiceId = sessionMismatch ? null : (session?.invoiceId ?? null);
+
+      if (sessionMismatch && session) {
         workerLog('error', 'Online payment event did not match its local session.', {
           paymentSessionId: event.paymentSessionId,
           sessionAmountCents: session.amountCents,
@@ -68,7 +69,6 @@ export class PaymentEventsRepository implements PaymentEventsStore {
           sessionCurrency: session.currency,
           eventCurrency: event.currency
         });
-        throw new Error('Online payment event did not match its local session.');
       }
 
       await this.lockJob(tx, jobId);
@@ -114,6 +114,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         amountCents: event.amountCents,
         allocatedCents,
         sessionMissing: session === null,
+        sessionMismatch,
         occurredAt
       });
       return 'applied';
@@ -210,6 +211,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       amountCents: number;
       allocatedCents: number;
       sessionMissing: boolean;
+      sessionMismatch: boolean;
       occurredAt: Date;
     }
   ): Promise<void> {
@@ -224,7 +226,10 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     const sessionNote = input.sessionMissing
       ? ' No local payment-link record matched this confirmation — please review.'
       : '';
-    const message = `Online payment of ${formatCents(input.amountCents)} confirmed.${overpaymentNote}${sessionNote}`;
+    const mismatchNote = input.sessionMismatch
+      ? ' The local payment-link record did not match this confirmation — please review.'
+      : '';
+    const message = `Online payment of ${formatCents(input.amountCents)} confirmed.${overpaymentNote}${sessionNote}${mismatchNote}`;
     await tx.query('update jobs set updated_at = $2 where id = $1', [
       input.jobId,
       input.occurredAt

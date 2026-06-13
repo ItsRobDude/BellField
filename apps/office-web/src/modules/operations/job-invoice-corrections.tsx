@@ -278,11 +278,16 @@ export function JobInvoiceCorrections({
     }
     setIsCreatingPaymentLink(true);
     try {
-      const response = await createOfficeOnlinePaymentLink({
-        invoiceId: mainInvoiceId,
-        apiBaseUrl,
-        sessionToken
-      });
+      let response = await requestPaymentLink(false);
+      if (response.state === 'confirmationRequired') {
+        const confirmed = window.confirm(
+          `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
+        );
+        if (!confirmed) {
+          return;
+        }
+        response = await requestPaymentLink(true);
+      }
       if (response.state !== 'created') {
         setErrorMessage(response.message ?? 'Online payment links are not available right now.');
         return;
@@ -296,12 +301,27 @@ export function JobInvoiceCorrections({
       } catch {
         copied = false;
       }
-      setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
+      if (response.reusedExisting) {
+        setNoticeMessage(
+          copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
+        );
+      } else {
+        setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
       setIsCreatingPaymentLink(false);
     }
+  }
+
+  function requestPaymentLink(confirmSameAmountCharge: boolean) {
+    return createOfficeOnlinePaymentLink({
+      invoiceId: mainInvoiceId,
+      confirmSameAmountCharge: confirmSameAmountCharge || undefined,
+      apiBaseUrl,
+      sessionToken
+    });
   }
 
   async function voidPayment(payment: Payment) {

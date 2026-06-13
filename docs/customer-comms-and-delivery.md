@@ -324,7 +324,10 @@ The controlling design is [acceptance-links-design.md](./acceptance-links-design
 Shipped 2026-06-13: full-balance Stripe Checkout links through the BellField
 relay, Stripe webhook intake on the relay, install worker poll/ack for confirmed
 payment events, and local append-only job-level payment records with
-auto-allocation across posted charge invoices.
+auto-allocation across posted charge invoices. Payment-link idempotency is now
+per `(job, amount, attempt)`: active unpaid links are reused locally, and a
+same-dollar repeat after a prior online card payment requires office
+confirmation before BellField creates the next Stripe Checkout attempt.
 
 Still deferred: invoice email delivery, refunds, deposits, partial payments,
 stored cards, customer surcharge logic, and processor-fee reconciliation beyond

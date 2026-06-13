@@ -166,50 +166,65 @@ test('PaymentEventsRepository records a confirmation with no local session and f
   assert.match(String(timeline?.values?.[3]), /No local payment-link record/);
 });
 
-test('PaymentEventsRepository rejects a local session amount mismatch without recording payment', async () => {
+test('PaymentEventsRepository records a local session amount mismatch and flags it', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }]
+    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
   ];
   const repository = new PaymentEventsRepository(database);
 
-  await assert.rejects(
-    () => repository.applyRelayPaymentEvent(makeEvent(), new Date('2026-06-13T12:00:10.000Z')),
-    /did not match its local session/
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent(),
+    new Date('2026-06-13T12:00:10.000Z')
   );
 
-  assert.equal(
-    database.queries.some((query) => /insert into payments/i.test(query.text)),
-    false
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[1], 'job-1');
+  assert.equal(paymentInsert?.values?.[2], null);
+  assert.equal(paymentInsert?.values?.[3], '175.00');
+  const sessionUpdate = database.queries.find((query) =>
+    /update online_payment_sessions/i.test(query.text)
   );
-  assert.equal(
-    database.queries.some((query) => /update online_payment_sessions/i.test(query.text)),
-    false
+  assert.deepEqual(sessionUpdate?.values?.slice(0, 2), ['session-1', paymentInsert?.values?.[0]]);
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
   );
+  assert.match(String(timeline?.values?.[3]), /payment-link record did not match/);
 });
 
-test('PaymentEventsRepository rejects a local session currency mismatch without recording payment', async () => {
+test('PaymentEventsRepository records a local session currency mismatch and flags it', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'CAD' }]
+    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'CAD' }],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
   ];
   const repository = new PaymentEventsRepository(database);
 
-  await assert.rejects(
-    () => repository.applyRelayPaymentEvent(makeEvent(), new Date('2026-06-13T12:00:10.000Z')),
-    /did not match its local session/
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent(),
+    new Date('2026-06-13T12:00:10.000Z')
   );
 
-  assert.equal(
-    database.queries.some((query) => /insert into payments/i.test(query.text)),
-    false
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[2], null);
+  assert.equal(paymentInsert?.values?.[4], 'USD');
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
   );
-  assert.equal(
-    database.queries.some((query) => /update online_payment_sessions/i.test(query.text)),
-    false
-  );
+  assert.match(String(timeline?.values?.[3]), /payment-link record did not match/);
 });
 
 test('PaymentEventsRepository treats an existing provider payment as already applied', async () => {

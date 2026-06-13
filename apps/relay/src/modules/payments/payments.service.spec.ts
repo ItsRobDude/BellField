@@ -22,7 +22,6 @@ function makeService(overrides?: {
 }) {
   const recordPaidEventCalls: unknown[] = [];
   let recordSessionInput: Parameters<RelayPaymentsStore['recordSession']>[0] | undefined;
-  let refreshSessionInput: Parameters<RelayPaymentsStore['refreshExpiredSession']>[0] | undefined;
   let createCheckoutInput: Record<string, unknown> | undefined;
 
   const store: RelayPaymentsStore = {
@@ -49,21 +48,6 @@ function makeService(overrides?: {
         expiresAt: input.expiresAt,
         createdAt: input.createdAt,
         updatedAt: input.createdAt
-      });
-    },
-    refreshExpiredSession: async (input) => {
-      refreshSessionInput = input;
-      return makeSession({
-        id: input.id,
-        shopId: input.shopId,
-        idempotencyKey: input.request.idempotencyKey,
-        checkoutUrl: input.checkoutUrl,
-        amountCents: input.request.amountCents,
-        currency: input.request.currency.toUpperCase(),
-        applicationFeeCents: input.applicationFeeCents,
-        expiresAt: input.expiresAt,
-        createdAt: overrides?.existingSession?.createdAt,
-        updatedAt: input.refreshedAt
       });
     },
     recordPaidEvent: async (input: unknown) => {
@@ -99,7 +83,6 @@ function makeService(overrides?: {
     stripe,
     getRecordPaidEventCalls: () => recordPaidEventCalls,
     getRecordSessionInput: () => recordSessionInput,
-    getRefreshSessionInput: () => refreshSessionInput,
     getCreateCheckoutInput: () => createCheckoutInput
   };
 }
@@ -172,11 +155,11 @@ describe('RelayPaymentsService.createPaymentSession', () => {
     expect(ctx.getCreateCheckoutInput()).toBeUndefined();
   });
 
-  it('reuses an unexpired created session without touching Stripe', async () => {
+  it('reuses an existing session with the same idempotency key without touching Stripe', async () => {
     const existing = makeSession({
       id: 'pay_sess_reusable',
       checkoutUrl: 'https://stripe.test/reusable',
-      expiresAt: new Date(Date.now() + 3_600_000)
+      expiresAt: new Date(Date.now() - 60_000)
     });
     const ctx = makeService({ existingSession: existing });
 
@@ -190,29 +173,6 @@ describe('RelayPaymentsService.createPaymentSession', () => {
     expect(result.checkoutUrl).toBe('https://stripe.test/reusable');
     expect(ctx.getCreateCheckoutInput()).toBeUndefined();
     expect(ctx.getRecordSessionInput()).toBeUndefined();
-    expect(ctx.getRefreshSessionInput()).toBeUndefined();
-  });
-
-  it('refreshes an expired created session instead of returning a dead checkout link', async () => {
-    const existing = makeSession({
-      id: 'pay_sess_expired',
-      checkoutUrl: 'https://stripe.test/expired',
-      expiresAt: new Date(Date.now() - 60_000)
-    });
-    const ctx = makeService({ existingSession: existing });
-
-    const result = await ctx.service.createPaymentSession(shop, baseRequest);
-
-    expect(result.kind).toBe('created');
-    if (result.kind !== 'created') {
-      throw new Error('Expected a refreshed payment session.');
-    }
-    expect(result.paymentSessionId).toBe('pay_sess_expired');
-    expect(result.checkoutUrl).toBe('https://stripe.test/checkout');
-    expect(ctx.getCreateCheckoutInput()).toBeDefined();
-    expect(ctx.getRecordSessionInput()).toBeUndefined();
-    expect(ctx.getRefreshSessionInput()?.id).toBe('pay_sess_expired');
-    expect(ctx.getRefreshSessionInput()?.checkoutUrl).toBe('https://stripe.test/checkout');
   });
 });
 

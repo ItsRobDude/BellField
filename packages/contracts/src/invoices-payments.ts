@@ -208,11 +208,13 @@ export interface JobPaymentsResponse {
 export type OnlinePaymentLinkState =
   | 'paymentsNotConfigured'
   | 'paymentsDisabled'
+  | 'confirmationRequired'
   | 'created'
   | 'providerError';
 
 export interface CreateOnlinePaymentLinkRequest {
   customerEmail?: string;
+  confirmSameAmountCharge?: boolean;
 }
 
 export type OnlinePaymentLinkResponse =
@@ -223,9 +225,17 @@ export type OnlinePaymentLinkResponse =
       amount: number;
       currency: string;
       expiresAt: string;
+      reusedExisting?: boolean;
     }
   | {
-      state: Exclude<OnlinePaymentLinkState, 'created'>;
+      state: 'confirmationRequired';
+      code: 'sameAmountPreviouslyPaid';
+      amount: number;
+      currency: string;
+      message: string;
+    }
+  | {
+      state: Exclude<OnlinePaymentLinkState, 'created' | 'confirmationRequired'>;
       message?: string;
     };
 

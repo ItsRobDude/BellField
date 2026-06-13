@@ -10,7 +10,7 @@ import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
 import { log } from '../../common/logger';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
 import { isStripeCheckoutSession, StripePaymentsService } from './stripe-payments.service';
-import type { RelayPaymentSessionRecord, RelayPaymentsStore } from './payments.types';
+import type { RelayPaymentsStore } from './payments.types';
 
 export const RELAY_PAYMENTS_STORE = 'RELAY_PAYMENTS_STORE';
 
@@ -49,14 +49,11 @@ export class RelayPaymentsService {
       shop.shopId,
       request.idempotencyKey,
       async () => {
-        const now = new Date();
         const existing = await this.paymentsStore.findSessionByIdempotencyKey(
           shop.shopId,
           request.idempotencyKey
         );
-        const expiredExisting =
-          existing && isExpiredCreatedSession(existing, now) ? existing : null;
-        if (existing && !expiredExisting) {
+        if (existing) {
           return sessionResult(existing);
         }
 
@@ -92,8 +89,8 @@ export class RelayPaymentsService {
             successUrl,
             cancelUrl
           });
-          const sessionInput = {
-            id: expiredExisting ? expiredExisting.id : `pay_sess_${cryptoRandomSuffix()}`,
+          const recorded = await this.paymentsStore.recordSession({
+            id: `pay_sess_${cryptoRandomSuffix()}`,
             shopId: shop.shopId,
             request,
             successUrl,
@@ -104,14 +101,8 @@ export class RelayPaymentsService {
             checkoutUrl: stripeSession.checkoutUrl,
             applicationFeeCents,
             expiresAt: stripeSession.expiresAt,
-            createdAt: now
-          };
-          const recorded = expiredExisting
-            ? await this.paymentsStore.refreshExpiredSession({
-                ...sessionInput,
-                refreshedAt: now
-              })
-            : await this.paymentsStore.recordSession(sessionInput);
+            createdAt: new Date()
+          });
           return sessionResult(recorded);
         } catch (error) {
           // A permanent failure (restricted connected account, unsupported
@@ -218,10 +209,6 @@ function sessionResult(session: {
     currency: session.currency,
     applicationFeeCents: session.applicationFeeCents
   };
-}
-
-function isExpiredCreatedSession(session: RelayPaymentSessionRecord, now: Date): boolean {
-  return session.status === 'created' && session.expiresAt.getTime() <= now.getTime();
 }
 
 function cryptoRandomSuffix(): string {

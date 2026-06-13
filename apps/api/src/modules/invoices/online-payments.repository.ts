@@ -124,6 +124,23 @@ export class OnlinePaymentsRepository {
     return result.rows[0] ? toRecord(result.rows[0]) : null;
   }
 
+  async listForJobAmount(input: {
+    jobId: string;
+    amount: number;
+    currency: string;
+  }): Promise<OnlinePaymentSessionRecord[]> {
+    const result = await this.databaseService.query<OnlinePaymentSessionRow>(
+      `select ${ONLINE_PAYMENT_SESSION_COLUMNS}
+       from online_payment_sessions
+       where job_id = $1
+         and amount = $2
+         and currency = $3
+       order by created_at asc, id asc`,
+      [input.jobId, input.amount, input.currency.toUpperCase()]
+    );
+    return result.rows.map(toRecord);
+  }
+
   async markPaid(input: {
     relayPaymentSessionId: string;
     paymentId: string;

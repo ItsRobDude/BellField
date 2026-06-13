@@ -224,6 +224,7 @@ describe('JobInvoiceSection posting', () => {
     await waitFor(() =>
       expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
         invoiceId: 'inv-1',
+        confirmSameAmountCharge: undefined,
         apiBaseUrl: 'http://localhost',
         sessionToken: 'test-token'
       })
@@ -231,5 +232,131 @@ describe('JobInvoiceSection posting', () => {
     expect(
       await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_123')
     ).toBeInTheDocument();
+  });
+
+  it('shows the reused active payment link notice when the API returns an existing session', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      amountDue: 250
+    });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true
+    });
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'created',
+      checkoutUrl: 'https://checkout.stripe.test/pay/reused',
+      paymentSessionId: 'pay_sess_reused',
+      amount: 250,
+      currency: 'USD',
+      expiresAt: '2026-06-14T00:00:00.000Z',
+      reusedExisting: true
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/reused')
+    ).toBeInTheDocument();
+    expect(await screen.findByText('Existing active payment link copied.')).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith('https://checkout.stripe.test/pay/reused');
+    expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('confirms before creating another same-amount online payment link', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      amountDue: 250
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.createOfficeOnlinePaymentLink
+      .mockResolvedValueOnce({
+        state: 'confirmationRequired',
+        code: 'sameAmountPreviouslyPaid',
+        amount: 250,
+        currency: 'USD',
+        message:
+          'This job already had an online card payment for $250.00. BellField still shows $250.00 due.'
+      })
+      .mockResolvedValueOnce({
+        state: 'created',
+        checkoutUrl: 'https://checkout.stripe.test/pay/cs_retry',
+        paymentSessionId: 'pay_sess_retry',
+        amount: 250,
+        currency: 'USD',
+        expiresAt: '2026-06-14T00:00:00.000Z'
+      });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Create another $250.00 payment link?\n\nThis job already had an online card payment for $250.00. BellField still shows $250.00 due.'
+    );
+    expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(1, {
+      invoiceId: 'inv-1',
+      confirmSameAmountCharge: undefined,
+      apiBaseUrl: 'http://localhost',
+      sessionToken: 'test-token'
+    });
+    expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(2, {
+      invoiceId: 'inv-1',
+      confirmSameAmountCharge: true,
+      apiBaseUrl: 'http://localhost',
+      sessionToken: 'test-token'
+    });
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_retry')
+    ).toBeInTheDocument();
+  });
+
+  it('does not create another same-amount link when confirmation is dismissed', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      amountDue: 250
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'confirmationRequired',
+      code: 'sameAmountPreviouslyPaid',
+      amount: 250,
+      currency: 'USD',
+      message:
+        'This job already had an online card payment for $250.00. BellField still shows $250.00 due.'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
   });
 });

@@ -46,6 +46,40 @@ export class OnlinePaymentLinkService {
       throw new ConflictException('This job does not have an outstanding balance.');
     }
 
+    const currency = 'USD';
+    const amount = amountDueCents / 100;
+    const sameAmountSessions = await this.onlinePaymentsRepository.listForJobAmount({
+      jobId: invoice.jobId,
+      amount,
+      currency
+    });
+    const now = new Date();
+    const activeSession = sameAmountSessions.find((session) => isActiveSession(session, now));
+    if (activeSession) {
+      return {
+        state: 'created',
+        checkoutUrl: activeSession.checkoutUrl,
+        paymentSessionId: activeSession.relayPaymentSessionId,
+        amount,
+        currency,
+        expiresAt: activeSession.expiresAt,
+        reusedExisting: true
+      };
+    }
+
+    const hasPaidSameAmountSession = sameAmountSessions.some(
+      (session) => session.status === 'paid'
+    );
+    if (hasPaidSameAmountSession && request.confirmSameAmountCharge !== true) {
+      return {
+        state: 'confirmationRequired',
+        code: 'sameAmountPreviouslyPaid',
+        amount,
+        currency,
+        message: `This job already had an online card payment for ${formatMoney(amount)}. BellField still shows ${formatMoney(amount)} due.`
+      };
+    }
+
     const relay = getApiRuntimeConfig().relay;
     if (!relay) {
       return {
@@ -54,13 +88,11 @@ export class OnlinePaymentLinkService {
       };
     }
 
-    const currency = 'USD';
-    const amount = amountDueCents / 100;
-    // Deterministic per (job, amount): repeat clicks / retries reuse the same
-    // relay session instead of minting a second live Stripe checkout the
-    // customer could pay twice. A randomUUID() here would defeat the relay's
-    // and Stripe's idempotency entirely.
-    const idempotencyKey = `invoice-payment:${invoice.jobId}:${amountDueCents}`;
+    // The attempt suffix keeps one live payable link per local balance while
+    // still allowing a legitimate same-dollar charge after an earlier session
+    // is paid or expired. The relay and Stripe both treat the full key as
+    // opaque idempotency.
+    const idempotencyKey = `invoice-payment:${invoice.jobId}:${amountDueCents}:attempt-${sameAmountSessions.length + 1}`;
     const relayResponse = await this.requestRelayPaymentSession(relay, {
       idempotencyKey,
       jobRef: invoice.jobId,
@@ -159,4 +191,12 @@ export class OnlinePaymentLinkService {
 
 function dollarsToCents(value: number): number {
   return Math.round(value * 100);
+}
+
+function isActiveSession(session: { status: string; expiresAt: string }, now: Date): boolean {
+  return session.status === 'created' && new Date(session.expiresAt).getTime() > now.getTime();
+}
+
+function formatMoney(amount: number): string {
+  return `$${amount.toFixed(2)}`;
 }

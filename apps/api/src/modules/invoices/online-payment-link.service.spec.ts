@@ -1,0 +1,230 @@
+import { OnlinePaymentLinkService } from './online-payment-link.service';
+import type { OnlinePaymentSessionRecord } from './online-payments.repository';
+
+const actor = { id: 'emp-1', displayName: 'Bea Bookkeeper' };
+
+function createService() {
+  const identityAccessService = {
+    getAuthorizedEmployee: jest.fn().mockResolvedValue(actor)
+  };
+  const invoicesRepository = {
+    getInvoiceById: jest.fn().mockResolvedValue({
+      id: 'inv-main',
+      jobId: 'job-1',
+      status: 'posted',
+      invoiceKind: 'main',
+      posted: { jobNumber: '1001' }
+    }),
+    listInvoiceTotalsForJob: jest.fn().mockResolvedValue([
+      { invoiceKind: 'main', status: 'posted', total: 250 },
+      { invoiceKind: 'adjustment', status: 'draft', total: 25 }
+    ])
+  };
+  const paymentsRepository = {
+    sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0)
+  };
+  const onlinePaymentsRepository = {
+    listForJobAmount: jest.fn().mockResolvedValue([]),
+    recordCreated: jest.fn()
+  };
+  onlinePaymentsRepository.recordCreated.mockImplementation(
+    (input: { relayPaymentSessionId: string }) =>
+      Promise.resolve({
+        id: 'local-session-1',
+        relayPaymentSessionId: input.relayPaymentSessionId
+      })
+  );
+
+  return {
+    service: new OnlinePaymentLinkService(
+      identityAccessService as never,
+      invoicesRepository as never,
+      paymentsRepository as never,
+      onlinePaymentsRepository as never
+    ),
+    identityAccessService,
+    invoicesRepository,
+    paymentsRepository,
+    onlinePaymentsRepository
+  };
+}
+
+function paymentSession(
+  overrides: Partial<OnlinePaymentSessionRecord> = {}
+): OnlinePaymentSessionRecord {
+  const createdAt = '2026-06-13T12:00:00.000Z';
+  return {
+    id: 'online-session-1',
+    jobId: 'job-1',
+    invoiceId: 'inv-main',
+    relayPaymentSessionId: 'pay_sess_1',
+    amount: 250,
+    currency: 'USD',
+    checkoutUrl: 'https://stripe.test/existing',
+    status: 'created',
+    createdByName: 'Bea Bookkeeper',
+    expiresAt: '2026-06-14T12:00:00.000Z',
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
+  };
+}
+
+function setupRelayEnv() {
+  process.env.BELLFIELD_RELAY_BASE_URL = 'https://relay.example';
+  process.env.BELLFIELD_RELAY_TOKEN = 'relay-token';
+  process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID = 'instance-1';
+}
+
+function clearRelayEnv() {
+  delete process.env.BELLFIELD_RELAY_BASE_URL;
+  delete process.env.BELLFIELD_RELAY_TOKEN;
+  delete process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID;
+}
+
+function mockRelayCreated(paymentSessionId = 'pay_sess_new') {
+  const fetchMock = jest.fn().mockResolvedValue({
+    ok: true,
+    json: async () => ({
+      result: {
+        kind: 'created',
+        paymentSessionId,
+        checkoutUrl: 'https://stripe.test/new',
+        amountCents: 25_000,
+        currency: 'USD',
+        applicationFeeCents: 250,
+        expiresAt: '2026-06-14T00:00:00.000Z'
+      }
+    })
+  });
+  global.fetch = fetchMock as never;
+  return fetchMock;
+}
+
+function requestBody(fetchMock: jest.Mock): { idempotencyKey: string } {
+  const body = fetchMock.mock.calls[0]?.[1]?.body;
+  if (typeof body !== 'string') {
+    throw new Error('Expected relay request body.');
+  }
+  return JSON.parse(body) as { idempotencyKey: string };
+}
+
+describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    clearRelayEnv();
+    setupRelayEnv();
+    mockRelayCreated();
+  });
+
+  afterEach(() => {
+    clearRelayEnv();
+    jest.restoreAllMocks();
+  });
+
+  it('creates the first attempt with an attempt-1 idempotency key', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_attempt_1');
+    const { service, onlinePaymentsRepository } = createService();
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
+
+    expect(result.state).toBe('created');
+    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+    expect(onlinePaymentsRepository.recordCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        relayPaymentSessionId: 'pay_sess_attempt_1',
+        amount: 250,
+        currency: 'USD'
+      })
+    );
+  });
+
+  it('returns an unexpired local created session without calling the relay', async () => {
+    clearRelayEnv();
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as never;
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
+      paymentSession({ relayPaymentSessionId: 'pay_sess_existing' })
+    ]);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
+
+    expect(result).toEqual({
+      state: 'created',
+      checkoutUrl: 'https://stripe.test/existing',
+      paymentSessionId: 'pay_sess_existing',
+      amount: 250,
+      currency: 'USD',
+      expiresAt: '2026-06-14T12:00:00.000Z',
+      reusedExisting: true
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onlinePaymentsRepository.recordCreated).not.toHaveBeenCalled();
+  });
+
+  it('creates the next attempt after an expired local created session', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_attempt_2');
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
+      paymentSession({ expiresAt: '2026-06-12T12:00:00.000Z' })
+    ]);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
+
+    expect(result.state).toBe('created');
+    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-2');
+  });
+
+  it('requires confirmation before a new same-amount link after a paid online session', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
+      paymentSession({ status: 'paid', paymentId: 'pay-1', paidAt: '2026-06-13T13:00:00.000Z' })
+    ]);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
+
+    expect(result).toEqual({
+      state: 'confirmationRequired',
+      code: 'sameAmountPreviouslyPaid',
+      amount: 250,
+      currency: 'USD',
+      message:
+        'This job already had an online card payment for $250.00. BellField still shows $250.00 due.'
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onlinePaymentsRepository.recordCreated).not.toHaveBeenCalled();
+  });
+
+  it('creates the next attempt when same-amount payment is confirmed by the office', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_attempt_2');
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
+      paymentSession({ status: 'paid', paymentId: 'pay-1', paidAt: '2026-06-13T13:00:00.000Z' })
+    ]);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', {
+      confirmSameAmountCharge: true
+    });
+
+    expect(result.state).toBe('created');
+    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-2');
+  });
+
+  it('uses the same attempt key for repeated same-state requests before local persistence changes', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_attempt_1');
+    const { service } = createService();
+
+    await service.createOnlinePaymentLink('token', 'inv-main', {});
+    await service.createOnlinePaymentLink('token', 'inv-main', {});
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+    const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body as string) as {
+      idempotencyKey: string;
+    };
+    expect(secondBody.idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+  });
+});

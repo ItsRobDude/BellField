@@ -616,6 +616,9 @@ Build: payment allocation schema, full-balance online-link endpoint on posted
 invoices, relay Stripe Connect Checkout Session creation, relay payment-event
 poll/ack API, Stripe webhook intake, worker poller that idempotently records
 confirmed provider payments, and office UI to create/copy a payment link.
+The link model reuses one active unpaid local link, keys fresh relay attempts
+by `(job, amount, attempt)`, and requires office confirmation before creating a
+new same-dollar link after a prior online card payment.
 
 Status: landed as a first slice. Payments are now job-level append-only ledger
 rows with invoice allocations. BellField's platform fee is one fixed rate for
