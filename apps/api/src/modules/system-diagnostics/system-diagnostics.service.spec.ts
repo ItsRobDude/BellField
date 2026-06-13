@@ -151,6 +151,26 @@ describe('SystemDiagnosticsService', () => {
 
   it('reports release-stamped build information from the build manifest', async () => {
     const root = mkdtempSync(join(tmpdir(), 'bellfield-build-manifest-spec-'));
+    // A release build must run with NODE_ENV=production (runtime-config refuses
+    // to start otherwise), which in turn activates the rest of the production
+    // env contract. Set the minimal valid production env and restore it so
+    // nothing leaks into sibling tests.
+    const productionEnv = {
+      NODE_ENV: 'production',
+      DATABASE_URL: 'postgresql://app:secret@db.internal:5432/bellfield',
+      BELLFIELD_OFFICE_ORIGINS: 'https://office.example.com'
+    } as const;
+    const restoreProductionEnv = Object.keys(productionEnv).map((key) => {
+      const original = process.env[key];
+      process.env[key] = productionEnv[key as keyof typeof productionEnv];
+      return () => {
+        if (original === undefined) {
+          delete process.env[key];
+        } else {
+          process.env[key] = original;
+        }
+      };
+    });
     try {
       const manifestPath = join(root, 'bellfield-build-manifest.json');
       writeFileSync(
@@ -181,6 +201,9 @@ describe('SystemDiagnosticsService', () => {
         sourceCommit: 'abc1234'
       });
     } finally {
+      for (const restore of restoreProductionEnv) {
+        restore();
+      }
       rmSync(root, { force: true, recursive: true });
     }
   });
