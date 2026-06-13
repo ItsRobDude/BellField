@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -97,7 +105,10 @@ test('BackupService writes a dump, copies media, records success, and writes a m
     if (result.status !== 'succeeded') {
       throw new Error('expected backup to succeed');
     }
-    assert.equal(result.backupSetPath, join(backupRoot, 'bellfield-backup-20260611-011533Z'));
+    assert.equal(
+      result.backupSetPath,
+      join(backupRoot, `bellfield-backup-20260611-011533Z-${repository.started[0].slice(0, 8)}`)
+    );
     assert.equal(repository.failed.length, 0);
     assert.equal(repository.succeeded.length, 1);
     const success = repository.succeeded[0];
@@ -150,7 +161,48 @@ test('BackupService records failure and removes the partial backup set', async (
     assert.equal(repository.succeeded.length, 0);
     assert.equal(repository.failed.length, 1);
     assert.match(repository.failed[0].errorMessage, /pg_dump failed/);
-    assert.equal(existsSync(join(backupRoot, 'bellfield-backup-20260611-011533Z')), false);
+    assert.equal(
+      existsSync(
+        join(backupRoot, `bellfield-backup-20260611-011533Z-${repository.started[0].slice(0, 8)}`)
+      ),
+      false
+    );
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('BackupService failure does not remove a pre-existing backup set path collision', async () => {
+  const root = createTempRoot();
+  try {
+    const mediaRoot = join(root, 'media');
+    const backupRoot = join(root, 'backups');
+    mkdirSync(mediaRoot, { recursive: true });
+    mkdirSync(backupRoot, { recursive: true });
+    writeFileSync(join(mediaRoot, 'photo.txt'), 'media bytes', { flag: 'wx' });
+
+    const repository = new InMemoryBackupRunsRepository();
+    const collisionPath = join(backupRoot, 'bellfield-backup-20260611-011533Z-collision');
+    mkdirSync(collisionPath, { recursive: true });
+    writeFileSync(join(collisionPath, 'marker.txt'), 'do not delete', { flag: 'wx' });
+
+    const service = new BackupService(
+      {
+        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
+        mediaRoot,
+        backupRoot,
+        retentionCount: 7
+      },
+      repository,
+      {
+        processRunner: async () => ({ status: 1, stderr: 'pg_dump failed' }),
+        now: () => new Date('2026-06-11T01:15:33.000Z')
+      }
+    );
+
+    await service.runBackup();
+
+    assert.equal(existsSync(join(collisionPath, 'marker.txt')), true);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }
@@ -233,6 +285,8 @@ test('BackupService startup preparation fails orphaned runs and removes manifest
     mkdirSync(successfulBackupSetPath, { recursive: true });
     writeFileSync(join(partialBackupSetPath, 'database.dump'), 'partial', { flag: 'wx' });
     writeFileSync(join(successfulBackupSetPath, 'manifest.json'), '{}', { flag: 'wx' });
+    const oldPartialTime = new Date('2026-06-11T01:00:00.000Z');
+    utimesSync(partialBackupSetPath, oldPartialTime, oldPartialTime);
 
     const repository = new InMemoryBackupRunsRepository();
     repository.runningFailedCount = 2;
@@ -261,6 +315,39 @@ test('BackupService startup preparation fails orphaned runs and removes manifest
     assert.equal(existsSync(partialBackupSetPath), false);
     assert.equal(existsSync(successfulBackupSetPath), true);
     assert.deepEqual(prepared.removedPartialBackupSetPaths, [partialBackupSetPath]);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('BackupService startup preparation leaves fresh manifest-less partial sets alone', async () => {
+  const root = createTempRoot();
+  try {
+    const mediaRoot = join(root, 'media');
+    const backupRoot = join(root, 'backups');
+    const freshPartialBackupSetPath = join(backupRoot, 'bellfield-backup-fresh-partial');
+    mkdirSync(mediaRoot, { recursive: true });
+    mkdirSync(freshPartialBackupSetPath, { recursive: true });
+    writeFileSync(join(freshPartialBackupSetPath, 'database.dump'), 'partial', { flag: 'wx' });
+    const freshPartialTime = new Date('2026-06-11T01:45:00.000Z');
+    utimesSync(freshPartialBackupSetPath, freshPartialTime, freshPartialTime);
+
+    const repository = new InMemoryBackupRunsRepository();
+    const service = new BackupService(
+      {
+        databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
+        mediaRoot,
+        backupRoot,
+        retentionCount: 7
+      },
+      repository,
+      { now: () => new Date('2026-06-11T02:00:00.000Z') }
+    );
+
+    const prepared = await service.prepareForScheduling();
+
+    assert.equal(existsSync(freshPartialBackupSetPath), true);
+    assert.deepEqual(prepared.removedPartialBackupSetPaths, []);
   } finally {
     rmSync(root, { force: true, recursive: true });
   }

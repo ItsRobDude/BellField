@@ -25,7 +25,7 @@ Still not claimed:
 Each backup set is written under `BELLFIELD_BACKUP_ROOT` as:
 
 ```text
-bellfield-backup-YYYYMMDD-HHMMSSZ\
+bellfield-backup-YYYYMMDD-HHMMSSZ-<runid>\
   database.dump
   media\
   license\
@@ -78,7 +78,7 @@ Run:
 .\release\runtime\node\node.exe .\release\tools\install\restore-backup.mjs `
   --release-root=.\release `
   --install-root=C:\BellField `
-  --backup-set=C:\BellField\data\backups\bellfield-backup-YYYYMMDD-HHMMSSZ `
+  --backup-set=C:\BellField\data\backups\bellfield-backup-YYYYMMDD-HHMMSSZ-<runid> `
   --confirm=RESTORE
 ```
 

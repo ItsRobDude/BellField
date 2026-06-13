@@ -30,7 +30,7 @@ Because host PostgreSQL client tools were unavailable, this smoke did not run a 
   - throwing jobs are isolated
   - scheduled backups run immediately when no successful backup exists or the last success is overdue
   - scheduled backups wait only the remaining interval after a recent success
-  - backup startup recovery marks orphaned `running` rows failed and removes manifest-less partial backup sets
+  - backup startup recovery marks orphaned `running` rows failed and removes old manifest-less partial backup sets
   - backup service writes a dump/media/manifest through a fake process runner
   - failed backups are recorded and partial sets removed
   - retention deletes old backup sets and marks rows

@@ -50,6 +50,15 @@ export class SendEstimateService {
     shop: AuthenticatedRelayShop,
     input: SendEstimateDocumentInput
   ): Promise<RelaySendResult> {
+    return await this.messagesStore.withIdempotencyLock(shop.shopId, input.idempotencyKey, () =>
+      this.sendEstimateDocumentLocked(shop, input)
+    );
+  }
+
+  private async sendEstimateDocumentLocked(
+    shop: AuthenticatedRelayShop,
+    input: SendEstimateDocumentInput
+  ): Promise<RelaySendResult> {
     const now = this.now();
 
     // Replays return the recorded outcome instead of re-sending; the install
@@ -157,13 +166,19 @@ export class SendEstimateService {
         acceptedAt: now
       });
       if (providerResult.kind === 'sent') {
-        await this.recordAcceptanceLink(shop, input.acceptance, acceptanceLink, record.id, now);
+        const recordedLink = await this.recordAcceptanceLink(
+          shop,
+          input.acceptance,
+          acceptanceLink,
+          record.id,
+          now
+        );
         return {
           kind: 'sent',
           relayMessageId: record.id,
           providerMessageId: record.providerMessageId ?? undefined,
-          acceptanceUrl: acceptanceLink?.url,
-          acceptanceLinkId: acceptanceLink?.linkId
+          acceptanceUrl: recordedLink ? acceptanceLink?.url : undefined,
+          acceptanceLinkId: recordedLink ? acceptanceLink?.linkId : undefined
         };
       }
       return providerResult;
@@ -190,8 +205,9 @@ export class SendEstimateService {
    * Persisted only after the message recorded as sent: a failed message has
    * no email in the world, so it needs no link. When this write fails the
    * email is already out with a now-dead link — the homeowner sees the
-   * neutral not-found page and the shop resends; log loudly, same
-   * lesser-harm posture as an unrecorded message.
+   * neutral not-found page and the shop resends. Do not return the link to the
+   * install in that case; the office should not display a link BellField failed
+   * to persist.
    */
   private async recordAcceptanceLink(
     shop: AuthenticatedRelayShop,
@@ -199,9 +215,9 @@ export class SendEstimateService {
     acceptanceLink: PreparedAcceptanceLink | undefined,
     relayMessageId: string,
     now: Date
-  ): Promise<void> {
+  ): Promise<boolean> {
     if (!acceptance || !acceptanceLink) {
-      return;
+      return false;
     }
     try {
       await this.acceptanceLinksService.recordMintedLink({
@@ -211,12 +227,14 @@ export class SendEstimateService {
         acceptance,
         now
       });
+      return true;
     } catch (error) {
       log('error', 'Relay failed to record an acceptance link for a sent message.', {
         shopId: shop.shopId,
         relayMessageId,
         error
       });
+      return false;
     }
   }
 }

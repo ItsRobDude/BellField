@@ -29,6 +29,19 @@ const MESSAGE_COLUMNS = `id, shop_id, idempotency_key, recipient_email, subject,
 export class RelayMessagesRepository implements RelayMessagesStore {
   constructor(private readonly database: DatabaseService) {}
 
+  async withIdempotencyLock<T>(
+    shopId: string,
+    idempotencyKey: string,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    return await this.database.transaction(async (queryable) => {
+      await queryable.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', [
+        `relay-send:${shopId}:${idempotencyKey}`
+      ]);
+      return await callback();
+    });
+  }
+
   async findByIdempotencyKey(
     shopId: string,
     idempotencyKey: string
@@ -70,8 +83,9 @@ export class RelayMessagesRepository implements RelayMessagesStore {
     providerMessageId: string | null;
     acceptedAt: Date;
   }): Promise<RelayMessageRecord> {
-    // Concurrent duplicate submits race past the replay lookup; the unique
-    // index decides the winner and the loser returns the recorded row.
+    // The send service normally serializes duplicate submits with an advisory
+    // lock. The unique index remains the final integrity guard if a caller ever
+    // bypasses that path.
     const inserted = await this.database.query<MessageRow>(
       `INSERT INTO relay_messages
          (id, shop_id, idempotency_key, recipient_email, subject, status,

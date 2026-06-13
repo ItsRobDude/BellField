@@ -19,6 +19,31 @@ class InMemoryMessagesStore implements RelayMessagesStore {
   messages: RelayMessageRecord[] = [];
   suppressions: { shopId: string; email: string; reason: SuppressionReason }[] = [];
   failRecordOutcome = false;
+  private readonly lockQueues = new Map<string, Promise<void>>();
+
+  async withIdempotencyLock<T>(
+    shopId: string,
+    idempotencyKey: string,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    const lockKey = `${shopId}:${idempotencyKey}`;
+    const previous = this.lockQueues.get(lockKey) ?? Promise.resolve();
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    this.lockQueues.set(
+      lockKey,
+      previous.catch(() => undefined).then(() => gate)
+    );
+
+    await previous.catch(() => undefined);
+    try {
+      return await callback();
+    } finally {
+      release();
+    }
+  }
 
   async findByIdempotencyKey(shopId: string, idempotencyKey: string) {
     return (
@@ -437,7 +462,7 @@ describe('SendEstimateService', () => {
     expect(acceptanceStore.records).toHaveLength(0);
   });
 
-  it('still returns sent with the link URL when link recording fails', async () => {
+  it('does not return an unpersisted acceptance link when link recording fails', async () => {
     const store = new InMemoryMessagesStore();
     const acceptanceStore = new StubAcceptanceStore();
     acceptanceStore.failRecord = true;
@@ -451,7 +476,8 @@ describe('SendEstimateService', () => {
 
     expect(result.kind).toBe('sent');
     if (result.kind === 'sent') {
-      expect(result.acceptanceUrl).toMatch(/^https:\/\/relay\.test\/a\//);
+      expect(result.acceptanceUrl).toBeUndefined();
+      expect(result.acceptanceLinkId).toBeUndefined();
     }
   });
 
@@ -475,6 +501,47 @@ describe('SendEstimateService', () => {
     if (first.kind === 'sent' && replay.kind === 'sent') {
       expect(first.acceptanceUrl).toBeDefined();
       expect(replay.acceptanceUrl).toBeUndefined();
+    }
+  });
+
+  it('serializes duplicate acceptance sends for the same idempotency key', async () => {
+    const store = new InMemoryMessagesStore();
+    const acceptanceStore = new StubAcceptanceStore();
+    let releaseProvider: () => void = () => undefined;
+    const providerGate = new Promise<void>((resolve) => {
+      releaseProvider = resolve;
+    });
+    const adapter: EmailSendAdapter & { calls: { bodyText: string }[] } = {
+      calls: [],
+      async send(input) {
+        adapter.calls.push(input);
+        await providerGate;
+        return { kind: 'sent', providerMessageId: 'prov-concurrent' };
+      }
+    };
+    const service = makeService(store, adapter, acceptanceStore);
+
+    const firstSend = service.sendEstimateDocument(
+      shop,
+      makeInput({ acceptance: makeAcceptance() })
+    );
+    await Promise.resolve();
+    const duplicateSend = service.sendEstimateDocument(
+      shop,
+      makeInput({ acceptance: makeAcceptance() })
+    );
+
+    releaseProvider();
+    const [first, duplicate] = await Promise.all([firstSend, duplicateSend]);
+
+    expect(adapter.calls).toHaveLength(1);
+    expect(acceptanceStore.records).toHaveLength(1);
+    expect(first.kind).toBe('sent');
+    expect(duplicate.kind).toBe('sent');
+    if (first.kind === 'sent' && duplicate.kind === 'sent') {
+      expect(first.acceptanceUrl).toBeDefined();
+      expect(duplicate.relayMessageId).toBe(first.relayMessageId);
+      expect(duplicate.acceptanceUrl).toBeUndefined();
     }
   });
 });

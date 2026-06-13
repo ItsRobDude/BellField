@@ -28,6 +28,14 @@ class StubStore implements RelayMessagesStore {
   reputation: ShopReputationCounts = { attempted: 0, hardFailures: 0 };
   appliedEvents: { providerMessageId: string; status: string }[] = [];
 
+  async withIdempotencyLock<T>(
+    _shopId: string,
+    _idempotencyKey: string,
+    callback: () => Promise<T>
+  ) {
+    return await callback();
+  }
+
   async findByIdempotencyKey() {
     return null;
   }

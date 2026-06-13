@@ -45,6 +45,11 @@ export type ShopReputationCounts = {
 };
 
 export interface RelayMessagesStore {
+  withIdempotencyLock<T>(
+    shopId: string,
+    idempotencyKey: string,
+    callback: () => Promise<T>
+  ): Promise<T>;
   findByIdempotencyKey(shopId: string, idempotencyKey: string): Promise<RelayMessageRecord | null>;
   findByIdForShop(messageId: string, shopId: string): Promise<RelayMessageRecord | null>;
   findByProviderMessageId(providerMessageId: string): Promise<RelayMessageRecord | null>;

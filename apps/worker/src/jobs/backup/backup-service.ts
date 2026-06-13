@@ -72,6 +72,7 @@ const databaseDumpFilename = 'database.dump';
 const mediaBackupDirectoryName = 'media';
 const licenseBackupDirectoryName = 'license';
 const licenseBackupFilename = 'bellfield-license.json';
+const manifestlessPartialMinimumAgeMs = 30 * 60 * 1000;
 
 export class BackupService {
   private readonly now: () => Date;
@@ -92,11 +93,12 @@ export class BackupService {
     const backupId = randomUUID();
     const backupSetPath = resolve(
       this.config.backupRoot,
-      `bellfield-backup-${timestampForPath(startedAt)}`
+      `bellfield-backup-${timestampForPath(startedAt)}-${backupId.slice(0, 8)}`
     );
     const databaseDumpPath = join(backupSetPath, databaseDumpFilename);
     const mediaBackupPath = join(backupSetPath, mediaBackupDirectoryName);
     const manifestPath = join(backupSetPath, backupManifestFilename);
+    let backupSetCreated = false;
 
     await this.repository.startRun({ id: backupId, runKind, startedAt });
 
@@ -104,6 +106,7 @@ export class BackupService {
       throwIfAborted(input.signal);
       mkdirSync(this.config.backupRoot, { recursive: true });
       mkdirSync(backupSetPath, { recursive: false });
+      backupSetCreated = true;
       await this.dumpDatabase(databaseDumpPath, input.signal);
 
       throwIfAborted(input.signal);
@@ -171,7 +174,9 @@ export class BackupService {
       });
       return success;
     } catch (error) {
-      rmSync(backupSetPath, { force: true, recursive: true });
+      if (backupSetCreated && isPathInsideDirectory(backupSetPath, this.config.backupRoot)) {
+        rmSync(backupSetPath, { force: true, recursive: true });
+      }
       const completedAt = this.now();
       const errorMessage = sanitizeErrorMessage(error);
       await this.repository.markFailed({
@@ -317,6 +322,10 @@ export class BackupService {
         continue;
       }
       if (existsSync(join(candidate, backupManifestFilename))) {
+        continue;
+      }
+      const candidateAgeMs = this.now().getTime() - statSync(candidate).mtimeMs;
+      if (candidateAgeMs < manifestlessPartialMinimumAgeMs) {
         continue;
       }
 

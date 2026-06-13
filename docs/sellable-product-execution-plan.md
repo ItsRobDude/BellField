@@ -66,7 +66,7 @@ These must all be performed and dated before the first sold install or pilot.
   switches to owner-account setup.
 - Backup/restore: Phase 2 repo-side foundation now exists. The worker owns a
   scheduled backup job, startup due-check from latest successful backup,
-  orphaned-running cleanup, manifest-less partial-set cleanup, backup run
+  orphaned-running cleanup, old manifest-less partial-set cleanup, backup run
   history, backup-set retention, and a packaged restore helper with staged
   media/license replacement; the scratch-machine restore gate remains
   unclaimed.
@@ -308,7 +308,7 @@ Phase 5 reuses it instead of inventing one.
 Status: repo-side Phase 2 implementation landed 2026-06-11. This includes the
 worker job-runner substrate, scheduled `pg_dump` + media backups, `backup_runs`
 history, startup due-check from latest successful backup, orphaned-running and
-manifest-less partial-set cleanup, System backup freshness visibility,
+old manifest-less partial-set cleanup, System backup freshness visibility,
 support-bundle config summary, retention, staged restore media/license
 replacement, and `docs/restore-runbook.md`. A nondestructive same-machine
 validation pass is recorded in
