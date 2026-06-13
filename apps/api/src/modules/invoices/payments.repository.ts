@@ -98,7 +98,7 @@ export class PaymentsRepository {
   async recordPayment(invoiceId: string, input: PaymentWriteInput): Promise<PaymentRecord> {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
-      const target = await this.lockTargetInvoice(invoiceId, queryable);
+      const target = await this.lockJobForPayment(invoiceId, queryable);
       const paymentId = randomUUID();
       await this.insertPayment(
         paymentId,
@@ -306,13 +306,21 @@ export class PaymentsRepository {
     return Number(result.rows[0]?.cents ?? 0);
   }
 
-  private async lockTargetInvoice(
+  /**
+   * Acquire payment locks in a single consistent order: the job row, then the
+   * job's posted invoices by id. The target invoice is read (not locked) first
+   * only to find its job and validate it — locking the single target row before
+   * the ordered set would let two payments on different invoices of the same
+   * job deadlock (each holding the other's target row). Posting is monotonic,
+   * so reading the target unlocked is safe.
+   */
+  private async lockJobForPayment(
     invoiceId: string,
     queryable: QueryExecutor
   ): Promise<TargetInvoiceRow> {
     const invoiceResult = await queryable.query<TargetInvoiceRow>(
       `select job_id as "jobId", status, invoice_kind as "invoiceKind"
-       from invoices where id = $1 limit 1 for update`,
+       from invoices where id = $1 limit 1`,
       [invoiceId]
     );
     const invoice = invoiceResult.rows[0];
@@ -325,8 +333,19 @@ export class PaymentsRepository {
     if (invoice.invoiceKind === 'credit') {
       throw new ConflictException('A credit cannot be paid; it reduces what is owed.');
     }
+    await this.lockJobRow(invoice.jobId, queryable);
     await this.lockPostedInvoicesForJob(invoice.jobId, queryable);
     return invoice;
+  }
+
+  private async lockJobRow(jobId: string, queryable: QueryExecutor): Promise<void> {
+    const result = await queryable.query<{ id: string }>(
+      `select id from jobs where id = $1 for update`,
+      [jobId]
+    );
+    if (!result.rows[0]) {
+      throw new NotFoundException('Job not found.');
+    }
   }
 
   private async lockPostedInvoicesForJob(jobId: string, queryable: QueryExecutor): Promise<void> {

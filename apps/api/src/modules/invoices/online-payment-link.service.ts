@@ -1,5 +1,4 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
-import { randomUUID } from 'node:crypto';
 import {
   relayServerInstanceHeader,
   type OnlinePaymentLinkResponse,
@@ -57,7 +56,11 @@ export class OnlinePaymentLinkService {
 
     const currency = 'USD';
     const amount = amountDueCents / 100;
-    const idempotencyKey = `invoice-payment:${invoice.jobId}:${amountDueCents}:${randomUUID()}`;
+    // Deterministic per (job, amount): repeat clicks / retries reuse the same
+    // relay session instead of minting a second live Stripe checkout the
+    // customer could pay twice. A randomUUID() here would defeat the relay's
+    // and Stripe's idempotency entirely.
+    const idempotencyKey = `invoice-payment:${invoice.jobId}:${amountDueCents}`;
     const relayResponse = await this.requestRelayPaymentSession(relay, {
       idempotencyKey,
       jobRef: invoice.jobId,
@@ -65,9 +68,7 @@ export class OnlinePaymentLinkService {
       amountCents: amountDueCents,
       currency,
       description: `BellField invoice ${invoice.posted?.jobNumber ?? invoice.id}`,
-      customerEmail: request.customerEmail?.trim() || undefined,
-      successUrl: `${relay.baseUrl}/payment-return/success`,
-      cancelUrl: `${relay.baseUrl}/payment-return/canceled`
+      customerEmail: request.customerEmail?.trim() || undefined
     });
 
     const result = relayResponse.result;
@@ -130,8 +131,6 @@ export class OnlinePaymentLinkService {
       currency: string;
       description: string;
       customerEmail?: string;
-      successUrl: string;
-      cancelUrl: string;
     }
   ): Promise<RelayCreatePaymentSessionResponse> {
     const response = await fetch(`${relay.baseUrl}/v1/payment-sessions`, {

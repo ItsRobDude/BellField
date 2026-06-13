@@ -58,15 +58,20 @@ const PAYMENT_ROW = {
 
 const actor = { id: 'emp-1', displayName: 'Bea Bookkeeper' };
 
-const INVOICE_LOCK = /from invoices where id = \$1 limit 1 for update/i;
+// The target invoice is READ (not locked) first; locks are then taken in a
+// consistent order (job row, then posted invoices) to avoid a deadlock.
+const INVOICE_READ = /from invoices where id = \$1 limit 1(?! for update)/i;
+const JOB_LOCK = /select id from jobs where id = \$1 for update/i;
+const POSTED_SET_LOCK = /select id from invoices\s+where job_id = \$1 and status = 'posted'/i;
 const TIMELINE_INSERT = /insert into job_timeline_entries/i;
 const ALLOCATION_SELECT = /from payment_allocations pa\s+join invoices i/i;
 
 describe('PaymentsRepository.recordPayment', () => {
   it('records against a posted invoice and writes a paymentRecorded timeline entry', async () => {
     const { repository, calls } = repositoryWith([
-      { match: INVOICE_LOCK, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }] },
-      { match: /select id from invoices\s+where job_id = \$1 and status = 'posted'/i, rows: [] },
+      { match: INVOICE_READ, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
       { match: /insert into payments/i, rowCount: 1 },
       { match: /from invoices i\s+left join active_allocations/i, rows: [] },
       {
@@ -103,20 +108,54 @@ describe('PaymentsRepository.recordPayment', () => {
     expect(timeline?.params[4]).toBe('paymentRecorded');
   });
 
+  it('locks the job row and posted set, never the single target invoice (deadlock-safe order)', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: INVOICE_READ, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      { match: /from invoices i\s+left join active_allocations/i, rows: [] },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      { match: /and id <> \$2/i, rows: [{ cents: 0 }] },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      { match: /from payments where id = \$1/i, rows: [PAYMENT_ROW] },
+      { match: ALLOCATION_SELECT, rows: [] }
+    ]);
+
+    await repository.recordPayment('inv-main', {
+      amount: 200,
+      method: 'card',
+      receivedAt: '2026-06-02T00:00:00.000Z',
+      actor
+    });
+
+    // The single target invoice is never locked on its own (that out-of-order
+    // row lock is what deadlocked); the job row is locked before the posted set.
+    expect(findCall(calls, /from invoices where id = \$1 limit 1 for update/i)).toBeUndefined();
+    const jobLockIdx = calls.findIndex((c) => JOB_LOCK.test(c.sql));
+    const setLockIdx = calls.findIndex((c) => POSTED_SET_LOCK.test(c.sql));
+    const insertIdx = calls.findIndex((c) => /insert into payments/i.test(c.sql));
+    expect(jobLockIdx).toBeGreaterThanOrEqual(0);
+    expect(jobLockIdx).toBeLessThan(setLockIdx);
+    expect(setLockIdx).toBeLessThan(insertIdx);
+  });
+
   it('rejects a payment against a draft invoice and writes nothing', async () => {
     const { repository, calls } = repositoryWith([
-      { match: INVOICE_LOCK, rows: [{ jobId: 'job-1', status: 'draft', invoiceKind: 'main' }] }
+      { match: INVOICE_READ, rows: [{ jobId: 'job-1', status: 'draft', invoiceKind: 'main' }] }
     ]);
 
     await expect(
       repository.recordPayment('inv-main', { amount: 50, method: 'cash', receivedAt: 'x', actor })
     ).rejects.toBeInstanceOf(ConflictException);
     expect(findCall(calls, /insert into payments/i)).toBeUndefined();
+    // Validation rejects before any lock is taken.
+    expect(findCall(calls, JOB_LOCK)).toBeUndefined();
   });
 
   it('rejects a payment against a credit', async () => {
     const { repository } = repositoryWith([
-      { match: INVOICE_LOCK, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'credit' }] }
+      { match: INVOICE_READ, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'credit' }] }
     ]);
 
     await expect(

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import type {
+  RecordPaidEventOutcome,
   RelayPaymentSessionRecord,
   RelayPaymentsStore,
   RelayShopPaymentsConfig
@@ -125,8 +126,8 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
         input.request.currency.toUpperCase(),
         input.request.description,
         input.request.customerEmail ?? null,
-        input.request.successUrl,
-        input.request.cancelUrl,
+        input.successUrl,
+        input.cancelUrl,
         input.stripeConnectedAccountId,
         input.stripeCheckoutSessionId,
         input.stripePaymentIntentId,
@@ -151,7 +152,7 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
 
   async recordPaidEvent(
     input: Parameters<RelayPaymentsStore['recordPaidEvent']>[0]
-  ): Promise<boolean> {
+  ): Promise<RecordPaidEventOutcome> {
     return this.database.transaction(async (queryable) => {
       const sessionResult = await queryable.query<PaymentSessionRow>(
         `select ${PAYMENT_SESSION_COLUMNS}
@@ -162,7 +163,19 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
       );
       const session = sessionResult.rows[0];
       if (!session) {
-        return false;
+        return 'sessionNotFound';
+      }
+
+      // Reconcile the webhook against the amount/currency/account we authorized
+      // at session creation. The stored session is the contract; never trust a
+      // webhook that reports a different amount, currency, or connected account.
+      if (
+        input.amountCents !== session.amount_cents ||
+        input.currency.toUpperCase() !== session.currency.toUpperCase() ||
+        (input.connectedAccountId !== undefined &&
+          input.connectedAccountId !== session.stripe_connected_account_id)
+      ) {
+        return 'mismatch';
       }
 
       await queryable.query(
@@ -175,14 +188,18 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
         [session.id, input.stripePaymentIntentId, input.paidAt, input.occurredAt]
       );
 
-      await queryable.query(
+      // Unqualified ON CONFLICT DO NOTHING so a redelivered event (same
+      // stripe_event_id) AND a second event for the same payment intent (same
+      // shop_id, provider_payment_id) both no-op instead of throwing a unique
+      // violation that would 500 the webhook into an infinite Stripe retry.
+      const inserted = await queryable.query(
         `insert into relay_payment_events (
            id, shop_id, payment_session_id, stripe_event_id, provider_payment_id,
            provider_session_id, amount_cents, currency, application_fee_cents,
            processor_fee_cents, paid_at, created_at
          )
          values ($1, $2, $3, $4, $5, $6, $7, $8, $9, null, $10, $11)
-         on conflict (stripe_event_id) do nothing`,
+         on conflict do nothing`,
         [
           randomUUID(),
           session.shop_id,
@@ -197,7 +214,7 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
           input.occurredAt
         ]
       );
-      return true;
+      return (inserted.rowCount ?? 0) > 0 ? 'recorded' : 'duplicate';
     });
   }
 

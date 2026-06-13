@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto';
+import { workerLog } from '../../common/logger';
 import type { RelayPaymentEvent } from '../delivery/delivery-types';
 import type {
   PaymentEventApplyOutcome,
@@ -14,6 +15,8 @@ type ExistingPaymentRow = {
 type OnlinePaymentSessionRow = {
   jobId: string;
   invoiceId: string | null;
+  amountCents: number;
+  currency: string;
 };
 
 type ChargeInvoiceRow = {
@@ -45,7 +48,28 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       }
 
       const session = await this.findOnlinePaymentSessionForUpdate(tx, event.paymentSessionId);
+      // jobRef is the install's own job id echoed back by the relay, so it is a
+      // valid local job either way. But invoice_id is only trusted from the
+      // local session — never event.invoiceRef, which could point at an invoice
+      // on a different job. A missing session is recorded (the customer did pay)
+      // and surfaced, never dropped.
       const jobId = session?.jobId ?? event.jobRef;
+      const invoiceId = session?.invoiceId ?? null;
+
+      if (
+        session &&
+        (session.amountCents !== event.amountCents ||
+          session.currency.toUpperCase() !== event.currency.trim().toUpperCase())
+      ) {
+        workerLog('error', 'Online payment event did not match its local session.', {
+          paymentSessionId: event.paymentSessionId,
+          sessionAmountCents: session.amountCents,
+          eventAmountCents: event.amountCents,
+          sessionCurrency: session.currency,
+          eventCurrency: event.currency
+        });
+      }
+
       await this.lockJob(tx, jobId);
       await this.lockPostedInvoicesForJob(tx, jobId);
 
@@ -63,7 +87,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         [
           paymentId,
           jobId,
-          session?.invoiceId ?? event.invoiceRef ?? null,
+          invoiceId,
           centsToDollarsString(event.amountCents),
           event.currency.trim().toUpperCase(),
           paidAt,
@@ -76,9 +100,21 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         ]
       );
 
-      await this.insertAutoAllocations(tx, paymentId, jobId, event.amountCents, occurredAt);
+      const allocatedCents = await this.insertAutoAllocations(
+        tx,
+        paymentId,
+        jobId,
+        event.amountCents,
+        occurredAt
+      );
       await this.markOnlinePaymentSessionPaid(tx, event.paymentSessionId, paymentId, paidAt);
-      await this.addTimelineEntry(tx, jobId, event.amountCents, occurredAt);
+      await this.addTimelineEntry(tx, {
+        jobId,
+        amountCents: event.amountCents,
+        allocatedCents,
+        sessionMissing: session === null,
+        occurredAt
+      });
       return 'applied';
     });
   }
@@ -101,14 +137,29 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     tx: PaymentEventsQueryExecutor,
     relayPaymentSessionId: string
   ): Promise<OnlinePaymentSessionRow | null> {
-    const result = await tx.query<OnlinePaymentSessionRow>(
-      `select job_id as "jobId", invoice_id as "invoiceId"
+    const result = await tx.query<{
+      jobId: string;
+      invoiceId: string | null;
+      amountCents: string | number;
+      currency: string;
+    }>(
+      `select job_id as "jobId", invoice_id as "invoiceId",
+              round(amount * 100) as "amountCents", currency
        from online_payment_sessions
        where relay_payment_session_id = $1
        for update`,
       [relayPaymentSessionId]
     );
-    return result.rows[0] ?? null;
+    const row = result.rows[0];
+    if (!row) {
+      return null;
+    }
+    return {
+      jobId: row.jobId,
+      invoiceId: row.invoiceId,
+      amountCents: Number(row.amountCents),
+      currency: row.currency
+    };
   }
 
   private async lockJob(tx: PaymentEventsQueryExecutor, jobId: string): Promise<void> {
@@ -153,15 +204,34 @@ export class PaymentEventsRepository implements PaymentEventsStore {
 
   private async addTimelineEntry(
     tx: PaymentEventsQueryExecutor,
-    jobId: string,
-    amountCents: number,
-    occurredAt: Date
+    input: {
+      jobId: string;
+      amountCents: number;
+      allocatedCents: number;
+      sessionMissing: boolean;
+      occurredAt: Date;
+    }
   ): Promise<void> {
-    await tx.query('update jobs set updated_at = $2 where id = $1', [jobId, occurredAt]);
+    // Surface the things the office must see rather than letting them happen
+    // silently: an overpayment (the balance moved between link and payment) and
+    // a confirmation with no local link record.
+    const overpaymentCents = Math.max(input.amountCents - input.allocatedCents, 0);
+    const overpaymentNote =
+      overpaymentCents > 0
+        ? ` ${formatCents(overpaymentCents)} exceeds the balance due and is held as credit on this job.`
+        : '';
+    const sessionNote = input.sessionMissing
+      ? ' No local payment-link record matched this confirmation — please review.'
+      : '';
+    const message = `Online payment of ${formatCents(input.amountCents)} confirmed.${overpaymentNote}${sessionNote}`;
+    await tx.query('update jobs set updated_at = $2 where id = $1', [
+      input.jobId,
+      input.occurredAt
+    ]);
     await tx.query(
       `insert into job_timeline_entries (id, job_id, occurred_at, actor_name, kind, message)
        values ($1, $2, $3, 'BellField Payments', 'paymentRecorded', $4)`,
-      [randomUUID(), jobId, occurredAt, `Online payment of ${formatCents(amountCents)} confirmed.`]
+      [randomUUID(), input.jobId, input.occurredAt, message]
     );
   }
 
@@ -171,7 +241,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     jobId: string,
     paymentCents: number,
     occurredAt: Date
-  ): Promise<void> {
+  ): Promise<number> {
     const [chargeRows, creditTotalCents, activePaidBeforeThisCents] = await Promise.all([
       this.listPostedChargeInvoiceBalances(tx, jobId),
       this.sumPostedCreditCentsForJob(tx, jobId),
@@ -187,11 +257,12 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       positiveChargeTotalCents - creditTotalCents - activePaidBeforeThisCents,
       0
     );
-    let remainingToAllocateCents = Math.min(
+    const allocatableCents = Math.min(
       paymentCents,
       positiveUnpaidCents,
       netDueBeforeThisPaymentCents
     );
+    let remainingToAllocateCents = allocatableCents;
 
     for (const invoice of chargeRows) {
       if (remainingToAllocateCents <= 0) {
@@ -214,6 +285,10 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       );
       remainingToAllocateCents -= allocationCents;
     }
+
+    // What actually landed on invoices; the caller surfaces any remainder as an
+    // overpayment/credit rather than letting it vanish.
+    return allocatableCents - remainingToAllocateCents;
   }
 
   private async listPostedChargeInvoiceBalances(

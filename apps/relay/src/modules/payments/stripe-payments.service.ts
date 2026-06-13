@@ -15,6 +15,8 @@ export type StripeWebhookEvent = {
   id: string;
   type: string;
   created: number;
+  /** Connected account that produced the event; reconciled against the session. */
+  account?: string;
   data: { object: unknown };
 };
 
@@ -58,6 +60,11 @@ export class StripePaymentsService {
     const session = await this.stripe.checkout.sessions.create(
       {
         mode: 'payment',
+        // Card-only for this first slice: the install ledger records only
+        // immediately-confirmed payments. Delayed methods (ACH, etc.) fire
+        // async_payment_succeeded, which is not handled yet — enabling them
+        // here would silently drop genuinely-paid sessions.
+        payment_method_types: ['card'],
         success_url: input.successUrl,
         cancel_url: input.cancelUrl,
         customer_email: input.customerEmail,

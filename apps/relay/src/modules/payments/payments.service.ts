@@ -7,6 +7,7 @@ import type {
   RelayPaymentSessionResult
 } from '@bellfield/contracts';
 import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
+import { log } from '../../common/logger';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
 import { isStripeCheckoutSession, StripePaymentsService } from './stripe-payments.service';
 import type { RelayPaymentsStore } from './payments.types';
@@ -15,7 +16,8 @@ export const RELAY_PAYMENTS_STORE = 'RELAY_PAYMENTS_STORE';
 
 @Injectable()
 export class RelayPaymentsService {
-  private readonly platformFeeBasisPoints = getRelayRuntimeConfig().paymentsPlatformFeeBasisPoints;
+  private readonly runtimeConfig = getRelayRuntimeConfig();
+  private readonly platformFeeBasisPoints = this.runtimeConfig.paymentsPlatformFeeBasisPoints;
 
   constructor(
     @Inject(RELAY_PAYMENTS_STORE) private readonly paymentsStore: RelayPaymentsStore,
@@ -73,18 +75,26 @@ export class RelayPaymentsService {
           request.amountCents,
           this.platformFeeBasisPoints
         );
+        // The relay owns the customer-facing origin; the install never supplies
+        // the post-checkout redirect target.
+        const successUrl = `${this.runtimeConfig.publicBaseUrl}/payment-return/success`;
+        const cancelUrl = `${this.runtimeConfig.publicBaseUrl}/payment-return/canceled`;
 
         try {
           const stripeSession = await this.stripePaymentsService.createCheckoutSession({
             ...request,
             currency: request.currency.toUpperCase(),
             connectedAccountId: paymentsConfig.stripeConnectedAccountId,
-            applicationFeeCents
+            applicationFeeCents,
+            successUrl,
+            cancelUrl
           });
           const recorded = await this.paymentsStore.recordSession({
             id: `pay_sess_${cryptoRandomSuffix()}`,
             shopId: shop.shopId,
             request,
+            successUrl,
+            cancelUrl,
             stripeConnectedAccountId: paymentsConfig.stripeConnectedAccountId,
             stripeCheckoutSessionId: stripeSession.stripeCheckoutSessionId,
             stripePaymentIntentId: stripeSession.stripePaymentIntentId,
@@ -94,7 +104,14 @@ export class RelayPaymentsService {
             createdAt: new Date()
           });
           return sessionResult(recorded);
-        } catch {
+        } catch (error) {
+          // A permanent failure (restricted connected account, unsupported
+          // currency) is reported retryable so the office can retry transient
+          // outages, but it must be logged or the real cause is invisible.
+          log('error', 'Stripe checkout session creation failed.', {
+            shopId: shop.shopId,
+            error
+          });
           return {
             kind: 'failed',
             code: 'providerError',
@@ -116,19 +133,39 @@ export class RelayPaymentsService {
       return;
     }
     const paymentIntentId =
-      typeof session.payment_intent === 'string' ? session.payment_intent : undefined;
-    if (!paymentIntentId || typeof session.amount_total !== 'number' || !session.currency) {
+      typeof session.payment_intent === 'string'
+        ? session.payment_intent
+        : (session.payment_intent?.id ?? undefined);
+    // amount_total === 0 is a number and would pass a typeof check, but the
+    // ledger requires a positive amount; treat a zero/blank paid session as a
+    // no-op rather than letting the DB CHECK throw and 500 the webhook.
+    if (
+      !paymentIntentId ||
+      typeof session.amount_total !== 'number' ||
+      session.amount_total <= 0 ||
+      !session.currency
+    ) {
       return;
     }
-    await this.paymentsStore.recordPaidEvent({
+    const outcome = await this.paymentsStore.recordPaidEvent({
       stripeEventId: event.id,
       stripeCheckoutSessionId: session.id,
       stripePaymentIntentId: paymentIntentId,
+      connectedAccountId: event.account,
       amountCents: session.amount_total,
       currency: session.currency.toUpperCase(),
       paidAt: new Date(event.created * 1000),
       occurredAt: new Date()
     });
+    // A mismatch or missing session is a reconciliation failure, not a crash:
+    // the event is acknowledged (200) but never trusted into the ledger.
+    if (outcome === 'mismatch' || outcome === 'sessionNotFound') {
+      log('error', 'Paid webhook did not reconcile against a stored session.', {
+        outcome,
+        stripeCheckoutSessionId: session.id,
+        stripeEventId: event.id
+      });
+    }
   }
 
   async listUndeliveredPaymentEvents(shopId: string): Promise<RelayPaymentEventsResponse> {

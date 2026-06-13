@@ -36,6 +36,9 @@ export type RelayPaymentSessionRecord = {
 export type StripeCheckoutSessionCreateInput = RelayCreatePaymentSessionRequest & {
   connectedAccountId: string;
   applicationFeeCents: number;
+  /** Relay-generated from publicBaseUrl — never install-supplied. */
+  successUrl: string;
+  cancelUrl: string;
 };
 
 export type StripeCheckoutSessionCreateResult = {
@@ -44,6 +47,13 @@ export type StripeCheckoutSessionCreateResult = {
   checkoutUrl: string;
   expiresAt: Date;
 };
+
+/**
+ * Outcome of reconciling a paid webhook against the stored session.
+ * `mismatch`/`sessionNotFound` are no-ops the service logs rather than trusting
+ * webhook-reported amount/currency/account that disagree with the contract.
+ */
+export type RecordPaidEventOutcome = 'recorded' | 'duplicate' | 'sessionNotFound' | 'mismatch';
 
 export interface RelayPaymentsStore {
   withPaymentSessionLock<T>(
@@ -60,6 +70,9 @@ export interface RelayPaymentsStore {
     id: string;
     shopId: string;
     request: RelayCreatePaymentSessionRequest;
+    /** Relay-generated customer redirect URLs (not from the request). */
+    successUrl: string;
+    cancelUrl: string;
     stripeConnectedAccountId: string;
     stripeCheckoutSessionId: string;
     stripePaymentIntentId: string | null;
@@ -72,11 +85,13 @@ export interface RelayPaymentsStore {
     stripeEventId: string;
     stripeCheckoutSessionId: string;
     stripePaymentIntentId: string;
+    /** Connected account from the webhook event, reconciled against the stored session. */
+    connectedAccountId: string | undefined;
     amountCents: number;
     currency: string;
     paidAt: Date;
     occurredAt: Date;
-  }): Promise<boolean>;
+  }): Promise<RecordPaidEventOutcome>;
   listUndeliveredPaymentEvents(shopId: string): Promise<RelayPaymentEventRecord[]>;
   acknowledgePaymentEvent(
     shopId: string,

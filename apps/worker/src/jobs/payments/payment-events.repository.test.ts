@@ -51,7 +51,7 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main' }],
+    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'USD' }],
     [{ id: 'job-1' }],
     [],
     [],
@@ -95,6 +95,75 @@ test('PaymentEventsRepository records a provider payment and allocates it across
     /update online_payment_sessions/i.test(query.text)
   );
   assert.deepEqual(sessionUpdate?.values?.slice(0, 2), ['session-1', paymentInsert.values?.[0]]);
+});
+
+test('PaymentEventsRepository records an overpayment in full and surfaces the unallocated remainder', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 20_000, currency: 'USD' }],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    // Only $125 is still due, but the customer paid $200 (balance moved after
+    // the link was created).
+    [{ invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' }],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ amountCents: 20_000 }),
+    new Date('2026-06-13T12:00:10.000Z')
+  );
+
+  assert.equal(outcome, 'applied');
+  // The full confirmed amount is recorded (the money is real)...
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[3], '200.00');
+  // ...only $125 is allocated to the open charge...
+  const allocations = database.queries.filter((query) =>
+    /insert into payment_allocations/i.test(query.text)
+  );
+  assert.equal(allocations.length, 1);
+  assert.equal(allocations[0].values?.[3], '125.00');
+  // ...and the $75 remainder is surfaced, not silent.
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.match(String(timeline?.values?.[3]), /\$75\.00 exceeds the balance due/);
+});
+
+test('PaymentEventsRepository records a confirmation with no local session and flags it', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [], // no online_payment_sessions row
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ invoiceRef: 'inv-on-another-job' }),
+    new Date('2026-06-13T12:00:10.000Z')
+  );
+
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  // Falls back to the relay-echoed job, but invoice_id is null — never the
+  // untrusted event.invoiceRef that could belong to a different job.
+  assert.equal(paymentInsert?.values?.[1], 'job-1');
+  assert.equal(paymentInsert?.values?.[2], null);
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.match(String(timeline?.values?.[3]), /No local payment-link record/);
 });
 
 test('PaymentEventsRepository treats an existing provider payment as already applied', async () => {

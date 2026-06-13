@@ -159,8 +159,9 @@ export interface RelayCreatePaymentSessionRequest {
   currency: string;
   description: string;
   customerEmail?: string;
-  successUrl: string;
-  cancelUrl: string;
+  // The customer-facing success/cancel URLs are NOT install-supplied: the relay
+  // owns the public origin and mints them from its own publicBaseUrl, so an
+  // install can never point the post-checkout redirect at an internal/wrong host.
 }
 
 export interface RelayCreatePaymentSessionResponse {

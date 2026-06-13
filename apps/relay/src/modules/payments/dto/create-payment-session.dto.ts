@@ -4,7 +4,6 @@ import {
   IsISO4217CurrencyCode,
   IsOptional,
   IsString,
-  IsUrl,
   MaxLength,
   Min
 } from 'class-validator';
@@ -38,10 +37,4 @@ export class CreatePaymentSessionRequestDto implements RelayCreatePaymentSession
   @IsOptional()
   @IsEmail()
   customerEmail?: string;
-
-  @IsUrl({ require_protocol: true })
-  successUrl!: string;
-
-  @IsUrl({ require_protocol: true })
-  cancelUrl!: string;
 }
