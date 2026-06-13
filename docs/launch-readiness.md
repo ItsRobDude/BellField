@@ -42,6 +42,11 @@ Built, tested, and (where marked) deployed. Each line names its evidence.
   and external uptime monitoring in place) —
   [delivery-relay-plan.md](./delivery-relay-plan.md),
   [relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)
+- **Estimate acceptance links** (relay-hosted public approve/decline pages,
+  version-pinned links, structured decline reasons, worker poll/ack, office
+  state surfacing; live relay smoke passed 2026-06-13) —
+  [acceptance-links-design.md](./acceptance-links-design.md),
+  [phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md)
 - **Security harness in CI** — secret scanning, blocking prod dependency
   audit (currently zero known vulnerabilities), `SECURITY.md` +
   `security@bellfield.app`, prod env-var startup validation, Dependabot
@@ -63,8 +68,8 @@ proofs are deliberately batched. Owned by
       install bar) — the owner does not perform installs.
 - [ ] scratch-machine restore from a real backup set
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
-- [ ] sold-shaped install sends through the production relay end to end
-      (closes the formal Phase 5 gate)
+- [ ] sold-shaped install sends and accepts through the production relay end
+      to end (closes the formal Phase 5/6a environmental gate)
 - [ ] second office desktop + real Android field device against that install
 
 Gate day is validation debt, not build debt — it never blocks build lanes.

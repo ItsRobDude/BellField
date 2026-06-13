@@ -11,6 +11,12 @@ update runbook set. It supersedes
 [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md)
 for current scoring.
 
+Status note 2026-06-13: Phase 6a acceptance links shipped after this scoring
+run and passed a live-relay smoke
+([phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md)).
+The weighted scores below are preserved as the 2026-06-12 snapshot until the
+next comparison rerun; do not treat the row-9 acceptance caveat as current.
+
 ## Method And Caveats
 
 - ServiceTitan was re-inspected live in Chrome in a logged-in tenant at
@@ -62,7 +68,7 @@ judgments; rows 8, 13, and 14 carry new evidence.
 | 6   | Dispatch & scheduling (10)                 |   5    |   4    |  4.5   | Unchanged. The board's structure (tech rows with clock-in state, time grid, unassigned grid with per-column filters, status buckets, map with tech/job pins, drag with side-panel quick edit) matches the prior scoring.                                                                                                                                                                                                                                             |
 | 7   | Field mobile & offline (12)                |   5    |   4    |   5    | Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 8   | Notes/activity/media/history (6)           |   5    |   4    |  4.5   | Scores hold, both sides better evidenced. ST's job history is a **unified feed with channel tabs (Events/Calls/Notes/Files/Email/Chat)** including automated SMS entries with delivery status. BellField's timeline now carries real delivery lifecycle events (sent/failed/canceled, and delivered/bounced via the live relay) — correct, but single-channel.                                                                                                       |
-| 9   | Estimates/pricing/register/draft (8)       |   5    |  3.5   |  4.5   | Unchanged: customer acceptance is **designed** ([acceptance-links-design.md](./acceptance-links-design.md)) but not built, and field estimate building remains future. No score credit for design documents.                                                                                                                                                                                                                                                         |
+| 9   | Estimates/pricing/register/draft (8)       |   5    |  3.5   |  4.5   | Snapshot caveat: at the time of this 2026-06-12 scoring run, customer acceptance had not shipped. Phase 6a shipped on 2026-06-13 and should move this row in the next comparison rerun. Field estimate building remains future.                                                                                                                                                                                                                                      |
 | 10  | Billing/payments/accounting safety (10)    |   5    |  3.5   |   5    | Unchanged score. Fresh ST evidence: the accounting workspace is batch-centric (payment-type totals strip, batch lifecycle, "Collect Payments"/recurring billing) with a **per-batch QuickBooks export log**. That is the integration bar for "deep accounting" later.                                                                                                                                                                                                |
 | 11  | Inventory/purchasing/costing (8)           |  4.5   |   4    |  4.5   | Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
 | 12  | Permissions/audit/safety (7)               |   5    |   4    |   5    | Unchanged.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
@@ -118,21 +124,21 @@ relative to its impact:
   dated deployment evidence. The 06-10 run's recommendation #6 ("do the
   self-hosted runbook work before pilot") is done at repo level; only the
   scratch-machine gate day remains as validation debt.
-- **Acceptance links are designed, not built** — no score movement, but 6a.1
-  is shovel-ready.
+- **Acceptance links were still ahead in this scorecard** — Phase 6a shipped
+  on 2026-06-13 after the run; rescore it in the next comparison pass.
 
 ## Highest-Leverage Recommendations (re-ranked)
 
-1. **Build Phase 6a acceptance links** (design done). Largest single Track A
-   row-9/row-13 mover available; ST/HCP/Jobber all have it.
-2. **Invoice delivery.** The relay is live and the estimate path is proven —
+1. **Invoice delivery.** The relay is live and the estimate/acceptance path is proven —
    invoice email is mostly reuse (relay plan §5 anticipated it) and unlocks
    the bookkeeping completeness owners feel first.
-3. **Unsold-estimates worklist + owner "needs attention" view.** Cheap,
+2. **Unsold-estimates worklist + owner "needs attention" view.** Cheap,
    data-already-exists reporting with the ST Follow Up pattern as the spec.
-4. **Dispatch card density** using the face + hover + status-buckets recipe.
-5. **Email-first operational comms** (booking confirmation, reminder,
+3. **Dispatch card density** using the face + hover + status-buckets recipe.
+4. **Email-first operational comms** (booking confirmation, reminder,
    on-my-way) on the live relay, logged to the timeline, per-job suppressible.
+5. **Refresh the comparison score after Phase 6a** before using the 2026-06-12
+   weighted totals as current planning input.
    SMS becomes a provider decision later; the email versions are pure reuse.
 6. **Payments planning** unchanged: online-only, posted-invoice-only,
    provider-confirmed, audit-heavy — design after 6a ships.

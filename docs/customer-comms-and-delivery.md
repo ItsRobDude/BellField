@@ -58,7 +58,9 @@ BellField already has enough operational structure to support this lane later:
   for company name, reply-to, and estimate email template defaults.
 
 Estimate PDF email delivery has shipped and rides the production relay with
-queue/retry/cancel semantics (status stamps in §10). This document continues to
+queue/retry/cancel semantics (status stamps in §10). Estimate acceptance links
+have also shipped: the relay hosts the public decision page and the worker
+polls decisions back into the self-hosted install. This document continues to
 define the guardrails for the next delivery slices.
 
 ---
@@ -137,12 +139,15 @@ This is exactly the content the delivery provider already receives today; the
 relay must not become storage of customer business data, and the deployment
 docs must say so wherever the self-hosted posture is described.
 
-**Status 2026-06-12: the relay exists and is deployed to production**
+**Status 2026-06-13: the relay exists and is deployed to production**
 (`relay.bellfield.app`; see `relay-deployment-2026-06-12.md`). Installs send
 through the relay-client adapter using a per-shop relay token; the first real
-end-to-end delivered email is on record. The direct provider adapter remains in
-the codebase only as the internal adapter boundary behind the relay — provider
-keys live solely on the relay host and must never ship to sold installs.
+end-to-end delivered email is on record. The same relay now also hosts Phase 6a
+estimate acceptance links; a live smoke on 2026-06-13 proved relay link
+minting, public approve/decline pages, worker poll/ack, and local estimate
+state application. The direct provider adapter remains in the codebase only as
+the internal adapter boundary behind the relay — provider keys live solely on
+the relay host and must never ship to sold installs.
 
 The controlling design for the relay itself — business model, relay-token
 semantics, sender identity tiers, API shape, queueing, and build order — is
@@ -289,20 +294,20 @@ Shipped beyond the original scope: relay-backed delivery with queue/retry on
 retryable failure, office Cancel for queued sends, and worker
 retry/expiry/status-poll jobs.
 
-### Phase 3 - Invoice Email Delivery — NOT STARTED (queued behind acceptance links)
+### Phase 3 - Invoice Email Delivery — NOT STARTED
 
 - office or bookkeeping sends posted invoice documents
 - delivery state is logged
 - behavior respects invoice posting and correction rules
 
-### Phase 4 - Estimate Acceptance Link — DESIGNED, NEXT BUILD LANE
+### Phase 4 - Estimate Acceptance Link — SHIPPED
 
 The controlling design is [acceptance-links-design.md](./acceptance-links-design.md)
 (slices 6a.1–6a.3 in `sellable-product-execution-plan.md`).
 
 - customer approves or declines through a secure link
-- captured name/signature, timestamp, selected option, and immutable estimate
-  meaning are preserved
+- timestamp, selected option, structured decline reasons, optional note, and
+  immutable estimate version are preserved
 - office still controls scheduling and conversion
 
 ### Phase 5 - Payment Links — NOT STARTED

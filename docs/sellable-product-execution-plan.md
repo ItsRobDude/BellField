@@ -49,6 +49,9 @@ session:
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
   pre-update `pg_dump` backup, plus a real refusal against an expired-window
   license
+- Phase 5/6: sold-shaped installed release sends an estimate through the
+  production relay, opens the customer acceptance page, and applies the
+  customer decision back through the worker poller
 
 These must all be performed and dated before the first sold install or pilot.
 
@@ -550,6 +553,11 @@ option-group choice as the approval itself, version-pinned links so an edited
 estimate is never auto-approved stale, at-least-once poll/ack delivery to the
 install, and office-action-wins race rules.
 
+Status: Phase 6a is closed as a build/functional lane. Local same-machine proof
+against the live production relay passed on 2026-06-13; see
+[phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md).
+The sold-shaped release proof remains gate-day validation debt.
+
 ### 6a.1 Relay acceptance surface — BUILT 2026-06-12
 
 Build: acceptance_links schema, link minting in `POST /v1/messages/estimate`,
@@ -561,8 +569,8 @@ Verified end to end with curl against a local relay and a real Resend send:
 mint + template splice into the email, open page render, option/reason
 validation, first-decision-wins decline with structured reasons + note,
 409 on the second decision, poll → ack → empty, 404 on unknown tokens, and
-429s from the per-link rate limit. Page copy awaits owner sign-off; prod
-relay deploy happens alongside or before 6a.2.
+429s from the per-link rate limit. The live relay was also exercised during
+the 2026-06-13 Phase 6a smoke.
 
 ### 6a.2 Install integration — BUILT 2026-06-13
 
@@ -582,7 +590,9 @@ Evidence: `pnpm --filter @bellfield/worker test -- --runInBand`, `pnpm
 `pnpm --filter @bellfield/office-web test -- job-estimates-section.test.tsx
 --runInBand`, full `pnpm test`, `pnpm typecheck`, `pnpm lint`, `pnpm
 format:check`, `pnpm check:architecture`, `pnpm check:ui-copy`, and `git diff
---check` all passed locally on 2026-06-13.
+--check` all passed locally on 2026-06-13. Live-relay smoke on 2026-06-13 sent
+two estimates, submitted one approval and one decline through Chrome, and the
+worker applied both decisions (`fetched:2`, `applied:2`).
 
 ### 6a.3 Office surfacing — BUILT 2026-06-13
 
@@ -592,7 +602,9 @@ response", "Customer approved online"), copy per the no-leakage rule.
 Status: initial office surfacing landed in the existing estimate review panel
 and delivery history. It shows awaiting/expired/recorded customer-response
 state without exposing the raw customer approval link as a normal office
-action.
+action. API readback after the live-relay smoke showed the approved estimate
+as `approved`, the declined estimate as `declined`, and structured decline
+reason codes `price` and `questions` stored on the declined estimate.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use
@@ -602,8 +614,8 @@ timeline-only); an optional note is allowed on approve. Page copy is drafted
 during 6a.1 review. Shipping gate: the D7 hosting revisit is resolved — the
 laptop hosts until the first paying customer has acceptance links live
 (event-triggered re-decision, not a date; see the design doc). Phase 6b
-(payment links) is design-deferred until 6a ships; its constraints are
-sketched in the design doc.
+(payment links) is the next design lane; its constraints are sketched in the
+design doc.
 
 ---
 

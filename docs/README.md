@@ -206,6 +206,22 @@ Read when: deciding whether Phase 4 repo-side updater foundations are ready to b
 
 Does not own: the install recipe (`install-runbook.md`), license format (`license-design.md`), restore recipe (`restore-runbook.md`), or the future self-serve update UI.
 
+### [phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md)
+
+Audience: contributors checking whether Phase 6a customer acceptance links
+have been proven against the live relay.
+
+Purpose: dated evidence for the live-relay acceptance validation: local API
+sends, relay-minted acceptance links, Chrome approve/decline public-page
+decisions, worker poll/ack, and local estimate/outbound-message readback.
+
+Read when: deciding whether Phase 6a is closed as a build lane, or
+distinguishing that proof from the remaining sold-shaped release gate.
+
+Does not own: the acceptance-link design (`acceptance-links-design.md`), the
+relay design (`delivery-relay-plan.md`), or the gate-day sold-release proof
+(`gate-day-checklist.md`).
+
 ### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Audience: contributors checking what Phase 1 install validation has actually been run.
@@ -298,7 +314,7 @@ Does not own: the relay's business design (`delivery-relay-plan.md`) or the lice
 
 ### [acceptance-links-design.md](./acceptance-links-design.md)
 
-Audience: contributors building customer-facing estimate acceptance links (Phase 6a).
+Audience: contributors working on or reviewing customer-facing estimate acceptance links (Phase 6a).
 
 Purpose: the controlling design for `/a/<token>` acceptance pages — token format, shop-fronted server-rendered page, option selection, version pinning, poll/ack delivery of decisions, office-wins race rules, and expiry.
 

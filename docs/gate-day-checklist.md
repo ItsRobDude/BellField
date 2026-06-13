@@ -28,9 +28,10 @@ closeout.
 | 2    | Phase 2: restore drill from a real worker-produced backup set                                                                                        | restore-runbook.md                                     |
 | 3    | Phase 4: installed v(N) → v(N+1) update with real services and a real pre-update `pg_dump`                                                           | install-runbook.md §Update Existing Install            |
 | 4    | Phase 4: real refusal against an expired-window license                                                                                              | install-runbook.md §Update Existing Install            |
+| 5    | Phase 5/6a: sold-shaped installed release sends through the production relay and applies a customer acceptance decision                              | install-runbook.md + acceptance-links-design.md        |
 
 Rough budget: prep 1–2 hours (before the day), Gate 1 ~2 hours, Gate 2 ~45
-minutes, Gates 3+4 ~1 hour, closeout ~30 minutes.
+minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 
 ---
 
@@ -58,6 +59,11 @@ minutes, Gates 3+4 ~1 hour, closeout ~30 minutes.
     the future (must be ≥ artifact B's release date)
   - `bellfield-license-EXPIRED.json` — `--update-window-end` strictly
     **before** artifact B's release date
+- [ ] **Prepare sold-shaped relay config** for the gate install: relay base
+      URL, relay token, and server instance id. Store the token material only
+      in the local API-key folder or the encrypted transfer path being used for
+      the scratch machine; do not paste it into this checklist or the evidence
+      doc.
 - [ ] **USB stick:** both zips, both license files, this checklist, and
       offline copies of install-runbook.md and restore-runbook.md (the
       scratch machine may have no network or no browser bookmarks).
@@ -154,6 +160,28 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 
 ---
 
+## Gate 5 — Production relay send and acceptance (Phase 5/6a)
+
+Run this from the installed release, not from the repo checkout.
+
+- [ ] Confirm `bellfield-server.env` contains the relay env triplet for
+      `https://relay.bellfield.app` and no provider API key.
+- [ ] In office-web, create or open a pending estimate and send it to the test
+      mailbox (`admin@bellsoftwarellc.com` or the current BellField test
+      address).
+- [ ] Confirm delivery history shows a `sent` outbound row and an acceptance
+      expiry. Do not record the full acceptance URL/token in the evidence doc.
+- [ ] Open the customer acceptance page from the email or the recorded office
+      reference and approve it.
+- [ ] Within the worker poll interval, confirm office-web/API shows the
+      estimate as customer-approved and the outbound row has
+      `acceptanceDecisionAppliedAt`.
+- [ ] Optional but preferred: send a second pending estimate, decline it with
+      at least one structured reason, and confirm the reason code stores
+      locally.
+
+---
+
 ## Closeout (same day)
 
 - [ ] Write the evidence doc `docs/gate-day-<YYYY-MM-DD>.md` using the
@@ -198,6 +226,12 @@ Artifacts: A = v<N> (<release-date>, commit <sha>), B = v<N+1> (<release-date>, 
 
 - refusal message: <verbatim>
 - services uninterrupted: <notes>
+
+## Gate 5 — production relay send and acceptance: PASSED/FAILED
+
+- outbound message: sent/queued/failed <notes>
+- customer acceptance page: <approve/decline result, token redacted>
+- worker poll/application: <local estimate status + timestamp>
 
 ## Runbook deviations found
 

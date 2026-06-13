@@ -1,14 +1,13 @@
 # Estimate Acceptance Links Design (Phase 6a)
 
-This document opens Phase 6 of
+This document records Phase 6a of
 [sellable-product-execution-plan.md](./sellable-product-execution-plan.md):
 customer-facing estimate acceptance on the relay's host and auth, followed
-later by payment links (sketched in §10, designed properly when 6a ships).
+later by payment links (sketched in §10, designed properly in Phase 6b).
 
 Competitive context: ServiceTitan, Housecall Pro, and Jobber all let the
-homeowner approve an estimate from the email. BellField approval is currently
-office-recorded ("Mark approved"). This phase closes that gap and finally
-makes "Customer approved" a literal statement.
+homeowner approve an estimate from the email. BellField now does too: this
+phase closes that gap and makes "Customer approved" a literal statement.
 
 ## Constraints already decided (binding)
 
@@ -42,6 +41,17 @@ makes "Customer approved" a literal statement.
 4. The install's worker polls the relay, applies the decision to the
    estimate (status, actor "Customer", timeline entry), and acknowledges.
    The office sees "Customer approved" without anyone touching BellField.
+
+## Status
+
+Phase 6a is built and live-smoked. On 2026-06-13 a local install connected to
+the live relay sent two estimates, Chrome submitted one customer approval and
+one customer decline through the public pages, and the worker applied both
+decisions back into the local estimate state. Evidence:
+[phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md).
+
+The remaining proof is environmental, not build scope: a sold-shaped release
+install still needs to run the same flow during gate day.
 
 ## Link anatomy and token
 
@@ -192,7 +202,7 @@ estimate in front of a customer.
 ## Payment links (Phase 6b sketch — constraints only)
 
 Decided posture: BellField pages never touch card data or shop processor
-keys. The shape to design when 6a ships: the install creates a
+keys. The shape to design for Phase 6b: the install creates a
 processor-hosted checkout session (e.g. Stripe Checkout) **outbound** at
 invoice-send time and the email links straight to the processor's page;
 payment confirmation reaches the install either via the processor's own
@@ -240,6 +250,4 @@ piloting 6a does not wait on any host change.
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 7–90 days defaulting to 30; declines use the fixed multi-select reason list
 plus "Other" free text; an optional note is allowed on approve; free text is
-timeline-only (≤500 chars) while reason codes store structured. One item
-remains open by design: the exact customer-facing page copy set, drafted
-during 6a.1 review like the 5.5 copy was.
+timeline-only (≤500 chars) while reason codes store structured.
