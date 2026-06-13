@@ -142,13 +142,30 @@ Payment-link v1 is deliberately narrow:
 
 - relay admin links a shop to a Stripe connected account with
   `relay-admin set-payments-account --shop-id=<shop> --stripe-account-id=acct_...`
-- install calls `POST /v1/payment-sessions` with job/invoice refs, full-balance
-  amount in cents, and success/cancel URLs
+- install calls `POST /v1/payment-sessions` with job/invoice refs and the
+  full-balance amount in cents. The **install does not supply the customer
+  redirect URLs**: the relay mints `success`/`cancel` URLs from its own
+  `publicBaseUrl`, so a misconfigured install can never point the
+  post-checkout redirect at an internal or wrong host.
+- the install's payment-link idempotency key is deterministic per
+  `(job, amount)` — no random component — so repeat clicks or retries reuse the
+  same session instead of minting a second payable Checkout.
 - relay creates a Stripe Checkout Session as a direct charge on the connected
-  account and applies BellField's platform fee (default 100 basis points)
-- Stripe webhooks terminate at `POST /webhooks/stripe`
+  account, **card-only in v1** (`payment_method_types: ['card']`; delayed
+  methods like ACH fire `async_payment_succeeded`, which is not handled yet and
+  would otherwise be silently dropped), and applies BellField's platform fee
+  (default 100 basis points)
+- Stripe webhooks terminate at `POST /webhooks/stripe`. The relay **reconciles
+  every paid event against the stored session** (amount, currency, connected
+  account) and refuses mismatches; a zero-amount paid session is a no-op, not a
+  crash; duplicate events for either unique index no-op rather than 500 into a
+  Stripe retry loop.
 - install worker polls `GET /v1/payment-events` and acknowledges with
-  `POST /v1/payment-events/:id/ack` only after local ledger persistence
+  `POST /v1/payment-events/:id/ack` only after local ledger persistence. The
+  worker records the confirmed payment **in full** and surfaces any
+  unallocated remainder as an overpayment timeline note — a confirmed payment
+  is never dropped or refused, even if the balance moved after the link was
+  created.
 
 No card data, Stripe secret key, or shop processor credential is ever present on
 the customer-owned install.

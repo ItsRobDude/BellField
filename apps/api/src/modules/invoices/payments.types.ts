@@ -70,17 +70,3 @@ export type PaymentWriteInput = {
   memo?: string;
   actor: { id: string; displayName: string };
 };
-
-export type ProviderPaymentWriteInput = {
-  jobId: string;
-  amount: number;
-  currency: string;
-  provider: PaymentProviderValue;
-  providerPaymentId: string;
-  providerSessionId?: string;
-  processorFee?: number;
-  applicationFee?: number;
-  receivedAt: string;
-  reference?: string;
-  memo?: string;
-};
