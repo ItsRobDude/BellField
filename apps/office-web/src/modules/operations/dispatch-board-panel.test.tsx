@@ -215,7 +215,7 @@ describe('DispatchBoardPanel', () => {
       within(taylorRegion).getByRole('button', {
         name: 'Job 1001, Main Shop, 123 Main, Blaine, WA, Scheduled'
       })
-    ).toHaveStyle({ height: '100%', minHeight: '3.8rem', minWidth: '11rem' });
+    ).toHaveStyle({ height: '100%', minHeight: '3.8rem', minWidth: '0px' });
     expect(within(taylorRegion).queryByText('1')).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText('No cooling')).not.toBeInTheDocument();
     expect(

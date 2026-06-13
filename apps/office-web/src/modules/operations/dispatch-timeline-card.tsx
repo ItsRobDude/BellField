@@ -266,7 +266,10 @@ const timelineCardMainButtonStyle: CSSProperties = {
   gap: '0.35rem',
   height: '100%',
   minHeight: timelineCardMinHeight,
-  minWidth: '11rem',
+  // The frame owns the 11rem floor. The inner button must stay shrinkable
+  // (text ellipsizes) or the Edit button overflows past the card border on
+  // narrow appointments.
+  minWidth: 0,
   overflow: 'hidden',
   padding: '0 0 0 0',
   textAlign: 'left'
