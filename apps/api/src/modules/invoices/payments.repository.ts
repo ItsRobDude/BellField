@@ -9,8 +9,7 @@ import type {
   PaymentProviderValue,
   PaymentRecord,
   PaymentSourceValue,
-  PaymentWriteInput,
-  ProviderPaymentWriteInput
+  PaymentWriteInput
 } from './payments.types';
 
 type PaymentRow = {
@@ -139,76 +138,6 @@ export class PaymentsRepository {
           actorName: input.actor.displayName,
           kind: 'paymentRecorded',
           message: `Payment of ${formatMoney(input.amount)} recorded (${input.method}).`
-        },
-        queryable
-      );
-
-      return this.findPaymentById(paymentId, queryable);
-    });
-  }
-
-  /**
-   * Record a provider-confirmed BellField Payments receipt. Idempotency is keyed
-   * by provider + providerPaymentId so relay redelivery and worker retries are safe.
-   */
-  async recordProviderPayment(input: ProviderPaymentWriteInput): Promise<PaymentRecord> {
-    const existing = await this.findProviderPayment(input.provider, input.providerPaymentId);
-    if (existing) {
-      return existing;
-    }
-
-    const now = new Date().toISOString();
-    return this.databaseService.transaction(async (queryable) => {
-      const inTransactionExisting = await this.findProviderPayment(
-        input.provider,
-        input.providerPaymentId,
-        queryable
-      );
-      if (inTransactionExisting) {
-        return inTransactionExisting;
-      }
-
-      await this.lockPostedInvoicesForJob(input.jobId, queryable);
-      const paymentId = randomUUID();
-      await this.insertPayment(
-        paymentId,
-        {
-          jobId: input.jobId,
-          invoiceId: null,
-          amount: input.amount,
-          method: 'card',
-          source: 'bellfieldPayments',
-          provider: input.provider,
-          currency: normalizeCurrency(input.currency),
-          receivedAt: input.receivedAt,
-          reference: input.reference,
-          memo: input.memo,
-          recordedByEmployeeId: null,
-          recordedByName: 'BellField Payments',
-          processorFee: input.processorFee,
-          applicationFee: input.applicationFee,
-          providerPaymentId: input.providerPaymentId,
-          providerSessionId: input.providerSessionId
-        },
-        now,
-        queryable
-      );
-      await this.insertAutoAllocations(
-        paymentId,
-        input.jobId,
-        dollarsToCents(input.amount),
-        now,
-        queryable
-      );
-
-      await insertJobTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: input.jobId,
-          occurredAt: now,
-          actorName: 'BellField Payments',
-          kind: 'paymentRecorded',
-          message: `Online payment of ${formatMoney(input.amount)} confirmed.`
         },
         queryable
       );
@@ -538,24 +467,6 @@ export class PaymentsRepository {
       throw new NotFoundException('Payment not found.');
     }
     const [payment] = await this.hydratePayments([row], queryable);
-    return payment;
-  }
-
-  private async findProviderPayment(
-    provider: PaymentProviderValue,
-    providerPaymentId: string,
-    queryable: QueryExecutor = this.databaseService
-  ): Promise<PaymentRecord | null> {
-    const result = await queryable.query<PaymentRow>(
-      `select ${PAYMENT_COLUMNS} from payments
-       where provider = $1 and provider_payment_id = $2
-       limit 1`,
-      [provider, providerPaymentId]
-    );
-    if (!result.rows[0]) {
-      return null;
-    }
-    const [payment] = await this.hydratePayments([result.rows[0]], queryable);
     return payment;
   }
 
