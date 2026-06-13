@@ -1,0 +1,7 @@
+name = "bellfield-site"
+compatibility_date = "2026-06-01"
+pages_build_output_dir = "public"
+
+[[kv_namespaces]]
+binding = "WAITLIST"
+id = "73ec2bede2224a1dba9decf9a048a3dc"
