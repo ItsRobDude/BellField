@@ -757,6 +757,70 @@ describe('JobEstimatesSection', () => {
     expect(screen.getByText(/Last sent/)).toBeInTheDocument();
   });
 
+  it('labels relay-applied customer approval as customer-approved', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-09T18:00:00.000Z',
+          approvedByName: 'Customer',
+          latestAcceptanceDecisionAppliedAt: '2026-06-09T18:00:00.000Z'
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect(await screen.findByText('Customer approved')).toBeInTheDocument();
+    expect(screen.getByText(/Customer approved online/)).toBeInTheDocument();
+  });
+
+  it('does not label an office approval as customer-approved just because the employee is named Customer', async () => {
+    mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
+      estimates: [
+        {
+          ...estimate,
+          status: 'approved',
+          approvedAt: '2026-06-09T18:00:00.000Z',
+          approvedByEmployeeId: 'employee-customer',
+          approvedByName: 'Customer',
+          latestAcceptanceDecisionAppliedAt: '2026-06-09T18:00:00.000Z'
+        }
+      ]
+    });
+
+    render(
+      <JobEstimatesSection
+        jobId="job-1"
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        canCreate
+        canEdit
+        canApprove
+        canSend
+        canConvert
+        canViewCatalog={false}
+      />
+    );
+
+    expect(await screen.findByText('Customer responded')).toBeInTheDocument();
+    expect(screen.getByText(/Customer response recorded/)).toBeInTheDocument();
+    expect(screen.queryByText('Customer approved')).toBeNull();
+  });
+
   it('shows customer acceptance state in delivery history', async () => {
     mockedApi.getOfficeEstimateOutboundMessages.mockResolvedValue({
       outboundMessages: [

@@ -367,10 +367,10 @@ function wasEditedSinceLastSend(estimate: EstimateSummary): boolean {
 
 function estimateAcceptanceBadgeLabel(estimate: EstimateSummary): string | null {
   if (estimate.latestAcceptanceDecisionAppliedAt) {
-    if (estimate.status === 'approved' && estimate.approvedByName === 'Customer') {
+    if (wasApprovedByCustomerOnline(estimate)) {
       return 'Customer approved';
     }
-    if (estimate.status === 'declined' && estimate.declinedByName === 'Customer') {
+    if (wasDeclinedByCustomerOnline(estimate)) {
       return 'Customer declined';
     }
     return 'Customer responded';
@@ -386,10 +386,10 @@ function estimateAcceptanceBadgeLabel(estimate: EstimateSummary): string | null 
 function estimateAcceptanceDetailText(estimate: EstimateSummary): string | null {
   if (estimate.latestAcceptanceDecisionAppliedAt) {
     const at = formatSentDate(estimate.latestAcceptanceDecisionAppliedAt);
-    if (estimate.status === 'approved' && estimate.approvedByName === 'Customer') {
+    if (wasApprovedByCustomerOnline(estimate)) {
       return `Customer approved online ${at}.`;
     }
-    if (estimate.status === 'declined' && estimate.declinedByName === 'Customer') {
+    if (wasDeclinedByCustomerOnline(estimate)) {
       return `Customer declined online ${at}.`;
     }
     return `Customer response recorded ${at}.`;
@@ -401,6 +401,24 @@ function estimateAcceptanceDetailText(estimate: EstimateSummary): string | null 
   return isPastDateTime(estimate.latestAcceptanceLinkExpiresAt)
     ? `Customer response link expired ${at}.`
     : `Awaiting customer response · link expires ${at}.`;
+}
+
+function wasApprovedByCustomerOnline(estimate: EstimateSummary): boolean {
+  return (
+    estimate.status === 'approved' &&
+    estimate.latestAcceptanceDecisionAppliedAt !== undefined &&
+    estimate.approvedByEmployeeId === undefined &&
+    estimate.approvedByName === 'Customer'
+  );
+}
+
+function wasDeclinedByCustomerOnline(estimate: EstimateSummary): boolean {
+  return (
+    estimate.status === 'declined' &&
+    estimate.latestAcceptanceDecisionAppliedAt !== undefined &&
+    estimate.declinedByEmployeeId === undefined &&
+    estimate.declinedByName === 'Customer'
+  );
 }
 
 function isPastDateTime(value: string): boolean {

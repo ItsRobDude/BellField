@@ -235,6 +235,8 @@ export class DeliveryService {
   }
 }
 
+// Keep this in sync with relayAcceptanceExpiryDays in packages/contracts.
+// The relay enforces the real expiry; the worker only caches the install-side display timestamp.
 const acceptanceExpiryDays = {
   min: 7,
   max: 90,
