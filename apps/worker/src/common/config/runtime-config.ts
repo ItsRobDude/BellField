@@ -80,6 +80,9 @@ export type WorkerRuntimeConfig = {
     statusIntervalMs: number;
     acceptanceDecisionsIntervalMs: number;
   };
+  payments: {
+    eventIntervalMs: number;
+  };
 };
 
 export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
@@ -145,6 +148,12 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
     isProduction,
     problems
   );
+  const paymentEventsIntervalSeconds = getPositiveInteger(
+    'BELLFIELD_PAYMENT_EVENTS_INTERVAL_SECONDS',
+    60,
+    isProduction,
+    problems
+  );
 
   if (problems.length > 0) {
     throw new Error(
@@ -175,6 +184,9 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
       retryIntervalMs: deliveryRetryIntervalSeconds * 1_000,
       statusIntervalMs: deliveryStatusIntervalMinutes * 60_000,
       acceptanceDecisionsIntervalMs: acceptanceDecisionsIntervalSeconds * 1_000
+    },
+    payments: {
+      eventIntervalMs: paymentEventsIntervalSeconds * 1_000
     }
   };
 }

@@ -157,6 +157,33 @@ async function main(): Promise<number> {
       return 0;
     }
 
+    if (input.command === 'set-payments-account') {
+      await repository.setShopPayments({
+        shopId: shop.id,
+        stripeConnectedAccountId: input.stripeConnectedAccountId,
+        enabled: input.enabled,
+        occurredAt: now
+      });
+      printResult({
+        command: input.command,
+        shopId: shop.id,
+        stripeConnectedAccountId: input.stripeConnectedAccountId,
+        paymentsStatus: input.enabled ? 'enabled' : 'disabled'
+      });
+      return 0;
+    }
+
+    if (input.command === 'disable-payments') {
+      await repository.setShopPayments({
+        shopId: shop.id,
+        stripeConnectedAccountId: null,
+        enabled: false,
+        occurredAt: now
+      });
+      printResult({ command: input.command, shopId: shop.id, paymentsStatus: 'disabled' });
+      return 0;
+    }
+
     const tokens = await repository.listTokensForShop(shop.id);
     const events = await repository.listRecentEvents(shop.id, 20);
     printResult({
@@ -169,6 +196,9 @@ async function main(): Promise<number> {
         monthlySendQuota: shop.monthlySendQuota,
         suspendedReason: shop.suspendedReason,
         updateWindowEnd: shop.updateWindowEnd,
+        paymentsStatus: shop.paymentsStatus,
+        stripeConnectedAccountId: shop.stripeConnectedAccountId,
+        paymentsEnabledAt: shop.paymentsEnabledAt?.toISOString() ?? null,
         createdAt: shop.createdAt.toISOString()
       },
       tokens: tokens.map((token) => ({

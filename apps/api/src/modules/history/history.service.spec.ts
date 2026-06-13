@@ -85,7 +85,7 @@ describe('HistoryService', () => {
     expect(res.entries[5].jobId).toBeNull();
   });
 
-  it('unions all six sources and resolves payment jobs via the invoice join', async () => {
+  it('unions all six sources and reads payment jobs from the payment row', async () => {
     const { service, databaseService } = createService();
     await service.getHistory('token', {});
     const [sql] = databaseService.query.mock.calls[0] as [string, unknown[]];
@@ -99,7 +99,7 @@ describe('HistoryService', () => {
     ]) {
       expect(sql).toContain(t);
     }
-    expect(sql).toContain('join invoices i on i.id = p.invoice_id');
+    expect(sql).toContain('p.method, p.job_id');
   });
 
   it('applies every filter to the query', async () => {

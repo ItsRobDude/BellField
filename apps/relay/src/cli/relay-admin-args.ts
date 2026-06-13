@@ -4,6 +4,13 @@ export type RelayAdminCommand =
   | { command: 'revoke-token'; shopId: string }
   | { command: 'reactivate-shop'; shopId: string }
   | { command: 'set-update-window'; shopId: string; updateWindowEnd: string }
+  | {
+      command: 'set-payments-account';
+      shopId: string;
+      stripeConnectedAccountId: string;
+      enabled: boolean;
+    }
+  | { command: 'disable-payments'; shopId: string }
   | { command: 'publish-release'; file: string; version: string; releaseDate: string }
   | { command: 'inspect'; shopId: string };
 
@@ -18,6 +25,8 @@ export const relayAdminUsage = [
   '  relay-admin revoke-token --shop-id=<shopId>',
   '  relay-admin reactivate-shop --shop-id=<shopId>',
   '  relay-admin set-update-window --shop-id=<shopId> --end=YYYY-MM-DD',
+  '  relay-admin set-payments-account --shop-id=<shopId> --stripe-account-id=acct_... [--enabled=true|false]',
+  '  relay-admin disable-payments --shop-id=<shopId>',
   '  relay-admin publish-release --file=<path-under-artifacts-root> --version=<v> --release-date=YYYY-MM-DD',
   '  relay-admin inspect --shop-id=<shopId>'
 ].join('\n');
@@ -60,6 +69,7 @@ export function parseRelayAdminArgs(args: string[]): RelayAdminParseResult {
     command === 'issue-token' ||
     command === 'revoke-token' ||
     command === 'reactivate-shop' ||
+    command === 'disable-payments' ||
     command === 'inspect'
   ) {
     const shopId = getFlag(rest, 'shop-id')?.trim();
@@ -67,6 +77,30 @@ export function parseRelayAdminArgs(args: string[]): RelayAdminParseResult {
       return { ok: false, error: `${command} requires --shop-id.` };
     }
     return { ok: true, parsed: { command, shopId } };
+  }
+
+  if (command === 'set-payments-account') {
+    const shopId = getFlag(rest, 'shop-id')?.trim();
+    const stripeConnectedAccountId = getFlag(rest, 'stripe-account-id')?.trim();
+    const enabledRaw = getFlag(rest, 'enabled')?.trim().toLowerCase();
+    if (!shopId) {
+      return { ok: false, error: 'set-payments-account requires --shop-id.' };
+    }
+    if (!stripeConnectedAccountId || !stripeConnectedAccountId.startsWith('acct_')) {
+      return { ok: false, error: 'set-payments-account requires --stripe-account-id=acct_...' };
+    }
+    if (enabledRaw !== undefined && enabledRaw !== 'true' && enabledRaw !== 'false') {
+      return { ok: false, error: '--enabled must be true or false.' };
+    }
+    return {
+      ok: true,
+      parsed: {
+        command,
+        shopId,
+        stripeConnectedAccountId,
+        enabled: enabledRaw !== 'false'
+      }
+    };
   }
 
   if (command === 'set-update-window') {

@@ -32,14 +32,22 @@ function repositoryWith(handlers: Array<{ match: RegExp; rows?: unknown[]; rowCo
 
 const PAYMENT_ROW = {
   id: 'pay-1',
+  jobId: 'job-1',
   invoiceId: 'inv-main',
   amount: '200.00',
   method: 'card',
+  source: 'manual',
+  provider: null,
+  currency: 'USD',
   receivedAt: '2026-06-02T00:00:00.000Z',
   reference: null,
   memo: null,
   recordedByEmployeeId: 'emp-1',
   recordedByName: 'Bea Bookkeeper',
+  processorFee: null,
+  applicationFee: null,
+  providerPaymentId: null,
+  providerSessionId: null,
   isVoid: false,
   voidReason: null,
   voidedByName: null,
@@ -52,14 +60,30 @@ const actor = { id: 'emp-1', displayName: 'Bea Bookkeeper' };
 
 const INVOICE_LOCK = /from invoices where id = \$1 limit 1 for update/i;
 const TIMELINE_INSERT = /insert into job_timeline_entries/i;
+const ALLOCATION_SELECT = /from payment_allocations pa\s+join invoices i/i;
 
 describe('PaymentsRepository.recordPayment', () => {
   it('records against a posted invoice and writes a paymentRecorded timeline entry', async () => {
     const { repository, calls } = repositoryWith([
       { match: INVOICE_LOCK, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }] },
+      { match: /select id from invoices\s+where job_id = \$1 and status = 'posted'/i, rows: [] },
       { match: /insert into payments/i, rowCount: 1 },
+      { match: /from invoices i\s+left join active_allocations/i, rows: [] },
+      {
+        match:
+          /from invoices\s+where job_id = \$1\s+and status = 'posted'\s+and invoice_kind = 'credit'/i,
+        rows: [{ cents: 0 }]
+      },
+      {
+        match: /from payments\s+where is_void = false\s+and job_id = \$1\s+and id <> \$2/i,
+        rows: [{ cents: 0 }]
+      },
       { match: TIMELINE_INSERT, rowCount: 1 },
-      { match: /from payments where id = \$1/i, rows: [PAYMENT_ROW] }
+      { match: /from payments where id = \$1/i, rows: [PAYMENT_ROW] },
+      {
+        match: ALLOCATION_SELECT,
+        rows: [{ paymentId: 'pay-1', invoiceId: 'inv-main', invoiceKind: 'main', amount: '200.00' }]
+      }
     ]);
 
     const result = await repository.recordPayment('inv-main', {
@@ -105,12 +129,16 @@ describe('PaymentsRepository.voidPayment', () => {
   it('writes the void audit (actor) to the row and the timeline', async () => {
     const { repository, calls } = repositoryWith([
       {
-        match: /from payments p\s+join invoices inv/i,
-        rows: [{ jobId: 'job-1', isVoid: false, amount: '200.00' }]
+        match: /from payments\s+where id = \$1\s+for update/i,
+        rows: [{ jobId: 'job-1', isVoid: false, amount: '200.00', source: 'manual' }]
       },
       { match: /update payments set/i, rowCount: 1 },
       { match: TIMELINE_INSERT, rowCount: 1 },
-      { match: /from payments where id = \$1/i, rows: [{ ...PAYMENT_ROW, isVoid: true }] }
+      { match: /from payments where id = \$1/i, rows: [{ ...PAYMENT_ROW, isVoid: true }] },
+      {
+        match: ALLOCATION_SELECT,
+        rows: [{ paymentId: 'pay-1', invoiceId: 'inv-main', invoiceKind: 'main', amount: '200.00' }]
+      }
     ]);
 
     await repository.voidPayment('pay-1', 'entered twice', actor);
@@ -128,14 +156,29 @@ describe('PaymentsRepository.voidPayment', () => {
   it('rejects a double-void and writes no timeline entry', async () => {
     const { repository, calls } = repositoryWith([
       {
-        match: /from payments p\s+join invoices inv/i,
-        rows: [{ jobId: 'job-1', isVoid: true, amount: '200.00' }]
+        match: /from payments\s+where id = \$1\s+for update/i,
+        rows: [{ jobId: 'job-1', isVoid: true, amount: '200.00', source: 'manual' }]
       }
     ]);
 
     await expect(repository.voidPayment('pay-1', undefined, actor)).rejects.toBeInstanceOf(
       ConflictException
     );
+    expect(findCall(calls, TIMELINE_INSERT)).toBeUndefined();
+  });
+
+  it('rejects manual voids for provider-confirmed online payments', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: /from payments\s+where id = \$1\s+for update/i,
+        rows: [{ jobId: 'job-1', isVoid: false, amount: '200.00', source: 'bellfield_payments' }]
+      }
+    ]);
+
+    await expect(repository.voidPayment('pay-1', undefined, actor)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, /update payments set/i)).toBeUndefined();
     expect(findCall(calls, TIMELINE_INSERT)).toBeUndefined();
   });
 });

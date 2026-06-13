@@ -17,6 +17,9 @@ export type RelayShopRecord = {
   suspendedReason: string | null;
   /** YYYY-MM-DD from the shop's license; gates release downloads. */
   updateWindowEnd: string | null;
+  paymentsStatus: 'disabled' | 'enabled';
+  stripeConnectedAccountId: string | null;
+  paymentsEnabledAt: Date | null;
   createdAt: Date;
 };
 

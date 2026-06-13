@@ -51,7 +51,8 @@ BellField already has enough operational structure to support this lane later:
   as a printable document.
 - Invoices belong to jobs, can be posted, and can be exported as a printable
   document.
-- Payments are recorded against posted invoices as an append-only ledger.
+- Payments are recorded as a job-level append-only ledger with allocations to
+  posted charge invoices.
 - Jobs already have a mixed timeline that can show important estimate, invoice,
   payment, media, register, and appointment events.
 - `companySettings` exists as a permission area with an office settings surface
@@ -60,8 +61,11 @@ BellField already has enough operational structure to support this lane later:
 Estimate PDF email delivery has shipped and rides the production relay with
 queue/retry/cancel semantics (status stamps in §10). Estimate acceptance links
 have also shipped: the relay hosts the public decision page and the worker
-polls decisions back into the self-hosted install. This document continues to
-define the guardrails for the next delivery slices.
+polls decisions back into the self-hosted install. The first payment-link slice
+has shipped too: the office can create a full-balance Stripe Checkout link for a
+posted invoice, the relay receives Stripe webhooks, and the worker records
+confirmed payments locally. This document continues to define the guardrails for
+the next delivery slices.
 
 ---
 
@@ -310,12 +314,21 @@ The controlling design is [acceptance-links-design.md](./acceptance-links-design
   immutable estimate version are preserved
 - office still controls scheduling and conversion
 
-### Phase 5 - Payment Links — NOT STARTED
+### Phase 5 - Payment Links — FIRST SLICE SHIPPED
 
 - payment links are allowed only for posted invoices
 - payments are recorded from confirmed gateway state
 - BellField stores provider reference and operational result
 - payments remain online-only in v1
+
+Shipped 2026-06-13: full-balance Stripe Checkout links through the BellField
+relay, Stripe webhook intake on the relay, install worker poll/ack for confirmed
+payment events, and local append-only job-level payment records with
+auto-allocation across posted charge invoices.
+
+Still deferred: invoice email delivery, refunds, deposits, partial payments,
+stored cards, customer surcharge logic, and processor-fee reconciliation beyond
+BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

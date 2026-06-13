@@ -19,6 +19,9 @@ type ShopRow = {
   monthly_send_quota: number;
   suspended_reason: string | null;
   update_window_end: string | null;
+  payments_status: 'disabled' | 'enabled';
+  stripe_connected_account_id: string | null;
+  payments_enabled_at: Date | null;
   created_at: Date;
 };
 
@@ -94,6 +97,28 @@ export class RelayIdentityRepository implements RelayIdentityStore {
     await this.database.query(
       `UPDATE relay_shops SET update_window_end = $2, updated_at = NOW() WHERE id = $1`,
       [shopId, updateWindowEnd]
+    );
+  }
+
+  async setShopPayments(input: {
+    shopId: string;
+    stripeConnectedAccountId: string | null;
+    enabled: boolean;
+    occurredAt: Date;
+  }): Promise<void> {
+    await this.database.query(
+      `UPDATE relay_shops
+       SET stripe_connected_account_id = $2,
+           payments_status = $3,
+           payments_enabled_at = $4,
+           updated_at = $4
+       WHERE id = $1`,
+      [
+        input.shopId,
+        input.stripeConnectedAccountId,
+        input.enabled ? 'enabled' : 'disabled',
+        input.enabled ? input.occurredAt : null
+      ]
     );
   }
 
@@ -221,7 +246,8 @@ export class RelayIdentityRepository implements RelayIdentityStore {
   async findShopById(shopId: string): Promise<RelayShopRecord | null> {
     const result = await this.database.query<ShopRow>(
       `SELECT id, display_name, license_id, status, monthly_send_quota, suspended_reason,
-              update_window_end, created_at
+              update_window_end, payments_status, stripe_connected_account_id,
+              payments_enabled_at, created_at
        FROM relay_shops
        WHERE id = $1`,
       [shopId]
@@ -238,6 +264,9 @@ export class RelayIdentityRepository implements RelayIdentityStore {
       monthlySendQuota: row.monthly_send_quota,
       suspendedReason: row.suspended_reason,
       updateWindowEnd: row.update_window_end,
+      paymentsStatus: row.payments_status,
+      stripeConnectedAccountId: row.stripe_connected_account_id,
+      paymentsEnabledAt: row.payments_enabled_at,
       createdAt: row.created_at
     };
   }

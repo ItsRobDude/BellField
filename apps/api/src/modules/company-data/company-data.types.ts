@@ -327,6 +327,7 @@ export type JobTimelineEntry = {
     | 'estimateSendCanceled'
     | 'invoicePosted'
     | 'invoiceAdjustmentCreated'
+    | 'paymentLinkCreated'
     | 'paymentRecorded'
     | 'paymentVoided'
     | 'registerEntryNotReflected'

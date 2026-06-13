@@ -5,6 +5,7 @@ const DEFAULT_MONTHLY_SEND_QUOTA = 1000;
 const DEFAULT_REBIND_FLAP_THRESHOLD = 5;
 const DEFAULT_REBIND_FLAP_WINDOW_MINUTES = 60;
 const DEFAULT_PUBLIC_BASE_URL = 'https://relay.bellfield.app';
+const DEFAULT_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = 100;
 
 export type RelayNodeEnv = 'development' | 'test' | 'production';
 
@@ -23,6 +24,9 @@ export type RelayRuntimeConfig = {
   artifactsRoot?: string;
   /** Origin used to compose public acceptance-link URLs. */
   publicBaseUrl: string;
+  stripeSecretKey?: string;
+  stripeWebhookSecret?: string;
+  paymentsPlatformFeeBasisPoints: number;
 };
 
 function getNodeEnv(): RelayNodeEnv {
@@ -54,6 +58,8 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
   const resendApiKey = process.env.BELLFIELD_RELAY_RESEND_API_KEY || undefined;
   const fromAddress = process.env.BELLFIELD_RELAY_FROM_ADDRESS || DEFAULT_FROM_ADDRESS;
   const webhookSigningSecret = process.env.BELLFIELD_RELAY_WEBHOOK_SIGNING_SECRET || undefined;
+  const stripeSecretKey = process.env.BELLFIELD_RELAY_STRIPE_SECRET_KEY || undefined;
+  const stripeWebhookSecret = process.env.BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET || undefined;
   const port = readPositiveInteger('BELLFIELD_RELAY_PORT', DEFAULT_PORT, problems);
   const defaultMonthlySendQuota = readPositiveInteger(
     'BELLFIELD_RELAY_DEFAULT_MONTHLY_QUOTA',
@@ -70,6 +76,11 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     DEFAULT_REBIND_FLAP_WINDOW_MINUTES,
     problems
   );
+  const paymentsPlatformFeeBasisPoints = readPositiveInteger(
+    'BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS',
+    DEFAULT_PAYMENTS_PLATFORM_FEE_BASIS_POINTS,
+    problems
+  );
 
   if (nodeEnv === 'production') {
     if (!databaseUrl) {
@@ -81,6 +92,11 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     if (!fromAddress.includes('@')) {
       problems.push('BELLFIELD_RELAY_FROM_ADDRESS must be an email address.');
     }
+  }
+  if ((stripeSecretKey && !stripeWebhookSecret) || (!stripeSecretKey && stripeWebhookSecret)) {
+    problems.push(
+      'BELLFIELD_RELAY_STRIPE_SECRET_KEY and BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET must be set together.'
+    );
   }
 
   if (problems.length > 0) {
@@ -100,6 +116,9 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     artifactsRoot: process.env.BELLFIELD_RELAY_ARTIFACTS_ROOT?.trim() || undefined,
     publicBaseUrl: (process.env.BELLFIELD_RELAY_PUBLIC_BASE_URL?.trim() || DEFAULT_PUBLIC_BASE_URL)
       // A trailing slash would produce //a/<token> URLs.
-      .replace(/\/+$/, '')
+      .replace(/\/+$/, ''),
+    stripeSecretKey,
+    stripeWebhookSecret,
+    paymentsPlatformFeeBasisPoints
   };
 }

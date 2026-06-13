@@ -15,6 +15,8 @@ import {
 } from './payments.controller';
 import { PaymentsRepository } from './payments.repository';
 import { PaymentsService } from './payments.service';
+import { OnlinePaymentLinkService } from './online-payment-link.service';
+import { OnlinePaymentsRepository } from './online-payments.repository';
 
 // DatabaseService comes from the @Global DatabaseModule. CompanyDataModule
 // supplies JobsDataService (job existence checks); IdentityAccessModule supplies
@@ -31,7 +33,14 @@ import { PaymentsService } from './payments.service';
     InvoicePaymentsController,
     PaymentController
   ],
-  providers: [InvoicesRepository, InvoicesService, PaymentsRepository, PaymentsService],
+  providers: [
+    InvoicesRepository,
+    InvoicesService,
+    PaymentsRepository,
+    PaymentsService,
+    OnlinePaymentsRepository,
+    OnlinePaymentLinkService
+  ],
   // Exported so the estimates module can write into the invoice draft during
   // estimate-to-invoice conversion.
   exports: [InvoicesRepository]

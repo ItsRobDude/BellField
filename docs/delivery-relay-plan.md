@@ -134,9 +134,24 @@ Narrow by design. The relay is not a generic email API:
   bounced / complained / failed with sanitized summaries
 - `entitlement status`: remaining quota, sending state, custom-domain state
 
-Later, the same host and auth carry estimate acceptance links and payment-link
+The same host and auth also carry estimate acceptance links and payment-link
 surfaces ([customer-comms-and-delivery.md](./customer-comms-and-delivery.md)
 Phases 4–5). Invoice delivery reuses `send` with a document type.
+
+Payment-link v1 is deliberately narrow:
+
+- relay admin links a shop to a Stripe connected account with
+  `relay-admin set-payments-account --shop-id=<shop> --stripe-account-id=acct_...`
+- install calls `POST /v1/payment-sessions` with job/invoice refs, full-balance
+  amount in cents, and success/cancel URLs
+- relay creates a Stripe Checkout Session as a direct charge on the connected
+  account and applies BellField's platform fee (default 100 basis points)
+- Stripe webhooks terminate at `POST /webhooks/stripe`
+- install worker polls `GET /v1/payment-events` and acknowledges with
+  `POST /v1/payment-events/:id/ack` only after local ledger persistence
+
+No card data, Stripe secret key, or shop processor credential is ever present on
+the customer-owned install.
 
 ---
 
@@ -206,11 +221,12 @@ when acceptance links are designed.
    2026-06-11** (office UI for queued sends remains, execution plan 5.5).
 4. **Custom-domain add-on** — domain registration/verification flow and
    per-shop sender identity.
-5. **Acceptance links** (comms Phase 4) on the same host/auth, then payment
-   links (Phase 5) with the rule that BellField pages never touch card data or
-   shop processor keys: the shop's server creates processor-hosted checkout
-   sessions outbound and payment confirmation follows the same
-   webhook-at-BellField / poll-from-install pattern.
+5. **Acceptance links** (comms Phase 4) on the same host/auth.
+6. **Payment links** (comms Phase 5) with the rule that BellField pages never
+   touch card data or shop processor keys: the install requests
+   processor-hosted Stripe Checkout sessions through the relay, and payment
+   confirmation follows the same webhook-at-BellField / poll-from-install
+   pattern. First slice shipped 2026-06-13.
 
 Until step 3 ships, the direct provider adapter behind
 `BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY` remains the interim implementation

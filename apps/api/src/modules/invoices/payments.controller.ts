@@ -2,6 +2,8 @@ import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { PaymentsService } from './payments.service';
 import { RecordPaymentRequestBodyDto, VoidPaymentRequestBodyDto } from './payments.dto';
+import { OnlinePaymentLinkService } from './online-payment-link.service';
+import { CreateOnlinePaymentLinkRequestBodyDto } from './online-payment-link.dto';
 
 // Payments are listed at the job level (a job's whole payment history across its
 // invoices).
@@ -21,7 +23,10 @@ export class JobPaymentsController {
 // A payment is recorded against a specific posted invoice (main or adjustment).
 @Controller('operations/invoices/:invoiceId/payments')
 export class InvoicePaymentsController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly onlinePaymentLinkService: OnlinePaymentLinkService
+  ) {}
 
   @Post()
   async record(
@@ -30,6 +35,19 @@ export class InvoicePaymentsController {
     @Body() request: RecordPaymentRequestBodyDto
   ) {
     return this.paymentsService.recordPayment(
+      getBearerToken(authorizationHeader),
+      invoiceId,
+      request
+    );
+  }
+
+  @Post('online-link')
+  async createOnlinePaymentLink(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string,
+    @Body() request: CreateOnlinePaymentLinkRequestBodyDto
+  ) {
+    return this.onlinePaymentLinkService.createOnlinePaymentLink(
       getBearerToken(authorizationHeader),
       invoiceId,
       request

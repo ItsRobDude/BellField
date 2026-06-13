@@ -19,6 +19,7 @@ vi.mock('@/lib/operations-api', () => ({
   addOfficeInvoiceLineById: vi.fn(),
   postOfficeInvoiceById: vi.fn(),
   listOfficeJobPayments: vi.fn(),
+  createOfficeOnlinePaymentLink: vi.fn(),
   recordOfficePayment: vi.fn(),
   voidOfficePayment: vi.fn()
 }));
@@ -42,6 +43,14 @@ beforeEach(() => {
   });
   mockedApi.listOfficeJobAdjustments.mockResolvedValue({ adjustments: [] });
   mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [] });
+  mockedApi.createOfficeOnlinePaymentLink.mockResolvedValue({
+    state: 'created',
+    checkoutUrl: 'https://checkout.stripe.test/pay/cs_123',
+    paymentSessionId: 'pay_sess_123',
+    amount: 250,
+    currency: 'USD',
+    expiresAt: '2026-06-14T00:00:00.000Z'
+  });
   mockedApi.downloadOfficeInvoiceDocument.mockResolvedValue(new Blob(['html']));
 });
 
@@ -193,5 +202,34 @@ describe('JobInvoiceSection posting', () => {
     // Add line proves the draft loaded and canEdit still works.
     expect(await screen.findByRole('button', { name: 'Add line' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Post invoice' })).not.toBeInTheDocument();
+  });
+
+  it('creates a full-balance online payment link from the posted invoice screen', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      amountDue: 250
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
+        invoiceId: 'inv-1',
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_123')
+    ).toBeInTheDocument();
   });
 });

@@ -118,6 +118,25 @@ export type RelayDecisionsOutcome =
   | { kind: 'decisions'; decisions: AcceptanceDecision[] }
   | { kind: 'unavailable' };
 
+export type RelayPaymentEvent = {
+  paymentEventId: string;
+  paymentSessionId: string;
+  jobRef: string;
+  invoiceRef: string | null;
+  provider: 'stripe';
+  providerPaymentId: string;
+  providerSessionId: string;
+  amountCents: number;
+  currency: string;
+  applicationFeeCents: number;
+  processorFeeCents: number | null;
+  paidAt: string;
+};
+
+export type RelayPaymentEventsOutcome =
+  | { kind: 'events'; events: RelayPaymentEvent[] }
+  | { kind: 'unavailable' };
+
 export interface RelayDeliveryClient {
   sendEstimateDocument(input: {
     idempotencyKey: string;
