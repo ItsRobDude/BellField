@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createBellFieldTranslator } from '@bellfield/i18n';
 import type { FieldAssignedWorkResponse } from '@/lib/operations-api';
 import type { PendingOperation } from '../field-sync-types';
 import {
@@ -166,6 +167,28 @@ describe('field appointment display helpers', () => {
       'Job 1001 appointment status changed to confirmed.'
     ]);
     expect(summarizeOfficeAppointmentChanges(null, next)).toEqual([]);
+  });
+
+  it('uses the selected translator for field appointment display labels', () => {
+    const t = createBellFieldTranslator('es');
+    const previous = makeSnapshot();
+    const next = makeSnapshot({
+      scheduledDate: '2026-05-23',
+      scheduledStartTime: '11:00',
+      scheduledEndTime: '12:00',
+      technicianId: undefined,
+      technicianName: undefined,
+      status: 'confirmed'
+    });
+
+    expect(formatFieldLocationAddress(undefined, t)).toBe('Dirección de ubicación desconocida');
+    expect(formatWorkOrderLine(makeSnapshot().jobs[0], t)).toBe('Orden de trabajo: WO-7788');
+    expect(summarizeAppointmentQueueState('appointment-1', [], t)).toBeUndefined();
+    expect(summarizeOfficeAppointmentChanges(previous, next, t)).toEqual([
+      'Trabajo 1001 la programación de la cita cambió a 2026-05-23 - 11:00-12:00.',
+      'Trabajo 1001 la asignación de la cita cambió a Sin asignar.',
+      'Trabajo 1001 el estado de la cita cambió a confirmada.'
+    ]);
   });
 
   it('reports appointments that disappear from the assigned-work snapshot', () => {

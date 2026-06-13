@@ -1,4 +1,5 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { createBellFieldTranslator, type BellFieldLocale } from '@bellfield/i18n';
 import { formatAppointmentSchedule, formatFieldLocationAddress } from './field-appointment-display';
 import { formatAppointmentAssignmentLine } from './field-assignment-display';
 import { openAddressInMaps, openPhoneNumber } from './field-contact-actions';
@@ -17,6 +18,7 @@ type FieldJobOverviewSectionProps = {
   currentEmployeeId: string;
   customer?: FieldCustomer;
   job: FieldJob;
+  locale: BellFieldLocale;
   location?: FieldLocation;
 };
 
@@ -30,19 +32,24 @@ export function FieldJobOverviewSection({
   currentEmployeeId,
   customer,
   job,
+  locale,
   location
 }: FieldJobOverviewSectionProps) {
+  const t = createBellFieldTranslator(locale);
   const appointment = selectFieldTimelineAppointment(job, currentEmployeeId);
-  const address = formatFieldLocationAddress(location);
-  const phoneRows = buildPhoneRows(location, customer);
+  const address = formatFieldLocationAddress(location, t);
+  const phoneRows = buildPhoneRows(location, customer, t);
 
   return (
     <View style={localStyles.stack}>
       <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitleSmall}>Job context</Text>
+        <Text style={styles.sectionTitleSmall}>{t('fieldOverview.jobContext')}</Text>
         <View style={localStyles.factGrid}>
-          <Fact label="Customer" value={customer?.name ?? job.billToCustomerName} />
-          <Fact label="Location" value={location?.name ?? job.locationName} />
+          <Fact
+            label={t('fieldOverview.customer')}
+            value={customer?.name ?? job.billToCustomerName}
+          />
+          <Fact label={t('fieldOverview.location')} value={location?.name ?? job.locationName} />
         </View>
         {phoneRows.length > 0 ? (
           phoneRows.map((row) => (
@@ -56,62 +63,66 @@ export function FieldJobOverviewSection({
             </Pressable>
           ))
         ) : (
-          <Text style={styles.summaryText}>No phone numbers recorded for this location.</Text>
+          <Text style={styles.summaryText}>{t('fieldOverview.noPhoneNumbers')}</Text>
         )}
         <Pressable
           disabled={!location}
           onPress={() => void openAddressInMaps(address)}
           style={[localStyles.tapRow, !location ? localStyles.disabledTapRow : null]}
         >
-          <Text style={localStyles.rowLabel}>Service address</Text>
+          <Text style={localStyles.rowLabel}>{t('fieldOverview.serviceAddress')}</Text>
           <Text style={localStyles.rowValue}>{address}</Text>
         </Pressable>
       </View>
 
       <View style={styles.summaryCard}>
-        <Text style={styles.sectionTitleSmall}>Work summary</Text>
+        <Text style={styles.sectionTitleSmall}>{t('fieldOverview.workSummary')}</Text>
         {appointment ? (
           <>
-            <Text style={styles.summaryText}>{formatAppointmentSchedule(appointment)}</Text>
+            <Text style={styles.summaryText}>{formatAppointmentSchedule(appointment, t)}</Text>
             <Text style={styles.summaryText}>
-              {formatAppointmentAssignmentLine(appointment, currentEmployeeId)}
+              {formatAppointmentAssignmentLine(appointment, currentEmployeeId, t)}
             </Text>
             <Text style={styles.summaryText}>
-              Status: {formatAppointmentStatusLabel(appointment.status)}
+              {t('fieldOverview.status')}: {formatAppointmentStatusLabel(appointment.status, t)}
             </Text>
           </>
         ) : (
-          <Text style={styles.summaryText}>No active appointment is scheduled for this job.</Text>
+          <Text style={styles.summaryText}>{t('fieldOverview.noActiveAppointment')}</Text>
         )}
-        <Text style={localStyles.rowLabel}>Office notes</Text>
+        <Text style={localStyles.rowLabel}>{t('fieldOverview.officeNotes')}</Text>
         <Text style={localStyles.summaryValue}>{job.summary}</Text>
         <View style={localStyles.factGrid}>
-          <Fact label="Type" value={job.jobType} />
-          <Fact label="Category" value={job.category} />
-          <Fact label="Origin" value={job.origin} />
-          {job.workOrderNumber ? <Fact label="Work order" value={job.workOrderNumber} /> : null}
+          <Fact label={t('fieldOverview.type')} value={job.jobType} />
+          <Fact label={t('fieldOverview.category')} value={job.category} />
+          <Fact label={t('fieldOverview.origin')} value={job.origin} />
+          {job.workOrderNumber ? (
+            <Fact label={t('fieldOverview.workOrder')} value={job.workOrderNumber} />
+          ) : null}
         </View>
       </View>
 
       {agreementCoverage.length > 0 ? (
         <View style={styles.summaryCard}>
-          <Text style={styles.sectionTitleSmall}>Service agreements</Text>
+          <Text style={styles.sectionTitleSmall}>{t('fieldOverview.serviceAgreements')}</Text>
           {agreementCoverage.map((agreement) => (
             <View key={agreement.agreementId} style={localStyles.agreementBlock}>
               <Text style={localStyles.rowValue}>
                 {agreement.name} ({agreement.agreementNumber})
               </Text>
-              <Text style={styles.summaryText}>{formatAgreementRenewalLine(agreement)}</Text>
+              <Text style={styles.summaryText}>{formatAgreementRenewalLine(agreement, t)}</Text>
               {agreement.description ? (
                 <Text style={styles.summaryText}>{agreement.description}</Text>
               ) : null}
               <AgreementList
                 items={agreement.coveredEquipment.map((record) => record.equipmentLabel)}
-                label="Covered equipment"
+                label={t('fieldOverview.coveredEquipment')}
               />
               <AgreementList
-                items={agreement.activeVisitTemplates.map(formatVisitTemplateLine)}
-                label="Recurring service"
+                items={agreement.activeVisitTemplates.map((template) =>
+                  formatVisitTemplateLine(template, t)
+                )}
+                label={t('fieldOverview.recurringService')}
               />
             </View>
           ))}
@@ -151,12 +162,13 @@ function AgreementList({ items, label }: { items: string[]; label: string }) {
 
 export function buildPhoneRows(
   location: FieldLocation | undefined,
-  customer: FieldCustomer | undefined
+  customer: FieldCustomer | undefined,
+  t = createBellFieldTranslator('en')
 ): PhoneRow[] {
   const rows: PhoneRow[] = [];
 
   if (location?.phone) {
-    rows.push({ label: 'Service location', value: location.phone });
+    rows.push({ label: t('fieldOverview.serviceLocation'), value: location.phone });
   }
 
   for (const contact of location?.contacts ?? []) {
@@ -166,7 +178,7 @@ export function buildPhoneRows(
   }
 
   if (customer?.phone && customer.id !== location?.customerId) {
-    rows.push({ label: `Bill to: ${customer.name}`, value: customer.phone });
+    rows.push({ label: `${t('fieldWorkspace.billTo')}: ${customer.name}`, value: customer.phone });
   }
 
   return dedupePhoneRows(rows);
@@ -187,18 +199,24 @@ function dedupePhoneRows(rows: PhoneRow[]): PhoneRow[] {
   return dedupedRows;
 }
 
-function formatAgreementRenewalLine(agreement: FieldAgreementCoverage): string {
-  return agreement.renewalDate ? `Renewal: ${agreement.renewalDate}` : 'No renewal date listed.';
+function formatAgreementRenewalLine(
+  agreement: FieldAgreementCoverage,
+  t = createBellFieldTranslator('en')
+): string {
+  return agreement.renewalDate
+    ? `${t('fieldOverview.renewal')}: ${agreement.renewalDate}`
+    : t('fieldOverview.noRenewalDate');
 }
 
 function formatVisitTemplateLine(
-  template: FieldAgreementCoverage['activeVisitTemplates'][number]
+  template: FieldAgreementCoverage['activeVisitTemplates'][number],
+  t = createBellFieldTranslator('en')
 ): string {
   const details = [
-    formatVisitFrequency(template),
+    formatVisitFrequency(template, t),
     template.timeWindowLabel,
     template.estimatedDurationMinutes
-      ? `${template.estimatedDurationMinutes} min estimated`
+      ? `${template.estimatedDurationMinutes} ${t('fieldOverview.minutesEstimated')}`
       : undefined
   ].filter((entry): entry is string => Boolean(entry));
   const detailLine = details.length > 0 ? ` - ${details.join(', ')}` : '';
@@ -207,21 +225,24 @@ function formatVisitTemplateLine(
 }
 
 function formatVisitFrequency(
-  template: FieldAgreementCoverage['activeVisitTemplates'][number]
+  template: FieldAgreementCoverage['activeVisitTemplates'][number],
+  t = createBellFieldTranslator('en')
 ): string {
   switch (template.frequency) {
     case 'monthly':
-      return 'Monthly';
+      return t('fieldOverview.frequency.monthly');
     case 'quarterly':
-      return 'Quarterly';
+      return t('fieldOverview.frequency.quarterly');
     case 'semiAnnual':
-      return 'Semiannual';
+      return t('fieldOverview.frequency.semiAnnual');
     case 'annual':
-      return 'Annual';
+      return t('fieldOverview.frequency.annual');
     case 'custom':
       return template.intervalMonths
-        ? `Every ${template.intervalMonths} months`
-        : 'Custom frequency';
+        ? `${t('fieldOverview.everyMonths')} ${template.intervalMonths} ${t(
+            'fieldOverview.months'
+          )}`
+        : t('fieldOverview.customFrequency');
   }
 }
 

@@ -7,6 +7,33 @@ import type {
   RegisterCatalogSnapshot,
   RegisterEntryKind
 } from '@/lib/operations-api';
+import {
+  createBellFieldTranslator,
+  type BellFieldMessageKey,
+  type BellFieldTranslator
+} from '@bellfield/i18n';
+
+const defaultTranslator = createBellFieldTranslator('en');
+
+const appointmentStatusLabelKeys = {
+  arrived: 'fieldAppointment.status.arrived',
+  cancelled: 'fieldAppointment.status.cancelled',
+  confirmed: 'fieldAppointment.status.confirmed',
+  dispatched: 'fieldAppointment.status.dispatched',
+  finished: 'fieldAppointment.status.finished',
+  noAnswer: 'fieldAppointment.status.noAnswer',
+  onTheWay: 'fieldAppointment.status.onTheWay',
+  scheduled: 'fieldAppointment.status.scheduled',
+  working: 'fieldAppointment.status.working'
+} satisfies Record<AppointmentStatus, BellFieldMessageKey>;
+
+const registerEntryKindLabelKeys = {
+  labor: 'fieldRegister.kind.labor',
+  membership: 'fieldRegister.kind.membership',
+  other: 'fieldRegister.kind.other',
+  part: 'fieldRegister.kind.part',
+  serviceItem: 'fieldRegister.kind.serviceItem'
+} satisfies Record<RegisterEntryKind, BellFieldMessageKey>;
 
 export type EquipmentDraft = {
   model: string;
@@ -296,28 +323,18 @@ export function mapCatalogKindToRegisterEntryKind(
   return 'other';
 }
 
-export function formatAppointmentStatusLabel(status: AppointmentStatus): string {
-  if (status === 'onTheWay') {
-    return 'on the way';
-  }
-
-  if (status === 'noAnswer') {
-    return 'no answer';
-  }
-
-  return status;
+export function formatAppointmentStatusLabel(
+  status: AppointmentStatus,
+  t: BellFieldTranslator = defaultTranslator
+): string {
+  return t(appointmentStatusLabelKeys[status]);
 }
 
-export function formatRegisterEntryKind(kind: RegisterEntryKind): string {
-  if (kind === 'serviceItem') {
-    return 'Service item';
-  }
-
-  if (kind === 'membership') {
-    return 'Agreement';
-  }
-
-  return kind.charAt(0).toUpperCase() + kind.slice(1);
+export function formatRegisterEntryKind(
+  kind: RegisterEntryKind,
+  t: BellFieldTranslator = defaultTranslator
+): string {
+  return t(registerEntryKindLabelKeys[kind]);
 }
 
 export function formatCurrency(value: number): string {

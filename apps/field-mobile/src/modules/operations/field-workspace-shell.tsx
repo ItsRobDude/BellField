@@ -275,7 +275,7 @@ function FieldPendingQueue({
       ) : (
         pendingOperations.map((operation) => (
           <View key={operation.id} style={styles.queueItem}>
-            <Text style={styles.summaryText}>{formatPendingOperation(operation)}</Text>
+            <Text style={styles.summaryText}>{formatPendingOperation(operation, t)}</Text>
             {shouldOfferQueueResolution(operation) ? (
               <View style={styles.actionRow}>
                 <Pressable
@@ -322,7 +322,14 @@ export function FieldOfficeChangeNotice({
         </Text>
       ))}
       {messages.length > 3 ? (
-        <Text style={styles.summaryText}>Plus {messages.length - 3} more office update(s).</Text>
+        <Text style={styles.summaryText}>
+          {messages.length - 3}{' '}
+          {t(
+            messages.length - 3 === 1
+              ? 'fieldWorkspace.officeChangeMoreSingular'
+              : 'fieldWorkspace.officeChangeMorePlural'
+          )}
+        </Text>
       ) : null}
     </View>
   );
@@ -507,10 +514,9 @@ function formatWorkWindow(
     return formatDateLabel(assignedWork.windowStartDate, locale);
   }
 
-  return `${formatDateLabel(assignedWork.windowStartDate, locale)} to ${formatDateLabel(
-    assignedWork.windowEndDate,
-    locale
-  )}`;
+  return `${formatDateLabel(assignedWork.windowStartDate, locale)} ${t(
+    'common.to'
+  )} ${formatDateLabel(assignedWork.windowEndDate, locale)}`;
 }
 
 function formatLastSync(

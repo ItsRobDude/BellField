@@ -37,7 +37,7 @@ export function JobSyncTab({
       ) : (
         jobOperations.map((operation) => (
           <View key={operation.id} style={styles.queueItem}>
-            <Text style={styles.summaryText}>{formatPendingOperation(operation)}</Text>
+            <Text style={styles.summaryText}>{formatPendingOperation(operation, t)}</Text>
             {shouldOfferQueueResolution(operation) ? (
               <View style={styles.actionRow}>
                 <Pressable

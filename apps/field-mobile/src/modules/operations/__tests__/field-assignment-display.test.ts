@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createBellFieldTranslator } from '@bellfield/i18n';
 import {
   buildAppointmentOwnershipWarning,
   describeAppointmentAssignment,
@@ -70,6 +71,18 @@ describe('formatAppointmentAssignmentLine', () => {
   it('keeps unassigned appointments plainly labeled', () => {
     expect(formatAppointmentAssignmentLine({}, currentEmployeeId)).toBe('Unassigned');
   });
+
+  it('uses the selected translator for assignment labels', () => {
+    const t = createBellFieldTranslator('es');
+
+    expect(formatAppointmentAssignmentLine({}, currentEmployeeId, t)).toBe('Sin asignar');
+    expect(
+      formatAppointmentAssignmentLine({ technicianId: currentEmployeeId }, currentEmployeeId, t)
+    ).toBe('Asignado a ti');
+    expect(
+      formatAppointmentAssignmentLine({ technicianId: 'employee-2' }, currentEmployeeId, t)
+    ).toBe('Asignado a Otro técnico');
+  });
 });
 
 describe('appointment ownership confirmations', () => {
@@ -94,5 +107,13 @@ describe('appointment ownership confirmations', () => {
         'marking it finished'
       )
     ).toBe('This appointment is assigned to Sam Tech. Continue with marking it finished?');
+  });
+
+  it('uses the selected translator for ownership warnings', () => {
+    const t = createBellFieldTranslator('es');
+
+    expect(
+      buildAppointmentOwnershipWarning({}, currentEmployeeId, 'marcarla como trabajando', t)
+    ).toBe('Esta cita no tiene técnico asignado. ¿Continuar con marcarla como trabajando?');
   });
 });

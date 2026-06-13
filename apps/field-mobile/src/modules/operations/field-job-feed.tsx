@@ -2,11 +2,11 @@ import { useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, TextInput, View } from 'react-native';
 import { createBellFieldTranslator, type BellFieldLocale } from '@bellfield/i18n';
 import type {
-  AppointmentFinishOutcome,
   AppointmentStatus,
   FieldCatalogItem,
   FieldTruckStockItem
 } from '@/lib/operations-api';
+import { AppointmentFinishReviewCard, AppointmentMediaCard } from './field-appointment-work-cards';
 import { EquipmentTab } from './field-equipment-tab';
 import { FieldJobOverviewSection } from './field-job-overview-section';
 import { JobSyncTab } from './field-job-sync-tab';
@@ -22,7 +22,6 @@ import {
   formatAppointmentAssignmentLine,
   shouldConfirmAppointmentOwnership
 } from './field-assignment-display';
-import { formatFinishOutcome } from './field-pending-replay';
 import type { PendingOperation } from './field-sync-types';
 import type { FieldMediaSource } from './field-media-capture';
 import { RegisterTab } from './field-register-tab';
@@ -304,6 +303,15 @@ export function FieldJobFeed({
     );
   }
 
+  function updateFinishReviewForAppointment(
+    appointmentId: string,
+    patch: Partial<FinishReviewState>
+  ) {
+    setFinishReview((current) =>
+      current && current.appointmentId === appointmentId ? { ...current, ...patch } : current
+    );
+  }
+
   function handleAppointmentStatusPress(
     jobId: string,
     appointment: FieldAppointment,
@@ -321,15 +329,16 @@ export function FieldJobFeed({
 
     if (shouldConfirmAppointmentOwnership(appointment, currentEmployeeId)) {
       Alert.alert(
-        'Appointment not assigned to you',
+        t('fieldAppointment.notAssignedTitle'),
         buildAppointmentOwnershipWarning(
           appointment,
           currentEmployeeId,
-          `marking it ${formatAppointmentStatusLabel(status)}`
+          `${t('fieldAppointment.statusActionPrefix')} ${formatAppointmentStatusLabel(status, t)}`,
+          t
         ),
         [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Continue', onPress: continueStatusChange }
+          { text: t('fieldWorkspace.actions.cancel'), style: 'cancel' },
+          { text: t('fieldWorkspace.actions.continue'), onPress: continueStatusChange }
         ]
       );
       return;
@@ -349,12 +358,12 @@ export function FieldJobFeed({
 
     if (!visitNotes && !allowEmptyNotes) {
       Alert.alert(
-        'Finish without notes?',
-        'BellField should prompt for visit notes before the appointment is marked finished. Continue anyway?',
+        t('fieldFinishReview.withoutNotesTitle'),
+        t('fieldFinishReview.withoutNotesBody'),
         [
-          { text: 'Add notes', style: 'cancel' },
+          { text: t('fieldFinishReview.addNotes'), style: 'cancel' },
           {
-            text: 'Continue',
+            text: t('fieldWorkspace.actions.continue'),
             onPress: () => commitFinishReview(true, allowNoNotesAndNoCharges)
           }
         ]
@@ -364,12 +373,12 @@ export function FieldJobFeed({
 
     if (!visitNotes && !currentFinishReview.hasChargeActivity && !allowNoNotesAndNoCharges) {
       Alert.alert(
-        'Finish with no notes and no charges?',
-        'This finish review has no visit notes and no charge activity. BellField should warn before continuing.',
+        t('fieldFinishReview.noNotesNoChargesTitle'),
+        t('fieldFinishReview.noNotesNoChargesBody'),
         [
-          { text: 'Go back', style: 'cancel' },
+          { text: t('fieldFinishReview.goBack'), style: 'cancel' },
           {
-            text: 'Continue',
+            text: t('fieldWorkspace.actions.continue'),
             onPress: () => commitFinishReview(true, true)
           }
         ]
@@ -395,15 +404,16 @@ export function FieldJobFeed({
           (record) => record.locationId === job.locationId
         );
         const jobAgreementCoverage = getAgreementCoverageForJob(job, agreementCoverage);
-        const workOrderLine = formatWorkOrderLine(job);
+        const workOrderLine = formatWorkOrderLine(job, t);
         const queueBadge = summarizeJobQueueBadge(job, equipment, pendingOperations);
         const queueBadgeLabel = formatQueueBadgeLabel(queueBadge, t);
         const jobMediaCaptionKey = buildFieldMediaCaptionDraftKey({ jobId: job.id });
         const cardMetadata = buildFieldJobCardMetadata({
           currentEmployeeId,
           job,
-          locationAddress: formatFieldLocationAddress(location),
-          locationName: location?.name ?? job.locationName
+          locationAddress: formatFieldLocationAddress(location, t),
+          locationName: location?.name ?? job.locationName,
+          t
         });
         const isExpanded = selectedJobId === job.id;
 
@@ -479,14 +489,18 @@ export function FieldJobFeed({
               ? job.appointments.map((appointment) => {
                   const assignmentLine = formatAppointmentAssignmentLine(
                     appointment,
-                    currentEmployeeId
+                    currentEmployeeId,
+                    t
                   );
                   const queueSummary = summarizeAppointmentQueueState(
                     appointment.id,
-                    pendingOperations
+                    pendingOperations,
+                    t
                   );
-                  const finishedReviewAcknowledgement =
-                    formatFinishedReviewAcknowledgement(appointment);
+                  const finishedReviewAcknowledgement = formatFinishedReviewAcknowledgement(
+                    appointment,
+                    t
+                  );
                   const appointmentMediaCaptionKey = buildFieldMediaCaptionDraftKey({
                     jobId: job.id,
                     appointmentId: appointment.id
@@ -495,7 +509,7 @@ export function FieldJobFeed({
                   return (
                     <View key={appointment.id} style={styles.block}>
                       <Text style={styles.sectionTitleSmall}>
-                        {formatAppointmentSchedule(appointment)}
+                        {formatAppointmentSchedule(appointment, t)}
                       </Text>
                       <Text style={styles.summaryText}>{assignmentLine}</Text>
                       {queueSummary ? (
@@ -508,7 +522,8 @@ export function FieldJobFeed({
                         </Text>
                       ) : null}
                       <Text style={styles.summaryText}>
-                        Latest local appointment status: {appointment.status}
+                        {t('fieldOverview.status')}:{' '}
+                        {formatAppointmentStatusLabel(appointment.status, t)}
                       </Text>
                       {finishedReviewAcknowledgement ? (
                         <Text style={styles.summaryText}>{finishedReviewAcknowledgement}</Text>
@@ -522,146 +537,37 @@ export function FieldJobFeed({
                             }
                             style={styles.tagButton}
                           >
-                            <Text style={styles.tagButtonText}>{status}</Text>
+                            <Text style={styles.tagButtonText}>
+                              {formatAppointmentStatusLabel(status, t)}
+                            </Text>
                           </Pressable>
                         ))}
                       </View>
 
                       {finishReview?.appointmentId === appointment.id ? (
-                        <View style={styles.reviewCard}>
-                          <Text style={styles.sectionTitleSmall}>Finish review</Text>
-                          <Text style={styles.summaryText}>
-                            BellField should prompt for notes, outcome, and charge activity before
-                            finishing this visit.
-                          </Text>
-                          <Text style={styles.summaryText}>
-                            Outcome: {formatFinishOutcome(finishReview.finishOutcome)}
-                          </Text>
-                          <View style={styles.actionRow}>
-                            {(
-                              [
-                                'completed',
-                                'followUpNeeded',
-                                'noAccess'
-                              ] as AppointmentFinishOutcome[]
-                            ).map((outcome) => (
-                              <Pressable
-                                key={outcome}
-                                onPress={() =>
-                                  setFinishReview((current) =>
-                                    current && current.appointmentId === appointment.id
-                                      ? { ...current, finishOutcome: outcome }
-                                      : current
-                                  )
-                                }
-                                style={styles.tagButton}
-                              >
-                                <Text style={styles.tagButtonText}>
-                                  {formatFinishOutcome(outcome)}
-                                </Text>
-                              </Pressable>
-                            ))}
-                          </View>
-                          <Text style={styles.summaryText}>
-                            Charge activity: {finishReview.hasChargeActivity ? 'Yes' : 'No'}
-                          </Text>
-                          <View style={styles.actionRow}>
-                            <Pressable
-                              onPress={() =>
-                                setFinishReview((current) =>
-                                  current && current.appointmentId === appointment.id
-                                    ? { ...current, hasChargeActivity: true }
-                                    : current
-                                )
-                              }
-                              style={styles.tagButton}
-                            >
-                              <Text style={styles.tagButtonText}>Charges added</Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() =>
-                                setFinishReview((current) =>
-                                  current && current.appointmentId === appointment.id
-                                    ? { ...current, hasChargeActivity: false }
-                                    : current
-                                )
-                              }
-                              style={styles.tagButton}
-                            >
-                              <Text style={styles.tagButtonText}>No charges</Text>
-                            </Pressable>
-                          </View>
-                          <TextInput
-                            value={finishReview.visitNotes}
-                            onChangeText={(value) =>
-                              setFinishReview((current) =>
-                                current && current.appointmentId === appointment.id
-                                  ? { ...current, visitNotes: value }
-                                  : current
-                              )
-                            }
-                            multiline
-                            placeholder="Visit notes"
-                            style={styles.input}
-                          />
-                          <TextInput
-                            value={finishReview.registerReminder}
-                            onChangeText={(value) =>
-                              setFinishReview((current) =>
-                                current && current.appointmentId === appointment.id
-                                  ? { ...current, registerReminder: value }
-                                  : current
-                              )
-                            }
-                            multiline
-                            placeholder="Register item or follow-up reminder"
-                            style={styles.input}
-                          />
-                          <View style={styles.actionRow}>
-                            <Pressable
-                              onPress={() => commitFinishReview(false, false)}
-                              style={styles.primaryButton}
-                            >
-                              <Text style={styles.primaryButtonText}>Save finish locally</Text>
-                            </Pressable>
-                            <Pressable
-                              onPress={() => setFinishReview(null)}
-                              style={styles.secondaryButton}
-                            >
-                              <Text style={styles.secondaryButtonText}>Cancel</Text>
-                            </Pressable>
-                          </View>
-                        </View>
+                        <AppointmentFinishReviewCard
+                          appointmentId={appointment.id}
+                          finishReview={finishReview}
+                          onCancel={() => setFinishReview(null)}
+                          onSave={() => commitFinishReview(false, false)}
+                          onUpdate={updateFinishReviewForAppointment}
+                          t={t}
+                        />
                       ) : null}
 
-                      <View style={styles.reviewCard}>
-                        <Text style={styles.sectionTitleSmall}>Appointment media</Text>
-                        <TextInput
-                          value={mediaCaptionDrafts[appointmentMediaCaptionKey] ?? ''}
-                          onChangeText={(value) =>
-                            setMediaCaptionDrafts((current) => ({
-                              ...current,
-                              [appointmentMediaCaptionKey]: value
-                            }))
-                          }
-                          placeholder="Optional caption for this visit"
-                          style={styles.input}
-                        />
-                        <View style={styles.actionRow}>
-                          <Pressable
-                            onPress={() => void queueMediaUpload(job, 'camera', appointment.id)}
-                            style={styles.secondaryButton}
-                          >
-                            <Text style={styles.secondaryButtonText}>Capture media</Text>
-                          </Pressable>
-                          <Pressable
-                            onPress={() => void queueMediaUpload(job, 'library', appointment.id)}
-                            style={styles.secondaryButton}
-                          >
-                            <Text style={styles.secondaryButtonText}>Pick from library</Text>
-                          </Pressable>
-                        </View>
-                      </View>
+                      <AppointmentMediaCard
+                        caption={mediaCaptionDrafts[appointmentMediaCaptionKey] ?? ''}
+                        onCaptureMedia={(source) =>
+                          void queueMediaUpload(job, source, appointment.id)
+                        }
+                        onChangeCaption={(value) =>
+                          setMediaCaptionDrafts((current) => ({
+                            ...current,
+                            [appointmentMediaCaptionKey]: value
+                          }))
+                        }
+                        t={t}
+                      />
                     </View>
                   );
                 })
@@ -674,29 +580,29 @@ export function FieldJobFeed({
                   agreementCoverage={jobAgreementCoverage}
                   customer={customer}
                   job={job}
+                  locale={locale}
                   location={location}
                 />
 
                 <View style={styles.block}>
-                  <Text style={styles.sectionTitleSmall}>Capture</Text>
-                  <Text style={styles.summaryText}>
-                    Notes, photos, and videos stay on-device until Sync Now applies them on the
-                    server.
-                  </Text>
+                  <Text style={styles.sectionTitleSmall}>{t('fieldCapture.title')}</Text>
+                  <Text style={styles.summaryText}>{t('fieldCapture.body')}</Text>
                   <TextInput
                     value={noteDrafts[job.id] ?? ''}
                     onChangeText={(value) =>
                       setNoteDrafts((current) => ({ ...current, [job.id]: value }))
                     }
                     multiline
-                    placeholder="Add visit notes that should queue until sync."
+                    placeholder={t('fieldCapture.notePlaceholder')}
                     style={styles.input}
                   />
                   <Pressable
                     onPress={() => void queueJobNote(job.id)}
                     style={styles.secondaryButton}
                   >
-                    <Text style={styles.secondaryButtonText}>Save note locally</Text>
+                    <Text style={styles.secondaryButtonText}>
+                      {t('fieldCapture.saveNoteLocally')}
+                    </Text>
                   </Pressable>
 
                   <TextInput
@@ -707,7 +613,7 @@ export function FieldJobFeed({
                         [jobMediaCaptionKey]: value
                       }))
                     }
-                    placeholder="Optional caption"
+                    placeholder={t('fieldCapture.optionalCaption')}
                     style={styles.input}
                   />
                   <View style={styles.actionRow}>
@@ -715,13 +621,17 @@ export function FieldJobFeed({
                       onPress={() => void queueMediaUpload(job, 'camera')}
                       style={styles.secondaryButton}
                     >
-                      <Text style={styles.secondaryButtonText}>Capture media</Text>
+                      <Text style={styles.secondaryButtonText}>
+                        {t('fieldCapture.captureMedia')}
+                      </Text>
                     </Pressable>
                     <Pressable
                       onPress={() => void queueMediaUpload(job, 'library')}
                       style={styles.secondaryButton}
                     >
-                      <Text style={styles.secondaryButtonText}>Pick from library</Text>
+                      <Text style={styles.secondaryButtonText}>
+                        {t('fieldCapture.pickFromLibrary')}
+                      </Text>
                     </Pressable>
                   </View>
                 </View>
@@ -735,6 +645,7 @@ export function FieldJobFeed({
                 registerEditDrafts={registerEditDrafts}
                 truckStockItems={truckStockItems}
                 catalogItems={catalogItems}
+                locale={locale}
                 onConfirmVoidRegisterEntry={onConfirmVoidRegisterEntry}
                 onQueueRegisterEntryCreate={queueRegisterEntryCreate}
                 onQueueRegisterEntryEdit={(entry) => void queueRegisterEntryEdit(entry)}

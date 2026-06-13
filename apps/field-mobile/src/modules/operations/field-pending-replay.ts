@@ -5,12 +5,17 @@ import type {
   JobMutationResponse,
   RegisterEntrySummary
 } from '@/lib/operations-api';
+import { createBellFieldTranslator, type BellFieldTranslator } from '@bellfield/i18n';
 import type { AssignedWorkSnapshot, PendingOperation } from './field-sync-types';
+import { formatAppointmentStatusLabel } from './field-workspace-drafts';
+
+const defaultTranslator = createBellFieldTranslator('en');
 
 export function applyPendingOperations(
   snapshot: AssignedWorkSnapshot | null,
   pendingOperations: PendingOperation[],
-  actorName: string
+  actorName: string,
+  t: BellFieldTranslator = defaultTranslator
 ): FieldAssignedWorkResponse | null {
   if (!snapshot) {
     return null;
@@ -110,7 +115,7 @@ export function applyPendingOperations(
                     id: `${operation.id}-local-finish`,
                     occurredAt: operation.occurredAt,
                     actorName,
-                    message: `Finish review saved locally with outcome ${formatFinishOutcome(operation.finishOutcome)}.`,
+                    message: `${t('fieldQueue.finishReviewSavedLocallyWithOutcome')} ${formatFinishOutcome(operation.finishOutcome, t)}.`,
                     kind: 'appointmentFinishedReview'
                   }
                 ]
@@ -155,7 +160,7 @@ export function applyPendingOperations(
                     id: `${operation.id}-local-register`,
                     occurredAt: operation.occurredAt,
                     actorName,
-                    message: `Register entry saved locally: ${operation.description}.`,
+                    message: `${t('fieldQueue.registerEntrySavedLocally')}: ${operation.description}.`,
                     kind: 'registerEntryAdded'
                   }
                 ]
@@ -183,7 +188,9 @@ export function applyPendingOperations(
                     id: `${operation.id}-local-register-edit`,
                     occurredAt: operation.occurredAt,
                     actorName,
-                    message: `Register entry edit saved locally: ${operation.description ?? operation.registerEntryId}.`,
+                    message: `${t('fieldQueue.registerEntryEditSavedLocally')}: ${
+                      operation.description ?? operation.registerEntryId
+                    }.`,
                     kind: 'registerEntryEdited'
                   }
                 ]
@@ -216,7 +223,9 @@ export function applyPendingOperations(
                     id: `${operation.id}-local-register-void`,
                     occurredAt: operation.occurredAt,
                     actorName,
-                    message: `Register entry void saved locally${operation.reason ? `: ${operation.reason}` : '.'}`,
+                    message: `${t('fieldQueue.registerEntryVoidSavedLocally')}${
+                      operation.reason ? `: ${operation.reason}` : '.'
+                    }`,
                     kind: 'registerEntryVoided'
                   }
                 ]
@@ -239,7 +248,7 @@ export function applyPendingOperations(
                     id: `${operation.id}-local-media`,
                     occurredAt: operation.occurredAt,
                     actorName,
-                    message: `Media queued locally: ${operation.originalFilename}.`,
+                    message: `${t('fieldQueue.mediaQueuedLocally')}: ${operation.originalFilename}.`,
                     kind: 'mediaAttached'
                   }
                 ]
@@ -335,55 +344,77 @@ export function findRegisterEntryBaseUpdatedAt(
     .find((registerEntry) => registerEntry.id === registerEntryId)?.updatedAt;
 }
 
-export function formatFinishOutcome(value: AppointmentFinishOutcome): string {
+export function formatFinishOutcome(
+  value: AppointmentFinishOutcome,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   if (value === 'followUpNeeded') {
-    return 'Follow-up needed';
+    return t('fieldFinishReview.outcome.followUpNeeded');
   }
 
   if (value === 'noAccess') {
-    return 'No access';
+    return t('fieldFinishReview.outcome.noAccess');
   }
 
-  return 'Completed';
+  return t('fieldFinishReview.outcome.completed');
 }
 
-export function formatPendingOperation(operation: PendingOperation): string {
+export function formatPendingOperation(
+  operation: PendingOperation,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   const stateSuffix =
     operation.state === 'pending'
-      ? 'pending sync'
+      ? t('fieldQueue.state.pendingSync')
       : operation.state === 'conflict'
-        ? `conflict${operation.lastResultMessage ? `: ${operation.lastResultMessage}` : ''}`
-        : `rejected${operation.lastResultMessage ? `: ${operation.lastResultMessage}` : ''}`;
+        ? `${t('fieldQueue.state.conflict')}${
+            operation.lastResultMessage ? `: ${operation.lastResultMessage}` : ''
+          }`
+        : `${t('fieldQueue.state.rejected')}${
+            operation.lastResultMessage ? `: ${operation.lastResultMessage}` : ''
+          }`;
 
   if (operation.kind === 'jobNote') {
-    return `Job note saved locally at ${new Date(operation.occurredAt).toLocaleTimeString()} (${stateSuffix})`;
+    return `${t('fieldQueue.jobNoteSavedLocallyAt')} ${new Date(
+      operation.occurredAt
+    ).toLocaleTimeString()} (${stateSuffix})`;
   }
 
   if (operation.kind === 'appointmentStatus') {
-    return `Appointment status queued: ${operation.status} (${stateSuffix})`;
+    return `${t('fieldQueue.appointmentStatusQueued')}: ${formatAppointmentStatusLabel(
+      operation.status,
+      t
+    )} (${stateSuffix})`;
   }
 
   if (operation.kind === 'appointmentFinishReview') {
-    return `Finish review queued: ${formatFinishOutcome(operation.finishOutcome)} (${stateSuffix})`;
+    return `${t('fieldQueue.finishReviewQueued')}: ${formatFinishOutcome(
+      operation.finishOutcome,
+      t
+    )} (${stateSuffix})`;
   }
 
   if (operation.kind === 'registerEntryCreate') {
-    return `Register entry queued: ${operation.description} (${stateSuffix})`;
+    return `${t('fieldQueue.registerEntryQueued')}: ${operation.description} (${stateSuffix})`;
   }
 
   if (operation.kind === 'registerEntryEdit') {
-    return `Register entry edit queued: ${operation.description ?? operation.registerEntryId} (${stateSuffix})`;
+    return `${t('fieldQueue.registerEntryEditQueued')}: ${
+      operation.description ?? operation.registerEntryId
+    } (${stateSuffix})`;
   }
 
   if (operation.kind === 'registerEntryVoid') {
-    return `Register entry void queued${operation.reason ? `: ${operation.reason}` : ''} (${stateSuffix})`;
+    return `${t('fieldQueue.registerEntryVoidQueued')}${
+      operation.reason ? `: ${operation.reason}` : ''
+    } (${stateSuffix})`;
   }
 
   if (operation.kind === 'mediaUpload') {
-    return `Media upload queued: ${operation.originalFilename} (${stateSuffix})`;
+    return `${t('fieldQueue.mediaUploadQueued')}: ${operation.originalFilename} (${stateSuffix})`;
   }
 
-  return `Equipment update queued: ${operation.status} (${stateSuffix})`;
+  return `${t('fieldQueue.equipmentUpdateQueued')}: ${operation.status} (${stateSuffix})`;
 }
 
 type RegisterEntryCreateOperation = Extract<PendingOperation, { kind: 'registerEntryCreate' }>;

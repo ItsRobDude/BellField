@@ -1,4 +1,9 @@
 import type { FieldAssignedWorkResponse } from '@/lib/operations-api';
+import {
+  createBellFieldTranslator,
+  type BellFieldMessageKey,
+  type BellFieldTranslator
+} from '@bellfield/i18n';
 import type { PendingOperation } from './field-sync-types';
 
 type FieldJob = FieldAssignedWorkResponse['jobs'][number];
@@ -6,19 +11,36 @@ type FieldAppointment = FieldJob['appointments'][number];
 type FieldLocation = FieldAssignedWorkResponse['locations'][number];
 type FinishedReviewDecision = NonNullable<FieldAppointment['finishedReviewDecision']>;
 
+const defaultTranslator = createBellFieldTranslator('en');
+
 export type AppointmentQueueSummary = {
   label: string;
   tone: 'attention' | 'alert';
 };
 
-const finishedReviewDecisionLabels: Record<FinishedReviewDecision, string> = {
-  keptOpen: 'Office kept this job open',
-  followUpScheduled: 'Office scheduled follow-up'
-};
+const finishedReviewDecisionLabelKeys = {
+  keptOpen: 'fieldAppointment.officeKeptOpen',
+  followUpScheduled: 'fieldAppointment.officeScheduledFollowUp'
+} satisfies Record<FinishedReviewDecision, BellFieldMessageKey>;
 
-export function formatFieldLocationAddress(location: FieldLocation | undefined): string {
+const appointmentStatusLabelKeys = {
+  arrived: 'fieldAppointment.status.arrived',
+  cancelled: 'fieldAppointment.status.cancelled',
+  confirmed: 'fieldAppointment.status.confirmed',
+  dispatched: 'fieldAppointment.status.dispatched',
+  finished: 'fieldAppointment.status.finished',
+  noAnswer: 'fieldAppointment.status.noAnswer',
+  onTheWay: 'fieldAppointment.status.onTheWay',
+  scheduled: 'fieldAppointment.status.scheduled',
+  working: 'fieldAppointment.status.working'
+} satisfies Record<FieldAppointment['status'], BellFieldMessageKey>;
+
+export function formatFieldLocationAddress(
+  location: FieldLocation | undefined,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   if (!location) {
-    return 'Unknown location address';
+    return t('fieldAppointment.unknownLocationAddress');
   }
 
   const cityState = [location.city, location.state].filter(Boolean).join(', ');
@@ -26,41 +48,51 @@ export function formatFieldLocationAddress(location: FieldLocation | undefined):
   return [location.addressLine1, cityStatePostal].filter(Boolean).join(', ');
 }
 
-export function formatWorkOrderLine(job: Pick<FieldJob, 'workOrderNumber'>): string | undefined {
+export function formatWorkOrderLine(
+  job: Pick<FieldJob, 'workOrderNumber'>,
+  t: BellFieldTranslator = defaultTranslator
+): string | undefined {
   if (!job.workOrderNumber) {
     return undefined;
   }
 
-  return `Work order: ${job.workOrderNumber}`;
+  return `${t('fieldAppointment.workOrder')}: ${job.workOrderNumber}`;
 }
 
-export function formatAppointmentSchedule(appointment: FieldAppointment): string {
-  const dateLabel = appointment.scheduledDate || 'Unscheduled';
+export function formatAppointmentSchedule(
+  appointment: FieldAppointment,
+  t: BellFieldTranslator = defaultTranslator
+): string {
+  const dateLabel = appointment.scheduledDate || t('fieldAppointment.unscheduled');
   const structuredTime = formatStructuredTime(appointment);
 
   if (structuredTime) {
     return `${dateLabel} - ${structuredTime}`;
   }
 
-  return `${dateLabel} - ${appointment.timeWindowLabel || 'No window'}`;
+  return `${dateLabel} - ${appointment.timeWindowLabel || t('fieldAppointment.noWindow')}`;
 }
 
 export function formatFinishedReviewAcknowledgement(
-  appointment: FieldAppointment
+  appointment: FieldAppointment,
+  t: BellFieldTranslator = defaultTranslator
 ): string | undefined {
   if (!appointment.finishedReviewedAt || !appointment.finishedReviewDecision) {
     return undefined;
   }
 
-  const reviewer = appointment.finishedReviewedBy ? ` by ${appointment.finishedReviewedBy}` : '';
-  return `Office review acknowledged${reviewer}: ${
-    finishedReviewDecisionLabels[appointment.finishedReviewDecision]
-  } (${appointment.finishedReviewedAt.slice(0, 10)})`;
+  const reviewer = appointment.finishedReviewedBy
+    ? ` ${t('fieldAppointment.officeReviewBy')} ${appointment.finishedReviewedBy}`
+    : '';
+  return `${t('fieldAppointment.officeReviewAcknowledged')}${reviewer}: ${t(
+    finishedReviewDecisionLabelKeys[appointment.finishedReviewDecision]
+  )} (${appointment.finishedReviewedAt.slice(0, 10)})`;
 }
 
 export function summarizeAppointmentQueueState(
   appointmentId: string,
-  pendingOperations: PendingOperation[]
+  pendingOperations: PendingOperation[],
+  t: BellFieldTranslator = defaultTranslator
 ): AppointmentQueueSummary | undefined {
   const appointmentOperations = pendingOperations.filter(
     (operation) =>
@@ -78,20 +110,21 @@ export function summarizeAppointmentQueueState(
     )
   ) {
     return {
-      label: 'Appointment change needs review before it can sync.',
+      label: t('fieldAppointment.changeNeedsReview'),
       tone: 'alert'
     };
   }
 
   return {
-    label: 'Appointment change queued on this device.',
+    label: t('fieldAppointment.changeQueued'),
     tone: 'attention'
   };
 }
 
 export function summarizeOfficeAppointmentChanges(
   previousSnapshot: FieldAssignedWorkResponse | null,
-  nextSnapshot: FieldAssignedWorkResponse
+  nextSnapshot: FieldAssignedWorkResponse,
+  t: BellFieldTranslator = defaultTranslator
 ): string[] {
   if (!previousSnapshot) {
     return [];
@@ -111,30 +144,41 @@ export function summarizeOfficeAppointmentChanges(
     for (const appointment of job.appointments) {
       nextAppointmentIds.add(appointment.id);
       const previous = previousAppointments.get(appointment.id);
-      const jobLabel = `Job ${job.jobNumber}`;
+      const jobLabel = `${t('fieldAppointment.job')} ${job.jobNumber}`;
 
       if (!previous) {
         changes.push(
-          `${jobLabel} has a new appointment: ${formatAppointmentSchedule(appointment)}.`
+          `${jobLabel} ${t('fieldAppointment.hasNewAppointment')}: ${formatAppointmentSchedule(
+            appointment,
+            t
+          )}.`
         );
         continue;
       }
 
       if (hasScheduleChanged(previous.appointment, appointment)) {
         changes.push(
-          `${jobLabel} appointment schedule changed to ${formatAppointmentSchedule(appointment)}.`
+          `${jobLabel} ${t('fieldAppointment.scheduleChangedTo')} ${formatAppointmentSchedule(
+            appointment,
+            t
+          )}.`
         );
       }
 
       if (previous.appointment.technicianId !== appointment.technicianId) {
         changes.push(
-          `${jobLabel} appointment assignment changed to ${appointment.technicianName ?? 'Unassigned'}.`
+          `${jobLabel} ${t('fieldAppointment.assignmentChangedTo')} ${
+            appointment.technicianName ?? t('fieldAppointment.unassigned')
+          }.`
         );
       }
 
       if (previous.appointment.status !== appointment.status) {
         changes.push(
-          `${jobLabel} appointment status changed to ${formatStatusLabel(appointment.status)}.`
+          `${jobLabel} ${t('fieldAppointment.statusChangedTo')} ${formatStatusLabel(
+            appointment.status,
+            t
+          )}.`
         );
       }
     }
@@ -142,7 +186,9 @@ export function summarizeOfficeAppointmentChanges(
 
   for (const { appointment, job } of previousAppointments.values()) {
     if (!nextAppointmentIds.has(appointment.id)) {
-      changes.push(`Job ${job.jobNumber} appointment no longer appears in your assigned work.`);
+      changes.push(
+        `${t('fieldAppointment.job')} ${job.jobNumber} ${t('fieldAppointment.noLongerAppears')}`
+      );
     }
   }
 
@@ -166,14 +212,9 @@ function formatStructuredTime(appointment: FieldAppointment): string | undefined
   return appointment.scheduledStartTime ?? appointment.scheduledEndTime;
 }
 
-function formatStatusLabel(status: FieldAppointment['status']): string {
-  if (status === 'onTheWay') {
-    return 'on the way';
-  }
-
-  if (status === 'noAnswer') {
-    return 'no answer';
-  }
-
-  return status;
+function formatStatusLabel(
+  status: FieldAppointment['status'],
+  t: BellFieldTranslator = defaultTranslator
+): string {
+  return t(appointmentStatusLabelKeys[status]);
 }

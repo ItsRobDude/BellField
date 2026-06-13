@@ -138,8 +138,8 @@ export function TechnicianWorkspaceScreen({
   }, [isInitializing]);
 
   const assignedWork = useMemo(
-    () => applyPendingOperations(serverSnapshot, pendingOperations, employee.displayName),
-    [employee.displayName, pendingOperations, serverSnapshot]
+    () => applyPendingOperations(serverSnapshot, pendingOperations, employee.displayName, t),
+    [employee.displayName, pendingOperations, serverSnapshot, t]
   );
 
   const locationLookup = useMemo(
@@ -216,7 +216,7 @@ export function TechnicianWorkspaceScreen({
         await saveAssignedWorkSnapshot(nextAssignedWork);
         await saveSyncMetadata(nextSyncMetadata);
         setOfficeChangeMessages(
-          summarizeOfficeAppointmentChanges(persistedSnapshot, nextAssignedWork)
+          summarizeOfficeAppointmentChanges(persistedSnapshot, nextAssignedWork, t)
         );
         setServerSnapshot(nextAssignedWork);
         setSyncMetadata(nextSyncMetadata);
@@ -258,7 +258,9 @@ export function TechnicianWorkspaceScreen({
 
       await saveAssignedWorkSnapshot(nextAssignedWork);
       await saveSyncMetadata(nextSyncMetadata);
-      setOfficeChangeMessages(summarizeOfficeAppointmentChanges(serverSnapshot, nextAssignedWork));
+      setOfficeChangeMessages(
+        summarizeOfficeAppointmentChanges(serverSnapshot, nextAssignedWork, t)
+      );
       setServerSnapshot(nextAssignedWork);
       setSyncMetadata(nextSyncMetadata);
       await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);

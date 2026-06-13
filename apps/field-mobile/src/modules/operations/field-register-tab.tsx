@@ -1,5 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
+import {
+  createBellFieldTranslator,
+  type BellFieldLocale,
+  type BellFieldMessageKey,
+  type BellFieldTranslator
+} from '@bellfield/i18n';
 import type {
   FieldCatalogItem,
   FieldTruckStockItem,
@@ -37,8 +43,22 @@ const registerEntryKinds: RegisterEntryKind[] = [
   'other'
 ];
 
+const defaultTranslator = createBellFieldTranslator('en');
+
+const catalogKindLabelKeys = {
+  agreement: 'fieldRegister.catalogKind.agreement',
+  discount: 'fieldRegister.catalogKind.discount',
+  equipment: 'fieldRegister.catalogKind.equipment',
+  fee: 'fieldRegister.catalogKind.fee',
+  labor: 'fieldRegister.catalogKind.labor',
+  other: 'fieldRegister.catalogKind.other',
+  part: 'fieldRegister.catalogKind.part',
+  service: 'fieldRegister.catalogKind.service'
+} satisfies Record<FieldCatalogItem['kind'], BellFieldMessageKey>;
+
 type RegisterTabProps = {
   job: FieldJob;
+  locale: BellFieldLocale;
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
   registerEditDrafts: Record<string, RegisterEntryDraft>;
   catalogItems: FieldCatalogItem[];
@@ -55,6 +75,7 @@ type RegisterTabProps = {
 
 export function RegisterTab({
   job,
+  locale,
   registerCreateDrafts,
   registerEditDrafts,
   catalogItems,
@@ -65,13 +86,14 @@ export function RegisterTab({
   onUpdateRegisterCreateDraft,
   onUpdateRegisterEditDraft
 }: RegisterTabProps) {
+  const t = createBellFieldTranslator(locale);
   const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
 
   return (
     <View style={styles.block}>
-      <Text style={styles.sectionTitleSmall}>Register</Text>
+      <Text style={styles.sectionTitleSmall}>{t('fieldRegister.title')}</Text>
       {(job.registerEntries ?? []).length === 0 ? (
-        <Text style={styles.summaryText}>No work lines saved yet.</Text>
+        <Text style={styles.summaryText}>{t('fieldRegister.empty')}</Text>
       ) : (
         <View style={styles.replacementOptionList}>
           {(job.registerEntries ?? []).map((entry) => {
@@ -88,36 +110,43 @@ export function RegisterTab({
                 >
                   <View style={styles.flexColumn}>
                     <Text style={styles.replacementOptionLabel}>{entry.description}</Text>
-                    <Text style={styles.summaryText}>{formatEntrySummary(entry)}</Text>
+                    <Text style={styles.summaryText}>{formatEntrySummary(entry, t)}</Text>
                     {entry.inventorySourceLabel ? (
-                      <Text style={styles.summaryText}>Source: {entry.inventorySourceLabel}</Text>
+                      <Text style={styles.summaryText}>
+                        {t('fieldRegister.source')}: {entry.inventorySourceLabel}
+                      </Text>
                     ) : null}
                   </View>
                   <View style={styles.registerLineAmount}>
                     <Text style={styles.replacementOptionLabel}>
                       {formatCurrency(entry.totalAmount)}
                     </Text>
-                    {entry.isVoid ? <Text style={styles.errorText}>Voided</Text> : null}
-                    {isLocalEntry ? <Text style={styles.pendingText}>Queued</Text> : null}
+                    {entry.isVoid ? (
+                      <Text style={styles.errorText}>{t('fieldRegister.voided')}</Text>
+                    ) : null}
+                    {isLocalEntry ? (
+                      <Text style={styles.pendingText}>{t('fieldRegister.queued')}</Text>
+                    ) : null}
                   </View>
                 </Pressable>
                 {entry.voidReason ? (
-                  <Text style={styles.pendingText}>Void reason: {entry.voidReason}</Text>
+                  <Text style={styles.pendingText}>
+                    {t('fieldRegister.voidReason')}: {entry.voidReason}
+                  </Text>
                 ) : null}
                 {isLocalEntry ? (
-                  <Text style={styles.pendingText}>
-                    This line is waiting to sync. Use the pending queue if it needs review.
-                  </Text>
+                  <Text style={styles.pendingText}>{t('fieldRegister.lineWaitingToSync')}</Text>
                 ) : null}
                 {!entry.isVoid && !isLocalEntry && isExpanded ? (
                   <RegisterLineAdvancedEditor
                     draft={editDraft}
                     job={job}
                     onChange={(patch) => onUpdateRegisterEditDraft(entry, patch)}
-                    saveLabel="Save details"
+                    saveLabel={t('fieldRegister.saveDetails')}
                     onSave={() => onQueueRegisterEntryEdit(entry)}
                     onVoid={() => onConfirmVoidRegisterEntry(entry)}
                     showVoid
+                    t={t}
                   />
                 ) : null}
               </View>
@@ -128,6 +157,7 @@ export function RegisterTab({
 
       <RegisterCreateCard
         job={job}
+        t={t}
         registerCreateDrafts={registerCreateDrafts}
         catalogItems={catalogItems}
         truckStockItems={truckStockItems}
@@ -140,6 +170,7 @@ export function RegisterTab({
 
 function RegisterCreateCard({
   job,
+  t,
   registerCreateDrafts,
   catalogItems,
   truckStockItems,
@@ -147,6 +178,7 @@ function RegisterCreateCard({
   onUpdateRegisterCreateDraft
 }: {
   job: FieldJob;
+  t: BellFieldTranslator;
   registerCreateDrafts: Record<string, RegisterEntryDraft>;
   catalogItems: FieldCatalogItem[];
   truckStockItems: FieldTruckStockItem[];
@@ -249,17 +281,17 @@ function RegisterCreateCard({
 
   return (
     <View style={styles.reviewCard}>
-      <Text style={styles.sectionTitleSmall}>Add work</Text>
+      <Text style={styles.sectionTitleSmall}>{t('fieldRegister.addWork')}</Text>
       <TextInput
         value={query}
         onChangeText={setQuery}
-        placeholder="Search Catalog or truck stock"
+        placeholder={t('fieldRegister.searchPlaceholder')}
         style={styles.input}
       />
       {shouldShowResults && query.trim() ? (
         <View style={styles.replacementOptionList}>
           {results.length === 0 ? (
-            <Text style={styles.summaryText}>No matching Catalog or truck-stock items.</Text>
+            <Text style={styles.summaryText}>{t('fieldRegister.noMatchingItems')}</Text>
           ) : (
             results.map((result) => (
               <Pressable
@@ -276,7 +308,7 @@ function RegisterCreateCard({
                     selectedResult?.id === result.id ? styles.replacementOptionLabelSelected : null
                   ]}
                 >
-                  {formatSearchResultTitle(result)}
+                  {formatSearchResultTitle(result, t)}
                 </Text>
                 <Text
                   style={[
@@ -284,7 +316,7 @@ function RegisterCreateCard({
                     selectedResult?.id === result.id ? styles.replacementOptionDetailSelected : null
                   ]}
                 >
-                  {formatSearchResultDetail(result)}
+                  {formatSearchResultDetail(result, t)}
                 </Text>
               </Pressable>
             ))
@@ -294,12 +326,17 @@ function RegisterCreateCard({
 
       {selectedDraftResult ? (
         <View style={styles.registerComposerCard}>
-          <Text style={styles.sectionTitleSmall}>{createDraft.description || 'Custom line'}</Text>
-          <Text style={styles.summaryText}>{formatSelectedResultDetail(selectedDraftResult)}</Text>
+          <Text style={styles.sectionTitleSmall}>
+            {createDraft.description || t('fieldRegister.customLine')}
+          </Text>
+          <Text style={styles.summaryText}>
+            {formatSelectedResultDetail(selectedDraftResult, t)}
+          </Text>
           {createDraft.catalogSnapshot?.estimatedLaborHours &&
           createDraft.registerEntryKind !== 'labor' ? (
             <Text style={styles.summaryText}>
-              Planned time: {createDraft.catalogSnapshot.estimatedLaborHours} hr
+              {t('fieldRegister.plannedTime')}: {createDraft.catalogSnapshot.estimatedLaborHours}{' '}
+              {t('fieldRegister.hourAbbr')}
             </Text>
           ) : null}
           <TextInput
@@ -308,7 +345,7 @@ function RegisterCreateCard({
               updateCreateDraft(buildPricedRegisterDraftPatch(createDraft, { quantity }))
             }
             keyboardType="decimal-pad"
-            placeholder={getQuantityPlaceholder(createDraft)}
+            placeholder={getQuantityPlaceholder(createDraft, t)}
             style={styles.input}
           />
           {selectedDraftResult.kind === 'truckStock' && !createDraft.catalogItemId ? (
@@ -318,12 +355,12 @@ function RegisterCreateCard({
                 updateCreateDraft(buildPricedRegisterDraftPatch(createDraft, { unitPrice }))
               }
               keyboardType="decimal-pad"
-              placeholder="Unit price"
+              placeholder={t('fieldRegister.unitPrice')}
               style={styles.input}
             />
           ) : null}
           <View style={styles.registerTotalRow}>
-            <Text style={styles.summaryText}>Total</Text>
+            <Text style={styles.summaryText}>{t('fieldRegister.total')}</Text>
             <Text style={styles.replacementOptionLabel}>{formatDraftTotalLabel(createDraft)}</Text>
           </View>
           <View style={styles.actionRow}>
@@ -332,7 +369,9 @@ function RegisterCreateCard({
               onPress={() => void handleAddLine()}
               style={[styles.primaryButton, isAdding ? styles.disabledButton : null]}
             >
-              <Text style={styles.primaryButtonText}>{isAdding ? 'Adding...' : 'Add line'}</Text>
+              <Text style={styles.primaryButtonText}>
+                {isAdding ? t('fieldRegister.adding') : t('fieldRegister.addLine')}
+              </Text>
             </Pressable>
             <Pressable
               disabled={isAdding}
@@ -340,7 +379,7 @@ function RegisterCreateCard({
               style={[styles.secondaryButton, isAdding ? styles.disabledButton : null]}
             >
               <Text style={styles.secondaryButtonText}>
-                {isAdvancedOpen ? 'Hide details' : 'More details'}
+                {isAdvancedOpen ? t('fieldRegister.hideDetails') : t('fieldRegister.moreDetails')}
               </Text>
             </Pressable>
             <Pressable
@@ -348,7 +387,7 @@ function RegisterCreateCard({
               onPress={() => setSelectedResult(null)}
               style={[styles.secondaryButton, isAdding ? styles.disabledButton : null]}
             >
-              <Text style={styles.secondaryButtonText}>Change item</Text>
+              <Text style={styles.secondaryButtonText}>{t('fieldRegister.changeItem')}</Text>
             </Pressable>
           </View>
           {isAdvancedOpen ? (
@@ -356,15 +395,16 @@ function RegisterCreateCard({
               draft={createDraft}
               job={job}
               onChange={updateCreateDraft}
-              saveLabel={isAdding ? 'Adding...' : 'Add line'}
+              saveLabel={isAdding ? t('fieldRegister.adding') : t('fieldRegister.addLine')}
               onSave={() => void handleAddLine()}
               saveDisabled={isAdding}
+              t={t}
             />
           ) : null}
         </View>
       ) : (
         <Pressable onPress={applyCustomLine} style={styles.secondaryButton}>
-          <Text style={styles.secondaryButtonText}>Add custom line</Text>
+          <Text style={styles.secondaryButtonText}>{t('fieldRegister.addCustomLine')}</Text>
         </Pressable>
       )}
     </View>
@@ -378,6 +418,7 @@ function RegisterLineAdvancedEditor({
   saveLabel,
   onSave,
   onVoid,
+  t,
   saveDisabled = false,
   showVoid = false
 }: {
@@ -388,6 +429,7 @@ function RegisterLineAdvancedEditor({
   onSave: () => void;
   saveDisabled?: boolean;
   onVoid?: () => void;
+  t: BellFieldTranslator;
   showVoid?: boolean;
 }) {
   function patchPriced(values: Partial<Pick<RegisterEntryDraft, 'quantity' | 'unitPrice'>>) {
@@ -412,7 +454,7 @@ function RegisterLineAdvancedEditor({
                 draft.registerEntryKind === entryKind ? styles.catalogTagButtonTextSelected : null
               ]}
             >
-              {formatRegisterEntryKind(entryKind)}
+              {formatRegisterEntryKind(entryKind, t)}
             </Text>
           </Pressable>
         ))}
@@ -432,7 +474,7 @@ function RegisterLineAdvancedEditor({
                 !draft.appointmentId ? styles.catalogTagButtonTextSelected : null
               ]}
             >
-              Job-level
+              {t('fieldRegister.jobLevel')}
             </Text>
           </Pressable>
           {job.appointments.map((appointment) => (
@@ -452,7 +494,7 @@ function RegisterLineAdvancedEditor({
                     : null
                 ]}
               >
-                {formatAppointmentSchedule(appointment)}
+                {formatAppointmentSchedule(appointment, t)}
               </Text>
             </Pressable>
           ))}
@@ -461,46 +503,46 @@ function RegisterLineAdvancedEditor({
       <TextInput
         value={draft.description}
         onChangeText={(description) => onChange({ description })}
-        placeholder="Description"
+        placeholder={t('fieldRegister.description')}
         style={styles.input}
       />
       <TextInput
         value={draft.quantity}
         onChangeText={(quantity) => patchPriced({ quantity })}
         keyboardType="decimal-pad"
-        placeholder={getQuantityPlaceholder(draft)}
+        placeholder={getQuantityPlaceholder(draft, t)}
         style={styles.input}
       />
       <TextInput
         value={draft.unitOfMeasure}
         onChangeText={(unitOfMeasure) => onChange({ unitOfMeasure })}
-        placeholder="Unit"
+        placeholder={t('fieldRegister.unit')}
         style={styles.input}
       />
       <TextInput
         value={draft.unitPrice}
         onChangeText={(unitPrice) => patchPriced({ unitPrice })}
         keyboardType="decimal-pad"
-        placeholder="Unit price"
+        placeholder={t('fieldRegister.unitPrice')}
         style={styles.input}
       />
       <TextInput
         value={draft.totalAmount}
         onChangeText={(totalAmount) => onChange({ totalAmount })}
         keyboardType="decimal-pad"
-        placeholder="Total"
+        placeholder={t('fieldRegister.total')}
         style={styles.input}
       />
       <TextInput
         value={draft.partNumber}
         onChangeText={(partNumber) => onChange({ partNumber })}
-        placeholder="Part number"
+        placeholder={t('fieldRegister.partNumber')}
         style={styles.input}
       />
       <TextInput
         value={draft.inventorySourceLabel}
         onChangeText={(inventorySourceLabel) => onChange({ inventorySourceLabel })}
-        placeholder="Source"
+        placeholder={t('fieldRegister.source')}
         style={styles.input}
       />
       <View style={styles.actionRow}>
@@ -513,7 +555,7 @@ function RegisterLineAdvancedEditor({
         </Pressable>
         {showVoid && onVoid ? (
           <Pressable onPress={onVoid} style={styles.dangerButton}>
-            <Text style={styles.dangerButtonText}>Void line</Text>
+            <Text style={styles.dangerButtonText}>{t('fieldRegister.voidLine')}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -521,7 +563,10 @@ function RegisterLineAdvancedEditor({
   );
 }
 
-function formatSearchResultTitle(result: RegisterSearchResult): string {
+function formatSearchResultTitle(
+  result: RegisterSearchResult,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   if (result.kind === 'catalog') {
     return result.item.name;
   }
@@ -530,54 +575,69 @@ function formatSearchResultTitle(result: RegisterSearchResult): string {
     return result.item.itemName;
   }
 
-  return 'Custom line';
+  return t('fieldRegister.customLine');
 }
 
-function formatSearchResultDetail(result: RegisterSearchResult): string {
+function formatSearchResultDetail(
+  result: RegisterSearchResult,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   if (result.kind === 'catalog') {
     const parts = [
-      formatCatalogKind(result.item.kind),
+      formatCatalogKind(result.item.kind, t),
       result.item.category,
       result.item.code,
       result.item.defaultSalePrice === undefined
-        ? 'No price'
+        ? t('fieldRegister.noPrice')
         : formatCurrency(result.item.defaultSalePrice),
-      result.truckMatch ? `${result.truckMatch.quantityOnHand} on truck` : undefined
+      result.truckMatch
+        ? `${result.truckMatch.quantityOnHand} ${t('fieldRegister.onTruck')}`
+        : undefined
     ].filter(Boolean);
     return parts.join(' - ');
   }
 
   if (result.kind === 'truckStock') {
     return [
-      'Truck stock',
+      t('fieldRegister.truckStock'),
       result.item.sku,
-      `${result.item.quantityOnHand} on hand`,
+      `${result.item.quantityOnHand} ${t('fieldRegister.onHand')}`,
       result.item.locationName
     ]
       .filter(Boolean)
       .join(' - ');
   }
 
-  return 'Enter a one-off charge or note for this job.';
+  return t('fieldRegister.enterOneOff');
 }
 
-function formatSelectedResultDetail(result: RegisterSearchResult): string {
+function formatSelectedResultDetail(
+  result: RegisterSearchResult,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   if (result.kind === 'catalog') {
-    const description = result.item.description ?? formatCatalogKind(result.item.kind);
-    const source = result.truckMatch ? `Truck stock: ${result.truckMatch.locationName}` : undefined;
+    const description = result.item.description ?? formatCatalogKind(result.item.kind, t);
+    const source = result.truckMatch
+      ? `${t('fieldRegister.truckStock')}: ${result.truckMatch.locationName}`
+      : undefined;
     return [description, source].filter(Boolean).join(' - ');
   }
 
   if (result.kind === 'truckStock') {
-    return `${result.item.quantityOnHand} on hand - ${result.item.locationName}`;
+    return `${result.item.quantityOnHand} ${t('fieldRegister.onHand')} - ${
+      result.item.locationName
+    }`;
   }
 
-  return 'Custom line for work that is not in the Catalog yet.';
+  return t('fieldRegister.customLineDetail');
 }
 
-function formatEntrySummary(entry: FieldRegisterEntry): string {
+function formatEntrySummary(
+  entry: FieldRegisterEntry,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   return [
-    formatRegisterEntryKind(entry.kind),
+    formatRegisterEntryKind(entry.kind, t),
     formatQuantity(entry.quantity, entry.unitOfMeasure),
     entry.catalogSnapshot?.code ?? entry.partNumber
   ]
@@ -589,17 +649,18 @@ function formatQuantity(quantity: number, unitOfMeasure?: string): string {
   return `${quantity}${unitOfMeasure ? ` ${unitOfMeasure}` : ''}`;
 }
 
-function getQuantityPlaceholder(draft: RegisterEntryDraft): string {
-  return draft.registerEntryKind === 'labor' ? 'Time in hours' : 'Quantity';
+function getQuantityPlaceholder(
+  draft: RegisterEntryDraft,
+  t: BellFieldTranslator = defaultTranslator
+): string {
+  return draft.registerEntryKind === 'labor'
+    ? t('fieldRegister.timeInHours')
+    : t('fieldRegister.quantity');
 }
 
-function formatCatalogKind(kind: FieldCatalogItem['kind']): string {
-  if (kind === 'service') return 'Service';
-  if (kind === 'part') return 'Part';
-  if (kind === 'equipment') return 'Equipment';
-  if (kind === 'labor') return 'Labor';
-  if (kind === 'fee') return 'Fee';
-  if (kind === 'discount') return 'Discount';
-  if (kind === 'agreement') return 'Agreement';
-  return 'Other';
+function formatCatalogKind(
+  kind: FieldCatalogItem['kind'],
+  t: BellFieldTranslator = defaultTranslator
+): string {
+  return t(catalogKindLabelKeys[kind]);
 }

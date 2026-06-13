@@ -12,6 +12,10 @@
  *   - if no technicianId at all, show "Unassigned"
  */
 
+import { createBellFieldTranslator, type BellFieldTranslator } from '@bellfield/i18n';
+
+const defaultTranslator = createBellFieldTranslator('en');
+
 export type AppointmentAssignmentLike = {
   technicianId?: string;
   technicianName?: string;
@@ -19,28 +23,30 @@ export type AppointmentAssignmentLike = {
 
 export function describeAppointmentAssignment(
   appointment: AppointmentAssignmentLike,
-  currentEmployeeId: string
+  currentEmployeeId: string,
+  t: BellFieldTranslator = defaultTranslator
 ): string {
   if (appointment.technicianName) {
     return appointment.technicianName;
   }
 
   if (!appointment.technicianId) {
-    return 'Unassigned';
+    return t('fieldAppointment.unassigned');
   }
 
   if (appointment.technicianId === currentEmployeeId) {
-    return 'You';
+    return t('fieldAppointment.you');
   }
 
-  return 'Another technician';
+  return t('fieldAppointment.anotherTechnician');
 }
 
 export function formatAppointmentAssignmentLine(
   appointment: AppointmentAssignmentLike,
-  currentEmployeeId: string
+  currentEmployeeId: string,
+  t: BellFieldTranslator = defaultTranslator
 ): string {
-  const assignmentLabel = describeAppointmentAssignment(appointment, currentEmployeeId);
+  const assignmentLabel = describeAppointmentAssignment(appointment, currentEmployeeId, t);
 
   if (!appointment.technicianId) {
     return assignmentLabel;
@@ -48,11 +54,11 @@ export function formatAppointmentAssignmentLine(
 
   if (isAppointmentAssignedToCurrentTechnician(appointment, currentEmployeeId)) {
     return appointment.technicianName
-      ? `Assigned to you (${appointment.technicianName})`
-      : 'Assigned to you';
+      ? `${t('fieldAppointment.assignedToYou')} (${appointment.technicianName})`
+      : t('fieldAppointment.assignedToYou');
   }
 
-  return `Assigned to ${assignmentLabel}`;
+  return `${t('fieldAppointment.assignedTo')} ${assignmentLabel}`;
 }
 
 /**
@@ -76,14 +82,18 @@ export function shouldConfirmAppointmentOwnership(
 export function buildAppointmentOwnershipWarning(
   appointment: AppointmentAssignmentLike,
   currentEmployeeId: string,
-  actionLabel: string
+  actionLabel: string,
+  t: BellFieldTranslator = defaultTranslator
 ): string {
   if (!appointment.technicianId) {
-    return `This appointment is currently unassigned. Continue with ${actionLabel}?`;
+    return `${t('fieldAppointment.thisAppointmentUnassigned')} ${t(
+      'fieldAppointment.continueWith'
+    )} ${actionLabel}?`;
   }
 
-  return `This appointment is assigned to ${describeAppointmentAssignment(
+  return `${t('fieldAppointment.thisAppointmentAssignedTo')} ${describeAppointmentAssignment(
     appointment,
-    currentEmployeeId
-  )}. Continue with ${actionLabel}?`;
+    currentEmployeeId,
+    t
+  )}. ${t('fieldAppointment.continueWith')} ${actionLabel}?`;
 }

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createBellFieldTranslator } from '@bellfield/i18n';
 import type {
   AppointmentSummary,
   CustomerAccountSummary,
@@ -804,6 +805,14 @@ describe('formatFinishOutcome', () => {
     expect(formatFinishOutcome('followUpNeeded')).toBe('Follow-up needed');
     expect(formatFinishOutcome('noAccess')).toBe('No access');
   });
+
+  it('uses the selected translator for localized outcome labels', () => {
+    const t = createBellFieldTranslator('es');
+
+    expect(formatFinishOutcome('completed', t)).toBe('Completada');
+    expect(formatFinishOutcome('followUpNeeded', t)).toBe('Necesita seguimiento');
+    expect(formatFinishOutcome('noAccess', t)).toBe('Sin acceso');
+  });
 });
 
 describe('formatPendingOperation', () => {
@@ -875,5 +884,33 @@ describe('formatPendingOperation', () => {
       'conflict: Office already changed this line.'
     );
     expect(formatPendingOperation(mediaUpload)).toContain('Media upload queued: media-1.jpg');
+  });
+
+  it('uses the selected translator for queued operation labels', () => {
+    const t = createBellFieldTranslator('es');
+    const pending: PendingOperation = {
+      id: 'op-1',
+      kind: 'appointmentStatus',
+      appointmentId: 'appt-1',
+      status: 'working',
+      occurredAt: baseTimestamp,
+      state: 'pending'
+    };
+    const registerCreate: PendingOperation = {
+      id: 'op-register',
+      kind: 'registerEntryCreate',
+      jobId: 'job-1',
+      registerEntryKind: 'part',
+      description: 'Contactor',
+      quantity: 1,
+      totalAmount: 125,
+      occurredAt: baseTimestamp,
+      state: 'pending'
+    };
+
+    expect(formatPendingOperation(pending, t)).toContain('Estado de cita en cola: trabajando');
+    expect(formatPendingOperation(registerCreate, t)).toContain(
+      'Línea de registro en cola: Contactor'
+    );
   });
 });

@@ -1,5 +1,8 @@
 import type { FieldAssignedWorkResponse } from '@/lib/operations-api';
+import { createBellFieldTranslator, type BellFieldTranslator } from '@bellfield/i18n';
 import type { PendingOperation } from './field-sync-types';
+
+const defaultTranslator = createBellFieldTranslator('en');
 
 export const fieldDetailTabs = [
   { id: 'overview', label: 'Overview' },
@@ -75,14 +78,18 @@ export function sortFieldJobsBySchedule(jobs: FieldJob[], currentEmployeeId: str
   });
 }
 
-export function formatFieldJobCardScheduleLabel(job: FieldJob, currentEmployeeId: string): string {
+export function formatFieldJobCardScheduleLabel(
+  job: FieldJob,
+  currentEmployeeId: string,
+  t: BellFieldTranslator = defaultTranslator
+): string {
   const appointment = selectFieldTimelineAppointment(job, currentEmployeeId);
 
   if (!appointment) {
-    return 'Unscheduled';
+    return t('fieldAppointment.unscheduled');
   }
 
-  const dateLabel = appointment.scheduledDate || 'Unscheduled';
+  const dateLabel = appointment.scheduledDate || t('fieldAppointment.unscheduled');
   const structuredTime = formatStructuredTime(appointment);
 
   if (structuredTime) {
@@ -101,12 +108,15 @@ export function buildFieldJobCardMetadata(input: {
   job: FieldJob;
   locationAddress: string;
   locationName: string;
+  t?: BellFieldTranslator;
 }): FieldJobCardMetadata {
+  const t = input.t ?? defaultTranslator;
+
   return {
     locationLine: `${input.locationName} - ${input.locationAddress}`,
-    scheduleLabel: formatFieldJobCardScheduleLabel(input.job, input.currentEmployeeId),
+    scheduleLabel: formatFieldJobCardScheduleLabel(input.job, input.currentEmployeeId, t),
     summaryLine: input.job.summary,
-    title: `Job ${input.job.jobNumber}`
+    title: `${t('fieldAppointment.job')} ${input.job.jobNumber}`
   };
 }
 
