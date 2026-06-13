@@ -36,3 +36,6 @@ tools/update/*.pem
 
 # wrangler local state
 site/.wrangler/
+
+# wrangler local state
+.wrangler/
