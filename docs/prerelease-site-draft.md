@@ -39,9 +39,12 @@ decoration:
 
 > **Buy it once. It runs in your shop. It never stops working.**
 >
-> BellField is field-service software — dispatch, estimates, invoices,
-> payments — that runs on a computer you own. No subscription required to
-> keep operating. Your data never leaves your building.
+> Dispatch, estimates your customers approve from their phone, invoicing,
+> and an offline-capable field app — running on a computer you own. No
+> subscription required to keep operating. Your data never leaves your
+> building. (Optional services — email sending, updates after year one,
+> managed remote access — are pay-as-you-go and never required to keep
+> working.)
 
 [Screenshot: dispatch board]
 
@@ -85,16 +88,18 @@ BellField-facilitated processing tier. The promise is "never forced," not
 
 > **Where we are:** BellField runs daily in a real HVAC office — ours. We're
 > getting it ready for a small group of founding shops. It is not for sale
-> to the public yet, and we won't pretend otherwise.
+> to the public yet.
 
 ### Founding pricing
 
 > | BellField license (up to 5 users) | **$4,500, one time** |
 > | BellField license (up to 15 users) | **$7,500, one time** |
 >
-> First year of updates included. After that, updates are about $900/yr —
-> and entirely optional, because the software never stops working if you
-> skip them. Founding shops get assisted setup free.
+> Every founding license includes: remote assisted setup (we walk your
+> install through on a screen share), your first year of updates, and
+> direct support from the people who built it. After year one, updates are
+> about $900/yr — and entirely optional, because the software never stops
+> working if you skip them. Customer email sending is pay-as-you-go.
 >
 > _For comparison: ServiceTitan quoted a 7-user shop $64,800 over 36
 > months._
@@ -106,11 +111,15 @@ BellField-facilitated processing tier. The promise is "never forced," not
 > we'll ever send you.
 >
 > [email field] [Notify me]
+>
+> Already know you want in? Email us about a founding install:
+> [contact mailbox].
 
 ### Footer
 
-> Built by people who run a service business, not a software company that's
-> heard of one. Questions: [hello@bellfield.app — mailbox to be created]
+> Built inside a working HVAC office, for shops like yours.
+> Questions: [contact mailbox — create in Google Workspace; support@ or
+> > founders@; hello@ does not exist yet]
 
 ---
 
@@ -118,8 +127,10 @@ BellField-facilitated processing tier. The promise is "never forced," not
 
 Owner voice; facts in brackets are Rob's to confirm or correct:
 
-> I'm Rob. I work in a real HVAC office — [N] people, real dispatch board,
-> real Saturday emergencies.
+> I'm Rob. I'm the service manager at a real HVAC company — I run the
+> dispatch board, the scheduling, and the office, [N] people deep, real
+> Saturday emergencies. (Voice rule: Rob is office staff/service manager —
+> never imply he owned the company.)
 >
 > When we went shopping for software, ServiceTitan quoted us $64,800 for
 > three years. Another vendor wanted [~$35,000] on a finance plan to "own"
