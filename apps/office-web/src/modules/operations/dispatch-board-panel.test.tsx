@@ -206,14 +206,16 @@ describe('DispatchBoardPanel', () => {
 
     expect(within(unassignedRegion).getByText('#1002')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('#1001')).toBeInTheDocument();
-    expect(within(taylorRegion).getByText('Main Shop')).toBeInTheDocument();
-    expect(within(taylorRegion).getByText('123 Main, Blaine, WA')).toBeInTheDocument();
+    expect(within(taylorRegion).getByText('Acme')).toBeInTheDocument();
+    expect(
+      within(taylorRegion).getByText('Service · Main Shop · 123 Main, Blaine, WA')
+    ).toBeInTheDocument();
     expect(taylorRegion).toHaveStyle({ minHeight: '4.85rem' });
     expect(taylorRegion.children[0]).toHaveStyle({ minHeight: '4.85rem' });
     expect(taylorLane).toHaveStyle({ minHeight: '4.85rem' });
     expect(
       within(taylorRegion).getByRole('button', {
-        name: 'Job 1001, Main Shop, 123 Main, Blaine, WA, Scheduled'
+        name: 'Job 1001, Acme, Service, Main Shop, 123 Main, Blaine, WA, Scheduled'
       })
     ).toHaveStyle({ height: '100%', minHeight: '3.8rem', minWidth: '0px' });
     expect(within(taylorRegion).queryByText('1')).not.toBeInTheDocument();
@@ -273,7 +275,9 @@ describe('DispatchBoardPanel', () => {
 
     expect(within(taylorRegion).getByText('· No cooling')).toBeInTheDocument();
     expect(
-      within(taylorRegion).getByText('8:00 AM - 11:00 AM · Scheduled · 123 Main, Blaine, WA')
+      within(taylorRegion).getByText(
+        '8:00 AM - 11:00 AM · Scheduled · Service · 123 Main, Blaine, WA'
+      )
     ).toBeInTheDocument();
   });
 
@@ -296,15 +300,17 @@ describe('DispatchBoardPanel', () => {
     );
 
     const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
-    const locationName = within(taylorRegion).getByText('Main Shop');
+    const primaryName = within(taylorRegion).getByText('Acme');
     const editButton = within(taylorRegion).getByRole('button', {
       name: 'Edit schedule for job 1001'
     });
 
     expect(within(taylorRegion).queryByText(/After-hours repair/)).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText(/5:00 PM - 8:00 PM/)).not.toBeInTheDocument();
+    expect(within(taylorRegion).getByText('Service')).toBeInTheDocument();
+    expect(within(taylorRegion).queryByText(/Main Shop/)).not.toBeInTheDocument();
     expect(editButton).toHaveStyle({ position: 'absolute', right: '0.65rem' });
-    expect(locationName.parentElement).toHaveStyle({ paddingRight: '3.1rem' });
+    expect(primaryName.parentElement).toHaveStyle({ paddingRight: '3.1rem' });
   });
 
   it('opens a calendar picker and commits the selected dispatch date', () => {
@@ -412,7 +418,7 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByLabelText(/Job 1001, Main Shop/i));
+    fireEvent.click(screen.getByLabelText(/Job 1001, Acme/i));
 
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
   });
@@ -434,7 +440,7 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    const cardButton = screen.getByLabelText(/Job 1001, Main Shop/i);
+    const cardButton = screen.getByLabelText(/Job 1001, Acme/i);
     fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
 
     let menu = screen.getByRole('menu', { name: 'Dispatch actions for job 1001' });
@@ -476,7 +482,7 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    const cardButton = screen.getByLabelText(/Job 1001, Main Shop/i);
+    const cardButton = screen.getByLabelText(/Job 1001, Acme/i);
     fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(

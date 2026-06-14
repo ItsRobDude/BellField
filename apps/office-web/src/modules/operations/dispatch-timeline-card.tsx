@@ -3,6 +3,12 @@
 import { useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
+import {
+  formatDispatchCardAddress,
+  formatDispatchCardAriaLabel,
+  formatDispatchCardDetailLine,
+  formatDispatchCardPrimaryName
+} from './dispatch-card-display';
 import { DispatchSchedulePopover } from './dispatch-schedule-popover';
 import type { DispatchScheduleDraft, DispatchScheduleEditorState } from './dispatch-schedule-types';
 import type { DispatchTimelineDragState } from './dispatch-timeline-drag-state';
@@ -68,18 +74,20 @@ export function DispatchCardButton({
   onScheduleEditorSave
 }: DispatchCardButtonProps) {
   const cardFrameRef = useRef<HTMLDivElement | null>(null);
-  const address = formatDispatchCardAddress(card);
   const statusLabel = appointmentStatusLabels[card.status];
-  const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
-  const overlapLabel = hasScheduleConflict ? ', overlaps another appointment' : '';
   const hasOverlapWarning = hasScheduleConflict || Boolean(dragState?.overlapWarning);
   const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
   const endMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
   const usesOverlayEdit = Boolean(onOpenScheduleEditor && spaceTier === 'narrow');
-  const detailLine =
-    spaceTier === 'wide' && startMinutes !== null && endMinutes !== null
-      ? `${formatDispatchResizePreview(startMinutes, endMinutes)} · ${statusLabel} · ${address}`
-      : address;
+  const timeRangeText =
+    startMinutes !== null && endMinutes !== null
+      ? formatDispatchResizePreview(startMinutes, endMinutes)
+      : null;
+  const primaryName = formatDispatchCardPrimaryName(card);
+  const detailLine = formatDispatchCardDetailLine(card, spaceTier, {
+    statusLabel,
+    timeRangeText
+  });
   const canResize = Boolean(onResizeStart && card.scheduledDate && startMinutes !== null);
   const canDrag = Boolean(onDragStart);
   const dragStatusText = dragState ? formatDispatchDragPreview(dragState) : null;
@@ -124,7 +132,10 @@ export function DispatchCardButton({
             y: frameRect ? frameRect.top + 16 : 16
           });
         }}
-        aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}${overlapLabel}`}
+        aria-label={formatDispatchCardAriaLabel(card, {
+          statusLabel,
+          hasScheduleConflict
+        })}
         style={{
           ...timelineCardMainButtonStyle,
           ...(canDrag ? timelineCardMoveButtonStyle : null),
@@ -142,7 +153,7 @@ export function DispatchCardButton({
             }}
           >
             <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
-            <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
+            <strong style={timelineCardLocationStyle}>{primaryName}</strong>
             {spaceTier === 'wide' && card.jobSummary ? (
               <span style={timelineCardSummaryStyle}>· {card.jobSummary}</span>
             ) : null}
@@ -222,11 +233,7 @@ export function getDispatchTimelineCardSpaceTier(
   return 'standard';
 }
 
-export function formatDispatchCardAddress(card: DispatchAppointmentCard): string {
-  const cityState = [card.locationCity, card.locationState].filter(Boolean).join(', ');
-
-  return [card.locationAddressLine1, cityState].filter(Boolean).join(', ');
-}
+export { formatDispatchCardAddress } from './dispatch-card-display';
 
 function formatDispatchDragPreview(dragState: DispatchTimelineDragState): string {
   if (dragState.mode === 'saving') {
