@@ -122,11 +122,7 @@ export class InvoiceDeliveryService {
     const invoice = await this.requireInvoice(invoiceId);
     this.requirePostedInvoice(invoice);
     const settings = await this.companySettingsRepository.getSettings();
-    const emailContent = buildInvoiceEmailContent(
-      settings,
-      buildInvoiceEmailTokens(settings, invoice),
-      {}
-    );
+    const emailContent = buildInvoiceEmailContent(buildInvoiceEmailTokens(settings, invoice), {});
 
     return {
       preview: {
@@ -154,7 +150,6 @@ export class InvoiceDeliveryService {
     const generatedAt = new Date().toISOString();
     const settings = await this.companySettingsRepository.getSettings();
     const emailContent = buildInvoiceEmailContent(
-      settings,
       buildInvoiceEmailTokens(settings, invoice),
       request
     );
@@ -358,7 +353,6 @@ export class InvoiceDeliveryService {
 }
 
 function buildInvoiceEmailContent(
-  settings: CompanySettings,
   tokens: Record<string, string>,
   request: Partial<Pick<SendInvoiceRequestDto, 'subject' | 'bodyText'>>
 ): { subject: string; bodyText: string } {

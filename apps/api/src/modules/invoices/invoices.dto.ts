@@ -1,5 +1,6 @@
 import {
   IsBoolean,
+  IsEmail,
   IsIn,
   IsNumber,
   IsOptional,
@@ -65,9 +66,8 @@ export class CreateAdjustmentRequestBodyDto implements CreateAdjustmentRequest {
 }
 
 export class SendInvoiceRequestBodyDto implements SendInvoiceRequest {
-  @IsString()
-  @MinLength(1)
-  @MaxLength(320)
+  @IsEmail()
+  @MaxLength(254)
   recipientEmail!: string;
 
   @IsOptional()

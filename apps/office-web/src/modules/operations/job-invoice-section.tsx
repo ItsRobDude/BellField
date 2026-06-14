@@ -75,6 +75,7 @@ export function JobInvoiceSection({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [newLineDraft, setNewLineDraft] = useState<InvoiceLineDraft | null>(null);
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<InvoiceLineDraft | null>(null);
@@ -316,6 +317,7 @@ export function JobInvoiceSection({
     setIsSendingInvoice(true);
     setErrorMessage(null);
     setNoticeMessage(null);
+    setWarningMessage(null);
     try {
       const response = await sendOfficeInvoice({
         invoiceId: invoice.id,
@@ -327,11 +329,13 @@ export function JobInvoiceSection({
       });
       await loadDeliveryHistory(invoice.id);
       if (response.outboundMessage.status === 'sent') {
-        setNoticeMessage(
-          response.recordingIncomplete
-            ? 'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
-            : 'Invoice sent.'
-        );
+        if (response.recordingIncomplete) {
+          setWarningMessage(
+            'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
+          );
+        } else {
+          setNoticeMessage('Invoice sent.');
+        }
       } else if (response.outboundMessage.status === 'queued') {
         setNoticeMessage('Queued — will send automatically.');
       } else {
@@ -411,6 +415,7 @@ export function JobInvoiceSection({
         </div>
 
         {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {warningMessage ? <p style={styles.warning}>{warningMessage}</p> : null}
         {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
 
         {newLineDraft ? (
