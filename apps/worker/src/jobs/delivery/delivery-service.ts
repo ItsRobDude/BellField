@@ -152,6 +152,7 @@ export class DeliveryService {
       // Same key the synchronous attempt used: the relay replays a recorded
       // outcome instead of double-sending.
       idempotencyKey: `${message.documentType}-send-${message.id}`,
+      documentType: message.documentType,
       recipientEmail: message.recipientEmail,
       fromName: message.fromName ?? '',
       replyToEmail: message.replyToEmail ?? undefined,

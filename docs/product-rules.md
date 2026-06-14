@@ -683,6 +683,13 @@ Once an invoice is posted:
 - it should no longer be casually editable
 - follow-up correction should happen through adjustments or similar accounting-safe actions
 
+### Invoice delivery
+
+Posted invoice email delivery is BellField-operated. Invoice and payment-document
+emails send from `billing@bellfield.app`; shops may edit company name,
+reply-to, and later invoice template text, but they must not configure or
+replace the backend email provider.
+
 ---
 
 ## 11. Job Register / Invoice Reflection Rules

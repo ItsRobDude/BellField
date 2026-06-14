@@ -451,7 +451,8 @@ BellField-operated customer document email is not a customer-configured provider
 For estimate and invoice email delivery:
 
 - BellField controls the sending provider, sending domain, and backend API key
-- messages are sent from `estimates@bellfield.app`
+- estimate messages are sent from `estimates@bellfield.app`; invoice/payment
+  document messages are sent from `billing@bellfield.app`
 - shops may configure customer-facing content such as company name, reply-to,
   subject template, and body template
 - shops must not enter provider API keys, change the delivery provider, or manage

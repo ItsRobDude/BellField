@@ -6,14 +6,17 @@ import {
   IsArray,
   IsEmail,
   IsInt,
+  IsIn,
   IsNotEmpty,
   IsOptional,
   IsString,
   MaxLength,
   Min,
+  ValidateIf,
   ValidateNested
 } from 'class-validator';
 import type {
+  CustomerDocumentType,
   RelayAcceptanceOptionInput,
   RelayAcceptancePayload,
   RelaySendEstimateDocumentRequest
@@ -79,11 +82,21 @@ export class AcceptancePayloadDto implements RelayAcceptancePayload {
   expiresInDays?: number;
 }
 
-export class SendEstimateDocumentRequestDto implements RelaySendEstimateDocumentRequest {
+const relayDocumentTypes: readonly CustomerDocumentType[] = ['estimate', 'invoice'];
+
+export class SendEstimateDocumentRequestDto
+  implements Omit<RelaySendEstimateDocumentRequest, 'documentType'>
+{
   @IsString()
   @IsNotEmpty()
   @MaxLength(200)
   idempotencyKey!: string;
+
+  // Optional at the DTO boundary so older estimate-only clients continue to
+  // work; the controller normalizes missing values to "estimate".
+  @ValidateIf((_input, value) => value !== undefined)
+  @IsIn(relayDocumentTypes)
+  documentType?: CustomerDocumentType;
 
   @IsEmail()
   recipientEmail!: string;

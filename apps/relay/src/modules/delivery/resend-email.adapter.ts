@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
+import type { CustomerDocumentType } from '@bellfield/contracts';
+import { getRelayRuntimeConfig, type RelayRuntimeConfig } from '../../common/config/runtime-config';
 import type {
   EmailSendAdapter,
   ProviderSendInput,
@@ -41,7 +42,7 @@ export class ResendEmailAdapter implements EmailSendAdapter {
       },
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
-        from: formatFrom(input.fromName, config.fromAddress),
+        from: formatFrom(input.fromName, fromAddressForDocument(config, input.documentType)),
         to: [input.to],
         reply_to: input.replyToEmail ? [input.replyToEmail] : undefined,
         subject: input.subject,
@@ -86,6 +87,10 @@ export class ResendEmailAdapter implements EmailSendAdapter {
 
     return { kind: 'sent', providerMessageId: body.id };
   }
+}
+
+function fromAddressForDocument(config: RelayRuntimeConfig, documentType: CustomerDocumentType) {
+  return documentType === 'invoice' ? config.invoiceFromAddress : config.estimateFromAddress;
 }
 
 // The display name lands in a mail header and is shop-edited content, so strip

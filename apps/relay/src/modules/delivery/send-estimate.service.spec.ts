@@ -7,6 +7,7 @@ import type {
 } from '../acceptance/acceptance.types';
 import type {
   EmailSendAdapter,
+  ProviderSendInput,
   ProviderSendResult,
   RelayMessageRecord,
   RelayMessagesStore,
@@ -162,6 +163,7 @@ const shop: AuthenticatedRelayShop = {
 function makeInput(overrides?: Partial<SendEstimateDocumentInput>): SendEstimateDocumentInput {
   return {
     idempotencyKey: 'estimate-send-msg-1',
+    documentType: 'estimate',
     recipientEmail: 'homeowner@example.com',
     fromName: 'Acme HVAC',
     replyToEmail: 'office@acmehvac.example',
@@ -188,8 +190,8 @@ function makeAcceptance(overrides?: Partial<RelayAcceptancePayload>): RelayAccep
 
 function makeAdapter(
   result: ProviderSendResult
-): EmailSendAdapter & { calls: { bodyText: string }[] } {
-  const calls: { bodyText: string }[] = [];
+): EmailSendAdapter & { calls: ProviderSendInput[] } {
+  const calls: ProviderSendInput[] = [];
   return {
     calls,
     async send(input) {
@@ -231,6 +233,7 @@ describe('SendEstimateService', () => {
     expect(store.messages[0]).toMatchObject({ status: 'sent', providerMessageId: 'prov-1' });
     expect(adapter.calls).toHaveLength(1);
     expect(adapter.calls[0]).toMatchObject({
+      documentType: 'estimate',
       idempotencyKey: 'relay/shop_1/estimate-send-msg-1'
     });
   });
@@ -343,6 +346,29 @@ describe('SendEstimateService', () => {
       expect(result.retryable).toBe(false);
     }
     expect(adapter.calls).toHaveLength(0);
+  });
+
+  it('rejects invoice sends that include estimate acceptance data before provider send', async () => {
+    const store = new InMemoryMessagesStore();
+    const adapter = makeAdapter({ kind: 'sent' });
+    const service = makeService(store, adapter);
+
+    const result = await service.sendEstimateDocument(
+      shop,
+      makeInput({
+        documentType: 'invoice',
+        idempotencyKey: 'invoice-send-msg-1',
+        acceptance: makeAcceptance()
+      })
+    );
+
+    expect(result).toMatchObject({
+      kind: 'failed',
+      code: 'deliveryRejected',
+      retryable: false
+    });
+    expect(adapter.calls).toHaveLength(0);
+    expect(store.messages).toHaveLength(0);
   });
 
   it('still reports sent when recording fails after provider acceptance', async () => {

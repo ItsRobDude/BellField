@@ -80,14 +80,49 @@ describe('EmailProviderService.sendEstimateEmail', () => {
     expect(headers['x-bellfield-server-instance']).toBe('instance-uuid-1');
     const body = JSON.parse(String(options.body)) as {
       idempotencyKey: string;
+      documentType: string;
       recipientEmail: string;
       fromName: string;
       document: { filename: string; contentType: string; bytesBase64: string };
     };
     expect(body.idempotencyKey).toBe('estimate-send-msg-1');
+    expect(body.documentType).toBe('estimate');
     expect(body.recipientEmail).toBe('homeowner@example.com');
     expect(body.fromName).toBe('Acme Heating');
     expect(Buffer.from(body.document.bytesBase64, 'base64').toString('utf8')).toBe('%PDF-1.7 test');
+  });
+
+  it('posts invoice sends with invoice document type for relay sender selection', async () => {
+    configureRelayEnv();
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({
+        result: { kind: 'sent', relayMessageId: 'relay-invoice-1' }
+      })
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const service = new EmailProviderService();
+
+    const result = await service.sendInvoiceEmail({
+      ...makeInput(),
+      subject: 'Your invoice',
+      idempotencyKey: 'invoice-send-msg-1',
+      attachment: {
+        filename: 'invoice.pdf',
+        contentType: 'application/pdf',
+        bytes: Buffer.from('%PDF-1.7 invoice')
+      }
+    });
+
+    expect(result).toEqual({ kind: 'sent', providerMessageId: 'relay-invoice-1' });
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(options.body)) as {
+      documentType: string;
+      idempotencyKey: string;
+    };
+    expect(body.documentType).toBe('invoice');
+    expect(body.idempotencyKey).toBe('invoice-send-msg-1');
   });
 
   it('passes through relay failure codes and retryability', async () => {

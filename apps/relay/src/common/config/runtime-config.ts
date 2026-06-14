@@ -1,6 +1,7 @@
 const DEFAULT_PORT = 3201;
 const DEFAULT_DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/bellfield_relay';
-const DEFAULT_FROM_ADDRESS = 'estimates@bellfield.app';
+const DEFAULT_ESTIMATE_FROM_ADDRESS = 'estimates@bellfield.app';
+const DEFAULT_INVOICE_FROM_ADDRESS = 'billing@bellfield.app';
 const DEFAULT_MONTHLY_SEND_QUOTA = 1000;
 const DEFAULT_REBIND_FLAP_THRESHOLD = 5;
 const DEFAULT_REBIND_FLAP_WINDOW_MINUTES = 60;
@@ -15,7 +16,8 @@ export type RelayRuntimeConfig = {
   databaseUrl: string;
   /** The only provider credential anywhere in the product — relay-side only. */
   resendApiKey?: string;
-  fromAddress: string;
+  estimateFromAddress: string;
+  invoiceFromAddress: string;
   webhookSigningSecret?: string;
   defaultMonthlySendQuota: number;
   rebindFlapThreshold: number;
@@ -56,7 +58,13 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
 
   const databaseUrl = process.env.BELLFIELD_RELAY_DATABASE_URL ?? '';
   const resendApiKey = process.env.BELLFIELD_RELAY_RESEND_API_KEY || undefined;
-  const fromAddress = process.env.BELLFIELD_RELAY_FROM_ADDRESS || DEFAULT_FROM_ADDRESS;
+  const legacyFromAddress = process.env.BELLFIELD_RELAY_FROM_ADDRESS?.trim() || undefined;
+  const estimateFromAddress =
+    process.env.BELLFIELD_RELAY_ESTIMATE_FROM_ADDRESS?.trim() ||
+    legacyFromAddress ||
+    DEFAULT_ESTIMATE_FROM_ADDRESS;
+  const invoiceFromAddress =
+    process.env.BELLFIELD_RELAY_INVOICE_FROM_ADDRESS?.trim() || DEFAULT_INVOICE_FROM_ADDRESS;
   const webhookSigningSecret = process.env.BELLFIELD_RELAY_WEBHOOK_SIGNING_SECRET || undefined;
   const stripeSecretKey = process.env.BELLFIELD_RELAY_STRIPE_SECRET_KEY || undefined;
   const stripeWebhookSecret = process.env.BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET || undefined;
@@ -89,8 +97,11 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     if (!resendApiKey) {
       problems.push('BELLFIELD_RELAY_RESEND_API_KEY is required in production.');
     }
-    if (!fromAddress.includes('@')) {
-      problems.push('BELLFIELD_RELAY_FROM_ADDRESS must be an email address.');
+    if (!estimateFromAddress.includes('@')) {
+      problems.push('BELLFIELD_RELAY_ESTIMATE_FROM_ADDRESS must be an email address.');
+    }
+    if (!invoiceFromAddress.includes('@')) {
+      problems.push('BELLFIELD_RELAY_INVOICE_FROM_ADDRESS must be an email address.');
     }
   }
   if ((stripeSecretKey && !stripeWebhookSecret) || (!stripeSecretKey && stripeWebhookSecret)) {
@@ -108,7 +119,8 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     port,
     databaseUrl: databaseUrl || DEFAULT_DATABASE_URL,
     resendApiKey,
-    fromAddress,
+    estimateFromAddress,
+    invoiceFromAddress,
     webhookSigningSecret,
     defaultMonthlySendQuota,
     rebindFlapThreshold,

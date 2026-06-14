@@ -39,7 +39,10 @@ export class DeliveryController {
     @Body() body: SendEstimateDocumentRequestDto
   ): Promise<RelaySendEstimateDocumentResponse> {
     const shop = getAuthenticatedShop(request);
-    const result = await this.sendEstimateService.sendEstimateDocument(shop, body);
+    const result = await this.sendEstimateService.sendEstimateDocument(shop, {
+      ...body,
+      documentType: body.documentType ?? 'estimate'
+    });
     return { result };
   }
 

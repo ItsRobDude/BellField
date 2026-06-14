@@ -1,4 +1,4 @@
-import type { RelaySendFailureCode } from '@bellfield/contracts';
+import type { CustomerDocumentType, RelaySendFailureCode } from '@bellfield/contracts';
 
 export type RelayMessageStatus = 'sent' | 'delivered' | 'bounced' | 'complained' | 'failed';
 
@@ -18,6 +18,7 @@ export type RelayMessageRecord = {
 export type SuppressionReason = 'bounce' | 'complaint' | 'manual';
 
 export type ProviderSendInput = {
+  documentType: CustomerDocumentType;
   fromName: string;
   to: string;
   replyToEmail?: string;

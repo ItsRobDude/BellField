@@ -3,6 +3,7 @@ import { workerLog } from '../../common/logger';
 import type {
   AcceptanceDecision,
   AcceptancePayload,
+  CustomerDocumentType,
   RelayDecisionsOutcome,
   RelayDeliveryClient,
   RelayPaymentEvent,
@@ -23,6 +24,7 @@ export class RelayClient implements RelayDeliveryClient {
 
   async sendEstimateDocument(input: {
     idempotencyKey: string;
+    documentType: CustomerDocumentType;
     recipientEmail: string;
     fromName: string;
     replyToEmail?: string;
@@ -39,6 +41,7 @@ export class RelayClient implements RelayDeliveryClient {
         signal: AbortSignal.timeout(30_000),
         body: JSON.stringify({
           idempotencyKey: input.idempotencyKey,
+          documentType: input.documentType,
           recipientEmail: input.recipientEmail,
           fromName: input.fromName,
           replyToEmail: input.replyToEmail,
