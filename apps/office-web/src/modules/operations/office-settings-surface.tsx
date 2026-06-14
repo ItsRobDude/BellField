@@ -194,6 +194,11 @@ export function OfficeSettingsSurface({
                 style={{ ...styles.textarea, minHeight: '12rem' }}
               />
             </label>
+            <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
+              Tokens you can use:{' '}
+              {'{companyName}, {customerName}, {estimateTitle}, {jobNumber}, {locationName}'}.
+              Anything else is sent exactly as typed.
+            </p>
             <label style={styles.fieldLabel}>
               Approval link expiry (days)
               <input
@@ -237,6 +242,13 @@ export function OfficeSettingsSurface({
                 style={{ ...styles.textarea, minHeight: '10rem' }}
               />
             </label>
+            <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
+              Tokens you can use:{' '}
+              {
+                '{companyName}, {customerName}, {invoiceLabel}, {invoiceLabelLower}, {jobNumber}, {locationName}'
+              }
+              . Anything else is sent exactly as typed.
+            </p>
           </section>
           <section style={styles.panel} aria-label="Billing and tax settings">
             <h2 style={styles.sectionHeading}>Billing & tax</h2>

@@ -10,7 +10,6 @@ import type {
 import { getApiRuntimeConfig, type ApiRelayConfig } from '../../common/config/runtime-config';
 import type { EmailProviderSendInput, EmailProviderSendResult } from './customer-delivery.types';
 
-export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
 export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
 export const invoiceDeliveryFailedMessage =
