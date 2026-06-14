@@ -7,18 +7,9 @@ export type EstimateDeliveryDraft = {
   bodyText: string;
 };
 
-export function EstimateDeliveryPanel({
-  draft,
-  deliveryStatus,
-  history,
-  isHistoryLoading,
-  isPreviewLoading,
-  isSending,
-  cancelingMessageId,
-  onChange,
-  onSend,
-  onCancelMessage
-}: {
+export type DocumentDeliveryDraft = EstimateDeliveryDraft;
+
+export function EstimateDeliveryPanel(props: {
   draft: EstimateDeliveryDraft;
   deliveryStatus: EstimateEmailDeliveryStatus | null;
   history: OutboundMessageSummary[];
@@ -30,18 +21,57 @@ export function EstimateDeliveryPanel({
   onSend: () => void;
   onCancelMessage: (outboundMessageId: string) => void;
 }) {
+  return (
+    <DocumentDeliveryPanel
+      {...props}
+      documentLabel="Estimate"
+      panelAriaLabel="Estimate delivery"
+      showAcceptanceHistory
+    />
+  );
+}
+
+export function DocumentDeliveryPanel({
+  documentLabel,
+  panelAriaLabel,
+  showAcceptanceHistory,
+  draft,
+  deliveryStatus,
+  history,
+  isHistoryLoading,
+  isPreviewLoading,
+  isSending,
+  cancelingMessageId,
+  onChange,
+  onSend,
+  onCancelMessage
+}: {
+  documentLabel: 'Estimate' | 'Invoice';
+  panelAriaLabel: string;
+  showAcceptanceHistory: boolean;
+  draft: DocumentDeliveryDraft;
+  deliveryStatus: EstimateEmailDeliveryStatus | null;
+  history: OutboundMessageSummary[];
+  isHistoryLoading: boolean;
+  isPreviewLoading: boolean;
+  isSending: boolean;
+  cancelingMessageId: string | null;
+  onChange: (patch: Partial<DocumentDeliveryDraft>) => void;
+  onSend: () => void;
+  onCancelMessage: (outboundMessageId: string) => void;
+}) {
   const deliveryBlocked = deliveryStatus !== null && !deliveryStatus.ready;
   const recipientEmail = draft.recipientEmail.trim();
   const recipientLooksValid = /^\S+@\S+\.\S+$/.test(recipientEmail);
   const canSend = !isPreviewLoading && !deliveryBlocked && recipientLooksValid;
 
   return (
-    <section style={styles.subpanel} aria-label="Estimate delivery">
+    <section style={styles.subpanel} aria-label={panelAriaLabel}>
       <div style={styles.formGridCompact}>
         <label style={styles.fieldLabel}>
           Recipient email
           <input
-            aria-label="Estimate recipient email"
+            aria-label={`${documentLabel} recipient email`}
             type="email"
             value={draft.recipientEmail}
             onChange={(event) => onChange({ recipientEmail: event.target.value })}
@@ -58,7 +88,7 @@ export function EstimateDeliveryPanel({
         <label style={styles.fieldLabel}>
           Subject
           <input
-            aria-label="Estimate email subject"
+            aria-label={`${documentLabel} email subject`}
             value={draft.subject}
             onChange={(event) => onChange({ subject: event.target.value })}
             style={styles.input}
@@ -67,7 +97,7 @@ export function EstimateDeliveryPanel({
         <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
           Body
           <textarea
-            aria-label="Estimate email body"
+            aria-label={`${documentLabel} email body`}
             value={draft.bodyText}
             onChange={(event) => onChange({ bodyText: event.target.value })}
             style={styles.textarea}
@@ -89,25 +119,31 @@ export function EstimateDeliveryPanel({
         </button>
       </div>
       <EstimateDeliveryHistory
+        documentLabel={documentLabel}
         history={history}
         isLoading={isHistoryLoading}
         cancelingMessageId={cancelingMessageId}
         onCancelMessage={onCancelMessage}
+        showAcceptanceHistory={showAcceptanceHistory}
       />
     </section>
   );
 }
 
 function EstimateDeliveryHistory({
+  documentLabel,
   history,
   isLoading,
   cancelingMessageId,
-  onCancelMessage
+  onCancelMessage,
+  showAcceptanceHistory
 }: {
+  documentLabel: 'Estimate' | 'Invoice';
   history: OutboundMessageSummary[];
   isLoading: boolean;
   cancelingMessageId: string | null;
   onCancelMessage: (outboundMessageId: string) => void;
+  showAcceptanceHistory: boolean;
 }) {
   if (isLoading) {
     return <p style={styles.tinyMuted}>Loading delivery history...</p>;
@@ -117,9 +153,9 @@ function EstimateDeliveryHistory({
   }
 
   return (
-    <div style={styles.listCompact} aria-label="Estimate delivery history">
+    <div style={styles.listCompact} aria-label={`${documentLabel} delivery history`}>
       {history.map((message) => {
-        const acceptanceMessage = acceptanceHistoryMessage(message);
+        const acceptanceMessage = showAcceptanceHistory ? acceptanceHistoryMessage(message) : null;
         return (
           <div key={message.id} style={styles.deliveryHistoryItem}>
             <div style={styles.row}>

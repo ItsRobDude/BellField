@@ -45,6 +45,7 @@ type JobDetailPanelProps = {
   canViewInvoice: boolean;
   canEditInvoice: boolean;
   canPostInvoice: boolean;
+  canSendInvoice: boolean;
   canConvertEstimate: boolean;
   canViewJobCosting: boolean;
   canCreateJobCosting: boolean;
@@ -123,6 +124,7 @@ export function JobDetailPanel({
   canViewInvoice,
   canEditInvoice,
   canPostInvoice,
+  canSendInvoice,
   canConvertEstimate,
   canViewJobCosting,
   canCreateJobCosting,
@@ -316,6 +318,8 @@ export function JobDetailPanel({
           sessionToken={sessionToken}
           canEdit={canEditInvoice}
           canPost={canPostInvoice}
+          canSend={canSendInvoice}
+          billToCustomerEmail={billToCustomer.email}
           canCreateAdjustments={canConvertEstimate}
           paymentPermissions={paymentPermissions}
         />

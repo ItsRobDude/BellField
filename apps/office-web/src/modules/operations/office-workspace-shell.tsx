@@ -134,6 +134,7 @@ export function OfficeWorkspaceShell({
   const canViewInvoice = employee.effectivePermissions.includes('invoices:view');
   const canEditInvoice = employee.effectivePermissions.includes('invoices:edit');
   const canPostInvoice = employee.effectivePermissions.includes('invoices:post');
+  const canSendInvoice = employee.effectivePermissions.includes('invoices:send');
   // Converting an approved estimate writes invoice lines, so it is gated on
   // invoices:create (the same authority that creates billing).
   const canConvertEstimate = employee.effectivePermissions.includes('invoices:create');
@@ -965,6 +966,7 @@ export function OfficeWorkspaceShell({
           canViewInvoice,
           canEditInvoice,
           canPostInvoice,
+          canSendInvoice,
           canConvertEstimate,
           canViewJobCosting,
           canCreateJobCosting,
