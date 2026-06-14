@@ -14,12 +14,46 @@ export class CustomerDocumentStorageService {
     snapshotId: string;
     bytes: Buffer;
   }): Promise<{ storagePath: string; sha256: string; byteSize: number }> {
+    return this.writeCustomerDocumentPdf({
+      jobId: input.jobId,
+      sourceFolder: 'estimates',
+      sourceId: input.estimateId,
+      sourceLabel: 'estimate id',
+      snapshotId: input.snapshotId,
+      bytes: input.bytes
+    });
+  }
+
+  async writeInvoicePdf(input: {
+    jobId: string;
+    invoiceId: string;
+    snapshotId: string;
+    bytes: Buffer;
+  }): Promise<{ storagePath: string; sha256: string; byteSize: number }> {
+    return this.writeCustomerDocumentPdf({
+      jobId: input.jobId,
+      sourceFolder: 'invoices',
+      sourceId: input.invoiceId,
+      sourceLabel: 'invoice id',
+      snapshotId: input.snapshotId,
+      bytes: input.bytes
+    });
+  }
+
+  private async writeCustomerDocumentPdf(input: {
+    jobId: string;
+    sourceFolder: 'estimates' | 'invoices';
+    sourceId: string;
+    sourceLabel: string;
+    snapshotId: string;
+    bytes: Buffer;
+  }): Promise<{ storagePath: string; sha256: string; byteSize: number }> {
     const relativePath = path.join(
       'customer-documents',
       'jobs',
       safePathSegment(input.jobId, 'job id'),
-      'estimates',
-      safePathSegment(input.estimateId, 'estimate id'),
+      input.sourceFolder,
+      safePathSegment(input.sourceId, input.sourceLabel),
       `${safePathSegment(input.snapshotId, 'snapshot id')}.pdf`
     );
     const absolutePath = this.resolveUnderMediaRoot(relativePath);

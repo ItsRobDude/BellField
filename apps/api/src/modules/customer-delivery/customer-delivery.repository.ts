@@ -7,6 +7,7 @@ import type {
   CreateCustomerDocumentSnapshotInput,
   CreateEstimateSendIntentResult,
   CreateOutboundMessageInput,
+  CreateOutboundSendIntentResult,
   CustomerDocumentSnapshotRecord,
   OutboundMessageRecord
 } from './customer-delivery.types';
@@ -153,16 +154,34 @@ export class CustomerDeliveryRepository {
   async createEstimateSendIntent(
     input: CreateOutboundMessageInput & { dedupeSince: string; now: string }
   ): Promise<CreateEstimateSendIntentResult> {
+    return this.createOutboundSendIntent('estimate', input);
+  }
+
+  async createInvoiceSendIntent(
+    input: CreateOutboundMessageInput & { dedupeSince: string; now: string }
+  ): Promise<CreateOutboundSendIntentResult> {
+    return this.createOutboundSendIntent('invoice', input);
+  }
+
+  private async createOutboundSendIntent(
+    documentType: 'estimate' | 'invoice',
+    input: CreateOutboundMessageInput & { dedupeSince: string; now: string }
+  ): Promise<CreateOutboundSendIntentResult> {
     const { dedupeSince, now, ...message } = input;
+    const sourceId = documentType === 'estimate' ? message.estimateId : message.invoiceId;
+    if (!sourceId) {
+      throw new Error(`Missing ${documentType} id for outbound send intent.`);
+    }
+    const sourceColumn = documentType === 'estimate' ? 'estimate_id' : 'invoice_id';
     const blockedReason = await this.databaseService.transaction(async (queryable) => {
       await queryable.query('select pg_advisory_xact_lock(hashtextextended($1, 0))', [
-        `estimate-email:${message.estimateId}:${message.recipientEmail.toLowerCase()}`
+        `${documentType}-email:${sourceId}:${message.recipientEmail.toLowerCase()}`
       ]);
       const blocking = await queryable.query<{ status: 'queued' | 'sent' }>(
         `
           select status
           from outbound_messages
-          where estimate_id = $1
+          where ${sourceColumn} = $1
             and lower(recipient_email) = lower($2)
             and channel = 'email'
             and (
@@ -172,7 +191,7 @@ export class CustomerDeliveryRepository {
           order by status asc
           limit 1
         `,
-        [message.estimateId, message.recipientEmail, dedupeSince, now]
+        [sourceId, message.recipientEmail, dedupeSince, now]
       );
       const row = blocking.rows[0];
       if (row) {
@@ -296,14 +315,25 @@ export class CustomerDeliveryRepository {
   }
 
   async listOutboundMessagesForEstimate(estimateId: string): Promise<OutboundMessageRecord[]> {
+    return this.listOutboundMessagesForSource('estimate_id', estimateId);
+  }
+
+  async listOutboundMessagesForInvoice(invoiceId: string): Promise<OutboundMessageRecord[]> {
+    return this.listOutboundMessagesForSource('invoice_id', invoiceId);
+  }
+
+  private async listOutboundMessagesForSource(
+    sourceColumn: 'estimate_id' | 'invoice_id',
+    sourceId: string
+  ): Promise<OutboundMessageRecord[]> {
     const result = await this.databaseService.query<OutboundMessageRow>(
       `
         select ${OUTBOUND_COLUMNS}
         from outbound_messages
-        where estimate_id = $1
+        where ${sourceColumn} = $1
         order by created_at desc, id desc
       `,
-      [estimateId]
+      [sourceId]
     );
     return result.rows.map(toOutboundMessageRecord);
   }
@@ -319,16 +349,33 @@ export class CustomerDeliveryRepository {
     estimateId: string,
     canceledAt: string
   ): Promise<OutboundMessageRecord | null> {
+    return this.cancelOutboundMessageForSource(messageId, 'estimate_id', estimateId, canceledAt);
+  }
+
+  async cancelInvoiceOutboundMessage(
+    messageId: string,
+    invoiceId: string,
+    canceledAt: string
+  ): Promise<OutboundMessageRecord | null> {
+    return this.cancelOutboundMessageForSource(messageId, 'invoice_id', invoiceId, canceledAt);
+  }
+
+  private async cancelOutboundMessageForSource(
+    messageId: string,
+    sourceColumn: 'estimate_id' | 'invoice_id',
+    sourceId: string,
+    canceledAt: string
+  ): Promise<OutboundMessageRecord | null> {
     const result = await this.databaseService.query<{ id: string }>(
       `
         update outbound_messages
         set status = 'canceled',
             next_attempt_at = null,
             updated_at = $3
-        where id = $1 and estimate_id = $2 and status = 'queued'
+        where id = $1 and ${sourceColumn} = $2 and status = 'queued'
         returning id
       `,
-      [messageId, estimateId, canceledAt]
+      [messageId, sourceId, canceledAt]
     );
     if (!result.rows[0]) {
       return null;
@@ -341,6 +388,32 @@ export class CustomerDeliveryRepository {
     occurredAt: string;
     actorName: string;
     kind: 'estimateSent' | 'estimateDeliveryFailed' | 'estimateSendCanceled';
+    message: string;
+  }): Promise<void> {
+    await this.addDocumentDeliveryTimeline(input);
+  }
+
+  async addInvoiceDeliveryTimeline(input: {
+    jobId: string;
+    occurredAt: string;
+    actorName: string;
+    kind: 'invoiceSent' | 'invoiceDeliveryFailed' | 'invoiceSendCanceled';
+    message: string;
+  }): Promise<void> {
+    await this.addDocumentDeliveryTimeline(input);
+  }
+
+  private async addDocumentDeliveryTimeline(input: {
+    jobId: string;
+    occurredAt: string;
+    actorName: string;
+    kind:
+      | 'estimateSent'
+      | 'estimateDeliveryFailed'
+      | 'estimateSendCanceled'
+      | 'invoiceSent'
+      | 'invoiceDeliveryFailed'
+      | 'invoiceSendCanceled';
     message: string;
   }): Promise<void> {
     await this.databaseService.transaction(async (queryable) => {

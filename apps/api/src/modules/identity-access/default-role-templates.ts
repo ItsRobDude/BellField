@@ -31,7 +31,7 @@ const officeCore = [
 const adminCore = [
   ...officeCore,
   ...permissionKeys('equipment', ['configure']),
-  ...permissionKeys('invoices', ['view', 'create', 'edit', 'post']),
+  ...permissionKeys('invoices', ['view', 'create', 'edit', 'post', 'send']),
   ...permissionKeys('payments', ['view', 'create', 'edit']),
   ...permissionKeys('purchasing', ['view', 'create', 'edit']),
   ...permissionKeys('inventory', ['view', 'create', 'edit']),
@@ -114,7 +114,7 @@ export const defaultRoleTemplates: Record<EmployeeRoleId, RoleTemplate> = {
       ...officeCore,
       // Bookkeeping owns corrections, so it can create adjustment/credit records
       // (invoices:create), in addition to viewing, editing, and posting invoices.
-      ...permissionKeys('invoices', ['view', 'create', 'edit', 'post']),
+      ...permissionKeys('invoices', ['view', 'create', 'edit', 'post', 'send']),
       ...permissionKeys('payments', ['view', 'create', 'edit']),
       // Bookkeeping owns financial cost data, so it can see and post job costs.
       ...permissionKeys('jobCosting', ['view', 'create', 'edit']),

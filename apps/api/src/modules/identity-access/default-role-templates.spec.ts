@@ -4,18 +4,30 @@ import { defaultRoleTemplates } from './default-role-templates';
 describe('defaultRoleTemplates invoice permissions', () => {
   it('grants bookkeeping invoices:create so it can issue adjustment/credit corrections', () => {
     expect(defaultRoleTemplates.bookKeeping.permissions).toEqual(
-      expect.arrayContaining(['invoices:view', 'invoices:create', 'invoices:edit', 'invoices:post'])
+      expect.arrayContaining([
+        'invoices:view',
+        'invoices:create',
+        'invoices:edit',
+        'invoices:post',
+        'invoices:send'
+      ])
     );
   });
 
-  it('grants owner invoices:post', () => {
+  it('grants owner and admin invoice send/post permissions', () => {
     expect(defaultRoleTemplates.owner.permissions).toContain('invoices:post');
+    expect(defaultRoleTemplates.owner.permissions).toContain('invoices:send');
+    expect(defaultRoleTemplates.admin.permissions).toContain('invoices:post');
+    expect(defaultRoleTemplates.admin.permissions).toContain('invoices:send');
   });
 
-  it('does not grant non-financial roles invoices:create', () => {
+  it('does not grant non-financial roles invoice create/send permissions', () => {
     expect(defaultRoleTemplates.csr.permissions).not.toContain('invoices:create');
+    expect(defaultRoleTemplates.csr.permissions).not.toContain('invoices:send');
     expect(defaultRoleTemplates.dispatcher.permissions).not.toContain('invoices:create');
+    expect(defaultRoleTemplates.dispatcher.permissions).not.toContain('invoices:send');
     expect(defaultRoleTemplates.technician.permissions).not.toContain('invoices:create');
+    expect(defaultRoleTemplates.technician.permissions).not.toContain('invoices:send');
   });
 });
 

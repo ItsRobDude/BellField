@@ -4,6 +4,7 @@ import { CustomerDeliveryRepository } from './customer-delivery.repository';
 import { CustomerDocumentStorageService } from './customer-document-storage.service';
 import { EmailProviderService } from './email-provider.service';
 import { EstimatePdfRendererService } from './estimate-pdf-renderer.service';
+import { InvoicePdfRendererService } from './invoice-pdf-renderer.service';
 
 @Module({
   imports: [MediaModule],
@@ -11,13 +12,15 @@ import { EstimatePdfRendererService } from './estimate-pdf-renderer.service';
     CustomerDeliveryRepository,
     CustomerDocumentStorageService,
     EmailProviderService,
-    EstimatePdfRendererService
+    EstimatePdfRendererService,
+    InvoicePdfRendererService
   ],
   exports: [
     CustomerDeliveryRepository,
     CustomerDocumentStorageService,
     EmailProviderService,
-    EstimatePdfRendererService
+    EstimatePdfRendererService,
+    InvoicePdfRendererService
   ]
 })
 export class CustomerDeliveryModule {}

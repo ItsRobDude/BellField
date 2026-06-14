@@ -12,6 +12,7 @@ import type {
   CreateAdjustmentRequest,
   InvoiceAdjustmentKind,
   InvoiceLineItemInput,
+  SendInvoiceRequest,
   VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
 import {
@@ -61,4 +62,21 @@ export class VoidInvoiceLineItemRequestBodyDto implements VoidInvoiceLineItemReq
 export class CreateAdjustmentRequestBodyDto implements CreateAdjustmentRequest {
   @IsIn(['adjustment', 'credit'])
   kind!: InvoiceAdjustmentKind;
+}
+
+export class SendInvoiceRequestBodyDto implements SendInvoiceRequest {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(320)
+  recipientEmail!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(200)
+  subject?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000)
+  bodyText?: string;
 }

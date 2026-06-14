@@ -1,4 +1,5 @@
 import type {
+  CancelOutboundMessageResponse,
   EstimateDiscount,
   InvoiceKind,
   InvoiceLineItemKind,
@@ -6,10 +7,14 @@ import type {
   InvoiceLineSourceKind,
   InvoiceLineSourceSyncState,
   InvoiceResponse,
+  InvoiceSendPreviewResponse,
   InvoiceStatus,
   InvoiceSummary,
   InvoiceTotals,
-  PostedInvoiceContext
+  OutboundMessagesResponse,
+  PostedInvoiceContext,
+  SendInvoiceRequest,
+  SendInvoiceResponse
 } from '@bellfield/contracts';
 
 // Alias the contract shapes the controller/service speak in, mirroring the
@@ -21,6 +26,11 @@ export type InvoiceLineSourceKindValue = InvoiceLineSourceKind;
 export type InvoiceLineSourceSyncStateValue = InvoiceLineSourceSyncState;
 export type InvoiceSummaryDto = InvoiceSummary;
 export type InvoiceResponseDto = InvoiceResponse;
+export type SendInvoiceRequestDto = SendInvoiceRequest;
+export type SendInvoiceResponseDto = SendInvoiceResponse;
+export type InvoiceSendPreviewResponseDto = InvoiceSendPreviewResponse;
+export type InvoiceOutboundMessagesResponseDto = OutboundMessagesResponse;
+export type InvoiceCancelOutboundMessageResponseDto = CancelOutboundMessageResponse;
 export type InvoiceDiscountValue = EstimateDiscount;
 export type InvoiceTotalsValue = InvoiceTotals;
 
