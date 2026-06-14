@@ -32,6 +32,16 @@ export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySetting
   @MaxLength(4000)
   estimateEmailBody!: string;
 
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  invoiceEmailSubject!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  invoiceEmailBody!: string;
+
   @IsInt()
   @Min(7)
   @Max(90)

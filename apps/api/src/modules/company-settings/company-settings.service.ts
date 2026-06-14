@@ -56,6 +56,8 @@ function normalizeSettings(
   const replyToEmail = request.replyToEmail?.trim().toLowerCase();
   const estimateEmailSubject = request.estimateEmailSubject.trim();
   const estimateEmailBody = request.estimateEmailBody.trim();
+  const invoiceEmailSubject = request.invoiceEmailSubject.trim();
+  const invoiceEmailBody = request.invoiceEmailBody.trim();
   const acceptanceLinkExpiryDays = request.acceptanceLinkExpiryDays;
   const chargesSalesTax = request.chargesSalesTax === true;
   const defaultSalesTaxBasisPoints = request.defaultSalesTaxBasisPoints;
@@ -69,6 +71,12 @@ function normalizeSettings(
   }
   if (!estimateEmailBody) {
     throw new BadRequestException('Estimate email body is required.');
+  }
+  if (!invoiceEmailSubject) {
+    throw new BadRequestException('Invoice email subject is required.');
+  }
+  if (!invoiceEmailBody) {
+    throw new BadRequestException('Invoice email body is required.');
   }
   if (
     !Number.isInteger(acceptanceLinkExpiryDays) ||
@@ -92,6 +100,8 @@ function normalizeSettings(
     replyToEmail: replyToEmail || undefined,
     estimateEmailSubject,
     estimateEmailBody,
+    invoiceEmailSubject,
+    invoiceEmailBody,
     acceptanceLinkExpiryDays,
     chargesSalesTax,
     defaultSalesTaxBasisPoints,

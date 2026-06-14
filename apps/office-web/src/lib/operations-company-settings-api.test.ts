@@ -35,6 +35,8 @@ describe('operations-company-settings-api', () => {
       companyName: 'BellField',
       estimateEmailSubject: 'Estimate from BellField',
       estimateEmailBody: 'Attached.',
+      invoiceEmailSubject: 'Invoice from BellField',
+      invoiceEmailBody: 'Attached invoice.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
       defaultSalesTaxBasisPoints: 825,

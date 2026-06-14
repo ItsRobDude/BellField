@@ -3,6 +3,8 @@ export interface CompanySettings {
   replyToEmail?: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  invoiceEmailSubject: string;
+  invoiceEmailBody: string;
   /** Days a customer acceptance link stays usable; bounded by relayAcceptanceExpiryDays. */
   acceptanceLinkExpiryDays: number;
   chargesSalesTax: boolean;
@@ -22,6 +24,8 @@ export interface UpdateCompanySettingsRequest {
   replyToEmail?: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  invoiceEmailSubject: string;
+  invoiceEmailBody: string;
   acceptanceLinkExpiryDays: number;
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
