@@ -250,7 +250,17 @@ Purpose: signed license file format, canonical signing bytes, offline Ed25519 ve
 
 Read when: changing license verification, license issuance tooling, support diagnostics around licensing, updater entitlement checks, or restore behavior for licensed installs.
 
-Does not own: the commercial posture (`asset-protection-and-licensing.md`), the broader install posture (`self-hosted-installation-strategy.md`), or the Phase 4 update mechanism.
+Does not own: the commercial posture (`asset-protection-and-licensing.md`), the broader install posture (`self-hosted-installation-strategy.md`), the planned v2 trial/refund/data-only entitlement model (`license-refund-trial-plan.md`), or the Phase 4 update mechanism.
+
+### [license-refund-trial-plan.md](./license-refund-trial-plan.md)
+
+Audience: contributors planning or implementing trial, refund, data-only, or v2 entitlement behavior.
+
+Purpose: the planned `trial | paid | dataOnly` entitlement model, strict-but-fair refund posture, signed entitlement cache rules, recovery-mode startup, data-only access boundaries, and fail-open opportunistic revocation design.
+
+Read when: changing license kinds, refund/termination handling, trial expiry behavior, data-only/export mode, license recovery startup, restore handling for entitlement artifacts, or relay license-status checks.
+
+Does not own: the current v1 signed license primitive (`license-design.md`), general commercial posture (`asset-protection-and-licensing.md`), or the broader install/update sequencing (`sellable-product-execution-plan.md`).
 
 ### [launch-readiness.md](./launch-readiness.md)
 
@@ -613,7 +623,7 @@ For customer document delivery, communications, or BellField-operated delivery i
 For licensing, releases, installer, updater, or sellability infrastructure:
 
 - `sellable-product-execution-plan.md`
-- `license-design.md`, `install-runbook.md`, `restore-runbook.md` as the area recipes
+- `license-design.md` for the current v1 license primitive; `license-refund-trial-plan.md` for planned trial/refund/data-only entitlement behavior; `install-runbook.md` and `restore-runbook.md` as the install/restore recipes
 - `launch-readiness.md` and `gate-day-checklist.md` for what still blocks a pilot
 
 For market positioning, pricing, or remote access:
