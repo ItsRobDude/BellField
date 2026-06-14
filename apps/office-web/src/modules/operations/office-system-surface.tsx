@@ -72,6 +72,12 @@ function licenseStatusText(license: SystemDiagnosticsResponse['license']): strin
     return 'Not required';
   }
   if (license.status === 'valid') {
+    if (license.licenseKind === 'dataOnly') {
+      return 'Data-only';
+    }
+    if (license.licenseKind === 'trial') {
+      return 'Trial';
+    }
     return 'Licensed';
   }
   if (license.status === 'missing') {
@@ -81,7 +87,10 @@ function licenseStatusText(license: SystemDiagnosticsResponse['license']): strin
 }
 
 function licenseStatusOk(license: SystemDiagnosticsResponse['license']): boolean {
-  return license.status === 'valid' || license.status === 'notRequired';
+  return (
+    license.status === 'notRequired' ||
+    (license.status === 'valid' && license.licenseKind !== 'dataOnly')
+  );
 }
 
 // Any red rollup check renders here, so data-audit checks that have no card
@@ -266,11 +275,16 @@ export function OfficeSystemSurface({
                 {licenseStatusText(diagnostics.license)}
               </div>
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
-                {diagnostics.license.status === 'valid'
-                  ? `${diagnostics.license.shopName} · Updates through ${diagnostics.license.updateWindowEnd}`
-                  : (diagnostics.license.message ??
-                    diagnostics.license.path ??
-                    'Source/dev runtime')}
+                {diagnostics.license.status === 'valid' ? (
+                  <>
+                    {diagnostics.license.shopName}
+                    {diagnostics.license.updateWindowEnd
+                      ? ` · Updates through ${diagnostics.license.updateWindowEnd}`
+                      : ' · Export/recovery only'}
+                  </>
+                ) : (
+                  (diagnostics.license.message ?? diagnostics.license.path ?? 'Source/dev runtime')
+                )}
               </div>
             </div>
             <div style={cardStyle}>

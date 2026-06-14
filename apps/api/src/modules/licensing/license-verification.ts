@@ -1,13 +1,50 @@
 import { createPublicKey, verify } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 
-export type BellFieldLicenseBody = {
+export type BellFieldLicenseKind = 'paid' | 'trial' | 'dataOnly';
+
+export type BellFieldLegacyLicenseBody = {
   schemaVersion: 1;
   licenseId: string;
   shopName: string;
   issuedAt: string;
   updateWindowEnd: string;
 };
+
+export type BellFieldPaidLicenseBody = {
+  schemaVersion: 2;
+  licenseKind: 'paid';
+  licenseId: string;
+  shopName: string;
+  issuedAt: string;
+  updateWindowEnd: string;
+};
+
+export type BellFieldTrialLicenseBody = {
+  schemaVersion: 2;
+  licenseKind: 'trial';
+  licenseId: string;
+  shopName: string;
+  issuedAt: string;
+  updateWindowEnd: string;
+  operationEnd: string;
+};
+
+export type BellFieldDataOnlyLicenseBody = {
+  schemaVersion: 2;
+  licenseKind: 'dataOnly';
+  licenseId: string;
+  terminatedLicenseId: string;
+  shopName: string;
+  issuedAt: string;
+  terminationReason: string;
+};
+
+export type BellFieldLicenseBody =
+  | BellFieldLegacyLicenseBody
+  | BellFieldPaidLicenseBody
+  | BellFieldTrialLicenseBody
+  | BellFieldDataOnlyLicenseBody;
 
 export type VerifiedBellFieldLicense = BellFieldLicenseBody & {
   keyId: string;
@@ -35,6 +72,7 @@ const embeddedLicensePublicKeyPem = [
 
 type LicenseEnvelope = {
   license: BellFieldLicenseBody;
+  signedLicense: Record<string, unknown>;
   signature: {
     algorithm: typeof licenseSignatureAlgorithm;
     keyId: typeof licenseKeyId;
@@ -105,7 +143,7 @@ export function verifyLicenseContent(
 
   try {
     const publicKey = createPublicKey(publicKeyPem);
-    const signedBytes = Buffer.from(canonicalizeLicenseBody(envelope.license), 'utf8');
+    const signedBytes = Buffer.from(canonicalizeJson(envelope.signedLicense), 'utf8');
     const signatureOk = verify(null, signedBytes, publicKey, signature);
     if (!signatureOk) {
       return {
@@ -160,7 +198,12 @@ function parseLicenseEnvelope(value: unknown): LicenseEnvelope | Error {
     return new Error('License file must be a JSON object.');
   }
 
-  const license = parseLicenseBody(value.license);
+  const signedLicense = value.license;
+  if (!isRecord(signedLicense)) {
+    return new Error('License body must be an object.');
+  }
+
+  const license = parseLicenseBody(signedLicense);
   if (license instanceof Error) {
     return license;
   }
@@ -170,7 +213,7 @@ function parseLicenseEnvelope(value: unknown): LicenseEnvelope | Error {
     return signature;
   }
 
-  return { license, signature };
+  return { license, signedLicense, signature };
 }
 
 function parseLicenseBody(value: unknown): BellFieldLicenseBody | Error {
@@ -178,10 +221,20 @@ function parseLicenseBody(value: unknown): BellFieldLicenseBody | Error {
     return new Error('License body must be an object.');
   }
 
-  if (value.schemaVersion !== 1) {
-    return new Error('License schemaVersion must be 1.');
+  if (value.schemaVersion === 1) {
+    return parseLegacyLicenseBody(value);
   }
 
+  if (value.schemaVersion === 2) {
+    return parseV2LicenseBody(value);
+  }
+
+  return new Error('License schemaVersion must be 1 or 2.');
+}
+
+function parseLegacyLicenseBody(
+  value: Record<string, unknown>
+): BellFieldLegacyLicenseBody | Error {
   const licenseId = requiredString(value.licenseId, 'licenseId');
   if (licenseId instanceof Error) {
     return licenseId;
@@ -215,6 +268,95 @@ function parseLicenseBody(value: unknown): BellFieldLicenseBody | Error {
     issuedAt,
     updateWindowEnd
   };
+}
+
+function parseV2LicenseBody(value: Record<string, unknown>): BellFieldLicenseBody | Error {
+  const licenseKind = parseLicenseKind(value.licenseKind);
+  if (licenseKind instanceof Error) {
+    return licenseKind;
+  }
+
+  const licenseId = requiredString(value.licenseId, 'licenseId');
+  if (licenseId instanceof Error) {
+    return licenseId;
+  }
+
+  const shopName = requiredString(value.shopName, 'shopName');
+  if (shopName instanceof Error) {
+    return shopName;
+  }
+
+  const issuedAt = requiredString(value.issuedAt, 'issuedAt');
+  if (issuedAt instanceof Error) {
+    return issuedAt;
+  }
+  if (!isValidIsoTimestamp(issuedAt)) {
+    return new Error('License issuedAt must be an ISO timestamp.');
+  }
+
+  if (licenseKind === 'dataOnly') {
+    const terminatedLicenseId = requiredString(value.terminatedLicenseId, 'terminatedLicenseId');
+    if (terminatedLicenseId instanceof Error) {
+      return terminatedLicenseId;
+    }
+    const terminationReason = requiredString(value.terminationReason, 'terminationReason');
+    if (terminationReason instanceof Error) {
+      return terminationReason;
+    }
+    return {
+      schemaVersion: 2,
+      licenseKind,
+      licenseId,
+      terminatedLicenseId,
+      shopName,
+      issuedAt,
+      terminationReason
+    };
+  }
+
+  const updateWindowEnd = requiredString(value.updateWindowEnd, 'updateWindowEnd');
+  if (updateWindowEnd instanceof Error) {
+    return updateWindowEnd;
+  }
+  if (!isValidIsoDate(updateWindowEnd)) {
+    return new Error('License updateWindowEnd must be a YYYY-MM-DD date.');
+  }
+
+  if (licenseKind === 'paid') {
+    return {
+      schemaVersion: 2,
+      licenseKind,
+      licenseId,
+      shopName,
+      issuedAt,
+      updateWindowEnd
+    };
+  }
+
+  const operationEnd = requiredString(value.operationEnd, 'operationEnd');
+  if (operationEnd instanceof Error) {
+    return operationEnd;
+  }
+  if (!isValidIsoDate(operationEnd)) {
+    return new Error('License operationEnd must be a YYYY-MM-DD date.');
+  }
+
+  return {
+    schemaVersion: 2,
+    licenseKind,
+    licenseId,
+    shopName,
+    issuedAt,
+    updateWindowEnd,
+    operationEnd
+  };
+}
+
+function parseLicenseKind(value: unknown): BellFieldLicenseKind | Error {
+  if (value === 'paid' || value === 'trial' || value === 'dataOnly') {
+    return value;
+  }
+  return new Error('License licenseKind must be paid, trial, or dataOnly.');
 }
 
 function parseLicenseSignature(value: unknown): LicenseEnvelope['signature'] | Error {

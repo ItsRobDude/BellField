@@ -33,6 +33,7 @@ export interface LicenseDiagnosticsSummary {
   required: boolean;
   path: string | null;
   status: 'notRequired' | 'valid' | 'missing' | 'invalid';
+  licenseKind?: 'paid' | 'trial' | 'dataOnly';
   licenseId?: string;
   shopName?: string;
   issuedAt?: string;

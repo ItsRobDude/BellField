@@ -300,14 +300,16 @@ export class SystemDiagnosticsService {
 
     const verification = verifyLicenseFile({ licensePath: runtime.licensePath });
     if (verification.status === 'valid') {
+      const license = verification.license;
       return {
         required: runtime.licenseRequired,
         path: runtime.licensePath ?? null,
         status: 'valid',
-        licenseId: verification.license.licenseId,
-        shopName: verification.license.shopName,
-        issuedAt: verification.license.issuedAt,
-        updateWindowEnd: verification.license.updateWindowEnd
+        licenseKind: license.schemaVersion === 1 ? 'paid' : license.licenseKind,
+        licenseId: license.licenseId,
+        shopName: license.shopName,
+        issuedAt: license.issuedAt,
+        updateWindowEnd: 'updateWindowEnd' in license ? license.updateWindowEnd : undefined
       };
     }
 

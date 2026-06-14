@@ -72,7 +72,7 @@ export function verifyLicenseContent(rawLicenseFile, publicKeyPem = embeddedLice
     const publicKey = createPublicKey(publicKeyPem);
     const signatureOk = verify(
       null,
-      Buffer.from(canonicalizeJson(envelope.license), 'utf8'),
+      Buffer.from(canonicalizeJson(envelope.signedLicense), 'utf8'),
       publicKey,
       signature
     );
@@ -113,14 +113,26 @@ function parseLicenseEnvelope(value) {
     return signature;
   }
 
-  return { license, signature };
+  return { license, signedLicense: value.license, signature };
 }
 
 function parseLicenseBody(value) {
-  if (!isRecord(value) || value.schemaVersion !== 1) {
-    return new Error('License schemaVersion must be 1.');
+  if (!isRecord(value)) {
+    return new Error('License body must be an object.');
   }
 
+  if (value.schemaVersion === 1) {
+    return parseLegacyLicenseBody(value);
+  }
+
+  if (value.schemaVersion === 2) {
+    return parseV2LicenseBody(value);
+  }
+
+  return new Error('License schemaVersion must be 1 or 2.');
+}
+
+function parseLegacyLicenseBody(value) {
   const licenseId = requiredString(value.licenseId, 'licenseId');
   const shopName = requiredString(value.shopName, 'shopName');
   const issuedAt = requiredString(value.issuedAt, 'issuedAt');
@@ -143,6 +155,77 @@ function parseLicenseBody(value) {
     issuedAt,
     updateWindowEnd
   };
+}
+
+function parseV2LicenseBody(value) {
+  const licenseKind = parseLicenseKind(value.licenseKind);
+  if (licenseKind instanceof Error) return licenseKind;
+
+  const licenseId = requiredString(value.licenseId, 'licenseId');
+  const shopName = requiredString(value.shopName, 'shopName');
+  const issuedAt = requiredString(value.issuedAt, 'issuedAt');
+  if (licenseId instanceof Error) return licenseId;
+  if (shopName instanceof Error) return shopName;
+  if (issuedAt instanceof Error) return issuedAt;
+  if (!Number.isFinite(Date.parse(issuedAt))) {
+    return new Error('License issuedAt must be an ISO timestamp.');
+  }
+
+  if (licenseKind === 'dataOnly') {
+    const terminatedLicenseId = requiredString(value.terminatedLicenseId, 'terminatedLicenseId');
+    const terminationReason = requiredString(value.terminationReason, 'terminationReason');
+    if (terminatedLicenseId instanceof Error) return terminatedLicenseId;
+    if (terminationReason instanceof Error) return terminationReason;
+    return {
+      schemaVersion: 2,
+      licenseKind,
+      licenseId,
+      terminatedLicenseId,
+      shopName,
+      issuedAt,
+      terminationReason
+    };
+  }
+
+  const updateWindowEnd = requiredString(value.updateWindowEnd, 'updateWindowEnd');
+  if (updateWindowEnd instanceof Error) return updateWindowEnd;
+  if (!isValidIsoDate(updateWindowEnd)) {
+    return new Error('License updateWindowEnd must be a YYYY-MM-DD date.');
+  }
+
+  if (licenseKind === 'paid') {
+    return {
+      schemaVersion: 2,
+      licenseKind,
+      licenseId,
+      shopName,
+      issuedAt,
+      updateWindowEnd
+    };
+  }
+
+  const operationEnd = requiredString(value.operationEnd, 'operationEnd');
+  if (operationEnd instanceof Error) return operationEnd;
+  if (!isValidIsoDate(operationEnd)) {
+    return new Error('License operationEnd must be a YYYY-MM-DD date.');
+  }
+
+  return {
+    schemaVersion: 2,
+    licenseKind,
+    licenseId,
+    shopName,
+    issuedAt,
+    updateWindowEnd,
+    operationEnd
+  };
+}
+
+function parseLicenseKind(value) {
+  if (value === 'paid' || value === 'trial' || value === 'dataOnly') {
+    return value;
+  }
+  return new Error('License licenseKind must be paid, trial, or dataOnly.');
 }
 
 function parseLicenseSignature(value) {
