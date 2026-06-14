@@ -1,6 +1,12 @@
 # BellField License Design
 
-This document pins the Phase 3 licensing primitive.
+This document pins the **current** Phase 3 licensing primitive (license schema
+`v1`, paid-perpetual only). The planned successor — a `trial | paid | dataOnly`
+entitlement model with a data-only degrade and an opportunistic, fail-open
+revocation check — is specified in
+[license-refund-trial-plan.md](./license-refund-trial-plan.md). That model
+preserves every paid invariant below and scopes the new gating to trials and
+refunded licenses only (see this doc's Non-Goals note).
 
 It implements the posture from [asset-protection-and-licensing.md](./asset-protection-and-licensing.md): BellField gates acquisition and updates, not continued operation. Runtime verification is offline-only and exists to prove that the installed copy has a legitimate right-to-run license.
 
@@ -22,6 +28,14 @@ These are constraints, not merely deferred work:
 - no hardware-bound activation
 - no anti-tamper or obfuscation treated as a security boundary
 - no runtime refusal based on update-window expiry
+
+> **v2 note.** These remain absolute **for a paid copy in good standing**. The
+> planned v2 model ([license-refund-trial-plan.md](./license-refund-trial-plan.md))
+> adds operation-gating to the `trial` and `dataOnly` license kinds only, plus an
+> _opportunistic, fail-open_ license-status check that merely delivers a signed
+> downgrade to an already-terminated trial/refunded license. A missed check is
+> always a no-op, so paid runtime never depends on a network call — "no runtime
+> phone-home that gates paid" and "no kill switch for paid" still hold.
 
 ## File Format
 
