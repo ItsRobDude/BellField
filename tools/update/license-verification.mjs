@@ -13,6 +13,10 @@ const embeddedLicensePublicKeyPem = [
   ''
 ].join('\n');
 
+function stripLeadingBom(value) {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
+}
+
 export function verifyLicenseFile(input) {
   const licensePath = input.licensePath?.trim();
   if (!licensePath) {
@@ -42,7 +46,11 @@ export function verifyLicenseFile(input) {
 export function verifyLicenseContent(rawLicenseFile, publicKeyPem = embeddedLicensePublicKeyPem) {
   let parsed;
   try {
-    parsed = JSON.parse(rawLicenseFile);
+    // Tolerate a single leading UTF-8 BOM (Windows editor re-save). Must match
+    // the API verifier's behavior or the two would disagree on a BOM'd file.
+    // Safe: the signature is over the re-canonicalized license object, not the
+    // raw bytes.
+    parsed = JSON.parse(stripLeadingBom(rawLicenseFile));
   } catch {
     return {
       status: 'invalid',

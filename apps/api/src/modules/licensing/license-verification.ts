@@ -115,7 +115,11 @@ export function verifyLicenseContent(
 ): LicenseVerificationStatus {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(rawLicenseFile);
+    // Tolerate a single leading UTF-8 BOM: a license/cache/receipt file re-saved
+    // by a Windows editor (e.g. Notepad) gets a BOM that would otherwise break
+    // JSON.parse. The signature is verified over the re-canonicalized license
+    // OBJECT, not the raw file bytes, so stripping the BOM cannot weaken it.
+    parsed = JSON.parse(stripLeadingBom(rawLicenseFile));
   } catch {
     return {
       status: 'invalid',
@@ -396,6 +400,10 @@ function requiredString(value: unknown, fieldName: string): string | Error {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function stripLeadingBom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }
 
 function isValidIsoTimestamp(value: string): boolean {

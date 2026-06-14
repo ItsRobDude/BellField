@@ -161,6 +161,11 @@ Rules:
 - `paid` must never carry `operationEnd`; **issuance rejects it and runtime
   ignores it** if somehow present.
 - `trial` must carry `operationEnd`.
+- `operationEnd` is an **inclusive, server-local calendar date**: a trial runs
+  through the end of that day on the shop's own machine clock and expires at
+  local midnight the following day. Date-only fields that gate operation are
+  read in the shop's local time (the server PC is the shop's operational clock,
+  matching the field work window), never UTC.
 - `dataOnly` never permits operations.
 - `terminatedLicenseId` names the paid/trial license this artifact terminates;
   precedence (§6) keys off it. (Renamed from an earlier `replacesLicenseId`,
@@ -199,6 +204,12 @@ evaluation**, by precedence:
 
 Resulting states: `paidOperational`, `trialOperational`, `trialExpiredDataOnly`,
 `refundedDataOnly`, `licenseRecovery`.
+
+In System diagnostics this is exposed as two orthogonal fields: `status`
+describes the signed **artifact** only (`valid`/`missing`/`invalid`/`notRequired`),
+while `operational` (plus `entitlementState`) is the runtime entitlement truth.
+A refunded or expired-trial install is still `status: 'valid'` because its
+artifact verifies — consumers must gate on `operational`, never `status === 'valid'`.
 
 ### Fail-safe table (this is what protects paying shops)
 

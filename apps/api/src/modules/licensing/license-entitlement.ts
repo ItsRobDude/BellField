@@ -201,7 +201,19 @@ function isDataOnlyArtifact(artifact: ValidArtifact): artifact is DataOnlyArtifa
 }
 
 function isTrialActive(license: BellFieldTrialLicenseBody, now: Date): boolean {
-  const [year, month, day] = license.operationEnd.split('-').map(Number);
-  const expiresAt = Date.UTC(year, month - 1, day + 1);
-  return now.getTime() < expiresAt;
+  // operationEnd is an inclusive, SERVER-LOCAL calendar date: a trial runs
+  // through the end of that day on the shop's own machine clock and expires at
+  // local midnight the following day. Date-only fields that gate operation are
+  // read in the shop's local time — the server PC is the shop's operational
+  // clock, matching the field work window's formatLocalDate — never UTC.
+  // Comparing zero-padded YYYY-MM-DD strings is chronological, and operationEnd
+  // is validated to that shape at verification time.
+  return toLocalDateString(now) <= license.operationEnd;
+}
+
+function toLocalDateString(value: Date): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
