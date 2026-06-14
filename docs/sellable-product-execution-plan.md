@@ -84,7 +84,10 @@ These must all be performed and dated before the first sold install or pilot.
   file design, API startup verification behind a license-required runtime flag
   or release build manifest, System/support visibility, private issuance
   tooling, v1 key ceremony docs, local-key smoke, and backup/restore coverage
-  for the license file.
+  for the license file. The v2 trial/refund foundation has begun: verifier
+  parity accepts v1 and v2 `paid | trial | dataOnly`, issuance tooling can mint
+  all v2 kinds, and the pure entitlement resolver/cache helpers exist but are
+  not wired into runtime startup or operation guards yet.
 - `apps/worker`: real DB-backed job-runner footing now exists for heartbeat and
   scheduled backups; Phase 5 can reuse it for delivery retry jobs.
 - Live contradictions after Phase 1 repo work: the interim Resend key remains a
@@ -363,6 +366,12 @@ still owns release-date stamping and updater entitlement enforcement; Phase 5
 still owns relay-token service behavior. Local nondestructive validation is
 recorded in
 [phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md).
+
+Status addendum, 2026-06-14: v2 trial/refund work has started. The verifier
+supports v1 and v2 license bodies, `issue-license.mjs` can mint `paid`, `trial`,
+and `dataOnly` v2 licenses, and the pure entitlement resolver/cache helpers
+cover the fail-safe table. Recovery-mode startup, operation guards, worker
+gating, restore merge behavior, and relay license-status checks remain pending.
 
 ### 3.1 License design doc
 

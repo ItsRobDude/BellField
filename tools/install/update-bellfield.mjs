@@ -208,6 +208,11 @@ const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PAT
 if (licenseStatus.status !== 'valid') {
   throw new Error(`BellField update cannot be installed: ${licenseStatus.message}`);
 }
+if (licenseStatus.license.licenseKind === 'dataOnly') {
+  throw new Error(
+    'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
+  );
+}
 assertReleaseWithinUpdateWindow({
   releaseDate: verifiedArtifact.build.releaseDate,
   updateWindowEnd: licenseStatus.license.updateWindowEnd

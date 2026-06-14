@@ -3,14 +3,14 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import type { SystemDiagnosticsResponse } from '@bellfield/contracts';
+import type { LicenseDiagnosticsSummary, SystemDiagnosticsResponse } from '@bellfield/contracts';
 import { readAppBuildInfo } from '../../common/config/build-manifest';
 import { getApiRuntimeConfig } from '../../common/config/runtime-config';
 import { DatabaseService } from '../../database/database.service';
 import { toIsoString } from '../../database/database-row.utils';
 import { MediaConfigService } from '../media/media-config.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
-import { verifyLicenseFile } from '../licensing/license-verification';
+import { resolveInstalledLicenseEntitlement } from '../licensing/license-entitlement-store';
 
 const defaultBackupRetentionCount = 7;
 const defaultBackupStaleAfterHours = 36;
@@ -87,7 +87,7 @@ export class SystemDiagnosticsService {
         },
         {
           key: 'license',
-          ok: license.status === 'valid' || license.status === 'notRequired',
+          ok: licenseCheckOk(license),
           detail: licenseCheckDetail(license)
         },
         estimateTaxRates,
@@ -294,28 +294,41 @@ export class SystemDiagnosticsService {
       return {
         required: false,
         path: null,
-        status: 'notRequired'
+        status: 'notRequired',
+        operational: true
       };
     }
 
-    const verification = verifyLicenseFile({ licensePath: runtime.licensePath });
-    if (verification.status === 'valid') {
+    const resolved = resolveInstalledLicenseEntitlement({ licensePath: runtime.licensePath });
+    if (resolved.entitlement.state !== 'licenseRecovery') {
+      const { entitlement } = resolved;
+      const { license } = entitlement;
       return {
         required: runtime.licenseRequired,
         path: runtime.licensePath ?? null,
         status: 'valid',
-        licenseId: verification.license.licenseId,
-        shopName: verification.license.shopName,
-        issuedAt: verification.license.issuedAt,
-        updateWindowEnd: verification.license.updateWindowEnd
+        operational: licenseEntitlementOperational(entitlement.state),
+        entitlementState: entitlement.state,
+        entitlementSource: entitlement.source,
+        licenseKind: license.schemaVersion === 1 ? 'paid' : license.licenseKind,
+        licenseId: license.licenseId,
+        terminatedLicenseId:
+          'terminatedLicenseId' in license ? license.terminatedLicenseId : undefined,
+        shopName: license.shopName,
+        issuedAt: license.issuedAt,
+        updateWindowEnd: 'updateWindowEnd' in license ? license.updateWindowEnd : undefined,
+        operationEnd: 'operationEnd' in license ? license.operationEnd : undefined,
+        message: licenseArtifactWarning(resolved) ?? entitlement.warning
       };
     }
 
     return {
       required: runtime.licenseRequired,
       path: runtime.licensePath ?? null,
-      status: verification.status,
-      message: verification.message
+      status: resolved.current.status,
+      operational: false,
+      entitlementState: resolved.entitlement.state,
+      message: licenseArtifactWarning(resolved) ?? resolved.entitlement.message
     };
   }
 }
@@ -368,11 +381,48 @@ function backupCheckDetail(backups: SystemDiagnosticsResponse['backups']): strin
   return undefined;
 }
 
-function licenseCheckDetail(license: SystemDiagnosticsResponse['license']): string | undefined {
-  if (license.status === 'notRequired' || license.status === 'valid') {
+function licenseCheckOk(license: LicenseDiagnosticsSummary): boolean {
+  return license.status === 'notRequired' || license.operational;
+}
+
+function licenseCheckDetail(license: LicenseDiagnosticsSummary): string | undefined {
+  if (license.status === 'notRequired') {
+    return undefined;
+  }
+  if (license.operational) {
+    return license.message;
+  }
+  if (license.entitlementState === 'trialExpiredDataOnly') {
+    return 'Trial has expired; BellField is in data-only/export mode.';
+  }
+  if (license.entitlementState === 'refundedDataOnly') {
+    return 'License is data-only/export only.';
+  }
+  if (license.entitlementState === 'licenseRecovery') {
+    return license.message ?? 'License recovery is required.';
+  }
+  if (license.status === 'valid') {
     return undefined;
   }
   return license.message ?? 'License needs attention.';
+}
+
+function licenseEntitlementOperational(
+  state: Exclude<LicenseDiagnosticsSummary['entitlementState'], undefined>
+): boolean {
+  return state === 'paidOperational' || state === 'trialOperational';
+}
+
+function licenseArtifactWarning(
+  resolved: ReturnType<typeof resolveInstalledLicenseEntitlement>
+): string | undefined {
+  if (resolved.receiptReadError) {
+    return 'License entitlement artifacts could not be read. Check license directory permissions.';
+  }
+  if (resolved.cacheWriteError) {
+    return 'License entitlement cache could not be updated. Check license directory permissions.';
+  }
+  return undefined;
 }
 
 function getBoolean(value: string | undefined, defaultValue: boolean): boolean {

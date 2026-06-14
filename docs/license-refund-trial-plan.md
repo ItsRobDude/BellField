@@ -1,21 +1,37 @@
 # BellField — Trial, Refund & Ownership Plan (v2 entitlement model)
 
-**Status: planned, not built.** This is the controlling spec for the v2 license
-entitlement model (`trial | paid | dataOnly`), the narrow-refund posture, and
-the data-only degrade. It extends — and in two places deliberately refines —
-the current v1 primitive in [license-design.md](./license-design.md) and the
-ownership promise in [positioning-and-pricing.md](./positioning-and-pricing.md).
-No code exists for this yet; today's runtime behavior is still the v1 primitive.
+**Status: implementation in progress.** This is the controlling spec for the v2
+license entitlement model (`trial | paid | dataOnly`), the narrow-refund
+posture, and the data-only degrade. It extends — and in two places deliberately
+refines — the v1 primitive in [license-design.md](./license-design.md) and the
+ownership promise in
+[positioning-and-pricing.md](./positioning-and-pricing.md).
+
+As of 2026-06-14, the v2 verifier/issuance foundation, API/tooling verifier
+parity tests, pure entitlement resolver, and signed-artifact cache helpers are
+built. Runtime startup, business-operation guards, worker gating, restore merge
+behavior, relay license-status checks, and the recovery/data-only UI are not yet
+wired.
 
 Decided through owner sparring, 2026-06-13.
 
 ---
 
-## 0. Current state (verified against code, 2026-06-13)
+## 0. Current state (verified against code, 2026-06-14)
 
-- License verifier is **v1 only** — `schemaVersion: 1`, no `licenseKind`,
-  `trial`, `dataOnly`, or `operationEnd`
-  (`apps/api/src/modules/licensing/license-verification.ts`).
+- License verifier accepts legacy `schemaVersion: 1` paid licenses and v2
+  `paid | trial | dataOnly` licenses in both API TypeScript and standalone
+  updater tooling, with parity tests
+  (`apps/api/src/modules/licensing/license-verification.ts`,
+  `tools/update/license-verification.mjs`).
+- `tools/license/issue-license.mjs` now issues v2 `paid` by default and supports
+  `--kind=trial`, `--kind=dataOnly`, and `--kind=legacy`; the smoke mints all
+  three v2 kinds and checks ledger `licenseKind` fields.
+- The API has a pure entitlement resolver and signed-artifact cache helpers for
+  the fail-safe table, but they are **not wired into startup, guards, restore, or
+  worker behavior yet**
+  (`apps/api/src/modules/licensing/license-entitlement.ts`,
+  `apps/api/src/modules/licensing/license-artifact-cache.ts`).
 - The sold API **hard-fails before Nest starts** on a missing/invalid required
   license: `getApiRuntimeConfig()` throws if `BELLFIELD_LICENSE_REQUIRED=true`
   and `BELLFIELD_LICENSE_PATH` is unset
@@ -23,8 +39,6 @@ Decided through owner sparring, 2026-06-13.
   `assertRuntimeLicense()` throws on an invalid file
   (`apps/api/src/main.ts:13-14`). **Both gates must soften for recovery mode
   (§7).**
-- Issuance tooling mints **only v1 paid-style** licenses; it already appends a
-  non-secret issued-license ledger (`tools/license/issue-license.mjs`).
 - The relay can revoke active tokens
   (`apps/relay/src/modules/identity/relay-identity.repository.ts:319`) and gate
   update downloads, but has **no license-status/downgrade endpoint**. Relay auth
@@ -363,14 +377,17 @@ file edit flip `trial`→`paid`, it is wrong by construction.
 ## 12. Implementation slices
 
 1. **Docs & copy** — this doc; mark v1 posture "current" in `license-design.md`
-   and `positioning-and-pricing.md`; Terms draft.
+   and `positioning-and-pricing.md`; Terms draft. _Started; the route and v2
+   implementation status are documented. Public positioning copy and legal Terms
+   are still not finalized._
 2. **License schema v2** — extend verification; `issue-license.mjs` gains
    `issue-trial` / `issue-paid` / `issue-data-only`; ledger fields `licenseKind`,
    `terminatedLicenseId`, `terminationReason`; issuance rejects
-   paid-with-`operationEnd`.
+   paid-with-`operationEnd`. _Built for verifier + issuance tooling._
 3. **Signed-artifact entitlement service** — re-verifies cached signed
    license/revocation every evaluation; precedence + fail-safe table (§6); System
-   shows exact state. _No plaintext state cache._
+   shows exact state. _Pure resolver and atomic signed-artifact cache helpers are
+   built; runtime/System wiring is still pending. No plaintext state cache._
 4. **Recovery-mode startup** — soften only the license-related gates in
    `runtime-config.ts` and `main.ts`; live entitlement re-evaluation; tiny
    always-reachable recovery surface. Other config stays fatal.

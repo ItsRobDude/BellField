@@ -29,14 +29,27 @@ export interface BackupDiagnosticsSummary {
   error?: string;
 }
 
+export type LicenseEntitlementState =
+  | 'paidOperational'
+  | 'trialOperational'
+  | 'trialExpiredDataOnly'
+  | 'refundedDataOnly'
+  | 'licenseRecovery';
+
 export interface LicenseDiagnosticsSummary {
   required: boolean;
   path: string | null;
   status: 'notRequired' | 'valid' | 'missing' | 'invalid';
+  operational: boolean;
+  licenseKind?: 'paid' | 'trial' | 'dataOnly';
+  entitlementState?: LicenseEntitlementState;
+  entitlementSource?: 'current' | 'cache' | 'terminationReceipt';
   licenseId?: string;
+  terminatedLicenseId?: string;
   shopName?: string;
   issuedAt?: string;
   updateWindowEnd?: string;
+  operationEnd?: string;
   message?: string;
 }
 

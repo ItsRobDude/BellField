@@ -303,6 +303,10 @@ copyFileRequired(
 );
 copyRequired(join(repoRoot, 'tools', 'install'), join(releaseRoot, 'tools', 'install'));
 copyFileRequired(
+  join(repoRoot, 'tools', 'license', 'license-format.mjs'),
+  join(releaseRoot, 'tools', 'license', 'license-format.mjs')
+);
+copyFileRequired(
   join(repoRoot, 'tools', 'update', 'release-artifact.mjs'),
   join(releaseRoot, 'tools', 'update', 'release-artifact.mjs')
 );

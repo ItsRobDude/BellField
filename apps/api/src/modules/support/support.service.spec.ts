@@ -33,7 +33,8 @@ const diagnostics: SystemDiagnosticsResponse = {
   license: {
     required: false,
     path: null,
-    status: 'notRequired'
+    status: 'notRequired',
+    operational: true
   },
   checks: []
 };

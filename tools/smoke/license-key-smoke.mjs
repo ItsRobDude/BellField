@@ -1,16 +1,14 @@
-import { createPublicKey, verify } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { canonicalizeJson } from '../license/license-format.mjs';
+import { verifyLicenseContent } from '../update/license-verification.mjs';
 
 const timestamp = new Date().toISOString();
 const root = mkdtempSync(path.join(tmpdir(), 'bellfield-license-key-smoke-'));
 const defaultPrivateKeyPath =
   'C:\\Users\\rober\\Documents\\API Keys\\BellField\\license-v1\\bellfield-license-private-key.pem';
 const privateKeyPath = getArgValue('--private-key') || defaultPrivateKeyPath;
-const licensePath = path.join(root, 'bellfield-license.json');
 const ledgerPath = path.join(root, 'issued-licenses.jsonl');
 const evidence = {
   name: 'License key smoke',
@@ -21,35 +19,80 @@ const evidence = {
 try {
   check('private key exists outside repo', existsSync(privateKeyPath));
 
-  const issueResult = spawnSync(
-    process.execPath,
-    [
-      path.resolve('tools', 'license', 'issue-license.mjs'),
-      `--private-key=${privateKeyPath}`,
-      '--license-id=lic_smoke_local_key',
-      '--shop-name=BellField Local Key Smoke',
+  const paidEnvelope = issueAndVerifyLicense({
+    outputPath: path.join(root, 'paid-license.json'),
+    args: ['--kind=paid', '--license-id=lic_smoke_paid', '--update-window-end=2027-06-11']
+  });
+  check(
+    'issued v2 paid license verifies with embedded public key',
+    paidEnvelope.license.licenseKind === 'paid',
+    {
+      licenseKind: paidEnvelope.license.licenseKind
+    }
+  );
+
+  const trialEnvelope = issueAndVerifyLicense({
+    outputPath: path.join(root, 'trial-license.json'),
+    args: [
+      '--kind=trial',
+      '--license-id=lic_smoke_trial',
+      '--update-window-end=2026-07-11',
+      '--operation-end=2026-07-11'
+    ]
+  });
+  check(
+    'issued v2 trial license verifies with embedded public key',
+    trialEnvelope.license.licenseKind === 'trial',
+    {
+      licenseKind: trialEnvelope.license.licenseKind,
+      operationEnd: trialEnvelope.license.operationEnd
+    }
+  );
+
+  const dataOnlyEnvelope = issueAndVerifyLicense({
+    outputPath: path.join(root, 'data-only-license.json'),
+    args: [
+      '--kind=dataOnly',
+      '--license-id=lic_smoke_data_only',
+      '--terminated-license-id=lic_smoke_paid',
+      '--termination-reason=refund'
+    ]
+  });
+  check(
+    'issued v2 data-only license verifies with embedded public key',
+    dataOnlyEnvelope.license.licenseKind === 'dataOnly',
+    {
+      licenseKind: dataOnlyEnvelope.license.licenseKind,
+      terminatedLicenseId: dataOnlyEnvelope.license.terminatedLicenseId
+    }
+  );
+  expectIssueLicenseFailure({
+    outputPath: path.join(root, 'invalid-paid-operation-end-license.json'),
+    args: [
+      '--kind=paid',
+      '--license-id=lic_smoke_invalid_paid',
       '--update-window-end=2027-06-11',
-      `--output=${licensePath}`,
-      `--ledger=${ledgerPath}`
+      '--operation-end=2026-07-11'
     ],
-    { encoding: 'utf8', shell: false }
-  );
-  if (issueResult.status !== 0) {
-    throw new Error(
-      issueResult.stderr || issueResult.stdout || `issue-license exited ${issueResult.status}`
-    );
-  }
+    expectedMessage: 'paid licenses must never carry operationEnd'
+  });
+  check('paid license rejects operationEnd', true);
 
-  const envelope = JSON.parse(readFileSync(licensePath, 'utf8'));
-  const publicKeyPem = readEmbeddedPublicKeyPem();
-  const signatureOk = verify(
-    null,
-    Buffer.from(canonicalizeJson(envelope.license), 'utf8'),
-    createPublicKey(publicKeyPem),
-    Buffer.from(envelope.signature.value, 'base64url')
+  const ledgerEntries = readFileSync(ledgerPath, 'utf8')
+    .trim()
+    .split(/\r?\n/)
+    .map((line) => JSON.parse(line));
+  const ledgerKinds = ledgerEntries.map((entry) => entry.licenseKind);
+  check(
+    'issued-license ledger records all v2 kinds',
+    ledgerEntries.length === 3 &&
+      ledgerKinds.includes('paid') &&
+      ledgerKinds.includes('trial') &&
+      ledgerKinds.includes('dataOnly'),
+    {
+      licenseKinds: ledgerKinds
+    }
   );
-
-  check('issued license verifies with embedded public key', signatureOk);
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
   console.log(JSON.stringify(evidence, null, 2));
@@ -69,23 +112,57 @@ function getArgValue(name) {
   return match ? match.slice(prefix.length) : undefined;
 }
 
-function readEmbeddedPublicKeyPem() {
-  const source = readFileSync(
-    path.resolve('apps', 'api', 'src', 'modules', 'licensing', 'license-verification.ts'),
-    'utf8'
+function issueAndVerifyLicense({ outputPath, args }) {
+  const issueResult = spawnSync(
+    process.execPath,
+    [
+      path.resolve('tools', 'license', 'issue-license.mjs'),
+      `--private-key=${privateKeyPath}`,
+      '--shop-name=BellField Local Key Smoke',
+      `--output=${outputPath}`,
+      `--ledger=${ledgerPath}`,
+      ...args
+    ],
+    { encoding: 'utf8', shell: false }
   );
-  const match = source.match(
-    /'-----BEGIN PUBLIC KEY-----',\s*'([^']+)',\s*'-----END PUBLIC KEY-----'/m
-  );
-  if (!match) {
-    throw new Error('Could not read embedded license public key from API source.');
+  if (issueResult.status !== 0) {
+    throw new Error(
+      issueResult.stderr || issueResult.stdout || `issue-license exited ${issueResult.status}`
+    );
   }
 
-  return ['-----BEGIN PUBLIC KEY-----', match[1], '-----END PUBLIC KEY-----', ''].join('\n');
+  const rawLicense = readFileSync(outputPath, 'utf8');
+  const status = verifyLicenseContent(rawLicense);
+  if (status.status !== 'valid') {
+    throw new Error(`issued license did not verify: ${status.message}`);
+  }
+  return JSON.parse(rawLicense);
 }
 
-function check(name, passed) {
-  evidence.checks.push({ name, passed });
+function expectIssueLicenseFailure({ outputPath, args, expectedMessage }) {
+  const issueResult = spawnSync(
+    process.execPath,
+    [
+      path.resolve('tools', 'license', 'issue-license.mjs'),
+      `--private-key=${privateKeyPath}`,
+      '--shop-name=BellField Local Key Smoke',
+      `--output=${outputPath}`,
+      `--ledger=${ledgerPath}`,
+      ...args
+    ],
+    { encoding: 'utf8', shell: false }
+  );
+  if (issueResult.status === 0) {
+    throw new Error('issue-license unexpectedly accepted an invalid paid operationEnd.');
+  }
+  const output = `${issueResult.stderr}\n${issueResult.stdout}`;
+  if (!output.includes(expectedMessage)) {
+    throw new Error(`issue-license failed with unexpected message: ${output.trim()}`);
+  }
+}
+
+function check(name, passed, details = {}) {
+  evidence.checks.push({ name, passed, details });
   if (!passed) {
     throw new Error(name);
   }

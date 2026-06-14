@@ -302,8 +302,13 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
     mockedApi.updateOfficeEmployee.mockRejectedValue(new Error('Save boom'));
     renderSurface({ canConfigure: true, actorId: 'e-owner', actorRoleId: 'owner' });
     await selectEmployee('Tina Tech');
-    fireEvent.click(await screen.findByLabelText('Active')); // make the draft dirty
-    fireEvent.click(screen.getByRole('button', { name: 'Save changes' }));
+    expect(await screen.findByText(/e-tech@bellfield\.local/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Active')); // make the draft dirty
+    const saveButton = screen.getByRole('button', { name: 'Save changes' });
+    await waitFor(() => expect(saveButton).toBeEnabled());
+    fireEvent.click(saveButton);
+
     await waitFor(() => expect(screen.getByText('Save boom')).toBeInTheDocument());
   });
 
