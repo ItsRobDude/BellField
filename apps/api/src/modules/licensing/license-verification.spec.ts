@@ -108,7 +108,7 @@ describe('license verification', () => {
 
     // A Windows editor re-save can prepend a BOM; it must not break parsing,
     // and it must not change the verdict (signature is over the license object).
-    const status = verifyLicenseContent('﻿' + JSON.stringify(envelope), publicKeyPem);
+    const status = verifyLicenseContent('\uFEFF' + JSON.stringify(envelope), publicKeyPem);
 
     expect(status).toEqual({
       status: 'valid',
@@ -367,7 +367,7 @@ describe('license verification', () => {
       // A BOM'd license must get the SAME verdict from both verifiers, or a
       // Windows-saved file would pass one and fail the other.
       {
-        rawLicense: '﻿' + JSON.stringify(validFixtures[0].envelope),
+        rawLicense: '\uFEFF' + JSON.stringify(validFixtures[0].envelope),
         publicKeyPem: validFixtures[0].publicKeyPem
       },
       {
