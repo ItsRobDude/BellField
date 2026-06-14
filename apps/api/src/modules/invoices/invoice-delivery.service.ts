@@ -245,11 +245,23 @@ export class InvoiceDeliveryService {
     let bodyText = emailContent.bodyText;
     if (paymentLinkUrl) {
       bodyText = `${emailContent.bodyText}\n\nPay online: ${paymentLinkUrl}`;
-      await this.customerDeliveryRepository.updateOutboundMessageBody(
-        outboundMessageId,
-        bodyText,
-        new Date().toISOString()
-      );
+      // Best-effort: the provider send below uses the in-memory bodyText, so the
+      // customer gets the link on this attempt regardless. We only sync the
+      // stored body so a worker retry also carries it — a failure here must not
+      // block a send the link was never meant to block. (A retry after a failed
+      // sync would fall back to the linkless stored body, which matches the
+      // best-effort posture.)
+      try {
+        await this.customerDeliveryRepository.updateOutboundMessageBody(
+          outboundMessageId,
+          bodyText,
+          new Date().toISOString()
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Invoice ${invoice.id} pay-now link was added to the outgoing email but the stored body could not be synced for retry: ${describeError(error)}`
+        );
+      }
     }
 
     const providerResult = await this.sendInvoiceEmailSafely(

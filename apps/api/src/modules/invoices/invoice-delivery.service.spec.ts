@@ -362,6 +362,96 @@ describe('InvoiceDeliveryService', () => {
     expect(result.outboundMessage.invoiceId).toBe('invoice-1');
   });
 
+  it('still sends with the link when the stored-body sync fails (the link never blocks the send)', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository,
+      emailProviderService
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
+      state: 'created',
+      checkoutUrl: 'https://pay.example/cs_test_123',
+      paymentSessionId: 'pay_sess_1',
+      amount: 250,
+      currency: 'USD',
+      expiresAt: '2026-07-01T00:00:00.000Z'
+    });
+    customerDeliveryRepository.updateOutboundMessageBody.mockRejectedValueOnce(
+      new Error('db down')
+    );
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    // The provider send uses the in-memory body, so the customer still gets the
+    // link on this attempt even though syncing the stored body failed.
+    expect(emailProviderService.sendInvoiceEmail).toHaveBeenCalled();
+    expect(emailProviderService.sendInvoiceEmail.mock.calls[0][0].bodyText).toContain(
+      'Pay online: https://pay.example/cs_test_123'
+    );
+    expect(result.paymentLinkIncluded).toBe(true);
+    expect(result.outboundMessage.invoiceId).toBe('invoice-1');
+  });
+
+  it('does not mint a payment link when the send intent is blocked as a duplicate', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository,
+      invoicePdfRendererService
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    customerDeliveryRepository.createInvoiceSendIntent.mockResolvedValueOnce({
+      kind: 'blocked',
+      reason: 'alreadyQueued'
+    });
+
+    await expect(
+      service.sendInvoice('token', 'invoice-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    // Ordering invariant: a blocked send never reaches the PDF render or the link mint.
+    expect(invoicePdfRendererService.renderInvoicePdf).not.toHaveBeenCalled();
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
+  });
+
+  it('does not mint a payment link when the PDF render fails', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository,
+      invoicePdfRendererService
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    invoicePdfRendererService.renderInvoicePdf.mockRejectedValueOnce(new Error('render boom'));
+
+    await expect(
+      service.sendInvoice('token', 'invoice-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toThrow('render boom');
+
+    // Ordering invariant: the link is minted only after a successful render.
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.updateOutboundMessageBody).not.toHaveBeenCalled();
+  });
+
   it('leaves retryable provider failures queued without a timeline entry', async () => {
     const { service, emailProviderService, customerDeliveryRepository } = createService();
     emailProviderService.sendInvoiceEmail.mockResolvedValueOnce({
