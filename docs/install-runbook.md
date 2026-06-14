@@ -157,8 +157,13 @@ License issuance is BellField-side only:
 
 ```powershell
 node tools\license\generate-keypair.mjs --output-dir=<private-bellfield-key-dir>
-node tools\license\issue-license.mjs --private-key=<private-key.pem> --license-id=<id> --shop-name="<Shop Name>" --update-window-end=YYYY-MM-DD --output=<license-file-path>
+node tools\license\issue-license.mjs --kind=paid --private-key=<private-key.pem> --license-id=<id> --shop-name="<Shop Name>" --update-window-end=YYYY-MM-DD --output=<license-file-path>
 ```
+
+`--kind=paid` is the default for new v2 licenses; pass it anyway in runbooks so
+operator intent is visible. `--kind=trial` additionally requires
+`--operation-end=YYYY-MM-DD`; `--kind=dataOnly` requires
+`--terminated-license-id=<id>` and `--termination-reason=<reason>`.
 
 Do not copy private signing keys into the release folder or a customer machine.
 

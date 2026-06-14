@@ -1,12 +1,16 @@
 # BellField License Design
 
-This document pins the **current** Phase 3 licensing primitive (license schema
-`v1`, paid-perpetual only). The planned successor — a `trial | paid | dataOnly`
-entitlement model with a data-only degrade and an opportunistic, fail-open
-revocation check — is specified in
-[license-refund-trial-plan.md](./license-refund-trial-plan.md). That model
+This document pins the Phase 3 licensing primitive and its current v2
+compatibility foundation. Legacy `schemaVersion: 1` licenses remain paid
+perpetual. The successor `trial | paid | dataOnly` entitlement model, with a
+data-only degrade and an opportunistic, fail-open revocation check, is specified
+in [license-refund-trial-plan.md](./license-refund-trial-plan.md). That model
 preserves every paid invariant below and scopes the new gating to trials and
 refunded licenses only (see this doc's Non-Goals note).
+
+As of 2026-06-14, v2 license parsing/issuance and the pure entitlement resolver
+exist, but sold runtime startup still uses the older required-license startup
+gate until recovery/data-only wiring lands.
 
 It implements the posture from [asset-protection-and-licensing.md](./asset-protection-and-licensing.md): BellField gates acquisition and updates, not continued operation. Runtime verification is offline-only and exists to prove that the installed copy has a legitimate right-to-run license.
 
@@ -60,7 +64,9 @@ The license file is JSON:
 
 Rules:
 
-- `license.schemaVersion` is the license-body schema version. Phase 3 supports only `1`.
+- `license.schemaVersion` is the license-body schema version. Current tooling
+  accepts legacy `1` and v2 `paid | trial | dataOnly`; v1/no-kind resolves as
+  paid for entitlement purposes.
 - `license.licenseId` is a stable BellField-issued id and must be non-empty.
 - `license.shopName` is display-only in the installed product and support bundles.
 - `license.issuedAt` is an ISO timestamp. It may be in the future; clock skew must not block runtime.
@@ -83,7 +89,10 @@ Runtime verification:
 
 Failure rules:
 
-- If a sold-shaped build requires a license and the file is missing, unreadable, malformed, or has a bad signature, the API refuses to start with a readable recovery message.
+- Current sold-shaped builds still refuse to start if a required license is
+  missing, unreadable, malformed, or has a bad signature. The v2 recovery-mode
+  startup change is planned in
+  [license-refund-trial-plan.md](./license-refund-trial-plan.md).
 - If the file is valid, the API starts regardless of `issuedAt`, `updateWindowEnd`, machine identity, or internet connectivity.
 - If a source/dev/test build does not require a license, it may run without a license file. If a license file is configured, diagnostics may still report its status.
 
@@ -133,8 +142,11 @@ The license is customer-bound, not hardware-bound. A normal restore must not req
 The Phase 3 issuance tooling is private BellField-side tooling:
 
 - generate Ed25519 keypairs
-- issue signed license files
-- append a non-secret issued-license ledger entry
+- issue signed license files (`--kind=paid` default, `--kind=trial`,
+  `--kind=dataOnly`, and `--kind=legacy` for v1 compatibility)
+- append a non-secret issued-license ledger entry, including `schemaVersion`,
+  `licenseKind`, and the kind-specific fields such as `operationEnd`,
+  `terminatedLicenseId`, and `terminationReason`
 
 The default update window for a new license is **one year from issuance**
 (decided 2026-06-11): the software runs forever, updates are included for 12
