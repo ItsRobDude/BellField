@@ -49,24 +49,6 @@ export const DispatchCardContextMenu = forwardRef<HTMLDivElement, DispatchCardCo
         <button
           type="button"
           role="menuitem"
-          disabled={!canOpenJobDetail}
-          style={getMenuButtonStyle(!canOpenJobDetail)}
-          onClick={onOpenOverview}
-        >
-          Open overview
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          disabled={!canOpenJobDetail}
-          style={getMenuButtonStyle(!canOpenJobDetail)}
-          onClick={onOpenAppointments}
-        >
-          Open appointments
-        </button>
-        <button
-          type="button"
-          role="menuitem"
           disabled={!canEditSchedule}
           style={getMenuButtonStyle(!canEditSchedule)}
           onClick={onEditSchedule}
@@ -81,15 +63,6 @@ export const DispatchCardContextMenu = forwardRef<HTMLDivElement, DispatchCardCo
           onClick={onEditSchedule}
         >
           Assign / reassign
-        </button>
-        <button
-          type="button"
-          role="menuitem"
-          disabled={!address}
-          style={getMenuButtonStyle(!address)}
-          onClick={onCopyAddress}
-        >
-          Copy address
         </button>
 
         {canUpdateStatus ? (
@@ -120,6 +93,35 @@ export const DispatchCardContextMenu = forwardRef<HTMLDivElement, DispatchCardCo
             </div>
           </>
         ) : null}
+
+        <div role="separator" style={menuSeparatorStyle} />
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!address}
+          style={getMenuButtonStyle(!address)}
+          onClick={onCopyAddress}
+        >
+          Copy address
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!canOpenJobDetail}
+          style={getMenuButtonStyle(!canOpenJobDetail)}
+          onClick={onOpenOverview}
+        >
+          Open overview
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          disabled={!canOpenJobDetail}
+          style={getMenuButtonStyle(!canOpenJobDetail)}
+          onClick={onOpenAppointments}
+        >
+          Open appointments
+        </button>
       </div>
     );
   }

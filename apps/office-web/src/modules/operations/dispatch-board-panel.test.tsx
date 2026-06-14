@@ -7,7 +7,7 @@ import type {
   JobStatus
 } from '@/lib/operations-api';
 import { buildDispatchBoardModel } from './dispatch-board-data';
-import { DispatchBoardPanel } from './dispatch-board-panel';
+import { clampDispatchContextMenuPosition, DispatchBoardPanel } from './dispatch-board-panel';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -175,6 +175,15 @@ describe('buildDispatchBoardModel', () => {
 });
 
 describe('DispatchBoardPanel', () => {
+  it('clamps dispatch card action menus inside the viewport', () => {
+    expect(
+      clampDispatchContextMenuPosition({ x: 760, y: 580 }, { width: 800, height: 600 })
+    ).toEqual({
+      x: 560,
+      y: 80
+    });
+  });
+
   it('renders a compact dated board with technician rows and unassigned work', () => {
     const dispatchBoard = buildDispatchBoard([
       buildDispatchAppointment({
@@ -301,15 +310,15 @@ describe('DispatchBoardPanel', () => {
 
     const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
     const primaryName = within(taylorRegion).getByText('Acme');
-    const editButton = within(taylorRegion).getByRole('button', {
-      name: 'Edit schedule for job 1001'
+    const actionButton = within(taylorRegion).getByRole('button', {
+      name: 'Dispatch actions for job 1001'
     });
 
     expect(within(taylorRegion).queryByText(/After-hours repair/)).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText(/5:00 PM - 8:00 PM/)).not.toBeInTheDocument();
     expect(within(taylorRegion).getByText('Service')).toBeInTheDocument();
     expect(within(taylorRegion).queryByText(/Main Shop/)).not.toBeInTheDocument();
-    expect(editButton).toHaveStyle({ position: 'absolute', right: '0.65rem' });
+    expect(actionButton).toHaveStyle({ position: 'absolute', right: '0.65rem' });
     expect(primaryName.parentElement).toHaveStyle({ paddingRight: '3.1rem' });
   });
 
@@ -423,6 +432,29 @@ describe('DispatchBoardPanel', () => {
     expect(onOpenJobDetail).toHaveBeenCalledWith('job-1', 'appt-tech1');
   });
 
+  it('opens dispatch card actions from the visible action button without opening job detail', () => {
+    const onOpenJobDetail = vi.fn();
+    const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
+    const onAppointmentStatusUpdate = vi.fn(async () => undefined);
+
+    render(
+      <DispatchBoardPanel
+        dispatchBoard={buildDispatchBoard([
+          buildDispatchAppointment({ appointmentId: 'appt-tech1' })
+        ])}
+        viewDate="2026-05-22"
+        onOpenJobDetail={onOpenJobDetail}
+        onAppointmentScheduleUpdate={onAppointmentScheduleUpdate}
+        onAppointmentStatusUpdate={onAppointmentStatusUpdate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dispatch actions for job 1001' }));
+
+    expect(onOpenJobDetail).not.toHaveBeenCalled();
+    expect(screen.getByRole('menu', { name: 'Dispatch actions for job 1001' })).toBeInTheDocument();
+  });
+
   it('opens dispatch card actions from right-click and keyboard context menu triggers', () => {
     const onOpenJobDetail = vi.fn();
     const onAppointmentScheduleUpdate = vi.fn(async () => undefined);
@@ -444,6 +476,26 @@ describe('DispatchBoardPanel', () => {
     fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
 
     let menu = screen.getByRole('menu', { name: 'Dispatch actions for job 1001' });
+    expect(
+      within(menu)
+        .getAllByRole('menuitem')
+        .map((item) => item.textContent)
+    ).toEqual([
+      'Edit schedule',
+      'Assign / reassign',
+      'Scheduled (current)',
+      'Confirmed',
+      'Dispatched',
+      'On the way',
+      'Arrived',
+      'Working',
+      'Finished',
+      'No answer',
+      'Cancelled',
+      'Copy address',
+      'Open overview',
+      'Open appointments'
+    ]);
     expect(within(menu).getByRole('menuitem', { name: 'Open overview' })).toBeInTheDocument();
     expect(within(menu).getByRole('menuitem', { name: 'Open appointments' })).toBeInTheDocument();
     expect(within(menu).getByRole('menuitem', { name: 'Edit schedule' })).toBeInTheDocument();
@@ -521,7 +573,13 @@ describe('DispatchBoardPanel', () => {
       />
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Edit schedule for job 1001' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Dispatch actions for job 1001' }));
+    fireEvent.click(
+      within(screen.getByRole('menu', { name: 'Dispatch actions for job 1001' })).getByRole(
+        'menuitem',
+        { name: 'Edit schedule' }
+      )
+    );
 
     expect(onOpenJobDetail).not.toHaveBeenCalled();
 

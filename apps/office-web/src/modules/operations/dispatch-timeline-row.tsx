@@ -74,7 +74,6 @@ type DispatchTimelineRowProps = {
   activeScheduleEditor: DispatchScheduleEditorState | null;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail?: (jobId: string, appointmentId?: string) => void;
-  onOpenScheduleEditor?: (card: DispatchAppointmentCard) => void;
   onOpenContextMenu?: (
     card: DispatchAppointmentCard,
     position: DispatchContextMenuPosition
@@ -98,7 +97,6 @@ export function DispatchTimelineRow({
   activeScheduleEditor,
   technicians,
   onOpenJobDetail,
-  onOpenScheduleEditor,
   onOpenContextMenu,
   onScheduleUpdate,
   getAssignmentTargetCards,
@@ -473,7 +471,6 @@ export function DispatchTimelineRow({
                 spaceTier={cardPlacement.spaceTier}
                 technicians={technicians}
                 onOpenJobDetail={() => handleOpenCardDetail(card)}
-                onOpenScheduleEditor={onOpenScheduleEditor}
                 onOpenContextMenu={onOpenContextMenu}
                 onDragStart={onScheduleUpdate ? handleCardDragStart : undefined}
                 onResizeStart={onScheduleUpdate ? handleResizeStart : undefined}

@@ -803,7 +803,9 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit schedule for job 1001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Dispatch actions for job 1001' }));
+    const actionMenu = await screen.findByRole('menu', { name: 'Dispatch actions for job 1001' });
+    fireEvent.click(within(actionMenu).getByRole('menuitem', { name: 'Edit schedule' }));
     const scheduleDialog = await screen.findByRole('dialog', {
       name: 'Edit schedule for job 1001'
     });

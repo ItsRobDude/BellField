@@ -1,5 +1,6 @@
 import type { DispatchAppointmentCard } from './dispatch-board-data';
-import type { DispatchTimelineCardSpaceTier } from './dispatch-timeline-card';
+
+export type DispatchCardSpaceTier = 'narrow' | 'standard' | 'wide';
 
 type DispatchCardDetailOptions = {
   statusLabel: string;
@@ -26,7 +27,7 @@ export function formatDispatchCardPrimaryName(card: DispatchAppointmentCard): st
 
 export function formatDispatchCardDetailLine(
   card: DispatchAppointmentCard,
-  spaceTier: DispatchTimelineCardSpaceTier,
+  spaceTier: DispatchCardSpaceTier,
   options: DispatchCardDetailOptions
 ): string {
   const address = formatDispatchCardAddress(card);

@@ -4,7 +4,7 @@ import { useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } fr
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
 import {
-  formatDispatchCardAddress,
+  type DispatchCardSpaceTier,
   formatDispatchCardAriaLabel,
   formatDispatchCardDetailLine,
   formatDispatchCardPrimaryName
@@ -25,7 +25,7 @@ export type DispatchContextMenuPosition = {
   y: number;
 };
 
-export type DispatchTimelineCardSpaceTier = 'narrow' | 'standard' | 'wide';
+export type DispatchTimelineCardSpaceTier = DispatchCardSpaceTier;
 
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
@@ -36,7 +36,6 @@ type DispatchCardButtonProps = {
   spaceTier?: DispatchTimelineCardSpaceTier;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail: () => void;
-  onOpenScheduleEditor?: (card: DispatchAppointmentCard) => void;
   onOpenContextMenu?: (
     card: DispatchAppointmentCard,
     position: DispatchContextMenuPosition
@@ -65,7 +64,6 @@ export function DispatchCardButton({
   spaceTier = 'standard',
   technicians,
   onOpenJobDetail,
-  onOpenScheduleEditor,
   onOpenContextMenu,
   onDragStart,
   onResizeStart,
@@ -78,7 +76,7 @@ export function DispatchCardButton({
   const hasOverlapWarning = hasScheduleConflict || Boolean(dragState?.overlapWarning);
   const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
   const endMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
-  const usesOverlayEdit = Boolean(onOpenScheduleEditor && spaceTier === 'narrow');
+  const usesOverlayActions = Boolean(onOpenContextMenu && spaceTier === 'narrow');
   const timeRangeText =
     startMinutes !== null && endMinutes !== null
       ? formatDispatchResizePreview(startMinutes, endMinutes)
@@ -149,7 +147,7 @@ export function DispatchCardButton({
           <div
             style={{
               ...timelineCardTitleRowStyle,
-              ...(usesOverlayEdit ? timelineCardTitleRowWithOverlayEditStyle : null)
+              ...(usesOverlayActions ? timelineCardTitleRowWithOverlayActionStyle : null)
             }}
           >
             <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
@@ -163,21 +161,32 @@ export function DispatchCardButton({
           <span style={timelineCardAddressStyle}>{detailLine}</span>
         </div>
       </button>
-      {onOpenScheduleEditor ? (
+      {onOpenContextMenu ? (
         <button
           type="button"
-          aria-label={`Edit schedule for job ${card.jobNumber}`}
-          onClick={(event) => {
+          aria-haspopup="menu"
+          aria-label={`Dispatch actions for job ${card.jobNumber}`}
+          title="Dispatch actions"
+          onPointerDown={(event) => {
             event.stopPropagation();
-            onOpenScheduleEditor(card);
+          }}
+          onClick={(event) => {
+            const buttonRect = event.currentTarget.getBoundingClientRect();
+
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenContextMenu(card, {
+              x: buttonRect.left,
+              y: buttonRect.bottom + 6
+            });
           }}
           style={
-            usesOverlayEdit
-              ? { ...timelineCardEditButtonStyle, ...timelineCardEditOverlayStyle }
-              : timelineCardEditButtonStyle
+            usesOverlayActions
+              ? { ...timelineCardActionButtonStyle, ...timelineCardActionOverlayStyle }
+              : timelineCardActionButtonStyle
           }
         >
-          Edit
+          {spaceTier === 'narrow' ? '...' : 'Actions'}
         </button>
       ) : null}
       {dragStatusText ? (
@@ -329,11 +338,11 @@ const timelineCardMovingButtonStyle: CSSProperties = {
 };
 
 /**
- * Narrow cards have no width to spare for an inline Edit slot: float the
+ * Narrow cards have no width to spare for an inline action slot: float the
  * button over the card's top-right corner instead, clear of the resize
  * handle (width 0.55rem, zIndex 3).
  */
-const timelineCardEditOverlayStyle: CSSProperties = {
+const timelineCardActionOverlayStyle: CSSProperties = {
   position: 'absolute',
   right: '0.65rem',
   top: '0.2rem',
@@ -341,7 +350,7 @@ const timelineCardEditOverlayStyle: CSSProperties = {
   marginRight: 0
 };
 
-const timelineCardEditButtonStyle: CSSProperties = {
+const timelineCardActionButtonStyle: CSSProperties = {
   alignSelf: 'center',
   background: '#ffffff',
   border: '1px solid #cbe3e8',
@@ -435,7 +444,7 @@ const timelineCardTitleRowStyle: CSSProperties = {
   minWidth: 0
 };
 
-const timelineCardTitleRowWithOverlayEditStyle: CSSProperties = {
+const timelineCardTitleRowWithOverlayActionStyle: CSSProperties = {
   paddingRight: '3.1rem'
 };
 
