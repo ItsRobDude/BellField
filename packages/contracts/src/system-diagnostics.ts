@@ -40,6 +40,7 @@ export interface LicenseDiagnosticsSummary {
   required: boolean;
   path: string | null;
   status: 'notRequired' | 'valid' | 'missing' | 'invalid';
+  operational: boolean;
   licenseKind?: 'paid' | 'trial' | 'dataOnly';
   entitlementState?: LicenseEntitlementState;
   entitlementSource?: 'current' | 'cache' | 'terminationReceipt';

@@ -1,9 +1,8 @@
-import { createPublicKey, verify } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { canonicalizeJson } from '../license/license-format.mjs';
+import { verifyLicenseContent } from '../update/license-verification.mjs';
 
 const timestamp = new Date().toISOString();
 const root = mkdtempSync(path.join(tmpdir(), 'bellfield-license-key-smoke-'));
@@ -20,9 +19,7 @@ const evidence = {
 try {
   check('private key exists outside repo', existsSync(privateKeyPath));
 
-  const publicKeyPem = readEmbeddedPublicKeyPem();
   const paidEnvelope = issueAndVerifyLicense({
-    publicKeyPem,
     outputPath: path.join(root, 'paid-license.json'),
     args: ['--kind=paid', '--license-id=lic_smoke_paid', '--update-window-end=2027-06-11']
   });
@@ -35,7 +32,6 @@ try {
   );
 
   const trialEnvelope = issueAndVerifyLicense({
-    publicKeyPem,
     outputPath: path.join(root, 'trial-license.json'),
     args: [
       '--kind=trial',
@@ -54,7 +50,6 @@ try {
   );
 
   const dataOnlyEnvelope = issueAndVerifyLicense({
-    publicKeyPem,
     outputPath: path.join(root, 'data-only-license.json'),
     args: [
       '--kind=dataOnly',
@@ -71,6 +66,17 @@ try {
       terminatedLicenseId: dataOnlyEnvelope.license.terminatedLicenseId
     }
   );
+  expectIssueLicenseFailure({
+    outputPath: path.join(root, 'invalid-paid-operation-end-license.json'),
+    args: [
+      '--kind=paid',
+      '--license-id=lic_smoke_invalid_paid',
+      '--update-window-end=2027-06-11',
+      '--operation-end=2026-07-11'
+    ],
+    expectedMessage: 'paid licenses must never carry operationEnd'
+  });
+  check('paid license rejects operationEnd', true);
 
   const ledgerEntries = readFileSync(ledgerPath, 'utf8')
     .trim()
@@ -106,22 +112,7 @@ function getArgValue(name) {
   return match ? match.slice(prefix.length) : undefined;
 }
 
-function readEmbeddedPublicKeyPem() {
-  const source = readFileSync(
-    path.resolve('apps', 'api', 'src', 'modules', 'licensing', 'license-verification.ts'),
-    'utf8'
-  );
-  const match = source.match(
-    /'-----BEGIN PUBLIC KEY-----',\s*'([^']+)',\s*'-----END PUBLIC KEY-----'/m
-  );
-  if (!match) {
-    throw new Error('Could not read embedded license public key from API source.');
-  }
-
-  return ['-----BEGIN PUBLIC KEY-----', match[1], '-----END PUBLIC KEY-----', ''].join('\n');
-}
-
-function issueAndVerifyLicense({ publicKeyPem, outputPath, args }) {
+function issueAndVerifyLicense({ outputPath, args }) {
   const issueResult = spawnSync(
     process.execPath,
     [
@@ -140,17 +131,34 @@ function issueAndVerifyLicense({ publicKeyPem, outputPath, args }) {
     );
   }
 
-  const envelope = JSON.parse(readFileSync(outputPath, 'utf8'));
-  const signatureOk = verify(
-    null,
-    Buffer.from(canonicalizeJson(envelope.license), 'utf8'),
-    createPublicKey(publicKeyPem),
-    Buffer.from(envelope.signature.value, 'base64url')
-  );
-  if (!signatureOk) {
-    throw new Error(`issued license did not verify: ${outputPath}`);
+  const rawLicense = readFileSync(outputPath, 'utf8');
+  const status = verifyLicenseContent(rawLicense);
+  if (status.status !== 'valid') {
+    throw new Error(`issued license did not verify: ${status.message}`);
   }
-  return envelope;
+  return JSON.parse(rawLicense);
+}
+
+function expectIssueLicenseFailure({ outputPath, args, expectedMessage }) {
+  const issueResult = spawnSync(
+    process.execPath,
+    [
+      path.resolve('tools', 'license', 'issue-license.mjs'),
+      `--private-key=${privateKeyPath}`,
+      '--shop-name=BellField Local Key Smoke',
+      `--output=${outputPath}`,
+      `--ledger=${ledgerPath}`,
+      ...args
+    ],
+    { encoding: 'utf8', shell: false }
+  );
+  if (issueResult.status === 0) {
+    throw new Error('issue-license unexpectedly accepted an invalid paid operationEnd.');
+  }
+  const output = `${issueResult.stderr}\n${issueResult.stdout}`;
+  if (!output.includes(expectedMessage)) {
+    throw new Error(`issue-license failed with unexpected message: ${output.trim()}`);
+  }
 }
 
 function check(name, passed, details = {}) {

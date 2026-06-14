@@ -52,6 +52,18 @@ function paidLicense(licenseId = 'lic_paid_001'): BellFieldLicenseBody {
   };
 }
 
+function trialLicense(operationEnd = '2026-06-12'): BellFieldLicenseBody {
+  return {
+    schemaVersion: 2,
+    licenseKind: 'trial',
+    licenseId: 'lic_trial_001',
+    shopName: 'Trial Shop',
+    issuedAt: '2026-06-01T00:00:00.000Z',
+    updateWindowEnd: '2026-07-01',
+    operationEnd
+  };
+}
+
 function dataOnlyLicense(terminatedLicenseId = 'lic_paid_001'): BellFieldLicenseBody {
   return {
     schemaVersion: 2,
@@ -144,7 +156,7 @@ describe('resolveInstalledLicenseEntitlement', () => {
     }
   });
 
-  it('lets a signed data-only receipt supersede a matching current paid license', () => {
+  it('caches the signed data-only receipt when it supersedes a matching current paid license', () => {
     const root = mkdtempSync(join(tmpdir(), 'bellfield-entitlement-store-spec-'));
     try {
       const signer = createSigner();
@@ -155,11 +167,8 @@ describe('resolveInstalledLicenseEntitlement', () => {
       }
       writeFileSync(licensePath, signer.signLicense(paidLicense('lic_paid_001')), 'utf8');
       mkdirSync(paths.terminationReceiptsDirectory, { recursive: true });
-      writeFileSync(
-        join(paths.terminationReceiptsDirectory, 'receipt.json'),
-        signer.signLicense(dataOnlyLicense('lic_paid_001')),
-        'utf8'
-      );
+      const rawReceipt = signer.signLicense(dataOnlyLicense('lic_paid_001'));
+      writeFileSync(join(paths.terminationReceiptsDirectory, 'receipt.json'), rawReceipt, 'utf8');
 
       const result = resolveInstalledLicenseEntitlement({
         licensePath,
@@ -171,6 +180,107 @@ describe('resolveInstalledLicenseEntitlement', () => {
       expect(result.entitlement).toMatchObject({
         state: 'refundedDataOnly',
         source: 'terminationReceipt'
+      });
+      expect(readFileSync(paths.lastVerifiedLicensePath, 'utf8')).toBe(rawReceipt);
+
+      rmSync(licensePath, { force: true });
+      rmSync(paths.terminationReceiptsDirectory, { force: true, recursive: true });
+
+      const cachedResult = resolveInstalledLicenseEntitlement({
+        licensePath,
+        publicKeyPem: signer.publicKeyPem,
+        now
+      });
+
+      expect(cachedResult.current.status).toBe('missing');
+      expect(cachedResult.cachedLicense?.status).toBe('valid');
+      expect(cachedResult.entitlement).toMatchObject({
+        state: 'refundedDataOnly',
+        source: 'cache'
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('does not fall open to a structurally valid cache signed by the wrong key', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-entitlement-store-spec-'));
+    try {
+      const trustedSigner = createSigner();
+      const wrongSigner = createSigner();
+      const licensePath = join(root, 'bellfield-license.json');
+      const paths = getEntitlementArtifactPaths(licensePath);
+      if (!paths) {
+        throw new Error('expected entitlement paths');
+      }
+      writeFileSync(paths.lastVerifiedLicensePath, wrongSigner.signLicense(paidLicense()), 'utf8');
+
+      const result = resolveInstalledLicenseEntitlement({
+        licensePath,
+        publicKeyPem: trustedSigner.publicKeyPem,
+        now
+      });
+
+      expect(result.cachedLicense?.status).toBe('invalid');
+      expect(result.entitlement).toMatchObject({
+        state: 'licenseRecovery',
+        reason: 'missing'
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('warns but fails open when the receipt store is present but unreadable', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-entitlement-store-spec-'));
+    try {
+      const signer = createSigner();
+      const licensePath = join(root, 'bellfield-license.json');
+      const paths = getEntitlementArtifactPaths(licensePath);
+      if (!paths) {
+        throw new Error('expected entitlement paths');
+      }
+      writeFileSync(licensePath, signer.signLicense(paidLicense()), 'utf8');
+      writeFileSync(paths.terminationReceiptsDirectory, 'not a directory', 'utf8');
+
+      const result = resolveInstalledLicenseEntitlement({
+        licensePath,
+        publicKeyPem: signer.publicKeyPem,
+        now
+      });
+
+      expect(result.receiptReadError).toEqual(expect.any(String));
+      expect(result.terminationReceipts).toHaveLength(0);
+      expect(result.entitlement).toMatchObject({
+        state: 'paidOperational',
+        source: 'current'
+      });
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
+
+  it('keeps an expired current trial data-only even when a paid cache is present', () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-entitlement-store-spec-'));
+    try {
+      const signer = createSigner();
+      const licensePath = join(root, 'bellfield-license.json');
+      const paths = getEntitlementArtifactPaths(licensePath);
+      if (!paths) {
+        throw new Error('expected entitlement paths');
+      }
+      writeFileSync(licensePath, signer.signLicense(trialLicense('2026-06-12')), 'utf8');
+      writeFileSync(paths.lastVerifiedLicensePath, signer.signLicense(paidLicense()), 'utf8');
+
+      const result = resolveInstalledLicenseEntitlement({
+        licensePath,
+        publicKeyPem: signer.publicKeyPem,
+        now
+      });
+
+      expect(result.entitlement).toMatchObject({
+        state: 'trialExpiredDataOnly',
+        source: 'current'
       });
     } finally {
       rmSync(root, { force: true, recursive: true });

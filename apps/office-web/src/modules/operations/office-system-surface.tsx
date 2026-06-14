@@ -102,11 +102,7 @@ function licenseStatusText(license: SystemDiagnosticsResponse['license']): strin
 }
 
 function licenseStatusOk(license: SystemDiagnosticsResponse['license']): boolean {
-  return (
-    license.status === 'notRequired' ||
-    license.entitlementState === 'paidOperational' ||
-    license.entitlementState === 'trialOperational'
-  );
+  return license.status === 'notRequired' || license.operational;
 }
 
 // Any red rollup check renders here, so data-audit checks that have no card

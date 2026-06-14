@@ -144,6 +144,7 @@ describe('SystemDiagnosticsService', () => {
     expect(result.app.buildKind).toBe('development');
     expect(result.backups.stale).toBe(true);
     expect(result.license.status).toBe('notRequired');
+    expect(result.license.operational).toBe(true);
     expect(result.checks.find((c) => c.key === 'backups')?.ok).toBe(false);
     expect(result.checks.find((c) => c.key === 'database')?.ok).toBe(true);
     expect(result.checks.find((c) => c.key === 'license')?.ok).toBe(true);
@@ -299,6 +300,7 @@ describe('SystemDiagnosticsService', () => {
       const result = await service.collectDiagnostics();
 
       expect(result.license.status).toBe('missing');
+      expect(result.license.operational).toBe(false);
       expect(result.checks.find((c) => c.key === 'license')).toEqual({
         key: 'license',
         ok: false,
@@ -315,6 +317,39 @@ describe('SystemDiagnosticsService', () => {
       } else {
         process.env.BELLFIELD_LICENSE_PATH = originalPath;
       }
+    }
+  });
+
+  it('sanitizes license artifact read failures in diagnostics', async () => {
+    const root = mkdtempSync(join(tmpdir(), 'bellfield-license-artifact-spec-'));
+    const originalRequired = process.env.BELLFIELD_LICENSE_REQUIRED;
+    const originalPath = process.env.BELLFIELD_LICENSE_PATH;
+    process.env.BELLFIELD_LICENSE_REQUIRED = 'true';
+    process.env.BELLFIELD_LICENSE_PATH = join(root, 'bellfield-license.json');
+    writeFileSync(join(root, 'entitlement-receipts'), 'not a directory', 'utf8');
+    try {
+      const { service } = createService();
+
+      const result = await service.collectDiagnostics();
+
+      expect(result.license.operational).toBe(false);
+      expect(result.license.entitlementState).toBe('licenseRecovery');
+      expect(result.license.message).toBe(
+        'License entitlement artifacts could not be read. Check license directory permissions.'
+      );
+      expect(result.license.message).not.toMatch(/enotdir|eperm|eacces/i);
+    } finally {
+      if (originalRequired === undefined) {
+        delete process.env.BELLFIELD_LICENSE_REQUIRED;
+      } else {
+        process.env.BELLFIELD_LICENSE_REQUIRED = originalRequired;
+      }
+      if (originalPath === undefined) {
+        delete process.env.BELLFIELD_LICENSE_PATH;
+      } else {
+        process.env.BELLFIELD_LICENSE_PATH = originalPath;
+      }
+      rmSync(root, { force: true, recursive: true });
     }
   });
 });

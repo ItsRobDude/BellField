@@ -294,7 +294,8 @@ export class SystemDiagnosticsService {
       return {
         required: false,
         path: null,
-        status: 'notRequired'
+        status: 'notRequired',
+        operational: true
       };
     }
 
@@ -306,6 +307,7 @@ export class SystemDiagnosticsService {
         required: runtime.licenseRequired,
         path: runtime.licensePath ?? null,
         status: 'valid',
+        operational: licenseEntitlementOperational(entitlement.state),
         entitlementState: entitlement.state,
         entitlementSource: entitlement.source,
         licenseKind: license.schemaVersion === 1 ? 'paid' : license.licenseKind,
@@ -316,9 +318,7 @@ export class SystemDiagnosticsService {
         issuedAt: license.issuedAt,
         updateWindowEnd: 'updateWindowEnd' in license ? license.updateWindowEnd : undefined,
         operationEnd: 'operationEnd' in license ? license.operationEnd : undefined,
-        message: resolved.cacheWriteError
-          ? `License cache could not be updated: ${resolved.cacheWriteError}`
-          : entitlement.warning
+        message: licenseArtifactWarning(resolved) ?? entitlement.warning
       };
     }
 
@@ -326,8 +326,9 @@ export class SystemDiagnosticsService {
       required: runtime.licenseRequired,
       path: runtime.licensePath ?? null,
       status: resolved.current.status,
+      operational: false,
       entitlementState: resolved.entitlement.state,
-      message: resolved.entitlement.message
+      message: licenseArtifactWarning(resolved) ?? resolved.entitlement.message
     };
   }
 }
@@ -381,21 +382,14 @@ function backupCheckDetail(backups: SystemDiagnosticsResponse['backups']): strin
 }
 
 function licenseCheckOk(license: LicenseDiagnosticsSummary): boolean {
-  return (
-    license.status === 'notRequired' ||
-    license.entitlementState === 'paidOperational' ||
-    license.entitlementState === 'trialOperational'
-  );
+  return license.status === 'notRequired' || license.operational;
 }
 
 function licenseCheckDetail(license: LicenseDiagnosticsSummary): string | undefined {
   if (license.status === 'notRequired') {
     return undefined;
   }
-  if (
-    license.entitlementState === 'paidOperational' ||
-    license.entitlementState === 'trialOperational'
-  ) {
+  if (license.operational) {
     return license.message;
   }
   if (license.entitlementState === 'trialExpiredDataOnly') {
@@ -411,6 +405,24 @@ function licenseCheckDetail(license: LicenseDiagnosticsSummary): string | undefi
     return undefined;
   }
   return license.message ?? 'License needs attention.';
+}
+
+function licenseEntitlementOperational(
+  state: Exclude<LicenseDiagnosticsSummary['entitlementState'], undefined>
+): boolean {
+  return state === 'paidOperational' || state === 'trialOperational';
+}
+
+function licenseArtifactWarning(
+  resolved: ReturnType<typeof resolveInstalledLicenseEntitlement>
+): string | undefined {
+  if (resolved.receiptReadError) {
+    return 'License entitlement artifacts could not be read. Check license directory permissions.';
+  }
+  if (resolved.cacheWriteError) {
+    return 'License entitlement cache could not be updated. Check license directory permissions.';
+  }
+  return undefined;
 }
 
 function getBoolean(value: string | undefined, defaultValue: boolean): boolean {

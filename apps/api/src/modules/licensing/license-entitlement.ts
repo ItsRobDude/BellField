@@ -53,6 +53,10 @@ type ValidArtifact = {
   license: VerifiedBellFieldLicense;
 };
 
+type DataOnlyArtifact = ValidArtifact & {
+  license: VerifiedBellFieldLicense & BellFieldDataOnlyLicenseBody;
+};
+
 export function resolveLicenseEntitlement(
   input: ResolveLicenseEntitlementInput
 ): LicenseEntitlementState {
@@ -64,7 +68,7 @@ export function resolveLicenseEntitlement(
   const validArtifacts = [currentArtifact, cachedArtifact, ...receiptArtifacts].filter(
     (artifact): artifact is ValidArtifact => Boolean(artifact)
   );
-  const dataOnlyArtifacts = validArtifacts.filter((artifact) => isDataOnly(artifact.license));
+  const dataOnlyArtifacts = validArtifacts.filter(isDataOnlyArtifact);
 
   if (currentArtifact) {
     const currentState = artifactState(currentArtifact, dataOnlyArtifacts, input.now);
@@ -81,7 +85,7 @@ export function resolveLicenseEntitlement(
   }
 
   const directDataOnlyArtifact = dataOnlyArtifacts[0];
-  if (directDataOnlyArtifact && isDataOnly(directDataOnlyArtifact.license)) {
+  if (directDataOnlyArtifact) {
     return dataOnlyState(directDataOnlyArtifact);
   }
 
@@ -116,37 +120,24 @@ function validArtifact(
   return { source, license: status.license };
 }
 
-function firstOperationalArtifact(artifact: ValidArtifact | null): ValidArtifact | null {
-  if (!artifact || isDataOnly(artifact.license)) {
-    return null;
-  }
-  return artifact;
-}
-
 function artifactState(
   artifact: ValidArtifact,
-  dataOnlyArtifacts: ValidArtifact[],
+  dataOnlyArtifacts: DataOnlyArtifact[],
   now: Date
 ): LicenseEntitlementState | null {
-  if (isDataOnly(artifact.license)) {
+  if (isDataOnlyArtifact(artifact)) {
     return dataOnlyState(artifact);
-  }
-
-  const operationalArtifact = firstOperationalArtifact(artifact);
-  if (!operationalArtifact) {
-    return null;
   }
 
   const terminatingArtifact = dataOnlyArtifacts.find(
     (dataOnlyArtifact) =>
-      isDataOnly(dataOnlyArtifact.license) &&
-      dataOnlyArtifact.license.terminatedLicenseId === operationalArtifact.license.licenseId
+      dataOnlyArtifact.license.terminatedLicenseId === artifact.license.licenseId
   );
-  if (terminatingArtifact && isDataOnly(terminatingArtifact.license)) {
+  if (terminatingArtifact) {
     return dataOnlyState(terminatingArtifact);
   }
 
-  return operationalState(operationalArtifact, now);
+  return operationalState(artifact, now);
 }
 
 function operationalState(artifact: ValidArtifact, now: Date): LicenseEntitlementState {
@@ -177,10 +168,7 @@ function operationalState(artifact: ValidArtifact, now: Date): LicenseEntitlemen
   };
 }
 
-function dataOnlyState(artifact: ValidArtifact): LicenseEntitlementState {
-  if (!isDataOnly(artifact.license)) {
-    throw new Error('Expected a data-only license artifact.');
-  }
+function dataOnlyState(artifact: DataOnlyArtifact): LicenseEntitlementState {
   return {
     state: 'refundedDataOnly',
     source: artifact.source,
@@ -208,6 +196,12 @@ function isDataOnly(
   return license.schemaVersion === 2 && license.licenseKind === 'dataOnly';
 }
 
+function isDataOnlyArtifact(artifact: ValidArtifact): artifact is DataOnlyArtifact {
+  return isDataOnly(artifact.license);
+}
+
 function isTrialActive(license: BellFieldTrialLicenseBody, now: Date): boolean {
-  return now.getTime() < Date.parse(`${license.operationEnd}T00:00:00.000Z`);
+  const [year, month, day] = license.operationEnd.split('-').map(Number);
+  const expiresAt = Date.UTC(year, month - 1, day + 1);
+  return now.getTime() < expiresAt;
 }

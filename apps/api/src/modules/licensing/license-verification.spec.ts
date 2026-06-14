@@ -1,6 +1,6 @@
 import { generateKeyPairSync, sign } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -75,6 +75,17 @@ function verifyWithStandaloneTooling(rawLicenseFile: string, publicKeyPem: strin
     throw new Error(result.stderr || result.stdout || `tooling verifier exited ${result.status}`);
   }
   return JSON.parse(result.stdout);
+}
+
+function readEmbeddedLicensePublicKey(relativePath: string): string {
+  const source = readFileSync(join(repoRoot(), ...relativePath.split('/')), 'utf8');
+  const match = source.match(
+    /'-----BEGIN PUBLIC KEY-----',\s*'([^']+)',\s*'-----END PUBLIC KEY-----'/m
+  );
+  if (!match) {
+    throw new Error(`Could not read embedded license public key from ${relativePath}.`);
+  }
+  return ['-----BEGIN PUBLIC KEY-----', match[1], '-----END PUBLIC KEY-----', ''].join('\n');
 }
 
 describe('license verification', () => {
@@ -355,5 +366,11 @@ describe('license verification', () => {
 
       expect(toolingStatus).toEqual(apiStatus);
     }
+  });
+
+  it('keeps the API and updater embedded license public keys in parity', () => {
+    expect(readEmbeddedLicensePublicKey('tools/update/license-verification.mjs')).toBe(
+      readEmbeddedLicensePublicKey('apps/api/src/modules/licensing/license-verification.ts')
+    );
   });
 });

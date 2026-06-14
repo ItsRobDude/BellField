@@ -133,8 +133,28 @@ describe('resolveLicenseEntitlement', () => {
 
   it('degrades an expired trial to data-only', () => {
     const entitlement = resolveLicenseEntitlement({
-      current: valid(trial({ operationEnd: '2026-06-13' })),
+      current: valid(trial({ operationEnd: '2026-06-12' })),
       now
+    });
+
+    expectEntitlementState(entitlement, 'trialExpiredDataOnly');
+    expect(entitlement.source).toBe('current');
+  });
+
+  it('keeps a trial active through the named UTC operationEnd date', () => {
+    const entitlement = resolveLicenseEntitlement({
+      current: valid(trial({ operationEnd: '2026-06-13' })),
+      now: new Date('2026-06-13T23:59:59.999Z')
+    });
+
+    expectEntitlementState(entitlement, 'trialOperational');
+    expect(entitlement.source).toBe('current');
+  });
+
+  it('expires a trial at the start of the next UTC date', () => {
+    const entitlement = resolveLicenseEntitlement({
+      current: valid(trial({ operationEnd: '2026-06-13' })),
+      now: new Date('2026-06-14T00:00:00.000Z')
     });
 
     expectEntitlementState(entitlement, 'trialExpiredDataOnly');
@@ -178,7 +198,7 @@ describe('resolveLicenseEntitlement', () => {
   it('does not upgrade an expired signed trial cache to paid', () => {
     const entitlement = resolveLicenseEntitlement({
       current: missing(),
-      cachedLicense: valid(trial({ operationEnd: '2026-06-13' })),
+      cachedLicense: valid(trial({ operationEnd: '2026-06-12' })),
       now
     });
 
