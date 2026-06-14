@@ -171,7 +171,7 @@ The settings screen should eventually include:
 - reply-to email address
 - default document branding basics
 - estimate email subject/body template defaults
-- later invoice email template defaults
+- invoice email subject/body template defaults
 - later document branding basics such as logo and footer text
 
 The settings screen must not ask for email-provider API keys, delivery-provider
@@ -314,6 +314,8 @@ retry/expiry/status-poll jobs.
   with `documentType: "invoice"`; `/v1/messages/estimate` remains a legacy
   compatibility alias for older estimate-only clients
 - invoice/payment-document email sends from `billing@bellfield.app`
+- office settings include invoice email subject/body template defaults, with
+  per-send overrides still available from the invoice send preview
 - when the owner enables the `includeInvoicePaymentLink` setting, sending a
   posted **main** invoice with an outstanding balance appends an online pay-now
   link (the existing full-balance link) to the email body. The link is minted
@@ -347,9 +349,9 @@ per `(job, amount, attempt)`: active unpaid links are reused locally, and a
 same-dollar repeat after a prior online card payment requires office
 confirmation before BellField creates the next Stripe Checkout attempt.
 
-Still deferred: invoice email template settings, refunds, deposits, partial
-payments, stored cards, customer surcharge logic, and processor-fee
-reconciliation beyond BellField's application fee.
+Still deferred: refunds, deposits, partial payments, stored cards, customer
+surcharge logic, and processor-fee reconciliation beyond BellField's
+application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

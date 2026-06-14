@@ -18,6 +18,8 @@ function arrange() {
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.',
+      invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+      invoiceEmailBody: 'Attached is your invoice.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
       defaultSalesTaxBasisPoints: 825,
@@ -38,6 +40,8 @@ function arrange() {
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.',
+      invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+      invoiceEmailBody: 'Attached is your invoice.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
       defaultSalesTaxBasisPoints: 875,
@@ -73,6 +77,9 @@ describe('OfficeSettingsSurface', () => {
     fireEvent.change(screen.getByLabelText('Default sales tax rate'), {
       target: { value: '8.75' }
     });
+    fireEvent.change(screen.getByLabelText('Invoice email subject'), {
+      target: { value: 'Invoice for {jobNumber}' }
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Save settings' }));
 
     await waitFor(() => {
@@ -81,6 +88,8 @@ describe('OfficeSettingsSurface', () => {
           apiBaseUrl: 'http://api.test',
           sessionToken: 'session-token',
           companyName: 'BellField HVAC',
+          invoiceEmailSubject: 'Invoice for {jobNumber}',
+          invoiceEmailBody: 'Attached is your invoice.',
           chargesSalesTax: true,
           defaultSalesTaxBasisPoints: 875
         })
@@ -93,6 +102,9 @@ describe('OfficeSettingsSurface', () => {
     renderSurface();
 
     expect(await screen.findByLabelText('Reply-to email')).toHaveValue('office@example.com');
+    expect(screen.getByLabelText('Invoice email subject')).toHaveValue(
+      'Invoice {jobNumber} from {companyName}'
+    );
     expect(screen.getByLabelText('Charge sales tax')).toBeChecked();
     expect(screen.getByLabelText('Default sales tax rate')).toHaveValue(8.25);
     expect(screen.queryByLabelText('Estimate email from address')).toBeNull();
@@ -167,6 +179,7 @@ describe('OfficeSettingsSurface', () => {
     renderSurface(false);
 
     expect(await screen.findByLabelText('Company name')).toBeDisabled();
+    expect(screen.getByLabelText('Invoice email body')).toBeDisabled();
     expect(screen.getByLabelText('Charge sales tax')).toBeDisabled();
     expect(screen.getByLabelText('Default sales tax rate')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();

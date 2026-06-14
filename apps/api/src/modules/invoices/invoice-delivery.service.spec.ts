@@ -73,6 +73,20 @@ function outboundMessage(overrides = {}) {
   };
 }
 
+function companySettings(overrides = {}) {
+  return {
+    companyName: 'Acme HVAC',
+    replyToEmail: 'office@acme.example',
+    estimateEmailSubject: 'Estimate from {companyName}',
+    estimateEmailBody: 'Attached is your estimate.',
+    invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+    invoiceEmailBody:
+      'Hello {customerName}, attached is your {invoiceLabelLower} for job {jobNumber}.',
+    includeInvoicePaymentLink: false,
+    ...overrides
+  };
+}
+
 function createService() {
   const identityAccessService = {
     getAuthorizedEmployee: jest.fn().mockResolvedValue({
@@ -82,11 +96,7 @@ function createService() {
     })
   };
   const companySettingsRepository = {
-    getSettings: jest.fn().mockResolvedValue({
-      companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example',
-      includeInvoicePaymentLink: false
-    })
+    getSettings: jest.fn().mockResolvedValue(companySettings())
   };
   const customerDeliveryRepository = {
     listOutboundMessagesForInvoice: jest.fn().mockResolvedValue([]),
@@ -198,6 +208,21 @@ describe('InvoiceDeliveryService', () => {
     expect(emailProviderService.getInvoiceEmailDeliveryStatus).toHaveBeenCalledTimes(1);
   });
 
+  it('uses invoice email template defaults from company settings', async () => {
+    const { service, companySettingsRepository } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({
+        invoiceEmailSubject: '{invoiceLabel} ready for {jobNumber}',
+        invoiceEmailBody: 'Hi {customerName}, {companyName} attached {invoiceLabelLower}.'
+      })
+    );
+
+    const result = await service.getInvoiceSendPreview('token', 'invoice-1');
+
+    expect(result.preview.subject).toBe('Invoice ready for 1001');
+    expect(result.preview.bodyText).toBe('Hi Acme Co, Acme HVAC attached invoice.');
+  });
+
   it('rejects draft invoices and posted invoices missing frozen context', async () => {
     const { service, invoicesRepository } = createService();
     invoicesRepository.getInvoiceById.mockResolvedValueOnce(
@@ -285,11 +310,9 @@ describe('InvoiceDeliveryService', () => {
       onlinePaymentLinkService,
       customerDeliveryRepository
     } = createService();
-    companySettingsRepository.getSettings.mockResolvedValue({
-      companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example',
-      includeInvoicePaymentLink: true
-    });
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({ includeInvoicePaymentLink: true })
+    );
     onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
       state: 'created',
       checkoutUrl: 'https://pay.example/cs_test_123',
@@ -339,11 +362,9 @@ describe('InvoiceDeliveryService', () => {
       onlinePaymentLinkService,
       customerDeliveryRepository
     } = createService();
-    companySettingsRepository.getSettings.mockResolvedValue({
-      companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example',
-      includeInvoicePaymentLink: true
-    });
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({ includeInvoicePaymentLink: true })
+    );
     onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
       state: 'confirmationRequired',
       code: 'sameAmountPreviouslyPaid',
@@ -370,11 +391,9 @@ describe('InvoiceDeliveryService', () => {
       customerDeliveryRepository,
       emailProviderService
     } = createService();
-    companySettingsRepository.getSettings.mockResolvedValue({
-      companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example',
-      includeInvoicePaymentLink: true
-    });
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({ includeInvoicePaymentLink: true })
+    );
     onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
       state: 'created',
       checkoutUrl: 'https://pay.example/cs_test_123',
@@ -409,11 +428,9 @@ describe('InvoiceDeliveryService', () => {
       customerDeliveryRepository,
       invoicePdfRendererService
     } = createService();
-    companySettingsRepository.getSettings.mockResolvedValue({
-      companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example',
-      includeInvoicePaymentLink: true
-    });
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({ includeInvoicePaymentLink: true })
+    );
     customerDeliveryRepository.createInvoiceSendIntent.mockResolvedValueOnce({
       kind: 'blocked',
       reason: 'alreadyQueued'
@@ -436,11 +453,9 @@ describe('InvoiceDeliveryService', () => {
       customerDeliveryRepository,
       invoicePdfRendererService
     } = createService();
-    companySettingsRepository.getSettings.mockResolvedValue({
-      companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example',
-      includeInvoicePaymentLink: true
-    });
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({ includeInvoicePaymentLink: true })
+    );
     invoicePdfRendererService.renderInvoicePdf.mockRejectedValueOnce(new Error('render boom'));
 
     await expect(

@@ -7,6 +7,8 @@ const validSettings: UpdateCompanySettingsRequestDto = {
   replyToEmail: 'Office@Example.COM',
   estimateEmailSubject: 'Estimate from {companyName}',
   estimateEmailBody: 'Attached is your estimate.',
+  invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+  invoiceEmailBody: 'Attached is your invoice.',
   acceptanceLinkExpiryDays: 30,
   chargesSalesTax: true,
   defaultSalesTaxBasisPoints: 825,
@@ -94,5 +96,37 @@ describe('CompanySettingsService', () => {
     await service.updateSettings('token', { ...validSettings, acceptanceLinkExpiryDays: 7 });
     await service.updateSettings('token', { ...validSettings, acceptanceLinkExpiryDays: 90 });
     expect(companySettingsRepository.upsertSettings).toHaveBeenCalledTimes(2);
+  });
+
+  it('trims and requires invoice email template defaults', async () => {
+    const { service, companySettingsRepository } = createService();
+
+    await expect(
+      service.updateSettings('token', {
+        ...validSettings,
+        invoiceEmailSubject: '   '
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await expect(
+      service.updateSettings('token', {
+        ...validSettings,
+        invoiceEmailBody: '   '
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    await service.updateSettings('token', {
+      ...validSettings,
+      invoiceEmailSubject: '  Invoice {jobNumber}  ',
+      invoiceEmailBody: '  Hello {customerName}.  '
+    });
+
+    expect(companySettingsRepository.upsertSettings).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        invoiceEmailSubject: 'Invoice {jobNumber}',
+        invoiceEmailBody: 'Hello {customerName}.'
+      }),
+      expect.objectContaining({ id: 'employee-1' })
+    );
   });
 });

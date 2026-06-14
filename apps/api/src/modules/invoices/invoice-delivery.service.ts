@@ -124,7 +124,11 @@ export class InvoiceDeliveryService {
     const invoice = await this.requireInvoice(invoiceId);
     this.requirePostedInvoice(invoice);
     const settings = await this.companySettingsRepository.getSettings();
-    const emailContent = buildInvoiceEmailContent(buildInvoiceEmailTokens(settings, invoice), {});
+    const emailContent = buildInvoiceEmailContent(
+      settings,
+      buildInvoiceEmailTokens(settings, invoice),
+      {}
+    );
 
     return {
       preview: {
@@ -152,6 +156,7 @@ export class InvoiceDeliveryService {
     const generatedAt = new Date().toISOString();
     const settings = await this.companySettingsRepository.getSettings();
     const emailContent = buildInvoiceEmailContent(
+      settings,
       buildInvoiceEmailTokens(settings, invoice),
       request
     );
@@ -412,14 +417,12 @@ export class InvoiceDeliveryService {
 }
 
 function buildInvoiceEmailContent(
+  settings: CompanySettings,
   tokens: Record<string, string>,
   request: Partial<Pick<SendInvoiceRequestDto, 'subject' | 'bodyText'>>
 ): { subject: string; bodyText: string } {
-  const defaultSubject = 'Invoice {jobNumber} from {companyName}';
-  const defaultBody =
-    'Hello {customerName}, attached is your {invoiceLabelLower} for job {jobNumber}.';
-  const subject = (request.subject?.trim() || defaultSubject).trim();
-  const bodyText = (request.bodyText?.trim() || defaultBody).trim();
+  const subject = (request.subject?.trim() || settings.invoiceEmailSubject).trim();
+  const bodyText = (request.bodyText?.trim() || settings.invoiceEmailBody).trim();
   if (!subject) {
     throw new BadRequestException('Invoice email subject is required.');
   }

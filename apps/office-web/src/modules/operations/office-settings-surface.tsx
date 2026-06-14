@@ -19,6 +19,8 @@ type SettingsDraft = {
   replyToEmail: string;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  invoiceEmailSubject: string;
+  invoiceEmailBody: string;
   acceptanceLinkExpiryDays: string;
   chargesSalesTax: boolean;
   defaultSalesTaxRatePercent: string;
@@ -30,6 +32,8 @@ const emptyDraft: SettingsDraft = {
   replyToEmail: '',
   estimateEmailSubject: '',
   estimateEmailBody: '',
+  invoiceEmailSubject: '',
+  invoiceEmailBody: '',
   acceptanceLinkExpiryDays: '30',
   chargesSalesTax: false,
   defaultSalesTaxRatePercent: '0',
@@ -101,6 +105,8 @@ export function OfficeSettingsSurface({
         replyToEmail: draft.replyToEmail.trim() || undefined,
         estimateEmailSubject: draft.estimateEmailSubject,
         estimateEmailBody: draft.estimateEmailBody,
+        invoiceEmailSubject: draft.invoiceEmailSubject,
+        invoiceEmailBody: draft.invoiceEmailBody,
         acceptanceLinkExpiryDays,
         chargesSalesTax: draft.chargesSalesTax,
         defaultSalesTaxBasisPoints,
@@ -205,6 +211,33 @@ export function OfficeSettingsSurface({
               />
             </label>
           </section>
+          <section style={styles.panel} aria-label="Invoice email defaults">
+            <h2 style={styles.sectionHeading}>Invoice email</h2>
+            <label style={styles.fieldLabel}>
+              Subject
+              <input
+                aria-label="Invoice email subject"
+                value={draft.invoiceEmailSubject}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'invoiceEmailSubject', event.target.value)
+                }
+                style={styles.input}
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              Body
+              <textarea
+                aria-label="Invoice email body"
+                value={draft.invoiceEmailBody}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'invoiceEmailBody', event.target.value)
+                }
+                style={{ ...styles.textarea, minHeight: '10rem' }}
+              />
+            </label>
+          </section>
           <section style={styles.panel} aria-label="Billing and tax settings">
             <h2 style={styles.sectionHeading}>Billing & tax</h2>
             <label style={styles.inlineLabel}>
@@ -278,6 +311,8 @@ function toDraft(settings: CompanySettings): SettingsDraft {
     replyToEmail: settings.replyToEmail ?? '',
     estimateEmailSubject: settings.estimateEmailSubject,
     estimateEmailBody: settings.estimateEmailBody,
+    invoiceEmailSubject: settings.invoiceEmailSubject,
+    invoiceEmailBody: settings.invoiceEmailBody,
     acceptanceLinkExpiryDays: String(settings.acceptanceLinkExpiryDays),
     chargesSalesTax: settings.chargesSalesTax,
     defaultSalesTaxRatePercent: basisPointsToPercentString(settings.defaultSalesTaxBasisPoints),

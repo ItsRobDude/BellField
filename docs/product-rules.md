@@ -687,8 +687,8 @@ Once an invoice is posted:
 
 Posted invoice email delivery is BellField-operated. Invoice and payment-document
 emails send from `billing@bellfield.app`; shops may edit company name,
-reply-to, and later invoice template text, but they must not configure or
-replace the backend email provider.
+reply-to, and invoice template text, but they must not configure or replace
+the backend email provider.
 
 ---
 

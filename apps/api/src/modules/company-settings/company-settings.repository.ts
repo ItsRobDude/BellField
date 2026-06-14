@@ -9,6 +9,8 @@ type CompanySettingsRow = {
   replyToEmail: string | null;
   estimateEmailSubject: string;
   estimateEmailBody: string;
+  invoiceEmailSubject: string;
+  invoiceEmailBody: string;
   acceptanceLinkExpiryDays: number;
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
@@ -29,6 +31,8 @@ export class CompanySettingsRepository {
           reply_to_email as "replyToEmail",
           estimate_email_subject as "estimateEmailSubject",
           estimate_email_body as "estimateEmailBody",
+          invoice_email_subject as "invoiceEmailSubject",
+          invoice_email_body as "invoiceEmailBody",
           acceptance_link_expiry_days as "acceptanceLinkExpiryDays",
           charges_sales_tax as "chargesSalesTax",
           default_sales_tax_basis_points as "defaultSalesTaxBasisPoints",
@@ -50,6 +54,8 @@ export class CompanySettingsRepository {
       replyToEmail: row.replyToEmail ?? undefined,
       estimateEmailSubject: row.estimateEmailSubject,
       estimateEmailBody: row.estimateEmailBody,
+      invoiceEmailSubject: row.invoiceEmailSubject,
+      invoiceEmailBody: row.invoiceEmailBody,
       acceptanceLinkExpiryDays: row.acceptanceLinkExpiryDays,
       chargesSalesTax: row.chargesSalesTax,
       defaultSalesTaxBasisPoints: row.defaultSalesTaxBasisPoints,
@@ -68,16 +74,19 @@ export class CompanySettingsRepository {
       `
         insert into company_settings (
           id, company_name, reply_to_email, estimate_email_subject, estimate_email_body,
+          invoice_email_subject, invoice_email_body,
           acceptance_link_expiry_days, charges_sales_tax, default_sales_tax_basis_points,
           include_invoice_payment_link,
           updated_by_employee_id, updated_by_name, created_at, updated_at
         )
-        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
         on conflict (id) do update set
           company_name = excluded.company_name,
           reply_to_email = excluded.reply_to_email,
           estimate_email_subject = excluded.estimate_email_subject,
           estimate_email_body = excluded.estimate_email_body,
+          invoice_email_subject = excluded.invoice_email_subject,
+          invoice_email_body = excluded.invoice_email_body,
           acceptance_link_expiry_days = excluded.acceptance_link_expiry_days,
           charges_sales_tax = excluded.charges_sales_tax,
           default_sales_tax_basis_points = excluded.default_sales_tax_basis_points,
@@ -91,6 +100,8 @@ export class CompanySettingsRepository {
         input.replyToEmail ?? null,
         input.estimateEmailSubject,
         input.estimateEmailBody,
+        input.invoiceEmailSubject,
+        input.invoiceEmailBody,
         input.acceptanceLinkExpiryDays,
         input.chargesSalesTax,
         input.defaultSalesTaxBasisPoints,
