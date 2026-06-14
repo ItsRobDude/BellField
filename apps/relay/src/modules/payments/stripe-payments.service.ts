@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import Stripe from 'stripe';
+import Stripe = require('stripe');
 import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
 import type {
   StripeCheckoutSessionCreateInput,
