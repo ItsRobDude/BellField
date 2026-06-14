@@ -573,7 +573,7 @@ sold-shaped release proof remains gate-day validation debt.
 
 ### 6a.1 Relay acceptance surface — BUILT 2026-06-12
 
-Build: acceptance_links schema, link minting in `POST /v1/messages/estimate`,
+Build: acceptance_links schema, link minting in `POST /v1/messages/send`,
 public `GET /a/:token` page + `POST /a/:token/decision` (rate-limited,
 escaped, idempotent), poll/ack endpoints for installs.
 

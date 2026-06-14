@@ -76,7 +76,8 @@ install still needs to run the same flow during gate day.
 
 ## Send-API extension (relay contract)
 
-`POST /v1/messages/estimate` gains an optional `acceptance` payload:
+`POST /v1/messages/send` gains an optional `acceptance` payload for estimate
+sends (the legacy `/v1/messages/estimate` route remains an alias):
 
 ```jsonc
 {

@@ -53,10 +53,7 @@ export class EmailProviderService {
       };
     }
 
-    // Deliberate debt: the relay send payload is already document-generic, but
-    // the v1 relay route is still estimate-branded. Keep the route stable for
-    // this invoice slice and rename it in a later relay API cleanup.
-    const response = await fetch(`${relay.baseUrl}/v1/messages/estimate`, {
+    const response = await fetch(`${relay.baseUrl}/v1/messages/send`, {
       method: 'POST',
       headers: relayHeaders(relay, { 'Content-Type': 'application/json' }),
       signal: AbortSignal.timeout(30_000),

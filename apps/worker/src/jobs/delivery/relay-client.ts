@@ -35,7 +35,7 @@ export class RelayClient implements RelayDeliveryClient {
   }): Promise<RelaySendOutcome> {
     let response: Response;
     try {
-      response = await fetch(`${this.config.baseUrl}/v1/messages/estimate`, {
+      response = await fetch(`${this.config.baseUrl}/v1/messages/send`, {
         method: 'POST',
         headers: this.headers({ 'Content-Type': 'application/json' }),
         signal: AbortSignal.timeout(30_000),
