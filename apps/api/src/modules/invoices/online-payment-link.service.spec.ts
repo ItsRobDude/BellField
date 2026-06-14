@@ -49,6 +49,12 @@ function createService() {
   };
 }
 
+// The service reads the real wall clock (`new Date()`), so the reuse/expiry
+// branches must be tested against now-relative timestamps — a hard-coded date
+// becomes a time bomb that flips once the clock passes it.
+const unexpiredExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+const expiredExpiresAt = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
 function paymentSession(
   overrides: Partial<OnlinePaymentSessionRecord> = {}
 ): OnlinePaymentSessionRecord {
@@ -63,7 +69,7 @@ function paymentSession(
     checkoutUrl: 'https://stripe.test/existing',
     status: 'created',
     createdByName: 'Bea Bookkeeper',
-    expiresAt: '2026-06-14T12:00:00.000Z',
+    expiresAt: unexpiredExpiresAt,
     createdAt,
     updatedAt: createdAt,
     ...overrides
@@ -157,7 +163,7 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
       paymentSessionId: 'pay_sess_existing',
       amount: 250,
       currency: 'USD',
-      expiresAt: '2026-06-14T12:00:00.000Z',
+      expiresAt: unexpiredExpiresAt,
       reusedExisting: true
     });
     expect(fetchMock).not.toHaveBeenCalled();
@@ -168,7 +174,7 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     const fetchMock = mockRelayCreated('pay_sess_attempt_2');
     const { service, onlinePaymentsRepository } = createService();
     onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
-      paymentSession({ expiresAt: '2026-06-12T12:00:00.000Z' })
+      paymentSession({ expiresAt: expiredExpiresAt })
     ]);
 
     const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
