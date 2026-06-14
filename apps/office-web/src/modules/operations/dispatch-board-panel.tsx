@@ -56,6 +56,38 @@ type DispatchContextMenuState = {
   position: DispatchContextMenuPosition;
 };
 
+type DispatchContextMenuViewport = {
+  width: number;
+  height: number;
+};
+
+const dispatchContextMenuWidthPx = 232;
+const dispatchContextMenuMaxHeightPx = 512;
+const dispatchContextMenuViewportMarginPx = 8;
+
+export function clampDispatchContextMenuPosition(
+  position: DispatchContextMenuPosition,
+  viewport: DispatchContextMenuViewport = getDispatchContextMenuViewport()
+): DispatchContextMenuPosition {
+  const menuHeight = Math.min(
+    dispatchContextMenuMaxHeightPx,
+    Math.max(0, viewport.height - dispatchContextMenuViewportMarginPx * 2)
+  );
+  const maxX = Math.max(
+    dispatchContextMenuViewportMarginPx,
+    viewport.width - dispatchContextMenuWidthPx - dispatchContextMenuViewportMarginPx
+  );
+  const maxY = Math.max(
+    dispatchContextMenuViewportMarginPx,
+    viewport.height - menuHeight - dispatchContextMenuViewportMarginPx
+  );
+
+  return {
+    x: clampNumber(position.x, dispatchContextMenuViewportMarginPx, maxX),
+    y: clampNumber(position.y, dispatchContextMenuViewportMarginPx, maxY)
+  };
+}
+
 export function DispatchBoardPanel({
   dispatchBoard,
   viewDate,
@@ -196,7 +228,7 @@ export function DispatchBoardPanel({
     setAssignmentTargetPreview(null);
     setContextMenu({
       appointmentId: card.appointmentId,
-      position
+      position: clampDispatchContextMenuPosition(position)
     });
   }
 
@@ -248,7 +280,7 @@ export function DispatchBoardPanel({
           <p style={styles.muted}>{totalCardCount} appointments</p>
         </div>
         <div style={styles.badgeRow}>
-          <span style={unassignedCount > 0 ? styles.dangerBadge : styles.badge}>
+          <span style={unassignedCount > 0 ? dispatchUnassignedAttentionBadgeStyle : styles.badge}>
             {unassignedCount} unassigned
           </span>
         </div>
@@ -308,9 +340,6 @@ export function DispatchBoardPanel({
               activeScheduleEditor={scheduleEditor}
               technicians={dispatchBoard.technicians}
               onOpenJobDetail={onOpenJobDetail}
-              onOpenScheduleEditor={
-                onAppointmentScheduleUpdate ? handleOpenScheduleEditor : undefined
-              }
               onOpenContextMenu={handleOpenContextMenu}
               onScheduleUpdate={
                 onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
@@ -334,9 +363,6 @@ export function DispatchBoardPanel({
                 activeScheduleEditor={scheduleEditor}
                 technicians={dispatchBoard.technicians}
                 onOpenJobDetail={onOpenJobDetail}
-                onOpenScheduleEditor={
-                  onAppointmentScheduleUpdate ? handleOpenScheduleEditor : undefined
-                }
                 onOpenContextMenu={handleOpenContextMenu}
                 onScheduleUpdate={
                   onAppointmentScheduleUpdate ? handleTimelineScheduleUpdate : undefined
@@ -391,6 +417,24 @@ function formatLastRefreshedAt(value?: string | null): string {
   return `Refreshed ${refreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
 }
 
+function getDispatchContextMenuViewport(): DispatchContextMenuViewport {
+  if (typeof window === 'undefined') {
+    return {
+      width: dispatchContextMenuWidthPx + dispatchContextMenuViewportMarginPx * 2,
+      height: dispatchContextMenuMaxHeightPx + dispatchContextMenuViewportMarginPx * 2
+    };
+  }
+
+  return {
+    width: window.innerWidth,
+    height: window.innerHeight
+  };
+}
+
+function clampNumber(value: number, min: number, max: number): number {
+  return Math.min(Math.max(value, min), max);
+}
+
 const dispatchToolbarStyle: CSSProperties = {
   alignItems: 'end',
   display: 'flex',
@@ -424,6 +468,15 @@ const dispatchTimelineContentStyle: CSSProperties = {
 const dispatchBoardStyle: CSSProperties = {
   display: 'grid',
   gap: '0.45rem'
+};
+
+const dispatchUnassignedAttentionBadgeStyle: CSSProperties = {
+  background: '#fffbeb',
+  borderRadius: 6,
+  color: '#92400e',
+  fontSize: '0.8rem',
+  fontWeight: 800,
+  padding: '0.25rem 0.55rem'
 };
 
 const timelineHeaderRowStyle: CSSProperties = {

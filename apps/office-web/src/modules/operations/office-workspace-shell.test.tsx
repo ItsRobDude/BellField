@@ -780,7 +780,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByLabelText(/Job 1001, Main Shop/i));
+    fireEvent.click(await screen.findByLabelText(/Job 1001, Acme/i));
 
     expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
     expect(mockedOperationsApi.getOfficeJobDetail).toHaveBeenCalledWith({
@@ -803,7 +803,9 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Edit schedule for job 1001' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Dispatch actions for job 1001' }));
+    const actionMenu = await screen.findByRole('menu', { name: 'Dispatch actions for job 1001' });
+    fireEvent.click(within(actionMenu).getByRole('menuitem', { name: 'Edit schedule' }));
     const scheduleDialog = await screen.findByRole('dialog', {
       name: 'Edit schedule for job 1001'
     });
@@ -845,7 +847,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.contextMenu(await screen.findByLabelText(/Job 1001, Main Shop/i), {
+    fireEvent.contextMenu(await screen.findByLabelText(/Job 1001, Acme/i), {
       clientX: 120,
       clientY: 140
     });
@@ -897,7 +899,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    const cardButton = await screen.findByLabelText(/Job 1001, Main Shop/i);
+    const cardButton = await screen.findByLabelText(/Job 1001, Acme/i);
     fireEvent.pointerDown(cardButton, { clientX: 100, button: 0, pointerId: 1 });
     fireEvent.pointerMove(window, { clientX: 196 });
     fireEvent.pointerUp(window);
@@ -932,7 +934,7 @@ describe('OfficeWorkspaceShell IA', () => {
     const restoreElementFromPoint = stubElementFromPoint(jamieRow);
 
     try {
-      const cardButton = await screen.findByLabelText(/Job 1001, Main Shop/i);
+      const cardButton = await screen.findByLabelText(/Job 1001, Acme/i);
       fireEvent.pointerDown(cardButton, { clientX: 100, clientY: 100, button: 0, pointerId: 1 });
       fireEvent.pointerMove(window, { clientX: 100, clientY: 132 });
       fireEvent.pointerUp(window);
@@ -962,7 +964,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByLabelText(/Job 1001, Main Shop/i));
+    fireEvent.click(await screen.findByLabelText(/Job 1001, Acme/i));
     expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Overview' }));
@@ -1404,7 +1406,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByLabelText(/Job 1001, Main Shop/i));
+    fireEvent.click(await screen.findByLabelText(/Job 1001, Acme/i));
     fireEvent.click(await screen.findByRole('button', { name: 'Appointments' }));
     const appointment = await screen.findByRole('region', { name: 'Appointment appointment-1' });
     fireEvent.change(within(appointment).getByLabelText('Appointment date'), {
@@ -1468,7 +1470,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByLabelText(/Job 1001, Main Shop/i));
+    fireEvent.click(await screen.findByLabelText(/Job 1001, Acme/i));
     fireEvent.click(await screen.findByRole('button', { name: 'Complete' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Confirm' }));
 
@@ -1497,7 +1499,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    fireEvent.click(await screen.findByLabelText(/Job 1001, Main Shop/i));
+    fireEvent.click(await screen.findByLabelText(/Job 1001, Acme/i));
     fireEvent.click(await screen.findByRole('button', { name: 'Captured' }));
 
     await waitFor(() => {
@@ -1595,7 +1597,7 @@ describe('OfficeWorkspaceShell IA', () => {
 
     renderShell();
 
-    expect(await screen.findByLabelText(/Job 1001, Main Shop/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/Job 1001, Acme/i)).toBeInTheDocument();
     expect(intervalHandlers.size).toBe(1);
 
     await act(async () => {
@@ -1606,7 +1608,7 @@ describe('OfficeWorkspaceShell IA', () => {
       expect(mockedOperationsApi.getOfficeDispatchBoard).toHaveBeenCalledTimes(2);
     });
     await waitFor(() => {
-      expect(screen.queryByLabelText(/Job 1001, Main Shop/i)).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/Job 1001, Acme/i)).not.toBeInTheDocument();
     });
   });
 });

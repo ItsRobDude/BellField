@@ -3,6 +3,12 @@
 import { useRef, type CSSProperties, type PointerEvent as ReactPointerEvent } from 'react';
 import type { DispatchBoardResponse } from '@/lib/operations-api';
 import type { DispatchAppointmentCard } from './dispatch-board-data';
+import {
+  type DispatchCardSpaceTier,
+  formatDispatchCardAriaLabel,
+  formatDispatchCardDetailLine,
+  formatDispatchCardPrimaryName
+} from './dispatch-card-display';
 import { DispatchSchedulePopover } from './dispatch-schedule-popover';
 import type { DispatchScheduleDraft, DispatchScheduleEditorState } from './dispatch-schedule-types';
 import type { DispatchTimelineDragState } from './dispatch-timeline-drag-state';
@@ -19,7 +25,7 @@ export type DispatchContextMenuPosition = {
   y: number;
 };
 
-export type DispatchTimelineCardSpaceTier = 'narrow' | 'standard' | 'wide';
+export type DispatchTimelineCardSpaceTier = DispatchCardSpaceTier;
 
 type DispatchCardButtonProps = {
   card: DispatchAppointmentCard;
@@ -30,7 +36,6 @@ type DispatchCardButtonProps = {
   spaceTier?: DispatchTimelineCardSpaceTier;
   technicians: DispatchBoardResponse['technicians'];
   onOpenJobDetail: () => void;
-  onOpenScheduleEditor?: (card: DispatchAppointmentCard) => void;
   onOpenContextMenu?: (
     card: DispatchAppointmentCard,
     position: DispatchContextMenuPosition
@@ -59,7 +64,6 @@ export function DispatchCardButton({
   spaceTier = 'standard',
   technicians,
   onOpenJobDetail,
-  onOpenScheduleEditor,
   onOpenContextMenu,
   onDragStart,
   onResizeStart,
@@ -68,18 +72,20 @@ export function DispatchCardButton({
   onScheduleEditorSave
 }: DispatchCardButtonProps) {
   const cardFrameRef = useRef<HTMLDivElement | null>(null);
-  const address = formatDispatchCardAddress(card);
   const statusLabel = appointmentStatusLabels[card.status];
-  const reviewLabel = card.needsOfficeReview ? ', review needed' : '';
-  const overlapLabel = hasScheduleConflict ? ', overlaps another appointment' : '';
   const hasOverlapWarning = hasScheduleConflict || Boolean(dragState?.overlapWarning);
   const startMinutes = parseDispatchTimeToMinutes(card.scheduledStartTime);
   const endMinutes = parseDispatchTimeToMinutes(card.scheduledEndTime);
-  const usesOverlayEdit = Boolean(onOpenScheduleEditor && spaceTier === 'narrow');
-  const detailLine =
-    spaceTier === 'wide' && startMinutes !== null && endMinutes !== null
-      ? `${formatDispatchResizePreview(startMinutes, endMinutes)} · ${statusLabel} · ${address}`
-      : address;
+  const usesOverlayActions = Boolean(onOpenContextMenu && spaceTier === 'narrow');
+  const timeRangeText =
+    startMinutes !== null && endMinutes !== null
+      ? formatDispatchResizePreview(startMinutes, endMinutes)
+      : null;
+  const primaryName = formatDispatchCardPrimaryName(card);
+  const detailLine = formatDispatchCardDetailLine(card, spaceTier, {
+    statusLabel,
+    timeRangeText
+  });
   const canResize = Boolean(onResizeStart && card.scheduledDate && startMinutes !== null);
   const canDrag = Boolean(onDragStart);
   const dragStatusText = dragState ? formatDispatchDragPreview(dragState) : null;
@@ -124,7 +130,10 @@ export function DispatchCardButton({
             y: frameRect ? frameRect.top + 16 : 16
           });
         }}
-        aria-label={`Job ${card.jobNumber}, ${card.locationName}, ${address}, ${statusLabel}${reviewLabel}${overlapLabel}`}
+        aria-label={formatDispatchCardAriaLabel(card, {
+          statusLabel,
+          hasScheduleConflict
+        })}
         style={{
           ...timelineCardMainButtonStyle,
           ...(canDrag ? timelineCardMoveButtonStyle : null),
@@ -138,35 +147,43 @@ export function DispatchCardButton({
           <div
             style={{
               ...timelineCardTitleRowStyle,
-              ...(usesOverlayEdit ? timelineCardTitleRowWithOverlayEditStyle : null)
+              ...(usesOverlayActions ? timelineCardTitleRowWithOverlayActionStyle : null)
             }}
           >
             <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
-            <strong style={timelineCardLocationStyle}>{card.locationName}</strong>
-            {spaceTier === 'wide' && card.jobSummary ? (
-              <span style={timelineCardSummaryStyle}>· {card.jobSummary}</span>
-            ) : null}
+            <strong style={timelineCardLocationStyle}>{primaryName}</strong>
             {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
             {hasScheduleConflict ? <span style={timelineOverlapChipStyle}>Overlap</span> : null}
           </div>
           <span style={timelineCardAddressStyle}>{detailLine}</span>
         </div>
       </button>
-      {onOpenScheduleEditor ? (
+      {onOpenContextMenu ? (
         <button
           type="button"
-          aria-label={`Edit schedule for job ${card.jobNumber}`}
-          onClick={(event) => {
+          aria-haspopup="menu"
+          aria-label={`Dispatch actions for job ${card.jobNumber}`}
+          title="Dispatch actions"
+          onPointerDown={(event) => {
             event.stopPropagation();
-            onOpenScheduleEditor(card);
+          }}
+          onClick={(event) => {
+            const buttonRect = event.currentTarget.getBoundingClientRect();
+
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenContextMenu(card, {
+              x: buttonRect.left,
+              y: buttonRect.bottom + 6
+            });
           }}
           style={
-            usesOverlayEdit
-              ? { ...timelineCardEditButtonStyle, ...timelineCardEditOverlayStyle }
-              : timelineCardEditButtonStyle
+            usesOverlayActions
+              ? { ...timelineCardActionButtonStyle, ...timelineCardActionOverlayStyle }
+              : timelineCardActionButtonStyle
           }
         >
-          Edit
+          ...
         </button>
       ) : null}
       {dragStatusText ? (
@@ -222,11 +239,7 @@ export function getDispatchTimelineCardSpaceTier(
   return 'standard';
 }
 
-export function formatDispatchCardAddress(card: DispatchAppointmentCard): string {
-  const cityState = [card.locationCity, card.locationState].filter(Boolean).join(', ');
-
-  return [card.locationAddressLine1, cityState].filter(Boolean).join(', ');
-}
+export { formatDispatchCardAddress } from './dispatch-card-display';
 
 function formatDispatchDragPreview(dragState: DispatchTimelineDragState): string {
   if (dragState.mode === 'saving') {
@@ -322,11 +335,11 @@ const timelineCardMovingButtonStyle: CSSProperties = {
 };
 
 /**
- * Narrow cards have no width to spare for an inline Edit slot: float the
+ * Narrow cards have no width to spare for an inline action slot: float the
  * button over the card's top-right corner instead, clear of the resize
  * handle (width 0.55rem, zIndex 3).
  */
-const timelineCardEditOverlayStyle: CSSProperties = {
+const timelineCardActionOverlayStyle: CSSProperties = {
   position: 'absolute',
   right: '0.65rem',
   top: '0.2rem',
@@ -334,20 +347,24 @@ const timelineCardEditOverlayStyle: CSSProperties = {
   marginRight: 0
 };
 
-const timelineCardEditButtonStyle: CSSProperties = {
+const timelineCardActionButtonStyle: CSSProperties = {
+  alignItems: 'center',
   alignSelf: 'center',
   background: '#ffffff',
   border: '1px solid #cbe3e8',
   borderRadius: 4,
   color: '#176b5b',
   cursor: 'pointer',
+  display: 'inline-flex',
   flex: '0 0 auto',
   fontSize: '0.68rem',
   fontWeight: 800,
   height: '1.45rem',
+  justifyContent: 'center',
   lineHeight: 1,
   marginRight: '0.35rem',
-  padding: '0 0.35rem'
+  padding: 0,
+  width: '1.55rem'
 };
 
 const timelineResizeHandleStyle: CSSProperties = {
@@ -428,8 +445,8 @@ const timelineCardTitleRowStyle: CSSProperties = {
   minWidth: 0
 };
 
-const timelineCardTitleRowWithOverlayEditStyle: CSSProperties = {
-  paddingRight: '3.1rem'
+const timelineCardTitleRowWithOverlayActionStyle: CSSProperties = {
+  paddingRight: '2.45rem'
 };
 
 const timelineJobChipStyle: CSSProperties = {
@@ -476,24 +493,13 @@ const timelineOverlapChipStyle: CSSProperties = {
 
 const timelineCardLocationStyle: CSSProperties = {
   display: 'block',
-  flex: '0 1 auto',
+  flex: '1 1 auto',
   fontSize: '0.78rem',
   height: timelineCardTextLineHeight,
   lineHeight: timelineCardTextLineHeight,
+  minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
-};
-
-const timelineCardSummaryStyle: CSSProperties = {
-  color: '#475569',
-  display: 'block',
-  flex: '1 1 auto',
-  fontSize: '0.74rem',
-  height: timelineCardTextLineHeight,
-  lineHeight: timelineCardTextLineHeight,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap'
 };
 
 const timelineCardAddressStyle: CSSProperties = {
