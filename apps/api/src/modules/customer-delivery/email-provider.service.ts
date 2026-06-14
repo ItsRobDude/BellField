@@ -62,6 +62,7 @@ export class EmailProviderService {
       signal: AbortSignal.timeout(30_000),
       body: JSON.stringify({
         idempotencyKey: input.idempotencyKey,
+        documentType: kind,
         recipientEmail: input.to,
         fromName: input.fromName,
         replyToEmail: input.replyToEmail,

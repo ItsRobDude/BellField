@@ -2,6 +2,8 @@
 // relay. The relay composes the actual email itself; installs can only request
 // the narrow BellField document-send shape (docs/delivery-relay-plan.md §5).
 
+import type { CustomerDocumentType } from './document-delivery.js';
+
 /** Header carrying the install's server instance id on every relay call. */
 export const relayServerInstanceHeader = 'x-bellfield-server-instance';
 
@@ -70,6 +72,11 @@ export interface RelayAcceptancePayload {
 export interface RelaySendEstimateDocumentRequest {
   /** Install-side idempotency key; the relay returns the recorded outcome on replays. */
   idempotencyKey: string;
+  /**
+   * Selects the relay-owned sender identity. Callers never supply arbitrary
+   * From addresses.
+   */
+  documentType: CustomerDocumentType;
   recipientEmail: string;
   /** Shop display name fronting the email (the From display name). */
   fromName: string;

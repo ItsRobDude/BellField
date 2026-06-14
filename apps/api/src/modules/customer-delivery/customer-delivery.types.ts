@@ -23,7 +23,7 @@ export type OutboundMessageRecord = {
   recipientEmail: string;
   subject: string;
   bodyText: string;
-  /** D8: sender identity pinned at queue time so delayed retries send what the office saw. */
+  /** D8: shop display/reply-to pinned; relay sender is selected from document type. */
   fromName?: string;
   replyToEmail?: string;
   sentByName: string;

@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
+  type CustomerDocumentType,
   estimateEmailMaxAttachmentBytes,
   type RelayAcceptancePayload,
   type RelaySendFailureCode,
@@ -20,6 +21,7 @@ export const EMAIL_SEND_ADAPTER = 'EMAIL_SEND_ADAPTER';
 
 export type SendEstimateDocumentInput = {
   idempotencyKey: string;
+  documentType: CustomerDocumentType;
   recipientEmail: string;
   fromName: string;
   replyToEmail?: string;
@@ -36,6 +38,8 @@ export type SendEstimateDocumentInput = {
 const recipientUnavailableMessage = 'This recipient is not currently able to receive email.';
 const sendingLimitMessage = 'The monthly sending limit for this shop has been reached.';
 const attachmentTooLargeMessage = 'The document attachment is too large to send.';
+const invoiceAcceptanceRejectedMessage =
+  'Invoice document sends cannot include estimate acceptance.';
 
 @Injectable()
 export class SendEstimateService {
@@ -60,6 +64,15 @@ export class SendEstimateService {
     input: SendEstimateDocumentInput
   ): Promise<RelaySendResult> {
     const now = this.now();
+
+    if (input.documentType === 'invoice' && input.acceptance) {
+      return {
+        kind: 'failed',
+        code: 'deliveryRejected',
+        retryable: false,
+        message: invoiceAcceptanceRejectedMessage
+      };
+    }
 
     // Replays return the recorded outcome instead of re-sending; the install
     // reuses its idempotency key across worker retries of the same intent.
@@ -132,6 +145,7 @@ export class SendEstimateService {
     }
 
     const providerResult = await this.emailAdapter.send({
+      documentType: input.documentType,
       fromName: input.fromName,
       to: input.recipientEmail,
       replyToEmail: input.replyToEmail,

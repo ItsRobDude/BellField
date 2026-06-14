@@ -196,8 +196,13 @@ void test('sends a due queued delivery and records the timeline entry', async ()
     assert.equal(store.timeline[0].kind, 'estimateSent');
     assert.match(store.timeline[0].message, /Estimate sent to homeowner@example.com/);
     assert.equal(store.timeline[0].actorName, 'Dispatcher');
-    const sendCall = relay.sendCalls[0] as { idempotencyKey: string; fromName: string };
+    const sendCall = relay.sendCalls[0] as {
+      idempotencyKey: string;
+      documentType: string;
+      fromName: string;
+    };
     assert.equal(sendCall.idempotencyKey, 'estimate-send-msg-1');
+    assert.equal(sendCall.documentType, 'estimate');
     assert.equal(sendCall.fromName, 'Acme HVAC');
   });
 });
@@ -229,8 +234,13 @@ void test('sends a queued invoice with invoice timeline copy and no acceptance p
     assert.equal(store.timeline[0].kind, 'invoiceSent');
     assert.match(store.timeline[0].message, /Invoice sent to homeowner@example.com/);
     assert.match(store.timeline[0].message, /Invoice for job 1001/);
-    const sendCall = relay.sendCalls[0] as { idempotencyKey: string; acceptance?: unknown };
+    const sendCall = relay.sendCalls[0] as {
+      idempotencyKey: string;
+      documentType: string;
+      acceptance?: unknown;
+    };
     assert.equal(sendCall.idempotencyKey, 'invoice-send-msg-1');
+    assert.equal(sendCall.documentType, 'invoice');
     assert.equal(sendCall.acceptance, undefined);
   });
 });

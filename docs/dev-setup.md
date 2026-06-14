@@ -72,7 +72,7 @@ Media config notes:
 Relay settings (only when working on delivery/relay code):
 
 - The API's relay client needs all three of `BELLFIELD_RELAY_BASE_URL`, `BELLFIELD_RELAY_TOKEN`, and `BELLFIELD_RELAY_SERVER_INSTANCE` — set all or none. With none set, estimate sends report delivery as not configured.
-- The relay app itself reads `BELLFIELD_RELAY_DATABASE_URL` (its own `bellfield_relay` database), `BELLFIELD_RELAY_RESEND_API_KEY`, `BELLFIELD_RELAY_FROM_ADDRESS`, `BELLFIELD_RELAY_WEBHOOK_SIGNING_SECRET`, and optionally `BELLFIELD_RELAY_PORT`, `BELLFIELD_RELAY_DEFAULT_MONTHLY_QUOTA`, and `BELLFIELD_RELAY_ARTIFACTS_ROOT` (release-download storage).
+- The relay app itself reads `BELLFIELD_RELAY_DATABASE_URL` (its own `bellfield_relay` database), `BELLFIELD_RELAY_RESEND_API_KEY`, `BELLFIELD_RELAY_ESTIMATE_FROM_ADDRESS`, `BELLFIELD_RELAY_INVOICE_FROM_ADDRESS`, `BELLFIELD_RELAY_WEBHOOK_SIGNING_SECRET`, and optionally `BELLFIELD_RELAY_PORT`, `BELLFIELD_RELAY_DEFAULT_MONTHLY_QUOTA`, and `BELLFIELD_RELAY_ARTIFACTS_ROOT` (release-download storage). `BELLFIELD_RELAY_FROM_ADDRESS` remains a legacy estimate-sender fallback for older relay env files.
 - Production relay deployment lives under `deploy/relay/` (compose stack, env template, backup script); see `docs/relay-deployment-2026-06-12.md` for the live-host record.
 
 Client runtime settings:

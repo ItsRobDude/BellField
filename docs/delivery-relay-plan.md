@@ -92,9 +92,11 @@ tier. Shop identity (display name, reply-to, templates) is shop-owned content.
 
 Two tiers:
 
-**Default — BellField domain, shop name.** Mail is sent from the address
-`estimates@bellfield.app` with the shop's company name as the From display
-name: `Acme HVAC <estimates@bellfield.app>`. Zero setup for the shop.
+**Default — BellField domain, shop name.** Mail is sent from BellField-owned
+document sender addresses with the shop's company name as the From display
+name: estimates use `estimates@bellfield.app` and invoice/payment documents use
+`billing@bellfield.app` (for example, `Acme HVAC <billing@bellfield.app>`).
+Zero setup for the shop.
 
 **Optional — shop's own domain (paid add-on).** A shop may send from its own
 domain without any exposure of BellField's backend:
@@ -126,17 +128,19 @@ never names providers.
 Narrow by design. The relay is not a generic email API:
 
 - authenticate: relay token → shop identity + entitlement
-- `send estimate document`: rendered subject, body text, recipient, and the
-  PDF, bounded by the shared `estimateEmailMaxAttachmentBytes` contract
-  constant; the relay composes the actual MIME message itself in the BellField
-  shape — callers cannot construct arbitrary email
+- `send estimate document`: rendered subject, body text, document type,
+  recipient, and the PDF, bounded by the shared
+  `estimateEmailMaxAttachmentBytes` contract constant; the relay composes the
+  actual MIME message itself in the BellField shape — callers cannot construct
+  arbitrary email or choose arbitrary From addresses
 - `delivery status`: poll per outbound message; returns sent / delivered /
   bounced / complained / failed with sanitized summaries
 - `entitlement status`: remaining quota, sending state, custom-domain state
 
 The same host and auth also carry estimate acceptance links and payment-link
 surfaces ([customer-comms-and-delivery.md](./customer-comms-and-delivery.md)
-Phases 4–5). Invoice delivery reuses `send` with a document type.
+Phases 4–5). Invoice delivery reuses the estimate-branded v1 route with
+`documentType: "invoice"`; that route name is intentional API naming debt.
 
 Payment-link v1 is deliberately narrow:
 

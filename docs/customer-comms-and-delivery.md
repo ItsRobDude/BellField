@@ -93,7 +93,8 @@ Estimate email delivery is BellField-operated.
 Default posture for estimate and invoice email:
 
 - office users can send/resend operational documents
-- the email From address is fixed as `estimates@bellfield.app`
+- estimate email sends from `estimates@bellfield.app`; invoice/payment-document
+  email sends from `billing@bellfield.app`
 - the provider account, provider API key, sending domain, and delivery backend
   are BellField-controlled infrastructure
 - shops never enter email-provider API keys or choose an email provider
@@ -187,7 +188,9 @@ Preferred delivery behavior:
 
 1. BellField generates or retrieves the customer document.
 2. The office user chooses a recipient and clicks send.
-3. BellField sends from `estimates@bellfield.app`.
+3. BellField sends from the relay-owned document sender address
+   (`estimates@bellfield.app` for estimates, `billing@bellfield.app` for
+   invoices/payment documents).
 4. First implementation may attach the generated PDF; later implementations may
    move to a secure PDF link as the reliable default.
 5. The send action, actor, recipient, delivery result, and failure state are
@@ -307,8 +310,10 @@ retry/expiry/status-poll jobs.
   not rewrite what was sent
 - the recipient email is chosen at send time and may default from the
   customer's current email address
-- invoice sends reuse the existing relay document-send payload; the relay route
-  remains `/v1/messages/estimate` for now, which is intentional naming debt
+- invoice sends reuse the existing relay document-send route with
+  `documentType: "invoice"`; the route remains `/v1/messages/estimate` for now,
+  which is intentional naming debt
+- invoice/payment-document email sends from `billing@bellfield.app`
 - when the owner enables the `includeInvoicePaymentLink` setting, sending a
   posted **main** invoice with an outstanding balance appends an online pay-now
   link (the existing full-balance link) to the email body. The link is minted
