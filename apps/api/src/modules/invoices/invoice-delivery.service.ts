@@ -37,6 +37,7 @@ import {
 import { InvoicePdfRendererService } from '../customer-delivery/invoice-pdf-renderer.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { InvoicesRepository } from './invoices.repository';
+import { OnlinePaymentLinkService } from './online-payment-link.service';
 import type {
   InvoiceCancelOutboundMessageResponseDto,
   InvoiceOutboundMessagesResponseDto,
@@ -57,7 +58,8 @@ export class InvoiceDeliveryService {
     private readonly customerDocumentStorageService: CustomerDocumentStorageService,
     private readonly emailProviderService: EmailProviderService,
     private readonly invoicePdfRendererService: InvoicePdfRendererService,
-    private readonly invoicesRepository: InvoicesRepository
+    private readonly invoicesRepository: InvoicesRepository,
+    private readonly onlinePaymentLinkService: OnlinePaymentLinkService
   ) {}
 
   async listInvoiceOutboundMessages(
@@ -234,6 +236,34 @@ export class InvoiceDeliveryService {
       throw error;
     }
 
+    // Only now that the send is reserved (dedupe passed) and the document is
+    // rendered do we mint the payable link — so a duplicate/blocked send or a
+    // PDF-render failure can never orphan a link or write a spurious
+    // "Payment link created" timeline entry. Append it after the (possibly
+    // customized) body and sync the stored body so a worker retry includes it.
+    const paymentLinkUrl = await this.resolveInvoicePaymentLinkUrl(sessionToken, invoice, settings);
+    let bodyText = emailContent.bodyText;
+    if (paymentLinkUrl) {
+      bodyText = `${emailContent.bodyText}\n\nPay online: ${paymentLinkUrl}`;
+      // Best-effort: the provider send below uses the in-memory bodyText, so the
+      // customer gets the link on this attempt regardless. We only sync the
+      // stored body so a worker retry also carries it — a failure here must not
+      // block a send the link was never meant to block. (A retry after a failed
+      // sync would fall back to the linkless stored body, which matches the
+      // best-effort posture.)
+      try {
+        await this.customerDeliveryRepository.updateOutboundMessageBody(
+          outboundMessageId,
+          bodyText,
+          new Date().toISOString()
+        );
+      } catch (error) {
+        this.logger.warn(
+          `Invoice ${invoice.id} pay-now link was added to the outgoing email but the stored body could not be synced for retry: ${describeError(error)}`
+        );
+      }
+    }
+
     const providerResult = await this.sendInvoiceEmailSafely(
       buildEmailProviderInput(
         {
@@ -243,7 +273,7 @@ export class InvoiceDeliveryService {
         {
           to: recipientEmail,
           subject: emailContent.subject,
-          bodyText: emailContent.bodyText,
+          bodyText,
           attachment: {
             filename,
             contentType: 'application/pdf',
@@ -317,6 +347,7 @@ export class InvoiceDeliveryService {
     return {
       outboundMessage: toOutboundMessageSummary(outboundMessage),
       documentSnapshot: toDocumentSnapshotSummary(documentSnapshot),
+      ...(paymentLinkUrl ? { paymentLinkIncluded: true } : {}),
       ...(recordingIncomplete ? { recordingIncomplete: true } : {})
     };
   }
@@ -335,6 +366,34 @@ export class InvoiceDeliveryService {
     }
     if (!invoice.posted) {
       throw new ConflictException('This posted invoice is missing its frozen posting context.');
+    }
+  }
+
+  // Best-effort: when the owner has enabled invoice pay links, create-or-reuse
+  // the job's full-balance online payment link for the MAIN invoice and return
+  // its URL. The invoice send must NEVER be blocked by this — no balance,
+  // payments not configured, a same-amount confirmation, or a missing
+  // payments:create permission all just mean "send the invoice without a link."
+  private async resolveInvoicePaymentLinkUrl(
+    sessionToken: string,
+    invoice: InvoiceRecord,
+    settings: CompanySettings
+  ): Promise<string | null> {
+    if (!settings.includeInvoicePaymentLink || invoice.invoiceKind !== 'main') {
+      return null;
+    }
+    try {
+      const result = await this.onlinePaymentLinkService.createOnlinePaymentLink(
+        sessionToken,
+        invoice.id,
+        {}
+      );
+      return result.state === 'created' ? result.checkoutUrl : null;
+    } catch (error) {
+      this.logger.warn(
+        `Invoice ${invoice.id} sent without a payment link: ${describeError(error)}`
+      );
+      return null;
     }
   }
 

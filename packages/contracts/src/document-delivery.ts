@@ -81,7 +81,10 @@ export interface SendEstimateResponse {
 }
 
 export type SendInvoiceRequest = SendEstimateRequest;
-export type SendInvoiceResponse = SendEstimateResponse;
+export type SendInvoiceResponse = SendEstimateResponse & {
+  /** True when this invoice email embedded an online pay-now link. */
+  paymentLinkIncluded?: boolean;
+};
 
 export interface OutboundMessagesResponse {
   outboundMessages: OutboundMessageSummary[];

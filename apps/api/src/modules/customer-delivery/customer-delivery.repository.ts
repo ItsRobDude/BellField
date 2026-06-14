@@ -253,6 +253,22 @@ export class CustomerDeliveryRepository {
     );
   }
 
+  async updateOutboundMessageBody(
+    messageId: string,
+    bodyText: string,
+    updatedAt: string
+  ): Promise<void> {
+    await this.databaseService.query(
+      `
+        update outbound_messages
+        set body_text = $2,
+            updated_at = $3
+        where id = $1
+      `,
+      [messageId, bodyText, updatedAt]
+    );
+  }
+
   async markOutboundMessageSent(
     messageId: string,
     providerMessageId: string | undefined,

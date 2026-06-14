@@ -309,6 +309,13 @@ retry/expiry/status-poll jobs.
   customer's current email address
 - invoice sends reuse the existing relay document-send payload; the relay route
   remains `/v1/messages/estimate` for now, which is intentional naming debt
+- when the owner enables the `includeInvoicePaymentLink` setting, sending a
+  posted **main** invoice with an outstanding balance appends an online pay-now
+  link (the existing full-balance link) to the email body. The link is minted
+  only after the send is reserved and the PDF renders, and the invoice send is
+  never blocked if the link cannot be created (no balance, payments not
+  configured, same-amount confirmation, etc.). Credits/adjustments/zero-balance
+  invoices never get a link. Default off.
 
 ### Phase 4 - Estimate Acceptance Link — SHIPPED
 

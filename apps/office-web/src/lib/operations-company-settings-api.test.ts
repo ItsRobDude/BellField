@@ -37,7 +37,8 @@ describe('operations-company-settings-api', () => {
       estimateEmailBody: 'Attached.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
-      defaultSalesTaxBasisPoints: 825
+      defaultSalesTaxBasisPoints: 825,
+      includeInvoicePaymentLink: false
     });
     await getOfficeEstimateEmailDeliveryStatus({
       sessionToken: 'session-token',

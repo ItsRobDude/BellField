@@ -84,7 +84,8 @@ function createService() {
   const companySettingsRepository = {
     getSettings: jest.fn().mockResolvedValue({
       companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example'
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: false
     })
   };
   const customerDeliveryRepository = {
@@ -119,6 +120,7 @@ function createService() {
       generatedAt: '2026-06-01T12:00:00.000Z'
     }),
     setOutboundMessageDocumentSnapshot: jest.fn().mockResolvedValue(undefined),
+    updateOutboundMessageBody: jest.fn().mockResolvedValue(undefined),
     markOutboundMessageSent: jest.fn().mockResolvedValue(outboundMessage()),
     markOutboundMessageFailed: jest.fn().mockResolvedValue(outboundMessage({ status: 'failed' })),
     scheduleOutboundMessageRetry: jest
@@ -151,6 +153,11 @@ function createService() {
   const invoicesRepository = {
     getInvoiceById: jest.fn().mockResolvedValue(postedInvoice())
   };
+  const onlinePaymentLinkService = {
+    createOnlinePaymentLink: jest
+      .fn()
+      .mockResolvedValue({ state: 'paymentsNotConfigured', message: 'not configured' })
+  };
   const service = new InvoiceDeliveryService(
     identityAccessService as never,
     companySettingsRepository as never,
@@ -158,7 +165,8 @@ function createService() {
     customerDocumentStorageService as never,
     emailProviderService as never,
     invoicePdfRendererService as never,
-    invoicesRepository as never
+    invoicesRepository as never,
+    onlinePaymentLinkService as never
   );
   return {
     service,
@@ -168,7 +176,8 @@ function createService() {
     customerDocumentStorageService,
     emailProviderService,
     invoicePdfRendererService,
-    invoicesRepository
+    invoicesRepository,
+    onlinePaymentLinkService
   };
 }
 
@@ -267,6 +276,180 @@ describe('InvoiceDeliveryService', () => {
     );
     expect(result.outboundMessage.invoiceId).toBe('invoice-1');
     expect(result.documentSnapshot.documentType).toBe('invoice');
+  });
+
+  it('embeds a pay-now link and flags it when the owner setting is on', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
+      state: 'created',
+      checkoutUrl: 'https://pay.example/cs_test_123',
+      paymentSessionId: 'pay_sess_1',
+      amount: 250,
+      currency: 'USD',
+      expiresAt: '2026-07-01T00:00:00.000Z'
+    });
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).toHaveBeenCalledWith(
+      'token',
+      'invoice-1',
+      {}
+    );
+    // Reorder invariant: the reserved intent body is the base (the link is only
+    // minted after the send is viable), then the stored body is synced with it.
+    const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
+    expect(sendIntent.bodyText).not.toContain('Pay online');
+    expect(customerDeliveryRepository.updateOutboundMessageBody).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('Pay online: https://pay.example/cs_test_123'),
+      expect.any(String)
+    );
+    expect(result.paymentLinkIncluded).toBe(true);
+  });
+
+  it('sends without a link and does not call the link service when the setting is off', async () => {
+    const { service, onlinePaymentLinkService, customerDeliveryRepository } = createService();
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.updateOutboundMessageBody).not.toHaveBeenCalled();
+    expect(result.paymentLinkIncluded).toBeUndefined();
+  });
+
+  it('still sends the invoice (no link, no body sync) when pay-link creation needs confirmation or fails', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
+      state: 'confirmationRequired',
+      code: 'sameAmountPreviouslyPaid',
+      amount: 250,
+      currency: 'USD',
+      message: 'already paid'
+    });
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).toHaveBeenCalled();
+    expect(customerDeliveryRepository.updateOutboundMessageBody).not.toHaveBeenCalled();
+    expect(result.paymentLinkIncluded).toBeUndefined();
+    expect(result.outboundMessage.invoiceId).toBe('invoice-1');
+  });
+
+  it('still sends with the link when the stored-body sync fails (the link never blocks the send)', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository,
+      emailProviderService
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
+      state: 'created',
+      checkoutUrl: 'https://pay.example/cs_test_123',
+      paymentSessionId: 'pay_sess_1',
+      amount: 250,
+      currency: 'USD',
+      expiresAt: '2026-07-01T00:00:00.000Z'
+    });
+    customerDeliveryRepository.updateOutboundMessageBody.mockRejectedValueOnce(
+      new Error('db down')
+    );
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    // The provider send uses the in-memory body, so the customer still gets the
+    // link on this attempt even though syncing the stored body failed.
+    expect(emailProviderService.sendInvoiceEmail).toHaveBeenCalled();
+    expect(emailProviderService.sendInvoiceEmail.mock.calls[0][0].bodyText).toContain(
+      'Pay online: https://pay.example/cs_test_123'
+    );
+    expect(result.paymentLinkIncluded).toBe(true);
+    expect(result.outboundMessage.invoiceId).toBe('invoice-1');
+  });
+
+  it('does not mint a payment link when the send intent is blocked as a duplicate', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository,
+      invoicePdfRendererService
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    customerDeliveryRepository.createInvoiceSendIntent.mockResolvedValueOnce({
+      kind: 'blocked',
+      reason: 'alreadyQueued'
+    });
+
+    await expect(
+      service.sendInvoice('token', 'invoice-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toBeInstanceOf(ConflictException);
+
+    // Ordering invariant: a blocked send never reaches the PDF render or the link mint.
+    expect(invoicePdfRendererService.renderInvoicePdf).not.toHaveBeenCalled();
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
+  });
+
+  it('does not mint a payment link when the PDF render fails', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository,
+      invoicePdfRendererService
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    invoicePdfRendererService.renderInvoicePdf.mockRejectedValueOnce(new Error('render boom'));
+
+    await expect(
+      service.sendInvoice('token', 'invoice-1', { recipientEmail: 'customer@example.com' })
+    ).rejects.toThrow('render boom');
+
+    // Ordering invariant: the link is minted only after a successful render.
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
+    expect(customerDeliveryRepository.updateOutboundMessageBody).not.toHaveBeenCalled();
   });
 
   it('leaves retryable provider failures queued without a timeline entry', async () => {

@@ -334,7 +334,9 @@ export function JobInvoiceSection({
             'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
           );
         } else {
-          setNoticeMessage('Invoice sent.');
+          setNoticeMessage(
+            response.paymentLinkIncluded ? 'Invoice sent with a pay-now link.' : 'Invoice sent.'
+          );
         }
       } else if (response.outboundMessage.status === 'queued') {
         setNoticeMessage('Queued — will send automatically.');
