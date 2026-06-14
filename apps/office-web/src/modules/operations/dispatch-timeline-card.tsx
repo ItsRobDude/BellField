@@ -152,9 +152,6 @@ export function DispatchCardButton({
           >
             <span style={timelineJobChipStyle}>#{card.jobNumber}</span>
             <strong style={timelineCardLocationStyle}>{primaryName}</strong>
-            {spaceTier === 'wide' && card.jobSummary ? (
-              <span style={timelineCardSummaryStyle}>· {card.jobSummary}</span>
-            ) : null}
             {card.needsOfficeReview ? <span style={timelineReviewChipStyle}>Review</span> : null}
             {hasScheduleConflict ? <span style={timelineOverlapChipStyle}>Overlap</span> : null}
           </div>
@@ -186,7 +183,7 @@ export function DispatchCardButton({
               : timelineCardActionButtonStyle
           }
         >
-          {spaceTier === 'narrow' ? '...' : 'Actions'}
+          ...
         </button>
       ) : null}
       {dragStatusText ? (
@@ -351,19 +348,23 @@ const timelineCardActionOverlayStyle: CSSProperties = {
 };
 
 const timelineCardActionButtonStyle: CSSProperties = {
+  alignItems: 'center',
   alignSelf: 'center',
   background: '#ffffff',
   border: '1px solid #cbe3e8',
   borderRadius: 4,
   color: '#176b5b',
   cursor: 'pointer',
+  display: 'inline-flex',
   flex: '0 0 auto',
   fontSize: '0.68rem',
   fontWeight: 800,
   height: '1.45rem',
+  justifyContent: 'center',
   lineHeight: 1,
   marginRight: '0.35rem',
-  padding: '0 0.35rem'
+  padding: 0,
+  width: '1.55rem'
 };
 
 const timelineResizeHandleStyle: CSSProperties = {
@@ -445,7 +446,7 @@ const timelineCardTitleRowStyle: CSSProperties = {
 };
 
 const timelineCardTitleRowWithOverlayActionStyle: CSSProperties = {
-  paddingRight: '3.1rem'
+  paddingRight: '2.45rem'
 };
 
 const timelineJobChipStyle: CSSProperties = {
@@ -492,24 +493,13 @@ const timelineOverlapChipStyle: CSSProperties = {
 
 const timelineCardLocationStyle: CSSProperties = {
   display: 'block',
-  flex: '0 1 auto',
+  flex: '1 1 auto',
   fontSize: '0.78rem',
   height: timelineCardTextLineHeight,
   lineHeight: timelineCardTextLineHeight,
+  minWidth: 0,
   overflow: 'hidden',
   textOverflow: 'ellipsis'
-};
-
-const timelineCardSummaryStyle: CSSProperties = {
-  color: '#475569',
-  display: 'block',
-  flex: '1 1 auto',
-  fontSize: '0.74rem',
-  height: timelineCardTextLineHeight,
-  lineHeight: timelineCardTextLineHeight,
-  overflow: 'hidden',
-  textOverflow: 'ellipsis',
-  whiteSpace: 'nowrap'
 };
 
 const timelineCardAddressStyle: CSSProperties = {

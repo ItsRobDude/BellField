@@ -33,16 +33,23 @@ export function formatDispatchCardDetailLine(
   const address = formatDispatchCardAddress(card);
   const locationName = formatDistinctLocationName(card);
   const jobType = card.jobType.trim();
+  const jobSummary = card.jobSummary.trim();
 
   if (spaceTier === 'wide') {
-    return joinDisplayParts([options.timeRangeText, options.statusLabel, jobType, address]);
+    return joinDisplayParts([
+      options.timeRangeText,
+      options.statusLabel,
+      jobType,
+      jobSummary,
+      address
+    ]);
   }
 
   if (spaceTier === 'narrow') {
-    return firstPresent(jobType, address, locationName, options.statusLabel) ?? options.statusLabel;
+    return joinDisplayParts([options.statusLabel, firstPresent(jobType, address, locationName)]);
   }
 
-  return joinDisplayParts([jobType, locationName, address]) || options.statusLabel;
+  return joinDisplayParts([options.statusLabel, jobType, locationName, address]);
 }
 
 export function formatDispatchCardAriaLabel(

@@ -217,7 +217,7 @@ describe('DispatchBoardPanel', () => {
     expect(within(taylorRegion).getByText('#1001')).toBeInTheDocument();
     expect(within(taylorRegion).getByText('Acme')).toBeInTheDocument();
     expect(
-      within(taylorRegion).getByText('Service · Main Shop · 123 Main, Blaine, WA')
+      within(taylorRegion).getByText('Scheduled · Service · Main Shop · 123 Main, Blaine, WA')
     ).toBeInTheDocument();
     expect(taylorRegion).toHaveStyle({ minHeight: '4.85rem' });
     expect(taylorRegion.children[0]).toHaveStyle({ minHeight: '4.85rem' });
@@ -282,12 +282,12 @@ describe('DispatchBoardPanel', () => {
 
     const taylorRegion = screen.getByRole('region', { name: /Appointments for Taylor Tech/i });
 
-    expect(within(taylorRegion).getByText('· No cooling')).toBeInTheDocument();
     expect(
       within(taylorRegion).getByText(
-        '8:00 AM - 11:00 AM · Scheduled · Service · 123 Main, Blaine, WA'
+        '8:00 AM - 11:00 AM · Scheduled · Service · No cooling · 123 Main, Blaine, WA'
       )
     ).toBeInTheDocument();
+    expect(within(taylorRegion).getByText('Acme')).toBeInTheDocument();
   });
 
   it('uses the visible clamped span for late-day card density', () => {
@@ -316,10 +316,11 @@ describe('DispatchBoardPanel', () => {
 
     expect(within(taylorRegion).queryByText(/After-hours repair/)).not.toBeInTheDocument();
     expect(within(taylorRegion).queryByText(/5:00 PM - 8:00 PM/)).not.toBeInTheDocument();
-    expect(within(taylorRegion).getByText('Service')).toBeInTheDocument();
+    expect(within(taylorRegion).getByText('Scheduled · Service')).toBeInTheDocument();
     expect(within(taylorRegion).queryByText(/Main Shop/)).not.toBeInTheDocument();
-    expect(actionButton).toHaveStyle({ position: 'absolute', right: '0.65rem' });
-    expect(primaryName.parentElement).toHaveStyle({ paddingRight: '3.1rem' });
+    expect(actionButton).toHaveTextContent('...');
+    expect(actionButton).toHaveStyle({ position: 'absolute', right: '0.65rem', width: '1.55rem' });
+    expect(primaryName.parentElement).toHaveStyle({ paddingRight: '2.45rem' });
   });
 
   it('opens a calendar picker and commits the selected dispatch date', () => {
