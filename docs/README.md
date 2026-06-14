@@ -222,6 +222,24 @@ Does not own: the acceptance-link design (`acceptance-links-design.md`), the
 relay design (`delivery-relay-plan.md`), or the gate-day sold-release proof
 (`gate-day-checklist.md`).
 
+### [phase-6b-live-invoice-email-payment-smoke-2026-06-14.md](./phase-6b-live-invoice-email-payment-smoke-2026-06-14.md)
+
+Audience: contributors checking the current live-relay proof for invoice email
+delivery with payment links.
+
+Purpose: dated evidence for the live invoice email/payment-link smoke:
+estimate delivery still passes through the relay and Gmail after sender-identity
+changes, invoice email sends from `billing@bellfield.app` with a Stripe Checkout
+link, and the worker records the provider-confirmed sandbox card payment locally.
+
+Read when: deciding where to resume invoice email/payment-link validation, or
+separating proven same-machine/live-relay payment-link behavior from the
+remaining sold-shaped install and real merchant onboarding gates.
+
+Does not own: the relay design (`delivery-relay-plan.md`), the test-relay
+operator recipe (`testing-relay-ops.md`), or the gate-day sold-release proof
+(`gate-day-checklist.md`).
+
 ### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Audience: contributors checking what Phase 1 install validation has actually been run.
