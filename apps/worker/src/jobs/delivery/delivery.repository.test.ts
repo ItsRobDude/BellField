@@ -52,7 +52,8 @@ test('DeliveryRepository claimDueQueued leases due rows with skip-locked semanti
       storage_path: 'customer-documents/jobs/job-1/estimate.pdf',
       sha256: 'a'.repeat(64),
       filename: 'estimate.pdf',
-      estimate_title: 'AC replacement'
+      document_type: 'estimate',
+      document_title: 'AC replacement'
     }
   ];
   const repository = new DeliveryRepository(database);
@@ -77,10 +78,11 @@ test('DeliveryRepository claimDueQueued leases due rows with skip-locked semanti
       sentByName: 'Dispatcher',
       attemptCount: 1,
       expiresAt: new Date('2026-06-12T00:00:00Z'),
+      documentType: 'estimate',
+      documentTitle: 'AC replacement',
       snapshotStoragePath: 'customer-documents/jobs/job-1/estimate.pdf',
       snapshotSha256: 'a'.repeat(64),
       snapshotFilename: 'estimate.pdf',
-      estimateTitle: 'AC replacement',
       acceptancePayload: {
         estimateRef: 'estimate-1',
         estimateVersion: 2,

@@ -13,13 +13,10 @@ import type { EmailProviderSendInput, EmailProviderSendResult } from './customer
 export const bellfieldEstimateEmailFromAddress = 'estimates@bellfield.app';
 export const deliveryFailedMessage =
   'BellField estimate email delivery failed. Try again or contact support.';
-const safeNeedsSetupMessage =
-  'Estimate email is not available on this server. Contact BellField support.';
-const safeTemporarilyUnavailableMessage =
-  'Estimate email availability could not be confirmed. Contact BellField support.';
-const safeQuotaExhaustedMessage =
-  'Estimate email has reached its sending limit. Contact BellField support.';
-const safeSuspendedMessage = 'Estimate email is paused for this server. Contact BellField support.';
+export const invoiceDeliveryFailedMessage =
+  'BellField invoice email delivery failed. Try again or contact support.';
+
+type CustomerEmailKind = 'estimate' | 'invoice';
 
 /**
  * Relay client for customer-facing email. Sold installs hold no provider
@@ -34,16 +31,31 @@ export class EmailProviderService {
   private readonly logger = new Logger(EmailProviderService.name);
 
   async sendEstimateEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
+    return this.sendCustomerDocumentEmail('estimate', input);
+  }
+
+  async sendInvoiceEmail(input: EmailProviderSendInput): Promise<EmailProviderSendResult> {
+    return this.sendCustomerDocumentEmail('invoice', input);
+  }
+
+  private async sendCustomerDocumentEmail(
+    kind: CustomerEmailKind,
+    input: EmailProviderSendInput
+  ): Promise<EmailProviderSendResult> {
+    const failedMessage = kind === 'invoice' ? invoiceDeliveryFailedMessage : deliveryFailedMessage;
     const relay = getApiRuntimeConfig().relay;
     if (!relay) {
       return {
         kind: 'failed',
         code: 'notConfigured',
         retryable: false,
-        message: deliveryFailedMessage
+        message: failedMessage
       };
     }
 
+    // Deliberate debt: the relay send payload is already document-generic, but
+    // the v1 relay route is still estimate-branded. Keep the route stable for
+    // this invoice slice and rename it in a later relay API cleanup.
     const response = await fetch(`${relay.baseUrl}/v1/messages/estimate`, {
       method: 'POST',
       headers: relayHeaders(relay, { 'Content-Type': 'application/json' }),
@@ -64,13 +76,13 @@ export class EmailProviderService {
       })
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Relay request failed.';
-      this.logger.warn(`BellField estimate email delivery request failed: ${message}`);
+      this.logger.warn(`BellField ${kind} email delivery request failed: ${message}`);
       return {
         failed: {
           kind: 'failed' as const,
           code: 'deliveryUnavailable' as const,
           retryable: true,
-          message: deliveryFailedMessage
+          message: failedMessage
         }
       };
     });
@@ -89,7 +101,7 @@ export class EmailProviderService {
         kind: 'failed',
         code: 'deliveryRejected',
         retryable: false,
-        message: deliveryFailedMessage
+        message: failedMessage
       };
     }
 
@@ -100,7 +112,7 @@ export class EmailProviderService {
         kind: 'failed',
         code: response.status >= 500 ? 'deliveryUnavailable' : 'deliveryRejected',
         retryable: response.status >= 500,
-        message: deliveryFailedMessage
+        message: failedMessage
       };
     }
 
@@ -124,7 +136,7 @@ export class EmailProviderService {
         kind: 'failed',
         code: mapRelayFailureCode(result.code),
         retryable: result.retryable === true,
-        message: deliveryFailedMessage
+        message: failedMessage
       };
     }
     this.logger.warn('BellField delivery relay returned an unrecognized send result.');
@@ -132,18 +144,29 @@ export class EmailProviderService {
       kind: 'failed',
       code: 'unknown',
       retryable: false,
-      message: deliveryFailedMessage
+      message: failedMessage
     };
   }
 
   async getEstimateEmailDeliveryStatus(): Promise<EstimateEmailDeliveryStatus> {
+    return this.getCustomerEmailDeliveryStatus('estimate');
+  }
+
+  async getInvoiceEmailDeliveryStatus(): Promise<EstimateEmailDeliveryStatus> {
+    return this.getCustomerEmailDeliveryStatus('invoice');
+  }
+
+  private async getCustomerEmailDeliveryStatus(
+    kind: CustomerEmailKind
+  ): Promise<EstimateEmailDeliveryStatus> {
     const relay = getApiRuntimeConfig().relay;
+    const labels = deliveryStatusLabels(kind);
     if (!relay) {
       return {
         configured: false,
         ready: false,
         status: 'needsSetup',
-        message: safeNeedsSetupMessage
+        message: labels.needsSetup
       };
     }
 
@@ -157,7 +180,7 @@ export class EmailProviderService {
           configured: true,
           ready: false,
           status: 'needsSetup',
-          message: safeNeedsSetupMessage
+          message: labels.needsSetup
         };
       }
       if (response.status === 403) {
@@ -165,14 +188,14 @@ export class EmailProviderService {
           configured: true,
           ready: false,
           status: 'suspended',
-          message: safeSuspendedMessage
+          message: labels.suspended
         };
       }
       if (!response.ok) {
         this.logger.warn(
-          `BellField estimate email delivery status check returned HTTP ${response.status}.`
+          `BellField ${kind} email delivery status check returned HTTP ${response.status}.`
         );
-        return deliveryStatusUnavailable();
+        return deliveryStatusUnavailable(kind);
       }
       const body = (await response.json().catch(() => ({}))) as RelayEntitlementResponse;
       if (body.sendingState === 'ready') {
@@ -180,7 +203,7 @@ export class EmailProviderService {
           configured: true,
           ready: true,
           status: 'ready',
-          message: 'Estimate email is ready.'
+          message: labels.ready
         };
       }
       if (body.sendingState === 'quotaExhausted') {
@@ -188,14 +211,14 @@ export class EmailProviderService {
           configured: true,
           ready: false,
           status: 'quotaExhausted',
-          message: safeQuotaExhaustedMessage
+          message: labels.quotaExhausted
         };
       }
-      return deliveryStatusUnavailable();
+      return deliveryStatusUnavailable(kind);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Delivery status check failed.';
-      this.logger.warn(`BellField estimate email delivery status check failed: ${message}`);
-      return deliveryStatusUnavailable();
+      this.logger.warn(`BellField ${kind} email delivery status check failed: ${message}`);
+      return deliveryStatusUnavailable(kind);
     }
   }
 }
@@ -242,11 +265,29 @@ function mapRelayFailureCode(code: string | undefined): OutboundMessageFailureCo
   }
 }
 
-function deliveryStatusUnavailable(): EstimateEmailDeliveryStatus {
+function deliveryStatusUnavailable(kind: CustomerEmailKind): EstimateEmailDeliveryStatus {
+  const labels = deliveryStatusLabels(kind);
   return {
     configured: true,
     ready: false,
     status: 'temporarilyUnavailable',
-    message: safeTemporarilyUnavailableMessage
+    message: labels.temporarilyUnavailable
+  };
+}
+
+function deliveryStatusLabels(kind: CustomerEmailKind): {
+  needsSetup: string;
+  temporarilyUnavailable: string;
+  quotaExhausted: string;
+  suspended: string;
+  ready: string;
+} {
+  const label = kind === 'invoice' ? 'Invoice email' : 'Estimate email';
+  return {
+    needsSetup: `${label} is not available on this server. Contact BellField support.`,
+    temporarilyUnavailable: `${label} availability could not be confirmed. Contact BellField support.`,
+    quotaExhausted: `${label} has reached its sending limit. Contact BellField support.`,
+    suspended: `${label} is paused for this server. Contact BellField support.`,
+    ready: `${label} is ready.`
   };
 }

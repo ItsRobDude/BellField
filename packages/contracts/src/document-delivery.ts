@@ -80,6 +80,9 @@ export interface SendEstimateResponse {
   recordingIncomplete?: boolean;
 }
 
+export type SendInvoiceRequest = SendEstimateRequest;
+export type SendInvoiceResponse = SendEstimateResponse;
+
 export interface OutboundMessagesResponse {
   outboundMessages: OutboundMessageSummary[];
 }
@@ -108,3 +111,6 @@ export interface EstimateSendPreviewResponse {
   preview: EstimateSendPreview;
   deliveryStatus: EstimateEmailDeliveryStatus;
 }
+
+export type InvoiceSendPreview = EstimateSendPreview;
+export type InvoiceSendPreviewResponse = EstimateSendPreviewResponse;

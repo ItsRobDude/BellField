@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { InvoiceSummary } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
+import * as invoiceDeliveryApi from '@/lib/operations-invoice-delivery-api';
 import * as downloadFile from '@/lib/download-file';
 import { JobInvoiceSection } from './job-invoice-section';
 
@@ -23,9 +24,16 @@ vi.mock('@/lib/operations-api', () => ({
   recordOfficePayment: vi.fn(),
   voidOfficePayment: vi.fn()
 }));
+vi.mock('@/lib/operations-invoice-delivery-api', () => ({
+  getOfficeInvoiceSendPreview: vi.fn(),
+  sendOfficeInvoice: vi.fn(),
+  getOfficeInvoiceOutboundMessages: vi.fn(),
+  cancelOfficeInvoiceOutboundMessage: vi.fn()
+}));
 vi.mock('@/lib/download-file', () => ({ downloadBlob: vi.fn() }));
 
 const mockedApi = vi.mocked(operationsApi);
+const mockedInvoiceDeliveryApi = vi.mocked(invoiceDeliveryApi);
 const mockedDownload = vi.mocked(downloadFile);
 
 beforeEach(() => {
@@ -52,6 +60,49 @@ beforeEach(() => {
     expiresAt: '2026-06-14T00:00:00.000Z'
   });
   mockedApi.downloadOfficeInvoiceDocument.mockResolvedValue(new Blob(['html']));
+  mockedInvoiceDeliveryApi.getOfficeInvoiceSendPreview.mockResolvedValue({
+    preview: {
+      subject: 'Invoice 1001 from Acme HVAC',
+      bodyText: 'Hello Acme Co, attached is your invoice for job 1001.'
+    },
+    deliveryStatus: {
+      configured: true,
+      ready: true,
+      status: 'ready',
+      message: 'Invoice email is ready.'
+    }
+  });
+  mockedInvoiceDeliveryApi.getOfficeInvoiceOutboundMessages.mockResolvedValue({
+    outboundMessages: []
+  });
+  mockedInvoiceDeliveryApi.sendOfficeInvoice.mockResolvedValue({
+    outboundMessage: {
+      id: 'message-1',
+      channel: 'email',
+      status: 'sent',
+      jobId: 'job-1',
+      invoiceId: 'inv-1',
+      documentSnapshotId: 'snapshot-1',
+      recipientEmail: 'customer@example.com',
+      subject: 'Invoice 1001 from Acme HVAC',
+      sentByName: 'Olivia Owner',
+      queuedAt: '2026-06-01T12:00:00.000Z',
+      sentAt: '2026-06-01T12:00:01.000Z'
+    },
+    documentSnapshot: {
+      id: 'snapshot-1',
+      documentType: 'invoice',
+      jobId: 'job-1',
+      invoiceId: 'inv-1',
+      sourceVersion: 2,
+      filename: 'invoice-1001-inv-1.pdf',
+      contentType: 'application/pdf',
+      sha256: 'a'.repeat(64),
+      byteSize: 123,
+      generatedByName: 'Olivia Owner',
+      generatedAt: '2026-06-01T12:00:00.000Z'
+    }
+  });
 });
 
 afterEach(() => {
@@ -114,7 +165,7 @@ function postedInvoice(): InvoiceSummary {
   });
 }
 
-function renderSection(canPost: boolean) {
+function renderSection(canPost: boolean, options?: { canSend?: boolean; customerEmail?: string }) {
   return render(
     <JobInvoiceSection
       jobId="job-1"
@@ -122,6 +173,8 @@ function renderSection(canPost: boolean) {
       sessionToken="test-token"
       canEdit
       canPost={canPost}
+      canSend={options?.canSend ?? false}
+      billToCustomerEmail={options?.customerEmail}
       canCreateAdjustments
       paymentPermissions={{ canView: true, canRecord: true, canVoid: true }}
     />
@@ -202,6 +255,149 @@ describe('JobInvoiceSection posting', () => {
     // Add line proves the draft loaded and canEdit still works.
     expect(await screen.findByRole('button', { name: 'Add line' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Post invoice' })).not.toBeInTheDocument();
+  });
+
+  it('shows invoice email only for posted invoices with send permission', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+
+    const { unmount } = renderSection(true, {
+      canSend: true,
+      customerEmail: 'customer@example.com'
+    });
+
+    expect(await screen.findByRole('button', { name: 'Post invoice' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Email invoice' })).not.toBeInTheDocument();
+    unmount();
+
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    renderSection(true, { canSend: false, customerEmail: 'customer@example.com' });
+
+    expect(await screen.findByText('Posted record')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Email invoice' })).not.toBeInTheDocument();
+  });
+
+  it('previews and sends a posted invoice email with the bill-to email default', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+
+    renderSection(true, { canSend: true, customerEmail: 'customer@example.com' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email invoice' }));
+
+    expect(await screen.findByLabelText('Invoice recipient email')).toHaveValue(
+      'customer@example.com'
+    );
+    expect(await screen.findByLabelText('Invoice email subject')).toHaveValue(
+      'Invoice 1001 from Acme HVAC'
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+
+    await waitFor(() =>
+      expect(mockedInvoiceDeliveryApi.sendOfficeInvoice).toHaveBeenCalledWith({
+        invoiceId: 'inv-1',
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token',
+        recipientEmail: 'customer@example.com',
+        subject: 'Invoice 1001 from Acme HVAC',
+        bodyText: 'Hello Acme Co, attached is your invoice for job 1001.'
+      })
+    );
+    expect(await screen.findByText('Invoice sent.')).toBeInTheDocument();
+  });
+
+  it('warns (not confirms success) when a sent invoice could not be fully recorded', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedInvoiceDeliveryApi.sendOfficeInvoice.mockResolvedValueOnce({
+      outboundMessage: {
+        id: 'message-1',
+        channel: 'email',
+        status: 'sent',
+        jobId: 'job-1',
+        invoiceId: 'inv-1',
+        documentSnapshotId: 'snapshot-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Invoice 1001 from Acme HVAC',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T12:00:00.000Z',
+        sentAt: '2026-06-01T12:00:01.000Z'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'invoice',
+        jobId: 'job-1',
+        invoiceId: 'inv-1',
+        sourceVersion: 2,
+        filename: 'invoice-1001-inv-1.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 123,
+        generatedByName: 'Olivia Owner',
+        generatedAt: '2026-06-01T12:00:00.000Z'
+      },
+      recordingIncomplete: true
+    });
+
+    renderSection(true, { canSend: true, customerEmail: 'customer@example.com' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email invoice' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Send email' }));
+
+    // The operator must see a "stop and call support" warning, never a green success.
+    expect(await screen.findByText(/could not finish recording it/i)).toBeInTheDocument();
+    expect(screen.queryByText('Invoice sent.')).not.toBeInTheDocument();
+  });
+
+  it('shows queued invoice delivery history and cancels queued sends', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedInvoiceDeliveryApi.getOfficeInvoiceOutboundMessages.mockResolvedValue({
+      outboundMessages: [
+        {
+          id: 'message-queued',
+          channel: 'email',
+          status: 'queued',
+          jobId: 'job-1',
+          invoiceId: 'inv-1',
+          recipientEmail: 'customer@example.com',
+          subject: 'Invoice 1001 from Acme HVAC',
+          sentByName: 'Olivia Owner',
+          queuedAt: '2026-06-01T12:00:00.000Z'
+        }
+      ]
+    });
+    mockedInvoiceDeliveryApi.cancelOfficeInvoiceOutboundMessage.mockResolvedValue({
+      outboundMessage: {
+        id: 'message-queued',
+        channel: 'email',
+        status: 'canceled',
+        jobId: 'job-1',
+        invoiceId: 'inv-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Invoice 1001 from Acme HVAC',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T12:00:00.000Z',
+        deliveryMessage: 'Canceled before sending.'
+      }
+    });
+
+    renderSection(true, { canSend: true, customerEmail: 'customer@example.com' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email invoice' }));
+    expect(await screen.findByText('Will send automatically.')).toBeInTheDocument();
+    expect(screen.queryByText(/Awaiting customer response/)).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel send' }));
+
+    await waitFor(() =>
+      expect(mockedInvoiceDeliveryApi.cancelOfficeInvoiceOutboundMessage).toHaveBeenCalledWith({
+        invoiceId: 'inv-1',
+        outboundMessageId: 'message-queued',
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(await screen.findByText('Queued email canceled.')).toBeInTheDocument();
   });
 
   it('creates a full-balance online payment link from the posted invoice screen', async () => {

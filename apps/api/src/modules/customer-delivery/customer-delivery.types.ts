@@ -86,9 +86,11 @@ export type CreateOutboundMessageInput = {
   acceptancePayload?: RelayAcceptancePayload;
 };
 
-export type CreateEstimateSendIntentResult =
+export type CreateOutboundSendIntentResult =
   | { kind: 'created'; message: OutboundMessageRecord }
   | { kind: 'blocked'; reason: 'alreadyQueued' | 'recentlySent' };
+
+export type CreateEstimateSendIntentResult = CreateOutboundSendIntentResult;
 
 export type EmailProviderSendInput = {
   to: string;

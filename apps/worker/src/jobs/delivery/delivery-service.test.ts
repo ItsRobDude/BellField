@@ -144,10 +144,23 @@ function makeDue(storagePath: string, sha256: string): DueQueuedDelivery {
     sentByName: 'Dispatcher',
     attemptCount: 1,
     expiresAt: new Date('2026-06-12T00:00:00Z'),
+    documentType: 'estimate',
+    documentTitle: 'AC replacement',
     snapshotStoragePath: storagePath,
     snapshotSha256: sha256,
     snapshotFilename: 'estimate.pdf',
-    estimateTitle: 'AC replacement',
+    acceptancePayload: null
+  };
+}
+
+function makeInvoiceDue(storagePath: string, sha256: string): DueQueuedDelivery {
+  return {
+    ...makeDue(storagePath, sha256),
+    documentType: 'invoice',
+    documentTitle: 'Invoice for job 1001',
+    subject: 'Your invoice',
+    bodyText: 'Invoice attached.',
+    snapshotFilename: 'invoice.pdf',
     acceptancePayload: null
   };
 }
@@ -189,6 +202,39 @@ void test('sends a due queued delivery and records the timeline entry', async ()
   });
 });
 
+void test('sends a queued invoice with invoice timeline copy and no acceptance payload', async () => {
+  await withMediaRoot(async (mediaRoot, storagePath, sha256) => {
+    const store = new InMemoryDeliveryStore();
+    const relay = new StubRelayClient();
+    relay.sendOutcome = {
+      kind: 'sent',
+      relayMessageId: 'relay-invoice-1',
+      acceptanceLinkId: 'unexpected-link',
+      acceptanceUrl: 'https://relay.test/a/unexpected'
+    };
+    const due = makeInvoiceDue(storagePath, sha256);
+    due.acceptancePayload = {
+      estimateRef: 'estimate-should-not-leak',
+      estimateVersion: 1,
+      title: 'Wrong document type',
+      options: [{ id: 'opt-1', label: 'Wrong', totalCents: 100 }]
+    };
+    store.due = [due];
+    const service = new DeliveryService({ mediaRoot }, store, relay, { now: fixedNow });
+
+    const summary = await service.processDueDeliveries();
+
+    assert.equal(summary.sent, 1);
+    assert.deepEqual(store.sentCalls, [{ id: 'msg-1', providerMessageId: 'relay-invoice-1' }]);
+    assert.equal(store.timeline[0].kind, 'invoiceSent');
+    assert.match(store.timeline[0].message, /Invoice sent to homeowner@example.com/);
+    assert.match(store.timeline[0].message, /Invoice for job 1001/);
+    const sendCall = relay.sendCalls[0] as { idempotencyKey: string; acceptance?: unknown };
+    assert.equal(sendCall.idempotencyKey, 'invoice-send-msg-1');
+    assert.equal(sendCall.acceptance, undefined);
+  });
+});
+
 void test('marks a non-retryable failure failed with a timeline entry', async () => {
   await withMediaRoot(async (mediaRoot, storagePath, sha256) => {
     const store = new InMemoryDeliveryStore();
@@ -202,6 +248,23 @@ void test('marks a non-retryable failure failed with a timeline entry', async ()
     assert.equal(summary.failed, 1);
     assert.deepEqual(store.failedCalls, [{ id: 'msg-1', code: 'recipientUnavailable' }]);
     assert.equal(store.timeline[0].kind, 'estimateDeliveryFailed');
+  });
+});
+
+void test('marks a non-retryable invoice failure with invoice timeline copy', async () => {
+  await withMediaRoot(async (mediaRoot, storagePath, sha256) => {
+    const store = new InMemoryDeliveryStore();
+    const relay = new StubRelayClient();
+    relay.sendOutcome = { kind: 'failed', code: 'recipientUnavailable', retryable: false };
+    store.due = [makeInvoiceDue(storagePath, sha256)];
+    const service = new DeliveryService({ mediaRoot }, store, relay, { now: fixedNow });
+
+    const summary = await service.processDueDeliveries();
+
+    assert.equal(summary.failed, 1);
+    assert.deepEqual(store.failedCalls, [{ id: 'msg-1', code: 'recipientUnavailable' }]);
+    assert.equal(store.timeline[0].kind, 'invoiceDeliveryFailed');
+    assert.match(store.timeline[0].message, /Invoice delivery failed/);
   });
 });
 
@@ -245,9 +308,10 @@ void test('writes timeline entries for expired queued sends', async () => {
     {
       id: 'msg-9',
       jobId: 'job-9',
+      documentType: 'estimate',
+      documentTitle: 'Furnace swap',
       recipientEmail: 'old@example.com',
-      sentByName: 'Dispatcher',
-      estimateTitle: 'Furnace swap'
+      sentByName: 'Dispatcher'
     }
   ];
   const service = new DeliveryService({ mediaRoot: tmpdir() }, store, relay, { now: fixedNow });
@@ -258,6 +322,29 @@ void test('writes timeline entries for expired queued sends', async () => {
   assert.equal(store.timeline.length, 1);
   assert.equal(store.timeline[0].kind, 'estimateDeliveryFailed');
   assert.match(store.timeline[0].message, /Furnace swap/);
+});
+
+void test('writes invoice timeline entries for expired queued sends', async () => {
+  const store = new InMemoryDeliveryStore();
+  const relay = new StubRelayClient();
+  store.expired = [
+    {
+      id: 'msg-10',
+      jobId: 'job-10',
+      documentType: 'invoice',
+      documentTitle: 'Invoice for job 1001',
+      recipientEmail: 'old-invoice@example.com',
+      sentByName: 'Bookkeeper'
+    }
+  ];
+  const service = new DeliveryService({ mediaRoot: tmpdir() }, store, relay, { now: fixedNow });
+
+  const summary = await service.processDueDeliveries();
+
+  assert.equal(summary.expired, 1);
+  assert.equal(store.timeline.length, 1);
+  assert.equal(store.timeline[0].kind, 'invoiceDeliveryFailed');
+  assert.match(store.timeline[0].message, /Invoice for job 1001/);
 });
 
 void test('applies delivered state from the status poll', async () => {

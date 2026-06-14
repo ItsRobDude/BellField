@@ -8,9 +8,17 @@ import {
   getOfficeInvoiceForJob,
   postOfficeInvoice,
   voidOfficeInvoiceLine,
+  type EstimateEmailDeliveryStatus,
   type InvoiceLineItemSummary,
-  type InvoiceSummary
+  type InvoiceSummary,
+  type OutboundMessageSummary
 } from '@/lib/operations-api';
+import {
+  cancelOfficeInvoiceOutboundMessage,
+  getOfficeInvoiceOutboundMessages,
+  getOfficeInvoiceSendPreview,
+  sendOfficeInvoice
+} from '@/lib/operations-invoice-delivery-api';
 import { downloadBlob } from '@/lib/download-file';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -29,6 +37,7 @@ import {
   type InvoicePaymentPermissions
 } from './job-invoice-shared';
 import { JobInvoiceCorrections } from './job-invoice-corrections';
+import { DocumentDeliveryPanel, type DocumentDeliveryDraft } from './job-estimate-delivery-panel';
 
 type JobInvoiceSectionProps = {
   jobId: string;
@@ -36,6 +45,8 @@ type JobInvoiceSectionProps = {
   sessionToken: string;
   canEdit: boolean;
   canPost: boolean;
+  canSend: boolean;
+  billToCustomerEmail?: string;
   canCreateAdjustments: boolean;
   paymentPermissions: InvoicePaymentPermissions;
 };
@@ -47,12 +58,16 @@ type JobInvoiceSectionProps = {
 // the draft, which freezes its display context and stops further editing. Once
 // posted, the corrections section (adjustments/credits + balance) appears below.
 // All styling reuses officeWorkspaceStyles.
+const queuedDeliveryPollIntervalMs = 15_000;
+
 export function JobInvoiceSection({
   jobId,
   apiBaseUrl,
   sessionToken,
   canEdit,
   canPost,
+  canSend,
+  billToCustomerEmail,
   canCreateAdjustments,
   paymentPermissions
 }: JobInvoiceSectionProps) {
@@ -60,10 +75,23 @@ export function JobInvoiceSection({
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
+  const [warningMessage, setWarningMessage] = useState<string | null>(null);
   const [newLineDraft, setNewLineDraft] = useState<InvoiceLineDraft | null>(null);
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<InvoiceLineDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeliveryPanelOpen, setIsDeliveryPanelOpen] = useState(false);
+  const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft>({
+    recipientEmail: billToCustomerEmail ?? '',
+    subject: '',
+    bodyText: ''
+  });
+  const [outboundMessages, setOutboundMessages] = useState<OutboundMessageSummary[]>([]);
+  const [deliveryStatus, setDeliveryStatus] = useState<EstimateEmailDeliveryStatus | null>(null);
+  const [isHistoryLoading, setIsHistoryLoading] = useState(false);
+  const [isPreviewLoading, setIsPreviewLoading] = useState(false);
+  const [isSendingInvoice, setIsSendingInvoice] = useState(false);
+  const [cancelingMessageId, setCancelingMessageId] = useState<string | null>(null);
 
   const loadInvoice = useCallback(async () => {
     setIsLoading(true);
@@ -81,6 +109,13 @@ export function JobInvoiceSection({
   useEffect(() => {
     void loadInvoice();
   }, [loadInvoice]);
+
+  useEffect(() => {
+    setDeliveryDraft((current) => ({
+      ...current,
+      recipientEmail: current.recipientEmail || billToCustomerEmail || ''
+    }));
+  }, [billToCustomerEmail]);
 
   function applyResult(next: InvoiceSummary, notice: string) {
     setInvoice(next);
@@ -186,6 +221,154 @@ export function JobInvoiceSection({
     }
   }
 
+  const loadDeliveryHistory = useCallback(
+    async (invoiceId: string, options?: { silent?: boolean }) => {
+      if (!options?.silent) {
+        setIsHistoryLoading(true);
+        setErrorMessage(null);
+      }
+      try {
+        const response = await getOfficeInvoiceOutboundMessages({
+          invoiceId,
+          apiBaseUrl,
+          sessionToken
+        });
+        setOutboundMessages(response.outboundMessages);
+      } catch (error) {
+        if (!options?.silent) {
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Unable to load invoice delivery history.'
+          );
+        }
+      } finally {
+        if (!options?.silent) {
+          setIsHistoryLoading(false);
+        }
+      }
+    },
+    [apiBaseUrl, sessionToken]
+  );
+
+  const hasQueuedDelivery = outboundMessages.some((message) => message.status === 'queued');
+
+  useEffect(() => {
+    if (!invoice || !isDeliveryPanelOpen || !hasQueuedDelivery) {
+      return;
+    }
+    const intervalId = window.setInterval(() => {
+      void loadDeliveryHistory(invoice.id, { silent: true });
+    }, queuedDeliveryPollIntervalMs);
+    return () => window.clearInterval(intervalId);
+  }, [hasQueuedDelivery, invoice, isDeliveryPanelOpen, loadDeliveryHistory]);
+
+  async function loadSendPreview(invoiceId: string) {
+    setIsPreviewLoading(true);
+    setErrorMessage(null);
+    try {
+      const response = await getOfficeInvoiceSendPreview({
+        invoiceId,
+        apiBaseUrl,
+        sessionToken
+      });
+      setDeliveryStatus(response.deliveryStatus);
+      setDeliveryDraft((current) => ({
+        ...current,
+        recipientEmail: current.recipientEmail || billToCustomerEmail || '',
+        subject: current.subject || response.preview.subject,
+        bodyText: current.bodyText || response.preview.bodyText
+      }));
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to load invoice send preview.'
+      );
+    } finally {
+      setIsPreviewLoading(false);
+    }
+  }
+
+  function toggleDeliveryPanel() {
+    if (!invoice) return;
+    setNoticeMessage(null);
+    setErrorMessage(null);
+    const next = !isDeliveryPanelOpen;
+    setIsDeliveryPanelOpen(next);
+    if (next) {
+      setDeliveryDraft((current) => ({
+        recipientEmail: current.recipientEmail || billToCustomerEmail || '',
+        subject: current.subject,
+        bodyText: current.bodyText
+      }));
+      void loadDeliveryHistory(invoice.id);
+      void loadSendPreview(invoice.id);
+    }
+  }
+
+  async function sendInvoiceEmail() {
+    if (!invoice) return;
+    const recipientEmail = deliveryDraft.recipientEmail.trim();
+    if (!recipientEmail) {
+      setErrorMessage('Recipient email is required.');
+      return;
+    }
+    if (!window.confirm(`Send this invoice PDF to ${recipientEmail}?`)) {
+      return;
+    }
+
+    setIsSendingInvoice(true);
+    setErrorMessage(null);
+    setNoticeMessage(null);
+    setWarningMessage(null);
+    try {
+      const response = await sendOfficeInvoice({
+        invoiceId: invoice.id,
+        apiBaseUrl,
+        sessionToken,
+        recipientEmail,
+        subject: deliveryDraft.subject.trim() || undefined,
+        bodyText: deliveryDraft.bodyText.trim() || undefined
+      });
+      await loadDeliveryHistory(invoice.id);
+      if (response.outboundMessage.status === 'sent') {
+        if (response.recordingIncomplete) {
+          setWarningMessage(
+            'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
+          );
+        } else {
+          setNoticeMessage('Invoice sent.');
+        }
+      } else if (response.outboundMessage.status === 'queued') {
+        setNoticeMessage('Queued — will send automatically.');
+      } else {
+        setErrorMessage(response.outboundMessage.deliveryMessage ?? 'Invoice delivery failed.');
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to send the invoice.');
+    } finally {
+      setIsSendingInvoice(false);
+    }
+  }
+
+  async function cancelQueuedMessage(outboundMessageId: string) {
+    if (!invoice) return;
+    setCancelingMessageId(outboundMessageId);
+    setNoticeMessage(null);
+    try {
+      await cancelOfficeInvoiceOutboundMessage({
+        invoiceId: invoice.id,
+        outboundMessageId,
+        apiBaseUrl,
+        sessionToken
+      });
+      await loadDeliveryHistory(invoice.id);
+      setNoticeMessage('Queued email canceled.');
+    } catch (error) {
+      await loadDeliveryHistory(invoice.id, { silent: true });
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to cancel the email.');
+    } finally {
+      setCancelingMessageId((current) => (current === outboundMessageId ? null : current));
+    }
+  }
+
   return (
     <>
       <section style={styles.panel} aria-label="Job invoice draft">
@@ -223,10 +406,16 @@ export function JobInvoiceSection({
                 Post invoice
               </button>
             ) : null}
+            {invoice && canSend && invoice.status === 'posted' ? (
+              <button type="button" style={styles.button} onClick={toggleDeliveryPanel}>
+                {isDeliveryPanelOpen ? 'Hide email' : 'Email invoice'}
+              </button>
+            ) : null}
           </div>
         </div>
 
         {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {warningMessage ? <p style={styles.warning}>{warningMessage}</p> : null}
         {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
 
         {newLineDraft ? (
@@ -314,6 +503,23 @@ export function JobInvoiceSection({
             )}
             <InvoiceTotals invoice={invoice} />
             {invoice.posted ? <PostedInvoiceSummary posted={invoice.posted} /> : null}
+            {invoice.status === 'posted' && canSend && isDeliveryPanelOpen ? (
+              <DocumentDeliveryPanel
+                documentLabel="Invoice"
+                panelAriaLabel="Invoice delivery"
+                showAcceptanceHistory={false}
+                draft={deliveryDraft}
+                deliveryStatus={deliveryStatus}
+                history={outboundMessages}
+                isHistoryLoading={isHistoryLoading}
+                isPreviewLoading={isPreviewLoading}
+                isSending={isSendingInvoice}
+                cancelingMessageId={cancelingMessageId}
+                onChange={(patch) => setDeliveryDraft((current) => ({ ...current, ...patch }))}
+                onSend={() => void sendInvoiceEmail()}
+                onCancelMessage={(outboundMessageId) => void cancelQueuedMessage(outboundMessageId)}
+              />
+            ) : null}
           </>
         )}
       </section>

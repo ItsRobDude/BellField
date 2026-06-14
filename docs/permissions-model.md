@@ -191,7 +191,7 @@ Current `PermissionAction` values are:
 - `delete`
 - `approve`
 - `post`
-- `send` (customer-facing document delivery, e.g. `estimates:send` for estimate email)
+- `send` (customer-facing document delivery, e.g. `estimates:send` for estimate email and `invoices:send` for posted invoice email)
 - `export`
 - `configure`
 
@@ -200,14 +200,14 @@ Current `PermissionAction` values are:
 The exact source of truth is `apps/api/src/modules/identity-access/default-role-templates.ts`.
 This table summarizes the current defaults so contributors do not have to rediscover them by reading code first.
 
-| Role         | Current default permission summary                                                                                                                                                                                                                                                                                                                           |
-| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Owner        | Admin core plus delete/configure/approval authority across operational, financial, reporting, employee, settings, and support areas.                                                                                                                                                                                                                         |
-| Admin        | Office core, equipment configure, invoice view/create/edit/post, payment view/create/edit, purchasing view/create/edit, inventory view/create/edit, jobCosting view/create/edit, estimate send, report view/export, employee permission view/configure, company settings view/configure, support logs/backups view/export, history view, and jobs configure. |
-| CSR          | Office core, equipment configure, invoice view, and payment view.                                                                                                                                                                                                                                                                                            |
-| Dispatcher   | Office core, equipment configure, invoice view, and report view.                                                                                                                                                                                                                                                                                             |
-| Book Keeping | Office core, invoice view/create/edit/post, payment view/create/edit, jobCosting view/create/edit, and report view/export.                                                                                                                                                                                                                                   |
-| Technician   | Customer/location/contact view, equipment create/edit/configure, appointment dispatch view/edit, register view/create/edit, media view/create/edit, catalog view, agreement view for assigned-work coverage context, estimate view/create/edit, and invoice view/edit.                                                                                       |
+| Role         | Current default permission summary                                                                                                                                                                                                                                                                                                                                |
+| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Owner        | Admin core plus delete/configure/approval authority across operational, financial, reporting, employee, settings, and support areas.                                                                                                                                                                                                                              |
+| Admin        | Office core, equipment configure, invoice view/create/edit/post/send, payment view/create/edit, purchasing view/create/edit, inventory view/create/edit, jobCosting view/create/edit, estimate send, report view/export, employee permission view/configure, company settings view/configure, support logs/backups view/export, history view, and jobs configure. |
+| CSR          | Office core, equipment configure, invoice view, and payment view.                                                                                                                                                                                                                                                                                                 |
+| Dispatcher   | Office core, equipment configure, invoice view, and report view.                                                                                                                                                                                                                                                                                                  |
+| Book Keeping | Office core, invoice view/create/edit/post/send, payment view/create/edit, jobCosting view/create/edit, and report view/export.                                                                                                                                                                                                                                   |
+| Technician   | Customer/location/contact view, equipment create/edit/configure, appointment dispatch view/edit, register view/create/edit, media view/create/edit, catalog view, agreement view for assigned-work coverage context, estimate view/create/edit, and invoice view/edit.                                                                                            |
 
 Office core currently means:
 
@@ -410,6 +410,7 @@ These actions should be owner/admin only by default unless manually granted to o
 - change backup settings
 - post invoices
 - email estimates to customers (`estimates:send`)
+- email posted invoices to customers (`invoices:send`; bookkeeping also gets this by default because AR delivery is a bookkeeping workflow)
 - permanently delete jobs/invoices/customers
 - change permission roles
 - reopen closed jobs unless granted

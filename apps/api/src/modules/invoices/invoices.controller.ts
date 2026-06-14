@@ -1,9 +1,11 @@
 import { Body, Controller, Get, Headers, Param, Post, Put, Res } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
+import { InvoiceDeliveryService } from './invoice-delivery.service';
 import { InvoicesService } from './invoices.service';
 import {
   CreateAdjustmentRequestBodyDto,
   InvoiceLineItemInputDto,
+  SendInvoiceRequestBodyDto,
   VoidInvoiceLineItemRequestBodyDto
 } from './invoices.dto';
 
@@ -105,7 +107,10 @@ export class InvoiceLineController {
 // (different segment shapes), and reads/writes here work for the main or an adjustment.
 @Controller('operations/invoices')
 export class InvoiceController {
-  constructor(private readonly invoicesService: InvoicesService) {}
+  constructor(
+    private readonly invoicesService: InvoicesService,
+    private readonly invoiceDeliveryService: InvoiceDeliveryService
+  ) {}
 
   @Get(':invoiceId')
   async getOne(
@@ -128,6 +133,54 @@ export class InvoiceController {
     response.setHeader('Content-Type', 'text/html; charset=utf-8');
     response.setHeader('Content-Disposition', `attachment; filename="${document.filename}"`);
     return document.html;
+  }
+
+  @Get(':invoiceId/send-preview')
+  async getSendPreview(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string
+  ) {
+    return this.invoiceDeliveryService.getInvoiceSendPreview(
+      getBearerToken(authorizationHeader),
+      invoiceId
+    );
+  }
+
+  @Post(':invoiceId/send')
+  async sendInvoice(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string,
+    @Body() request: SendInvoiceRequestBodyDto
+  ) {
+    return this.invoiceDeliveryService.sendInvoice(
+      getBearerToken(authorizationHeader),
+      invoiceId,
+      request
+    );
+  }
+
+  @Get(':invoiceId/outbound-messages')
+  async listOutboundMessages(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string
+  ) {
+    return this.invoiceDeliveryService.listInvoiceOutboundMessages(
+      getBearerToken(authorizationHeader),
+      invoiceId
+    );
+  }
+
+  @Post(':invoiceId/outbound-messages/:outboundMessageId/cancel')
+  async cancelOutboundMessage(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string,
+    @Param('outboundMessageId') outboundMessageId: string
+  ) {
+    return this.invoiceDeliveryService.cancelInvoiceOutboundMessage(
+      getBearerToken(authorizationHeader),
+      invoiceId,
+      outboundMessageId
+    );
   }
 
   @Post(':invoiceId/lines')

@@ -1,5 +1,7 @@
 import { Module } from '@nestjs/common';
 import { CompanyDataModule } from '../company-data/company-data.module';
+import { CompanySettingsModule } from '../company-settings/company-settings.module';
+import { CustomerDeliveryModule } from '../customer-delivery/customer-delivery.module';
 import { IdentityAccessModule } from '../identity-access/identity-access.module';
 import {
   InvoiceController,
@@ -8,6 +10,7 @@ import {
 } from './invoices.controller';
 import { InvoicesRepository } from './invoices.repository';
 import { InvoicesService } from './invoices.service';
+import { InvoiceDeliveryService } from './invoice-delivery.service';
 import {
   InvoicePaymentsController,
   JobPaymentsController,
@@ -24,7 +27,7 @@ import { OnlinePaymentsRepository } from './online-payments.repository';
 // tightly coupled to invoices (recorded against a posted invoice) and feed the job
 // invoice balance.
 @Module({
-  imports: [CompanyDataModule, IdentityAccessModule],
+  imports: [CompanyDataModule, CompanySettingsModule, CustomerDeliveryModule, IdentityAccessModule],
   controllers: [
     JobInvoiceController,
     InvoiceLineController,
@@ -36,6 +39,7 @@ import { OnlinePaymentsRepository } from './online-payments.repository';
   providers: [
     InvoicesRepository,
     InvoicesService,
+    InvoiceDeliveryService,
     PaymentsRepository,
     PaymentsService,
     OnlinePaymentsRepository,

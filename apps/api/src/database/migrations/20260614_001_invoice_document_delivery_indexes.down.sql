@@ -1,0 +1,2 @@
+drop index if exists outbound_messages_invoice_created_idx;
+drop index if exists customer_document_snapshots_invoice_created_idx;
