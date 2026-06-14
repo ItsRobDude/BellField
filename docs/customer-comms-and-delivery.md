@@ -298,11 +298,17 @@ Shipped beyond the original scope: relay-backed delivery with queue/retry on
 retryable failure, office Cancel for queued sends, and worker
 retry/expiry/status-poll jobs.
 
-### Phase 3 - Invoice Email Delivery — NOT STARTED
+### Phase 3 - Invoice Email Delivery — FIRST SLICE SHIPPED
 
 - office or bookkeeping sends posted invoice documents
 - delivery state is logged
 - behavior respects invoice posting and correction rules
+- invoice PDFs render from the posted invoice context, so later CRM edits do
+  not rewrite what was sent
+- the recipient email is chosen at send time and may default from the
+  customer's current email address
+- invoice sends reuse the existing relay document-send payload; the relay route
+  remains `/v1/messages/estimate` for now, which is intentional naming debt
 
 ### Phase 4 - Estimate Acceptance Link — SHIPPED
 
@@ -329,9 +335,9 @@ per `(job, amount, attempt)`: active unpaid links are reused locally, and a
 same-dollar repeat after a prior online card payment requires office
 confirmation before BellField creates the next Stripe Checkout attempt.
 
-Still deferred: invoice email delivery, refunds, deposits, partial payments,
-stored cards, customer surcharge logic, and processor-fee reconciliation beyond
-BellField's application fee.
+Still deferred: invoice email template settings, refunds, deposits, partial
+payments, stored cards, customer surcharge logic, and processor-fee
+reconciliation beyond BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 
@@ -376,7 +382,8 @@ the implementation is intentionally re-scoped.
   or link-first plus attachment when safe~~ — resolved: v1 sends a generated PDF
   attachment; secure links arrive with acceptance links (Phase 4)
 - ~~exact permission name for sending customer-facing estimate and invoice
-  documents~~ — resolved: `estimates:send`
+  documents~~ — resolved: `estimates:send` for estimates and `invoices:send`
+  for posted invoices
 - ~~whether a minimal settings screen must land before the first send action or
   in the same slice~~ — resolved: the company Settings surface shipped alongside
   delivery
