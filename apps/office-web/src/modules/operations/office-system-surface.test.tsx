@@ -35,6 +35,8 @@ const license = {
   required: true,
   path: 'C:\\BellField\\data\\license\\bellfield-license.json',
   status: 'valid' as const,
+  entitlementState: 'paidOperational' as const,
+  entitlementSource: 'current' as const,
   licenseId: 'lic_test_001',
   shopName: 'Test Service Co.',
   issuedAt: '2026-06-11T00:00:00.000Z',
@@ -200,6 +202,49 @@ describe('OfficeSystemSurface', () => {
     expect(
       screen.getByText('2 estimate(s) carry a stored sales tax rate above 25%.')
     ).toBeInTheDocument();
+  });
+
+  it('shows data-only licenses as needing attention', async () => {
+    mockedApi.getSystemDiagnostics.mockResolvedValue({
+      serverTime: '2026-06-06T00:00:00.000Z',
+      app: {
+        name: 'BellField API',
+        version: '0.0.1',
+        releaseDate: '2026-06-11',
+        buildKind: 'release',
+        generatedAt: '2026-06-11T00:00:00.000Z',
+        sourceCommit: 'abc1234',
+        nodeEnv: 'production'
+      },
+      database: { reachable: true, latencyMs: 3 },
+      migrations: {
+        appliedCount: 41,
+        latestFilename: '20260610_003_normalize_catalog_item_categories.up.sql',
+        latestAppliedAt: '2026-06-10T00:00:00.000Z'
+      },
+      mediaRoot: { path: '/var/bellfield/media', exists: true, writable: true, readable: true },
+      backups: currentBackups,
+      license: {
+        ...license,
+        licenseKind: 'dataOnly',
+        entitlementState: 'refundedDataOnly',
+        entitlementSource: 'current',
+        updateWindowEnd: undefined,
+        message: 'License is data-only/export only.'
+      },
+      checks: [
+        {
+          key: 'license',
+          ok: false,
+          detail: 'License is data-only/export only.'
+        }
+      ]
+    });
+    renderSurface();
+
+    expect(await screen.findByText('Data-only')).toBeInTheDocument();
+    expect(screen.getByText(/Export\/recovery only/)).toBeInTheDocument();
+    expect(screen.getByText('License is data-only/export only.')).toBeInTheDocument();
   });
 
   it('hides the attention block when every check passes', async () => {

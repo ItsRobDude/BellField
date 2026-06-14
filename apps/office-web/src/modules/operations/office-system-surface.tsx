@@ -71,6 +71,21 @@ function licenseStatusText(license: SystemDiagnosticsResponse['license']): strin
   if (license.status === 'notRequired') {
     return 'Not required';
   }
+  if (license.entitlementState === 'paidOperational') {
+    return 'Licensed';
+  }
+  if (license.entitlementState === 'trialOperational') {
+    return 'Trial';
+  }
+  if (license.entitlementState === 'trialExpiredDataOnly') {
+    return 'Trial expired';
+  }
+  if (license.entitlementState === 'refundedDataOnly') {
+    return 'Data-only';
+  }
+  if (license.entitlementState === 'licenseRecovery') {
+    return 'Recovery needed';
+  }
   if (license.status === 'valid') {
     if (license.licenseKind === 'dataOnly') {
       return 'Data-only';
@@ -89,7 +104,8 @@ function licenseStatusText(license: SystemDiagnosticsResponse['license']): strin
 function licenseStatusOk(license: SystemDiagnosticsResponse['license']): boolean {
   return (
     license.status === 'notRequired' ||
-    (license.status === 'valid' && license.licenseKind !== 'dataOnly')
+    license.entitlementState === 'paidOperational' ||
+    license.entitlementState === 'trialOperational'
   );
 }
 
@@ -278,9 +294,13 @@ export function OfficeSystemSurface({
                 {diagnostics.license.status === 'valid' ? (
                   <>
                     {diagnostics.license.shopName}
-                    {diagnostics.license.updateWindowEnd
-                      ? ` · Updates through ${diagnostics.license.updateWindowEnd}`
-                      : ' · Export/recovery only'}
+                    {diagnostics.license.entitlementState === 'trialOperational' &&
+                    diagnostics.license.operationEnd
+                      ? ` · Trial through ${diagnostics.license.operationEnd}`
+                      : diagnostics.license.updateWindowEnd
+                        ? ` · Updates through ${diagnostics.license.updateWindowEnd}`
+                        : ' · Export/recovery only'}
+                    {diagnostics.license.message ? ` · ${diagnostics.license.message}` : null}
                   </>
                 ) : (
                   (diagnostics.license.message ?? diagnostics.license.path ?? 'Source/dev runtime')
