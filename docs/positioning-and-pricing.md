@@ -10,6 +10,14 @@ scorecard.
 > **You buy it once, it runs in your shop, your data and your card
 > processing are yours, and it never stops working.**
 
+> **v2 scoping (pending owner sign-off).** The planned trial/refund model
+> ([license-refund-trial-plan.md](./license-refund-trial-plan.md)) scopes "never
+> stops working" to the version you **own** — a trial you never bought and a
+> license you refunded degrade to read-only/export-only, not perpetual
+> operation. The refined buyer line is "Buy it once. The version you own runs in
+> your shop." This canonical one-liner is left as-is until you bless promoting
+> the scoped wording.
+
 ## The deal, not the features
 
 BellField differentiates **structurally** (the ownership deal) and
@@ -29,7 +37,11 @@ novelty. Rules of engagement:
 the relay bills usage; nothing ever bricks a shop. If a renewal ever becomes
 effectively mandatory to keep operating, the positioning is destroyed.
 Guarded in code (license design: no runtime kill, no phone-home) and it
-stays guarded in every future decision.
+stays guarded in every future decision. The planned v2 entitlement model keeps
+this sacred line intact **for paid**: operation-gating applies only to trials
+and refunded licenses, and the opportunistic revocation check is fail-open, so
+no paid shop's operation ever depends on reaching BellField
+([license-refund-trial-plan.md](./license-refund-trial-plan.md) §11).
 
 ## Who buys it
 
