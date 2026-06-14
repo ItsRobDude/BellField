@@ -141,20 +141,23 @@ describe('resolveLicenseEntitlement', () => {
     expect(entitlement.source).toBe('current');
   });
 
-  it('keeps a trial active through the named UTC operationEnd date', () => {
+  // operationEnd is a server-LOCAL calendar date. These `now`s are built from
+  // local components (new Date(y, mIndex, d, h)) so the boundary assertions hold
+  // in any runtime timezone, including a UTC CI runner.
+  it('keeps a trial active through the end of the named server-local date', () => {
     const entitlement = resolveLicenseEntitlement({
       current: valid(trial({ operationEnd: '2026-06-13' })),
-      now: new Date('2026-06-13T23:59:59.999Z')
+      now: new Date(2026, 5, 13, 23, 59, 59)
     });
 
     expectEntitlementState(entitlement, 'trialOperational');
     expect(entitlement.source).toBe('current');
   });
 
-  it('expires a trial at the start of the next UTC date', () => {
+  it('expires a trial at the start of the next server-local date', () => {
     const entitlement = resolveLicenseEntitlement({
       current: valid(trial({ operationEnd: '2026-06-13' })),
-      now: new Date('2026-06-14T00:00:00.000Z')
+      now: new Date(2026, 5, 14, 0, 0, 0)
     });
 
     expectEntitlementState(entitlement, 'trialExpiredDataOnly');

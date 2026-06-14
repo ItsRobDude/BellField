@@ -103,6 +103,22 @@ describe('license verification', () => {
     });
   });
 
+  it('verifies a valid signed license carrying a leading UTF-8 BOM', () => {
+    const { envelope, publicKeyPem } = createSignedLicense();
+
+    // A Windows editor re-save can prepend a BOM; it must not break parsing,
+    // and it must not change the verdict (signature is over the license object).
+    const status = verifyLicenseContent('﻿' + JSON.stringify(envelope), publicKeyPem);
+
+    expect(status).toEqual({
+      status: 'valid',
+      license: {
+        ...envelope.license,
+        keyId: licenseKeyId
+      }
+    });
+  });
+
   it('rejects a missing license file', () => {
     const root = mkdtempSync(join(tmpdir(), 'bellfield-license-spec-'));
     try {
@@ -348,6 +364,12 @@ describe('license verification', () => {
         rawLicense: JSON.stringify(fixture.envelope),
         publicKeyPem: fixture.publicKeyPem
       })),
+      // A BOM'd license must get the SAME verdict from both verifiers, or a
+      // Windows-saved file would pass one and fail the other.
+      {
+        rawLicense: '﻿' + JSON.stringify(validFixtures[0].envelope),
+        publicKeyPem: validFixtures[0].publicKeyPem
+      },
       {
         rawLicense: JSON.stringify({
           ...tampered.envelope,

@@ -39,7 +39,17 @@ export type LicenseEntitlementState =
 export interface LicenseDiagnosticsSummary {
   required: boolean;
   path: string | null;
+  // `status` describes the signed license ARTIFACT only: was a valid signature
+  // found ('valid'), is the file absent ('missing'), unverifiable ('invalid'),
+  // or not required for this build ('notRequired'). It is NOT the runtime
+  // entitlement truth — a refunded or expired-trial install is still
+  // `status: 'valid'` because its artifact verifies. To decide whether the
+  // install may actually operate, read `operational` (+ `entitlementState`),
+  // never `status === 'valid'`.
   status: 'notRequired' | 'valid' | 'missing' | 'invalid';
+  // The runtime entitlement truth: true only when the install may operate
+  // (paid, or an active trial). False for data-only/expired/refunded/recovery.
+  // This is the field consumers should gate on.
   operational: boolean;
   licenseKind?: 'paid' | 'trial' | 'dataOnly';
   entitlementState?: LicenseEntitlementState;
