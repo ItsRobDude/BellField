@@ -280,7 +280,7 @@ export function DispatchBoardPanel({
           <p style={styles.muted}>{totalCardCount} appointments</p>
         </div>
         <div style={styles.badgeRow}>
-          <span style={unassignedCount > 0 ? styles.dangerBadge : styles.badge}>
+          <span style={unassignedCount > 0 ? dispatchUnassignedAttentionBadgeStyle : styles.badge}>
             {unassignedCount} unassigned
           </span>
         </div>
@@ -468,6 +468,15 @@ const dispatchTimelineContentStyle: CSSProperties = {
 const dispatchBoardStyle: CSSProperties = {
   display: 'grid',
   gap: '0.45rem'
+};
+
+const dispatchUnassignedAttentionBadgeStyle: CSSProperties = {
+  background: '#fffbeb',
+  borderRadius: 6,
+  color: '#92400e',
+  fontSize: '0.8rem',
+  fontWeight: 800,
+  padding: '0.25rem 0.55rem'
 };
 
 const timelineHeaderRowStyle: CSSProperties = {

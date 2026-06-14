@@ -205,6 +205,10 @@ describe('DispatchBoardPanel', () => {
 
     expect(screen.getByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Dispatch' })).toBeInTheDocument();
+    expect(screen.getByText('1 unassigned')).toHaveStyle({
+      background: '#fffbeb',
+      color: '#92400e'
+    });
     expect(screen.getByText('Taylor Tech')).toBeInTheDocument();
     expect(screen.getByText('Sam Tech')).toBeInTheDocument();
 
@@ -477,6 +481,7 @@ describe('DispatchBoardPanel', () => {
     fireEvent.contextMenu(cardButton, { clientX: 120, clientY: 140 });
 
     let menu = screen.getByRole('menu', { name: 'Dispatch actions for job 1001' });
+    expect(menu).toHaveStyle({ boxSizing: 'border-box', width: '14.5rem' });
     expect(
       within(menu)
         .getAllByRole('menuitem')

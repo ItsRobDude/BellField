@@ -131,6 +131,7 @@ const contextMenuStyle: CSSProperties = {
   background: '#ffffff',
   border: '1px solid #cbd8d6',
   borderRadius: 8,
+  boxSizing: 'border-box',
   boxShadow: '0 14px 32px rgba(15, 23, 42, 0.18)',
   display: 'grid',
   gap: '0.15rem',
