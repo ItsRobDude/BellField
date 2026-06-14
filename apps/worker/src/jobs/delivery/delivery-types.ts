@@ -20,9 +20,13 @@ export type AcceptanceDecision = {
   decidedAt: string;
 };
 
+export type CustomerDocumentType = 'estimate' | 'invoice';
+
 export type DueQueuedDelivery = {
   id: string;
   jobId: string;
+  documentType: CustomerDocumentType;
+  documentTitle: string;
   recipientEmail: string;
   subject: string;
   bodyText: string;
@@ -35,7 +39,6 @@ export type DueQueuedDelivery = {
   snapshotStoragePath: string;
   snapshotSha256: string;
   snapshotFilename: string;
-  estimateTitle: string | null;
   /** Frozen at queue time; a retry mints the link the office saw. */
   acceptancePayload: AcceptancePayload | null;
 };
@@ -43,9 +46,10 @@ export type DueQueuedDelivery = {
 export type ExpiredDelivery = {
   id: string;
   jobId: string;
+  documentType: CustomerDocumentType;
+  documentTitle: string;
   recipientEmail: string;
   sentByName: string;
-  estimateTitle: string | null;
 };
 
 export type PollableDelivery = {
@@ -57,7 +61,7 @@ export type DeliveryTimelineEntry = {
   jobId: string;
   occurredAt: Date;
   actorName: string;
-  kind: 'estimateSent' | 'estimateDeliveryFailed';
+  kind: 'estimateSent' | 'estimateDeliveryFailed' | 'invoiceSent' | 'invoiceDeliveryFailed';
   message: string;
 };
 

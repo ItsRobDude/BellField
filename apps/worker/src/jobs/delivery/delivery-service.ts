@@ -53,8 +53,8 @@ export class DeliveryService {
         jobId: message.jobId,
         occurredAt: now,
         actorName: message.sentByName,
-        kind: 'estimateDeliveryFailed',
-        message: `Estimate delivery failed for ${message.recipientEmail}: ${message.estimateTitle ?? 'estimate'}.`
+        kind: deliveryTimelineKind(message.documentType, false),
+        message: deliveryTimelineMessage(message, false)
       });
     }
 
@@ -138,12 +138,12 @@ export class DeliveryService {
     try {
       pdfBytes = await this.readSnapshot(message.snapshotStoragePath, message.snapshotSha256);
     } catch (error) {
-      workerLog('error', 'Queued estimate email snapshot could not be read.', {
+      workerLog('error', `Queued ${message.documentType} email snapshot could not be read.`, {
         outboundMessageId: message.id,
         errorMessage: error instanceof Error ? error.message : String(error)
       });
       await this.store.markFailed(message.id, 'unknown', occurredAt);
-      await this.addOutcomeTimeline(message, 'estimateDeliveryFailed', occurredAt);
+      await this.addOutcomeTimeline(message, false, occurredAt);
       summary.failed += 1;
       return;
     }
@@ -151,15 +151,16 @@ export class DeliveryService {
     const outcome = await this.relayClient.sendEstimateDocument({
       // Same key the synchronous attempt used: the relay replays a recorded
       // outcome instead of double-sending.
-      idempotencyKey: `estimate-send-${message.id}`,
+      idempotencyKey: `${message.documentType}-send-${message.id}`,
       recipientEmail: message.recipientEmail,
       fromName: message.fromName ?? '',
       replyToEmail: message.replyToEmail ?? undefined,
       subject: message.subject,
       bodyText: message.bodyText,
       document: { filename: message.snapshotFilename, bytes: pdfBytes },
-      // Frozen at queue time: the retry mints the link the office saw.
-      acceptance: message.acceptancePayload ?? undefined
+      // Frozen at queue time: estimate retries mint the link the office saw.
+      acceptance:
+        message.documentType === 'estimate' ? (message.acceptancePayload ?? undefined) : undefined
     });
 
     if (outcome.kind === 'sent') {
@@ -169,7 +170,7 @@ export class DeliveryService {
           ? outcome.relayMessageId
           : null,
         occurredAt,
-        outcome.acceptanceLinkId && outcome.acceptanceUrl
+        message.documentType === 'estimate' && outcome.acceptanceLinkId && outcome.acceptanceUrl
           ? {
               linkId: outcome.acceptanceLinkId,
               url: outcome.acceptanceUrl,
@@ -180,14 +181,14 @@ export class DeliveryService {
             }
           : undefined
       );
-      await this.addOutcomeTimeline(message, 'estimateSent', occurredAt);
+      await this.addOutcomeTimeline(message, true, occurredAt);
       summary.sent += 1;
       return;
     }
 
     if (!outcome.retryable) {
       await this.store.markFailed(message.id, outcome.code, occurredAt);
-      await this.addOutcomeTimeline(message, 'estimateDeliveryFailed', occurredAt);
+      await this.addOutcomeTimeline(message, false, occurredAt);
       summary.failed += 1;
       return;
     }
@@ -203,19 +204,15 @@ export class DeliveryService {
 
   private async addOutcomeTimeline(
     message: DueQueuedDelivery,
-    kind: 'estimateSent' | 'estimateDeliveryFailed',
+    sent: boolean,
     occurredAt: Date
   ): Promise<void> {
-    const title = message.estimateTitle ?? 'estimate';
     await this.store.addTimelineEntry({
       jobId: message.jobId,
       occurredAt,
       actorName: message.sentByName,
-      kind,
-      message:
-        kind === 'estimateSent'
-          ? `Estimate sent to ${message.recipientEmail}: ${title}.`
-          : `Estimate delivery failed for ${message.recipientEmail}: ${title}.`
+      kind: deliveryTimelineKind(message.documentType, sent),
+      message: deliveryTimelineMessage(message, sent)
     });
   }
 
@@ -229,10 +226,29 @@ export class DeliveryService {
     const bytes = await readFile(candidate);
     const actual = createHash('sha256').update(bytes).digest('hex');
     if (actual !== expectedSha256) {
-      throw new Error('Stored estimate PDF hash did not match its delivery snapshot.');
+      throw new Error('Stored PDF hash did not match its delivery snapshot.');
     }
     return bytes;
   }
+}
+
+function deliveryTimelineKind(
+  documentType: 'estimate' | 'invoice',
+  sent: boolean
+): 'estimateSent' | 'estimateDeliveryFailed' | 'invoiceSent' | 'invoiceDeliveryFailed' {
+  if (documentType === 'invoice') {
+    return sent ? 'invoiceSent' : 'invoiceDeliveryFailed';
+  }
+  return sent ? 'estimateSent' : 'estimateDeliveryFailed';
+}
+
+function deliveryTimelineMessage(
+  message: Pick<DueQueuedDelivery, 'documentType' | 'documentTitle' | 'recipientEmail'>,
+  sent: boolean
+): string {
+  const label = message.documentType === 'invoice' ? 'Invoice' : 'Estimate';
+  const action = sent ? 'sent to' : 'delivery failed for';
+  return `${label} ${action} ${message.recipientEmail}: ${message.documentTitle}.`;
 }
 
 // Keep this in sync with relayAcceptanceExpiryDays in packages/contracts.

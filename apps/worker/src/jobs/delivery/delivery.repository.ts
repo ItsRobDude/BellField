@@ -25,7 +25,8 @@ type DueRow = {
   storage_path: string;
   sha256: string;
   filename: string;
-  estimate_title: string | null;
+  document_type: 'estimate' | 'invoice';
+  document_title: string | null;
   acceptance_payload: AcceptancePayload | null;
 };
 
@@ -34,7 +35,8 @@ type ExpiredRow = {
   job_id: string;
   recipient_email: string;
   sent_by_name: string;
-  estimate_title: string | null;
+  document_type: 'estimate' | 'invoice';
+  document_title: string | null;
 };
 
 const dueQueuedClaimLeaseMs = 10 * 60 * 1000;
@@ -87,7 +89,19 @@ export class DeliveryRepository implements DeliveryStore {
           (select cds.filename
              from customer_document_snapshots cds
             where cds.id = claimed.document_snapshot_id) as filename,
-          (select title from estimates e where e.id = claimed.estimate_id) as estimate_title
+          case when claimed.invoice_id is not null then 'invoice' else 'estimate' end as document_type,
+          coalesce(
+            (select title from estimates e where e.id = claimed.estimate_id),
+            (select concat(
+               case inv.invoice_kind
+                 when 'adjustment' then 'Adjustment'
+                 when 'credit' then 'Credit'
+                 else 'Invoice'
+               end,
+               ' for job ',
+               coalesce(inv.job_number, inv.id)
+             ) from invoices inv where inv.id = claimed.invoice_id)
+          ) as document_title
       `,
       [now, limit, leaseUntil]
     );
@@ -102,10 +116,12 @@ export class DeliveryRepository implements DeliveryStore {
       sentByName: row.sent_by_name,
       attemptCount: row.attempt_count,
       expiresAt: row.expires_at,
+      documentType: row.document_type,
+      documentTitle:
+        row.document_title ?? (row.document_type === 'invoice' ? 'invoice' : 'estimate'),
       snapshotStoragePath: row.storage_path,
       snapshotSha256: row.sha256,
       snapshotFilename: row.filename,
-      estimateTitle: row.estimate_title,
       acceptancePayload: row.acceptance_payload
     }));
   }
@@ -184,16 +200,30 @@ export class DeliveryRepository implements DeliveryStore {
             or (om.expires_at is null and om.queued_at <= $2)
           )
         returning om.id, om.job_id, om.recipient_email, om.sent_by_name,
-          (select title from estimates e where e.id = om.estimate_id) as estimate_title
+          case when om.invoice_id is not null then 'invoice' else 'estimate' end as document_type,
+          coalesce(
+            (select title from estimates e where e.id = om.estimate_id),
+            (select concat(
+               case inv.invoice_kind
+                 when 'adjustment' then 'Adjustment'
+                 when 'credit' then 'Credit'
+                 else 'Invoice'
+               end,
+               ' for job ',
+               coalesce(inv.job_number, inv.id)
+             ) from invoices inv where inv.id = om.invoice_id)
+          ) as document_title
       `,
       [now, legacyCutoff]
     );
     return result.rows.map((row) => ({
       id: row.id,
       jobId: row.job_id,
+      documentType: row.document_type,
+      documentTitle:
+        row.document_title ?? (row.document_type === 'invoice' ? 'invoice' : 'estimate'),
       recipientEmail: row.recipient_email,
-      sentByName: row.sent_by_name,
-      estimateTitle: row.estimate_title
+      sentByName: row.sent_by_name
     }));
   }
 
