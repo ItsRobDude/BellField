@@ -1,8 +1,10 @@
 import { createPublicKey, verify } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
-
-export const licenseSignatureAlgorithm = 'Ed25519';
-export const licenseKeyId = 'bellfield-license-v1';
+import {
+  canonicalizeJson,
+  licenseKeyId,
+  licenseSignatureAlgorithm
+} from '../license/license-format.mjs';
 
 const embeddedLicensePublicKeyPem = [
   '-----BEGIN PUBLIC KEY-----',
@@ -174,34 +176,6 @@ function requiredString(value, fieldName) {
     return new Error(`License ${fieldName} must not include surrounding whitespace.`);
   }
   return value;
-}
-
-function canonicalizeJson(value) {
-  if (value === null) {
-    return 'null';
-  }
-  if (typeof value === 'string') {
-    return JSON.stringify(value);
-  }
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) {
-      throw new Error('Cannot canonicalize non-finite number.');
-    }
-    return JSON.stringify(value);
-  }
-  if (typeof value === 'boolean') {
-    return value ? 'true' : 'false';
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map((item) => canonicalizeJson(item)).join(',')}]`;
-  }
-  if (isRecord(value)) {
-    return `{${Object.keys(value)
-      .sort()
-      .map((key) => `${JSON.stringify(key)}:${canonicalizeJson(value[key])}`)
-      .join(',')}}`;
-  }
-  throw new Error('Unsupported value in canonical JSON.');
 }
 
 function isValidIsoDate(value) {
