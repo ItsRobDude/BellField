@@ -74,7 +74,7 @@ describe('EmailProviderService.sendEstimateEmail', () => {
 
     expect(result).toEqual({ kind: 'sent', providerMessageId: 'relay-1' });
     const [url, options] = fetchMock.mock.calls[0] as [string, RequestInit];
-    expect(url).toBe('https://relay.bellfield.app/v1/messages/estimate');
+    expect(url).toBe('https://relay.bellfield.app/v1/messages/send');
     const headers = options.headers as Record<string, string>;
     expect(headers.Authorization).toBe(`Bearer ${process.env.BELLFIELD_RELAY_TOKEN}`);
     expect(headers['x-bellfield-server-instance']).toBe('instance-uuid-1');

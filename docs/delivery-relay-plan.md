@@ -139,8 +139,9 @@ Narrow by design. The relay is not a generic email API:
 
 The same host and auth also carry estimate acceptance links and payment-link
 surfaces ([customer-comms-and-delivery.md](./customer-comms-and-delivery.md)
-Phases 4–5). Invoice delivery reuses the estimate-branded v1 route with
-`documentType: "invoice"`; that route name is intentional API naming debt.
+Phases 4–5). Invoice delivery reuses `POST /v1/messages/send` with
+`documentType: "invoice"`; the old `/v1/messages/estimate` route remains as a
+legacy compatibility alias for older estimate-only clients.
 
 Payment-link v1 is deliberately narrow:
 

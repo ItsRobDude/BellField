@@ -33,10 +33,25 @@ export class DeliveryController {
     @Inject(RELAY_MESSAGES_STORE) private readonly messagesStore: RelayMessagesStore
   ) {}
 
-  @Post('messages/estimate')
-  async sendEstimateDocument(
+  @Post('messages/send')
+  async sendCustomerDocument(
     @Req() request: RelayAuthenticatedRequest,
     @Body() body: SendEstimateDocumentRequestDto
+  ): Promise<RelaySendEstimateDocumentResponse> {
+    return this.sendCustomerDocumentFromBody(request, body);
+  }
+
+  @Post('messages/estimate')
+  async sendEstimateDocumentLegacy(
+    @Req() request: RelayAuthenticatedRequest,
+    @Body() body: SendEstimateDocumentRequestDto
+  ): Promise<RelaySendEstimateDocumentResponse> {
+    return this.sendCustomerDocumentFromBody(request, body);
+  }
+
+  private async sendCustomerDocumentFromBody(
+    request: RelayAuthenticatedRequest,
+    body: SendEstimateDocumentRequestDto
   ): Promise<RelaySendEstimateDocumentResponse> {
     const shop = getAuthenticatedShop(request);
     const result = await this.sendEstimateService.sendEstimateDocument(shop, {

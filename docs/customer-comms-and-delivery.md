@@ -310,9 +310,9 @@ retry/expiry/status-poll jobs.
   not rewrite what was sent
 - the recipient email is chosen at send time and may default from the
   customer's current email address
-- invoice sends reuse the existing relay document-send route with
-  `documentType: "invoice"`; the route remains `/v1/messages/estimate` for now,
-  which is intentional naming debt
+- invoice sends reuse the relay document-send route (`POST /v1/messages/send`)
+  with `documentType: "invoice"`; `/v1/messages/estimate` remains a legacy
+  compatibility alias for older estimate-only clients
 - invoice/payment-document email sends from `billing@bellfield.app`
 - when the owner enables the `includeInvoicePaymentLink` setting, sending a
   posted **main** invoice with an outstanding balance appends an online pay-now
