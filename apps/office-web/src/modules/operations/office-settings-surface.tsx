@@ -22,6 +22,7 @@ type SettingsDraft = {
   acceptanceLinkExpiryDays: string;
   chargesSalesTax: boolean;
   defaultSalesTaxRatePercent: string;
+  includeInvoicePaymentLink: boolean;
 };
 
 const emptyDraft: SettingsDraft = {
@@ -31,7 +32,8 @@ const emptyDraft: SettingsDraft = {
   estimateEmailBody: '',
   acceptanceLinkExpiryDays: '30',
   chargesSalesTax: false,
-  defaultSalesTaxRatePercent: '0'
+  defaultSalesTaxRatePercent: '0',
+  includeInvoicePaymentLink: false
 };
 
 export function OfficeSettingsSurface({
@@ -101,7 +103,8 @@ export function OfficeSettingsSurface({
         estimateEmailBody: draft.estimateEmailBody,
         acceptanceLinkExpiryDays,
         chargesSalesTax: draft.chargesSalesTax,
-        defaultSalesTaxBasisPoints
+        defaultSalesTaxBasisPoints,
+        includeInvoicePaymentLink: draft.includeInvoicePaymentLink
       });
       setSettings(response.settings);
       setDraft(toDraft(response.settings));
@@ -235,6 +238,21 @@ export function OfficeSettingsSurface({
                 style={styles.input}
               />
             </label>
+            <label style={styles.inlineLabel}>
+              <input
+                aria-label="Include a pay-now link in invoice emails"
+                type="checkbox"
+                checked={draft.includeInvoicePaymentLink}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    includeInvoicePaymentLink: event.target.checked
+                  }))
+                }
+              />
+              Include a pay-now link in invoice emails (posted invoices with a balance)
+            </label>
           </section>
         </div>
       ) : isLoading ? (
@@ -262,7 +280,8 @@ function toDraft(settings: CompanySettings): SettingsDraft {
     estimateEmailBody: settings.estimateEmailBody,
     acceptanceLinkExpiryDays: String(settings.acceptanceLinkExpiryDays),
     chargesSalesTax: settings.chargesSalesTax,
-    defaultSalesTaxRatePercent: basisPointsToPercentString(settings.defaultSalesTaxBasisPoints)
+    defaultSalesTaxRatePercent: basisPointsToPercentString(settings.defaultSalesTaxBasisPoints),
+    includeInvoicePaymentLink: settings.includeInvoicePaymentLink
   };
 }
 

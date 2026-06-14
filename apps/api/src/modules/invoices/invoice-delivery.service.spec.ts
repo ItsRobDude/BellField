@@ -84,7 +84,8 @@ function createService() {
   const companySettingsRepository = {
     getSettings: jest.fn().mockResolvedValue({
       companyName: 'Acme HVAC',
-      replyToEmail: 'office@acme.example'
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: false
     })
   };
   const customerDeliveryRepository = {
@@ -151,6 +152,11 @@ function createService() {
   const invoicesRepository = {
     getInvoiceById: jest.fn().mockResolvedValue(postedInvoice())
   };
+  const onlinePaymentLinkService = {
+    createOnlinePaymentLink: jest
+      .fn()
+      .mockResolvedValue({ state: 'paymentsNotConfigured', message: 'not configured' })
+  };
   const service = new InvoiceDeliveryService(
     identityAccessService as never,
     companySettingsRepository as never,
@@ -158,7 +164,8 @@ function createService() {
     customerDocumentStorageService as never,
     emailProviderService as never,
     invoicePdfRendererService as never,
-    invoicesRepository as never
+    invoicesRepository as never,
+    onlinePaymentLinkService as never
   );
   return {
     service,
@@ -168,7 +175,8 @@ function createService() {
     customerDocumentStorageService,
     emailProviderService,
     invoicePdfRendererService,
-    invoicesRepository
+    invoicesRepository,
+    onlinePaymentLinkService
   };
 }
 
@@ -267,6 +275,84 @@ describe('InvoiceDeliveryService', () => {
     );
     expect(result.outboundMessage.invoiceId).toBe('invoice-1');
     expect(result.documentSnapshot.documentType).toBe('invoice');
+  });
+
+  it('embeds a pay-now link and flags it when the owner setting is on', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
+      state: 'created',
+      checkoutUrl: 'https://pay.example/cs_test_123',
+      paymentSessionId: 'pay_sess_1',
+      amount: 250,
+      currency: 'USD',
+      expiresAt: '2026-07-01T00:00:00.000Z'
+    });
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).toHaveBeenCalledWith(
+      'token',
+      'invoice-1',
+      {}
+    );
+    const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
+    expect(sendIntent.bodyText).toContain('Pay online: https://pay.example/cs_test_123');
+    expect(result.paymentLinkIncluded).toBe(true);
+  });
+
+  it('sends without a link and does not call the link service when the setting is off', async () => {
+    const { service, onlinePaymentLinkService, customerDeliveryRepository } = createService();
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
+    const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
+    expect(sendIntent.bodyText).not.toContain('Pay online');
+    expect(result.paymentLinkIncluded).toBeUndefined();
+  });
+
+  it('still sends the invoice when pay-link creation needs confirmation or fails', async () => {
+    const {
+      service,
+      companySettingsRepository,
+      onlinePaymentLinkService,
+      customerDeliveryRepository
+    } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue({
+      companyName: 'Acme HVAC',
+      replyToEmail: 'office@acme.example',
+      includeInvoicePaymentLink: true
+    });
+    onlinePaymentLinkService.createOnlinePaymentLink.mockResolvedValue({
+      state: 'confirmationRequired',
+      code: 'sameAmountPreviouslyPaid',
+      amount: 250,
+      currency: 'USD',
+      message: 'already paid'
+    });
+
+    const result = await service.sendInvoice('token', 'invoice-1', {
+      recipientEmail: 'customer@example.com'
+    });
+
+    const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
+    expect(sendIntent.bodyText).not.toContain('Pay online');
+    expect(result.paymentLinkIncluded).toBeUndefined();
+    expect(result.outboundMessage.invoiceId).toBe('invoice-1');
   });
 
   it('leaves retryable provider failures queued without a timeline entry', async () => {

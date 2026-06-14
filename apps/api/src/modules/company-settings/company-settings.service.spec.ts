@@ -9,7 +9,8 @@ const validSettings: UpdateCompanySettingsRequestDto = {
   estimateEmailBody: 'Attached is your estimate.',
   acceptanceLinkExpiryDays: 30,
   chargesSalesTax: true,
-  defaultSalesTaxBasisPoints: 825
+  defaultSalesTaxBasisPoints: 825,
+  includeInvoicePaymentLink: false
 };
 
 function createService() {

@@ -7,6 +7,8 @@ export interface CompanySettings {
   acceptanceLinkExpiryDays: number;
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
+  /** When true, invoice emails embed an online pay-now link for posted main invoices with a balance. */
+  includeInvoicePaymentLink: boolean;
   updatedAt?: string;
   updatedByName?: string;
 }
@@ -23,4 +25,5 @@ export interface UpdateCompanySettingsRequest {
   acceptanceLinkExpiryDays: number;
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
+  includeInvoicePaymentLink: boolean;
 }

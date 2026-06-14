@@ -44,4 +44,7 @@ export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySetting
   @Min(0)
   @Max(2500)
   defaultSalesTaxBasisPoints!: number;
+
+  @IsBoolean()
+  includeInvoicePaymentLink!: boolean;
 }

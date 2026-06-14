@@ -37,6 +37,7 @@ import {
 import { InvoicePdfRendererService } from '../customer-delivery/invoice-pdf-renderer.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { InvoicesRepository } from './invoices.repository';
+import { OnlinePaymentLinkService } from './online-payment-link.service';
 import type {
   InvoiceCancelOutboundMessageResponseDto,
   InvoiceOutboundMessagesResponseDto,
@@ -57,7 +58,8 @@ export class InvoiceDeliveryService {
     private readonly customerDocumentStorageService: CustomerDocumentStorageService,
     private readonly emailProviderService: EmailProviderService,
     private readonly invoicePdfRendererService: InvoicePdfRendererService,
-    private readonly invoicesRepository: InvoicesRepository
+    private readonly invoicesRepository: InvoicesRepository,
+    private readonly onlinePaymentLinkService: OnlinePaymentLinkService
   ) {}
 
   async listInvoiceOutboundMessages(
@@ -149,10 +151,17 @@ export class InvoiceDeliveryService {
     const recipientEmail = normalizeEmail(request.recipientEmail);
     const generatedAt = new Date().toISOString();
     const settings = await this.companySettingsRepository.getSettings();
+    const paymentLinkUrl = await this.resolveInvoicePaymentLinkUrl(sessionToken, invoice, settings);
     const emailContent = buildInvoiceEmailContent(
       buildInvoiceEmailTokens(settings, invoice),
       request
     );
+    // The pay-now link is appended after the (possibly customized) body so its
+    // placement and wording stay consistent and the URL is never lost to a
+    // template that omits a token.
+    const bodyText = paymentLinkUrl
+      ? `${emailContent.bodyText}\n\nPay online: ${paymentLinkUrl}`
+      : emailContent.bodyText;
 
     const outboundMessageId = randomUUID();
     const intentResult = await this.customerDeliveryRepository.createInvoiceSendIntent({
@@ -164,7 +173,7 @@ export class InvoiceDeliveryService {
       invoiceId: invoice.id,
       recipientEmail,
       subject: emailContent.subject,
-      bodyText: emailContent.bodyText,
+      bodyText,
       fromName: settings.companyName,
       replyToEmail: settings.replyToEmail,
       sentByEmployeeId: actor.id,
@@ -243,7 +252,7 @@ export class InvoiceDeliveryService {
         {
           to: recipientEmail,
           subject: emailContent.subject,
-          bodyText: emailContent.bodyText,
+          bodyText,
           attachment: {
             filename,
             contentType: 'application/pdf',
@@ -317,6 +326,7 @@ export class InvoiceDeliveryService {
     return {
       outboundMessage: toOutboundMessageSummary(outboundMessage),
       documentSnapshot: toDocumentSnapshotSummary(documentSnapshot),
+      ...(paymentLinkUrl ? { paymentLinkIncluded: true } : {}),
       ...(recordingIncomplete ? { recordingIncomplete: true } : {})
     };
   }
@@ -335,6 +345,34 @@ export class InvoiceDeliveryService {
     }
     if (!invoice.posted) {
       throw new ConflictException('This posted invoice is missing its frozen posting context.');
+    }
+  }
+
+  // Best-effort: when the owner has enabled invoice pay links, create-or-reuse
+  // the job's full-balance online payment link for the MAIN invoice and return
+  // its URL. The invoice send must NEVER be blocked by this — no balance,
+  // payments not configured, a same-amount confirmation, or a missing
+  // payments:create permission all just mean "send the invoice without a link."
+  private async resolveInvoicePaymentLinkUrl(
+    sessionToken: string,
+    invoice: InvoiceRecord,
+    settings: CompanySettings
+  ): Promise<string | null> {
+    if (!settings.includeInvoicePaymentLink || invoice.invoiceKind !== 'main') {
+      return null;
+    }
+    try {
+      const result = await this.onlinePaymentLinkService.createOnlinePaymentLink(
+        sessionToken,
+        invoice.id,
+        {}
+      );
+      return result.state === 'created' ? result.checkoutUrl : null;
+    } catch (error) {
+      this.logger.warn(
+        `Invoice ${invoice.id} sent without a payment link: ${describeError(error)}`
+      );
+      return null;
     }
   }
 

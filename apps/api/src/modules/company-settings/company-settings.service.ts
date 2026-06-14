@@ -59,6 +59,7 @@ function normalizeSettings(
   const acceptanceLinkExpiryDays = request.acceptanceLinkExpiryDays;
   const chargesSalesTax = request.chargesSalesTax === true;
   const defaultSalesTaxBasisPoints = request.defaultSalesTaxBasisPoints;
+  const includeInvoicePaymentLink = request.includeInvoicePaymentLink === true;
 
   if (!companyName) {
     throw new BadRequestException('Company name is required.');
@@ -93,6 +94,7 @@ function normalizeSettings(
     estimateEmailBody,
     acceptanceLinkExpiryDays,
     chargesSalesTax,
-    defaultSalesTaxBasisPoints
+    defaultSalesTaxBasisPoints,
+    includeInvoicePaymentLink
   };
 }

@@ -20,7 +20,8 @@ function arrange() {
       estimateEmailBody: 'Attached is your estimate.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
-      defaultSalesTaxBasisPoints: 825
+      defaultSalesTaxBasisPoints: 825,
+      includeInvoicePaymentLink: false
     }
   });
   mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
@@ -39,7 +40,8 @@ function arrange() {
       estimateEmailBody: 'Attached is your estimate.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
-      defaultSalesTaxBasisPoints: 875
+      defaultSalesTaxBasisPoints: 875,
+      includeInvoicePaymentLink: true
     }
   });
 }
