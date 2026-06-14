@@ -71,7 +71,7 @@ export class OnlinePaymentsRepository {
   }): Promise<OnlinePaymentSessionRecord> {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
-      const result = await queryable.query<OnlinePaymentSessionRow>(
+      const result = await queryable.query<OnlinePaymentSessionRow & { inserted: boolean }>(
         `insert into online_payment_sessions (
            id, job_id, invoice_id, relay_payment_session_id, amount, currency,
            checkout_url, status, created_by_employee_id, created_by_name, expires_at,
@@ -82,7 +82,7 @@ export class OnlinePaymentsRepository {
            set checkout_url = excluded.checkout_url,
                expires_at = excluded.expires_at,
                updated_at = excluded.updated_at
-         returning ${ONLINE_PAYMENT_SESSION_COLUMNS}`,
+         returning ${ONLINE_PAYMENT_SESSION_COLUMNS}, (xmax = 0) as "inserted"`,
         [
           randomUUID(),
           input.jobId,
@@ -97,18 +97,25 @@ export class OnlinePaymentsRepository {
           now
         ]
       );
-      await insertJobTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: input.jobId,
-          occurredAt: now,
-          actorName: input.createdByName,
-          kind: 'paymentLinkCreated',
-          message: `Payment link created for ${formatMoney(input.amount)}.`
-        },
-        queryable
-      );
-      return toRecord(result.rows[0]!);
+      const row = result.rows[0]!;
+      // `xmax = 0` is true only for a freshly inserted row; an upsert that took
+      // the conflict-update path (a concurrent retry of the same relay session)
+      // returns false. Only the real creation writes a timeline entry, so a
+      // double-submit can't leave two "Payment link created" notes on the job.
+      if (row.inserted) {
+        await insertJobTimelineEntry(
+          {
+            id: randomUUID(),
+            jobId: input.jobId,
+            occurredAt: now,
+            actorName: input.createdByName,
+            kind: 'paymentLinkCreated',
+            message: `Payment link created for ${formatMoney(input.amount)}.`
+          },
+          queryable
+        );
+      }
+      return toRecord(row);
     });
   }
 
@@ -129,14 +136,16 @@ export class OnlinePaymentsRepository {
     amount: number;
     currency: string;
   }): Promise<OnlinePaymentSessionRecord[]> {
+    // Match on integer cents rather than the decimal-dollar column so the lookup
+    // never rides on float equality (and reads the same way the worker does).
     const result = await this.databaseService.query<OnlinePaymentSessionRow>(
       `select ${ONLINE_PAYMENT_SESSION_COLUMNS}
        from online_payment_sessions
        where job_id = $1
-         and amount = $2
+         and round(amount * 100) = $2
          and currency = $3
        order by created_at asc, id asc`,
-      [input.jobId, input.amount, input.currency.toUpperCase()]
+      [input.jobId, Math.round(input.amount * 100), input.currency.toUpperCase()]
     );
     return result.rows.map(toRecord);
   }
