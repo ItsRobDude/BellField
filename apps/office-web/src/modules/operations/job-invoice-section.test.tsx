@@ -306,6 +306,48 @@ describe('JobInvoiceSection posting', () => {
     expect(await screen.findByText('Invoice sent.')).toBeInTheDocument();
   });
 
+  it('reports when a pay-now link was included in the sent invoice', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedInvoiceDeliveryApi.sendOfficeInvoice.mockResolvedValueOnce({
+      outboundMessage: {
+        id: 'message-1',
+        channel: 'email',
+        status: 'sent',
+        jobId: 'job-1',
+        invoiceId: 'inv-1',
+        documentSnapshotId: 'snapshot-1',
+        recipientEmail: 'customer@example.com',
+        subject: 'Invoice 1001 from Acme HVAC',
+        sentByName: 'Olivia Owner',
+        queuedAt: '2026-06-01T12:00:00.000Z',
+        sentAt: '2026-06-01T12:00:01.000Z'
+      },
+      documentSnapshot: {
+        id: 'snapshot-1',
+        documentType: 'invoice',
+        jobId: 'job-1',
+        invoiceId: 'inv-1',
+        sourceVersion: 2,
+        filename: 'invoice-1001-inv-1.pdf',
+        contentType: 'application/pdf',
+        sha256: 'a'.repeat(64),
+        byteSize: 123,
+        generatedByName: 'Olivia Owner',
+        generatedAt: '2026-06-01T12:00:00.000Z'
+      },
+      paymentLinkIncluded: true
+    });
+
+    renderSection(true, { canSend: true, customerEmail: 'customer@example.com' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Email invoice' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Send email' }));
+
+    expect(await screen.findByText('Invoice sent with a pay-now link.')).toBeInTheDocument();
+    expect(screen.queryByText('Invoice sent.')).not.toBeInTheDocument();
+  });
+
   it('warns (not confirms success) when a sent invoice could not be fully recorded', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     vi.spyOn(window, 'confirm').mockReturnValue(true);

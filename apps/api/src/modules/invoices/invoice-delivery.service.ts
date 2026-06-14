@@ -151,17 +151,10 @@ export class InvoiceDeliveryService {
     const recipientEmail = normalizeEmail(request.recipientEmail);
     const generatedAt = new Date().toISOString();
     const settings = await this.companySettingsRepository.getSettings();
-    const paymentLinkUrl = await this.resolveInvoicePaymentLinkUrl(sessionToken, invoice, settings);
     const emailContent = buildInvoiceEmailContent(
       buildInvoiceEmailTokens(settings, invoice),
       request
     );
-    // The pay-now link is appended after the (possibly customized) body so its
-    // placement and wording stay consistent and the URL is never lost to a
-    // template that omits a token.
-    const bodyText = paymentLinkUrl
-      ? `${emailContent.bodyText}\n\nPay online: ${paymentLinkUrl}`
-      : emailContent.bodyText;
 
     const outboundMessageId = randomUUID();
     const intentResult = await this.customerDeliveryRepository.createInvoiceSendIntent({
@@ -173,7 +166,7 @@ export class InvoiceDeliveryService {
       invoiceId: invoice.id,
       recipientEmail,
       subject: emailContent.subject,
-      bodyText,
+      bodyText: emailContent.bodyText,
       fromName: settings.companyName,
       replyToEmail: settings.replyToEmail,
       sentByEmployeeId: actor.id,
@@ -241,6 +234,22 @@ export class InvoiceDeliveryService {
         )
         .catch(() => undefined);
       throw error;
+    }
+
+    // Only now that the send is reserved (dedupe passed) and the document is
+    // rendered do we mint the payable link — so a duplicate/blocked send or a
+    // PDF-render failure can never orphan a link or write a spurious
+    // "Payment link created" timeline entry. Append it after the (possibly
+    // customized) body and sync the stored body so a worker retry includes it.
+    const paymentLinkUrl = await this.resolveInvoicePaymentLinkUrl(sessionToken, invoice, settings);
+    let bodyText = emailContent.bodyText;
+    if (paymentLinkUrl) {
+      bodyText = `${emailContent.bodyText}\n\nPay online: ${paymentLinkUrl}`;
+      await this.customerDeliveryRepository.updateOutboundMessageBody(
+        outboundMessageId,
+        bodyText,
+        new Date().toISOString()
+      );
     }
 
     const providerResult = await this.sendInvoiceEmailSafely(

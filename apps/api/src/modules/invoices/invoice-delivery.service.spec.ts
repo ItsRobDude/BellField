@@ -120,6 +120,7 @@ function createService() {
       generatedAt: '2026-06-01T12:00:00.000Z'
     }),
     setOutboundMessageDocumentSnapshot: jest.fn().mockResolvedValue(undefined),
+    updateOutboundMessageBody: jest.fn().mockResolvedValue(undefined),
     markOutboundMessageSent: jest.fn().mockResolvedValue(outboundMessage()),
     markOutboundMessageFailed: jest.fn().mockResolvedValue(outboundMessage({ status: 'failed' })),
     scheduleOutboundMessageRetry: jest
@@ -307,8 +308,15 @@ describe('InvoiceDeliveryService', () => {
       'invoice-1',
       {}
     );
+    // Reorder invariant: the reserved intent body is the base (the link is only
+    // minted after the send is viable), then the stored body is synced with it.
     const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
-    expect(sendIntent.bodyText).toContain('Pay online: https://pay.example/cs_test_123');
+    expect(sendIntent.bodyText).not.toContain('Pay online');
+    expect(customerDeliveryRepository.updateOutboundMessageBody).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.stringContaining('Pay online: https://pay.example/cs_test_123'),
+      expect.any(String)
+    );
     expect(result.paymentLinkIncluded).toBe(true);
   });
 
@@ -320,12 +328,11 @@ describe('InvoiceDeliveryService', () => {
     });
 
     expect(onlinePaymentLinkService.createOnlinePaymentLink).not.toHaveBeenCalled();
-    const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
-    expect(sendIntent.bodyText).not.toContain('Pay online');
+    expect(customerDeliveryRepository.updateOutboundMessageBody).not.toHaveBeenCalled();
     expect(result.paymentLinkIncluded).toBeUndefined();
   });
 
-  it('still sends the invoice when pay-link creation needs confirmation or fails', async () => {
+  it('still sends the invoice (no link, no body sync) when pay-link creation needs confirmation or fails', async () => {
     const {
       service,
       companySettingsRepository,
@@ -349,8 +356,8 @@ describe('InvoiceDeliveryService', () => {
       recipientEmail: 'customer@example.com'
     });
 
-    const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];
-    expect(sendIntent.bodyText).not.toContain('Pay online');
+    expect(onlinePaymentLinkService.createOnlinePaymentLink).toHaveBeenCalled();
+    expect(customerDeliveryRepository.updateOutboundMessageBody).not.toHaveBeenCalled();
     expect(result.paymentLinkIncluded).toBeUndefined();
     expect(result.outboundMessage.invoiceId).toBe('invoice-1');
   });
