@@ -162,6 +162,44 @@ describe('PaymentsRepository.recordPayment', () => {
       repository.recordPayment('inv-cred', { amount: 50, method: 'cash', receivedAt: 'x', actor })
     ).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it('allocates a re-payment after a full refund (refund-aware net-due cap)', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: INVOICE_READ, rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      // $100 invoice whose prior payment was fully refunded → net allocated 0, $100 remaining.
+      {
+        match: /from invoices i\s+left join active_allocations/i,
+        rows: [{ invoiceId: 'inv-main', invoiceKind: 'main', total: '100.00', allocated: '0.00' }]
+      },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      // Gross paid by the prior non-void payment is $100...
+      {
+        match: /from payments\s+where is_void = false\s+and job_id = \$1\s+and id <> \$2/i,
+        rows: [{ cents: 10000 }]
+      },
+      // ...but $100 was refunded, so effective paid is $0 and the new payment allocates.
+      { match: /from payment_refunds\s+where job_id = \$1/i, rows: [{ cents: 10000 }] },
+      { match: /insert into payment_allocations/i, rowCount: 1 },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      { match: /from payments where id = \$1/i, rows: [PAYMENT_ROW] },
+      { match: ALLOCATION_SELECT, rows: [] }
+    ]);
+
+    await repository.recordPayment('inv-main', {
+      amount: 100,
+      method: 'card',
+      receivedAt: '2026-06-03T00:00:00.000Z',
+      actor
+    });
+
+    // Without subtracting refunds from the net-due cap this would allocate $0.
+    const allocInsert = findCall(calls, /insert into payment_allocations/i);
+    expect(allocInsert).toBeDefined();
+    expect(allocInsert?.params).toEqual(expect.arrayContaining(['inv-main', 100]));
+  });
 });
 
 describe('PaymentsRepository.voidPayment', () => {
@@ -217,6 +255,23 @@ describe('PaymentsRepository.voidPayment', () => {
     await expect(repository.voidPayment('pay-1', undefined, actor)).rejects.toBeInstanceOf(
       ConflictException
     );
+    expect(findCall(calls, /update payments set/i)).toBeUndefined();
+    expect(findCall(calls, TIMELINE_INSERT)).toBeUndefined();
+  });
+
+  it('rejects voiding a payment that already has refunds recorded', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: /from payments\s+where id = \$1\s+for update/i,
+        rows: [{ jobId: 'job-1', isVoid: false, amount: '200.00', source: 'manual' }]
+      },
+      { match: /from payment_refunds where payment_id = \$1 limit 1/i, rows: [{ exists: 1 }] }
+    ]);
+
+    await expect(repository.voidPayment('pay-1', undefined, actor)).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    // Voiding alongside an existing refund would inflate the balance, so it never writes.
     expect(findCall(calls, /update payments set/i)).toBeUndefined();
     expect(findCall(calls, TIMELINE_INSERT)).toBeUndefined();
   });

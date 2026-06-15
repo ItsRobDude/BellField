@@ -141,6 +141,18 @@ export class PaymentsRepository {
           'Online payments cannot be voided manually. Handle any refund or correction with the processor first.'
         );
       }
+      // A refund already reversed part/all of this payment; voiding it too would
+      // drop the payment from the paid total while the refund still counts,
+      // inflating the balance. Correct with a compensating payment instead.
+      const refundCheck = await queryable.query(
+        `select 1 from payment_refunds where payment_id = $1 limit 1`,
+        [paymentId]
+      );
+      if (refundCheck.rows.length > 0) {
+        throw new ConflictException(
+          'This payment has refunds recorded and cannot be voided. Record a correcting payment instead.'
+        );
+      }
 
       await queryable.query(
         `update payments set
@@ -545,19 +557,28 @@ export class PaymentsRepository {
     now: string,
     queryable: QueryExecutor
   ): Promise<void> {
-    const [chargeRows, creditTotalCents, activePaidBeforeThisCents] = await Promise.all([
-      this.listPostedChargeInvoiceBalances(jobId, queryable),
-      this.sumPostedCreditCentsForJob(jobId, queryable),
-      this.sumActivePaymentCentsForJobInTransaction(jobId, paymentId, queryable)
-    ]);
+    const [chargeRows, creditTotalCents, activePaidBeforeThisCents, refundedBeforeThisCents] =
+      await Promise.all([
+        this.listPostedChargeInvoiceBalances(jobId, queryable),
+        this.sumPostedCreditCentsForJob(jobId, queryable),
+        this.sumActivePaymentCentsForJobInTransaction(jobId, paymentId, queryable),
+        this.sumRefundCentsForJobInTransaction(jobId, queryable)
+      ]);
 
     const positiveChargeTotalCents = chargeRows.reduce(
       (sum, row) => sum + dollarsToCents(row.total),
       0
     );
     const positiveUnpaidCents = chargeRows.reduce((sum, row) => sum + row.remainingCents, 0);
+    // Effective paid by OTHER payments = their gross minus refunds taken against
+    // them (the new payment has no refunds yet). Without subtracting refunds a
+    // fully-refunded prior payment would wrongly cap this payment's allocation to 0.
+    const effectivePaidBeforeThisCents = Math.max(
+      activePaidBeforeThisCents - refundedBeforeThisCents,
+      0
+    );
     const netDueBeforeThisPaymentCents = Math.max(
-      positiveChargeTotalCents - creditTotalCents - activePaidBeforeThisCents,
+      positiveChargeTotalCents - creditTotalCents - effectivePaidBeforeThisCents,
       0
     );
     let remainingToAllocateCents = Math.min(
@@ -652,6 +673,19 @@ export class PaymentsRepository {
          and job_id = $1
          and id <> $2`,
       [jobId, excludedPaymentId]
+    );
+    return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  private async sumRefundCentsForJobInTransaction(
+    jobId: string,
+    queryable: QueryExecutor
+  ): Promise<number> {
+    const result = await queryable.query<{ cents: string | number }>(
+      `select coalesce(round(sum(amount) * 100), 0) as cents
+       from payment_refunds
+       where job_id = $1`,
+      [jobId]
     );
     return Number(result.rows[0]?.cents ?? 0);
   }
