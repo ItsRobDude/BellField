@@ -286,6 +286,41 @@ export type OnlinePaymentLinkResponse =
       message?: string;
     };
 
+// --- Online refunds (Phase 6b slice 2) -----------------------------------------
+
+/**
+ * Request an online (Stripe-via-relay) refund of a provider-confirmed card
+ * payment. Amount is positive dollars, ≤ the payment's still-refundable amount.
+ * This only opens a PENDING refund: the confirmed refund row is written by the
+ * worker from a Stripe refund event, never synchronously by this request.
+ */
+export interface OnlineRefundRequest {
+  amount: number;
+  reason?: string;
+}
+
+export type OnlineRefundState = 'requested' | 'failed' | 'paymentsNotConfigured' | 'providerError';
+
+/**
+ * `requested` means the relay accepted the refund and it is now pending; the
+ * worker records the confirmed refund when the Stripe event arrives.
+ * `providerError` is transient — the request stays open and the office may retry.
+ * `failed` is a terminal rejection. `paymentsNotConfigured` means this server has
+ * no relay configured.
+ */
+export type OnlineRefundResponse =
+  | {
+      state: 'requested';
+      /** The local pending online-refund request id. */
+      refundRequestId: string;
+      amount: number;
+      currency: string;
+    }
+  | {
+      state: Exclude<OnlineRefundState, 'requested'>;
+      message?: string;
+    };
+
 /** A manual invoice line the office adds, or the shape it edits a line into. */
 export interface InvoiceLineItemInput {
   kind: InvoiceLineItemKind;

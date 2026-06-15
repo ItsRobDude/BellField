@@ -20,6 +20,8 @@ import { PaymentsRepository } from './payments.repository';
 import { PaymentsService } from './payments.service';
 import { OnlinePaymentLinkService } from './online-payment-link.service';
 import { OnlinePaymentsRepository } from './online-payments.repository';
+import { OnlineRefundService } from './online-refund.service';
+import { OnlineRefundsRepository } from './online-refunds.repository';
 
 // DatabaseService comes from the @Global DatabaseModule. CompanyDataModule
 // supplies JobsDataService (job existence checks); IdentityAccessModule supplies
@@ -43,7 +45,9 @@ import { OnlinePaymentsRepository } from './online-payments.repository';
     PaymentsRepository,
     PaymentsService,
     OnlinePaymentsRepository,
-    OnlinePaymentLinkService
+    OnlinePaymentLinkService,
+    OnlineRefundsRepository,
+    OnlineRefundService
   ],
   // Exported so the estimates module can write into the invoice draft during
   // estimate-to-invoice conversion.
