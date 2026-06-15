@@ -17,6 +17,8 @@ function createService() {
   const paymentsRepository = {
     recordPayment: jest.fn(),
     listPaymentsForJob: jest.fn(),
+    listRefundsForJob: jest.fn().mockResolvedValue([]),
+    refundPayment: jest.fn(),
     voidPayment: jest.fn()
   };
 
@@ -157,5 +159,47 @@ describe('PaymentsService.voidPayment', () => {
       expect.objectContaining({ id: 'office-1', displayName: 'Bea Bookkeeper' })
     );
     expect(result.payment.isVoid).toBe(true);
+  });
+});
+
+describe('PaymentsService.refundPayment', () => {
+  it('refunds a payment gated on payments:refund and returns the refund', async () => {
+    const { service, identityAccessService, paymentsRepository } = createService();
+    paymentsRepository.refundPayment.mockResolvedValue({
+      id: 'ref-1',
+      paymentId: 'pay-1',
+      jobId: 'job-1',
+      amount: 40,
+      method: 'card',
+      source: 'manual',
+      currency: 'USD',
+      refundedAt: '2026-06-03T00:00:00.000Z',
+      reason: 'overcharge',
+      recordedByName: 'Bea Bookkeeper',
+      allocations: [{ invoiceId: 'inv-main', invoiceKind: 'main', amount: 40 }],
+      createdAt: '2026-06-03T00:00:00.000Z',
+      updatedAt: '2026-06-03T00:00:00.000Z'
+    });
+
+    const result = await service.refundPayment('token', 'pay-1', {
+      amount: 40,
+      reason: 'overcharge'
+    });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'payments:refund',
+      ['office-web']
+    );
+    expect(paymentsRepository.refundPayment).toHaveBeenCalledWith(
+      'pay-1',
+      expect.objectContaining({
+        amount: 40,
+        reason: 'overcharge',
+        actor: expect.objectContaining({ id: 'office-1', displayName: 'Bea Bookkeeper' })
+      })
+    );
+    expect(result.refund.amount).toBe(40);
+    expect(result.refund.paymentId).toBe('pay-1');
   });
 });

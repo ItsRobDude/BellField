@@ -221,3 +221,135 @@ describe('PaymentsRepository.voidPayment', () => {
     expect(findCall(calls, TIMELINE_INSERT)).toBeUndefined();
   });
 });
+
+const PAYMENT_HEAD = /from payments where id = \$1 limit 1/i;
+const PAYMENT_FOR_UPDATE = /from payments where id = \$1\s+for update/i;
+const SUM_REFUND_FOR_PAYMENT = /from payment_refunds\s+where payment_id = \$1/i;
+const INSERT_REFUND = /insert into payment_refunds /i;
+const REVERSAL_SELECT = /from payment_allocations pa\s+join invoices i/i;
+const INSERT_REFUND_ALLOC = /insert into payment_refund_allocations/i;
+const FIND_REFUND = /from payment_refunds where id = \$1/i;
+const HYDRATE_REFUND_ALLOC = /from payment_refund_allocations ra\s+join invoices i/i;
+
+const REFUND_ROW = {
+  id: 'ref-1',
+  paymentId: 'pay-1',
+  jobId: 'job-1',
+  amount: '170.00',
+  method: 'card',
+  source: 'manual',
+  provider: null,
+  currency: 'USD',
+  refundedAt: '2026-06-03T00:00:00.000Z',
+  reason: null,
+  recordedByName: 'Bea Bookkeeper',
+  applicationFeeRefunded: null,
+  providerRefundId: null,
+  providerPaymentId: null,
+  createdAt: '2026-06-03T00:00:00.000Z',
+  updatedAt: '2026-06-03T00:00:00.000Z'
+};
+
+function refundHandlers(
+  overrides: {
+    forUpdate?: Record<string, unknown>;
+    priorRefundCents?: number;
+    allocations?: Array<{ invoiceId: string; allocatedCents: string; refundedCents: string }>;
+  } = {}
+) {
+  return [
+    { match: PAYMENT_HEAD, rows: [{ jobId: 'job-1' }] },
+    { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+    { match: POSTED_SET_LOCK, rows: [] },
+    {
+      match: PAYMENT_FOR_UPDATE,
+      rows: [
+        {
+          jobId: 'job-1',
+          amount: '200.00',
+          method: 'card',
+          currency: 'USD',
+          source: 'manual',
+          isVoid: false,
+          ...overrides.forUpdate
+        }
+      ]
+    },
+    { match: SUM_REFUND_FOR_PAYMENT, rows: [{ cents: overrides.priorRefundCents ?? 0 }] },
+    { match: INSERT_REFUND, rowCount: 1 },
+    {
+      match: REVERSAL_SELECT,
+      rows: overrides.allocations ?? [
+        { invoiceId: 'inv-main', allocatedCents: '15000', refundedCents: '0' },
+        { invoiceId: 'inv-adj', allocatedCents: '5000', refundedCents: '0' }
+      ]
+    },
+    { match: INSERT_REFUND_ALLOC, rowCount: 1 },
+    { match: TIMELINE_INSERT, rowCount: 1 },
+    { match: FIND_REFUND, rows: [REFUND_ROW] },
+    { match: HYDRATE_REFUND_ALLOC, rows: [] }
+  ];
+}
+
+describe('PaymentsRepository.refundPayment', () => {
+  it('records a manual refund and reverses the payment allocations main-first', async () => {
+    const { repository, calls } = repositoryWith(refundHandlers());
+
+    const result = await repository.refundPayment('pay-1', {
+      amount: 170,
+      reason: 'returned',
+      actor
+    });
+
+    expect(result.amount).toBe(170);
+    const refundInsert = findCall(calls, INSERT_REFUND);
+    expect(refundInsert?.params).toContain(170);
+    expect(refundInsert?.sql).toMatch(/'manual'/);
+    // $170 reverses the full $150 main allocation, then $20 of the adjustment.
+    const allocInserts = calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql));
+    expect(allocInserts).toHaveLength(2);
+    expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-main', 150]));
+    expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
+    const timeline = findCall(calls, TIMELINE_INSERT);
+    expect(timeline?.params[4]).toBe('paymentRefunded');
+  });
+
+  it('rejects a refund larger than the payment', async () => {
+    const { repository, calls } = repositoryWith(refundHandlers());
+
+    await expect(repository.refundPayment('pay-1', { amount: 250, actor })).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, INSERT_REFUND)).toBeUndefined();
+  });
+
+  it('rejects a refund beyond the amount still refundable after prior refunds', async () => {
+    // $200 payment, $150 already refunded → only $50 remains; $60 must be rejected.
+    const { repository, calls } = repositoryWith(refundHandlers({ priorRefundCents: 15000 }));
+
+    await expect(repository.refundPayment('pay-1', { amount: 60, actor })).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, INSERT_REFUND)).toBeUndefined();
+  });
+
+  it('rejects refunding a voided payment', async () => {
+    const { repository, calls } = repositoryWith(refundHandlers({ forUpdate: { isVoid: true } }));
+
+    await expect(repository.refundPayment('pay-1', { amount: 10, actor })).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, INSERT_REFUND)).toBeUndefined();
+  });
+
+  it('rejects manually refunding an online card payment', async () => {
+    const { repository, calls } = repositoryWith(
+      refundHandlers({ forUpdate: { source: 'bellfield_payments' } })
+    );
+
+    await expect(repository.refundPayment('pay-1', { amount: 10, actor })).rejects.toBeInstanceOf(
+      ConflictException
+    );
+    expect(findCall(calls, INSERT_REFUND)).toBeUndefined();
+  });
+});

@@ -5,9 +5,13 @@ import { PaymentsRepository } from './payments.repository';
 import type {
   JobPaymentsResponseDto,
   PaymentRecord,
+  PaymentRefundResponseDto,
+  PaymentRefundSummaryDto,
   PaymentResponseDto,
   PaymentSummaryDto,
   RecordPaymentRequestDto,
+  RecordRefundRequestDto,
+  RefundRecord,
   VoidPaymentRequestDto
 } from './payments.types';
 
@@ -54,8 +58,39 @@ export class PaymentsService {
     // getJobById throws NotFoundException when the job is missing.
     await this.jobsDataService.getJobById(jobId);
 
-    const payments = await this.paymentsRepository.listPaymentsForJob(jobId);
-    return { payments: payments.map((payment) => this.toSummary(payment)) };
+    const [payments, refunds] = await Promise.all([
+      this.paymentsRepository.listPaymentsForJob(jobId),
+      this.paymentsRepository.listRefundsForJob(jobId)
+    ]);
+    return {
+      payments: payments.map((payment) => this.toSummary(payment)),
+      refunds: refunds.map((refund) => this.toRefundSummary(refund))
+    };
+  }
+
+  /**
+   * Refund all or part of a payment (the correction path for money already
+   * received; payments are never edited in place). Office-only, gated on
+   * payments:refund. v1 records manual refunds; online card refunds are recorded
+   * by the worker from a confirmed Stripe event.
+   */
+  async refundPayment(
+    sessionToken: string,
+    paymentId: string,
+    request: RecordRefundRequestDto
+  ): Promise<PaymentRefundResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'payments:refund',
+      ['office-web']
+    );
+
+    const refund = await this.paymentsRepository.refundPayment(paymentId, {
+      amount: request.amount,
+      reason: request.reason?.trim() || undefined,
+      actor: { id: actor.id, displayName: actor.displayName }
+    });
+    return { refund: this.toRefundSummary(refund) };
   }
 
   /**
@@ -104,6 +139,29 @@ export class PaymentsService {
       voidReason: record.voidReason,
       voidedByName: record.voidedByName,
       voidedAt: record.voidedAt,
+      createdAt: record.createdAt,
+      updatedAt: record.updatedAt
+    };
+  }
+
+  /** Drop internal-only fields from the refund wire shape. */
+  private toRefundSummary(record: RefundRecord): PaymentRefundSummaryDto {
+    return {
+      id: record.id,
+      paymentId: record.paymentId,
+      jobId: record.jobId,
+      amount: record.amount,
+      method: record.method,
+      source: record.source,
+      provider: record.provider,
+      currency: record.currency,
+      refundedAt: record.refundedAt,
+      reason: record.reason,
+      recordedByName: record.recordedByName,
+      applicationFeeRefunded: record.applicationFeeRefunded,
+      providerRefundId: record.providerRefundId,
+      providerPaymentId: record.providerPaymentId,
+      allocations: record.allocations,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
     };

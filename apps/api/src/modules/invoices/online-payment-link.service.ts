@@ -150,7 +150,8 @@ export class OnlinePaymentLinkService {
       .filter((invoice) => invoice.invoiceKind === 'credit' && invoice.status === 'posted')
       .reduce((sum, invoice) => sum + dollarsToCents(invoice.total), 0);
     const paidCents = await this.paymentsRepository.sumActivePaymentCentsForJob(jobId);
-    return postedMainCents + postedAdjustmentCents - postedCreditCents - paidCents;
+    const refundedCents = await this.paymentsRepository.sumActiveRefundCentsForJob(jobId);
+    return postedMainCents + postedAdjustmentCents - postedCreditCents - paidCents + refundedCents;
   }
 
   private async requestRelayPaymentSession(

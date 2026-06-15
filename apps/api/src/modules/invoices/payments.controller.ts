@@ -1,7 +1,11 @@
 import { Body, Controller, Get, Headers, Param, Post } from '@nestjs/common';
 import { getBearerToken } from '../../common/http/bearer-token';
 import { PaymentsService } from './payments.service';
-import { RecordPaymentRequestBodyDto, VoidPaymentRequestBodyDto } from './payments.dto';
+import {
+  RecordPaymentRequestBodyDto,
+  RecordRefundRequestBodyDto,
+  VoidPaymentRequestBodyDto
+} from './payments.dto';
 import { OnlinePaymentLinkService } from './online-payment-link.service';
 import { CreateOnlinePaymentLinkRequestBodyDto } from './online-payment-link.dto';
 
@@ -67,6 +71,19 @@ export class PaymentController {
     @Body() request: VoidPaymentRequestBodyDto
   ) {
     return this.paymentsService.voidPayment(
+      getBearerToken(authorizationHeader),
+      paymentId,
+      request
+    );
+  }
+
+  @Post(':paymentId/refund')
+  async refund(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('paymentId') paymentId: string,
+    @Body() request: RecordRefundRequestBodyDto
+  ) {
+    return this.paymentsService.refundPayment(
       getBearerToken(authorizationHeader),
       paymentId,
       request

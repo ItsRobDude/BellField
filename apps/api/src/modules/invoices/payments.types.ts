@@ -4,9 +4,13 @@ import type {
   PaymentAllocation,
   PaymentProvider,
   PaymentMethod,
+  PaymentRefund,
+  PaymentRefundAllocation,
+  PaymentRefundResponse,
   PaymentSource,
   PaymentResponse,
   RecordPaymentRequest,
+  RecordRefundRequest,
   VoidPaymentRequest
 } from '@bellfield/contracts';
 
@@ -16,10 +20,14 @@ export type PaymentMethodValue = PaymentMethod;
 export type PaymentSourceValue = PaymentSource;
 export type PaymentProviderValue = PaymentProvider;
 export type PaymentAllocationRecord = PaymentAllocation;
+export type PaymentRefundAllocationRecord = PaymentRefundAllocation;
 export type PaymentSummaryDto = Payment;
+export type PaymentRefundSummaryDto = PaymentRefund;
 export type PaymentResponseDto = PaymentResponse;
+export type PaymentRefundResponseDto = PaymentRefundResponse;
 export type JobPaymentsResponseDto = JobPaymentsResponse;
 export type RecordPaymentRequestDto = RecordPaymentRequest;
+export type RecordRefundRequestDto = RecordRefundRequest;
 export type VoidPaymentRequestDto = VoidPaymentRequest;
 
 export const paymentMethods = [
@@ -68,5 +76,33 @@ export type PaymentWriteInput = {
   receivedAt: string;
   reference?: string;
   memo?: string;
+  actor: { id: string; displayName: string };
+};
+
+/** A refund as the repository reads/writes it (money is decimal dollars). */
+export type RefundRecord = {
+  id: string;
+  paymentId: string;
+  jobId: string;
+  amount: number;
+  method: PaymentMethodValue;
+  source: PaymentSourceValue;
+  provider?: PaymentProviderValue;
+  currency: string;
+  refundedAt: string;
+  reason?: string;
+  recordedByName: string;
+  applicationFeeRefunded?: number;
+  providerRefundId?: string;
+  providerPaymentId?: string;
+  allocations: PaymentRefundAllocationRecord[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** Resolved, validated input the service hands the repository to record a manual refund. */
+export type RefundWriteInput = {
+  amount: number;
+  reason?: string;
   actor: { id: string; displayName: string };
 };

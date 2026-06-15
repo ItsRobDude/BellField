@@ -1,88 +1,35 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { DatabaseService, type QueryExecutor } from '../../database/database.service';
-import { toIsoString } from '../../database/database-row.utils';
 import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-utils';
 import type {
   PaymentAllocationRecord,
   PaymentMethodValue,
   PaymentProviderValue,
   PaymentRecord,
+  PaymentRefundAllocationRecord,
   PaymentSourceValue,
-  PaymentWriteInput
+  PaymentWriteInput,
+  RefundRecord,
+  RefundWriteInput
 } from './payments.types';
-
-type PaymentRow = {
-  id: string;
-  jobId: string;
-  invoiceId: string | null;
-  amount: string | number;
-  method: PaymentMethodValue;
-  source: 'manual' | 'bellfield_payments';
-  provider: PaymentProviderValue | null;
-  currency: string;
-  receivedAt: string | Date;
-  reference: string | null;
-  memo: string | null;
-  recordedByEmployeeId: string | null;
-  recordedByName: string;
-  processorFee: string | number | null;
-  applicationFee: string | number | null;
-  providerPaymentId: string | null;
-  providerSessionId: string | null;
-  isVoid: boolean;
-  voidReason: string | null;
-  voidedByName: string | null;
-  voidedAt: string | Date | null;
-  createdAt: string | Date;
-  updatedAt: string | Date;
-};
-
-type AllocationRow = {
-  paymentId: string;
-  invoiceId: string;
-  invoiceKind: 'main' | 'adjustment' | 'credit';
-  amount: string | number;
-};
-
-type ChargeInvoiceRow = {
-  invoiceId: string;
-  invoiceKind: 'main' | 'adjustment';
-  total: string | number;
-  allocated: string | number;
-};
-
-type TargetInvoiceRow = {
-  jobId: string;
-  status: string;
-  invoiceKind: string;
-};
-
-const PAYMENT_COLUMNS = `
-  id,
-  job_id as "jobId",
-  invoice_id as "invoiceId",
-  amount,
-  method,
-  source,
-  provider,
-  currency,
-  received_at as "receivedAt",
-  reference,
-  memo,
-  recorded_by_employee_id as "recordedByEmployeeId",
-  recorded_by_name as "recordedByName",
-  processor_fee_amount as "processorFee",
-  application_fee_amount as "applicationFee",
-  provider_payment_id as "providerPaymentId",
-  provider_session_id as "providerSessionId",
-  is_void as "isVoid",
-  void_reason as "voidReason",
-  voided_by_name as "voidedByName",
-  voided_at as "voidedAt",
-  created_at as "createdAt",
-  updated_at as "updatedAt"
-`;
+import {
+  PAYMENT_COLUMNS,
+  REFUND_COLUMNS,
+  centsToDollars,
+  dollarsToCents,
+  formatMoney,
+  normalizeCurrency,
+  toDbSource,
+  toPaymentRecord,
+  toRefundRecord,
+  type AllocationRow,
+  type ChargeInvoiceRow,
+  type PaymentRow,
+  type RefundAllocationRow,
+  type RefundRow,
+  type TargetInvoiceRow
+} from './payments-repository-utils';
 
 @Injectable()
 export class PaymentsRepository {
@@ -233,6 +180,255 @@ export class PaymentsRepository {
       [jobId]
     );
     return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  /** Sum a job's refunds, in whole cents. Refunds are terminal, so all count. */
+  async sumActiveRefundCentsForJob(jobId: string): Promise<number> {
+    const result = await this.databaseService.query<{ cents: string | number }>(
+      `select coalesce(round(sum(amount) * 100), 0) as cents
+       from payment_refunds
+       where job_id = $1`,
+      [jobId]
+    );
+    return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  /** List a job's refunds, newest first. */
+  async listRefundsForJob(jobId: string): Promise<RefundRecord[]> {
+    const result = await this.databaseService.query<RefundRow>(
+      `select ${REFUND_COLUMNS.replace(/\n/g, ' ')}
+       from payment_refunds
+       where job_id = $1
+       order by refunded_at desc, created_at desc`,
+      [jobId]
+    );
+    return this.hydrateRefunds(result.rows, this.databaseService);
+  }
+
+  /**
+   * Record a manual refund of all or part of a payment (the slice-1 path; online
+   * card refunds are recorded by the worker from a confirmed Stripe event). The
+   * refund reverses the payment's allocations main-first so each posted charge
+   * invoice's remaining balance stays exact, and the job's amount due rises by the
+   * refunded amount. Append-only — it never edits the payment or a posted invoice.
+   */
+  async refundPayment(paymentId: string, input: RefundWriteInput): Promise<RefundRecord> {
+    const now = new Date().toISOString();
+    const requestedCents = dollarsToCents(input.amount);
+    return this.databaseService.transaction(async (queryable) => {
+      // Read unlocked to find the job (amount is immutable); we re-lock + re-check below.
+      const head = await queryable.query<{ jobId: string }>(
+        `select job_id as "jobId" from payments where id = $1 limit 1`,
+        [paymentId]
+      );
+      if (!head.rows[0]) {
+        throw new NotFoundException('Payment not found.');
+      }
+      // Same lock order as recordPayment (job row, then posted invoices), then the
+      // payment row last — so concurrent payments/refunds on the job can't deadlock.
+      await this.lockJobRow(head.rows[0].jobId, queryable);
+      await this.lockPostedInvoicesForJob(head.rows[0].jobId, queryable);
+
+      const current = await queryable.query<{
+        jobId: string;
+        amount: string | number;
+        method: PaymentMethodValue;
+        currency: string;
+        source: PaymentRow['source'];
+        isVoid: boolean;
+      }>(
+        `select job_id as "jobId", amount, method, currency, source, is_void as "isVoid"
+         from payments where id = $1 for update`,
+        [paymentId]
+      );
+      const payment = current.rows[0];
+      if (!payment) {
+        throw new NotFoundException('Payment not found.');
+      }
+      if (payment.isVoid) {
+        throw new ConflictException('A voided payment cannot be refunded.');
+      }
+      if (payment.source !== 'manual') {
+        throw new ConflictException(
+          'Online card payments must be refunded through the processor, not recorded manually.'
+        );
+      }
+
+      const paymentCents = dollarsToCents(payment.amount);
+      const alreadyRefundedCents = await this.sumRefundCentsForPayment(paymentId, queryable);
+      const refundableCents = paymentCents - alreadyRefundedCents;
+      if (requestedCents > refundableCents) {
+        throw new ConflictException(
+          refundableCents <= 0
+            ? 'This payment has already been fully refunded.'
+            : `Refund exceeds the ${formatMoney(centsToDollars(refundableCents))} still refundable on this payment.`
+        );
+      }
+
+      const refundId = randomUUID();
+      await queryable.query(
+        `insert into payment_refunds (
+           id, payment_id, job_id, amount, method, currency, source, provider,
+           provider_refund_id, provider_payment_id, application_fee_refunded, reason,
+           refunded_by_employee_id, refunded_by_name, refunded_at, created_at, updated_at
+         )
+         values ($1, $2, $3, $4, $5, $6, 'manual', null, null, null, null, $7, $8, $9, $10, $10, $10)`,
+        [
+          refundId,
+          paymentId,
+          payment.jobId,
+          input.amount,
+          payment.method,
+          normalizeCurrency(payment.currency),
+          input.reason?.trim() || null,
+          input.actor.id,
+          input.actor.displayName,
+          now
+        ]
+      );
+
+      await this.insertRefundReversalAllocations(
+        refundId,
+        paymentId,
+        requestedCents,
+        now,
+        queryable
+      );
+
+      await insertJobTimelineEntry(
+        {
+          id: randomUUID(),
+          jobId: payment.jobId,
+          occurredAt: now,
+          actorName: input.actor.displayName,
+          kind: 'paymentRefunded',
+          message: `Refund of ${formatMoney(input.amount)} recorded (${payment.method}).`
+        },
+        queryable
+      );
+
+      return this.findRefundById(refundId, queryable);
+    });
+  }
+
+  /** Sum the refunds already taken against a single payment, in whole cents. */
+  private async sumRefundCentsForPayment(
+    paymentId: string,
+    queryable: QueryExecutor
+  ): Promise<number> {
+    const result = await queryable.query<{ cents: string | number }>(
+      `select coalesce(round(sum(amount) * 100), 0) as cents
+       from payment_refunds
+       where payment_id = $1`,
+      [paymentId]
+    );
+    return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  /**
+   * Reverse the payment's allocations main-first, up to the refund amount, net of
+   * any allocations already reversed by prior partial refunds. Any remainder maps
+   * to an unallocated (overpayment) portion of the payment and needs no allocation
+   * row — it still reduces job-level net paid via payment_refunds.amount.
+   */
+  private async insertRefundReversalAllocations(
+    refundId: string,
+    paymentId: string,
+    refundCents: number,
+    now: string,
+    queryable: QueryExecutor
+  ): Promise<void> {
+    const result = await queryable.query<{
+      invoiceId: string;
+      allocatedCents: string | number;
+      refundedCents: string | number;
+    }>(
+      `select
+         pa.invoice_id as "invoiceId",
+         round(pa.amount * 100) as "allocatedCents",
+         coalesce((
+           select round(sum(ra.amount) * 100)
+           from payment_refund_allocations ra
+           join payment_refunds r on r.id = ra.refund_id
+           where r.payment_id = pa.payment_id and ra.invoice_id = pa.invoice_id
+         ), 0) as "refundedCents"
+       from payment_allocations pa
+       join invoices i on i.id = pa.invoice_id
+       where pa.payment_id = $1
+       order by
+         case when i.invoice_kind = 'main' then 0 else 1 end,
+         i.posted_at asc nulls last,
+         i.id asc`,
+      [paymentId]
+    );
+
+    let remainingCents = refundCents;
+    for (const row of result.rows) {
+      if (remainingCents <= 0) {
+        break;
+      }
+      const reversibleCents = Number(row.allocatedCents) - Number(row.refundedCents);
+      if (reversibleCents <= 0) {
+        continue;
+      }
+      const reverseCents = Math.min(reversibleCents, remainingCents);
+      await queryable.query(
+        `insert into payment_refund_allocations (id, refund_id, invoice_id, amount, created_at)
+         values ($1, $2, $3, $4, $5)`,
+        [randomUUID(), refundId, row.invoiceId, centsToDollars(reverseCents), now]
+      );
+      remainingCents -= reverseCents;
+    }
+  }
+
+  private async findRefundById(refundId: string, queryable: QueryExecutor): Promise<RefundRecord> {
+    const result = await queryable.query<RefundRow>(
+      `select ${REFUND_COLUMNS} from payment_refunds where id = $1`,
+      [refundId]
+    );
+    const row = result.rows[0];
+    if (!row) {
+      throw new NotFoundException('Refund not found.');
+    }
+    const [refund] = await this.hydrateRefunds([row], queryable);
+    return refund;
+  }
+
+  private async hydrateRefunds(
+    rows: RefundRow[],
+    queryable: QueryExecutor
+  ): Promise<RefundRecord[]> {
+    if (rows.length === 0) {
+      return [];
+    }
+    const refundIds = rows.map((row) => row.id);
+    const allocationsResult = await queryable.query<RefundAllocationRow>(
+      `select
+         ra.refund_id as "refundId",
+         ra.invoice_id as "invoiceId",
+         i.invoice_kind as "invoiceKind",
+         ra.amount
+       from payment_refund_allocations ra
+       join invoices i on i.id = ra.invoice_id
+       where ra.refund_id = any($1::text[])
+       order by
+         ra.refund_id,
+         case when i.invoice_kind = 'main' then 0 else 1 end,
+         i.posted_at asc nulls last,
+         i.id asc`,
+      [refundIds]
+    );
+    const allocationsByRefund = new Map<string, PaymentRefundAllocationRecord[]>();
+    for (const allocation of allocationsResult.rows) {
+      const current = allocationsByRefund.get(allocation.refundId) ?? [];
+      current.push({
+        invoiceId: allocation.invoiceId,
+        invoiceKind: allocation.invoiceKind,
+        amount: Number(allocation.amount)
+      });
+      allocationsByRefund.set(allocation.refundId, current);
+    }
+    return rows.map((row) => toRefundRecord(row, allocationsByRefund.get(row.id) ?? []));
   }
 
   /**
@@ -398,14 +594,20 @@ export class PaymentsRepository {
          join payments p on p.id = pa.payment_id
          where p.is_void = false
          group by pa.invoice_id
+       ),
+       refunded_allocations as (
+         select ra.invoice_id, coalesce(sum(ra.amount), 0) as refunded
+         from payment_refund_allocations ra
+         group by ra.invoice_id
        )
        select
          i.id as "invoiceId",
          i.invoice_kind as "invoiceKind",
          i.total_amount as total,
-         coalesce(aa.allocated, 0) as allocated
+         coalesce(aa.allocated, 0) - coalesce(ra.refunded, 0) as allocated
        from invoices i
        left join active_allocations aa on aa.invoice_id = i.id
+       left join refunded_allocations ra on ra.invoice_id = i.id
        where i.job_id = $1
          and i.status = 'posted'
          and i.invoice_kind in ('main', 'adjustment')
@@ -506,61 +708,4 @@ export class PaymentsRepository {
     }
     return rows.map((row) => toPaymentRecord(row, allocationsByPayment.get(row.id) ?? []));
   }
-}
-
-function formatMoney(amount: number | string): string {
-  return `$${Number(amount).toFixed(2)}`;
-}
-
-function dollarsToCents(value: number | string): number {
-  return Math.round(Number(value) * 100);
-}
-
-function centsToDollars(cents: number): number {
-  return Math.round(cents) / 100;
-}
-
-function normalizeCurrency(currency: string): string {
-  return currency.trim().toUpperCase();
-}
-
-function toDbSource(source: PaymentSourceValue): 'manual' | 'bellfield_payments' {
-  return source === 'bellfieldPayments' ? 'bellfield_payments' : 'manual';
-}
-
-function fromDbSource(source: PaymentRow['source']): PaymentSourceValue {
-  return source === 'bellfield_payments' ? 'bellfieldPayments' : 'manual';
-}
-
-function optionalMoney(value: string | number | null): number | undefined {
-  return value === null ? undefined : Number(value);
-}
-
-function toPaymentRecord(row: PaymentRow, allocations: PaymentAllocationRecord[]): PaymentRecord {
-  return {
-    id: row.id,
-    jobId: row.jobId,
-    invoiceId: row.invoiceId ?? undefined,
-    amount: Number(row.amount),
-    method: row.method,
-    source: fromDbSource(row.source),
-    provider: row.provider ?? undefined,
-    currency: row.currency,
-    receivedAt: toIsoString(row.receivedAt),
-    reference: row.reference ?? undefined,
-    memo: row.memo ?? undefined,
-    recordedByEmployeeId: row.recordedByEmployeeId ?? undefined,
-    recordedByName: row.recordedByName,
-    processorFee: optionalMoney(row.processorFee),
-    applicationFee: optionalMoney(row.applicationFee),
-    providerPaymentId: row.providerPaymentId ?? undefined,
-    providerSessionId: row.providerSessionId ?? undefined,
-    allocations,
-    isVoid: row.isVoid,
-    voidReason: row.voidReason ?? undefined,
-    voidedByName: row.voidedByName ?? undefined,
-    voidedAt: row.voidedAt ? toIsoString(row.voidedAt) : undefined,
-    createdAt: toIsoString(row.createdAt),
-    updatedAt: toIsoString(row.updatedAt)
-  };
 }

@@ -47,10 +47,11 @@ beforeEach(() => {
     postedCreditsTotal: 0,
     netBilled: 0,
     paidTotal: 0,
+    refundedTotal: 0,
     amountDue: 0
   });
   mockedApi.listOfficeJobAdjustments.mockResolvedValue({ adjustments: [] });
-  mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [] });
+  mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [], refunds: [] });
   mockedApi.createOfficeOnlinePaymentLink.mockResolvedValue({
     state: 'created',
     checkoutUrl: 'https://checkout.stripe.test/pay/cs_123',
@@ -452,6 +453,7 @@ describe('JobInvoiceSection posting', () => {
       postedCreditsTotal: 0,
       netBilled: 250,
       paidTotal: 0,
+      refundedTotal: 0,
       amountDue: 250
     });
 
@@ -482,6 +484,7 @@ describe('JobInvoiceSection posting', () => {
       postedCreditsTotal: 0,
       netBilled: 250,
       paidTotal: 0,
+      refundedTotal: 0,
       amountDue: 250
     });
     const writeText = vi.fn().mockResolvedValue(undefined);
@@ -521,6 +524,7 @@ describe('JobInvoiceSection posting', () => {
       postedCreditsTotal: 0,
       netBilled: 250,
       paidTotal: 0,
+      refundedTotal: 0,
       amountDue: 250
     });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -577,6 +581,7 @@ describe('JobInvoiceSection posting', () => {
       postedCreditsTotal: 0,
       netBilled: 250,
       paidTotal: 0,
+      refundedTotal: 0,
       amountDue: 250
     });
     vi.spyOn(window, 'confirm').mockReturnValue(false);

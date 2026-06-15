@@ -91,6 +91,11 @@ export async function queryOpenBalanceRows(
        from payments p
        where p.is_void = false
        group by p.job_id
+     ),
+     refunded as (
+       select r.job_id, coalesce(sum(r.amount), 0) as refunded_total
+       from payment_refunds r
+       group by r.job_id
      )
      select
        j.id as "jobId",
@@ -98,12 +103,13 @@ export async function queryOpenBalanceRows(
        c.name as "customerName",
        coalesce(b.net_billed, 0) as "netBilled",
        coalesce(pd.paid_total, 0) as "paidTotal",
-       coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) as "amountDue"
+       coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) + coalesce(rd.refunded_total, 0) as "amountDue"
      from billed b
      join jobs j on j.id = b.job_id
      join customers c on c.id = j.bill_to_customer_id
      left join paid pd on pd.job_id = b.job_id
-     where coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) > 0
+     left join refunded rd on rd.job_id = b.job_id
+     where coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) + coalesce(rd.refunded_total, 0) > 0
      order by "amountDue" desc${limit !== null ? '\n     limit $1' : ''}`,
     limit !== null ? [limit] : []
   );

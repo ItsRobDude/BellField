@@ -101,7 +101,8 @@ export class InvoicesService {
     // rather than stored, so recording or voiding a payment never rewrites a posted
     // invoice. amountDue may be negative (an overpayment / credit balance).
     const paidCents = await this.paymentsRepository.sumActivePaymentCentsForJob(jobId);
-    const amountDueCents = netBilledCents - paidCents;
+    const refundedCents = await this.paymentsRepository.sumActiveRefundCentsForJob(jobId);
+    const amountDueCents = netBilledCents - paidCents + refundedCents;
 
     return {
       jobId,
@@ -111,6 +112,7 @@ export class InvoicesService {
       postedCreditsTotal: postedCreditsCents / 100,
       netBilled: netBilledCents / 100,
       paidTotal: paidCents / 100,
+      refundedTotal: refundedCents / 100,
       amountDue: amountDueCents / 100
     };
   }
