@@ -1,8 +1,11 @@
 # Refunds Design
 
 Status: manual install-side refund slice shipped (2026-06-14); online
-Stripe/relay refunds remain slice 2. Controlling doc for the refunds slice of
-the money-path-depth lane. Decisions confirmed with Rob via Q&A on 2026-06-14.
+Stripe/relay refunds PR1 (the full money path, no office button) built on
+`feat/payment-refunds-online` (relay + API pending model + worker apply/dead-letter,
+all unit-tested). Office button + read-model + live Stripe sandbox smoke remain
+PR2. Controlling doc for the refunds slice of the money-path-depth lane. Decisions
+confirmed with Rob via Q&A on 2026-06-14; PR1 build refinements on 2026-06-15.
 
 ## What this adds
 
@@ -179,20 +182,40 @@ true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
   relay **`esModuleInterop`** tsconfig cleanup is **deferred to its own tiny PR**
   (orthogonal to refunds, changes emit for every relay import, wants its own
   build check; `import Stripe = require()` already works).
-- **API** dedicated **pending online-refund request table** keyed to `payment_id`
-  (amount, reason, requestedBy, idempotency key, `providerRefundId` when known,
-  status, attempt/last-error, timestamps). New **`POST
-/operations/payments/:paymentId/online-refund`** (request → pending); the
-  existing `/refund` stays **manual-only**. Distinct response shapes
-  (`recorded` vs `requested`).
+- **Relay** refund-event lookup resolves the request by Stripe refund id first,
+  then by the metadata request id only if no refund-id row exists, and returns
+  `mismatch` when the two disagree — a single `OR` could match two rows and
+  advance an arbitrary one.
+- **API** dedicated **pending online-refund request table** (`online_refund_requests`,
+  migration `20260615_001`) keyed to `payment_id`: amount, currency, reason,
+  `requested_by_*`, `idempotency_key`, `relay_refund_request_id`,
+  `provider_refund_id`, status, `last_error`, and worker dead-letter columns
+  `apply_attempt_count`/`last_apply_error`/`last_apply_attempt_at`/`failed_at`.
+  New **`POST /operations/payments/:paymentId/online-refund`** (request →
+  pending); the existing `/refund` stays **manual-only**. The flow is split into
+  three phases so **no DB lock is held across the relay network call**: (1) a
+  short txn locks job+payment, validates (online, not void, has session id,
+  amount ≤ remaining refundable net of confirmed refunds + outstanding requests)
+  and creates-or-reuses the pending row; (2) the relay call runs outside any txn;
+  (3) a short update records the outcome. A **retryable/transport** relay failure
+  leaves the request `requested` with `last_error` and the **same idempotency
+  key** (a retry never double-refunds); only a **terminal/non-retryable** failure
+  moves it to `failed`. Response states: `requested | failed | providerError |
+paymentsNotConfigured`.
 - **Worker** `applyRelayRefundEvent`: write `payment_refunds`
   (`bellfield_payments`/`stripe`/`provider_refund_id`/proportional
-  `application_fee_refunded`) + reverse allocations, **idempotent on
+  `application_fee_refunded`) + reverse allocations main-first, **idempotent on
   `provider_refund_id`**, **only after the local payment exists** (match
-  `provider_payment_id`) — never fabricate from `jobRef`. **Explicit
-  deferred/dead-letter**: bounded attempts + last error on the pending request;
-  after the bound, mark `failed` + timeline-visible failure and stop retrying. A
-  `refund.failed` event clears pending **without** writing a refund row.
+  `provider_payment_id`) — never fabricate from `jobRef`. Reconcile the pending
+  request to `succeeded` by **`provider_refund_id` → `relay_refund_request_id` →
+  outstanding `(payment, amount)`** (the last covers an API timeout before the ids
+  were stored). **Deferred/dead-letter**: a succeeded refund whose payment isn't
+  recorded yet **defers** (no ack, relay redelivers) and bumps
+  `apply_attempt_count`; past an **injectable bound (default 30, ~30 min at the
+  shared payment-event poll)** the request is marked `failed` + a
+  `paymentRefundFailed` timeline entry and the event is acked. A `refund.failed`
+  event marks the request failed (+ `paymentRefundFailed` timeline) **without**
+  writing a refund row. The refund poll **reuses the payment-event interval**.
 
 **PR 2 — office UI + live smoke:** enable Refund on card (`bellfieldPayments`)
 payments with a **confirm dialog** ("Request a $X online refund?"), a "refund
