@@ -150,23 +150,54 @@ money ledger the moment refunds are recordable.
    allocations into `payment_refund_allocations`.
 4. Job timeline entry: `paymentRefunded`, "Refund of $X recorded (method)."
 
-### Online (Stripe) refund (relay + worker, slice 2) — DEFERRED
+### Online (Stripe) refund (relay + worker) — SLICE 2, IN PROGRESS
 
-1. Office requests a refund (full/partial) on a card payment → API → relay.
-2. Relay calls Stripe `refunds.create` on the connected account with
-   `refund_application_fee: true` (proportional) and the refund amount.
-3. Stripe emits a refund event (`charge.refunded` / `refund.updated`) to the
-   relay webhook; the relay records it as a relay payment event.
-4. The install worker polls/acks the event (reusing the existing payment-events
-   pipeline) and records the `payment_refunds` row (`source: 'bellfield_payments'`,
-   `provider: 'stripe'`, `provider_refund_id`, proportional
-   `application_fee_refunded`) + reverses allocations — idempotent on
-   `provider_refund_id`.
-5. Pending state between request and confirmation is tracked like online
-   payment sessions (no half-real refund row); UX shows "refund requested."
+Built around a real refund-event lifecycle (not a thin extension of the payment
+pipeline — `relay_payment_events` is payment-only and can't hold refunds). **Two
+PRs, split at the cross-app contract boundary** so nothing lands as unusable
+plumbing.
 
-The `esModuleInterop` relay tsconfig fix rides slice 2's relay PR so it goes
-through the `quality` gate.
+**PR 1 — foundation + money path, no office button (proven in tests):**
+
+- **Contracts** (`relay-delivery.ts`): `RelayCreateRefundRequest` /
+  `RelayRefundResult` / `RelayRefundEventRecord` (status `succeeded|failed`); an
+  API-side online-refund request with lifecycle `requested → succeeded | failed`.
+- **Relay** dedicated tables `relay_payment_refund_requests` +
+  `relay_payment_refund_events` (migration `20260614_107`). Token-authed endpoint
+  takes a relay-owned **session reference** (the Stripe checkout session id), not
+  a raw PaymentIntent/amount; the relay looks up the session, validates shop
+  ownership + connected account + currency + **amount ≤ remaining refundable**,
+  then `stripe.refunds.create({ payment_intent, amount?, refund_application_fee:
+true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
+  `apiVersion`** and pin/document the **webhook endpoint version**; handle
+  `refund.created/updated/failed`, storing events idempotently on
+  `provider_refund_id` (succeeded) / recording failures; apply ledger changes
+  only for **succeeded**. Refund-event poll + ack endpoints mirror payments.
+  Folds in the relay **`esModuleInterop`** tsconfig fix.
+- **API** dedicated **pending online-refund request table** keyed to `payment_id`
+  (amount, reason, requestedBy, idempotency key, `providerRefundId` when known,
+  status, attempt/last-error, timestamps). New **`POST
+/operations/payments/:paymentId/online-refund`** (request → pending); the
+  existing `/refund` stays **manual-only**. Distinct response shapes
+  (`recorded` vs `requested`).
+- **Worker** `applyRelayRefundEvent`: write `payment_refunds`
+  (`bellfield_payments`/`stripe`/`provider_refund_id`/proportional
+  `application_fee_refunded`) + reverse allocations, **idempotent on
+  `provider_refund_id`**, **only after the local payment exists** (match
+  `provider_payment_id`) — never fabricate from `jobRef`. **Explicit
+  deferred/dead-letter**: bounded attempts + last error on the pending request;
+  after the bound, mark `failed` + timeline-visible failure and stop retrying. A
+  `refund.failed` event clears pending **without** writing a refund row.
+
+**PR 2 — office UI + live smoke:** enable Refund on card (`bellfieldPayments`)
+payments with a **confirm dialog** ("Request a $X online refund?"), a "refund
+requested" pending state, duplicate-request blocking, and confirmed/failed
+display; dated Stripe sandbox smoke (card payment → partial + full refund →
+webhook → worker → ledger).
+
+**The worker has no bounded retry today** (`payment-events-service.ts` just
+skips the ack and redelivers forever) — the dead-letter handling above is new,
+not "existing."
 
 ## Permissions
 
