@@ -141,6 +141,12 @@ describe('RelayPaymentsRepository.recordPaidEvent', () => {
 const REFUND_REQUEST_SELECT = /from relay_payment_refund_requests r/i;
 const REFUND_EVENT_INSERT = /insert into relay_payment_refund_events/i;
 const REFUND_REQUEST_UPDATE = /update relay_payment_refund_requests/i;
+// recordRefundEvent now resolves the request in two ordered lookups — by Stripe
+// refund id first, then by the metadata request id only as a fallback — so tests
+// that exercise the fallback must distinguish the two queries by their where clause.
+const REFUND_SELECT_BY_REFUND_ID =
+  /from relay_payment_refund_requests r[\s\S]*where r\.stripe_refund_id = \$1/i;
+const REFUND_SELECT_BY_REQUEST_ID = /from relay_payment_refund_requests r[\s\S]*where r\.id = \$1/i;
 
 function storedRefundRequest(overrides?: Partial<Record<string, unknown>>) {
   const createdAt = new Date('2026-06-14T00:00:00.000Z');
@@ -240,8 +246,14 @@ describe('RelayPaymentsRepository.recordRefundEvent', () => {
   });
 
   it('backfills the Stripe refund id when matched via request metadata', async () => {
+    // The refund id is not yet persisted, so the by-refund-id lookup misses and we
+    // fall back to the metadata request id, then backfill the id when advancing.
     const { repo, calls } = repoWith([
-      { match: REFUND_REQUEST_SELECT, rows: [storedRefundRequest({ stripe_refund_id: null })] },
+      { match: REFUND_SELECT_BY_REFUND_ID, rows: [] },
+      {
+        match: REFUND_SELECT_BY_REQUEST_ID,
+        rows: [storedRefundRequest({ stripe_refund_id: null })]
+      },
       { match: REFUND_EVENT_INSERT, rowCount: 1 },
       { match: REFUND_REQUEST_UPDATE, rowCount: 1 }
     ]);
@@ -250,5 +262,34 @@ describe('RelayPaymentsRepository.recordRefundEvent', () => {
     const update = calls.find((c) => REFUND_REQUEST_UPDATE.test(c.sql));
     expect(update?.sql).toMatch(/stripe_refund_id = coalesce\(stripe_refund_id/i);
     expect(update?.params).toContain('re_1');
+  });
+
+  it('refuses when the matched refund id and metadata request id disagree', async () => {
+    // A webhook carrying a refund id AND a metadata request id that resolve to
+    // different requests is contradictory: advance neither, just log + ignore.
+    const { repo, calls } = repoWith([
+      { match: REFUND_REQUEST_SELECT, rows: [storedRefundRequest()] }
+    ]);
+    const outcome = await repo.recordRefundEvent({
+      ...baseRefundEvent,
+      refundRequestId: 'pay_refund_other'
+    });
+    expect(outcome).toBe('mismatch');
+    expect(calls.some((c) => REFUND_EVENT_INSERT.test(c.sql))).toBe(false);
+  });
+
+  it('refuses when the metadata request is already bound to another refund id', async () => {
+    // No row matches this refund id; the metadata request resolves but is already
+    // bound to a different Stripe refund, so this event can't belong to it.
+    const { repo, calls } = repoWith([
+      { match: REFUND_SELECT_BY_REFUND_ID, rows: [] },
+      {
+        match: REFUND_SELECT_BY_REQUEST_ID,
+        rows: [storedRefundRequest({ stripe_refund_id: 're_other' })]
+      }
+    ]);
+    const outcome = await repo.recordRefundEvent(baseRefundEvent);
+    expect(outcome).toBe('mismatch');
+    expect(calls.some((c) => REFUND_EVENT_INSERT.test(c.sql))).toBe(false);
   });
 });

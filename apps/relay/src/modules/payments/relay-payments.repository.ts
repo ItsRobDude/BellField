@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
-import { DatabaseService } from '../../database/database.service';
+import { DatabaseService, type QueryExecutor } from '../../database/database.service';
 import type {
   RecordPaidEventOutcome,
   RecordRefundEventOutcome,
@@ -393,29 +393,73 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
     );
   }
 
+  /**
+   * Lock and return the refund request matched by a single unique column
+   * (`stripe_refund_id` or its primary key `id`), joined to its session for the
+   * checkout id. `column` is a fixed literal chosen by this repository, never
+   * caller input, so interpolating it is safe. Returns null when no row matches.
+   */
+  private async lockRefundRequestRow(
+    queryable: QueryExecutor,
+    column: 'stripe_refund_id' | 'id',
+    value: string
+  ): Promise<(RefundRequestRow & { stripe_checkout_session_id: string }) | null> {
+    const result = await queryable.query<RefundRequestRow & { stripe_checkout_session_id: string }>(
+      `select
+         r.id, r.shop_id, r.payment_session_id, r.idempotency_key, r.amount_cents,
+         r.currency, r.reason, r.stripe_connected_account_id, r.stripe_payment_intent_id,
+         r.stripe_refund_id, r.application_fee_refunded_cents, r.status, r.failure_reason,
+         r.created_at, r.updated_at,
+         s.stripe_checkout_session_id
+       from relay_payment_refund_requests r
+       join relay_payment_sessions s on s.id = r.payment_session_id
+       where r.${column} = $1
+       for update of r`,
+      [value]
+    );
+    return result.rows[0] ?? null;
+  }
+
   async recordRefundEvent(
     input: Parameters<RelayPaymentsStore['recordRefundEvent']>[0]
   ): Promise<RecordRefundEventOutcome> {
     return this.database.transaction(async (queryable) => {
-      // Match by Stripe refund id OR by the request id echoed in refund metadata:
-      // a very fast terminal webhook can arrive before createRefund persisted the
-      // refund id, and we must still attach it to the request (and backfill the id).
-      const requestResult = await queryable.query<
-        RefundRequestRow & { stripe_checkout_session_id: string }
-      >(
-        `select
-           r.id, r.shop_id, r.payment_session_id, r.idempotency_key, r.amount_cents,
-           r.currency, r.reason, r.stripe_connected_account_id, r.stripe_payment_intent_id,
-           r.stripe_refund_id, r.application_fee_refunded_cents, r.status, r.failure_reason,
-           r.created_at, r.updated_at,
-           s.stripe_checkout_session_id
-         from relay_payment_refund_requests r
-         join relay_payment_sessions s on s.id = r.payment_session_id
-         where r.stripe_refund_id = $1 or r.id = $2
-         for update of r`,
-        [input.stripeRefundId, input.refundRequestId]
+      // Resolve which refund request this terminal webhook belongs to. Prefer the
+      // Stripe refund id (relay-owned + unique); only fall back to the request id
+      // echoed in refund metadata when no refund-id row exists yet — a very fast
+      // terminal webhook can arrive before createRefund persisted the refund id,
+      // and we must still attach it (and backfill the id). A single `OR` query
+      // could match the refund-id row AND a *different* metadata-id row, then
+      // advance whichever Postgres happened to return first; resolve the two in
+      // order and, if they point at different requests, refuse rather than guess.
+      const byRefundId = await this.lockRefundRequestRow(
+        queryable,
+        'stripe_refund_id',
+        input.stripeRefundId
       );
-      const request = requestResult.rows[0];
+      let request: (RefundRequestRow & { stripe_checkout_session_id: string }) | null = byRefundId;
+      if (byRefundId) {
+        if (input.refundRequestId !== null && input.refundRequestId !== byRefundId.id) {
+          // Metadata names a different request than the one already bound to this
+          // refund id — contradictory, so trust neither.
+          return 'mismatch';
+        }
+      } else {
+        const byRequestId =
+          input.refundRequestId !== null
+            ? await this.lockRefundRequestRow(queryable, 'id', input.refundRequestId)
+            : null;
+        if (
+          byRequestId &&
+          byRequestId.stripe_refund_id !== null &&
+          byRequestId.stripe_refund_id !== input.stripeRefundId
+        ) {
+          // The metadata request is already bound to a different Stripe refund —
+          // this event's refund id can't belong to it.
+          return 'mismatch';
+        }
+        request = byRequestId;
+      }
       if (!request) {
         // Out-of-band refund (e.g. created in the Stripe dashboard) — refund
         // events require a BellField request, so there is nothing to attach to.
