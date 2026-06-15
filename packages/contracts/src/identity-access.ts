@@ -14,6 +14,7 @@ export type PermissionAction =
   | 'approve'
   | 'post'
   | 'send'
+  | 'refund'
   | 'export'
   | 'configure';
 

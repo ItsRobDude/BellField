@@ -120,7 +120,8 @@ export interface CreateAdjustmentRequest {
  * posted adjustments minus posted credits. "Billed" means posted/accounting-visible, so a
  * draft main contributes 0 (`mainInvoiceStatus` says whether it is posted yet). `netBilled`
  * may be negative (a net credit balance). `paidTotal` is the sum of the job's non-void
- * payments; `amountDue` = netBilled − paidTotal (may be negative = overpaid/credit balance).
+ * payments and `refundedTotal` the sum of its non-void refunds; `amountDue` =
+ * netBilled − paidTotal + refundedTotal (may be negative = overpaid/credit balance).
  */
 export interface JobInvoiceBalance {
   jobId: string;
@@ -130,6 +131,7 @@ export interface JobInvoiceBalance {
   postedCreditsTotal: number;
   netBilled: number;
   paidTotal: number;
+  refundedTotal: number;
   amountDue: number;
 }
 
@@ -200,9 +202,54 @@ export interface PaymentResponse {
   payment: Payment;
 }
 
-/** A job's payments across its posted invoices, newest first. */
+export interface PaymentRefundAllocation {
+  invoiceId: string;
+  invoiceKind: InvoiceKind;
+  amount: number;
+}
+
+/**
+ * Money returned on a job, reversing all or part of a payment. Append-only, like
+ * a payment: it never rewrites a posted invoice; the job's amount due rises by
+ * the refunded amount. `allocations` reverses the original payment's allocations.
+ * A manual refund is recorded by the office; an online refund row is created by
+ * the worker only when the Stripe refund event is confirmed.
+ */
+export interface PaymentRefund {
+  id: string;
+  paymentId: string;
+  jobId: string;
+  amount: number;
+  method: PaymentMethod;
+  source: PaymentSource;
+  provider?: PaymentProvider;
+  currency: string;
+  refundedAt: string;
+  reason?: string;
+  recordedByName: string;
+  /** The application fee BellField returned for the refunded portion (online). */
+  applicationFeeRefunded?: number;
+  providerRefundId?: string;
+  providerPaymentId?: string;
+  allocations: PaymentRefundAllocation[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Refund all or part of a payment. Amount is positive dollars (≤ the payment's unrefunded amount). */
+export interface RecordRefundRequest {
+  amount: number;
+  reason?: string;
+}
+
+export interface PaymentRefundResponse {
+  refund: PaymentRefund;
+}
+
+/** A job's payments and refunds across its posted invoices, newest first. */
 export interface JobPaymentsResponse {
   payments: Payment[];
+  refunds: PaymentRefund[];
 }
 
 export type OnlinePaymentLinkState =

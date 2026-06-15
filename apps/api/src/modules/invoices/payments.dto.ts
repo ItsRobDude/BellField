@@ -1,5 +1,9 @@
 import { IsIn, IsISO8601, IsNumber, IsOptional, IsString, MaxLength, Min } from 'class-validator';
-import type { RecordPaymentRequest, VoidPaymentRequest } from '@bellfield/contracts';
+import type {
+  RecordPaymentRequest,
+  RecordRefundRequest,
+  VoidPaymentRequest
+} from '@bellfield/contracts';
 import { paymentMethods, type PaymentMethodValue } from './payments.types';
 
 export class RecordPaymentRequestBodyDto implements RecordPaymentRequest {
@@ -26,6 +30,17 @@ export class RecordPaymentRequestBodyDto implements RecordPaymentRequest {
 }
 
 export class VoidPaymentRequestBodyDto implements VoidPaymentRequest {
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  reason?: string;
+}
+
+export class RecordRefundRequestBodyDto implements RecordRefundRequest {
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount!: number;
+
   @IsOptional()
   @IsString()
   @MaxLength(500)

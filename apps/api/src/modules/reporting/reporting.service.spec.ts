@@ -110,6 +110,144 @@ describe('ReportingService.exportArOpenBalances', () => {
   });
 });
 
+type PaymentLedgerPaymentDbRow = {
+  paymentId: string;
+  invoiceIds: string[] | null;
+  jobId: string;
+  jobNumber: string;
+  customerName: string;
+  amount: string;
+  method: string;
+  source: 'manual' | 'bellfield_payments';
+  receivedAt: string;
+  reference: string | null;
+  memo: string | null;
+  recordedByName: string;
+  provider: string | null;
+  providerPaymentId: string | null;
+  processorFee: string | null;
+  applicationFee: string | null;
+  isVoid: boolean;
+  voidedAt: string | null;
+  voidReason: string | null;
+};
+
+type PaymentLedgerRefundDbRow = {
+  refundId: string;
+  paymentId: string;
+  invoiceIds: string[] | null;
+  jobId: string;
+  jobNumber: string;
+  customerName: string;
+  amount: string;
+  method: string;
+  source: 'manual' | 'bellfield_payments';
+  refundedAt: string;
+  reason: string | null;
+  recordedByName: string;
+  provider: string | null;
+  providerRefundId: string | null;
+  applicationFeeRefunded: string | null;
+};
+
+function createPaymentLedgerService(
+  paymentRows: PaymentLedgerPaymentDbRow[] = [],
+  refundRows: PaymentLedgerRefundDbRow[] = [],
+  perms: string[] = ['reports:view', 'payments:view', 'reports:export']
+) {
+  const identityAccessService = {
+    getAuthorizedEmployee: jest.fn().mockResolvedValue({
+      id: 'owner-1',
+      effectivePermissions: perms,
+      sessionSurface: 'office-web'
+    })
+  };
+  const databaseService = {
+    query: jest
+      .fn()
+      .mockResolvedValueOnce({ rows: paymentRows })
+      .mockResolvedValueOnce({ rows: refundRows })
+  };
+  return {
+    service: new ReportingService(databaseService as never, identityAccessService as never),
+    databaseService
+  };
+}
+
+describe('ReportingService.exportPaymentLedger', () => {
+  it('rejects 403 without payments:view and never queries', async () => {
+    const { service, databaseService } = createPaymentLedgerService(
+      [],
+      [],
+      ['reports:view', 'reports:export']
+    );
+
+    await expect(service.exportPaymentLedger('token')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(databaseService.query).not.toHaveBeenCalled();
+  });
+
+  it('exports payment and refund rows with stable reconciliation identifiers', async () => {
+    const { service } = createPaymentLedgerService(
+      [
+        {
+          paymentId: 'pay-1',
+          invoiceIds: ['inv-main'],
+          jobId: 'job-1',
+          jobNumber: '1001',
+          customerName: 'Acme',
+          amount: '100.00',
+          method: 'card',
+          source: 'bellfield_payments',
+          receivedAt: '2026-06-13T10:00:00.000Z',
+          reference: 'Stripe pi_123',
+          memo: null,
+          recordedByName: 'BellField Payments',
+          provider: 'stripe',
+          providerPaymentId: 'pi_123',
+          processorFee: '3.20',
+          applicationFee: '1.00',
+          isVoid: false,
+          voidedAt: null,
+          voidReason: null
+        }
+      ],
+      [
+        {
+          refundId: 'refund-1',
+          paymentId: 'pay-1',
+          invoiceIds: ['inv-main'],
+          jobId: 'job-1',
+          jobNumber: '1001',
+          customerName: 'Acme',
+          amount: '40.00',
+          method: 'card',
+          source: 'bellfield_payments',
+          refundedAt: '2026-06-13T11:00:00.000Z',
+          reason: 'Returned part',
+          recordedByName: 'BellField Payments',
+          provider: 'stripe',
+          providerRefundId: 're_123',
+          applicationFeeRefunded: '0.40'
+        }
+      ]
+    );
+
+    const out = await service.exportPaymentLedger('token');
+
+    expect(out.filename).toMatch(/^payment-ledger-\d{4}-\d{2}-\d{2}\.csv$/);
+    const lines = out.csv.split('\n');
+    expect(lines[0]).toBe(
+      'Entry type,Entry ID,Payment ID,Invoice IDs,Job #,Customer,Amount,Method,Source,Received at,Reference,Memo,Recorded by,Provider,Provider transaction ID,Processor fee,BellField fee,Void,Voided at,Void reason'
+    );
+    expect(lines[1]).toBe(
+      'refund,refund-1,pay-1,inv-main,1001,Acme,40,card,bellfieldPayments,2026-06-13T11:00:00.000Z,,Returned part,BellField Payments,stripe,re_123,,0.4,no,,'
+    );
+    expect(lines[2]).toBe(
+      'payment,pay-1,pay-1,inv-main,1001,Acme,100,card,bellfieldPayments,2026-06-13T10:00:00.000Z,Stripe pi_123,,BellField Payments,stripe,pi_123,3.2,1,no,,'
+    );
+  });
+});
+
 type ProfitOpts = {
   perms?: string[];
   revenueRows?: Array<Record<string, unknown>>;

@@ -21,7 +21,8 @@ function createService() {
     ])
   };
   const paymentsRepository = {
-    sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0)
+    sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0),
+    sumActiveRefundCentsForJob: jest.fn().mockResolvedValue(0)
   };
   const onlinePaymentsRepository = {
     listForJobAmount: jest.fn().mockResolvedValue([]),

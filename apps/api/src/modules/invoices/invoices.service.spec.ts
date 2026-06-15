@@ -37,7 +37,8 @@ function createService() {
     listInvoiceTotalsForJob: jest.fn()
   };
   const paymentsRepository = {
-    sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0)
+    sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0),
+    sumActiveRefundCentsForJob: jest.fn().mockResolvedValue(0)
   };
 
   return {
@@ -570,6 +571,7 @@ describe('InvoicesService job balance', () => {
       postedCreditsTotal: 50,
       netBilled: 1050,
       paidTotal: 0,
+      refundedTotal: 0,
       amountDue: 1050
     });
   });
@@ -587,6 +589,22 @@ describe('InvoicesService job balance', () => {
     expect(result.netBilled).toBe(1000);
     expect(result.paidTotal).toBe(400);
     expect(result.amountDue).toBe(600);
+  });
+
+  it('raises amountDue by refunds and reports refundedTotal', async () => {
+    const { service, invoicesRepository, paymentsRepository } = createService();
+    invoicesRepository.listInvoiceTotalsForJob.mockResolvedValue([
+      { id: 'main-1', invoiceKind: 'main', status: 'posted', total: 1000 }
+    ]);
+    paymentsRepository.sumActivePaymentCentsForJob.mockResolvedValue(40000);
+    // 150.00 refunded: amount due rises from 600 back to 750.
+    paymentsRepository.sumActiveRefundCentsForJob.mockResolvedValue(15000);
+
+    const result = await service.getJobInvoiceBalance('token', 'job-1');
+
+    expect(result.paidTotal).toBe(400);
+    expect(result.refundedTotal).toBe(150);
+    expect(result.amountDue).toBe(750);
   });
 
   it('returns a negative amountDue when overpaid', async () => {

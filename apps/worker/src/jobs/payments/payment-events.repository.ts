@@ -248,19 +248,27 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     paymentCents: number,
     occurredAt: Date
   ): Promise<number> {
-    const [chargeRows, creditTotalCents, activePaidBeforeThisCents] = await Promise.all([
-      this.listPostedChargeInvoiceBalances(tx, jobId),
-      this.sumPostedCreditCentsForJob(tx, jobId),
-      this.sumActivePaymentCentsForJob(tx, jobId, paymentId)
-    ]);
+    const [chargeRows, creditTotalCents, activePaidBeforeThisCents, refundedBeforeThisCents] =
+      await Promise.all([
+        this.listPostedChargeInvoiceBalances(tx, jobId),
+        this.sumPostedCreditCentsForJob(tx, jobId),
+        this.sumActivePaymentCentsForJob(tx, jobId, paymentId),
+        this.sumRefundCentsForJob(tx, jobId)
+      ]);
 
     const positiveChargeTotalCents = chargeRows.reduce(
       (sum, row) => sum + dollarsToCents(row.total),
       0
     );
     const positiveUnpaidCents = chargeRows.reduce((sum, row) => sum + row.remainingCents, 0);
+    // Net of refunds taken against other payments (this one has none yet), so a
+    // fully-refunded prior payment doesn't wrongly cap this allocation to 0.
+    const effectivePaidBeforeThisCents = Math.max(
+      activePaidBeforeThisCents - refundedBeforeThisCents,
+      0
+    );
     const netDueBeforeThisPaymentCents = Math.max(
-      positiveChargeTotalCents - creditTotalCents - activePaidBeforeThisCents,
+      positiveChargeTotalCents - creditTotalCents - effectivePaidBeforeThisCents,
       0
     );
     const allocatableCents = Math.min(
@@ -308,14 +316,20 @@ export class PaymentEventsRepository implements PaymentEventsStore {
          join payments p on p.id = pa.payment_id
          where p.is_void = false
          group by pa.invoice_id
+       ),
+       refunded_allocations as (
+         select ra.invoice_id, coalesce(sum(ra.amount), 0) as refunded
+         from payment_refund_allocations ra
+         group by ra.invoice_id
        )
        select
          i.id as "invoiceId",
          i.invoice_kind as "invoiceKind",
          i.total_amount as total,
-         coalesce(aa.allocated, 0) as allocated
+         coalesce(aa.allocated, 0) - coalesce(ra.refunded, 0) as allocated
        from invoices i
        left join active_allocations aa on aa.invoice_id = i.id
+       left join refunded_allocations ra on ra.invoice_id = i.id
        where i.job_id = $1
          and i.status = 'posted'
          and i.invoice_kind in ('main', 'adjustment')
@@ -360,6 +374,19 @@ export class PaymentEventsRepository implements PaymentEventsStore {
          and job_id = $1
          and id <> $2`,
       [jobId, excludedPaymentId]
+    );
+    return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  private async sumRefundCentsForJob(
+    tx: PaymentEventsQueryExecutor,
+    jobId: string
+  ): Promise<number> {
+    const result = await tx.query<{ cents: string | number }>(
+      `select coalesce(round(sum(amount) * 100), 0) as cents
+       from payment_refunds
+       where job_id = $1`,
+      [jobId]
     );
     return Number(result.rows[0]?.cents ?? 0);
   }

@@ -86,6 +86,11 @@ export interface PostedInvoiceExportRow {
 }
 
 export interface PaymentLedgerExportRow {
+  /** A money-in receipt or a money-out refund of one. `entryId` is the row's
+   * own ledger id; refund rows carry the original receipt id in `paymentId` so
+   * the two reconcile together. */
+  entryType: 'payment' | 'refund';
+  entryId: string;
   paymentId: string;
   invoiceIds: string[];
   jobId: string;
@@ -99,7 +104,8 @@ export interface PaymentLedgerExportRow {
   memo?: string;
   recordedByName: string;
   provider?: string;
-  providerPaymentId?: string;
+  /** Provider payment id for payment rows, provider refund id for refund rows. */
+  providerTransactionId?: string;
   processorFee?: number;
   applicationFee?: number;
   isVoid: boolean;

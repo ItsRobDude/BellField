@@ -18,7 +18,16 @@ import {
   getCurrentJobCostSnapshot
 } from '../job-costing/job-cost-rollup-utils';
 import { queryInventoryOnHand } from '../inventory/inventory-onhand-query';
-import { toCsv, type CsvColumn } from './report-csv';
+import { toCsv } from './report-csv';
+import {
+  AR_AGING_CSV_COLUMNS,
+  AR_CSV_COLUMNS,
+  INVENTORY_CSV_COLUMNS,
+  PAYMENT_LEDGER_CSV_COLUMNS,
+  POSTED_INVOICE_CSV_COLUMNS,
+  PROFITABILITY_CSV_COLUMNS,
+  SALES_TAX_CSV_COLUMNS
+} from './reporting-csv-columns';
 import {
   buildServiceAgreementReports,
   SERVICE_AGREEMENT_ACTIVE_CSV_COLUMNS,
@@ -34,90 +43,6 @@ function roundMoney(value: string | number): number {
 function roundQuantity(value: number): number {
   return Math.round(value * 10000) / 10000;
 }
-
-const AR_CSV_COLUMNS: CsvColumn<ArOpenBalancesReport['rows'][number]>[] = [
-  { header: 'Job #', value: (row) => row.jobNumber },
-  { header: 'Customer', value: (row) => row.customerName },
-  { header: 'Net billed', value: (row) => row.netBilled },
-  { header: 'Paid', value: (row) => row.paidTotal },
-  { header: 'Amount due', value: (row) => row.amountDue }
-];
-
-const AR_AGING_CSV_COLUMNS: CsvColumn<ArAgingReport['rows'][number]>[] = [
-  { header: 'Job #', value: (row) => row.jobNumber },
-  { header: 'Customer', value: (row) => row.customerName },
-  { header: 'Oldest posted', value: (row) => row.oldestPostedAt.slice(0, 10) },
-  { header: 'Days old', value: (row) => row.daysOld },
-  { header: 'Bucket', value: (row) => row.bucket },
-  { header: 'Amount due', value: (row) => row.amountDue }
-];
-
-const SALES_TAX_CSV_COLUMNS: CsvColumn<SalesTaxSummaryReport['rows'][number]>[] = [
-  { header: 'Tax rate bps', value: (row) => row.taxRateBasisPoints },
-  { header: 'Invoice count', value: (row) => row.invoiceCount },
-  { header: 'Taxable base', value: (row) => row.taxableBase },
-  { header: 'Tax', value: (row) => row.tax },
-  { header: 'Total', value: (row) => row.total }
-];
-
-const POSTED_INVOICE_CSV_COLUMNS: CsvColumn<PostedInvoiceExportRow>[] = [
-  { header: 'Invoice ID', value: (row) => row.invoiceId },
-  { header: 'Job #', value: (row) => row.jobNumber },
-  { header: 'Customer', value: (row) => row.customerName },
-  { header: 'Kind', value: (row) => row.invoiceKind },
-  { header: 'Posted at', value: (row) => row.postedAt },
-  { header: 'Subtotal', value: (row) => row.subtotal },
-  { header: 'Discount', value: (row) => row.discount },
-  { header: 'Taxable base', value: (row) => row.taxableBase },
-  { header: 'Tax', value: (row) => row.tax },
-  { header: 'Total', value: (row) => row.total }
-];
-
-const PAYMENT_LEDGER_CSV_COLUMNS: CsvColumn<PaymentLedgerExportRow>[] = [
-  { header: 'Payment ID', value: (row) => row.paymentId },
-  { header: 'Invoice IDs', value: (row) => row.invoiceIds.join('; ') },
-  { header: 'Job #', value: (row) => row.jobNumber },
-  { header: 'Customer', value: (row) => row.customerName },
-  { header: 'Amount', value: (row) => row.amount },
-  { header: 'Method', value: (row) => row.method },
-  { header: 'Source', value: (row) => row.source },
-  { header: 'Received at', value: (row) => row.receivedAt },
-  { header: 'Reference', value: (row) => row.reference ?? '' },
-  { header: 'Memo', value: (row) => row.memo ?? '' },
-  { header: 'Recorded by', value: (row) => row.recordedByName },
-  { header: 'Provider', value: (row) => row.provider ?? '' },
-  { header: 'Provider payment ID', value: (row) => row.providerPaymentId ?? '' },
-  { header: 'Processor fee', value: (row) => row.processorFee ?? '' },
-  { header: 'BellField fee', value: (row) => row.applicationFee ?? '' },
-  { header: 'Void', value: (row) => (row.isVoid ? 'yes' : 'no') },
-  { header: 'Voided at', value: (row) => row.voidedAt ?? '' },
-  { header: 'Void reason', value: (row) => row.voidReason ?? '' }
-];
-
-const PROFITABILITY_CSV_COLUMNS: CsvColumn<JobProfitabilityReport['rows'][number]>[] = [
-  { header: 'Job #', value: (row) => row.jobNumber },
-  { header: 'Customer', value: (row) => row.customerName },
-  { header: 'Status', value: (row) => row.status },
-  { header: 'Revenue', value: (row) => row.revenue },
-  { header: 'Material', value: (row) => row.materialCost },
-  { header: 'Labor', value: (row) => row.laborCost },
-  { header: 'Expense', value: (row) => row.expenseCost },
-  { header: 'Total cost', value: (row) => row.totalCost },
-  { header: 'Profit', value: (row) => row.profit },
-  { header: 'Margin bps', value: (row) => row.marginBasisPoints },
-  { header: 'Cost complete', value: (row) => (row.costComplete ? 'yes' : 'no') },
-  { header: 'Unresolved lines', value: (row) => row.unresolvedLineCount },
-  { header: 'Finalized', value: (row) => (row.isFinalized ? 'yes' : 'no') }
-];
-
-const INVENTORY_CSV_COLUMNS: CsvColumn<InventoryValuationReport['rows'][number]>[] = [
-  { header: 'Item', value: (row) => row.itemName },
-  { header: 'Kind', value: (row) => row.itemKind },
-  { header: 'Location', value: (row) => row.locationName },
-  { header: 'Quantity', value: (row) => row.quantity },
-  { header: 'Avg unit cost', value: (row) => row.averageUnitCost },
-  { header: 'Total value', value: (row) => row.totalValue }
-];
 
 /** A CSV export plus the suggested download filename. */
 export type ReportCsvExport = { filename: string; csv: string };
@@ -389,18 +314,24 @@ export class ReportingService {
          from payments p
          where p.is_void = false
          group by p.job_id
+       ),
+       refunded as (
+         select r.job_id, coalesce(sum(r.amount), 0) as refunded_total
+         from payment_refunds r
+         group by r.job_id
        )
        select
          j.id as "jobId",
          j.job_number as "jobNumber",
          c.name as "customerName",
          b.oldest_posted_at as "oldestPostedAt",
-         coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) as "amountDue"
+         coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) + coalesce(rd.refunded_total, 0) as "amountDue"
        from billed b
        join jobs j on j.id = b.job_id
        join customers c on c.id = j.bill_to_customer_id
        left join paid pd on pd.job_id = b.job_id
-       where coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) > 0
+       left join refunded rd on rd.job_id = b.job_id
+       where coalesce(b.net_billed, 0) - coalesce(pd.paid_total, 0) + coalesce(rd.refunded_total, 0) > 0
          and b.oldest_posted_at is not null
        order by "amountDue" desc`
     );
@@ -566,7 +497,9 @@ export class ReportingService {
        order by p.received_at desc, p.id asc`
     );
 
-    return result.rows.map((row) => ({
+    const paymentRows: PaymentLedgerExportRow[] = result.rows.map((row) => ({
+      entryType: 'payment',
+      entryId: row.paymentId,
       paymentId: row.paymentId,
       invoiceIds: row.invoiceIds ?? [],
       jobId: row.jobId,
@@ -580,12 +513,93 @@ export class ReportingService {
       memo: row.memo ?? undefined,
       recordedByName: row.recordedByName,
       provider: row.provider ?? undefined,
-      providerPaymentId: row.providerPaymentId ?? undefined,
+      providerTransactionId: row.providerPaymentId ?? undefined,
       processorFee: row.processorFee === null ? undefined : roundMoney(row.processorFee),
       applicationFee: row.applicationFee === null ? undefined : roundMoney(row.applicationFee),
       isVoid: row.isVoid,
       voidedAt: row.voidedAt ? new Date(row.voidedAt).toISOString() : undefined,
       voidReason: row.voidReason ?? undefined
+    }));
+
+    // Refunds are part of the same money ledger; without them the accounting
+    // hand-off would overstate net receipts. They reconcile to their payment via
+    // the shared paymentId, and sort interleaved by date.
+    const refundRows = await this.queryRefundLedgerExportRows();
+    return [...paymentRows, ...refundRows].sort((a, b) =>
+      a.receivedAt === b.receivedAt
+        ? a.paymentId.localeCompare(b.paymentId)
+        : b.receivedAt.localeCompare(a.receivedAt)
+    );
+  }
+
+  private async queryRefundLedgerExportRows(): Promise<PaymentLedgerExportRow[]> {
+    const result = await this.databaseService.query<{
+      refundId: string;
+      paymentId: string;
+      invoiceIds: string[] | null;
+      jobId: string;
+      jobNumber: string;
+      customerName: string;
+      amount: string | number;
+      method: string;
+      source: 'manual' | 'bellfield_payments';
+      refundedAt: string | Date;
+      reason: string | null;
+      recordedByName: string;
+      provider: string | null;
+      providerRefundId: string | null;
+      applicationFeeRefunded: string | number | null;
+    }>(
+      `select
+         r.id as "refundId",
+         r.payment_id as "paymentId",
+         array_remove(array_agg(ra.invoice_id order by ra.invoice_id), null) as "invoiceIds",
+         r.job_id as "jobId",
+         j.job_number as "jobNumber",
+         c.name as "customerName",
+         r.amount,
+         r.method,
+         r.source,
+         r.refunded_at as "refundedAt",
+         r.reason,
+         r.refunded_by_name as "recordedByName",
+         r.provider,
+         r.provider_refund_id as "providerRefundId",
+         r.application_fee_refunded as "applicationFeeRefunded"
+       from payment_refunds r
+       join jobs j on j.id = r.job_id
+       join customers c on c.id = j.bill_to_customer_id
+       left join payment_refund_allocations ra on ra.refund_id = r.id
+       group by
+         r.id, r.payment_id, r.job_id, j.job_number, c.name, r.amount, r.method, r.source,
+         r.refunded_at, r.reason, r.refunded_by_name, r.provider, r.provider_refund_id,
+         r.application_fee_refunded
+       order by r.refunded_at desc, r.id asc`
+    );
+
+    return result.rows.map((row) => ({
+      entryType: 'refund',
+      entryId: row.refundId,
+      paymentId: row.paymentId,
+      invoiceIds: row.invoiceIds ?? [],
+      jobId: row.jobId,
+      jobNumber: row.jobNumber,
+      customerName: row.customerName,
+      amount: roundMoney(row.amount),
+      method: row.method,
+      source: row.source === 'bellfield_payments' ? 'bellfieldPayments' : 'manual',
+      receivedAt: new Date(row.refundedAt).toISOString(),
+      reference: undefined,
+      memo: row.reason ?? undefined,
+      recordedByName: row.recordedByName,
+      provider: row.provider ?? undefined,
+      providerTransactionId: row.providerRefundId ?? undefined,
+      processorFee: undefined,
+      applicationFee:
+        row.applicationFeeRefunded === null ? undefined : roundMoney(row.applicationFeeRefunded),
+      isVoid: false,
+      voidedAt: undefined,
+      voidReason: undefined
     }));
   }
 
