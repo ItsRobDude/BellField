@@ -3,11 +3,13 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
 import type {
   RecordPaidEventOutcome,
+  RecordRefundEventOutcome,
+  RelayPaymentRefundRequestRecord,
   RelayPaymentSessionRecord,
   RelayPaymentsStore,
   RelayShopPaymentsConfig
 } from './payments.types';
-import type { RelayPaymentEventRecord } from '@bellfield/contracts';
+import type { RelayPaymentEventRecord, RelayRefundEventRecord } from '@bellfield/contracts';
 
 type PaymentSessionRow = {
   id: string;
@@ -51,6 +53,43 @@ const PAYMENT_SESSION_COLUMNS = `id, shop_id, idempotency_key, job_ref, invoice_
   amount_cents, currency, description, customer_email, success_url, cancel_url,
   stripe_connected_account_id, stripe_checkout_session_id, stripe_payment_intent_id,
   checkout_url, status, application_fee_cents, expires_at, paid_at, created_at, updated_at`;
+
+type RefundRequestRow = {
+  id: string;
+  shop_id: string;
+  payment_session_id: string;
+  idempotency_key: string;
+  amount_cents: number;
+  currency: string;
+  reason: string | null;
+  stripe_connected_account_id: string;
+  stripe_payment_intent_id: string;
+  stripe_refund_id: string | null;
+  application_fee_refunded_cents: number | null;
+  status: RelayPaymentRefundRequestRecord['status'];
+  failure_reason: string | null;
+  created_at: Date;
+  updated_at: Date;
+};
+
+type RefundEventRow = {
+  id: string;
+  refund_request_id: string;
+  stripe_refund_id: string;
+  provider_payment_id: string;
+  provider_session_id: string;
+  job_ref: string;
+  amount_cents: number;
+  currency: string;
+  application_fee_refunded_cents: number | null;
+  status: 'succeeded' | 'failed';
+  failure_reason: string | null;
+  occurred_at: Date;
+};
+
+const REFUND_REQUEST_COLUMNS = `id, shop_id, payment_session_id, idempotency_key, amount_cents,
+  currency, reason, stripe_connected_account_id, stripe_payment_intent_id, stripe_refund_id,
+  application_fee_refunded_cents, status, failure_reason, created_at, updated_at`;
 
 @Injectable()
 export class RelayPaymentsRepository implements RelayPaymentsStore {
@@ -254,6 +293,205 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
     );
     return (result.rowCount ?? 0) > 0;
   }
+
+  async withRefundSessionLock<T>(
+    shopId: string,
+    stripeCheckoutSessionId: string,
+    callback: () => Promise<T>
+  ): Promise<T> {
+    return this.database.transaction(async (queryable) => {
+      await queryable.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', [
+        `relay-refund:${shopId}:${stripeCheckoutSessionId}`
+      ]);
+      return callback();
+    });
+  }
+
+  async findRefundRequestByIdempotencyKey(
+    shopId: string,
+    idempotencyKey: string
+  ): Promise<RelayPaymentRefundRequestRecord | null> {
+    const result = await this.database.query<RefundRequestRow>(
+      `select ${REFUND_REQUEST_COLUMNS}
+       from relay_payment_refund_requests
+       where shop_id = $1 and idempotency_key = $2`,
+      [shopId, idempotencyKey]
+    );
+    return result.rows[0] ? toRefundRequestRecord(result.rows[0]) : null;
+  }
+
+  async findPaidSessionForRefund(
+    shopId: string,
+    stripeCheckoutSessionId: string
+  ): Promise<RelayPaymentSessionRecord | null> {
+    const result = await this.database.query<PaymentSessionRow>(
+      `select ${PAYMENT_SESSION_COLUMNS}
+       from relay_payment_sessions
+       where shop_id = $1 and stripe_checkout_session_id = $2 and status = 'paid'`,
+      [shopId, stripeCheckoutSessionId]
+    );
+    return result.rows[0] ? toSessionRecord(result.rows[0]) : null;
+  }
+
+  async sumConsumedRefundCentsForSession(paymentSessionId: string): Promise<number> {
+    const result = await this.database.query<{ consumed: string | number }>(
+      `select coalesce(sum(amount_cents), 0) as consumed
+       from relay_payment_refund_requests
+       where payment_session_id = $1 and status in ('requested', 'succeeded')`,
+      [paymentSessionId]
+    );
+    return Number(result.rows[0]?.consumed ?? 0);
+  }
+
+  async createRefundRequest(
+    input: Parameters<RelayPaymentsStore['createRefundRequest']>[0]
+  ): Promise<RelayPaymentRefundRequestRecord> {
+    const inserted = await this.database.query<RefundRequestRow>(
+      `insert into relay_payment_refund_requests (
+         id, shop_id, payment_session_id, idempotency_key, amount_cents, currency, reason,
+         stripe_connected_account_id, stripe_payment_intent_id, application_fee_refunded_cents,
+         status, created_at, updated_at
+       )
+       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'requested', $11, $11)
+       on conflict (shop_id, idempotency_key) do nothing
+       returning ${REFUND_REQUEST_COLUMNS}`,
+      [
+        input.id,
+        input.shopId,
+        input.paymentSessionId,
+        input.idempotencyKey,
+        input.amountCents,
+        input.currency.toUpperCase(),
+        input.reason,
+        input.stripeConnectedAccountId,
+        input.stripePaymentIntentId,
+        input.applicationFeeRefundedCents,
+        input.createdAt
+      ]
+    );
+    if (inserted.rows[0]) {
+      return toRefundRequestRecord(inserted.rows[0]);
+    }
+    const existing = await this.findRefundRequestByIdempotencyKey(
+      input.shopId,
+      input.idempotencyKey
+    );
+    if (!existing) {
+      throw new Error('Refund request insert conflicted but no request was found.');
+    }
+    return existing;
+  }
+
+  async setRefundRequestStripeRefundId(
+    input: Parameters<RelayPaymentsStore['setRefundRequestStripeRefundId']>[0]
+  ): Promise<void> {
+    await this.database.query(
+      `update relay_payment_refund_requests
+       set stripe_refund_id = $2, updated_at = $3
+       where id = $1`,
+      [input.id, input.stripeRefundId, input.updatedAt]
+    );
+  }
+
+  async recordRefundEvent(
+    input: Parameters<RelayPaymentsStore['recordRefundEvent']>[0]
+  ): Promise<RecordRefundEventOutcome> {
+    return this.database.transaction(async (queryable) => {
+      const requestResult = await queryable.query<
+        RefundRequestRow & { stripe_checkout_session_id: string }
+      >(
+        `select
+           r.id, r.shop_id, r.payment_session_id, r.idempotency_key, r.amount_cents,
+           r.currency, r.reason, r.stripe_connected_account_id, r.stripe_payment_intent_id,
+           r.stripe_refund_id, r.application_fee_refunded_cents, r.status, r.failure_reason,
+           r.created_at, r.updated_at,
+           s.stripe_checkout_session_id
+         from relay_payment_refund_requests r
+         join relay_payment_sessions s on s.id = r.payment_session_id
+         where r.stripe_refund_id = $1
+         for update of r`,
+        [input.stripeRefundId]
+      );
+      const request = requestResult.rows[0];
+      if (!request) {
+        // Out-of-band refund (e.g. created in the Stripe dashboard) — refund
+        // events require a BellField request, so there is nothing to attach to.
+        return 'requestNotFound';
+      }
+
+      await queryable.query(
+        `update relay_payment_refund_requests
+         set status = $2, failure_reason = $3, updated_at = $4
+         where id = $1`,
+        [request.id, input.status, input.failureReason, input.occurredAt]
+      );
+
+      const inserted = await queryable.query(
+        `insert into relay_payment_refund_events (
+           id, shop_id, refund_request_id, payment_session_id, stripe_event_id, stripe_refund_id,
+           provider_payment_id, provider_session_id, amount_cents, currency,
+           application_fee_refunded_cents, status, failure_reason, occurred_at, created_at
+         )
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
+         on conflict do nothing`,
+        [
+          randomUUID(),
+          request.shop_id,
+          request.id,
+          request.payment_session_id,
+          input.stripeEventId,
+          input.stripeRefundId,
+          request.stripe_payment_intent_id,
+          request.stripe_checkout_session_id,
+          input.amountCents,
+          input.currency.toUpperCase(),
+          request.application_fee_refunded_cents,
+          input.status,
+          input.failureReason,
+          input.occurredAt
+        ]
+      );
+      return (inserted.rowCount ?? 0) > 0 ? 'recorded' : 'duplicate';
+    });
+  }
+
+  async listUndeliveredRefundEvents(shopId: string): Promise<RelayRefundEventRecord[]> {
+    const result = await this.database.query<RefundEventRow>(
+      `select
+         e.id,
+         e.refund_request_id,
+         e.stripe_refund_id,
+         e.provider_payment_id,
+         e.provider_session_id,
+         s.job_ref,
+         e.amount_cents,
+         e.currency,
+         e.application_fee_refunded_cents,
+         e.status,
+         e.failure_reason,
+         e.occurred_at
+       from relay_payment_refund_events e
+       join relay_payment_sessions s on s.id = e.payment_session_id
+       where e.shop_id = $1 and e.delivered_at is null
+       order by e.occurred_at asc, e.created_at asc`,
+      [shopId]
+    );
+    return result.rows.map(toRefundEventRecord);
+  }
+
+  async acknowledgeRefundEvent(
+    shopId: string,
+    refundEventId: string,
+    deliveredAt: Date
+  ): Promise<boolean> {
+    const result = await this.database.query(
+      `update relay_payment_refund_events
+       set delivered_at = coalesce(delivered_at, $3)
+       where id = $1 and shop_id = $2`,
+      [refundEventId, shopId, deliveredAt]
+    );
+    return (result.rowCount ?? 0) > 0;
+  }
 }
 
 function toSessionRecord(row: PaymentSessionRow): RelayPaymentSessionRecord {
@@ -296,5 +534,43 @@ function toEventRecord(row: PaymentEventRow): RelayPaymentEventRecord {
     applicationFeeCents: row.application_fee_cents,
     processorFeeCents: row.processor_fee_cents,
     paidAt: row.paid_at.toISOString()
+  };
+}
+
+function toRefundRequestRecord(row: RefundRequestRow): RelayPaymentRefundRequestRecord {
+  return {
+    id: row.id,
+    shopId: row.shop_id,
+    paymentSessionId: row.payment_session_id,
+    idempotencyKey: row.idempotency_key,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    reason: row.reason,
+    stripeConnectedAccountId: row.stripe_connected_account_id,
+    stripePaymentIntentId: row.stripe_payment_intent_id,
+    stripeRefundId: row.stripe_refund_id,
+    applicationFeeRefundedCents: row.application_fee_refunded_cents,
+    status: row.status,
+    failureReason: row.failure_reason,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function toRefundEventRecord(row: RefundEventRow): RelayRefundEventRecord {
+  return {
+    refundEventId: row.id,
+    refundRequestId: row.refund_request_id,
+    provider: 'stripe',
+    providerRefundId: row.stripe_refund_id,
+    providerPaymentId: row.provider_payment_id,
+    providerSessionId: row.provider_session_id,
+    jobRef: row.job_ref,
+    amountCents: row.amount_cents,
+    currency: row.currency,
+    applicationFeeRefundedCents: row.application_fee_refunded_cents,
+    status: row.status,
+    failureReason: row.failure_reason,
+    occurredAt: row.occurred_at.toISOString()
   };
 }

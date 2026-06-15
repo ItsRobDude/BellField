@@ -3,6 +3,8 @@ import type { StripeWebhookEvent } from './stripe-payments.service';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
 import type {
   RecordPaidEventOutcome,
+  RecordRefundEventOutcome,
+  RelayPaymentRefundRequestRecord,
   RelayPaymentSessionRecord,
   RelayPaymentsStore
 } from './payments.types';
@@ -19,10 +21,23 @@ function makeService(overrides?: {
   existingSession?: RelayPaymentSessionRecord | null;
   recordPaidEvent?: (input: unknown) => Promise<RecordPaidEventOutcome>;
   config?: { paymentsStatus?: 'enabled' | 'disabled'; connectedAccount?: string | null };
+  existingRefundRequest?: RelayPaymentRefundRequestRecord | null;
+  paidSession?: RelayPaymentSessionRecord | null;
+  consumedRefundCents?: number;
+  recordRefundOutcome?: RecordRefundEventOutcome;
+  createRefundThrows?: boolean;
 }) {
   const recordPaidEventCalls: unknown[] = [];
+  const recordRefundEventCalls: unknown[] = [];
   let recordSessionInput: Parameters<RelayPaymentsStore['recordSession']>[0] | undefined;
   let createCheckoutInput: Record<string, unknown> | undefined;
+  let createRefundRequestInput:
+    | Parameters<RelayPaymentsStore['createRefundRequest']>[0]
+    | undefined;
+  let createRefundInput: Record<string, unknown> | undefined;
+  let setRefundStripeIdInput:
+    | Parameters<RelayPaymentsStore['setRefundRequestStripeRefundId']>[0]
+    | undefined;
 
   const store: RelayPaymentsStore = {
     withPaymentSessionLock: async <T>(_shopId: string, _key: string, cb: () => Promise<T>) => cb(),
@@ -55,7 +70,38 @@ function makeService(overrides?: {
       return (await overrides?.recordPaidEvent?.(input)) ?? 'recorded';
     },
     listUndeliveredPaymentEvents: async () => [],
-    acknowledgePaymentEvent: async () => true
+    acknowledgePaymentEvent: async () => true,
+    withRefundSessionLock: async <T>(_shopId: string, _sessionId: string, cb: () => Promise<T>) =>
+      cb(),
+    findRefundRequestByIdempotencyKey: async () => overrides?.existingRefundRequest ?? null,
+    findPaidSessionForRefund: async () => overrides?.paidSession ?? null,
+    sumConsumedRefundCentsForSession: async () => overrides?.consumedRefundCents ?? 0,
+    createRefundRequest: async (input) => {
+      createRefundRequestInput = input;
+      return makeRefundRequest({
+        id: input.id,
+        shopId: input.shopId,
+        paymentSessionId: input.paymentSessionId,
+        idempotencyKey: input.idempotencyKey,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        reason: input.reason,
+        stripeConnectedAccountId: input.stripeConnectedAccountId,
+        stripePaymentIntentId: input.stripePaymentIntentId,
+        applicationFeeRefundedCents: input.applicationFeeRefundedCents,
+        createdAt: input.createdAt,
+        updatedAt: input.createdAt
+      });
+    },
+    setRefundRequestStripeRefundId: async (input) => {
+      setRefundStripeIdInput = input;
+    },
+    recordRefundEvent: async (input) => {
+      recordRefundEventCalls.push(input);
+      return overrides?.recordRefundOutcome ?? 'recorded';
+    },
+    listUndeliveredRefundEvents: async () => [],
+    acknowledgeRefundEvent: async () => true
   };
 
   const stripe = {
@@ -68,6 +114,13 @@ function makeService(overrides?: {
         checkoutUrl: 'https://stripe.test/checkout',
         expiresAt: new Date('2026-06-14T00:00:00.000Z')
       };
+    },
+    createRefund: async (input: Record<string, unknown>) => {
+      createRefundInput = input;
+      if (overrides?.createRefundThrows) {
+        throw new Error('stripe refund failed');
+      }
+      return { stripeRefundId: 're_1', status: 'pending' as const };
     },
     constructWebhookEvent: (): StripeWebhookEvent => ({
       id: 'evt',
@@ -82,8 +135,12 @@ function makeService(overrides?: {
     service,
     stripe,
     getRecordPaidEventCalls: () => recordPaidEventCalls,
+    getRecordRefundEventCalls: () => recordRefundEventCalls,
     getRecordSessionInput: () => recordSessionInput,
-    getCreateCheckoutInput: () => createCheckoutInput
+    getCreateCheckoutInput: () => createCheckoutInput,
+    getCreateRefundRequestInput: () => createRefundRequestInput,
+    getCreateRefundInput: () => createRefundInput,
+    getSetRefundStripeIdInput: () => setRefundStripeIdInput
   };
 }
 
@@ -115,6 +172,30 @@ function makeSession(overrides?: Partial<RelayPaymentSessionRecord>): RelayPayme
   };
 }
 
+function makeRefundRequest(
+  overrides?: Partial<RelayPaymentRefundRequestRecord>
+): RelayPaymentRefundRequestRecord {
+  const createdAt = new Date('2026-06-14T12:00:00.000Z');
+  return {
+    id: 'pay_refund_1',
+    shopId: 'shop_1',
+    paymentSessionId: 'pay_sess_existing',
+    idempotencyKey: 'invoice-refund:pay-1:30000',
+    amountCents: 30_000,
+    currency: 'USD',
+    reason: null,
+    stripeConnectedAccountId: 'acct_1',
+    stripePaymentIntentId: 'pi_1',
+    stripeRefundId: null,
+    applicationFeeRefundedCents: 300,
+    status: 'requested',
+    failureReason: null,
+    createdAt,
+    updatedAt: createdAt,
+    ...overrides
+  };
+}
+
 const baseRequest = {
   idempotencyKey: 'invoice-payment:job-1:84500',
   jobRef: 'job-1',
@@ -123,6 +204,25 @@ const baseRequest = {
   currency: 'USD',
   description: 'BellField invoice 1001'
 };
+
+const baseRefundRequest = {
+  idempotencyKey: 'invoice-refund:pay-1:30000',
+  providerSessionId: 'cs_paid',
+  amountCents: 30_000,
+  reason: 'overcharge'
+};
+
+function paidSession(overrides?: Partial<RelayPaymentSessionRecord>): RelayPaymentSessionRecord {
+  return makeSession({
+    id: 'pay_sess_paid',
+    stripeCheckoutSessionId: 'cs_paid',
+    stripePaymentIntentId: 'pi_1',
+    status: 'paid',
+    amountCents: 84_500,
+    applicationFeeCents: 845,
+    ...overrides
+  });
+}
 
 describe('RelayPaymentsService.createPaymentSession', () => {
   beforeEach(() => {
@@ -223,5 +323,125 @@ describe('RelayPaymentsService.handleStripeWebhook', () => {
     });
     await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
     expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
+  });
+});
+
+describe('RelayPaymentsService.createRefund', () => {
+  beforeEach(() => {
+    process.env.BELLFIELD_RELAY_PUBLIC_BASE_URL = 'https://relay.example';
+  });
+
+  it('refunds against the relay-owned session, not an install-supplied payment intent', async () => {
+    const ctx = makeService({ paidSession: paidSession() });
+    const result = await ctx.service.createRefund(shop, baseRefundRequest);
+
+    expect(result.kind).toBe('requested');
+    // The connected account + payment intent come from the relay's stored session.
+    expect(ctx.getCreateRefundInput()?.connectedAccountId).toBe('acct_1');
+    expect(ctx.getCreateRefundInput()?.paymentIntentId).toBe('pi_1');
+    expect(ctx.getCreateRefundInput()?.amountCents).toBe(30_000);
+    // Proportional application fee = 845 * 30000 / 84500 = 300.
+    expect(ctx.getCreateRefundRequestInput()?.applicationFeeRefundedCents).toBe(300);
+    expect(ctx.getSetRefundStripeIdInput()?.stripeRefundId).toBe('re_1');
+  });
+
+  it('rejects a refund that exceeds the remaining refundable (incl. pending/consumed)', async () => {
+    // $845.00 paid, $700.00 already committed → only $145.00 remains; $300 is too much.
+    const ctx = makeService({ paidSession: paidSession(), consumedRefundCents: 70_000 });
+    const result = await ctx.service.createRefund(shop, baseRefundRequest);
+
+    expect(result.kind).toBe('failed');
+    if (result.kind === 'failed') {
+      expect(result.code).toBe('amountExceedsRefundable');
+    }
+    expect(ctx.getCreateRefundInput()).toBeUndefined();
+  });
+
+  it('rejects when no paid session matches the install reference', async () => {
+    const ctx = makeService({ paidSession: null });
+    const result = await ctx.service.createRefund(shop, baseRefundRequest);
+
+    expect(result.kind).toBe('failed');
+    if (result.kind === 'failed') {
+      expect(result.code).toBe('sessionNotFound');
+    }
+    expect(ctx.getCreateRefundInput()).toBeUndefined();
+  });
+
+  it('replays a fully-issued refund without calling Stripe again', async () => {
+    const ctx = makeService({
+      existingRefundRequest: makeRefundRequest({ stripeRefundId: 're_existing' })
+    });
+    const result = await ctx.service.createRefund(shop, baseRefundRequest);
+
+    expect(result.kind).toBe('requested');
+    if (result.kind === 'requested') {
+      expect(result.providerRefundId).toBe('re_existing');
+    }
+    expect(ctx.getCreateRefundInput()).toBeUndefined();
+  });
+
+  it('reports a retryable providerError when Stripe refund creation throws', async () => {
+    const ctx = makeService({ paidSession: paidSession(), createRefundThrows: true });
+    const result = await ctx.service.createRefund(shop, baseRefundRequest);
+
+    expect(result.kind).toBe('failed');
+    if (result.kind === 'failed') {
+      expect(result.code).toBe('providerError');
+      expect(result.retryable).toBe(true);
+    }
+  });
+});
+
+describe('RelayPaymentsService.handleStripeWebhook refunds', () => {
+  function refundEvent(
+    type: string,
+    status: string,
+    amount = 30_000,
+    refundId = 're_1'
+  ): StripeWebhookEvent {
+    return {
+      id: `evt_${refundId}_${status}`,
+      type,
+      created: 1_700_000_000,
+      account: 'acct_1',
+      data: {
+        object: {
+          object: 'refund',
+          id: refundId,
+          status,
+          payment_intent: 'pi_1',
+          amount,
+          currency: 'usd',
+          failure_reason: status === 'failed' ? 'card_declined' : null
+        }
+      }
+    };
+  }
+
+  it('records a terminal succeeded refund event', async () => {
+    const ctx = makeService();
+    ctx.stripe.constructWebhookEvent = () => refundEvent('refund.updated', 'succeeded');
+    await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
+    const calls = ctx.getRecordRefundEventCalls();
+    expect(calls).toHaveLength(1);
+    expect((calls[0] as { status?: string }).status).toBe('succeeded');
+    expect((calls[0] as { amountCents?: number }).amountCents).toBe(30_000);
+  });
+
+  it('ignores a non-terminal (pending) refund event', async () => {
+    const ctx = makeService();
+    ctx.stripe.constructWebhookEvent = () => refundEvent('refund.created', 'pending');
+    await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
+    expect(ctx.getRecordRefundEventCalls()).toHaveLength(0);
+  });
+
+  it('records a failed refund event so the install can clear the pending request', async () => {
+    const ctx = makeService();
+    ctx.stripe.constructWebhookEvent = () => refundEvent('refund.failed', 'failed');
+    await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
+    const calls = ctx.getRecordRefundEventCalls();
+    expect(calls).toHaveLength(1);
+    expect((calls[0] as { status?: string }).status).toBe('failed');
   });
 });
