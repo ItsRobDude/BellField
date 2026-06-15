@@ -186,6 +186,12 @@ export class OnlineRefundsRepository {
         };
       }
 
+      if (await this.hasUnresolvedAcceptedRefundForPayment(paymentId, queryable)) {
+        throw new ConflictException(
+          'This payment has an online refund that could not be recorded. Contact BellField support before requesting another refund.'
+        );
+      }
+
       // Remaining refundable = payment − confirmed refunds − outstanding requests.
       const paymentCents = dollarsToCents(Number(payment.amount));
       const confirmedCents = await this.sumConfirmedRefundCentsForPayment(paymentId, queryable);
@@ -301,6 +307,24 @@ export class OnlineRefundsRepository {
       [paymentId]
     );
     return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  private async hasUnresolvedAcceptedRefundForPayment(
+    paymentId: string,
+    queryable: QueryExecutor
+  ): Promise<boolean> {
+    const result = await queryable.query<{ id: string }>(
+      `select id
+       from online_refund_requests
+       where payment_id = $1
+         and status = 'failed'
+         and apply_attempt_count > 0
+       order by failed_at desc nulls last, updated_at desc
+       limit 1
+       for update`,
+      [paymentId]
+    );
+    return Boolean(result.rows[0]);
   }
 
   private async sumOutstandingRequestCentsForPayment(

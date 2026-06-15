@@ -205,7 +205,10 @@ true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
   leaves the request `requested` with `last_error` and the **same idempotency
   key** (a retry never double-refunds); only a **terminal/non-retryable** failure
   moves it to `failed`. Response states: `requested | failed | providerError |
-paymentsNotConfigured`.
+paymentsNotConfigured`. A `failed` request with `apply_attempt_count > 0` is
+  not a clean processor rejection: it means Stripe accepted the refund but
+  BellField dead-lettered local recording, so the API blocks additional refunds
+  for that payment until support reconciles it.
 - **Worker** `applyRelayRefundEvent`: write `payment_refunds`
   (`bellfield_payments`/`stripe`/`provider_refund_id`/proportional
   `application_fee_refunded`) + reverse allocations main-first, **idempotent on
