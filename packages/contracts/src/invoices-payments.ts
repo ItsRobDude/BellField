@@ -246,10 +246,35 @@ export interface PaymentRefundResponse {
   refund: PaymentRefund;
 }
 
+/**
+ * A pending or failed online-refund request, surfaced to the office so it can show
+ * a card refund's in-flight state. Confirmed online refunds are NOT here — they
+ * surface as `PaymentRefund` rows once the worker records them. No raw provider
+ * error text is exposed; the office renders fixed copy from `status` /
+ * `submissionState`.
+ */
+export interface OnlineRefundRequestSummary {
+  id: string;
+  paymentId: string;
+  amount: number;
+  currency: string;
+  status: 'requested' | 'failed';
+  /**
+   * `submitted`: the processor accepted the refund and it is awaiting worker
+   * confirmation — don't resubmit. `needsResubmit`: it never cleanly reached the
+   * processor (a transient failure) and the office can retry. Only meaningful
+   * while `status === 'requested'`.
+   */
+  submissionState: 'submitted' | 'needsResubmit';
+  requestedAt: string;
+}
+
 /** A job's payments and refunds across its posted invoices, newest first. */
 export interface JobPaymentsResponse {
   payments: Payment[];
   refunds: PaymentRefund[];
+  /** Pending/failed online card-refund requests (confirmed ones appear in `refunds`). */
+  onlineRefundRequests: OnlineRefundRequestSummary[];
 }
 
 export type OnlinePaymentLinkState =

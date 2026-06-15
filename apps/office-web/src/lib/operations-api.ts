@@ -996,8 +996,15 @@ export {
   recordOfficePayment,
   createOfficeOnlinePaymentLink,
   voidOfficePayment,
-  refundOfficePayment
+  refundOfficePayment,
+  requestOfficeOnlineRefund
 } from './operations-payments-api';
+
+export type {
+  OnlineRefundRequest,
+  OnlineRefundResponse,
+  OnlineRefundRequestSummary
+} from '@bellfield/contracts';
 
 /** Cross-job bookkeeping worklists: ready-to-post, open balances, recently posted. */
 export async function getOfficeBookkeepingQueues(input: {

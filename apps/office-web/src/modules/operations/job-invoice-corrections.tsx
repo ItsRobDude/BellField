@@ -12,6 +12,7 @@ import {
   postOfficeInvoiceById,
   recordOfficePayment,
   refundOfficePayment,
+  requestOfficeOnlineRefund,
   voidOfficeInvoiceLine,
   voidOfficePayment,
   type InvoiceAdjustmentKind,
@@ -19,6 +20,7 @@ import {
   type InvoiceSummary,
   type JobInvoiceBalance,
   type OnlinePaymentLinkResponse,
+  type OnlineRefundRequestSummary,
   type Payment,
   type PaymentRefund
 } from '@/lib/operations-api';
@@ -81,6 +83,9 @@ export function JobInvoiceCorrections({
   const [corrections, setCorrections] = useState<InvoiceSummary[]>([]);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [refunds, setRefunds] = useState<PaymentRefund[]>([]);
+  const [onlineRefundRequests, setOnlineRefundRequests] = useState<OnlineRefundRequestSummary[]>(
+    []
+  );
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -111,12 +116,13 @@ export function JobInvoiceCorrections({
         listOfficeJobAdjustments({ jobId, apiBaseUrl, sessionToken }),
         canViewPayments
           ? listOfficeJobPayments({ jobId, apiBaseUrl, sessionToken })
-          : Promise.resolve({ payments: [], refunds: [] })
+          : Promise.resolve({ payments: [], refunds: [], onlineRefundRequests: [] })
       ]);
       setBalance(balanceResult);
       setCorrections(adjustmentsResult.adjustments);
       setPayments(paymentsResult.payments);
       setRefunds(paymentsResult.refunds);
+      setOnlineRefundRequests(paymentsResult.onlineRefundRequests);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to load corrections.');
     } finally {
@@ -127,6 +133,21 @@ export function JobInvoiceCorrections({
   useEffect(() => {
     void load();
   }, [load]);
+
+  // While an accepted online refund awaits worker confirmation, poll so the pending
+  // row becomes the confirmed refund without a manual reload (smooth demo/smoke).
+  const hasPendingOnlineRefund = onlineRefundRequests.some(
+    (request) => request.status === 'requested' && request.submissionState === 'submitted'
+  );
+  useEffect(() => {
+    if (!hasPendingOnlineRefund) {
+      return;
+    }
+    const interval = setInterval(() => {
+      void load();
+    }, 10_000);
+    return () => clearInterval(interval);
+  }, [hasPendingOnlineRefund, load]);
 
   async function refreshBalance() {
     try {
@@ -369,6 +390,10 @@ export function JobInvoiceCorrections({
         return;
       }
     }
+    if (refundDraft.kind === 'online') {
+      await saveOnlineRefund(refundDraft.paymentId, amount, refundDraft.reason);
+      return;
+    }
     setIsSaving(true);
     try {
       const response = await refundOfficePayment({
@@ -385,6 +410,40 @@ export function JobInvoiceCorrections({
       void refreshBalance();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to record the refund.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  // Online refunds open a PENDING request the relay sends to the processor and the
+  // worker confirms later, so reload to pick up the new pending row (and the
+  // confirmed refund once it lands) rather than optimistically inserting one.
+  async function saveOnlineRefund(paymentId: string, amount: number, reason: string) {
+    setIsSaving(true);
+    try {
+      const response = await requestOfficeOnlineRefund({
+        paymentId,
+        amount,
+        reason: reason.trim() || undefined,
+        apiBaseUrl,
+        sessionToken
+      });
+      setRefundDraft(null);
+      // Refresh FIRST (load() clears the notice/error), then set the final message so
+      // it survives — and the new pending/failed row is reflected either way.
+      await load();
+      if (response.state === 'requested') {
+        setNoticeMessage('Online refund requested. It will confirm once the processor settles it.');
+        setErrorMessage(null);
+      } else {
+        setNoticeMessage(null);
+        // The API returns office-safe copy for failed/providerError/paymentsNotConfigured.
+        setErrorMessage(response.message ?? 'The online refund could not be requested.');
+      }
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : 'Unable to request the online refund.'
+      );
     } finally {
       setIsSaving(false);
     }
@@ -494,6 +553,7 @@ export function JobInvoiceCorrections({
         <PaymentsBlock
           payments={payments}
           refunds={refunds}
+          onlineRefundRequests={onlineRefundRequests}
           canRecord={paymentPermissions.canRecord}
           canVoid={paymentPermissions.canVoid}
           canRefund={paymentPermissions.canRefund}
@@ -510,7 +570,12 @@ export function JobInvoiceCorrections({
           onSavePayment={() => void savePayment()}
           onVoidPayment={(payment) => void voidPayment(payment)}
           onStartRefund={(payment, remaining) =>
-            setRefundDraft({ paymentId: payment.id, amount: remaining, reason: '' })
+            setRefundDraft({
+              paymentId: payment.id,
+              amount: remaining,
+              reason: '',
+              kind: payment.source === 'bellfieldPayments' ? 'online' : 'manual'
+            })
           }
           onCancelRefund={() => setRefundDraft(null)}
           onChangeRefundDraft={setRefundDraft}

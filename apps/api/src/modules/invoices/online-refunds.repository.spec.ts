@@ -265,3 +265,61 @@ describe('OnlineRefundsRepository mark* outcomes', () => {
     expect(update?.params).toEqual(expect.arrayContaining(['orr-1', 'amount exceeds refundable']));
   });
 });
+
+const LIST_FOR_JOB = /select distinct on \(payment_id\)[\s\S]*from online_refund_requests/i;
+
+describe('OnlineRefundsRepository.listForJob', () => {
+  it('reads the current pending/failed request per payment and normalizes amounts', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: LIST_FOR_JOB,
+        rows: [
+          {
+            id: 'orr-1',
+            paymentId: 'pay-1',
+            amount: '30.00',
+            currency: 'USD',
+            status: 'requested',
+            providerRefundId: 're_1',
+            requestedAt: '2026-06-15T00:00:00.000Z'
+          },
+          {
+            id: 'orr-2',
+            paymentId: 'pay-2',
+            amount: '40.00',
+            currency: 'USD',
+            status: 'failed',
+            providerRefundId: null,
+            requestedAt: '2026-06-15T00:05:00.000Z'
+          }
+        ]
+      }
+    ]);
+
+    const items = await repository.listForJob('job-1');
+
+    expect(items).toEqual([
+      {
+        id: 'orr-1',
+        paymentId: 'pay-1',
+        amount: 30,
+        currency: 'USD',
+        status: 'requested',
+        providerRefundId: 're_1',
+        requestedAt: '2026-06-15T00:00:00.000Z'
+      },
+      {
+        id: 'orr-2',
+        paymentId: 'pay-2',
+        amount: 40,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: null,
+        requestedAt: '2026-06-15T00:05:00.000Z'
+      }
+    ]);
+    const query = findCall(calls, LIST_FOR_JOB);
+    expect(query?.sql).toMatch(/status in \('requested', 'failed'\)/i);
+    expect(query?.params).toEqual(['job-1']);
+  });
+});

@@ -2,8 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { PaymentsRepository } from './payments.repository';
+import {
+  OnlineRefundsRepository,
+  type OnlineRefundRequestListItem
+} from './online-refunds.repository';
 import type {
   JobPaymentsResponseDto,
+  OnlineRefundRequestSummaryDto,
   PaymentRecord,
   PaymentRefundResponseDto,
   PaymentRefundSummaryDto,
@@ -20,7 +25,8 @@ export class PaymentsService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
-    private readonly paymentsRepository: PaymentsRepository
+    private readonly paymentsRepository: PaymentsRepository,
+    private readonly onlineRefundsRepository: OnlineRefundsRepository
   ) {}
 
   /**
@@ -58,13 +64,15 @@ export class PaymentsService {
     // getJobById throws NotFoundException when the job is missing.
     await this.jobsDataService.getJobById(jobId);
 
-    const [payments, refunds] = await Promise.all([
+    const [payments, refunds, onlineRefundRequests] = await Promise.all([
       this.paymentsRepository.listPaymentsForJob(jobId),
-      this.paymentsRepository.listRefundsForJob(jobId)
+      this.paymentsRepository.listRefundsForJob(jobId),
+      this.onlineRefundsRepository.listForJob(jobId)
     ]);
     return {
       payments: payments.map((payment) => this.toSummary(payment)),
-      refunds: refunds.map((refund) => this.toRefundSummary(refund))
+      refunds: refunds.map((refund) => this.toRefundSummary(refund)),
+      onlineRefundRequests: onlineRefundRequests.map((item) => this.toOnlineRefundSummary(item))
     };
   }
 
@@ -141,6 +149,24 @@ export class PaymentsService {
       voidedAt: record.voidedAt,
       createdAt: record.createdAt,
       updatedAt: record.updatedAt
+    };
+  }
+
+  /**
+   * Map a pending/failed online-refund request to the office wire shape. A request
+   * the relay accepted carries a provider refund id and is awaiting worker
+   * confirmation (`submitted`); without one it never cleanly reached the processor
+   * and the office can retry (`needsResubmit`). No raw provider error text leaves here.
+   */
+  private toOnlineRefundSummary(item: OnlineRefundRequestListItem): OnlineRefundRequestSummaryDto {
+    return {
+      id: item.id,
+      paymentId: item.paymentId,
+      amount: item.amount,
+      currency: item.currency,
+      status: item.status,
+      submissionState: item.providerRefundId ? 'submitted' : 'needsResubmit',
+      requestedAt: item.requestedAt
     };
   }
 

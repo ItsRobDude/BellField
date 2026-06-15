@@ -21,16 +21,21 @@ function createService() {
     refundPayment: jest.fn(),
     voidPayment: jest.fn()
   };
+  const onlineRefundsRepository = {
+    listForJob: jest.fn().mockResolvedValue([])
+  };
 
   return {
     service: new PaymentsService(
       identityAccessService as never,
       jobsDataService as never,
-      paymentsRepository as never
+      paymentsRepository as never,
+      onlineRefundsRepository as never
     ),
     identityAccessService,
     jobsDataService,
-    paymentsRepository
+    paymentsRepository,
+    onlineRefundsRepository
   };
 }
 
@@ -136,6 +141,56 @@ describe('PaymentsService.getJobPayments', () => {
       NotFoundException
     );
     expect(paymentsRepository.listPaymentsForJob).not.toHaveBeenCalled();
+  });
+
+  it('maps pending/failed online refund requests with a derived submission state', async () => {
+    const { service, paymentsRepository, onlineRefundsRepository } = createService();
+    paymentsRepository.listPaymentsForJob.mockResolvedValue([]);
+    onlineRefundsRepository.listForJob.mockResolvedValue([
+      // Relay accepted (provider refund id present) → awaiting worker confirmation.
+      {
+        id: 'orr-1',
+        paymentId: 'pay-1',
+        amount: 30,
+        currency: 'USD',
+        status: 'requested',
+        providerRefundId: 're_1',
+        requestedAt: '2026-06-15T00:00:00.000Z'
+      },
+      // Never cleanly submitted (no provider refund id) → office can retry.
+      {
+        id: 'orr-2',
+        paymentId: 'pay-2',
+        amount: 40,
+        currency: 'USD',
+        status: 'requested',
+        providerRefundId: null,
+        requestedAt: '2026-06-15T00:05:00.000Z'
+      }
+    ]);
+
+    const result = await service.getJobPayments('token', 'job-1');
+
+    expect(result.onlineRefundRequests).toEqual([
+      {
+        id: 'orr-1',
+        paymentId: 'pay-1',
+        amount: 30,
+        currency: 'USD',
+        status: 'requested',
+        submissionState: 'submitted',
+        requestedAt: '2026-06-15T00:00:00.000Z'
+      },
+      {
+        id: 'orr-2',
+        paymentId: 'pay-2',
+        amount: 40,
+        currency: 'USD',
+        status: 'requested',
+        submissionState: 'needsResubmit',
+        requestedAt: '2026-06-15T00:05:00.000Z'
+      }
+    ]);
   });
 });
 

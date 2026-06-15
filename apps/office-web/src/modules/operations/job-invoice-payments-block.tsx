@@ -2,6 +2,7 @@
 
 import type {
   OnlinePaymentLinkResponse,
+  OnlineRefundRequestSummary,
   Payment,
   PaymentMethod,
   PaymentRefund
@@ -25,7 +26,14 @@ export type PaymentDraft = {
   reference: string;
   memo: string;
 };
-export type RefundDraft = { paymentId: string; amount: string; reason: string };
+// `kind` routes the save: 'manual' records a refund immediately; 'online' opens a
+// pending Stripe-via-relay refund the worker confirms later.
+export type RefundDraft = {
+  paymentId: string;
+  amount: string;
+  reason: string;
+  kind: 'manual' | 'online';
+};
 
 export function emptyPaymentDraft(): PaymentDraft {
   return { amount: '', method: 'card', reference: '', memo: '' };
@@ -37,6 +45,7 @@ export function emptyPaymentDraft(): PaymentDraft {
 export function PaymentsBlock({
   payments,
   refunds,
+  onlineRefundRequests,
   canRecord,
   canVoid,
   canRefund,
@@ -59,6 +68,7 @@ export function PaymentsBlock({
 }: {
   payments: Payment[];
   refunds: PaymentRefund[];
+  onlineRefundRequests: OnlineRefundRequestSummary[];
   canRecord: boolean;
   canVoid: boolean;
   canRefund: boolean;
@@ -92,6 +102,12 @@ export function PaymentsBlock({
       ...(refundsByPayment.get(refund.paymentId) ?? []),
       refund
     ]);
+  }
+  // The read model returns at most one current (pending/failed) online refund per
+  // payment, so a flat map keyed by payment id is exact.
+  const onlineRefundByPayment = new Map<string, OnlineRefundRequestSummary>();
+  for (const request of onlineRefundRequests) {
+    onlineRefundByPayment.set(request.paymentId, request);
   }
   const hasOpenRefundDraft = refundDraft !== null;
 
@@ -208,6 +224,26 @@ export function PaymentsBlock({
           );
           const refundableCents = amountCents - refundedCents;
           const isRefunding = refundDraft?.paymentId === payment.id;
+          const isOnline = payment.source === 'bellfieldPayments';
+          const onlineRequest = isOnline ? (onlineRefundByPayment.get(payment.id) ?? null) : null;
+          // A submitted request is awaiting worker confirmation (don't offer another);
+          // a needsResubmit one never reached the processor and can be retried.
+          const pendingSubmitted =
+            onlineRequest?.status === 'requested' && onlineRequest.submissionState === 'submitted';
+          const pendingNeedsResubmit =
+            onlineRequest?.status === 'requested' &&
+            onlineRequest.submissionState === 'needsResubmit';
+          // Manual payments refund as before; an online card payment can open a refund
+          // only when no request for it is still in flight.
+          const canStartRefund =
+            canRefund &&
+            !payment.isVoid &&
+            refundableCents > 0 &&
+            (payment.source === 'manual' || isOnline) &&
+            !pendingSubmitted &&
+            !pendingNeedsResubmit &&
+            !hasOpenRefundDraft &&
+            !isRefunding;
           return (
             <div key={payment.id} style={{ display: 'grid', gap: '0.25rem' }}>
               <div style={styles.row}>
@@ -227,12 +263,7 @@ export function PaymentsBlock({
                   </p>
                 </div>
                 <div style={styles.badgeRow}>
-                  {canRefund &&
-                  !payment.isVoid &&
-                  payment.source === 'manual' &&
-                  refundableCents > 0 &&
-                  !hasOpenRefundDraft &&
-                  !isRefunding ? (
+                  {canStartRefund ? (
                     <button
                       type="button"
                       style={styles.button}
@@ -240,6 +271,20 @@ export function PaymentsBlock({
                       onClick={() => onStartRefund(payment, (refundableCents / 100).toFixed(2))}
                     >
                       Refund
+                    </button>
+                  ) : null}
+                  {pendingNeedsResubmit &&
+                  canRefund &&
+                  !hasOpenRefundDraft &&
+                  !isRefunding &&
+                  onlineRequest ? (
+                    <button
+                      type="button"
+                      style={styles.button}
+                      disabled={isSaving}
+                      onClick={() => onStartRefund(payment, onlineRequest.amount.toFixed(2))}
+                    >
+                      Try again
                     </button>
                   ) : null}
                   {/* Void is hidden once a refund exists: the backend rejects it (it would
@@ -267,6 +312,17 @@ export function PaymentsBlock({
                   {refund.reason ? ` · ${refund.reason}` : ''}
                 </p>
               ))}
+
+              {onlineRequest ? (
+                <p style={styles.tinyMuted}>
+                  ↳ Online refund of {formatCurrency(onlineRequest.amount)}{' '}
+                  {onlineRequest.status === 'failed'
+                    ? "didn't go through — you can request it again"
+                    : pendingSubmitted
+                      ? 'requested — pending confirmation'
+                      : "couldn't be submitted — try again"}
+                </p>
+              ) : null}
 
               {isRefunding && refundDraft ? (
                 <div style={styles.drawerPanel}>
@@ -299,6 +355,12 @@ export function PaymentsBlock({
                   <p style={styles.tinyMuted}>
                     Up to {formatCurrency(refundableCents / 100)} refundable.
                   </p>
+                  {refundDraft.kind === 'online' ? (
+                    <p style={styles.tinyMuted}>
+                      This requests a {formatCurrency(Number(refundDraft.amount) || 0)} refund to
+                      the customer&apos;s card; it confirms once the processor settles it.
+                    </p>
+                  ) : null}
                   <div style={styles.inlineActionBar}>
                     <button
                       type="button"
@@ -306,7 +368,13 @@ export function PaymentsBlock({
                       disabled={isSaving}
                       onClick={onSaveRefund}
                     >
-                      {isSaving ? 'Saving…' : 'Record refund'}
+                      {refundDraft.kind === 'online'
+                        ? isSaving
+                          ? 'Requesting…'
+                          : 'Request online refund'
+                        : isSaving
+                          ? 'Saving…'
+                          : 'Record refund'}
                     </button>
                     <button
                       type="button"

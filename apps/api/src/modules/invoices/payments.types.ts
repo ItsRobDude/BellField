@@ -1,5 +1,6 @@
 import type {
   JobPaymentsResponse,
+  OnlineRefundRequestSummary,
   Payment,
   PaymentAllocation,
   PaymentProvider,
@@ -26,6 +27,7 @@ export type PaymentRefundSummaryDto = PaymentRefund;
 export type PaymentResponseDto = PaymentResponse;
 export type PaymentRefundResponseDto = PaymentRefundResponse;
 export type JobPaymentsResponseDto = JobPaymentsResponse;
+export type OnlineRefundRequestSummaryDto = OnlineRefundRequestSummary;
 export type RecordPaymentRequestDto = RecordPaymentRequest;
 export type RecordRefundRequestDto = RecordRefundRequest;
 export type VoidPaymentRequestDto = VoidPaymentRequest;
