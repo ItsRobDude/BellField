@@ -135,6 +135,45 @@ test('PaymentEventsRepository records an overpayment in full and surfaces the un
   assert.match(String(timeline?.values?.[3]), /\$75\.00 exceeds the balance due/);
 });
 
+test('PaymentEventsRepository allocates a provider re-payment after a refunded prior payment', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [{ invoiceId: 'inv-main', invoiceKind: 'main', total: '100.00', allocated: '0.00' }],
+    [{ cents: 0 }],
+    [{ cents: 10_000 }],
+    [{ cents: 10_000 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ amountCents: 10_000 }),
+    new Date('2026-06-13T12:00:10.000Z')
+  );
+
+  assert.equal(outcome, 'applied');
+  const allocations = database.queries.filter((query) =>
+    /insert into payment_allocations/i.test(query.text)
+  );
+  assert.equal(allocations.length, 1);
+  assert.equal(allocations[0].values?.[2], 'inv-main');
+  assert.equal(allocations[0].values?.[3], '100.00');
+
+  const balanceQuery = database.queries.find((query) =>
+    /payment_refund_allocations/i.test(query.text)
+  );
+  assert.ok(balanceQuery);
+  assert.match(balanceQuery.text, /coalesce\(aa\.allocated, 0\) - coalesce\(ra\.refunded, 0\)/);
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.doesNotMatch(String(timeline?.values?.[3]), /exceeds the balance due/);
+});
+
 test('PaymentEventsRepository records a confirmation with no local session and flags it', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [

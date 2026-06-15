@@ -310,6 +310,16 @@ Read when: planning or implementing outbound customer email/SMS, estimate/invoic
 
 Does not own: estimate/invoice lifecycle rules (`workflows-and-state-machines.md`), permission taxonomy (`permissions-model.md`), or self-hosting constraints (`deployment-model.md`).
 
+### [refunds-design.md](./refunds-design.md)
+
+Audience: contributors implementing or reviewing payment refunds and refund-aware balances.
+
+Purpose: controlling design for payment refund ledger rows, allocation reversal, permission gating, balance/reporting/export effects, and the phased manual/online refund path.
+
+Read when: changing payment refunds, payment allocation, amount-due calculations, payment ledger exports, or Stripe refund handling.
+
+Does not own: general invoice lifecycle (`workflows-and-state-machines.md`), relay sender/delivery behavior (`delivery-relay-plan.md`), or license refunds (`license-refund-trial-plan.md`).
+
 ### [sellable-product-execution-plan.md](./sellable-product-execution-plan.md)
 
 Audience: contributors executing the path from "runs for BellField's own shop" to "a stranger can buy, install, run, and update it."

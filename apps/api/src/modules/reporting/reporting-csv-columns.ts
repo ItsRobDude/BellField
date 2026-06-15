@@ -53,6 +53,7 @@ export const POSTED_INVOICE_CSV_COLUMNS: CsvColumn<PostedInvoiceExportRow>[] = [
 
 export const PAYMENT_LEDGER_CSV_COLUMNS: CsvColumn<PaymentLedgerExportRow>[] = [
   { header: 'Entry type', value: (row) => row.entryType },
+  { header: 'Entry ID', value: (row) => row.entryId },
   { header: 'Payment ID', value: (row) => row.paymentId },
   { header: 'Invoice IDs', value: (row) => row.invoiceIds.join('; ') },
   { header: 'Job #', value: (row) => row.jobNumber },
@@ -65,7 +66,7 @@ export const PAYMENT_LEDGER_CSV_COLUMNS: CsvColumn<PaymentLedgerExportRow>[] = [
   { header: 'Memo', value: (row) => row.memo ?? '' },
   { header: 'Recorded by', value: (row) => row.recordedByName },
   { header: 'Provider', value: (row) => row.provider ?? '' },
-  { header: 'Provider payment ID', value: (row) => row.providerPaymentId ?? '' },
+  { header: 'Provider transaction ID', value: (row) => row.providerTransactionId ?? '' },
   { header: 'Processor fee', value: (row) => row.processorFee ?? '' },
   { header: 'BellField fee', value: (row) => row.applicationFee ?? '' },
   { header: 'Void', value: (row) => (row.isVoid ? 'yes' : 'no') },

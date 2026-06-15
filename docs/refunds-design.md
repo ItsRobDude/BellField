@@ -125,10 +125,12 @@ payment instead. (Covered by a repository test.)
 
 ## Payment ledger export
 
-The reporting payment-ledger CSV now emits refund rows too (an `Entry type`
-column distinguishes `payment` from `refund`; a refund row reconciles to its
-payment via the shared `paymentId`), so the bookkeeping/accounting hand-off
-represents the full money ledger the moment refunds are recordable.
+The reporting payment-ledger CSV now emits refund rows too. `Entry type`
+distinguishes `payment` from `refund`; `Entry ID` is the specific ledger row;
+`Payment ID` links a refund back to its original receipt; and `Provider
+transaction ID` carries the provider payment id for payments or the provider
+refund id for refunds. The bookkeeping/accounting hand-off represents the full
+money ledger the moment refunds are recordable.
 
 ## Flows
 

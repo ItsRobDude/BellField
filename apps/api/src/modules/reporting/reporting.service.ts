@@ -499,6 +499,7 @@ export class ReportingService {
 
     const paymentRows: PaymentLedgerExportRow[] = result.rows.map((row) => ({
       entryType: 'payment',
+      entryId: row.paymentId,
       paymentId: row.paymentId,
       invoiceIds: row.invoiceIds ?? [],
       jobId: row.jobId,
@@ -512,7 +513,7 @@ export class ReportingService {
       memo: row.memo ?? undefined,
       recordedByName: row.recordedByName,
       provider: row.provider ?? undefined,
-      providerPaymentId: row.providerPaymentId ?? undefined,
+      providerTransactionId: row.providerPaymentId ?? undefined,
       processorFee: row.processorFee === null ? undefined : roundMoney(row.processorFee),
       applicationFee: row.applicationFee === null ? undefined : roundMoney(row.applicationFee),
       isVoid: row.isVoid,
@@ -533,6 +534,7 @@ export class ReportingService {
 
   private async queryRefundLedgerExportRows(): Promise<PaymentLedgerExportRow[]> {
     const result = await this.databaseService.query<{
+      refundId: string;
       paymentId: string;
       invoiceIds: string[] | null;
       jobId: string;
@@ -549,6 +551,7 @@ export class ReportingService {
       applicationFeeRefunded: string | number | null;
     }>(
       `select
+         r.id as "refundId",
          r.payment_id as "paymentId",
          array_remove(array_agg(ra.invoice_id order by ra.invoice_id), null) as "invoiceIds",
          r.job_id as "jobId",
@@ -576,6 +579,7 @@ export class ReportingService {
 
     return result.rows.map((row) => ({
       entryType: 'refund',
+      entryId: row.refundId,
       paymentId: row.paymentId,
       invoiceIds: row.invoiceIds ?? [],
       jobId: row.jobId,
@@ -589,7 +593,7 @@ export class ReportingService {
       memo: row.reason ?? undefined,
       recordedByName: row.recordedByName,
       provider: row.provider ?? undefined,
-      providerPaymentId: row.providerRefundId ?? undefined,
+      providerTransactionId: row.providerRefundId ?? undefined,
       processorFee: undefined,
       applicationFee:
         row.applicationFeeRefunded === null ? undefined : roundMoney(row.applicationFeeRefunded),
