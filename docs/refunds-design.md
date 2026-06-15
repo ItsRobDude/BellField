@@ -21,7 +21,8 @@ ledger entries, exactly like payments.
 - **Scope of the full refunds lane:** online (Stripe) **and** manual refunds;
   full **or** partial amounts; gated behind a new `payments:refund` permission.
   The shipped first implementation exposes manual full/partial refunds in the
-  office; online refunds follow in slice 2.
+  office; online refunds are split into PR1 backend money path and PR2 office
+  surface/live proof.
 - **Application fee on a card refund:** refunded **proportionally**. When a shop
   refunds a customer's card payment, BellField returns its application fee for
   the refunded portion (Stripe `refund_application_fee` / proportional). The shop

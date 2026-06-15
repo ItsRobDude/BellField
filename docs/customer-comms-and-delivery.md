@@ -352,9 +352,12 @@ full/partial refunds for manually recorded payments have also shipped on the
 office invoice tab; they are append-only, permission-gated, and raise amount due
 through refund allocations.
 
-Still deferred: provider-confirmed online refunds through Stripe/relay, deposits,
-partial payments, stored cards, customer surcharge logic, customer refund
-receipts, and processor-fee reconciliation beyond BellField's application fee.
+The provider-confirmed online refund backend path through Stripe/relay now
+exists (pending API request, relay refund, worker-confirmed ledger apply and
+dead-letter). Still deferred: the office Refund-on-card UI, pending-state
+display, live Stripe sandbox smoke, deposits, partial payments, stored cards,
+customer surcharge logic, customer refund receipts, and processor-fee
+reconciliation beyond BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 
