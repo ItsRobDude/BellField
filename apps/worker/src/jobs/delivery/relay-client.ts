@@ -8,6 +8,8 @@ import type {
   RelayDeliveryClient,
   RelayPaymentEvent,
   RelayPaymentEventsOutcome,
+  RelayRefundEvent,
+  RelayRefundEventsOutcome,
   RelaySendOutcome,
   RelayStatusOutcome
 } from './delivery-types';
@@ -194,6 +196,41 @@ export class RelayClient implements RelayDeliveryClient {
     try {
       const response = await fetch(
         `${this.config.baseUrl}/v1/payment-events/${encodeURIComponent(paymentEventId)}/ack`,
+        {
+          method: 'POST',
+          headers: this.headers(),
+          signal: AbortSignal.timeout(10_000)
+        }
+      );
+      return response.ok;
+    } catch {
+      return false;
+    }
+  }
+
+  async getRefundEvents(): Promise<RelayRefundEventsOutcome> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/v1/refund-events`, {
+        headers: this.headers(),
+        signal: AbortSignal.timeout(10_000)
+      });
+    } catch {
+      return { kind: 'unavailable' };
+    }
+    if (!response.ok) {
+      return { kind: 'unavailable' };
+    }
+    const body = (await response.json().catch(() => ({}))) as {
+      events?: RelayRefundEvent[];
+    };
+    return { kind: 'events', events: Array.isArray(body.events) ? body.events : [] };
+  }
+
+  async acknowledgeRefundEvent(refundEventId: string): Promise<boolean> {
+    try {
+      const response = await fetch(
+        `${this.config.baseUrl}/v1/refund-events/${encodeURIComponent(refundEventId)}/ack`,
         {
           method: 'POST',
           headers: this.headers(),

@@ -141,6 +141,29 @@ export type RelayPaymentEventsOutcome =
   | { kind: 'events'; events: RelayPaymentEvent[] }
   | { kind: 'unavailable' };
 
+export type RelayRefundEvent = {
+  refundEventId: string;
+  /** The relay's own refund-request id; the install reconciles its pending request to it. */
+  refundRequestId: string;
+  provider: 'stripe';
+  /** Stripe refund id; the local refund row dedupes on this. */
+  providerRefundId: string;
+  /** Stripe PaymentIntent id of the original payment; the refund attaches to it. */
+  providerPaymentId: string;
+  providerSessionId: string;
+  jobRef: string;
+  amountCents: number;
+  currency: string;
+  applicationFeeRefundedCents: number | null;
+  status: 'succeeded' | 'failed';
+  failureReason: string | null;
+  occurredAt: string;
+};
+
+export type RelayRefundEventsOutcome =
+  | { kind: 'events'; events: RelayRefundEvent[] }
+  | { kind: 'unavailable' };
+
 export interface RelayDeliveryClient {
   sendEstimateDocument(input: {
     idempotencyKey: string;
