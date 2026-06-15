@@ -159,12 +159,18 @@ export class PaymentsService {
    * and the office can retry (`needsResubmit`). No raw provider error text leaves here.
    */
   private toOnlineRefundSummary(item: OnlineRefundRequestListItem): OnlineRefundRequestSummaryDto {
+    // A failed request the worker tried to apply (apply_attempt_count > 0) is a
+    // dead-letter: the PROCESSOR accepted the refund but BellField could not record
+    // it. That must NOT be re-requested (it would double-refund), so surface it as
+    // recordingFailed rather than a clean, re-requestable failure.
+    const status =
+      item.status === 'failed' && item.applyAttemptCount > 0 ? 'recordingFailed' : item.status;
     return {
       id: item.id,
       paymentId: item.paymentId,
       amount: item.amount,
       currency: item.currency,
-      status: item.status,
+      status,
       submissionState: item.providerRefundId ? 'submitted' : 'needsResubmit',
       requestedAt: item.requestedAt
     };

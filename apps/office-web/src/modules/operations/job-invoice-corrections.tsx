@@ -577,6 +577,7 @@ export function JobInvoiceCorrections({
               kind: payment.source === 'bellfieldPayments' ? 'online' : 'manual'
             })
           }
+          onRetryOnlineRefund={(payment, amount) => void saveOnlineRefund(payment.id, amount, '')}
           onCancelRefund={() => setRefundDraft(null)}
           onChangeRefundDraft={setRefundDraft}
           onSaveRefund={() => void saveRefund()}

@@ -258,7 +258,13 @@ export interface OnlineRefundRequestSummary {
   paymentId: string;
   amount: number;
   currency: string;
-  status: 'requested' | 'failed';
+  /**
+   * `requested`: in flight. `failed`: the processor rejected it — no money moved,
+   * so it is safe to request again. `recordingFailed`: the processor ACCEPTED the
+   * refund but BellField could not record it locally (dead-lettered) — the money
+   * moved, so it must NOT be re-requested; it needs support reconciliation.
+   */
+  status: 'requested' | 'failed' | 'recordingFailed';
   /**
    * `submitted`: the processor accepted the refund and it is awaiting worker
    * confirmation — don't resubmit. `needsResubmit`: it never cleanly reached the

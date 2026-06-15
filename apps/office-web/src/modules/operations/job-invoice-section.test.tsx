@@ -953,4 +953,59 @@ describe('JobInvoiceSection online refunds', () => {
       await screen.findByText('The refund could not be submitted right now. Please try again.')
     ).toBeInTheDocument();
   });
+
+  it('retries a needsResubmit refund by resubmitting the same amount directly', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments
+      .mockResolvedValueOnce({
+        payments: [onlinePayment()],
+        refunds: [],
+        onlineRefundRequests: [
+          onlineRefundRequest({ submissionState: 'needsResubmit', amount: 100 })
+        ]
+      })
+      .mockResolvedValue({
+        payments: [onlinePayment()],
+        refunds: [],
+        onlineRefundRequests: [onlineRefundRequest({ amount: 100 })]
+      });
+    mockedApi.requestOfficeOnlineRefund.mockResolvedValue({
+      state: 'requested',
+      refundRequestId: 'orr-1',
+      amount: 100,
+      currency: 'USD'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    // Resubmits the original amount with no editable drawer (no second forked request).
+    await waitFor(() =>
+      expect(mockedApi.requestOfficeOnlineRefund).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentId: 'pay-1', amount: 100 })
+      )
+    );
+    expect(screen.queryByRole('button', { name: 'Request online refund' })).not.toBeInTheDocument();
+  });
+
+  it('does NOT re-offer a refund when the processor accepted it but it could not be recorded', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment()],
+      refunds: [],
+      onlineRefundRequests: [onlineRefundRequest({ status: 'recordingFailed' })]
+    });
+
+    renderSection(true);
+
+    // Money moved at the processor: surface support copy, never a re-request action.
+    expect(
+      await screen.findByText(/could not be recorded — contact BellField support/)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
 });

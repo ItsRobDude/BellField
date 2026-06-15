@@ -281,6 +281,7 @@ describe('OnlineRefundsRepository.listForJob', () => {
             currency: 'USD',
             status: 'requested',
             providerRefundId: 're_1',
+            applyAttemptCount: 0,
             requestedAt: '2026-06-15T00:00:00.000Z'
           },
           {
@@ -290,6 +291,7 @@ describe('OnlineRefundsRepository.listForJob', () => {
             currency: 'USD',
             status: 'failed',
             providerRefundId: null,
+            applyAttemptCount: 0,
             requestedAt: '2026-06-15T00:05:00.000Z'
           }
         ]
@@ -306,6 +308,7 @@ describe('OnlineRefundsRepository.listForJob', () => {
         currency: 'USD',
         status: 'requested',
         providerRefundId: 're_1',
+        applyAttemptCount: 0,
         requestedAt: '2026-06-15T00:00:00.000Z'
       },
       {
@@ -315,6 +318,7 @@ describe('OnlineRefundsRepository.listForJob', () => {
         currency: 'USD',
         status: 'failed',
         providerRefundId: null,
+        applyAttemptCount: 0,
         requestedAt: '2026-06-15T00:05:00.000Z'
       }
     ]);

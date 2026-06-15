@@ -62,6 +62,7 @@ export function PaymentsBlock({
   onSavePayment,
   onVoidPayment,
   onStartRefund,
+  onRetryOnlineRefund,
   onCancelRefund,
   onChangeRefundDraft,
   onSaveRefund
@@ -85,6 +86,9 @@ export function PaymentsBlock({
   onSavePayment: () => void;
   onVoidPayment: (payment: Payment) => void;
   onStartRefund: (payment: Payment, remaining: string) => void;
+  // Retry a needsResubmit online refund: resubmits the SAME amount directly (no
+  // editable drawer), so a retry can't fork a second request at a different amount.
+  onRetryOnlineRefund: (payment: Payment, amount: number) => void;
   onCancelRefund: () => void;
   onChangeRefundDraft: (draft: RefundDraft) => void;
   onSaveRefund: () => void;
@@ -233,6 +237,10 @@ export function PaymentsBlock({
           const pendingNeedsResubmit =
             onlineRequest?.status === 'requested' &&
             onlineRequest.submissionState === 'needsResubmit';
+          // The processor accepted this refund but BellField couldn't record it
+          // (dead-letter): the money moved, so block any new refund on this payment
+          // until support reconciles — re-requesting would double-refund.
+          const recordingFailed = onlineRequest?.status === 'recordingFailed';
           // Manual payments refund as before; an online card payment can open a refund
           // only when no request for it is still in flight.
           const canStartRefund =
@@ -242,6 +250,7 @@ export function PaymentsBlock({
             (payment.source === 'manual' || isOnline) &&
             !pendingSubmitted &&
             !pendingNeedsResubmit &&
+            !recordingFailed &&
             !hasOpenRefundDraft &&
             !isRefunding;
           return (
@@ -273,16 +282,12 @@ export function PaymentsBlock({
                       Refund
                     </button>
                   ) : null}
-                  {pendingNeedsResubmit &&
-                  canRefund &&
-                  !hasOpenRefundDraft &&
-                  !isRefunding &&
-                  onlineRequest ? (
+                  {pendingNeedsResubmit && canRefund && !hasOpenRefundDraft && onlineRequest ? (
                     <button
                       type="button"
                       style={styles.button}
                       disabled={isSaving}
-                      onClick={() => onStartRefund(payment, onlineRequest.amount.toFixed(2))}
+                      onClick={() => onRetryOnlineRefund(payment, onlineRequest.amount)}
                     >
                       Try again
                     </button>
@@ -316,11 +321,13 @@ export function PaymentsBlock({
               {onlineRequest ? (
                 <p style={styles.tinyMuted}>
                   ↳ Online refund of {formatCurrency(onlineRequest.amount)}{' '}
-                  {onlineRequest.status === 'failed'
-                    ? "didn't go through — you can request it again"
-                    : pendingSubmitted
-                      ? 'requested — pending confirmation'
-                      : "couldn't be submitted — try again"}
+                  {onlineRequest.status === 'recordingFailed'
+                    ? 'was sent but could not be recorded — contact BellField support'
+                    : onlineRequest.status === 'failed'
+                      ? "didn't go through — you can request it again"
+                      : pendingSubmitted
+                        ? 'requested — pending confirmation'
+                        : "couldn't be submitted — try again"}
                 </p>
               ) : null}
 

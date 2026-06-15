@@ -47,6 +47,10 @@ export type OnlineRefundRequestListItem = {
   currency: string;
   status: 'requested' | 'failed';
   providerRefundId: string | null;
+  // Worker apply attempts: a failed row with attempts > 0 was dead-lettered (the
+  // processor accepted the refund but it could not be recorded), which the service
+  // surfaces distinctly from a clean processor rejection.
+  applyAttemptCount: number;
   requestedAt: string;
 };
 
@@ -67,11 +71,13 @@ export class OnlineRefundsRepository {
       currency: string;
       status: 'requested' | 'failed';
       providerRefundId: string | null;
+      applyAttemptCount: string | number;
       requestedAt: string | Date;
     }>(
       `select distinct on (payment_id)
          id, payment_id as "paymentId", amount, currency, status,
-         provider_refund_id as "providerRefundId", requested_at as "requestedAt"
+         provider_refund_id as "providerRefundId",
+         apply_attempt_count as "applyAttemptCount", requested_at as "requestedAt"
        from online_refund_requests
        where job_id = $1 and status in ('requested', 'failed')
        order by payment_id, created_at desc, id desc`,
@@ -84,6 +90,7 @@ export class OnlineRefundsRepository {
       currency: row.currency,
       status: row.status,
       providerRefundId: row.providerRefundId,
+      applyAttemptCount: Number(row.applyAttemptCount),
       requestedAt: new Date(row.requestedAt).toISOString()
     }));
   }

@@ -155,6 +155,7 @@ describe('PaymentsService.getJobPayments', () => {
         currency: 'USD',
         status: 'requested',
         providerRefundId: 're_1',
+        applyAttemptCount: 0,
         requestedAt: '2026-06-15T00:00:00.000Z'
       },
       // Never cleanly submitted (no provider refund id) → office can retry.
@@ -165,7 +166,31 @@ describe('PaymentsService.getJobPayments', () => {
         currency: 'USD',
         status: 'requested',
         providerRefundId: null,
+        applyAttemptCount: 0,
         requestedAt: '2026-06-15T00:05:00.000Z'
+      },
+      // Failed AFTER the worker tried to apply it (dead-letter): the money moved at
+      // the processor but couldn't be recorded → recordingFailed, never re-request.
+      {
+        id: 'orr-3',
+        paymentId: 'pay-3',
+        amount: 50,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: 're_3',
+        applyAttemptCount: 30,
+        requestedAt: '2026-06-15T00:10:00.000Z'
+      },
+      // Failed with no apply attempts: a clean processor rejection → re-requestable.
+      {
+        id: 'orr-4',
+        paymentId: 'pay-4',
+        amount: 60,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: null,
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:15:00.000Z'
       }
     ]);
 
@@ -189,6 +214,24 @@ describe('PaymentsService.getJobPayments', () => {
         status: 'requested',
         submissionState: 'needsResubmit',
         requestedAt: '2026-06-15T00:05:00.000Z'
+      },
+      {
+        id: 'orr-3',
+        paymentId: 'pay-3',
+        amount: 50,
+        currency: 'USD',
+        status: 'recordingFailed',
+        submissionState: 'submitted',
+        requestedAt: '2026-06-15T00:10:00.000Z'
+      },
+      {
+        id: 'orr-4',
+        paymentId: 'pay-4',
+        amount: 60,
+        currency: 'USD',
+        status: 'failed',
+        submissionState: 'needsResubmit',
+        requestedAt: '2026-06-15T00:15:00.000Z'
       }
     ]);
   });

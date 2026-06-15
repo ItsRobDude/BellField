@@ -634,11 +634,12 @@ rows with invoice allocations. BellField's platform fee is one fixed rate for
 all shops (default 100 basis points) and Stripe remains the hosted checkout
 surface. Online payments cannot be manually voided locally. Manual
 full/partial refunds for manually recorded payments have since shipped on the
-office invoice tab; the provider-confirmed online refund backend path has since
-landed through the relay/API/worker flow, with the office UI and live smoke
-remaining as the next slice.
+office invoice tab; the provider-confirmed online refund path has since landed
+through the relay/API/worker flow plus the office Refund-on-card action and
+pending/failed display, with the dated live Stripe sandbox smoke remaining as the
+gate.
 
-Intentionally deferred: online refund office UI/live smoke, partial payments,
+Intentionally deferred: the online refund live Stripe sandbox smoke, partial payments,
 deposits, estimate payments, stored cards, customer surcharge math, and
 processor-fee reconciliation beyond BellField's application fee.
 
