@@ -632,12 +632,14 @@ new same-dollar link after a prior online card payment.
 Status: landed as a first slice. Payments are now job-level append-only ledger
 rows with invoice allocations. BellField's platform fee is one fixed rate for
 all shops (default 100 basis points) and Stripe remains the hosted checkout
-surface. Online payments cannot be manually voided locally; refunds/corrections
-remain a deliberate later workflow.
+surface. Online payments cannot be manually voided locally. Manual
+full/partial refunds for manually recorded payments have since shipped on the
+office invoice tab; provider-confirmed online refunds remain the deliberate
+later relay/worker workflow.
 
-Intentionally deferred: refunds, partial payments, deposits, estimate payments,
-stored cards, customer surcharge math, invoice email delivery, and processor-fee
-reconciliation beyond BellField's application fee.
+Intentionally deferred: provider-confirmed online refunds through Stripe/relay,
+partial payments, deposits, estimate payments, stored cards, customer surcharge
+math, and processor-fee reconciliation beyond BellField's application fee.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use

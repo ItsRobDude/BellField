@@ -93,12 +93,13 @@ export function PaymentsBlock({
       refund
     ]);
   }
+  const hasOpenRefundDraft = refundDraft !== null;
 
   return (
     <div style={styles.subpanel}>
       <div style={styles.row}>
         <h3 style={styles.sectionHeading}>Payments</h3>
-        {canRecord && !paymentDraft ? (
+        {canRecord && !paymentDraft && !hasOpenRefundDraft ? (
           <div style={styles.badgeRow}>
             {amountDue > 0 ? (
               <button
@@ -230,6 +231,7 @@ export function PaymentsBlock({
                   !payment.isVoid &&
                   payment.source === 'manual' &&
                   refundableCents > 0 &&
+                  !hasOpenRefundDraft &&
                   !isRefunding ? (
                     <button
                       type="button"
@@ -245,7 +247,8 @@ export function PaymentsBlock({
                   {canVoid &&
                   !payment.isVoid &&
                   payment.source === 'manual' &&
-                  refundedCents === 0 ? (
+                  refundedCents === 0 &&
+                  !hasOpenRefundDraft ? (
                     <button
                       type="button"
                       style={styles.dangerButton}

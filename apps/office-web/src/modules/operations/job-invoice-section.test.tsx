@@ -756,4 +756,48 @@ describe('JobInvoiceSection refunds', () => {
     expect(await screen.findByRole('button', { name: 'Void' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
   });
+
+  it('hides local refund action for provider-confirmed online payments', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [
+        manualPayment({
+          source: 'bellfieldPayments',
+          provider: 'stripe',
+          providerPaymentId: 'pi_123',
+          providerSessionId: 'cs_123'
+        })
+      ],
+      refunds: []
+    });
+
+    renderSection(true);
+
+    expect(
+      await screen.findByText((_, element) => element?.textContent === '$250.00 · Online card')
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument();
+  });
+
+  it('hides competing payment actions while a refund draft is open', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue({
+      ...paidBalance,
+      netBilled: 300,
+      amountDue: 50
+    });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+
+    renderSection(true);
+
+    expect(await screen.findByRole('button', { name: 'Create payment link' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Refund' }));
+
+    expect(screen.getByRole('button', { name: 'Record refund' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create payment link' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Record payment' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument();
+  });
 });

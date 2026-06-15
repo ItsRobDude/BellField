@@ -1,7 +1,8 @@
 # Refunds Design
 
-Status: design (2026-06-14). Controlling doc for the refunds slice of the
-money-path-depth lane. Decisions confirmed with Rob via Q&A on 2026-06-14.
+Status: manual install-side refund slice shipped (2026-06-14); online
+Stripe/relay refunds remain slice 2. Controlling doc for the refunds slice of
+the money-path-depth lane. Decisions confirmed with Rob via Q&A on 2026-06-14.
 
 ## What this adds
 
@@ -13,8 +14,10 @@ ledger entries, exactly like payments.
 
 ## Decisions (locked)
 
-- **Scope of the first pass:** online (Stripe) **and** manual refunds; full
-  **or** partial amounts; gated behind a new `payments:refund` permission.
+- **Scope of the full refunds lane:** online (Stripe) **and** manual refunds;
+  full **or** partial amounts; gated behind a new `payments:refund` permission.
+  The shipped first implementation exposes manual full/partial refunds in the
+  office; online refunds follow in slice 2.
 - **Application fee on a card refund:** refunded **proportionally**. When a shop
   refunds a customer's card payment, BellField returns its application fee for
   the refunded portion (Stripe `refund_application_fee` / proportional). The shop
@@ -134,7 +137,7 @@ money ledger the moment refunds are recordable.
 
 ## Flows
 
-### Manual refund (install-side, slice 1)
+### Manual refund (install-side, slice 1) — SHIPPED
 
 `POST /operations/payments/:paymentId/refund` (mirrors the existing void route),
 `payments:refund` required:
@@ -147,7 +150,7 @@ money ledger the moment refunds are recordable.
    allocations into `payment_refund_allocations`.
 4. Job timeline entry: `paymentRefunded`, "Refund of $X recorded (method)."
 
-### Online (Stripe) refund (relay + worker, slice 2)
+### Online (Stripe) refund (relay + worker, slice 2) — DEFERRED
 
 1. Office requests a refund (full/partial) on a card payment → API → relay.
 2. Relay calls Stripe `refunds.create` on the connected account with
@@ -187,4 +190,7 @@ are refundable only through this permission; they remain non-voidable.
   paid-total sites each subtract active refunds (refund-then-balance,
   refund-then-reallocate).
 - Service/controller: permission gate; not-found; conflict copy.
+- Office: manual Refund action only for eligible manual payments; no local
+  refund/void action for provider-confirmed online payments; competing payment
+  actions hide while a refund draft is open.
 - Worker (slice 2): idempotent refund-event apply; proportional fee recorded.

@@ -347,11 +347,14 @@ payment events, and local append-only job-level payment records with
 auto-allocation across posted charge invoices. Payment-link idempotency is now
 per `(job, amount, attempt)`: active unpaid links are reused locally, and a
 same-dollar repeat after a prior online card payment requires office
-confirmation before BellField creates the next Stripe Checkout attempt.
+confirmation before BellField creates the next Stripe Checkout attempt. Manual
+full/partial refunds for manually recorded payments have also shipped on the
+office invoice tab; they are append-only, permission-gated, and raise amount due
+through refund allocations.
 
-Still deferred: refunds, deposits, partial payments, stored cards, customer
-surcharge logic, and processor-fee reconciliation beyond BellField's
-application fee.
+Still deferred: provider-confirmed online refunds through Stripe/relay, deposits,
+partial payments, stored cards, customer surcharge logic, customer refund
+receipts, and processor-fee reconciliation beyond BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 
