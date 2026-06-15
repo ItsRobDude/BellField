@@ -73,8 +73,11 @@ import type {
   Payment,
   PaymentMethod,
   PaymentResponse,
+  PaymentRefund,
+  PaymentRefundResponse,
   OwnershipHistoryEntry,
   RecordPaymentRequest,
+  RecordRefundRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -202,8 +205,11 @@ export type {
   Payment,
   PaymentMethod,
   PaymentResponse,
+  PaymentRefund,
+  PaymentRefundResponse,
   OwnershipHistoryEntry,
   RecordPaymentRequest,
+  RecordRefundRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -1044,6 +1050,20 @@ export async function voidOfficePayment(input: {
     sessionToken,
     method: 'POST',
     body: JSON.stringify({ reason })
+  });
+}
+
+/** Refund all or part of a payment by id (manual refunds; reverses allocations). */
+export async function refundOfficePayment(
+  input: RecordRefundRequest & { paymentId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<PaymentRefundResponse> {
+  const { paymentId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<PaymentRefundResponse>(`/operations/payments/${paymentId}/refund`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
   });
 }
 

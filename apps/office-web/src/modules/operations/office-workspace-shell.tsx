@@ -143,7 +143,8 @@ export function OfficeWorkspaceShell({
   const paymentPermissions = {
     canView: employee.effectivePermissions.includes('payments:view'),
     canRecord: employee.effectivePermissions.includes('payments:create'),
-    canVoid: employee.effectivePermissions.includes('payments:edit')
+    canVoid: employee.effectivePermissions.includes('payments:edit'),
+    canRefund: employee.effectivePermissions.includes('payments:refund')
   };
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {

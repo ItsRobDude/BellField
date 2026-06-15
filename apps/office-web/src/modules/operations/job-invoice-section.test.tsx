@@ -22,7 +22,8 @@ vi.mock('@/lib/operations-api', () => ({
   listOfficeJobPayments: vi.fn(),
   createOfficeOnlinePaymentLink: vi.fn(),
   recordOfficePayment: vi.fn(),
-  voidOfficePayment: vi.fn()
+  voidOfficePayment: vi.fn(),
+  refundOfficePayment: vi.fn()
 }));
 vi.mock('@/lib/operations-invoice-delivery-api', () => ({
   getOfficeInvoiceSendPreview: vi.fn(),
@@ -166,7 +167,19 @@ function postedInvoice(): InvoiceSummary {
   });
 }
 
-function renderSection(canPost: boolean, options?: { canSend?: boolean; customerEmail?: string }) {
+function renderSection(
+  canPost: boolean,
+  options?: {
+    canSend?: boolean;
+    customerEmail?: string;
+    paymentPermissions?: Partial<{
+      canView: boolean;
+      canRecord: boolean;
+      canVoid: boolean;
+      canRefund: boolean;
+    }>;
+  }
+) {
   return render(
     <JobInvoiceSection
       jobId="job-1"
@@ -177,7 +190,13 @@ function renderSection(canPost: boolean, options?: { canSend?: boolean; customer
       canSend={options?.canSend ?? false}
       billToCustomerEmail={options?.customerEmail}
       canCreateAdjustments
-      paymentPermissions={{ canView: true, canRecord: true, canVoid: true }}
+      paymentPermissions={{
+        canView: true,
+        canRecord: true,
+        canVoid: true,
+        canRefund: true,
+        ...options?.paymentPermissions
+      }}
     />
   );
 }
@@ -601,5 +620,140 @@ describe('JobInvoiceSection posting', () => {
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
+  });
+});
+
+function manualPayment(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'pay-1',
+    jobId: 'job-1',
+    invoiceId: 'inv-1',
+    amount: 250,
+    method: 'card' as const,
+    source: 'manual' as const,
+    currency: 'USD',
+    receivedAt: '2026-06-13T00:00:00.000Z',
+    recordedByName: 'Olivia Owner',
+    allocations: [],
+    isVoid: false,
+    createdAt: '2026-06-13T00:00:00.000Z',
+    updatedAt: '2026-06-13T00:00:00.000Z',
+    ...overrides
+  };
+}
+
+const paidBalance = {
+  jobId: 'job-1',
+  mainInvoiceStatus: 'posted' as const,
+  postedMainTotal: 250,
+  postedAdjustmentsTotal: 0,
+  postedCreditsTotal: 0,
+  netBilled: 250,
+  paidTotal: 250,
+  refundedTotal: 0,
+  amountDue: 0
+};
+
+describe('JobInvoiceSection refunds', () => {
+  it('records a partial refund of a manual payment and shows it linked', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+    mockedApi.refundOfficePayment.mockResolvedValue({
+      refund: {
+        id: 'refund-1',
+        paymentId: 'pay-1',
+        jobId: 'job-1',
+        amount: 100,
+        method: 'card',
+        source: 'manual',
+        currency: 'USD',
+        refundedAt: '2026-06-14T00:00:00.000Z',
+        reason: 'partial return',
+        recordedByName: 'Olivia Owner',
+        allocations: [],
+        createdAt: '2026-06-14T00:00:00.000Z',
+        updatedAt: '2026-06-14T00:00:00.000Z'
+      }
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refund' }));
+    fireEvent.change(screen.getByLabelText('Refund amount'), { target: { value: '100' } });
+    fireEvent.change(screen.getByLabelText('Refund reason'), {
+      target: { value: 'partial return' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Record refund' }));
+
+    await waitFor(() =>
+      expect(mockedApi.refundOfficePayment).toHaveBeenCalledWith({
+        paymentId: 'pay-1',
+        amount: 100,
+        reason: 'partial return',
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(await screen.findByText('Refund recorded.')).toBeInTheDocument();
+    expect(await screen.findByText(/↳ \$100\.00 refunded/)).toBeInTheDocument();
+  });
+
+  it('blocks a refund larger than the remaining refundable amount client-side', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refund' }));
+    fireEvent.change(screen.getByLabelText('Refund amount'), { target: { value: '300' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record refund' }));
+
+    expect(
+      await screen.findByText(/cannot exceed the \$250\.00 still refundable/)
+    ).toBeInTheDocument();
+    expect(mockedApi.refundOfficePayment).not.toHaveBeenCalled();
+  });
+
+  it('hides Void once a payment has a refund (matching the backend guard)', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [manualPayment()],
+      refunds: [
+        {
+          id: 'refund-1',
+          paymentId: 'pay-1',
+          jobId: 'job-1',
+          amount: 100,
+          method: 'card',
+          source: 'manual',
+          currency: 'USD',
+          refundedAt: '2026-06-14T00:00:00.000Z',
+          recordedByName: 'Olivia Owner',
+          allocations: [],
+          createdAt: '2026-06-14T00:00:00.000Z',
+          updatedAt: '2026-06-14T00:00:00.000Z'
+        }
+      ]
+    });
+
+    renderSection(true);
+
+    // Refund still offered (partial remaining), but Void is gone.
+    expect(await screen.findByRole('button', { name: 'Refund' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument();
+  });
+
+  it('hides the Refund action without the payments:refund permission', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+
+    renderSection(true, { paymentPermissions: { canRefund: false } });
+
+    expect(await screen.findByRole('button', { name: 'Void' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
   });
 });
