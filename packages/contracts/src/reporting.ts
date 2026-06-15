@@ -86,6 +86,9 @@ export interface PostedInvoiceExportRow {
 }
 
 export interface PaymentLedgerExportRow {
+  /** A money-in receipt or a money-out refund of one. Refund rows carry the
+   * refunded payment's id in `paymentId` so the two reconcile together. */
+  entryType: 'payment' | 'refund';
   paymentId: string;
   invoiceIds: string[];
   jobId: string;

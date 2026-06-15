@@ -85,35 +85,57 @@ refund-allocation per touched invoice. A full refund reverses all of the
 payment's allocations; a partial refund reverses the first N dollars. This keeps
 the reversal deterministic and explainable.
 
-## The four "paid total" sites that must subtract refunds
+## The "paid total" sites that must subtract refunds
 
-Refunds are only correct if every place that derives "paid" subtracts active
-refunds. There are four, and missing any one shows an invoice as paid in one
+Refunds are only correct if every place that derives "paid" subtracts refunds.
+There are six, in two repos, and missing any one shows an invoice as paid in one
 surface and refunded in another:
 
 1. `payments.repository.ts::sumActivePaymentCentsForJob` — job balance
    (`invoices.service.getJobInvoiceBalance`) **and** online-link amount-due
-   (`online-payment-link.service`). Becomes
-   `sum(non-void payments.amount) − sum(non-void refunds.amount)`.
+   (`online-payment-link.service`). Paired with `sumActiveRefundCentsForJob`;
+   amount due = `netBilled − paid + refunded`.
 2. `payments.repository.ts::listPostedChargeInvoiceBalances` `active_allocations`
-   CTE — drives auto-allocation of new payments. Per-invoice allocated becomes
-   `sum(payment allocations on non-void payments) − sum(refund allocations on
-non-void refunds)`. Without this, a refunded invoice still looks paid and a
-   later re-payment won't re-allocate to it.
-3. `bookkeeping/open-balance-query.ts` `pd` CTE — the open-balance worklist.
-4. `reporting/reporting.service.ts` `pd` CTE — AR/aging report + CSV.
+   CTE — drives auto-allocation of new manual payments. Per-invoice allocated
+   becomes `sum(payment allocations on non-void payments) − sum(refund
+allocations)`. Without this, a refunded invoice still looks paid and a later
+   re-payment won't re-allocate to it.
+3. `payments.repository.ts::insertAutoAllocations` net-due cap — the
+   `paid-before-this-payment` term must be **net of refunds**
+   (`activePaidBefore − refundsForJob`), or a fully-refunded prior payment caps
+   the new payment's allocation to 0 even though the invoice is unpaid again.
+4. **Worker** `payment-events.repository.ts::listPostedChargeInvoiceBalances`
+   `active_allocations` CTE — the provider-confirmed-payment allocation path has
+   its own copy and needs the same `refunded_allocations` subtraction.
+5. **Worker** `payment-events.repository.ts::insertAutoAllocations` net-due cap —
+   same refund-net `paid-before` fix as (3).
+6. `bookkeeping/open-balance-query.ts` and `reporting/reporting.service.ts` `pd`
+   CTEs — the open-balance worklist and the AR/aging report + CSV.
 
-The implementation adds a refunds round-trip repository test and an explicit
-assertion in each of these read paths so a future change can't silently drop the
-refund subtraction (this is the same class of gap the company-settings upsert
-test closed).
+Each is covered by a unit test or a real-DB SQL validation so a future change
+can't silently drop the refund subtraction (the same class of gap the
+company-settings upsert test closed).
+
+## Voiding a refunded payment is blocked
+
+`voidPayment` rejects any payment that already has `payment_refunds` rows:
+voiding drops the payment from the paid total while its refund still counts,
+inflating the balance. Correct a mistaken refunded payment with a compensating
+payment instead. (Covered by a repository test.)
+
+## Payment ledger export
+
+The reporting payment-ledger CSV now emits refund rows too (an `Entry type`
+column distinguishes `payment` from `refund`; a refund row reconciles to its
+payment via the shared `paymentId`), so the bookkeeping/accounting hand-off
+represents the full money ledger the moment refunds are recordable.
 
 ## Flows
 
 ### Manual refund (install-side, slice 1)
 
-`POST /jobs/:jobId/invoices/.../payments/:paymentId/refund` (exact route mirrors
-the existing void route), `payments:refund` required:
+`POST /operations/payments/:paymentId/refund` (mirrors the existing void route),
+`payments:refund` required:
 
 1. Lock the payment row + the job's posted invoices (same lock order as
    `recordPayment`/`voidPayment` to avoid deadlocks).
