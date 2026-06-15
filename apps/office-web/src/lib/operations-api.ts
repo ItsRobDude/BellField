@@ -73,8 +73,11 @@ import type {
   Payment,
   PaymentMethod,
   PaymentResponse,
+  PaymentRefund,
+  PaymentRefundResponse,
   OwnershipHistoryEntry,
   RecordPaymentRequest,
+  RecordRefundRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -202,8 +205,11 @@ export type {
   Payment,
   PaymentMethod,
   PaymentResponse,
+  PaymentRefund,
+  PaymentRefundResponse,
   OwnershipHistoryEntry,
   RecordPaymentRequest,
+  RecordRefundRequest,
   JobDetailResponse,
   JobIntakeContextResponse,
   JobStatus,
@@ -983,69 +989,15 @@ export async function postOfficeInvoiceById(input: {
   });
 }
 
-/** List a job's payments across its posted invoices (newest first). */
-export async function listOfficeJobPayments(input: {
-  jobId: string;
-  sessionToken: string;
-  apiBaseUrl?: string;
-}): Promise<JobPaymentsResponse> {
-  return requestJson<JobPaymentsResponse>(`/operations/jobs/${input.jobId}/invoice/payments`, {
-    apiBaseUrl: input.apiBaseUrl,
-    sessionToken: input.sessionToken
-  });
-}
-
-/** Record a payment against a posted invoice. */
-export async function recordOfficePayment(
-  input: RecordPaymentRequest & { invoiceId: string; sessionToken: string; apiBaseUrl?: string }
-): Promise<PaymentResponse> {
-  const { invoiceId, sessionToken, apiBaseUrl, ...payload } = input;
-
-  return requestJson<PaymentResponse>(`/operations/invoices/${invoiceId}/payments`, {
-    apiBaseUrl,
-    sessionToken,
-    method: 'POST',
-    body: JSON.stringify(payload)
-  });
-}
-
-/** Create a Stripe-hosted payment link for the full outstanding job balance. */
-export async function createOfficeOnlinePaymentLink(
-  input: CreateOnlinePaymentLinkRequest & {
-    invoiceId: string;
-    sessionToken: string;
-    apiBaseUrl?: string;
-  }
-): Promise<OnlinePaymentLinkResponse> {
-  const { invoiceId, sessionToken, apiBaseUrl, ...payload } = input;
-
-  return requestJson<OnlinePaymentLinkResponse>(
-    `/operations/invoices/${invoiceId}/payments/online-link`,
-    {
-      apiBaseUrl,
-      sessionToken,
-      method: 'POST',
-      body: JSON.stringify(payload)
-    }
-  );
-}
-
-/** Void a payment by id (the correction path; payments are never edited in place). */
-export async function voidOfficePayment(input: {
-  paymentId: string;
-  reason?: string;
-  sessionToken: string;
-  apiBaseUrl?: string;
-}): Promise<PaymentResponse> {
-  const { paymentId, sessionToken, apiBaseUrl, reason } = input;
-
-  return requestJson<PaymentResponse>(`/operations/payments/${paymentId}/void`, {
-    apiBaseUrl,
-    sessionToken,
-    method: 'POST',
-    body: JSON.stringify({ reason })
-  });
-}
+// Payment-ledger client functions live in operations-payments-api.ts (size
+// guardrail); re-exported here so existing import sites are unchanged.
+export {
+  listOfficeJobPayments,
+  recordOfficePayment,
+  createOfficeOnlinePaymentLink,
+  voidOfficePayment,
+  refundOfficePayment
+} from './operations-payments-api';
 
 /** Cross-job bookkeeping worklists: ready-to-post, open balances, recently posted. */
 export async function getOfficeBookkeepingQueues(input: {

@@ -135,7 +135,7 @@ export interface JobInvoiceBalance {
   amountDue: number;
 }
 
-// --- Payments (Milestone 8, online-only v1) -------------------------------------
+// --- Payments ------------------------------------------------------------------
 
 /** How a manually recorded payment was tendered. */
 export type PaymentMethod = 'cash' | 'check' | 'card' | 'ach' | 'other';
@@ -152,9 +152,9 @@ export interface PaymentAllocation {
 
 /**
  * A payment received for a job. It is an append-only ledger entry: it never changes
- * invoice totals; the job's amount due is derived as net billed − non-void payments.
- * `allocations` records how the receipt applies to posted charge invoices. A
- * correction is a void (`isVoid`), not an edit of the amount.
+ * invoice totals; the job's amount due is derived as net billed − non-void payments
+ * plus active refunds. `allocations` records how the receipt applies to posted
+ * charge invoices. A correction is a void (`isVoid`), not an edit of the amount.
  */
 export interface Payment {
   id: string;

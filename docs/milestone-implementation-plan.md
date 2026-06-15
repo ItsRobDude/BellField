@@ -462,7 +462,7 @@ Make the money side trustworthy.
 - invoice posting flow
 - posted invoice lock behavior
 - adjustment/credit follow-up record path
-- payment workflow foundations (online-only in v1)
+- payment workflow foundations (online-only in v1; no offline field payment queue)
 - bookkeeping access and actions
 - invoice-related activity showing in job history
 
@@ -500,10 +500,10 @@ The second slice (adjustment/credit correction foundation) has also shipped:
 
 The remaining slices have also landed:
 
-- payments (`20260601_010`): online-only v1, manually recorded against posted invoices as an append-only ledger that never mutates invoice totals. Amount due is derived (net billed − non-void payments). Record/list/void are gated on the `payments` area, lock the invoice row, and re-check posted in-transaction; the job timeline gains `paymentRecorded`/`paymentVoided`. Office payments block in the Invoice tab.
+- payments (`20260601_010` plus later allocation/refund migrations): online-only v1, manually recorded against posted invoices as an append-only ledger that never mutates invoice totals. Amount due is derived (net billed − non-void payments + refunds). Record/list/void/refund are gated on the `payments` area, lock the invoice or payment rows as appropriate, and re-check state in-transaction; the job timeline gains payment recorded/voided/refunded events. Office payments and manual refund actions live in the Invoice tab.
 - bookkeeping worklists: a read-only cross-job review surface (office Bookkeeping nav, `invoices:view`) — drafts ready to post, jobs with an open balance, and recently posted invoices, each bounded.
 
-All Milestone 8 migrations (007–010) and the full posting/adjustment/payment/balance/bookkeeping runtime were verified locally against the default dev database. Still later (post-M8): invoice PDF export/delivery and an automated payment-gateway integration.
+All Milestone 8 migrations (007–010) and the full posting/adjustment/payment/balance/bookkeeping runtime were verified locally against the default dev database. Later communication/payment-depth slices have since added invoice PDF/email delivery, full-balance online payment links, and manual office refunds. Still later: provider-confirmed online refunds, partial payments, deposits, stored cards, and deeper processor-fee reconciliation.
 
 ---
 

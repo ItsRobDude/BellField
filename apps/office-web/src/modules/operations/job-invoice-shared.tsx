@@ -24,6 +24,7 @@ export type InvoicePaymentPermissions = {
   canView: boolean;
   canRecord: boolean;
   canVoid: boolean;
+  canRefund: boolean;
 };
 
 export function formatCurrency(amount: number): string {
