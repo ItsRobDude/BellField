@@ -45,6 +45,7 @@ type StripeRefundEventObject = {
   amount?: number | null;
   currency?: string | null;
   failure_reason?: string | null;
+  metadata?: Record<string, string> | null;
 };
 
 @Injectable()

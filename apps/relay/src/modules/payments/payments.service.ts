@@ -356,20 +356,30 @@ export class RelayPaymentsService {
     if (amountCents <= 0 || !refund.currency) {
       return;
     }
+    const paymentIntentId =
+      typeof refund.payment_intent === 'string'
+        ? refund.payment_intent
+        : (refund.payment_intent?.id ?? null);
     const outcome = await this.paymentsStore.recordRefundEvent({
       stripeEventId: event.id,
       stripeRefundId: refund.id,
+      // Echoed back from createRefund's metadata; lets a fast terminal webhook
+      // attach even before the refund id was persisted on the request.
+      refundRequestId: refund.metadata?.bellfieldRefundRequestId ?? null,
       connectedAccountId: event.account,
+      paymentIntentId,
       status: terminal,
       amountCents,
       currency: refund.currency.toUpperCase(),
       failureReason: refund.failure_reason ?? null,
       occurredAt: new Date(event.created * 1000)
     });
-    if (outcome === 'requestNotFound') {
-      // An out-of-band refund (created in the Stripe dashboard, not via BellField).
-      // Deferred reconciliation, not a crash — acknowledge (200) and log.
-      log('error', 'Refund webhook had no matching BellField refund request.', {
+    if (outcome === 'requestNotFound' || outcome === 'mismatch') {
+      // Out-of-band refund (created in the Stripe dashboard) or a webhook that
+      // disagrees with the stored request. Deferred reconciliation, not a crash —
+      // acknowledge (200) and log rather than trusting it into the ledger.
+      log('error', 'Refund webhook did not reconcile against a BellField refund request.', {
+        outcome,
         stripeRefundId: refund.id,
         stripeEventId: event.id
       });

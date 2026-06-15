@@ -397,6 +397,9 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
     input: Parameters<RelayPaymentsStore['recordRefundEvent']>[0]
   ): Promise<RecordRefundEventOutcome> {
     return this.database.transaction(async (queryable) => {
+      // Match by Stripe refund id OR by the request id echoed in refund metadata:
+      // a very fast terminal webhook can arrive before createRefund persisted the
+      // refund id, and we must still attach it to the request (and backfill the id).
       const requestResult = await queryable.query<
         RefundRequestRow & { stripe_checkout_session_id: string }
       >(
@@ -408,9 +411,9 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
            s.stripe_checkout_session_id
          from relay_payment_refund_requests r
          join relay_payment_sessions s on s.id = r.payment_session_id
-         where r.stripe_refund_id = $1
+         where r.stripe_refund_id = $1 or r.id = $2
          for update of r`,
-        [input.stripeRefundId]
+        [input.stripeRefundId, input.refundRequestId]
       );
       const request = requestResult.rows[0];
       if (!request) {
@@ -419,13 +422,23 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
         return 'requestNotFound';
       }
 
-      await queryable.query(
-        `update relay_payment_refund_requests
-         set status = $2, failure_reason = $3, updated_at = $4
-         where id = $1`,
-        [request.id, input.status, input.failureReason, input.occurredAt]
-      );
+      // Reconcile the webhook against the request/session we authorized, exactly
+      // like the paid-event path: never trust a webhook reporting a different
+      // connected account, PaymentIntent, amount, or currency.
+      if (
+        (input.connectedAccountId !== undefined &&
+          input.connectedAccountId !== request.stripe_connected_account_id) ||
+        (input.paymentIntentId !== null &&
+          input.paymentIntentId !== request.stripe_payment_intent_id) ||
+        input.amountCents !== request.amount_cents ||
+        input.currency.toUpperCase() !== request.currency.toUpperCase()
+      ) {
+        return 'mismatch';
+      }
 
+      // Insert the canonical event FIRST. A duplicate/contradicting terminal
+      // webhook (same refund id) no-ops here and must NOT flip request status —
+      // the first terminal event wins.
       const inserted = await queryable.query(
         `insert into relay_payment_refund_events (
            id, shop_id, refund_request_id, payment_session_id, stripe_event_id, stripe_refund_id,
@@ -451,7 +464,22 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
           input.occurredAt
         ]
       );
-      return (inserted.rowCount ?? 0) > 0 ? 'recorded' : 'duplicate';
+      if ((inserted.rowCount ?? 0) === 0) {
+        return 'duplicate';
+      }
+
+      // Only now that a canonical event row exists do we advance the request, and
+      // backfill the Stripe refund id if createRefund hadn't persisted it yet.
+      await queryable.query(
+        `update relay_payment_refund_requests
+         set status = $2,
+             failure_reason = $3,
+             stripe_refund_id = coalesce(stripe_refund_id, $4),
+             updated_at = $5
+         where id = $1`,
+        [request.id, input.status, input.failureReason, input.stripeRefundId, input.occurredAt]
+      );
+      return 'recorded';
     });
   }
 

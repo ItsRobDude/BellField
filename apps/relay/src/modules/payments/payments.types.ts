@@ -83,9 +83,11 @@ export type RelayPaymentRefundRequestRecord = {
 /**
  * Outcome of recording a Stripe refund webhook. `requestNotFound` is the
  * out-of-band case (a refund created in the Stripe dashboard, no BellField
- * request) the service logs and ignores — deferred reconciliation, not an error.
+ * request); `mismatch` is a webhook whose account/PaymentIntent/amount/currency
+ * disagrees with the stored request. Both are logged and ignored (200), not
+ * trusted into the ledger.
  */
-export type RecordRefundEventOutcome = 'recorded' | 'duplicate' | 'requestNotFound';
+export type RecordRefundEventOutcome = 'recorded' | 'duplicate' | 'requestNotFound' | 'mismatch';
 
 /**
  * Outcome of reconciling a paid webhook against the stored session.
@@ -178,8 +180,13 @@ export interface RelayPaymentsStore {
   recordRefundEvent(input: {
     stripeEventId: string;
     stripeRefundId: string;
+    /** Request id echoed in the Stripe refund metadata; lets a fast terminal
+     * webhook attach even before createRefund persisted the refund id. */
+    refundRequestId: string | null;
     /** Connected account from the webhook event, reconciled against the request. */
     connectedAccountId: string | undefined;
+    /** PaymentIntent from the webhook refund, reconciled against the request. */
+    paymentIntentId: string | null;
     status: 'succeeded' | 'failed';
     amountCents: number;
     currency: string;

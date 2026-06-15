@@ -175,8 +175,10 @@ true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
   `apiVersion`** and pin/document the **webhook endpoint version**; handle
   `refund.created/updated/failed`, storing events idempotently on
   `provider_refund_id` (succeeded) / recording failures; apply ledger changes
-  only for **succeeded**. Refund-event poll + ack endpoints mirror payments.
-  Folds in the relay **`esModuleInterop`** tsconfig fix.
+  only for **succeeded**. Refund-event poll + ack endpoints mirror payments. The
+  relay **`esModuleInterop`** tsconfig cleanup is **deferred to its own tiny PR**
+  (orthogonal to refunds, changes emit for every relay import, wants its own
+  build check; `import Stripe = require()` already works).
 - **API** dedicated **pending online-refund request table** keyed to `payment_id`
   (amount, reason, requestedBy, idempotency key, `providerRefundId` when known,
   status, attempt/last-error, timestamps). New **`POST

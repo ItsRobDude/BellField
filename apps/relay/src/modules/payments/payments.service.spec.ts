@@ -413,7 +413,8 @@ describe('RelayPaymentsService.handleStripeWebhook refunds', () => {
           payment_intent: 'pi_1',
           amount,
           currency: 'usd',
-          failure_reason: status === 'failed' ? 'card_declined' : null
+          failure_reason: status === 'failed' ? 'card_declined' : null,
+          metadata: { bellfieldRefundRequestId: 'pay_refund_1' }
         }
       }
     };
