@@ -1,11 +1,12 @@
 # Refunds Design
 
 Status: manual install-side refund slice shipped (2026-06-14); online
-Stripe/relay refunds PR1 (the full money path, no office button) built on
-`feat/payment-refunds-online` (relay + API pending model + worker apply/dead-letter,
-all unit-tested). Office button + read-model + live Stripe sandbox smoke remain
-PR2. Controlling doc for the refunds slice of the money-path-depth lane. Decisions
-confirmed with Rob via Q&A on 2026-06-14; PR1 build refinements on 2026-06-15.
+Stripe/relay refunds PR1 — the full money path with no office button (relay +
+API pending model + worker apply/dead-letter) — is built and unit-tested. The
+office Refund-on-card button, pending-state display, and live Stripe sandbox
+smoke remain PR2. Controlling doc for the refunds slice of the money-path-depth
+lane. Decisions confirmed with Rob via Q&A on 2026-06-14; PR1 build refinements
+on 2026-06-15.
 
 ## What this adds
 
