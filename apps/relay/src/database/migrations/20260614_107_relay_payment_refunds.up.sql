@@ -37,7 +37,10 @@ create unique index relay_payment_refund_requests_stripe_refund_idx
 create table if not exists relay_payment_refund_events (
   id text primary key,
   shop_id text not null references relay_shops(id) on delete cascade,
-  refund_request_id text references relay_payment_refund_requests(id) on delete cascade,
+  -- Every refund event in this slice originates from a BellField refund request.
+  -- Out-of-band Stripe-dashboard refunds are deferred reconciliation work: the
+  -- webhook handler logs and ignores a refund with no matching request.
+  refund_request_id text not null references relay_payment_refund_requests(id) on delete cascade,
   payment_session_id text not null references relay_payment_sessions(id) on delete cascade,
   stripe_event_id text not null,
   stripe_refund_id text not null,
@@ -58,6 +61,12 @@ create table if not exists relay_payment_refund_events (
 -- Each Stripe webhook event lands at most once.
 create unique index relay_payment_refund_events_stripe_event_idx
   on relay_payment_refund_events (stripe_event_id);
+
+-- One stored refund event per shop + refund: several webhook events
+-- (refund.created/updated/failed) can describe the same refund, but the install
+-- should pick it up exactly once.
+create unique index relay_payment_refund_events_refund_idx
+  on relay_payment_refund_events (shop_id, stripe_refund_id);
 
 -- Fast poll of a shop's undelivered refund events (mirrors the payment-event poll).
 create index relay_payment_refund_events_undelivered_idx

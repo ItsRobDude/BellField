@@ -225,8 +225,12 @@ export type RelayRefundResult =
       providerRefundId: string;
       amountCents: number;
       currency: string;
-      /** Stripe refund status at creation; confirmation still arrives via webhook. */
-      status: 'pending' | 'succeeded';
+      /**
+       * Stripe-reported refund status at creation — NOT the BellField request
+       * lifecycle (`requested → succeeded | failed`). Final confirmation still
+       * arrives via the webhook-driven refund event.
+       */
+      providerStatus: 'pending' | 'succeeded';
     }
   | {
       kind: 'failed';
@@ -256,7 +260,7 @@ export interface RelayRefundEventRecord {
   provider: 'stripe';
   /** Stripe refund id; the worker dedupes the local refund row on this. */
   providerRefundId: string;
-  /** Stripe payment id of the original charge; the worker attaches the refund to it. */
+  /** Stripe PaymentIntent id of the original payment; the worker attaches the refund to it. */
   providerPaymentId: string;
   providerSessionId: string;
   jobRef: string;

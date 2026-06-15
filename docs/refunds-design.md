@@ -166,8 +166,11 @@ plumbing.
   `relay_payment_refund_events` (migration `20260614_107`). Token-authed endpoint
   takes a relay-owned **session reference** (the Stripe checkout session id), not
   a raw PaymentIntent/amount; the relay looks up the session, validates shop
-  ownership + connected account + currency + **amount ≤ remaining refundable**,
-  then `stripe.refunds.create({ payment_intent, amount?, refund_application_fee:
+  ownership + connected account + currency + **amount ≤ remaining refundable**
+  (remaining = session paid − succeeded refunds − **outstanding requested/pending
+  refund requests**, so a double-click or parallel request can't both pass relay
+  validation), then `stripe.refunds.create({ payment_intent, amount?,
+  refund_application_fee:
 true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
   `apiVersion`** and pin/document the **webhook endpoint version**; handle
   `refund.created/updated/failed`, storing events idempotently on
