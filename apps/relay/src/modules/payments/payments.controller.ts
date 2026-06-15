@@ -1,8 +1,11 @@
 import { Body, Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@nestjs/common';
 import type {
   RelayCreatePaymentSessionResponse,
+  RelayCreateRefundResponse,
   RelayPaymentEventAckResponse,
-  RelayPaymentEventsResponse
+  RelayPaymentEventsResponse,
+  RelayRefundEventAckResponse,
+  RelayRefundEventsResponse
 } from '@bellfield/contracts';
 import {
   getAuthenticatedShop,
@@ -10,6 +13,7 @@ import {
   type RelayAuthenticatedRequest
 } from '../identity/relay-auth.guard';
 import { CreatePaymentSessionRequestDto } from './dto/create-payment-session.dto';
+import { CreateRefundRequestDto } from './dto/create-refund.dto';
 import { RelayPaymentsService } from './payments.service';
 
 @Controller('v1')
@@ -47,5 +51,33 @@ export class PaymentsController {
       paymentEventId,
       new Date()
     );
+  }
+
+  @Post('payment-refunds')
+  async createRefund(
+    @Req() request: RelayAuthenticatedRequest,
+    @Body() body: CreateRefundRequestDto
+  ): Promise<RelayCreateRefundResponse> {
+    const shop = getAuthenticatedShop(request);
+    const result = await this.relayPaymentsService.createRefund(shop, body);
+    return { result };
+  }
+
+  @Get('refund-events')
+  async listRefundEvents(
+    @Req() request: RelayAuthenticatedRequest
+  ): Promise<RelayRefundEventsResponse> {
+    const shop = getAuthenticatedShop(request);
+    return this.relayPaymentsService.listUndeliveredRefundEvents(shop.shopId);
+  }
+
+  @Post('refund-events/:refundEventId/ack')
+  @HttpCode(200)
+  async acknowledgeRefundEvent(
+    @Req() request: RelayAuthenticatedRequest,
+    @Param('refundEventId') refundEventId: string
+  ): Promise<RelayRefundEventAckResponse> {
+    const shop = getAuthenticatedShop(request);
+    return this.relayPaymentsService.acknowledgeRefundEvent(shop.shopId, refundEventId, new Date());
   }
 }

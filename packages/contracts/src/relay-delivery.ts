@@ -198,3 +198,85 @@ export interface RelayPaymentEventsResponse {
 export interface RelayPaymentEventAckResponse {
   acknowledged: boolean;
 }
+
+// --- Online refunds (Phase 6b slice 2) ------------------------------------------
+
+/**
+ * Install request to refund a paid relay session. The install references the
+ * relay-owned session (the Stripe checkout session id it stored as the payment's
+ * providerSessionId); the relay validates ownership/amount and calls Stripe on the
+ * connected account. The install never supplies a raw PaymentIntent or fee.
+ */
+export interface RelayCreateRefundRequest {
+  /** Install-side idempotency key. Replays return the same recorded refund request. */
+  idempotencyKey: string;
+  /** The Stripe checkout session id of the original paid session (relay-owned). */
+  providerSessionId: string;
+  /** Amount to refund in minor units; must be ≤ the session's remaining refundable. */
+  amountCents: number;
+  reason?: string;
+}
+
+export type RelayRefundResult =
+  | {
+      kind: 'requested';
+      refundRequestId: string;
+      /** Stripe refund id (`re_…`); the worker reconciles confirmed events to it. */
+      providerRefundId: string;
+      amountCents: number;
+      currency: string;
+      /**
+       * Stripe-reported refund status at creation — NOT the BellField request
+       * lifecycle (`requested → succeeded | failed`). Final confirmation still
+       * arrives via the webhook-driven refund event.
+       */
+      providerStatus: 'pending' | 'succeeded';
+    }
+  | {
+      kind: 'failed';
+      code:
+        | 'paymentsNotConfigured'
+        | 'paymentsDisabled'
+        | 'sessionNotFound'
+        | 'notRefundable'
+        | 'amountExceedsRefundable'
+        | 'providerError';
+      retryable: boolean;
+      message: string;
+    };
+
+export interface RelayCreateRefundResponse {
+  result: RelayRefundResult;
+}
+
+/**
+ * A provider-confirmed refund outcome awaiting install pickup, delivered
+ * at-least-once until acked. `status` lets the worker apply succeeded refunds to
+ * the ledger and mark failed ones without writing a refund row.
+ */
+export interface RelayRefundEventRecord {
+  refundEventId: string;
+  refundRequestId: string;
+  provider: 'stripe';
+  /** Stripe refund id; the worker dedupes the local refund row on this. */
+  providerRefundId: string;
+  /** Stripe PaymentIntent id of the original payment; the worker attaches the refund to it. */
+  providerPaymentId: string;
+  providerSessionId: string;
+  jobRef: string;
+  amountCents: number;
+  currency: string;
+  applicationFeeRefundedCents: number | null;
+  status: 'succeeded' | 'failed';
+  /** Provider failure detail when status is 'failed'. */
+  failureReason: string | null;
+  occurredAt: string;
+}
+
+export interface RelayRefundEventsResponse {
+  events: RelayRefundEventRecord[];
+}
+
+export interface RelayRefundEventAckResponse {
+  acknowledged: boolean;
+}

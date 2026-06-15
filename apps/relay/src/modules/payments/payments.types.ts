@@ -1,6 +1,7 @@
 import type {
   RelayCreatePaymentSessionRequest,
-  RelayPaymentEventRecord
+  RelayPaymentEventRecord,
+  RelayRefundEventRecord
 } from '@bellfield/contracts';
 
 export type RelayShopPaymentsConfig = {
@@ -47,6 +48,46 @@ export type StripeCheckoutSessionCreateResult = {
   checkoutUrl: string;
   expiresAt: Date;
 };
+
+export type StripeRefundCreateInput = {
+  connectedAccountId: string;
+  paymentIntentId: string;
+  amountCents: number;
+  refundRequestId: string;
+  idempotencyKey: string;
+};
+
+export type StripeRefundCreateResult = {
+  stripeRefundId: string;
+  status: 'pending' | 'succeeded';
+};
+
+export type RelayPaymentRefundRequestRecord = {
+  id: string;
+  shopId: string;
+  paymentSessionId: string;
+  idempotencyKey: string;
+  amountCents: number;
+  currency: string;
+  reason: string | null;
+  stripeConnectedAccountId: string;
+  stripePaymentIntentId: string;
+  stripeRefundId: string | null;
+  applicationFeeRefundedCents: number | null;
+  status: 'requested' | 'succeeded' | 'failed';
+  failureReason: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+/**
+ * Outcome of recording a Stripe refund webhook. `requestNotFound` is the
+ * out-of-band case (a refund created in the Stripe dashboard, no BellField
+ * request); `mismatch` is a webhook whose account/PaymentIntent/amount/currency
+ * disagrees with the stored request. Both are logged and ignored (200), not
+ * trusted into the ledger.
+ */
+export type RecordRefundEventOutcome = 'recorded' | 'duplicate' | 'requestNotFound' | 'mismatch';
 
 /**
  * Outcome of reconciling a paid webhook against the stored session.
@@ -96,6 +137,66 @@ export interface RelayPaymentsStore {
   acknowledgePaymentEvent(
     shopId: string,
     paymentEventId: string,
+    deliveredAt: Date
+  ): Promise<boolean>;
+
+  // --- Refunds ---
+  /** Serialize all refund activity for one paid session so concurrent requests
+   * (different idempotency keys) can't both pass the remaining-refundable check. */
+  withRefundSessionLock<T>(
+    shopId: string,
+    stripeCheckoutSessionId: string,
+    callback: () => Promise<T>
+  ): Promise<T>;
+  findRefundRequestByIdempotencyKey(
+    shopId: string,
+    idempotencyKey: string
+  ): Promise<RelayPaymentRefundRequestRecord | null>;
+  /** The shop's own paid session for the given Stripe checkout session id, or null. */
+  findPaidSessionForRefund(
+    shopId: string,
+    stripeCheckoutSessionId: string
+  ): Promise<RelayPaymentSessionRecord | null>;
+  /** Cents already committed to refunds on a session: requested + succeeded (not failed). */
+  sumConsumedRefundCentsForSession(paymentSessionId: string): Promise<number>;
+  createRefundRequest(input: {
+    id: string;
+    shopId: string;
+    paymentSessionId: string;
+    idempotencyKey: string;
+    amountCents: number;
+    currency: string;
+    reason: string | null;
+    stripeConnectedAccountId: string;
+    stripePaymentIntentId: string;
+    applicationFeeRefundedCents: number;
+    createdAt: Date;
+  }): Promise<RelayPaymentRefundRequestRecord>;
+  setRefundRequestStripeRefundId(input: {
+    id: string;
+    stripeRefundId: string;
+    updatedAt: Date;
+  }): Promise<void>;
+  recordRefundEvent(input: {
+    stripeEventId: string;
+    stripeRefundId: string;
+    /** Request id echoed in the Stripe refund metadata; lets a fast terminal
+     * webhook attach even before createRefund persisted the refund id. */
+    refundRequestId: string | null;
+    /** Connected account from the webhook event, reconciled against the request. */
+    connectedAccountId: string | undefined;
+    /** PaymentIntent from the webhook refund, reconciled against the request. */
+    paymentIntentId: string | null;
+    status: 'succeeded' | 'failed';
+    amountCents: number;
+    currency: string;
+    failureReason: string | null;
+    occurredAt: Date;
+  }): Promise<RecordRefundEventOutcome>;
+  listUndeliveredRefundEvents(shopId: string): Promise<RelayRefundEventRecord[]>;
+  acknowledgeRefundEvent(
+    shopId: string,
+    refundEventId: string,
     deliveredAt: Date
   ): Promise<boolean>;
 }

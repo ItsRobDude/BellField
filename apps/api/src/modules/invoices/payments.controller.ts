@@ -8,6 +8,8 @@ import {
 } from './payments.dto';
 import { OnlinePaymentLinkService } from './online-payment-link.service';
 import { CreateOnlinePaymentLinkRequestBodyDto } from './online-payment-link.dto';
+import { OnlineRefundService } from './online-refund.service';
+import { RequestOnlineRefundBodyDto } from './online-refund.dto';
 
 // Payments are listed at the job level (a job's whole payment history across its
 // invoices).
@@ -62,7 +64,10 @@ export class InvoicePaymentsController {
 // Voiding addresses a payment by its own id (the correction path).
 @Controller('operations/payments')
 export class PaymentController {
-  constructor(private readonly paymentsService: PaymentsService) {}
+  constructor(
+    private readonly paymentsService: PaymentsService,
+    private readonly onlineRefundService: OnlineRefundService
+  ) {}
 
   @Post(':paymentId/void')
   async void(
@@ -84,6 +89,22 @@ export class PaymentController {
     @Body() request: RecordRefundRequestBodyDto
   ) {
     return this.paymentsService.refundPayment(
+      getBearerToken(authorizationHeader),
+      paymentId,
+      request
+    );
+  }
+
+  // Online (Stripe-via-relay) refund of a provider-confirmed card payment. Kept
+  // separate from /refund, which stays manual-only: this opens a pending request
+  // the worker confirms from a Stripe refund event.
+  @Post(':paymentId/online-refund')
+  async onlineRefund(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('paymentId') paymentId: string,
+    @Body() request: RequestOnlineRefundBodyDto
+  ) {
+    return this.onlineRefundService.requestOnlineRefund(
       getBearerToken(authorizationHeader),
       paymentId,
       request

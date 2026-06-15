@@ -16,6 +16,9 @@ import { JobRunner, type WorkerJob } from './jobs/job-runner';
 import { createPaymentEventsJob } from './jobs/payments/payment-events-job';
 import { PaymentEventsRepository } from './jobs/payments/payment-events.repository';
 import { PaymentEventsService } from './jobs/payments/payment-events-service';
+import { createRefundEventsJob } from './jobs/payments/refund-events-job';
+import { RefundEventsRepository } from './jobs/payments/refund-events.repository';
+import { RefundEventsService } from './jobs/payments/refund-events-service';
 
 const heartbeatMs = 60_000;
 
@@ -66,6 +69,12 @@ async function startWorker(): Promise<void> {
       new PaymentEventsRepository(database),
       relayClient
     );
+    // Refund events reuse the payment-event poll interval — same relay, same
+    // at-least-once delivery, so a second knob would only add config surface.
+    const refundEventsService = new RefundEventsService(
+      new RefundEventsRepository(database),
+      relayClient
+    );
     jobs.push(
       createDeliveryRetryJob({
         deliveryService,
@@ -81,6 +90,10 @@ async function startWorker(): Promise<void> {
       }),
       createPaymentEventsJob({
         paymentEventsService,
+        intervalMs: runtimeConfig.payments.eventIntervalMs
+      }),
+      createRefundEventsJob({
+        refundEventsService,
         intervalMs: runtimeConfig.payments.eventIntervalMs
       })
     );

@@ -3,8 +3,16 @@ import Stripe = require('stripe');
 import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
 import type {
   StripeCheckoutSessionCreateInput,
-  StripeCheckoutSessionCreateResult
+  StripeCheckoutSessionCreateResult,
+  StripeRefundCreateInput,
+  StripeRefundCreateResult
 } from './payments.types';
+
+// Pin the API version so refund/checkout response shapes (and the version Stripe
+// uses for our outbound calls) can't drift under us on an SDK bump. The webhook
+// endpoint's delivered-event version is configured separately in the Stripe
+// dashboard (see docs/refunds-design.md) and must track this.
+const STRIPE_API_VERSION = '2026-05-27.dahlia';
 
 type CheckoutPaymentIntentData = {
   metadata: Record<string, string>;
@@ -29,12 +37,23 @@ type StripeCheckoutSessionEventObject = {
   currency?: string | null;
 };
 
+type StripeRefundEventObject = {
+  object: 'refund';
+  id: string;
+  status?: string | null;
+  payment_intent?: string | { id?: string } | null;
+  amount?: number | null;
+  currency?: string | null;
+  failure_reason?: string | null;
+  metadata?: Record<string, string> | null;
+};
+
 @Injectable()
 export class StripePaymentsService {
   private readonly stripeSecretKey = getRelayRuntimeConfig().stripeSecretKey;
   private readonly stripeWebhookSecret = getRelayRuntimeConfig().stripeWebhookSecret;
   private readonly stripe = this.stripeSecretKey
-    ? new Stripe(this.stripeSecretKey, { typescript: true })
+    ? new Stripe(this.stripeSecretKey, { apiVersion: STRIPE_API_VERSION, typescript: true })
     : null;
 
   get isConfigured(): boolean {
@@ -106,6 +125,38 @@ export class StripePaymentsService {
     };
   }
 
+  /**
+   * Refund a PaymentIntent on the connected account. `refund_application_fee:
+   * true` returns BellField's platform fee proportionally for partial refunds.
+   * The idempotency key is per refund request, so a retried request never
+   * doubles the refund. Confirmation still arrives via the refund webhook.
+   */
+  async createRefund(input: StripeRefundCreateInput): Promise<StripeRefundCreateResult> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured.');
+    }
+    const refund = await this.stripe.refunds.create(
+      {
+        payment_intent: input.paymentIntentId,
+        amount: input.amountCents,
+        refund_application_fee: true,
+        metadata: {
+          bellfieldRefundRequestId: input.refundRequestId
+        }
+      },
+      {
+        stripeAccount: input.connectedAccountId,
+        idempotencyKey: `bellfield-payment-refund:${input.idempotencyKey}`
+      }
+    );
+    return {
+      stripeRefundId: refund.id,
+      // Treat anything not yet 'succeeded' as pending; failed/canceled surface via
+      // the refund webhook and clear the install's pending request.
+      status: refund.status === 'succeeded' ? 'succeeded' : 'pending'
+    };
+  }
+
   constructWebhookEvent(rawBody: Buffer, signature: string | undefined): StripeWebhookEvent {
     if (!this.stripe || !this.stripeWebhookSecret) {
       throw new Error('Stripe webhook handling is not configured.');
@@ -127,5 +178,14 @@ export function isStripeCheckoutSession(value: unknown): value is StripeCheckout
     value !== null &&
     'object' in value &&
     (value as { object?: unknown }).object === 'checkout.session'
+  );
+}
+
+export function isStripeRefund(value: unknown): value is StripeRefundEventObject {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'object' in value &&
+    (value as { object?: unknown }).object === 'refund'
   );
 }

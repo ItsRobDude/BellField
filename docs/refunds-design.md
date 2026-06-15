@@ -1,8 +1,12 @@
 # Refunds Design
 
 Status: manual install-side refund slice shipped (2026-06-14); online
-Stripe/relay refunds remain slice 2. Controlling doc for the refunds slice of
-the money-path-depth lane. Decisions confirmed with Rob via Q&A on 2026-06-14.
+Stripe/relay refunds PR1 — the full money path with no office button (relay +
+API pending model + worker apply/dead-letter) — is built and unit-tested. The
+office Refund-on-card button, pending-state display, and live Stripe sandbox
+smoke remain PR2. Controlling doc for the refunds slice of the money-path-depth
+lane. Decisions confirmed with Rob via Q&A on 2026-06-14; PR1 build refinements
+on 2026-06-15.
 
 ## What this adds
 
@@ -17,7 +21,8 @@ ledger entries, exactly like payments.
 - **Scope of the full refunds lane:** online (Stripe) **and** manual refunds;
   full **or** partial amounts; gated behind a new `payments:refund` permission.
   The shipped first implementation exposes manual full/partial refunds in the
-  office; online refunds follow in slice 2.
+  office; online refunds are split into PR1 backend money path and PR2 office
+  surface/live proof.
 - **Application fee on a card refund:** refunded **proportionally**. When a shop
   refunds a customer's card payment, BellField returns its application fee for
   the refunded portion (Stripe `refund_application_fee` / proportional). The shop
@@ -150,23 +155,79 @@ money ledger the moment refunds are recordable.
    allocations into `payment_refund_allocations`.
 4. Job timeline entry: `paymentRefunded`, "Refund of $X recorded (method)."
 
-### Online (Stripe) refund (relay + worker, slice 2) — DEFERRED
+### Online (Stripe) refund (relay + worker) — SLICE 2, IN PROGRESS
 
-1. Office requests a refund (full/partial) on a card payment → API → relay.
-2. Relay calls Stripe `refunds.create` on the connected account with
-   `refund_application_fee: true` (proportional) and the refund amount.
-3. Stripe emits a refund event (`charge.refunded` / `refund.updated`) to the
-   relay webhook; the relay records it as a relay payment event.
-4. The install worker polls/acks the event (reusing the existing payment-events
-   pipeline) and records the `payment_refunds` row (`source: 'bellfield_payments'`,
-   `provider: 'stripe'`, `provider_refund_id`, proportional
-   `application_fee_refunded`) + reverses allocations — idempotent on
-   `provider_refund_id`.
-5. Pending state between request and confirmation is tracked like online
-   payment sessions (no half-real refund row); UX shows "refund requested."
+Built around a real refund-event lifecycle (not a thin extension of the payment
+pipeline — `relay_payment_events` is payment-only and can't hold refunds). **Two
+PRs, split at the cross-app contract boundary** so nothing lands as unusable
+plumbing.
 
-The `esModuleInterop` relay tsconfig fix rides slice 2's relay PR so it goes
-through the `quality` gate.
+**PR 1 — foundation + money path, no office button (proven in tests):**
+
+- **Contracts** (`relay-delivery.ts`): `RelayCreateRefundRequest` /
+  `RelayRefundResult` / `RelayRefundEventRecord` (status `succeeded|failed`); an
+  API-side online-refund request with lifecycle `requested → succeeded | failed`.
+- **Relay** dedicated tables `relay_payment_refund_requests` +
+  `relay_payment_refund_events` (migration `20260614_107`). Token-authed endpoint
+  takes a relay-owned **session reference** (the Stripe checkout session id), not
+  a raw PaymentIntent/amount; the relay looks up the session, validates shop
+  ownership + connected account + currency + **amount ≤ remaining refundable**
+  (remaining = session paid − succeeded refunds − **outstanding requested/pending
+  refund requests**, so a double-click or parallel request can't both pass relay
+  validation), then `stripe.refunds.create({ payment_intent, amount?,
+  refund_application_fee:
+true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
+  `apiVersion`** and pin/document the **webhook endpoint version**; handle
+  `refund.created/updated/failed`, storing events idempotently on
+  `provider_refund_id` (succeeded) / recording failures; apply ledger changes
+  only for **succeeded**. Refund-event poll + ack endpoints mirror payments. The
+  relay **`esModuleInterop`** tsconfig cleanup is **deferred to its own tiny PR**
+  (orthogonal to refunds, changes emit for every relay import, wants its own
+  build check; `import Stripe = require()` already works).
+- **Relay** refund-event lookup resolves the request by Stripe refund id first,
+  then by the metadata request id only if no refund-id row exists, and returns
+  `mismatch` when the two disagree — a single `OR` could match two rows and
+  advance an arbitrary one.
+- **API** dedicated **pending online-refund request table** (`online_refund_requests`,
+  migration `20260615_001`) keyed to `payment_id`: amount, currency, reason,
+  `requested_by_*`, `idempotency_key`, `relay_refund_request_id`,
+  `provider_refund_id`, status, `last_error`, and worker dead-letter columns
+  `apply_attempt_count`/`last_apply_error`/`last_apply_attempt_at`/`failed_at`.
+  New **`POST /operations/payments/:paymentId/online-refund`** (request →
+  pending); the existing `/refund` stays **manual-only**. The flow is split into
+  three phases so **no DB lock is held across the relay network call**: (1) a
+  short txn locks job+payment, validates (online, not void, has session id,
+  amount ≤ remaining refundable net of confirmed refunds + outstanding requests)
+  and creates-or-reuses the pending row; (2) the relay call runs outside any txn;
+  (3) a short update records the outcome. A **retryable/transport** relay failure
+  leaves the request `requested` with `last_error` and the **same idempotency
+  key** (a retry never double-refunds); only a **terminal/non-retryable** failure
+  moves it to `failed`. Response states: `requested | failed | providerError |
+paymentsNotConfigured`.
+- **Worker** `applyRelayRefundEvent`: write `payment_refunds`
+  (`bellfield_payments`/`stripe`/`provider_refund_id`/proportional
+  `application_fee_refunded`) + reverse allocations main-first, **idempotent on
+  `provider_refund_id`**, **only after the local payment exists** (match
+  `provider_payment_id`) — never fabricate from `jobRef`. Reconcile the pending
+  request to `succeeded` by **`provider_refund_id` → `relay_refund_request_id` →
+  outstanding `(payment, amount)`** (the last covers an API timeout before the ids
+  were stored). **Deferred/dead-letter**: a succeeded refund whose payment isn't
+  recorded yet **defers** (no ack, relay redelivers) and bumps
+  `apply_attempt_count`; past an **injectable bound (default 30, ~30 min at the
+  shared payment-event poll)** the request is marked `failed` + a
+  `paymentRefundFailed` timeline entry and the event is acked. A `refund.failed`
+  event marks the request failed (+ `paymentRefundFailed` timeline) **without**
+  writing a refund row. The refund poll **reuses the payment-event interval**.
+
+**PR 2 — office UI + live smoke:** enable Refund on card (`bellfieldPayments`)
+payments with a **confirm dialog** ("Request a $X online refund?"), a "refund
+requested" pending state, duplicate-request blocking, and confirmed/failed
+display; dated Stripe sandbox smoke (card payment → partial + full refund →
+webhook → worker → ledger).
+
+**The worker has no bounded retry today** (`payment-events-service.ts` just
+skips the ack and redelivers forever) — the dead-letter handling above is new,
+not "existing."
 
 ## Permissions
 
