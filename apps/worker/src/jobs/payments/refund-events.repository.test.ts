@@ -62,16 +62,17 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   const database = new CapturingDatabase();
   database.rowQueue = [
     [], // 1: refund dedup — none
-    [{ id: 'pay-1', jobId: 'job-1' }], // 2: original payment
+    [{ id: 'pay-1', jobId: 'job-1', amountCents: 10_000 }], // 2: original payment
     [{ id: 'job-1' }], // 3: lock job
     [], // 4: lock posted invoices
-    [], // 5: insert payment_refunds
-    [{ invoiceId: 'inv-main', allocatedCents: 10_000, refundedCents: 0 }], // 6: reversal source
-    [], // 7: insert payment_refund_allocations
-    [{ id: 'orr-1', jobId: 'job-1' }], // 8: find request by refund id
-    [], // 9: update request -> succeeded
-    [], // 10: update jobs
-    [] // 11: insert timeline
+    [{ cents: 0 }], // 5: prior refunds on this payment
+    [], // 6: insert payment_refunds
+    [{ invoiceId: 'inv-main', allocatedCents: 10_000, refundedCents: 0 }], // 7: reversal source
+    [], // 8: insert payment_refund_allocations
+    [{ id: 'orr-1', jobId: 'job-1' }], // 9: find request by refund id
+    [], // 10: update request -> succeeded
+    [], // 11: update jobs
+    [] // 12: insert timeline
   ];
   const repository = new RefundEventsRepository(database);
 
@@ -101,6 +102,35 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   const timeline = database.find(/insert into job_timeline_entries/i);
   assert.match(timeline?.text ?? '', /'paymentRefunded'/);
   assert.match(String(timeline?.values?.[3]), /Online refund of \$100\.00 confirmed/);
+});
+
+test('RefundEventsRepository records a confirmed refund but flags one exceeding the remaining refundable', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [], // 1: refund dedup — none
+    [{ id: 'pay-1', jobId: 'job-1', amountCents: 10_000 }], // 2: $100 payment
+    [{ id: 'job-1' }], // 3: lock job
+    [], // 4: lock posted invoices
+    [{ cents: 8_000 }], // 5: $80 already refunded -> only $20 remains refundable
+    [], // 6: insert payment_refunds
+    [{ invoiceId: 'inv-main', allocatedCents: 10_000, refundedCents: 8_000 }], // 7: reversal source
+    [], // 8: insert payment_refund_allocations (reverses only the reversible $20)
+    [{ id: 'orr-1', jobId: 'job-1' }], // 9: find request by refund id
+    [], // 10: update request -> succeeded
+    [], // 11: update jobs
+    [] // 12: insert timeline
+  ];
+  const repository = new RefundEventsRepository(database);
+
+  // The event refunds the full $100 even though only $20 is still refundable.
+  const outcome = await repository.applyRelayRefundEvent(makeEvent(), occurredAt);
+
+  assert.equal(outcome, 'applied');
+  // The confirmed money is still recorded — never dropped...
+  assert.ok(database.find(/insert into payment_refunds/i));
+  // ...but the timeline flags the over-refund for the office to review.
+  const timeline = database.find(/insert into job_timeline_entries/i);
+  assert.match(String(timeline?.values?.[3]), /exceeds the amount still refundable/);
 });
 
 test('RefundEventsRepository is idempotent when the refund row already exists', async () => {
@@ -200,18 +230,19 @@ test('RefundEventsRepository reconciles the request by outstanding (payment, amo
   const database = new CapturingDatabase();
   database.rowQueue = [
     [], // 1: refund dedup — none
-    [{ id: 'pay-1', jobId: 'job-1' }], // 2: original payment
+    [{ id: 'pay-1', jobId: 'job-1', amountCents: 10_000 }], // 2: original payment
     [{ id: 'job-1' }], // 3: lock job
     [], // 4: lock posted invoices
-    [], // 5: insert payment_refunds
-    [{ invoiceId: 'inv-main', allocatedCents: 10_000, refundedCents: 0 }], // 6: reversal source
-    [], // 7: insert payment_refund_allocations
-    [], // 8: reconcile find by refund id — none (API timed out before storing it)
-    [], // 9: reconcile find by relay request id — none
-    [{ id: 'orr-1', jobId: 'job-1' }], // 10: reconcile find by outstanding (payment, amount)
-    [], // 11: update request -> succeeded
-    [], // 12: update jobs
-    [] // 13: insert timeline
+    [{ cents: 0 }], // 5: prior refunds on this payment
+    [], // 6: insert payment_refunds
+    [{ invoiceId: 'inv-main', allocatedCents: 10_000, refundedCents: 0 }], // 7: reversal source
+    [], // 8: insert payment_refund_allocations
+    [], // 9: reconcile find by refund id — none (API timed out before storing it)
+    [], // 10: reconcile find by relay request id — none
+    [{ id: 'orr-1', jobId: 'job-1' }], // 11: reconcile find by outstanding (payment, amount)
+    [], // 12: update request -> succeeded
+    [], // 13: update jobs
+    [] // 14: insert timeline
   ];
   const repository = new RefundEventsRepository(database);
 

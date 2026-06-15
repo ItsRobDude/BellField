@@ -46,6 +46,8 @@ function onlinePaymentRow(overrides: Record<string, unknown> = {}) {
     amount: '200.00',
     currency: 'USD',
     source: 'bellfield_payments',
+    provider: 'stripe',
+    method: 'card',
     providerSessionId: 'cs_1',
     isVoid: false,
     ...overrides
@@ -186,6 +188,42 @@ describe('OnlineRefundsRepository.createOrReusePending', () => {
 
     await expect(repository.createOrReusePending('pay-1', { amount: 50, actor })).rejects.toThrow(
       'manually recorded payment'
+    );
+  });
+
+  it('rejects a payment whose provider is not Stripe', async () => {
+    const { repository } = repositoryWith([
+      { match: PAYMENT_HEAD, rows: [{ jobId: 'job-1' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: PAYMENT_LOCK, rows: [onlinePaymentRow({ provider: null })] }
+    ]);
+
+    await expect(repository.createOrReusePending('pay-1', { amount: 50, actor })).rejects.toThrow(
+      'cannot be refunded online'
+    );
+  });
+
+  it('rejects a payment that is not a card charge', async () => {
+    const { repository } = repositoryWith([
+      { match: PAYMENT_HEAD, rows: [{ jobId: 'job-1' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: PAYMENT_LOCK, rows: [onlinePaymentRow({ method: 'ach' })] }
+    ]);
+
+    await expect(repository.createOrReusePending('pay-1', { amount: 50, actor })).rejects.toThrow(
+      'cannot be refunded online'
+    );
+  });
+
+  it('rejects an online payment with no relay session to refund against', async () => {
+    const { repository } = repositoryWith([
+      { match: PAYMENT_HEAD, rows: [{ jobId: 'job-1' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: PAYMENT_LOCK, rows: [onlinePaymentRow({ providerSessionId: null })] }
+    ]);
+
+    await expect(repository.createOrReusePending('pay-1', { amount: 50, actor })).rejects.toThrow(
+      'cannot be refunded online'
     );
   });
 

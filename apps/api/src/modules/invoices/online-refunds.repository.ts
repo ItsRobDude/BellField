@@ -70,10 +70,12 @@ export class OnlineRefundsRepository {
         amount: string | number;
         currency: string;
         source: string;
+        provider: string | null;
+        method: string;
         providerSessionId: string | null;
         isVoid: boolean;
       }>(
-        `select job_id as "jobId", amount, currency, source,
+        `select job_id as "jobId", amount, currency, source, provider, method,
                 provider_session_id as "providerSessionId", is_void as "isVoid"
          from payments where id = $1 for update`,
         [paymentId]
@@ -90,9 +92,20 @@ export class OnlineRefundsRepository {
           'A manually recorded payment is refunded directly, not through the processor.'
         );
       }
-      if (!payment.providerSessionId) {
+      // Online refunds go back through the processor, so the payment must be a
+      // BellField Payments (Stripe) card charge carrying the relay session id we
+      // refund against. Check each leg explicitly rather than inferring "online".
+      const isOnlineCardPayment =
+        payment.source === 'bellfield_payments' &&
+        payment.provider === 'stripe' &&
+        payment.method === 'card' &&
+        Boolean(payment.providerSessionId);
+      // The `providerSessionId` leg is repeated so TS narrows it to non-null for
+      // the relay call below; isOnlineCardPayment already requires it.
+      if (!isOnlineCardPayment || !payment.providerSessionId) {
         throw new ConflictException('This payment cannot be refunded online.');
       }
+      const providerSessionId = payment.providerSessionId;
 
       const currency = normalizeCurrency(payment.currency);
 
@@ -112,7 +125,7 @@ export class OnlineRefundsRepository {
         return {
           id: existing.rows[0].id,
           idempotencyKey: existing.rows[0].idempotencyKey,
-          providerSessionId: payment.providerSessionId,
+          providerSessionId,
           amount: input.amount,
           currency,
           reused: true
@@ -171,7 +184,7 @@ export class OnlineRefundsRepository {
       return {
         id,
         idempotencyKey,
-        providerSessionId: payment.providerSessionId,
+        providerSessionId,
         amount: input.amount,
         currency,
         reused: false

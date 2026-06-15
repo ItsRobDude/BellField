@@ -64,6 +64,24 @@ export class RefundEventsRepository implements RefundEventsStore {
       await this.lockJob(tx, payment.jobId);
       await this.lockPostedInvoicesForJob(tx, payment.jobId);
 
+      // Defense in depth: the relay and the API both bound the refund to the
+      // session's remaining refundable, but re-check against the LOCAL payment
+      // before writing. The confirmed money is real, so we still record it (never
+      // drop a real Stripe refund) — but a refund that exceeds what the payment
+      // can still give back is an anomaly the office must see, so flag it loudly.
+      const alreadyRefundedCents = await this.sumRefundedCentsForPayment(tx, payment.id);
+      const remainingRefundableCents = payment.amountCents - alreadyRefundedCents;
+      const exceedsRefundable = event.amountCents > remainingRefundableCents;
+      if (exceedsRefundable) {
+        workerLog('error', 'Confirmed refund exceeds the local remaining refundable.', {
+          refundEventId: event.refundEventId,
+          providerRefundId: event.providerRefundId,
+          paymentId: payment.id,
+          eventAmountCents: event.amountCents,
+          remainingRefundableCents
+        });
+      }
+
       const refundId = randomUUID();
       const refundedAt = parseIsoDate(event.occurredAt);
       await tx.query(
@@ -98,7 +116,13 @@ export class RefundEventsRepository implements RefundEventsStore {
         occurredAt
       );
       await this.reconcileRequestSucceeded(tx, event, payment.id, occurredAt);
-      await this.addRefundTimeline(tx, payment.jobId, event.amountCents, occurredAt);
+      await this.addRefundTimeline(
+        tx,
+        payment.jobId,
+        event.amountCents,
+        occurredAt,
+        exceedsRefundable
+      );
       return 'applied';
     });
   }
@@ -119,14 +143,28 @@ export class RefundEventsRepository implements RefundEventsStore {
   private async findPaymentByProviderPaymentId(
     tx: RefundEventsQueryExecutor,
     event: RelayRefundEvent
-  ): Promise<{ id: string; jobId: string } | null> {
-    const result = await tx.query<{ id: string; jobId: string }>(
-      `select id, job_id as "jobId" from payments
+  ): Promise<{ id: string; jobId: string; amountCents: number } | null> {
+    const result = await tx.query<{ id: string; jobId: string; amountCents: string | number }>(
+      `select id, job_id as "jobId", round(amount * 100) as "amountCents" from payments
        where provider = $1 and provider_payment_id = $2
        limit 1`,
       [event.provider, event.providerPaymentId]
     );
-    return result.rows[0] ?? null;
+    const row = result.rows[0];
+    return row ? { id: row.id, jobId: row.jobId, amountCents: Number(row.amountCents) } : null;
+  }
+
+  private async sumRefundedCentsForPayment(
+    tx: RefundEventsQueryExecutor,
+    paymentId: string
+  ): Promise<number> {
+    const result = await tx.query<{ cents: string | number }>(
+      `select coalesce(round(sum(amount) * 100), 0) as cents
+       from payment_refunds
+       where payment_id = $1`,
+      [paymentId]
+    );
+    return Number(result.rows[0]?.cents ?? 0);
   }
 
   private async recordFailedRefund(
@@ -349,13 +387,22 @@ export class RefundEventsRepository implements RefundEventsStore {
     tx: RefundEventsQueryExecutor,
     jobId: string,
     amountCents: number,
-    occurredAt: Date
+    occurredAt: Date,
+    exceedsRefundable: boolean
   ): Promise<void> {
+    const reviewNote = exceedsRefundable
+      ? ' This refund exceeds the amount still refundable on the payment — please review.'
+      : '';
     await tx.query('update jobs set updated_at = $2 where id = $1', [jobId, occurredAt]);
     await tx.query(
       `insert into job_timeline_entries (id, job_id, occurred_at, actor_name, kind, message)
        values ($1, $2, $3, 'BellField Payments', 'paymentRefunded', $4)`,
-      [randomUUID(), jobId, occurredAt, `Online refund of ${formatCents(amountCents)} confirmed.`]
+      [
+        randomUUID(),
+        jobId,
+        occurredAt,
+        `Online refund of ${formatCents(amountCents)} confirmed.${reviewNote}`
+      ]
     );
   }
 

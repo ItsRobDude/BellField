@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { OnlineRefundService } from './online-refund.service';
 import type { PendingOnlineRefund } from './online-refunds.repository';
 
@@ -95,6 +96,23 @@ describe('OnlineRefundService.requestOnlineRefund', () => {
     });
     expect(onlineRefundsRepository.createOrReusePending).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('propagates an eligibility rejection without calling the relay or marking anything', async () => {
+    const fetchMock = jest.fn();
+    global.fetch = fetchMock as never;
+    const { service, onlineRefundsRepository } = createService();
+    onlineRefundsRepository.createOrReusePending.mockRejectedValue(
+      new ConflictException('This payment cannot be refunded online.')
+    );
+
+    await expect(service.requestOnlineRefund('token', 'pay-1', { amount: 50 })).rejects.toThrow(
+      'cannot be refunded online'
+    );
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onlineRefundsRepository.markRelayAccepted).not.toHaveBeenCalled();
+    expect(onlineRefundsRepository.markRelayError).not.toHaveBeenCalled();
+    expect(onlineRefundsRepository.markFailed).not.toHaveBeenCalled();
   });
 
   it('requests the refund and records the relay ids on acceptance', async () => {
