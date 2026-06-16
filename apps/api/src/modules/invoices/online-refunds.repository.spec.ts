@@ -33,6 +33,8 @@ const JOB_LOCK = /select id from jobs where id = \$1 for update/i;
 const PAYMENT_LOCK = /from payments where id = \$1 for update/i;
 const REUSE_LOOKUP =
   /from online_refund_requests\s+where payment_id = \$1 and round\(amount \* 100\) = \$2 and status = 'requested'/i;
+const UNRESOLVED_ACCEPTED_REFUND_LOOKUP =
+  /from online_refund_requests\s+where payment_id = \$1\s+and status = 'failed'\s+and apply_attempt_count > 0/i;
 const CONFIRMED_SUM = /from payment_refunds\s+where payment_id = \$1/i;
 const OUTSTANDING_SUM =
   /sum\(amount\) \* 100\), 0\) as cents\s+from online_refund_requests\s+where payment_id = \$1 and status = 'requested'/i;
@@ -129,6 +131,42 @@ describe('OnlineRefundsRepository.createOrReusePending', () => {
 
     expect(pending.idempotencyKey).toBe('online-refund:pay-1:5000:attempt-2');
     expect(findCall(calls, REQUEST_INSERT)?.params).toContain('online-refund:pay-1:5000:attempt-2');
+  });
+
+  it('blocks a new refund when a prior accepted refund could not be recorded', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: PAYMENT_HEAD, rows: [{ jobId: 'job-1' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: PAYMENT_LOCK, rows: [onlinePaymentRow()] },
+      { match: REUSE_LOOKUP, rows: [] },
+      { match: UNRESOLVED_ACCEPTED_REFUND_LOOKUP, rows: [{ id: 'orr-dead-letter' }] }
+    ]);
+
+    await expect(repository.createOrReusePending('pay-1', { amount: 50, actor })).rejects.toThrow(
+      'could not be recorded'
+    );
+    expect(findCall(calls, CONFIRMED_SUM)).toBeUndefined();
+    expect(findCall(calls, REQUEST_INSERT)).toBeUndefined();
+  });
+
+  it('allows a fresh request after a clean terminal rejection with no money moved', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: PAYMENT_HEAD, rows: [{ jobId: 'job-1' }] },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: PAYMENT_LOCK, rows: [onlinePaymentRow()] },
+      { match: REUSE_LOOKUP, rows: [] },
+      { match: UNRESOLVED_ACCEPTED_REFUND_LOOKUP, rows: [] },
+      { match: CONFIRMED_SUM, rows: [{ cents: 0 }] },
+      { match: OUTSTANDING_SUM, rows: [{ cents: 0 }] },
+      { match: PRIOR_COUNT, rows: [{ count: 1 }] },
+      { match: REQUEST_INSERT, rowCount: 1 }
+    ]);
+
+    const pending = await repository.createOrReusePending('pay-1', { amount: 50, actor });
+
+    expect(findCall(calls, UNRESOLVED_ACCEPTED_REFUND_LOOKUP)?.params).toEqual(['pay-1']);
+    expect(pending.idempotencyKey).toBe('online-refund:pay-1:5000:attempt-2');
+    expect(findCall(calls, REQUEST_INSERT)).toBeDefined();
   });
 
   it('rejects a refund that exceeds the remaining refundable', async () => {
@@ -263,5 +301,67 @@ describe('OnlineRefundsRepository mark* outcomes', () => {
     const update = findCall(calls, REQUEST_UPDATE);
     expect(update?.sql).toMatch(/status = 'failed'/i);
     expect(update?.params).toEqual(expect.arrayContaining(['orr-1', 'amount exceeds refundable']));
+  });
+});
+
+const LIST_FOR_JOB = /select distinct on \(payment_id\)[\s\S]*from online_refund_requests/i;
+
+describe('OnlineRefundsRepository.listForJob', () => {
+  it('reads the current pending/failed request per payment and normalizes amounts', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: LIST_FOR_JOB,
+        rows: [
+          {
+            id: 'orr-1',
+            paymentId: 'pay-1',
+            amount: '30.00',
+            currency: 'USD',
+            status: 'requested',
+            providerRefundId: 're_1',
+            applyAttemptCount: 0,
+            requestedAt: '2026-06-15T00:00:00.000Z'
+          },
+          {
+            id: 'orr-2',
+            paymentId: 'pay-2',
+            amount: '40.00',
+            currency: 'USD',
+            status: 'failed',
+            providerRefundId: null,
+            applyAttemptCount: 0,
+            requestedAt: '2026-06-15T00:05:00.000Z'
+          }
+        ]
+      }
+    ]);
+
+    const items = await repository.listForJob('job-1');
+
+    expect(items).toEqual([
+      {
+        id: 'orr-1',
+        paymentId: 'pay-1',
+        amount: 30,
+        currency: 'USD',
+        status: 'requested',
+        providerRefundId: 're_1',
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:00:00.000Z'
+      },
+      {
+        id: 'orr-2',
+        paymentId: 'pay-2',
+        amount: 40,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: null,
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:05:00.000Z'
+      }
+    ]);
+    const query = findCall(calls, LIST_FOR_JOB);
+    expect(query?.sql).toMatch(/status in \('requested', 'failed'\)/i);
+    expect(query?.params).toEqual(['job-1']);
   });
 });

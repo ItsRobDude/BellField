@@ -1,12 +1,14 @@
 # Refunds Design
 
 Status: manual install-side refund slice shipped (2026-06-14); online
-Stripe/relay refunds PR1 — the full money path with no office button (relay +
-API pending model + worker apply/dead-letter) — is built and unit-tested. The
-office Refund-on-card button, pending-state display, and live Stripe sandbox
-smoke remain PR2. Controlling doc for the refunds slice of the money-path-depth
-lane. Decisions confirmed with Rob via Q&A on 2026-06-14; PR1 build refinements
-on 2026-06-15.
+Stripe/relay refunds PR1 (the money path — relay + API pending model + worker
+apply/dead-letter) merged 2026-06-15. PR2 — the office Refund-on-card action,
+the pending/failed read model on the job-payments response, and the retry/poll
+UX — is built and unit-tested; the dated live Stripe sandbox smoke
+(`online-refund-live-smoke-2026-06-15.md`) is the remaining gate before it counts
+as shipped. Controlling doc for the refunds slice of the money-path-depth lane.
+Decisions confirmed with Rob via Q&A on 2026-06-14; PR1/PR2 build refinements on
+2026-06-15.
 
 ## What this adds
 
@@ -203,7 +205,10 @@ true }, { stripeAccount, idempotencyKey })`. **Pin the Stripe client
   leaves the request `requested` with `last_error` and the **same idempotency
   key** (a retry never double-refunds); only a **terminal/non-retryable** failure
   moves it to `failed`. Response states: `requested | failed | providerError |
-paymentsNotConfigured`.
+paymentsNotConfigured`. A `failed` request with `apply_attempt_count > 0` is
+  not a clean processor rejection: it means Stripe accepted the refund but
+  BellField dead-lettered local recording, so the API blocks additional refunds
+  for that payment until support reconciles it.
 - **Worker** `applyRelayRefundEvent`: write `payment_refunds`
   (`bellfield_payments`/`stripe`/`provider_refund_id`/proportional
   `application_fee_refunded`) + reverse allocations main-first, **idempotent on

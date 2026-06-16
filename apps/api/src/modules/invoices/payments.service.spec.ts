@@ -1,6 +1,6 @@
 import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { PaymentsService } from './payments.service';
-import type { PaymentRecord } from './payments.types';
+import type { PaymentRecord, RefundRecord } from './payments.types';
 
 function createService() {
   const identityAccessService = {
@@ -21,16 +21,21 @@ function createService() {
     refundPayment: jest.fn(),
     voidPayment: jest.fn()
   };
+  const onlineRefundsRepository = {
+    listForJob: jest.fn().mockResolvedValue([])
+  };
 
   return {
     service: new PaymentsService(
       identityAccessService as never,
       jobsDataService as never,
-      paymentsRepository as never
+      paymentsRepository as never,
+      onlineRefundsRepository as never
     ),
     identityAccessService,
     jobsDataService,
-    paymentsRepository
+    paymentsRepository,
+    onlineRefundsRepository
   };
 }
 
@@ -50,6 +55,27 @@ function paymentRecord(overrides: Partial<PaymentRecord> = {}): PaymentRecord {
     isVoid: false,
     createdAt: '2026-06-02T00:00:00.000Z',
     updatedAt: '2026-06-02T00:00:00.000Z',
+    ...overrides
+  };
+}
+
+function refundRecord(overrides: Partial<RefundRecord> = {}): RefundRecord {
+  return {
+    id: 'ref-1',
+    paymentId: 'pay-1',
+    jobId: 'job-1',
+    amount: 50,
+    method: 'card',
+    source: 'bellfieldPayments',
+    provider: 'stripe',
+    currency: 'USD',
+    refundedAt: '2026-06-15T01:00:00.000Z',
+    recordedByName: 'BellField Payments',
+    providerRefundId: 're_1',
+    providerPaymentId: 'pi_1',
+    allocations: [{ invoiceId: 'inv-main', invoiceKind: 'main', amount: 50 }],
+    createdAt: '2026-06-15T01:00:00.000Z',
+    updatedAt: '2026-06-15T01:00:00.000Z',
     ...overrides
   };
 }
@@ -136,6 +162,162 @@ describe('PaymentsService.getJobPayments', () => {
       NotFoundException
     );
     expect(paymentsRepository.listPaymentsForJob).not.toHaveBeenCalled();
+  });
+
+  it('maps pending/failed online refund requests with a derived submission state', async () => {
+    const { service, paymentsRepository, onlineRefundsRepository } = createService();
+    paymentsRepository.listPaymentsForJob.mockResolvedValue([]);
+    onlineRefundsRepository.listForJob.mockResolvedValue([
+      // Relay accepted (provider refund id present) → awaiting worker confirmation.
+      {
+        id: 'orr-1',
+        paymentId: 'pay-1',
+        amount: 30,
+        currency: 'USD',
+        status: 'requested',
+        providerRefundId: 're_1',
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:00:00.000Z'
+      },
+      // Never cleanly submitted (no provider refund id) → office can retry.
+      {
+        id: 'orr-2',
+        paymentId: 'pay-2',
+        amount: 40,
+        currency: 'USD',
+        status: 'requested',
+        providerRefundId: null,
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:05:00.000Z'
+      },
+      // Failed AFTER the worker tried to apply it (dead-letter): the money moved at
+      // the processor but couldn't be recorded → recordingFailed, never re-request.
+      {
+        id: 'orr-3',
+        paymentId: 'pay-3',
+        amount: 50,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: 're_3',
+        applyAttemptCount: 30,
+        requestedAt: '2026-06-15T00:10:00.000Z'
+      },
+      // Failed with no apply attempts: a clean processor rejection → re-requestable.
+      {
+        id: 'orr-4',
+        paymentId: 'pay-4',
+        amount: 60,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: null,
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:15:00.000Z'
+      }
+    ]);
+
+    const result = await service.getJobPayments('token', 'job-1');
+
+    expect(result.onlineRefundRequests).toEqual([
+      {
+        id: 'orr-1',
+        paymentId: 'pay-1',
+        amount: 30,
+        currency: 'USD',
+        status: 'requested',
+        submissionState: 'submitted',
+        requestedAt: '2026-06-15T00:00:00.000Z'
+      },
+      {
+        id: 'orr-2',
+        paymentId: 'pay-2',
+        amount: 40,
+        currency: 'USD',
+        status: 'requested',
+        submissionState: 'needsResubmit',
+        requestedAt: '2026-06-15T00:05:00.000Z'
+      },
+      {
+        id: 'orr-3',
+        paymentId: 'pay-3',
+        amount: 50,
+        currency: 'USD',
+        status: 'recordingFailed',
+        submissionState: 'submitted',
+        requestedAt: '2026-06-15T00:10:00.000Z'
+      },
+      {
+        id: 'orr-4',
+        paymentId: 'pay-4',
+        amount: 60,
+        currency: 'USD',
+        status: 'failed',
+        submissionState: 'needsResubmit',
+        requestedAt: '2026-06-15T00:15:00.000Z'
+      }
+    ]);
+  });
+
+  it('hides clean failed online refund requests after confirmed refunds fully cover the payment', async () => {
+    const { service, paymentsRepository, onlineRefundsRepository } = createService();
+    paymentsRepository.listPaymentsForJob.mockResolvedValue([
+      paymentRecord({
+        id: 'pay-1',
+        amount: 120,
+        source: 'bellfieldPayments',
+        provider: 'stripe',
+        providerPaymentId: 'pi_1',
+        providerSessionId: 'pay_sess_1'
+      }),
+      paymentRecord({
+        id: 'pay-2',
+        amount: 80,
+        source: 'bellfieldPayments',
+        provider: 'stripe',
+        providerPaymentId: 'pi_2',
+        providerSessionId: 'pay_sess_2'
+      })
+    ]);
+    paymentsRepository.listRefundsForJob.mockResolvedValue([
+      refundRecord({ id: 'ref-1', paymentId: 'pay-1', amount: 60 }),
+      refundRecord({ id: 'ref-2', paymentId: 'pay-1', amount: 60 }),
+      refundRecord({ id: 'ref-3', paymentId: 'pay-2', amount: 80 })
+    ]);
+    onlineRefundsRepository.listForJob.mockResolvedValue([
+      {
+        id: 'orr-clean-failed',
+        paymentId: 'pay-1',
+        amount: 60,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: null,
+        applyAttemptCount: 0,
+        requestedAt: '2026-06-15T00:15:00.000Z'
+      },
+      {
+        id: 'orr-dead-letter',
+        paymentId: 'pay-2',
+        amount: 80,
+        currency: 'USD',
+        status: 'failed',
+        providerRefundId: 're_dead_letter',
+        applyAttemptCount: 30,
+        requestedAt: '2026-06-15T00:20:00.000Z'
+      }
+    ]);
+
+    const result = await service.getJobPayments('token', 'job-1');
+
+    expect(result.onlineRefundRequests).toEqual([
+      {
+        id: 'orr-dead-letter',
+        paymentId: 'pay-2',
+        amount: 80,
+        currency: 'USD',
+        status: 'recordingFailed',
+        submissionState: 'submitted',
+        requestedAt: '2026-06-15T00:20:00.000Z'
+      }
+    ]);
   });
 });
 

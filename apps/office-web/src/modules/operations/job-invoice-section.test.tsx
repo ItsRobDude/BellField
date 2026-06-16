@@ -23,7 +23,8 @@ vi.mock('@/lib/operations-api', () => ({
   createOfficeOnlinePaymentLink: vi.fn(),
   recordOfficePayment: vi.fn(),
   voidOfficePayment: vi.fn(),
-  refundOfficePayment: vi.fn()
+  refundOfficePayment: vi.fn(),
+  requestOfficeOnlineRefund: vi.fn()
 }));
 vi.mock('@/lib/operations-invoice-delivery-api', () => ({
   getOfficeInvoiceSendPreview: vi.fn(),
@@ -52,7 +53,11 @@ beforeEach(() => {
     amountDue: 0
   });
   mockedApi.listOfficeJobAdjustments.mockResolvedValue({ adjustments: [] });
-  mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [], refunds: [] });
+  mockedApi.listOfficeJobPayments.mockResolvedValue({
+    payments: [],
+    refunds: [],
+    onlineRefundRequests: []
+  });
   mockedApi.createOfficeOnlinePaymentLink.mockResolvedValue({
     state: 'created',
     checkoutUrl: 'https://checkout.stripe.test/pay/cs_123',
@@ -658,7 +663,11 @@ describe('JobInvoiceSection refunds', () => {
   it('records a partial refund of a manual payment and shows it linked', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
-    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [manualPayment()],
+      refunds: [],
+      onlineRefundRequests: []
+    });
     mockedApi.refundOfficePayment.mockResolvedValue({
       refund: {
         id: 'refund-1',
@@ -702,7 +711,11 @@ describe('JobInvoiceSection refunds', () => {
   it('blocks a refund larger than the remaining refundable amount client-side', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
-    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [manualPayment()],
+      refunds: [],
+      onlineRefundRequests: []
+    });
 
     renderSection(true);
 
@@ -736,7 +749,8 @@ describe('JobInvoiceSection refunds', () => {
           createdAt: '2026-06-14T00:00:00.000Z',
           updatedAt: '2026-06-14T00:00:00.000Z'
         }
-      ]
+      ],
+      onlineRefundRequests: []
     });
 
     renderSection(true);
@@ -749,7 +763,11 @@ describe('JobInvoiceSection refunds', () => {
   it('hides the Refund action without the payments:refund permission', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
-    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [manualPayment()],
+      refunds: [],
+      onlineRefundRequests: []
+    });
 
     renderSection(true, { paymentPermissions: { canRefund: false } });
 
@@ -757,7 +775,7 @@ describe('JobInvoiceSection refunds', () => {
     expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
   });
 
-  it('hides local refund action for provider-confirmed online payments', async () => {
+  it('offers an online Refund action (never a local Void) for provider-confirmed online payments', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
     mockedApi.listOfficeJobPayments.mockResolvedValue({
@@ -769,7 +787,8 @@ describe('JobInvoiceSection refunds', () => {
           providerSessionId: 'cs_123'
         })
       ],
-      refunds: []
+      refunds: [],
+      onlineRefundRequests: []
     });
 
     renderSection(true);
@@ -777,7 +796,9 @@ describe('JobInvoiceSection refunds', () => {
     expect(
       await screen.findByText((_, element) => element?.textContent === '$250.00 · Online card')
     ).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    // Online card payments now get an online Refund action, but never a local Void
+    // (the refund is their reversal path; they are not manually voidable).
+    expect(await screen.findByRole('button', { name: 'Refund' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument();
   });
 
@@ -788,7 +809,11 @@ describe('JobInvoiceSection refunds', () => {
       netBilled: 300,
       amountDue: 50
     });
-    mockedApi.listOfficeJobPayments.mockResolvedValue({ payments: [manualPayment()], refunds: [] });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [manualPayment()],
+      refunds: [],
+      onlineRefundRequests: []
+    });
 
     renderSection(true);
 
@@ -799,5 +824,188 @@ describe('JobInvoiceSection refunds', () => {
     expect(screen.queryByRole('button', { name: 'Create payment link' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Record payment' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument();
+  });
+});
+
+function onlinePayment(overrides: Record<string, unknown> = {}) {
+  return manualPayment({
+    source: 'bellfieldPayments',
+    provider: 'stripe',
+    providerPaymentId: 'pi_123',
+    providerSessionId: 'cs_123',
+    ...overrides
+  });
+}
+
+function onlineRefundRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'orr-1',
+    paymentId: 'pay-1',
+    amount: 100,
+    currency: 'USD',
+    status: 'requested' as const,
+    submissionState: 'submitted' as const,
+    requestedAt: '2026-06-15T00:00:00.000Z',
+    ...overrides
+  };
+}
+
+describe('JobInvoiceSection online refunds', () => {
+  it('requests an online refund for a card payment and surfaces it pending', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments
+      .mockResolvedValueOnce({ payments: [onlinePayment()], refunds: [], onlineRefundRequests: [] })
+      // After the request, the reload picks up the new pending row.
+      .mockResolvedValue({
+        payments: [onlinePayment()],
+        refunds: [],
+        onlineRefundRequests: [onlineRefundRequest({ amount: 250 })]
+      });
+    mockedApi.requestOfficeOnlineRefund.mockResolvedValue({
+      state: 'requested',
+      refundRequestId: 'orr-1',
+      amount: 250,
+      currency: 'USD'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refund' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request online refund' }));
+
+    await waitFor(() =>
+      expect(mockedApi.requestOfficeOnlineRefund).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentId: 'pay-1', amount: 250 })
+      )
+    );
+    expect(await screen.findByText(/requested — pending confirmation/)).toBeInTheDocument();
+  });
+
+  it('shows a submitted pending refund and blocks a second request', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment()],
+      refunds: [],
+      onlineRefundRequests: [onlineRefundRequest()]
+    });
+
+    renderSection(true);
+
+    expect(await screen.findByText(/requested — pending confirmation/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('offers Try again for a refund that never reached the processor', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment()],
+      refunds: [],
+      onlineRefundRequests: [onlineRefundRequest({ submissionState: 'needsResubmit' })]
+    });
+
+    renderSection(true);
+
+    expect(await screen.findByText(/couldn't be submitted/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Try again' })).toBeInTheDocument();
+    // A fresh Refund is suppressed while the prior attempt is still resolvable.
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+  });
+
+  it('re-offers Refund after a failed online refund', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment()],
+      refunds: [],
+      onlineRefundRequests: [onlineRefundRequest({ status: 'failed' })]
+    });
+
+    renderSection(true);
+
+    expect(await screen.findByText(/didn't go through/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Refund' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
+  });
+
+  it('surfaces the office-safe error when the processor cannot take the refund', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment()],
+      refunds: [],
+      onlineRefundRequests: []
+    });
+    mockedApi.requestOfficeOnlineRefund.mockResolvedValue({
+      state: 'providerError',
+      message: 'The refund could not be submitted right now. Please try again.'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Refund' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Request online refund' }));
+
+    expect(
+      await screen.findByText('The refund could not be submitted right now. Please try again.')
+    ).toBeInTheDocument();
+  });
+
+  it('retries a needsResubmit refund by resubmitting the same amount directly', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments
+      .mockResolvedValueOnce({
+        payments: [onlinePayment()],
+        refunds: [],
+        onlineRefundRequests: [
+          onlineRefundRequest({ submissionState: 'needsResubmit', amount: 100 })
+        ]
+      })
+      .mockResolvedValue({
+        payments: [onlinePayment()],
+        refunds: [],
+        onlineRefundRequests: [onlineRefundRequest({ amount: 100 })]
+      });
+    mockedApi.requestOfficeOnlineRefund.mockResolvedValue({
+      state: 'requested',
+      refundRequestId: 'orr-1',
+      amount: 100,
+      currency: 'USD'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Try again' }));
+
+    // Resubmits the original amount with no editable drawer (no second forked request).
+    await waitFor(() =>
+      expect(mockedApi.requestOfficeOnlineRefund).toHaveBeenCalledWith(
+        expect.objectContaining({ paymentId: 'pay-1', amount: 100 })
+      )
+    );
+    expect(screen.queryByRole('button', { name: 'Request online refund' })).not.toBeInTheDocument();
+  });
+
+  it('does NOT re-offer a refund when the processor accepted it but it could not be recorded', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment()],
+      refunds: [],
+      onlineRefundRequests: [onlineRefundRequest({ status: 'recordingFailed' })]
+    });
+
+    renderSection(true);
+
+    // Money moved at the processor: surface support copy, never a re-request action.
+    expect(
+      await screen.findByText(/could not be recorded — contact BellField support/)
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Refund' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument();
   });
 });

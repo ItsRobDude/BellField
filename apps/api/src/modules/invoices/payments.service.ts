@@ -2,8 +2,13 @@ import { Injectable } from '@nestjs/common';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
 import { PaymentsRepository } from './payments.repository';
+import {
+  OnlineRefundsRepository,
+  type OnlineRefundRequestListItem
+} from './online-refunds.repository';
 import type {
   JobPaymentsResponseDto,
+  OnlineRefundRequestSummaryDto,
   PaymentRecord,
   PaymentRefundResponseDto,
   PaymentRefundSummaryDto,
@@ -20,7 +25,8 @@ export class PaymentsService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
     private readonly jobsDataService: JobsDataService,
-    private readonly paymentsRepository: PaymentsRepository
+    private readonly paymentsRepository: PaymentsRepository,
+    private readonly onlineRefundsRepository: OnlineRefundsRepository
   ) {}
 
   /**
@@ -58,13 +64,22 @@ export class PaymentsService {
     // getJobById throws NotFoundException when the job is missing.
     await this.jobsDataService.getJobById(jobId);
 
-    const [payments, refunds] = await Promise.all([
+    const [payments, refunds, onlineRefundRequests] = await Promise.all([
       this.paymentsRepository.listPaymentsForJob(jobId),
-      this.paymentsRepository.listRefundsForJob(jobId)
+      this.paymentsRepository.listRefundsForJob(jobId),
+      this.onlineRefundsRepository.listForJob(jobId)
     ]);
+    const visibleOnlineRefundRequests = this.filterVisibleOnlineRefundRequests(
+      onlineRefundRequests,
+      payments,
+      refunds
+    );
     return {
       payments: payments.map((payment) => this.toSummary(payment)),
-      refunds: refunds.map((refund) => this.toRefundSummary(refund))
+      refunds: refunds.map((refund) => this.toRefundSummary(refund)),
+      onlineRefundRequests: visibleOnlineRefundRequests.map((item) =>
+        this.toOnlineRefundSummary(item)
+      )
     };
   }
 
@@ -144,6 +159,64 @@ export class PaymentsService {
     };
   }
 
+  /**
+   * Map a pending/failed online-refund request to the office wire shape. A request
+   * the relay accepted carries a provider refund id and is awaiting worker
+   * confirmation (`submitted`); without one it never cleanly reached the processor
+   * and the office can retry (`needsResubmit`). No raw provider error text leaves here.
+   */
+  private toOnlineRefundSummary(item: OnlineRefundRequestListItem): OnlineRefundRequestSummaryDto {
+    // A failed request the worker tried to apply (apply_attempt_count > 0) is a
+    // dead-letter: the PROCESSOR accepted the refund but BellField could not record
+    // it. That must NOT be re-requested (it would double-refund), so surface it as
+    // recordingFailed rather than a clean, re-requestable failure.
+    const status =
+      item.status === 'failed' && item.applyAttemptCount > 0 ? 'recordingFailed' : item.status;
+    return {
+      id: item.id,
+      paymentId: item.paymentId,
+      amount: item.amount,
+      currency: item.currency,
+      status,
+      submissionState: item.providerRefundId ? 'submitted' : 'needsResubmit',
+      requestedAt: item.requestedAt
+    };
+  }
+
+  private filterVisibleOnlineRefundRequests(
+    requests: OnlineRefundRequestListItem[],
+    payments: PaymentRecord[],
+    refunds: RefundRecord[]
+  ): OnlineRefundRequestListItem[] {
+    const paymentCentsById = new Map(
+      payments.map((payment) => [payment.id, dollarsToCents(payment.amount)])
+    );
+    const refundedCentsByPaymentId = new Map<string, number>();
+    for (const refund of refunds) {
+      refundedCentsByPaymentId.set(
+        refund.paymentId,
+        (refundedCentsByPaymentId.get(refund.paymentId) ?? 0) + dollarsToCents(refund.amount)
+      );
+    }
+
+    return requests.filter((request) => {
+      if (request.status === 'requested' || request.applyAttemptCount > 0) {
+        return true;
+      }
+
+      const paymentCents = paymentCentsById.get(request.paymentId);
+      if (paymentCents === undefined) {
+        return true;
+      }
+
+      // A clean failed submission is retryable only while the payment still has
+      // refundable balance. Once later confirmed refunds fully cover the payment,
+      // showing the stale failure makes the office think there is work left.
+      const refundedCents = refundedCentsByPaymentId.get(request.paymentId) ?? 0;
+      return paymentCents > refundedCents;
+    });
+  }
+
   /** Drop internal-only fields from the refund wire shape. */
   private toRefundSummary(record: RefundRecord): PaymentRefundSummaryDto {
     return {
@@ -166,4 +239,8 @@ export class PaymentsService {
       updatedAt: record.updatedAt
     };
   }
+}
+
+function dollarsToCents(amount: number): number {
+  return Math.round(amount * 100);
 }

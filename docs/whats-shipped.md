@@ -51,7 +51,7 @@ Refresh it after major implementation lanes land.
 - Field-app estimate builder
 - Unsold-estimates worklist / owner "needs attention" view (re-ranked next moves in `docs/fsm-comparison-servicetitan-2026-06-12.md`)
 - Managed remote access tier + guided Tailscale BYO (`docs/remote-access-plan.md`; security prerequisites are launch blockers per `docs/launch-readiness.md`)
-- Online refund office UI (Refund-on-card button + pending-state display) and live Stripe sandbox smoke — the relay + API + worker backend path now exists (PR1); the office surface and live proof remain (PR2).
+- Online refund **live Stripe sandbox smoke** — the relay + API + worker backend path (PR1) and the office Refund-on-card action + pending/failed display (PR2) are built and unit-tested; the dated live sandbox run is the remaining gate before online refunds count as fully shipped.
 - Email-first operational comms (booking confirmation, reminder, on-my-way) riding the relay; SMS deferred as a provider decision.
 - GPS/time tracking tied to appointment status, dispatch trust, and job costing, with technician-visible policy.
 - Route optimization and drag/drop dispatch

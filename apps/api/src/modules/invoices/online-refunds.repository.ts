@@ -37,9 +37,63 @@ export type PendingOnlineRefund = {
   reused: boolean;
 };
 
+/** One current (pending or failed) online-refund request per payment, for the
+ * office read model. `providerRefundId` is null until the relay accepts it; the
+ * service derives the UI submission state from that. */
+export type OnlineRefundRequestListItem = {
+  id: string;
+  paymentId: string;
+  amount: number;
+  currency: string;
+  status: 'requested' | 'failed';
+  providerRefundId: string | null;
+  // Worker apply attempts: a failed row with attempts > 0 was dead-lettered (the
+  // processor accepted the refund but it could not be recorded), which the service
+  // surfaces distinctly from a clean processor rejection.
+  applyAttemptCount: number;
+  requestedAt: string;
+};
+
 @Injectable()
 export class OnlineRefundsRepository {
   constructor(private readonly databaseService: DatabaseService) {}
+
+  /**
+   * The current pending/failed online-refund request per payment for a job: the
+   * latest non-succeeded request per payment (succeeded refunds already surface as
+   * payment_refunds rows). Backs the office read model.
+   */
+  async listForJob(jobId: string): Promise<OnlineRefundRequestListItem[]> {
+    const result = await this.databaseService.query<{
+      id: string;
+      paymentId: string;
+      amount: string | number;
+      currency: string;
+      status: 'requested' | 'failed';
+      providerRefundId: string | null;
+      applyAttemptCount: string | number;
+      requestedAt: string | Date;
+    }>(
+      `select distinct on (payment_id)
+         id, payment_id as "paymentId", amount, currency, status,
+         provider_refund_id as "providerRefundId",
+         apply_attempt_count as "applyAttemptCount", requested_at as "requestedAt"
+       from online_refund_requests
+       where job_id = $1 and status in ('requested', 'failed')
+       order by payment_id, created_at desc, id desc`,
+      [jobId]
+    );
+    return result.rows.map((row) => ({
+      id: row.id,
+      paymentId: row.paymentId,
+      amount: Number(row.amount),
+      currency: row.currency,
+      status: row.status,
+      providerRefundId: row.providerRefundId,
+      applyAttemptCount: Number(row.applyAttemptCount),
+      requestedAt: new Date(row.requestedAt).toISOString()
+    }));
+  }
 
   /**
    * Validate and open a pending online refund, or reuse the outstanding request
@@ -130,6 +184,12 @@ export class OnlineRefundsRepository {
           currency,
           reused: true
         };
+      }
+
+      if (await this.hasUnresolvedAcceptedRefundForPayment(paymentId, queryable)) {
+        throw new ConflictException(
+          'This payment has an online refund that could not be recorded. Contact BellField support before requesting another refund.'
+        );
       }
 
       // Remaining refundable = payment − confirmed refunds − outstanding requests.
@@ -247,6 +307,24 @@ export class OnlineRefundsRepository {
       [paymentId]
     );
     return Number(result.rows[0]?.cents ?? 0);
+  }
+
+  private async hasUnresolvedAcceptedRefundForPayment(
+    paymentId: string,
+    queryable: QueryExecutor
+  ): Promise<boolean> {
+    const result = await queryable.query<{ id: string }>(
+      `select id
+       from online_refund_requests
+       where payment_id = $1
+         and status = 'failed'
+         and apply_attempt_count > 0
+       order by failed_at desc nulls last, updated_at desc
+       limit 1
+       for update`,
+      [paymentId]
+    );
+    return Boolean(result.rows[0]);
   }
 
   private async sumOutstandingRequestCentsForPayment(

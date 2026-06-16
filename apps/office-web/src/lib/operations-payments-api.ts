@@ -2,6 +2,8 @@ import type {
   CreateOnlinePaymentLinkRequest,
   JobPaymentsResponse,
   OnlinePaymentLinkResponse,
+  OnlineRefundRequest,
+  OnlineRefundResponse,
   PaymentRefundResponse,
   PaymentResponse,
   RecordPaymentRequest,
@@ -84,6 +86,23 @@ export async function refundOfficePayment(
   const { paymentId, sessionToken, apiBaseUrl, ...payload } = input;
 
   return requestJson<PaymentRefundResponse>(`/operations/payments/${paymentId}/refund`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+/**
+ * Request an online (Stripe-via-relay) refund of a provider-confirmed card payment.
+ * Opens a pending request; the confirmed refund lands later via the worker.
+ */
+export async function requestOfficeOnlineRefund(
+  input: OnlineRefundRequest & { paymentId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<OnlineRefundResponse> {
+  const { paymentId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<OnlineRefundResponse>(`/operations/payments/${paymentId}/online-refund`, {
     apiBaseUrl,
     sessionToken,
     method: 'POST',
