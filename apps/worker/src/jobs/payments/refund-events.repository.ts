@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { workerLog } from '../../common/logger';
+import { enqueueRefundReceiptRow } from '../receipts/enqueue-receipt';
 import type { RelayRefundEvent } from '../delivery/delivery-types';
 import type {
   RefundEventApplyOutcome,
@@ -122,6 +123,22 @@ export class RefundEventsRepository implements RefundEventsStore {
         event.amountCents,
         occurredAt,
         exceedsRefundable
+      );
+      // Enqueue the customer refund receipt in the same transaction, only on first
+      // apply. alreadyApplied/failed/deferred/dead-lettered all return earlier, so
+      // a redelivery never double-receipts and a non-success never emails. An
+      // over-refund anomaly still receipts — the confirmed refund was recorded.
+      await enqueueRefundReceiptRow(
+        tx,
+        {
+          paymentRefundId: refundId,
+          jobId: payment.jobId,
+          amount: centsToDollarsString(event.amountCents),
+          currency: event.currency.trim().toUpperCase(),
+          method: 'card',
+          occurredAt: refundedAt
+        },
+        occurredAt
       );
       return 'applied';
     });

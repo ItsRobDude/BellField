@@ -102,6 +102,17 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   const timeline = database.find(/insert into job_timeline_entries/i);
   assert.match(timeline?.text ?? '', /'paymentRefunded'/);
   assert.match(String(timeline?.values?.[3]), /Online refund of \$100\.00 confirmed/);
+
+  // A refund receipt is enqueued in the same transaction, keyed to the refund.
+  // occurred_at is Stripe's refund time; created_at is worker processing time.
+  const receipt = database.find(/insert into payment_receipt_messages/i);
+  assert.ok(receipt);
+  assert.match(receipt.text, /'refundReceipt'/);
+  assert.equal(receipt.values?.[2], refundInsert.values?.[0]); // payment_refund_id
+  assert.equal(receipt.values?.[3], '100.00'); // amount
+  assert.equal(receipt.values?.[5], 'card'); // method
+  assert.equal((receipt.values?.[6] as Date).getTime(), Date.parse('2026-06-14T12:00:00.000Z'));
+  assert.equal((receipt.values?.[8] as Date).getTime(), occurredAt.getTime());
 });
 
 test('RefundEventsRepository refunds a deposit (no allocations) — records the refund, reverses nothing', async () => {
@@ -157,6 +168,8 @@ test('RefundEventsRepository records a confirmed refund but flags one exceeding 
   // ...but the timeline flags the over-refund for the office to review.
   const timeline = database.find(/insert into job_timeline_entries/i);
   assert.match(String(timeline?.values?.[3]), /exceeds the amount still refundable/);
+  // The receipt still goes out — the confirmed refund was recorded.
+  assert.ok(database.find(/insert into payment_receipt_messages/i));
 });
 
 test('RefundEventsRepository is idempotent when the refund row already exists', async () => {
@@ -175,6 +188,8 @@ test('RefundEventsRepository is idempotent when the refund row already exists', 
     database.queries.some((query) => /insert into payment_refunds/i.test(query.text)),
     false
   );
+  // A redelivery of an already-recorded refund never enqueues a second receipt.
+  assert.equal(database.find(/insert into payment_receipt_messages/i), undefined);
 });
 
 test('RefundEventsRepository records a failed refund without writing a refund row', async () => {
@@ -203,6 +218,8 @@ test('RefundEventsRepository records a failed refund without writing a refund ro
   assert.match(requestUpdate?.text ?? '', /status = 'failed'/);
   const timeline = database.find(/insert into job_timeline_entries/i);
   assert.match(timeline?.text ?? '', /'paymentRefundFailed'/);
+  // A failed refund moved no money — no customer receipt.
+  assert.equal(database.find(/insert into payment_receipt_messages/i), undefined);
 });
 
 test('RefundEventsRepository defers a succeeded refund whose payment is not recorded yet', async () => {
@@ -225,6 +242,8 @@ test('RefundEventsRepository defers a succeeded refund whose payment is not reco
   );
   const bump = database.find(/apply_attempt_count = apply_attempt_count \+ 1/i);
   assert.ok(bump);
+  // A deferred refund has no recorded refund yet — no receipt.
+  assert.equal(database.find(/insert into payment_receipt_messages/i), undefined);
 });
 
 test('RefundEventsRepository dead-letters a refund that defers past the bound', async () => {
@@ -250,6 +269,8 @@ test('RefundEventsRepository dead-letters a refund that defers past the bound', 
   assert.ok(failUpdate);
   const timeline = database.find(/insert into job_timeline_entries/i);
   assert.match(timeline?.text ?? '', /'paymentRefundFailed'/);
+  // A dead-lettered refund was never recorded — no customer receipt.
+  assert.equal(database.find(/insert into payment_receipt_messages/i), undefined);
 });
 
 test('RefundEventsRepository reconciles the request by outstanding (payment, amount) when ids are missing', async () => {

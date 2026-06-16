@@ -50,3 +50,47 @@ export async function enqueuePaymentReceiptRow(
     ]
   );
 }
+
+/**
+ * Enqueue a customer refund-receipt row from inside the worker's online-refund
+ * apply transaction (exactly-once with the payment_refunds insert; the unique
+ * guard on payment_refund_id makes a duplicated enqueue a no-op). Refund-specific:
+ * always a `refundReceipt` keyed to a payment_refund_id, with no purpose.
+ *
+ * `occurredAt` is the customer's actual refund time (Stripe's refund event time);
+ * `now` is worker processing time and drives created/updated/expires.
+ */
+export async function enqueueRefundReceiptRow(
+  tx: QueryExecutor,
+  input: {
+    paymentRefundId: string;
+    jobId: string;
+    /** Decimal dollars string, matching the recorded refund amount. */
+    amount: string;
+    currency: string;
+    method: string;
+    occurredAt: Date;
+  },
+  now: Date
+): Promise<void> {
+  const expiresAt = new Date(now.getTime() + RECEIPT_QUEUE_EXPIRY_MS);
+  await tx.query(
+    `insert into payment_receipt_messages (
+       id, kind, status, job_id, payment_refund_id, amount, currency, method, purpose,
+       occurred_at, expires_at, attempt_count, created_at, updated_at
+     )
+     values ($1, 'refundReceipt', 'queued', $2, $3, $4, $5, $6, null, $7, $8, 0, $9, $9)
+     on conflict (payment_refund_id) where payment_refund_id is not null do nothing`,
+    [
+      randomUUID(),
+      input.jobId,
+      input.paymentRefundId,
+      input.amount,
+      input.currency,
+      input.method,
+      input.occurredAt,
+      expiresAt,
+      now
+    ]
+  );
+}
