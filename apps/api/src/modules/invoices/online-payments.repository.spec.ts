@@ -31,9 +31,9 @@ function recordCreatedHarness(inserted: boolean) {
     createdAt: '2026-06-13T00:00:00.000Z',
     updatedAt: '2026-06-13T00:00:00.000Z'
   };
-  const queries: string[] = [];
-  const query = jest.fn(async (sql: string) => {
-    queries.push(sql);
+  const queries: Array<{ sql: string; params?: unknown[] }> = [];
+  const query = jest.fn(async (sql: string, params?: unknown[]) => {
+    queries.push({ sql, params });
     if (/insert into online_payment_sessions/i.test(sql)) {
       return { rows: [{ ...sessionRow, inserted }] };
     }
@@ -51,7 +51,7 @@ describe('OnlinePaymentsRepository.recordCreated', () => {
 
     await repository.recordCreated(recordCreatedInput);
 
-    expect(queries.some((sql) => /insert into job_timeline_entries/i.test(sql))).toBe(true);
+    expect(queries.some((query) => /insert into job_timeline_entries/i.test(query.sql))).toBe(true);
   });
 
   it('skips the timeline entry when the upsert took the conflict-update path', async () => {
@@ -59,7 +59,24 @@ describe('OnlinePaymentsRepository.recordCreated', () => {
 
     await repository.recordCreated(recordCreatedInput);
 
-    expect(queries.some((sql) => /insert into job_timeline_entries/i.test(sql))).toBe(false);
+    expect(queries.some((query) => /insert into job_timeline_entries/i.test(query.sql))).toBe(
+      false
+    );
+  });
+
+  it('writes deposit-specific timeline copy when a deposit link is created', async () => {
+    const { repository, queries } = recordCreatedHarness(true);
+
+    await repository.recordCreated({
+      ...recordCreatedInput,
+      invoiceId: null,
+      purpose: 'deposit'
+    });
+
+    const timeline = queries.find((query) => /insert into job_timeline_entries/i.test(query.sql));
+    expect(timeline?.params).toEqual(
+      expect.arrayContaining(['paymentLinkCreated', 'Deposit link created for $250.00.'])
+    );
   });
 });
 
@@ -91,13 +108,16 @@ describe('OnlinePaymentsRepository.listForJobAmount', () => {
 
     const result = await repository.listForJobAmount({
       jobId: 'job-1',
+      invoiceId: 'inv-main',
       amount: 250,
       currency: 'usd'
     });
 
     expect(databaseService.query).toHaveBeenCalledWith(
-      expect.stringMatching(/round\(amount \* 100\) = \$2[\s\S]*order by created_at asc, id asc/),
-      ['job-1', 25_000, 'USD']
+      expect.stringMatching(
+        /round\(amount \* 100\) = \$2[\s\S]*invoice_id = \$4[\s\S]*order by created_at asc, id asc/
+      ),
+      ['job-1', 25_000, 'USD', 'inv-main']
     );
     expect(result).toEqual([
       expect.objectContaining({
@@ -107,6 +127,27 @@ describe('OnlinePaymentsRepository.listForJobAmount', () => {
         currency: 'USD',
         expiresAt: '2026-06-14T00:00:00.000Z'
       })
+    ]);
+  });
+
+  it('looks up deposit sessions with no invoice id', async () => {
+    const databaseService = {
+      query: jest.fn().mockResolvedValue({ rows: [] })
+    };
+    const repository = new OnlinePaymentsRepository(databaseService as never);
+
+    await repository.listForJobAmount({
+      jobId: 'job-1',
+      invoiceId: null,
+      amount: 100,
+      currency: 'usd'
+    });
+
+    expect(databaseService.query).toHaveBeenCalledWith(expect.any(String), [
+      'job-1',
+      10_000,
+      'USD',
+      null
     ]);
   });
 });

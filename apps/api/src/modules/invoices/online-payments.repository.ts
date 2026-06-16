@@ -60,7 +60,7 @@ export class OnlinePaymentsRepository {
 
   async recordCreated(input: {
     jobId: string;
-    invoiceId: string;
+    invoiceId?: string | null;
     relayPaymentSessionId: string;
     amount: number;
     currency: string;
@@ -68,6 +68,7 @@ export class OnlinePaymentsRepository {
     createdByEmployeeId: string;
     createdByName: string;
     expiresAt: string;
+    purpose?: 'payment' | 'deposit';
   }): Promise<OnlinePaymentSessionRecord> {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
@@ -86,7 +87,7 @@ export class OnlinePaymentsRepository {
         [
           randomUUID(),
           input.jobId,
-          input.invoiceId,
+          input.invoiceId ?? null,
           input.relayPaymentSessionId,
           input.amount,
           input.currency,
@@ -110,7 +111,10 @@ export class OnlinePaymentsRepository {
             occurredAt: now,
             actorName: input.createdByName,
             kind: 'paymentLinkCreated',
-            message: `Payment link created for ${formatMoney(input.amount)}.`
+            message:
+              input.purpose === 'deposit'
+                ? `Deposit link created for ${formatMoney(input.amount)}.`
+                : `Payment link created for ${formatMoney(input.amount)}.`
           },
           queryable
         );
@@ -133,6 +137,7 @@ export class OnlinePaymentsRepository {
 
   async listForJobAmount(input: {
     jobId: string;
+    invoiceId?: string | null;
     amount: number;
     currency: string;
   }): Promise<OnlinePaymentSessionRecord[]> {
@@ -144,8 +149,17 @@ export class OnlinePaymentsRepository {
        where job_id = $1
          and round(amount * 100) = $2
          and currency = $3
+         and (
+           ($4::text is null and invoice_id is null)
+           or ($4::text is not null and invoice_id = $4)
+         )
        order by created_at asc, id asc`,
-      [input.jobId, Math.round(input.amount * 100), input.currency.toUpperCase()]
+      [
+        input.jobId,
+        Math.round(input.amount * 100),
+        input.currency.toUpperCase(),
+        input.invoiceId ?? null
+      ]
     );
     return result.rows.map(toRecord);
   }

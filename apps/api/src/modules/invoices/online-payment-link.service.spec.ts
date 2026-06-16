@@ -7,6 +7,9 @@ function createService() {
   const identityAccessService = {
     getAuthorizedEmployee: jest.fn().mockResolvedValue(actor)
   };
+  const jobsDataService = {
+    getJobById: jest.fn().mockResolvedValue({ id: 'job-1', jobNumber: '1001' })
+  };
   const invoicesRepository = {
     getInvoiceById: jest.fn().mockResolvedValue({
       id: 'inv-main',
@@ -39,11 +42,13 @@ function createService() {
   return {
     service: new OnlinePaymentLinkService(
       identityAccessService as never,
+      jobsDataService as never,
       invoicesRepository as never,
       paymentsRepository as never,
       onlinePaymentsRepository as never
     ),
     identityAccessService,
+    jobsDataService,
     invoicesRepository,
     paymentsRepository,
     onlinePaymentsRepository
@@ -108,12 +113,22 @@ function mockRelayCreated(paymentSessionId = 'pay_sess_new') {
   return fetchMock;
 }
 
-function requestBody(fetchMock: jest.Mock): { amountCents: number; idempotencyKey: string } {
+function requestBody(fetchMock: jest.Mock): {
+  amountCents: number;
+  idempotencyKey: string;
+  description?: string;
+  invoiceRef?: string;
+} {
   const body = fetchMock.mock.calls[0]?.[1]?.body;
   if (typeof body !== 'string') {
     throw new Error('Expected relay request body.');
   }
-  return JSON.parse(body) as { amountCents: number; idempotencyKey: string };
+  return JSON.parse(body) as {
+    amountCents: number;
+    idempotencyKey: string;
+    description?: string;
+    invoiceRef?: string;
+  };
 }
 
 describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
@@ -167,6 +182,7 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     );
     expect(onlinePaymentsRepository.listForJobAmount).toHaveBeenCalledWith({
       jobId: 'job-1',
+      invoiceId: 'inv-main',
       amount: 100,
       currency: 'USD'
     });
@@ -320,5 +336,96 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
       idempotencyKey: string;
     };
     expect(secondBody.idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+  });
+});
+
+describe('OnlinePaymentLinkService.createDepositPaymentLink', () => {
+  beforeEach(() => {
+    jest.restoreAllMocks();
+    clearRelayEnv();
+    setupRelayEnv();
+    mockRelayCreated();
+  });
+
+  afterEach(() => {
+    clearRelayEnv();
+    jest.restoreAllMocks();
+  });
+
+  it('creates a job-level deposit link without an invoice reference', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_deposit');
+    const { service, onlinePaymentsRepository } = createService();
+
+    const result = await service.createDepositPaymentLink('token', 'job-1', { amount: 100 });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        state: 'created',
+        amount: 100,
+        currency: 'USD'
+      })
+    );
+    expect(onlinePaymentsRepository.listForJobAmount).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      invoiceId: null,
+      amount: 100,
+      currency: 'USD'
+    });
+    expect(requestBody(fetchMock)).toEqual(
+      expect.objectContaining({
+        amountCents: 10_000,
+        idempotencyKey: 'deposit-payment:job-1:10000:attempt-1'
+      })
+    );
+    const relayBody = requestBody(fetchMock);
+    expect(relayBody.invoiceRef).toBeUndefined();
+    expect(relayBody.description).toBe('BellField deposit for job 1001');
+    expect(onlinePaymentsRepository.recordCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        jobId: 'job-1',
+        invoiceId: null,
+        relayPaymentSessionId: 'pay_sess_deposit',
+        amount: 100,
+        purpose: 'deposit'
+      })
+    );
+  });
+
+  it('requires confirmation before a repeat same-amount deposit after payment', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
+      paymentSession({
+        invoiceId: undefined,
+        amount: 100,
+        status: 'paid',
+        paymentId: 'pay-1',
+        paidAt: '2026-06-13T13:00:00.000Z'
+      })
+    ]);
+
+    const result = await service.createDepositPaymentLink('token', 'job-1', { amount: 100 });
+
+    expect(result).toEqual({
+      state: 'confirmationRequired',
+      code: 'sameAmountPreviouslyPaid',
+      amount: 100,
+      currency: 'USD',
+      message: 'This job already had an online card deposit for $100.00.'
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onlinePaymentsRepository.recordCreated).not.toHaveBeenCalled();
+  });
+
+  it('rejects a deposit amount with fractional cents', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+
+    await expect(
+      service.createDepositPaymentLink('token', 'job-1', { amount: 10.005 })
+    ).rejects.toThrow('Deposit link amount must be a positive dollar amount.');
+
+    expect(onlinePaymentsRepository.listForJobAmount).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

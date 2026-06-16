@@ -122,4 +122,4 @@ Operational notes from the run:
 
 - production/live-money refund (sandbox only)
 - refund of a refund / reversal
-- deposits, stored cards, surcharge, customer refund receipt
+- stored cards, surcharge, customer refund receipt

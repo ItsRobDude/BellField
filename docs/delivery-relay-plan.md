@@ -147,8 +147,10 @@ Payment-link v1 is deliberately narrow:
 
 - relay admin links a shop to a Stripe connected account with
   `relay-admin set-payments-account --shop-id=<shop> --stripe-account-id=acct_...`
-- install calls `POST /v1/payment-sessions` with job/invoice refs and the
-  install-validated amount in cents. The **install does not supply the customer
+- install calls `POST /v1/payment-sessions` with the job ref, an optional
+  invoice ref, and the install-validated amount in cents. Invoice links include
+  the initiating invoice id; deposit links omit it and record as job credit. The
+  **install does not supply the customer
   redirect URLs**: the relay mints `success`/`cancel` URLs from its own
   `publicBaseUrl`, so a misconfigured install can never point the
   post-checkout redirect at an internal or wrong host.

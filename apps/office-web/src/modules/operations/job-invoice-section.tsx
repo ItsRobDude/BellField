@@ -37,6 +37,7 @@ import {
   type InvoicePaymentPermissions
 } from './job-invoice-shared';
 import { JobInvoiceCorrections } from './job-invoice-corrections';
+import { DraftInvoiceDepositsPanel } from './job-invoice-deposits-panel';
 import { DocumentDeliveryPanel, type DocumentDeliveryDraft } from './job-estimate-delivery-panel';
 
 type JobInvoiceSectionProps = {
@@ -504,6 +505,15 @@ export function JobInvoiceSection({
               </div>
             )}
             <InvoiceTotals invoice={invoice} />
+            {invoice.status === 'draft' && paymentPermissions.canView ? (
+              <DraftInvoiceDepositsPanel
+                jobId={jobId}
+                apiBaseUrl={apiBaseUrl}
+                sessionToken={sessionToken}
+                billToCustomerEmail={billToCustomerEmail}
+                canCreate={paymentPermissions.canRecord}
+              />
+            ) : null}
             {invoice.posted ? <PostedInvoiceSummary posted={invoice.posted} /> : null}
             {invoice.status === 'posted' && canSend && isDeliveryPanelOpen ? (
               <DocumentDeliveryPanel

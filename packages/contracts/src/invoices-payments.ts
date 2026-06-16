@@ -297,6 +297,13 @@ export interface CreateOnlinePaymentLinkRequest {
   confirmSameAmountCharge?: boolean;
 }
 
+export interface CreateDepositPaymentLinkRequest {
+  customerEmail?: string;
+  /** Positive dollar amount to collect as job credit before invoicing. */
+  amount: number;
+  confirmSameAmountCharge?: boolean;
+}
+
 export type OnlinePaymentLinkResponse =
   | {
       state: 'created';

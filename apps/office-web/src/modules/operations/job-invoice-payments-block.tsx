@@ -280,6 +280,11 @@ export function PaymentsBlock({
             (sum, refund) => sum + Math.round(refund.amount * 100),
             0
           );
+          const allocatedCents = payment.allocations.reduce(
+            (sum, allocation) => sum + Math.round(allocation.amount * 100),
+            0
+          );
+          const unallocatedCents = Math.max(amountCents - allocatedCents - refundedCents, 0);
           const refundableCents = amountCents - refundedCents;
           const isRefunding = refundDraft?.paymentId === payment.id;
           const isOnline = payment.source === 'bellfieldPayments';
@@ -323,6 +328,9 @@ export function PaymentsBlock({
                       : ''}
                     {!payment.isVoid && refundedCents > 0
                       ? ` · ${formatCurrency(refundedCents / 100)} refunded`
+                      : ''}
+                    {!payment.isVoid && unallocatedCents > 0
+                      ? ` · ${formatCurrency(unallocatedCents / 100)} unallocated credit`
                       : ''}
                   </p>
                 </div>

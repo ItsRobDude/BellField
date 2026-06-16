@@ -450,7 +450,7 @@ Current implementation note:
 
 - structured register entries exist now
 - the eager main invoice draft and automatic register-to-invoice reflection are shipped; approved estimates convert into the draft (atomic, append/replace)
-- invoice posting + the posted lock + a posting-time customer/location/job snapshot have shipped (gated on `invoices:post`); adjustment/credit corrections (with office UI), manually recorded payments, manual office refunds, invoice PDF/email delivery, amount-scoped online payment links that default to the full amount due, the provider-confirmed online refund path (backend + office Refund-on-card action, pending/failed display, and live Stripe sandbox smoke), and a read-only cross-job bookkeeping worklist have also shipped. Still later: deposits, stored cards, SMS, customer portal behavior, and deeper processor-fee reconciliation
+- invoice posting + the posted lock + a posting-time customer/location/job snapshot have shipped (gated on `invoices:post`); adjustment/credit corrections (with office UI), manually recorded payments, manual office refunds, invoice PDF/email delivery, amount-scoped online payment links that default to the full amount due, job-level deposit links that land as unallocated credit, the provider-confirmed online refund path (backend + office Refund-on-card action, pending/failed display, and live Stripe sandbox smoke), and a read-only cross-job bookkeeping worklist have also shipped. Still later: stored cards, SMS, customer portal behavior, per-invoice allocation polish for pre-post deposits, and deeper processor-fee reconciliation
 
 ### Zero-dollar invoice rule
 

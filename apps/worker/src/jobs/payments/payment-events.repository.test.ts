@@ -205,6 +205,40 @@ test('PaymentEventsRepository records a confirmation with no local session and f
   assert.match(String(timeline?.values?.[3]), /No local payment-link record/);
 });
 
+test('PaymentEventsRepository records a deposit session as unallocated job credit', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [{ jobId: 'job-1', invoiceId: null, amountCents: 10_000, currency: 'USD' }],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ amountCents: 10_000 }),
+    new Date('2026-06-13T12:00:10.000Z')
+  );
+
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[1], 'job-1');
+  assert.equal(paymentInsert?.values?.[2], null);
+  assert.equal(paymentInsert?.values?.[3], '100.00');
+  assert.equal(
+    database.queries.some((query) => /insert into payment_allocations/i.test(query.text)),
+    false
+  );
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.match(String(timeline?.values?.[3]), /\$100\.00 exceeds the balance due/);
+});
+
 test('PaymentEventsRepository records a local session amount mismatch and flags it', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [

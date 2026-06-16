@@ -21,6 +21,7 @@ vi.mock('@/lib/operations-api', () => ({
   postOfficeInvoiceById: vi.fn(),
   listOfficeJobPayments: vi.fn(),
   createOfficeOnlinePaymentLink: vi.fn(),
+  createOfficeDepositPaymentLink: vi.fn(),
   recordOfficePayment: vi.fn(),
   voidOfficePayment: vi.fn(),
   refundOfficePayment: vi.fn(),
@@ -63,6 +64,14 @@ beforeEach(() => {
     checkoutUrl: 'https://checkout.stripe.test/pay/cs_123',
     paymentSessionId: 'pay_sess_123',
     amount: 250,
+    currency: 'USD',
+    expiresAt: '2026-06-14T00:00:00.000Z'
+  });
+  mockedApi.createOfficeDepositPaymentLink.mockResolvedValue({
+    state: 'created',
+    checkoutUrl: 'https://checkout.stripe.test/pay/deposit_123',
+    paymentSessionId: 'pay_sess_deposit_123',
+    amount: 100,
     currency: 'USD',
     expiresAt: '2026-06-14T00:00:00.000Z'
   });
@@ -299,6 +308,83 @@ describe('JobInvoiceSection posting', () => {
 
     expect(await screen.findByText('Posted record')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Email invoice' })).not.toBeInTheDocument();
+  });
+
+  it('creates a job-level deposit link before the invoice is posted', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+
+    renderSection(true, { customerEmail: 'billing@example.com' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create deposit link' }));
+    fireEvent.change(await screen.findByLabelText('Deposit amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create deposit link' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeDepositPaymentLink).toHaveBeenCalledWith({
+        jobId: 'job-1',
+        amount: 100,
+        customerEmail: 'billing@example.com',
+        confirmSameAmountCharge: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/deposit_123')
+    ).toBeInTheDocument();
+  });
+
+  it('shows unallocated deposit credit on a draft invoice', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'draft',
+      postedMainTotal: 0,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 0,
+      paidTotal: 100,
+      refundedTotal: 0,
+      amountDue: -100
+    });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [
+        manualPayment({
+          id: 'pay-deposit',
+          invoiceId: undefined,
+          amount: 100,
+          source: 'bellfieldPayments',
+          provider: 'stripe',
+          providerPaymentId: 'pi_deposit',
+          providerSessionId: 'pay_sess_deposit',
+          allocations: []
+        })
+      ],
+      refunds: [],
+      onlineRefundRequests: []
+    });
+
+    renderSection(true);
+
+    expect(await screen.findByText('Job credit')).toBeInTheDocument();
+    expect(
+      await screen.findByText('$100.00 - Online card - unallocated credit')
+    ).toBeInTheDocument();
+  });
+
+  it('hides draft deposits without payment view permission', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+
+    renderSection(true, { paymentPermissions: { canView: false } });
+
+    expect(
+      await screen.findByText(
+        'This draft is empty. Register work and converted estimates appear here.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create deposit link' })).not.toBeInTheDocument();
   });
 
   it('previews and sends a posted invoice email with the bill-to email default', async () => {

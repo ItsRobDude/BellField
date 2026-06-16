@@ -1,5 +1,8 @@
 import { IsBoolean, IsEmail, IsNumber, IsOptional, Min } from 'class-validator';
-import type { CreateOnlinePaymentLinkRequest } from '@bellfield/contracts';
+import type {
+  CreateDepositPaymentLinkRequest,
+  CreateOnlinePaymentLinkRequest
+} from '@bellfield/contracts';
 
 export class CreateOnlinePaymentLinkRequestBodyDto implements CreateOnlinePaymentLinkRequest {
   @IsOptional()
@@ -10,6 +13,20 @@ export class CreateOnlinePaymentLinkRequestBodyDto implements CreateOnlinePaymen
   @IsNumber({ maxDecimalPlaces: 2 })
   @Min(0.01)
   amount?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmSameAmountCharge?: boolean;
+}
+
+export class CreateDepositPaymentLinkRequestBodyDto implements CreateDepositPaymentLinkRequest {
+  @IsOptional()
+  @IsEmail()
+  customerEmail?: string;
+
+  @IsNumber({ maxDecimalPlaces: 2 })
+  @Min(0.01)
+  amount!: number;
 
   @IsOptional()
   @IsBoolean()

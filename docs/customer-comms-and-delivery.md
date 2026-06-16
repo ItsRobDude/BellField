@@ -63,10 +63,10 @@ queue/retry/cancel semantics (status stamps in §10). Estimate acceptance links
 have also shipped: the relay hosts the public decision page and the worker
 polls decisions back into the self-hosted install. The first payment-link slice
 has shipped too: the office can create a Stripe Checkout link for a posted
-invoice, defaulting to the full amount due while allowing a smaller amount, the
-relay receives Stripe webhooks, and the worker records confirmed payments
-locally. This document continues to define the guardrails for the next delivery
-slices.
+invoice, defaulting to the full amount due while allowing a smaller amount, and
+can create a job-level deposit link before posting; the relay receives Stripe
+webhooks, and the worker records confirmed payments locally. This document
+continues to define the guardrails for the next delivery slices.
 
 ---
 
@@ -335,9 +335,9 @@ The controlling design is [acceptance-links-design.md](./acceptance-links-design
   immutable estimate version are preserved
 - office still controls scheduling and conversion
 
-### Phase 5 - Payment Links — FIRST SLICE SHIPPED
+### Phase 5 - Payment Links — SHIPPED, WITH DEPOSIT CREDIT
 
-- payment links are allowed only for posted invoices
+- invoice payment links are allowed only for posted invoices; deposit links are job-level credits
 - payments are recorded from confirmed gateway state
 - BellField stores provider reference and operational result
 - payments remain online-only in v1
@@ -354,13 +354,20 @@ Checkout attempt. Manual full/partial refunds for manually recorded payments
 have also shipped on the office invoice tab; they are append-only,
 permission-gated, and raise amount due through refund allocations.
 
+Deposit links have now shipped as a separate job-level path: the draft invoice
+surface can create a Stripe Checkout deposit link for an explicit amount, and a
+confirmed deposit records as an unallocated job payment/credit. The job balance
+reflects that credit immediately, including before the invoice posts. Per-invoice
+allocation of pre-post deposits remains intentionally deferred; the credit is
+still visible and safe because amount due is job-level.
+
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
 display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
-2026-06-16 UTC. Still deferred: deposits, stored cards, customer surcharge
-logic, customer refund receipts, and processor-fee reconciliation beyond
-BellField's application fee.
+2026-06-16 UTC. Still deferred: stored cards, customer surcharge logic,
+customer payment/refund receipts, per-invoice allocation of pre-post deposits,
+and processor-fee reconciliation beyond BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

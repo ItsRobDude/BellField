@@ -206,8 +206,8 @@ Decided posture: BellField pages never touch card data or shop processor
 keys. Phase 6b uses Stripe Connect through the relay:
 
 - the office creates a payment link only from a posted invoice surface
-- the amount is chosen by the office up to the full current job balance; it is
-  not a deposit
+- invoice-link amounts are chosen by the office up to the full current job
+  balance; deposit links are a separate job-level credit path
 - the install asks the relay to create a Stripe Checkout Session on the shop's
   connected Stripe account
 - BellField applies the same platform fee to every shop (default **100 basis
@@ -222,10 +222,10 @@ keys. Phase 6b uses Stripe Connect through the relay:
 The first payment-link slice intentionally did not include refunds, deposits,
 estimate payments, customer surcharge math, stored cards, processor fee
 reconciliation beyond the application fee, or invoice email delivery. Invoice
-email delivery and refunds have since shipped; the remaining items stay separate
-slices. Online provider payments cannot be voided through the manual
-payment-void button; refund/correction workflows must be designed against the
-processor before local ledger correction is exposed.
+email delivery, refunds, and job-level deposit links have since shipped; the
+remaining items stay separate slices. Online provider payments cannot be voided
+through the manual payment-void button; refund/correction workflows must be
+designed against the processor before local ledger correction is exposed.
 
 ## Shipping prerequisite (D7 — resolved 2026-06-12)
 
