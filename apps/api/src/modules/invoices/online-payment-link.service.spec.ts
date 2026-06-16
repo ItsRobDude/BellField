@@ -108,12 +108,12 @@ function mockRelayCreated(paymentSessionId = 'pay_sess_new') {
   return fetchMock;
 }
 
-function requestBody(fetchMock: jest.Mock): { idempotencyKey: string } {
+function requestBody(fetchMock: jest.Mock): { amountCents: number; idempotencyKey: string } {
   const body = fetchMock.mock.calls[0]?.[1]?.body;
   if (typeof body !== 'string') {
     throw new Error('Expected relay request body.');
   }
-  return JSON.parse(body) as { idempotencyKey: string };
+  return JSON.parse(body) as { amountCents: number; idempotencyKey: string };
 }
 
 describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
@@ -129,14 +129,19 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     jest.restoreAllMocks();
   });
 
-  it('creates the first attempt with an attempt-1 idempotency key', async () => {
+  it('creates the default full-due amount with an attempt-1 idempotency key', async () => {
     const fetchMock = mockRelayCreated('pay_sess_attempt_1');
     const { service, onlinePaymentsRepository } = createService();
 
     const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
 
     expect(result.state).toBe('created');
-    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+    expect(requestBody(fetchMock)).toEqual(
+      expect.objectContaining({
+        amountCents: 25_000,
+        idempotencyKey: 'invoice-payment:job-1:25000:attempt-1'
+      })
+    );
     expect(onlinePaymentsRepository.recordCreated).toHaveBeenCalledWith(
       expect.objectContaining({
         jobId: 'job-1',
@@ -145,6 +150,62 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
         currency: 'USD'
       })
     );
+  });
+
+  it('creates a requested partial amount without changing the job balance', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_partial');
+    const { service, onlinePaymentsRepository } = createService();
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', { amount: 100 });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        state: 'created',
+        amount: 100,
+        currency: 'USD'
+      })
+    );
+    expect(onlinePaymentsRepository.listForJobAmount).toHaveBeenCalledWith({
+      jobId: 'job-1',
+      amount: 100,
+      currency: 'USD'
+    });
+    expect(requestBody(fetchMock)).toEqual(
+      expect.objectContaining({
+        amountCents: 10_000,
+        idempotencyKey: 'invoice-payment:job-1:10000:attempt-1'
+      })
+    );
+    expect(onlinePaymentsRepository.recordCreated).toHaveBeenCalledWith(
+      expect.objectContaining({
+        relayPaymentSessionId: 'pay_sess_partial',
+        amount: 100
+      })
+    );
+  });
+
+  it('rejects a requested amount above the current amount due', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+
+    await expect(
+      service.createOnlinePaymentLink('token', 'inv-main', { amount: 250.01 })
+    ).rejects.toThrow('Payment link amount cannot exceed the $250.00 currently due.');
+
+    expect(onlinePaymentsRepository.listForJobAmount).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('rejects a requested amount with fractional cents', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+
+    await expect(
+      service.createOnlinePaymentLink('token', 'inv-main', { amount: 10.005 })
+    ).rejects.toThrow('Payment link amount must be a positive dollar amount.');
+
+    expect(onlinePaymentsRepository.listForJobAmount).not.toHaveBeenCalled();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('returns an unexpired local created session without calling the relay', async () => {
@@ -200,6 +261,32 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
       currency: 'USD',
       message:
         'This job already had an online card payment for $250.00. BellField still shows $250.00 due.'
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onlinePaymentsRepository.recordCreated).not.toHaveBeenCalled();
+  });
+
+  it('uses the requested amount in the same-amount confirmation while showing full due', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.listForJobAmount.mockResolvedValue([
+      paymentSession({
+        amount: 100,
+        status: 'paid',
+        paymentId: 'pay-1',
+        paidAt: '2026-06-13T13:00:00.000Z'
+      })
+    ]);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', { amount: 100 });
+
+    expect(result).toEqual({
+      state: 'confirmationRequired',
+      code: 'sameAmountPreviouslyPaid',
+      amount: 100,
+      currency: 'USD',
+      message:
+        'This job already had an online card payment for $100.00. BellField still shows $250.00 due.'
     });
     expect(fetchMock).not.toHaveBeenCalled();
     expect(onlinePaymentsRepository.recordCreated).not.toHaveBeenCalled();

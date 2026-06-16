@@ -41,7 +41,7 @@ export async function recordOfficePayment(
   });
 }
 
-/** Create a Stripe-hosted payment link for the full outstanding job balance. */
+/** Create a Stripe-hosted payment link, defaulting to the full current amount due. */
 export async function createOfficeOnlinePaymentLink(
   input: CreateOnlinePaymentLinkRequest & {
     invoiceId: string;

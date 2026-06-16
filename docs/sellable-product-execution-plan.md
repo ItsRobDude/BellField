@@ -566,10 +566,10 @@ install, and office-action-wins race rules.
 Status: Phase 6a is closed as a build/functional lane. Local same-machine proof
 against the live production relay passed on 2026-06-13; see
 [phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md).
-Phase 6b's first payment-link slice landed on 2026-06-13: full-balance
-Stripe Checkout links through the relay, relay Stripe webhook intake, worker
-poll/ack, and local job-level payment ledger recording with allocations. The
-sold-shaped release proof remains gate-day validation debt.
+Phase 6b's first payment-link slice landed on 2026-06-13 and has since expanded
+to amount-scoped Stripe Checkout links through the relay, relay Stripe webhook
+intake, worker poll/ack, and local job-level payment ledger recording with
+allocations. The sold-shaped release proof remains gate-day validation debt.
 
 ### 6a.1 Relay acceptance surface — BUILT 2026-06-12
 
@@ -619,15 +619,16 @@ action. API readback after the live-relay smoke showed the approved estimate
 as `approved`, the declined estimate as `declined`, and structured decline
 reason codes `price` and `questions` stored on the declined estimate.
 
-### 6b.1 Full-balance Stripe Checkout payment links — BUILT 2026-06-13
+### 6b.1 Stripe Checkout payment links — BUILT 2026-06-13, AMOUNT-SCOPED AFTERWARD
 
-Build: payment allocation schema, full-balance online-link endpoint on posted
-invoices, relay Stripe Connect Checkout Session creation, relay payment-event
-poll/ack API, Stripe webhook intake, worker poller that idempotently records
-confirmed provider payments, and office UI to create/copy a payment link.
-The link model reuses one active unpaid local link, keys fresh relay attempts
-by `(job, amount, attempt)`, and requires office confirmation before creating a
-new same-dollar link after a prior online card payment.
+Build: payment allocation schema, online-link endpoint on posted invoices,
+relay Stripe Connect Checkout Session creation, relay payment-event poll/ack
+API, Stripe webhook intake, worker poller that idempotently records confirmed
+provider payments, and office UI to create/copy a payment link. The link model
+now supports any office-entered amount up to the current amount due, defaults to
+the full due balance, reuses one active unpaid local link, keys fresh relay
+attempts by `(job, amount, attempt)`, and requires office confirmation before
+creating a new same-dollar link after a prior online card payment.
 
 Status: landed as a first slice. Payments are now job-level append-only ledger
 rows with invoice allocations. BellField's platform fee is one fixed rate for
@@ -639,9 +640,9 @@ through the relay/API/worker flow plus the office Refund-on-card action and
 pending/failed display, and the dated live Stripe sandbox smoke passed on
 2026-06-15 Pacific / 2026-06-16 UTC.
 
-Intentionally deferred: partial payments, deposits, estimate payments, stored
-cards, customer surcharge math, and processor-fee reconciliation beyond
-BellField's application fee.
+Intentionally deferred: deposits, estimate payments, stored cards, customer
+surcharge math, and processor-fee reconciliation beyond BellField's application
+fee.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use

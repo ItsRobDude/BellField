@@ -1,4 +1,9 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import {
   relayServerInstanceHeader,
   type OnlinePaymentLinkResponse,
@@ -46,8 +51,19 @@ export class OnlinePaymentLinkService {
       throw new ConflictException('This job does not have an outstanding balance.');
     }
 
+    const requestedAmountCents =
+      request.amount === undefined ? amountDueCents : dollarsToCents(request.amount);
+    if (!isValidDollarAmountCents(request.amount, requestedAmountCents)) {
+      throw new BadRequestException('Payment link amount must be a positive dollar amount.');
+    }
+    if (requestedAmountCents > amountDueCents) {
+      throw new ConflictException(
+        `Payment link amount cannot exceed the ${formatMoney(amountDueCents / 100)} currently due.`
+      );
+    }
+
     const currency = 'USD';
-    const amount = amountDueCents / 100;
+    const amount = requestedAmountCents / 100;
     const sameAmountSessions = await this.onlinePaymentsRepository.listForJobAmount({
       jobId: invoice.jobId,
       amount,
@@ -76,7 +92,7 @@ export class OnlinePaymentLinkService {
         code: 'sameAmountPreviouslyPaid',
         amount,
         currency,
-        message: `This job already had an online card payment for ${formatMoney(amount)}. BellField still shows ${formatMoney(amount)} due.`
+        message: `This job already had an online card payment for ${formatMoney(amount)}. BellField still shows ${formatMoney(amountDueCents / 100)} due.`
       };
     }
 
@@ -92,12 +108,14 @@ export class OnlinePaymentLinkService {
     // still allowing a legitimate same-dollar charge after an earlier session
     // is paid or expired. The relay and Stripe both treat the full key as
     // opaque idempotency.
-    const idempotencyKey = `invoice-payment:${invoice.jobId}:${amountDueCents}:attempt-${sameAmountSessions.length + 1}`;
+    const idempotencyKey = `invoice-payment:${invoice.jobId}:${requestedAmountCents}:attempt-${
+      sameAmountSessions.length + 1
+    }`;
     const relayResponse = await this.requestRelayPaymentSession(relay, {
       idempotencyKey,
       jobRef: invoice.jobId,
       invoiceRef: invoice.id,
-      amountCents: amountDueCents,
+      amountCents: requestedAmountCents,
       currency,
       description: `BellField invoice ${invoice.posted?.jobNumber ?? invoice.id}`,
       customerEmail: request.customerEmail?.trim() || undefined
@@ -192,6 +210,13 @@ export class OnlinePaymentLinkService {
 
 function dollarsToCents(value: number): number {
   return Math.round(value * 100);
+}
+
+function isValidDollarAmountCents(value: number | undefined, cents: number): boolean {
+  if (value === undefined) {
+    return cents > 0;
+  }
+  return Number.isFinite(value) && value > 0 && Math.abs(value * 100 - cents) < 0.000001;
 }
 
 function isActiveSession(session: { status: string; expiresAt: string }, now: Date): boolean {

@@ -292,6 +292,8 @@ export type OnlinePaymentLinkState =
 
 export interface CreateOnlinePaymentLinkRequest {
   customerEmail?: string;
+  /** Positive dollar amount to collect. Defaults to the full current amount due. */
+  amount?: number;
   confirmSameAmountCharge?: boolean;
 }
 

@@ -37,6 +37,7 @@ import {
 import {
   emptyPaymentDraft,
   PaymentsBlock,
+  type PaymentLinkDraft,
   type PaymentDraft,
   type RefundDraft
 } from './job-invoice-payments-block';
@@ -97,6 +98,7 @@ export function JobInvoiceCorrections({
     draft: InvoiceLineDraft;
   } | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
+  const [paymentLinkDraft, setPaymentLinkDraft] = useState<PaymentLinkDraft | null>(null);
   const [refundDraft, setRefundDraft] = useState<RefundDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
@@ -286,14 +288,44 @@ export function JobInvoiceCorrections({
     }
   }
 
-  async function createPaymentLink() {
+  function startPaymentLink() {
     if (!balance || balance.amountDue <= 0) {
       setErrorMessage('This job does not have an outstanding balance.');
       return;
     }
+    setPaymentDraft(null);
+    setRefundDraft(null);
+    setPaymentLinkDraft({ amount: balance.amountDue.toFixed(2) });
+    setErrorMessage(null);
+  }
+
+  async function createPaymentLink() {
+    if (!paymentLinkDraft) return;
+    if (!balance || balance.amountDue <= 0) {
+      setErrorMessage('This job does not have an outstanding balance.');
+      return;
+    }
+    const requestedAmount = Number(paymentLinkDraft.amount);
+    const requestedAmountCents = Math.round(requestedAmount * 100);
+    if (
+      !Number.isFinite(requestedAmount) ||
+      requestedAmount <= 0 ||
+      Math.abs(requestedAmount * 100 - requestedAmountCents) > 0.000001
+    ) {
+      setErrorMessage('Enter a payment link amount greater than zero in dollars and cents.');
+      return;
+    }
+    const amountDueCents = Math.round(balance.amountDue * 100);
+    if (requestedAmountCents > amountDueCents) {
+      setErrorMessage(
+        `Payment link amount cannot exceed the ${formatCurrency(balance.amountDue)} currently due.`
+      );
+      return;
+    }
+    const amount = requestedAmountCents / 100;
     setIsCreatingPaymentLink(true);
     try {
-      let response = await requestPaymentLink(false);
+      let response = await requestPaymentLink(false, amount);
       if (response.state === 'confirmationRequired') {
         const confirmed = window.confirm(
           `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
@@ -301,13 +333,14 @@ export function JobInvoiceCorrections({
         if (!confirmed) {
           return;
         }
-        response = await requestPaymentLink(true);
+        response = await requestPaymentLink(true, amount);
       }
       if (response.state !== 'created') {
         setErrorMessage(response.message ?? 'Online payment links are not available right now.');
         return;
       }
       setOnlinePaymentLink(response);
+      setPaymentLinkDraft(null);
       setErrorMessage(null);
       let copied = false;
       try {
@@ -330,9 +363,10 @@ export function JobInvoiceCorrections({
     }
   }
 
-  function requestPaymentLink(confirmSameAmountCharge: boolean) {
+  function requestPaymentLink(confirmSameAmountCharge: boolean, amount: number) {
     return createOfficeOnlinePaymentLink({
       invoiceId: mainInvoiceId,
+      amount,
       confirmSameAmountCharge: confirmSameAmountCharge || undefined,
       apiBaseUrl,
       sessionToken
@@ -561,9 +595,16 @@ export function JobInvoiceCorrections({
           isCreatingPaymentLink={isCreatingPaymentLink}
           amountDue={balance?.amountDue ?? 0}
           onlinePaymentLink={onlinePaymentLink}
+          paymentLinkDraft={paymentLinkDraft}
           paymentDraft={paymentDraft}
           refundDraft={refundDraft}
-          onStartRecord={() => setPaymentDraft(emptyPaymentDraft())}
+          onStartRecord={() => {
+            setPaymentLinkDraft(null);
+            setPaymentDraft(emptyPaymentDraft());
+          }}
+          onStartPaymentLink={startPaymentLink}
+          onCancelPaymentLink={() => setPaymentLinkDraft(null)}
+          onChangePaymentLinkDraft={setPaymentLinkDraft}
           onCreatePaymentLink={() => void createPaymentLink()}
           onCancelRecord={() => setPaymentDraft(null)}
           onChangeDraft={setPaymentDraft}

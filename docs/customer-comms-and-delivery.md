@@ -62,10 +62,11 @@ Estimate PDF email delivery has shipped and rides the production relay with
 queue/retry/cancel semantics (status stamps in §10). Estimate acceptance links
 have also shipped: the relay hosts the public decision page and the worker
 polls decisions back into the self-hosted install. The first payment-link slice
-has shipped too: the office can create a full-balance Stripe Checkout link for a
-posted invoice, the relay receives Stripe webhooks, and the worker records
-confirmed payments locally. This document continues to define the guardrails for
-the next delivery slices.
+has shipped too: the office can create a Stripe Checkout link for a posted
+invoice, defaulting to the full amount due while allowing a smaller amount, the
+relay receives Stripe webhooks, and the worker records confirmed payments
+locally. This document continues to define the guardrails for the next delivery
+slices.
 
 ---
 
@@ -318,7 +319,7 @@ retry/expiry/status-poll jobs.
   per-send overrides still available from the invoice send preview
 - when the owner enables the `includeInvoicePaymentLink` setting, sending a
   posted **main** invoice with an outstanding balance appends an online pay-now
-  link (the existing full-balance link) to the email body. The link is minted
+  link (the default full-due link) to the email body. The link is minted
   only after the send is reserved and the PDF renders, and the invoice send is
   never blocked if the link cannot be created (no balance, payments not
   configured, same-amount confirmation, etc.). Credits/adjustments/zero-balance
@@ -341,24 +342,25 @@ The controlling design is [acceptance-links-design.md](./acceptance-links-design
 - BellField stores provider reference and operational result
 - payments remain online-only in v1
 
-Shipped 2026-06-13: full-balance Stripe Checkout links through the BellField
-relay, Stripe webhook intake on the relay, install worker poll/ack for confirmed
-payment events, and local append-only job-level payment records with
-auto-allocation across posted charge invoices. Payment-link idempotency is now
-per `(job, amount, attempt)`: active unpaid links are reused locally, and a
-same-dollar repeat after a prior online card payment requires office
-confirmation before BellField creates the next Stripe Checkout attempt. Manual
-full/partial refunds for manually recorded payments have also shipped on the
-office invoice tab; they are append-only, permission-gated, and raise amount due
-through refund allocations.
+Shipped 2026-06-13 and expanded afterward: Stripe Checkout links through the
+BellField relay, Stripe webhook intake on the relay, install worker poll/ack for
+confirmed payment events, and local append-only job-level payment records with
+auto-allocation across posted charge invoices. Office users can now choose an
+amount up to the current amount due; leaving the default collects the full due
+balance. Payment-link idempotency is per `(job, amount, attempt)`: active unpaid
+links are reused locally, and a same-dollar repeat after a prior online card
+payment requires office confirmation before BellField creates the next Stripe
+Checkout attempt. Manual full/partial refunds for manually recorded payments
+have also shipped on the office invoice tab; they are append-only,
+permission-gated, and raise amount due through refund allocations.
 
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
 display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
-2026-06-16 UTC. Still deferred: deposits, partial payments, stored cards,
-customer surcharge logic, customer refund receipts, and processor-fee
-reconciliation beyond BellField's application fee.
+2026-06-16 UTC. Still deferred: deposits, stored cards, customer surcharge
+logic, customer refund receipts, and processor-fee reconciliation beyond
+BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

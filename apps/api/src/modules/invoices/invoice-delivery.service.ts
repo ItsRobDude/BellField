@@ -375,7 +375,7 @@ export class InvoiceDeliveryService {
   }
 
   // Best-effort: when the owner has enabled invoice pay links, create-or-reuse
-  // the job's full-balance online payment link for the MAIN invoice and return
+  // the job's default full-due online payment link for the MAIN invoice and return
   // its URL. The invoice send must NEVER be blocked by this — no balance,
   // payments not configured, a same-amount confirmation, or a missing
   // payments:create permission all just mean "send the invoice without a link."

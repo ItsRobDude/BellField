@@ -467,7 +467,7 @@ describe('JobInvoiceSection posting', () => {
     expect(await screen.findByText('Queued email canceled.')).toBeInTheDocument();
   });
 
-  it('creates a full-balance online payment link from the posted invoice screen', async () => {
+  it('creates a default full-due online payment link from the posted invoice screen', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
       jobId: 'job-1',
@@ -484,10 +484,14 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    expect(await screen.findByLabelText('Payment link amount')).toHaveValue(250);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
 
     await waitFor(() =>
       expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
         invoiceId: 'inv-1',
+        amount: 250,
         confirmSameAmountCharge: undefined,
         apiBaseUrl: 'http://localhost',
         sessionToken: 'test-token'
@@ -495,6 +499,50 @@ describe('JobInvoiceSection posting', () => {
     );
     expect(
       await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_123')
+    ).toBeInTheDocument();
+  });
+
+  it('creates a partial online payment link from the posted invoice screen', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'created',
+      checkoutUrl: 'https://checkout.stripe.test/pay/cs_partial',
+      paymentSessionId: 'pay_sess_partial',
+      amount: 125,
+      currency: 'USD',
+      expiresAt: '2026-06-14T00:00:00.000Z'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Payment link amount'), {
+      target: { value: '125' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
+        invoiceId: 'inv-1',
+        amount: 125,
+        confirmSameAmountCharge: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_partial')
     ).toBeInTheDocument();
   });
 
@@ -529,6 +577,7 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
     expect(
       await screen.findByDisplayValue('https://checkout.stripe.test/pay/reused')
@@ -573,6 +622,7 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
     expect(window.confirm).toHaveBeenCalledWith(
@@ -580,12 +630,14 @@ describe('JobInvoiceSection posting', () => {
     );
     expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(1, {
       invoiceId: 'inv-1',
+      amount: 250,
       confirmSameAmountCharge: undefined,
       apiBaseUrl: 'http://localhost',
       sessionToken: 'test-token'
     });
     expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(2, {
       invoiceId: 'inv-1',
+      amount: 250,
       confirmSameAmountCharge: true,
       apiBaseUrl: 'http://localhost',
       sessionToken: 'test-token'
@@ -621,6 +673,7 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
     expect(window.confirm).toHaveBeenCalledTimes(1);
