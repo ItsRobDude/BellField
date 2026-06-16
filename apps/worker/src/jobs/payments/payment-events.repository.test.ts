@@ -29,6 +29,10 @@ class CapturingDatabase implements TransactionalQueryExecutor {
   }
 }
 
+function findReceiptEnqueue(database: CapturingDatabase) {
+  return database.queries.find((query) => /insert into payment_receipt_messages/i.test(query.text));
+}
+
 function makeEvent(overrides?: Partial<RelayPaymentEvent>): RelayPaymentEvent {
   return {
     paymentEventId: 'event-1',
@@ -105,6 +109,19 @@ test('PaymentEventsRepository records a provider payment and allocates it across
     /update online_payment_sessions/i.test(query.text)
   );
   assert.deepEqual(sessionUpdate?.values?.slice(0, 2), ['session-1', paymentInsert.values?.[0]]);
+
+  // A customer receipt is enqueued in the same transaction, keyed to the new
+  // payment, with the recorded amount/purpose. occurred_at is Stripe's paid time
+  // (paidAt); created_at is worker processing time (occurredAt).
+  const receipt = findReceiptEnqueue(database);
+  assert.ok(receipt);
+  assert.match(receipt.text, /'paymentReceipt'/);
+  assert.equal(receipt.values?.[2], paymentInsert.values?.[0]); // payment_id
+  assert.equal(receipt.values?.[3], '175.00'); // amount (dollars)
+  assert.equal(receipt.values?.[5], 'card'); // method
+  assert.equal(receipt.values?.[6], 'payment'); // purpose
+  assert.equal((receipt.values?.[7] as Date).getTime(), Date.parse('2026-06-13T12:00:00.000Z'));
+  assert.equal((receipt.values?.[9] as Date).getTime(), occurredAt.getTime());
 });
 
 test('PaymentEventsRepository records an overpayment in full and surfaces the unallocated remainder', async () => {
@@ -229,6 +246,13 @@ test('PaymentEventsRepository records a confirmation with no local session and f
     /insert into job_timeline_entries/i.test(query.text)
   );
   assert.match(String(timeline?.values?.[3]), /No local payment-link record/);
+  // The customer still gets a receipt for the money actually recorded: event
+  // amount, default purpose 'payment'.
+  const receipt = findReceiptEnqueue(database);
+  assert.ok(receipt);
+  assert.equal(receipt.values?.[2], paymentInsert?.values?.[0]);
+  assert.equal(receipt.values?.[3], '175.00');
+  assert.equal(receipt.values?.[6], 'payment');
 });
 
 test('PaymentEventsRepository records a deposit session as unallocated job credit, stamped deposit', async () => {
@@ -266,6 +290,11 @@ test('PaymentEventsRepository records a deposit session as unallocated job credi
   );
   assert.match(String(timeline?.values?.[3]), /Online deposit of \$100\.00 confirmed/);
   assert.match(String(timeline?.values?.[3]), /\$100\.00 exceeds the balance due/);
+  // The receipt carries the deposit purpose so its copy reads as a deposit.
+  const receipt = findReceiptEnqueue(database);
+  assert.ok(receipt);
+  assert.equal(receipt.values?.[3], '100.00');
+  assert.equal(receipt.values?.[6], 'deposit');
 });
 
 test('PaymentEventsRepository defaults an out-of-band confirmation (no session) to payment purpose', async () => {
@@ -375,6 +404,12 @@ test('PaymentEventsRepository records a local session amount mismatch and flags 
     /insert into job_timeline_entries/i.test(query.text)
   );
   assert.match(String(timeline?.values?.[3]), /payment-link record did not match/);
+  // The receipt matches the recorded (provider-confirmed) payment, not the
+  // stale local session amount.
+  const receipt = findReceiptEnqueue(database);
+  assert.ok(receipt);
+  assert.equal(receipt.values?.[3], '175.00');
+  assert.equal(receipt.values?.[6], 'payment');
 });
 
 test('PaymentEventsRepository records a local session currency mismatch and flags it', async () => {
@@ -425,6 +460,9 @@ test('PaymentEventsRepository treats an existing provider payment as already app
     database.queries.some((query) => /insert into payments/i.test(query.text)),
     false
   );
+  // Forward-only: a redelivery of an already-recorded payment never enqueues a
+  // second receipt (and never retroactively receipts a pre-1b payment).
+  assert.equal(findReceiptEnqueue(database), undefined);
   const sessionUpdate = database.queries.find((query) =>
     /update online_payment_sessions/i.test(query.text)
   );

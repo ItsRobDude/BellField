@@ -201,6 +201,14 @@ shop:
       charge afterward.
 - [ ] Confirm `success`/`cancel` redirects land on a reachable public host
       (the relay's `publicBaseUrl`), not an internal address.
+- [ ] **Stripe customer-receipt setting per connected account.** BellField now
+      sends its own customer payment receipt (slices 1a/1b). The relay's Checkout
+      session passes `customer_email` but does not set `receipt_email`, so Stripe
+      only emails a receipt if the connected account has automatic customer
+      receipts enabled in its Dashboard (Settings → Customer emails → Successful
+      payments). To avoid the customer getting two receipts, disable Stripe's
+      automatic receipt on the connected account (recommended, since BellField
+      owns the receipt) — or knowingly accept the overlap. Verify per account.
 
 ---
 
