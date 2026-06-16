@@ -8,9 +8,8 @@ unit tests; this is the live proof against the Stripe sandbox.
 Reuses the Bell Software LLC Stripe sandbox + connected account already configured
 for the 2026-06-14 payment-link smoke (`phase-6b-live-invoice-email-payment-smoke-2026-06-14.md`).
 
-> Status: **PENDING — to execute.** Fill in the Result section on the live run.
-> The actual run is manual (real Stripe Checkout + test card entry); it cannot be
-> driven from CI.
+> Status: **PASSED — executed 2026-06-15 Pacific / 2026-06-16 UTC.**
+> Sandbox-only Stripe Checkout and refund flow; no production money moved.
 
 ## Scope to prove
 
@@ -37,8 +36,8 @@ for the 2026-06-14 payment-link smoke (`phase-6b-live-invoice-email-payment-smok
   `BELLFIELD_RELAY_SERVER_INSTANCE_ID` set to the live relay triplet.
 - Worker running with the same relay triplet (refund-events poll reuses the
   payment-event interval).
-- Relay Stripe webhook endpoint subscribed to `charge.refund.updated` /
-  `refund.created` / `refund.updated` / `refund.failed`, on the pinned
+- Relay Stripe webhook endpoint subscribed to `refund.created` /
+  `refund.updated` / `refund.failed`, on the pinned
   dashboard event version that tracks `STRIPE_API_VERSION` (`2026-05-27.dahlia`).
 
 ## Procedure
@@ -64,20 +63,60 @@ for the 2026-06-14 payment-link smoke (`phase-6b-live-invoice-email-payment-smok
 
 ## Expected vs. observed
 
-| Check                                            | Expected                           | Observed |
-| ------------------------------------------------ | ---------------------------------- | -------- |
-| Office Refund action on online card payment      | present (gated `payments:refund`)  |          |
-| Pending state after request                      | `requested — pending confirmation` |          |
-| Worker applied refund event                      | `applied`, acked                   |          |
-| `payment_refunds` partial row + proportional fee | present                            |          |
-| Amount due rose by refunded amount               | yes                                |          |
-| Full refund of remainder                         | second row, fully refunded         |          |
-| Stripe shows both refunds + fee refunds          | yes                                |          |
+| Check                                            | Expected                           | Observed                                                                               |
+| ------------------------------------------------ | ---------------------------------- | -------------------------------------------------------------------------------------- |
+| Office Refund action on online card payment      | present (gated `payments:refund`)  | present before full refund; hidden after full refund                                   |
+| Pending state after request                      | `requested - pending confirmation` | observed in API/read model; office poll flipped to confirmed refund after worker apply |
+| Worker applied refund event                      | `applied`, acked                   | two events applied and acknowledged                                                    |
+| `payment_refunds` partial row + proportional fee | present                            | `$60.00` refund with `$0.60` application-fee refund                                    |
+| Amount due rose by refunded amount               | yes                                | `$60.00` after first refund; `$120.00` after full refund                               |
+| Full refund of remainder                         | second row, fully refunded         | second `$60.00` refund; total refunded `$120.00`                                       |
+| Stripe shows both refunds + fee refunds          | yes                                | two Stripe refunds on the PaymentIntent; application fee fully refunded proportionally |
 
 ## Result
 
-_PENDING — record date/time, job number, amounts, refund ids, and any deviations
-here on the live run._
+Live run used local API/worker/office against the live relay and Bell Software LLC
+Stripe sandbox.
+
+- Job: `2051`
+- Job id: `dc4fc379-da01-4270-9a5f-497c924ec046`
+- Invoice id: `59cce811-e046-4506-8a2f-6cc28f4560d3`
+- Payment id: `f4aebfc6-f3ca-4936-b863-c8cbf4f2b7e2`
+- Relay payment session: `pay_sess_1353865970750535c6ab`
+- Stripe PaymentIntent: `pi_3Tikh3ANpoMyEZNZ0Zx0zHwY`
+- Payment amount: `$120.00`
+- Application fee: `$1.20`
+
+Refunds recorded locally:
+
+| Local refund id                        | Stripe refund id              |   Amount | Application fee refunded |
+| -------------------------------------- | ----------------------------- | -------: | -----------------------: |
+| `a85a3887-b1d4-43fa-8c1b-5a823904725d` | `re_3Tikh3ANpoMyEZNZ0nlLz8OX` | `$60.00` |                  `$0.60` |
+| `add5a8d9-89ca-4da3-ad24-1b5f71311c22` | `re_3Tikh3ANpoMyEZNZ0koRGSEY` | `$60.00` |                  `$0.60` |
+
+Final local totals: `payment_refunds.amount = $120.00`,
+`payment_refunds.application_fee_refunded = $1.20`. The office invoice tab showed
+the posted `$120.00` invoice, paid `$120.00`, refunded `$120.00`, and amount due
+`$120.00`.
+
+Operational notes from the run:
+
+- The first refund attempt failed before reaching Stripe because the live relay
+  host was still on an older commit and returned `404 Cannot POST /v1/payment-refunds`.
+  The relay host was backed up (`bellfield-relay-20260616T002411Z.dump`), pulled
+  forward, rebuilt, and migrated through `20260614_107_relay_payment_refunds.up.sql`.
+- The Stripe webhook endpoint initially only subscribed to
+  `checkout.session.completed`; it was updated to include `refund.created`,
+  `refund.updated`, and `refund.failed`.
+- The first accepted refund occurred before the webhook subscription fix. The
+  exact Stripe event (`evt_3Tikh3ANpoMyEZNZ0SRbE8ub`) was replayed once to the
+  relay webhook with a valid Stripe signature so the worker could apply and ack it.
+- The second refund proved the corrected webhook subscription without manual
+  replay: Stripe webhook -> relay refund event -> worker apply -> ack.
+- The smoke exposed one office-read-model polish issue: an old clean failed
+  submission could still display after later confirmed refunds fully covered the
+  payment. The PR now hides that stale, no-longer-actionable prompt while keeping
+  true recording-failed dead letters visible.
 
 ## Still not claimed
 
