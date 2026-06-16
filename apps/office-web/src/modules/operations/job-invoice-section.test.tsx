@@ -23,6 +23,7 @@ vi.mock('@/lib/operations-api', () => ({
   createOfficeOnlinePaymentLink: vi.fn(),
   createOfficeDepositPaymentLink: vi.fn(),
   recordOfficePayment: vi.fn(),
+  recordOfficeJobDeposit: vi.fn(),
   voidOfficePayment: vi.fn(),
   refundOfficePayment: vi.fn(),
   requestOfficeOnlineRefund: vi.fn()
@@ -336,6 +337,28 @@ describe('JobInvoiceSection posting', () => {
     ).toBeInTheDocument();
   });
 
+  it('records a manual job-level deposit before the invoice is posted', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+    mockedApi.recordOfficeJobDeposit.mockResolvedValue({
+      payment: manualPayment({ purpose: 'deposit', method: 'check', amount: 500, allocations: [] })
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Record deposit' }));
+    fireEvent.change(await screen.findByLabelText('Manual deposit amount'), {
+      target: { value: '500' }
+    });
+    fireEvent.change(screen.getByLabelText('Deposit method'), { target: { value: 'cash' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record deposit' }));
+
+    await waitFor(() =>
+      expect(mockedApi.recordOfficeJobDeposit).toHaveBeenCalledWith(
+        expect.objectContaining({ jobId: 'job-1', amount: 500, method: 'cash' })
+      )
+    );
+  });
+
   it('shows unallocated deposit credit on a draft invoice', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
@@ -356,6 +379,7 @@ describe('JobInvoiceSection posting', () => {
           invoiceId: undefined,
           amount: 100,
           source: 'bellfieldPayments',
+          purpose: 'deposit',
           provider: 'stripe',
           providerPaymentId: 'pi_deposit',
           providerSessionId: 'pay_sess_deposit',
@@ -370,7 +394,7 @@ describe('JobInvoiceSection posting', () => {
 
     expect(await screen.findByText('Job credit')).toBeInTheDocument();
     expect(
-      await screen.findByText('$100.00 - Online card - unallocated credit')
+      await screen.findByText('$100.00 - Deposit received · Online card - unallocated credit')
     ).toBeInTheDocument();
   });
 

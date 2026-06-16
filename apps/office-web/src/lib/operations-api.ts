@@ -994,6 +994,7 @@ export async function postOfficeInvoiceById(input: {
 export {
   listOfficeJobPayments,
   recordOfficePayment,
+  recordOfficeJobDeposit,
   createOfficeOnlinePaymentLink,
   createOfficeDepositPaymentLink,
   voidOfficePayment,

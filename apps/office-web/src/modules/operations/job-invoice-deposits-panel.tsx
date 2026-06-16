@@ -3,11 +3,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   createOfficeDepositPaymentLink,
+  recordOfficeJobDeposit,
   getOfficeJobInvoiceBalance,
   listOfficeJobPayments,
   type JobInvoiceBalance,
   type OnlinePaymentLinkResponse,
   type Payment,
+  type PaymentMethod,
   type PaymentRefund
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -16,6 +18,24 @@ import { formatCurrency, SummaryRow } from './job-invoice-shared';
 type DepositDraft = {
   amount: string;
 };
+
+// A manually recorded deposit (cash/check/card the office took directly), mirroring
+// the manual payment form. Method is HOW it was paid; the purpose is always deposit.
+type ManualDepositDraft = {
+  amount: string;
+  method: PaymentMethod;
+  reference: string;
+  memo: string;
+};
+
+const depositMethodLabels: Record<PaymentMethod, string> = {
+  cash: 'Cash',
+  check: 'Check',
+  card: 'Card',
+  ach: 'ACH',
+  other: 'Other'
+};
+const depositMethodOptions: PaymentMethod[] = ['cash', 'check', 'card', 'ach', 'other'];
 
 type DraftInvoiceDepositsPanelProps = {
   jobId: string;
@@ -36,12 +56,14 @@ export function DraftInvoiceDepositsPanel({
   const [payments, setPayments] = useState<Payment[]>([]);
   const [refunds, setRefunds] = useState<PaymentRefund[]>([]);
   const [depositDraft, setDepositDraft] = useState<DepositDraft | null>(null);
+  const [manualDepositDraft, setManualDepositDraft] = useState<ManualDepositDraft | null>(null);
   const [depositLink, setDepositLink] = useState<Extract<
     OnlinePaymentLinkResponse,
     { state: 'created' }
   > | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
 
@@ -134,6 +156,44 @@ export function DraftInvoiceDepositsPanel({
     }
   }
 
+  async function saveManualDeposit() {
+    if (!manualDepositDraft) return;
+    const amount = Number(manualDepositDraft.amount);
+    const amountCents = Math.round(amount * 100);
+    if (
+      !Number.isFinite(amount) ||
+      amount <= 0 ||
+      Math.abs(amount * 100 - amountCents) > 0.000001
+    ) {
+      setErrorMessage('Enter a deposit amount greater than zero in dollars and cents.');
+      return;
+    }
+    setIsRecording(true);
+    setErrorMessage(null);
+    try {
+      await recordOfficeJobDeposit({
+        jobId,
+        amount: amountCents / 100,
+        method: manualDepositDraft.method,
+        reference: manualDepositDraft.reference.trim() || undefined,
+        memo: manualDepositDraft.memo.trim() || undefined,
+        apiBaseUrl,
+        sessionToken
+      });
+      setManualDepositDraft(null);
+      setNoticeMessage('Deposit recorded.');
+      await load();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to record the deposit.');
+    } finally {
+      setIsRecording(false);
+    }
+  }
+
+  function patchManualDeposit(values: Partial<ManualDepositDraft>) {
+    setManualDepositDraft((current) => (current ? { ...current, ...values } : current));
+  }
+
   function requestDepositLink(
     amount: number,
     confirmations: {
@@ -156,20 +216,35 @@ export function DraftInvoiceDepositsPanel({
     <div style={styles.subpanel} aria-label="Deposits and job credit">
       <div style={styles.row}>
         <h3 style={styles.sectionHeading}>Deposits</h3>
-        {canCreate && !depositDraft ? (
-          <button
-            type="button"
-            style={styles.primaryButton}
-            disabled={isCreating}
-            onClick={() => {
-              setDepositDraft({ amount: '' });
-              setDepositLink(null);
-              setErrorMessage(null);
-              setNoticeMessage(null);
-            }}
-          >
-            Create deposit link
-          </button>
+        {canCreate && !depositDraft && !manualDepositDraft ? (
+          <div style={styles.badgeRow}>
+            <button
+              type="button"
+              style={styles.button}
+              disabled={isCreating || isRecording}
+              onClick={() => {
+                setManualDepositDraft({ amount: '', method: 'check', reference: '', memo: '' });
+                setDepositLink(null);
+                setErrorMessage(null);
+                setNoticeMessage(null);
+              }}
+            >
+              Record deposit
+            </button>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              disabled={isCreating || isRecording}
+              onClick={() => {
+                setDepositDraft({ amount: '' });
+                setDepositLink(null);
+                setErrorMessage(null);
+                setNoticeMessage(null);
+              }}
+            >
+              Create deposit link
+            </button>
+          </div>
         ) : null}
       </div>
 
@@ -247,6 +322,77 @@ export function DraftInvoiceDepositsPanel({
         </div>
       ) : null}
 
+      {manualDepositDraft ? (
+        <div style={styles.drawerPanel}>
+          <div style={styles.formGridCompact}>
+            <label style={styles.fieldLabel}>
+              <span>Deposit amount</span>
+              <input
+                style={styles.input}
+                type="number"
+                step="0.01"
+                aria-label="Manual deposit amount"
+                value={manualDepositDraft.amount}
+                onChange={(event) => patchManualDeposit({ amount: event.target.value })}
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              <span>Method</span>
+              <select
+                style={styles.input}
+                aria-label="Deposit method"
+                value={manualDepositDraft.method}
+                onChange={(event) =>
+                  patchManualDeposit({ method: event.target.value as PaymentMethod })
+                }
+              >
+                {depositMethodOptions.map((method) => (
+                  <option key={method} value={method}>
+                    {depositMethodLabels[method]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label style={styles.fieldLabel}>
+              <span>Reference</span>
+              <input
+                style={styles.input}
+                aria-label="Deposit reference"
+                value={manualDepositDraft.reference}
+                onChange={(event) => patchManualDeposit({ reference: event.target.value })}
+              />
+            </label>
+            <label style={{ ...styles.fieldLabel, ...styles.formGridFullWidth }}>
+              <span>Memo</span>
+              <input
+                style={styles.input}
+                aria-label="Deposit memo"
+                value={manualDepositDraft.memo}
+                onChange={(event) => patchManualDeposit({ memo: event.target.value })}
+              />
+            </label>
+          </div>
+          <div style={styles.inlineActionBar}>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              disabled={isRecording}
+              onClick={() => void saveManualDeposit()}
+            >
+              {isRecording ? 'Recording...' : 'Record deposit'}
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              disabled={isRecording}
+              onClick={() => setManualDepositDraft(null)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {creditRows.length === 0 ? (
         <p style={styles.tinyMuted}>No deposits collected yet.</p>
       ) : (
@@ -281,9 +427,13 @@ function getUnallocatedCredits(
     .filter((row) => row.amount > 0);
 }
 
+// Purpose-aware, matching the main ledger: a held deposit reads "Deposit received
+// · Online card", an unallocated overpayment "Payment received · Check".
 function paymentLabel(payment: Payment): string {
-  if (payment.source === 'bellfieldPayments') {
-    return 'Online card';
-  }
-  return payment.method.charAt(0).toUpperCase() + payment.method.slice(1);
+  const purposeLabel = payment.purpose === 'deposit' ? 'Deposit received' : 'Payment received';
+  const methodLabel =
+    payment.source === 'bellfieldPayments'
+      ? 'Online card'
+      : payment.method.charAt(0).toUpperCase() + payment.method.slice(1);
+  return `${purposeLabel} · ${methodLabel}`;
 }

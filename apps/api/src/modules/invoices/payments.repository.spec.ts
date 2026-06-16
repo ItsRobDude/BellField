@@ -1,4 +1,4 @@
-import { ConflictException } from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { PaymentsRepository } from './payments.repository';
 import type { QueryExecutor } from '../../database/database.service';
 
@@ -37,6 +37,7 @@ const PAYMENT_ROW = {
   amount: '200.00',
   method: 'card',
   source: 'manual',
+  purpose: 'payment',
   provider: null,
   currency: 'USD',
   receivedAt: '2026-06-02T00:00:00.000Z',
@@ -65,6 +66,86 @@ const JOB_LOCK = /select id from jobs where id = \$1 for update/i;
 const POSTED_SET_LOCK = /select id from invoices\s+where job_id = \$1 and status = 'posted'/i;
 const TIMELINE_INSERT = /insert into job_timeline_entries/i;
 const ALLOCATION_SELECT = /from payment_allocations pa\s+join invoices i/i;
+
+describe('PaymentsRepository.recordDeposit', () => {
+  const depositInput = {
+    amount: 500,
+    method: 'check' as const,
+    receivedAt: '2026-06-16T00:00:00.000Z',
+    actor
+  };
+
+  it('records a job-level deposit as unallocated credit before any posting', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      // No posted charges → nothing to allocate; the money is held as job credit.
+      { match: /from invoices i\s+left join active_allocations/i, rows: [] },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      { match: /and id <> \$2/i, rows: [{ cents: 0 }] },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      {
+        match: /from payments where id = \$1/i,
+        rows: [
+          { ...PAYMENT_ROW, id: 'dep-1', invoiceId: null, amount: '500.00', purpose: 'deposit' }
+        ]
+      },
+      { match: ALLOCATION_SELECT, rows: [] }
+    ]);
+
+    const result = await repository.recordDeposit('job-1', depositInput);
+
+    expect(result.purpose).toBe('deposit');
+    expect(result.invoiceId).toBeUndefined();
+    const insert = findCall(calls, /insert into payments/i);
+    expect(insert?.params).toContain('deposit'); // purpose
+    expect(insert?.params).toContain('manual'); // source
+    expect(insert?.params).toContain(null); // invoice_id
+    expect(findCall(calls, /insert into payment_allocations/i)).toBeUndefined();
+    const timeline = findCall(calls, TIMELINE_INSERT);
+    expect(timeline?.params[4]).toBe('paymentRecorded');
+    expect(String(timeline?.params[5])).toMatch(/Deposit of \$500\.00 recorded \(check\)/);
+  });
+
+  it('allocates a deposit to posted charges when they exist', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      {
+        match: /from invoices i\s+left join active_allocations/i,
+        rows: [{ invoiceId: 'inv-main', invoiceKind: 'main', total: '300.00', allocated: '0.00' }]
+      },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      { match: /and id <> \$2/i, rows: [{ cents: 0 }] },
+      { match: /insert into payment_allocations/i, rowCount: 1 },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      {
+        match: /from payments where id = \$1/i,
+        rows: [
+          { ...PAYMENT_ROW, id: 'dep-1', invoiceId: null, amount: '200.00', purpose: 'deposit' }
+        ]
+      },
+      { match: ALLOCATION_SELECT, rows: [] }
+    ]);
+
+    await repository.recordDeposit('job-1', { ...depositInput, amount: 200 });
+
+    const allocation = findCall(calls, /insert into payment_allocations/i);
+    expect(allocation?.params).toContain('inv-main');
+    expect(allocation?.params).toContain(200);
+  });
+
+  it('throws NotFound for an unknown job before writing', async () => {
+    const { repository, calls } = repositoryWith([{ match: JOB_LOCK, rows: [] }]);
+
+    await expect(repository.recordDeposit('missing', depositInput)).rejects.toBeInstanceOf(
+      NotFoundException
+    );
+    expect(findCall(calls, /insert into payments/i)).toBeUndefined();
+  });
+});
 
 describe('PaymentsRepository.recordPayment', () => {
   it('records against a posted invoice and writes a paymentRecorded timeline entry', async () => {
@@ -102,6 +183,8 @@ describe('PaymentsRepository.recordPayment', () => {
     const insert = findCall(calls, /insert into payments/i);
     expect(insert?.params).toContain(200);
     expect(insert?.params).toContain('card');
+    // An invoice-scoped manual payment is recorded with purpose 'payment'.
+    expect(insert?.params).toContain('payment');
     const timeline = findCall(calls, TIMELINE_INSERT);
     // insertJobTimelineEntry values: [id, jobId, occurredAt, actorName, kind, message]
     expect(timeline?.params[3]).toBe('Bea Bookkeeper');
@@ -367,6 +450,18 @@ describe('PaymentsRepository.refundPayment', () => {
     expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
     const timeline = findCall(calls, TIMELINE_INSERT);
     expect(timeline?.params[4]).toBe('paymentRefunded');
+  });
+
+  it('refunds a manual deposit (no allocations) — records the refund, reverses nothing', async () => {
+    // A deposit held as job credit has no allocations to reverse; the refund still
+    // records and lowers net paid. (Deposits are source=manual, so they refund here.)
+    const { repository, calls } = repositoryWith(refundHandlers({ allocations: [] }));
+
+    await repository.refundPayment('pay-1', { amount: 200, actor });
+
+    const refundInsert = findCall(calls, INSERT_REFUND);
+    expect(refundInsert?.params).toContain(200);
+    expect(calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql))).toHaveLength(0);
   });
 
   it('rejects a refund larger than the payment', async () => {
