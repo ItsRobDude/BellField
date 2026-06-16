@@ -25,6 +25,9 @@ type SettingsDraft = {
   chargesSalesTax: boolean;
   defaultSalesTaxRatePercent: string;
   includeInvoicePaymentLink: boolean;
+  sendPaymentReceipts: boolean;
+  paymentReceiptEmailSubject: string;
+  paymentReceiptEmailBody: string;
 };
 
 const emptyDraft: SettingsDraft = {
@@ -37,7 +40,10 @@ const emptyDraft: SettingsDraft = {
   acceptanceLinkExpiryDays: '30',
   chargesSalesTax: false,
   defaultSalesTaxRatePercent: '0',
-  includeInvoicePaymentLink: false
+  includeInvoicePaymentLink: false,
+  sendPaymentReceipts: true,
+  paymentReceiptEmailSubject: '',
+  paymentReceiptEmailBody: ''
 };
 
 export function OfficeSettingsSurface({
@@ -110,7 +116,10 @@ export function OfficeSettingsSurface({
         acceptanceLinkExpiryDays,
         chargesSalesTax: draft.chargesSalesTax,
         defaultSalesTaxBasisPoints,
-        includeInvoicePaymentLink: draft.includeInvoicePaymentLink
+        includeInvoicePaymentLink: draft.includeInvoicePaymentLink,
+        sendPaymentReceipts: draft.sendPaymentReceipts,
+        paymentReceiptEmailSubject: draft.paymentReceiptEmailSubject,
+        paymentReceiptEmailBody: draft.paymentReceiptEmailBody
       });
       setSettings(response.settings);
       setDraft(toDraft(response.settings));
@@ -299,6 +308,55 @@ export function OfficeSettingsSurface({
               Include a pay-now link in invoice emails (posted invoices with a balance)
             </label>
           </section>
+          <section style={styles.panel} aria-label="Payment receipt email defaults">
+            <h2 style={styles.sectionHeading}>Payment receipt email</h2>
+            <label style={styles.inlineLabel}>
+              <input
+                aria-label="Send a receipt email when a payment is recorded"
+                type="checkbox"
+                checked={draft.sendPaymentReceipts}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    sendPaymentReceipts: event.target.checked
+                  }))
+                }
+              />
+              Email the customer a receipt when a payment or deposit is recorded
+            </label>
+            <label style={styles.fieldLabel}>
+              Subject
+              <input
+                aria-label="Payment receipt email subject"
+                value={draft.paymentReceiptEmailSubject}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'paymentReceiptEmailSubject', event.target.value)
+                }
+                style={styles.input}
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              Body
+              <textarea
+                aria-label="Payment receipt email body"
+                value={draft.paymentReceiptEmailBody}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'paymentReceiptEmailBody', event.target.value)
+                }
+                style={{ ...styles.textarea, minHeight: '10rem' }}
+              />
+            </label>
+            <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
+              Tokens you can use:{' '}
+              {
+                '{companyName}, {customerName}, {amount}, {method}, {date}, {jobNumber}, {receiptKind}'
+              }
+              . Anything else is sent exactly as typed.
+            </p>
+          </section>
         </div>
       ) : isLoading ? (
         <p style={styles.notice}>Loading settings...</p>
@@ -328,7 +386,10 @@ function toDraft(settings: CompanySettings): SettingsDraft {
     acceptanceLinkExpiryDays: String(settings.acceptanceLinkExpiryDays),
     chargesSalesTax: settings.chargesSalesTax,
     defaultSalesTaxRatePercent: basisPointsToPercentString(settings.defaultSalesTaxBasisPoints),
-    includeInvoicePaymentLink: settings.includeInvoicePaymentLink
+    includeInvoicePaymentLink: settings.includeInvoicePaymentLink,
+    sendPaymentReceipts: settings.sendPaymentReceipts,
+    paymentReceiptEmailSubject: settings.paymentReceiptEmailSubject,
+    paymentReceiptEmailBody: settings.paymentReceiptEmailBody
   };
 }
 

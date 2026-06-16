@@ -11,6 +11,12 @@ export interface CompanySettings {
   defaultSalesTaxBasisPoints: number;
   /** When true, invoice emails embed an online pay-now link for posted main invoices with a balance. */
   includeInvoicePaymentLink: boolean;
+  /** When true, a customer receipt email is sent whenever a payment or deposit is recorded. */
+  sendPaymentReceipts: boolean;
+  /** Receipt email subject template ({companyName} etc.). */
+  paymentReceiptEmailSubject: string;
+  /** Receipt email body template ({customerName}, {amount}, {method}, {date}, {jobNumber}, {receiptKind}). */
+  paymentReceiptEmailBody: string;
   updatedAt?: string;
   updatedByName?: string;
 }
@@ -30,4 +36,7 @@ export interface UpdateCompanySettingsRequest {
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
   includeInvoicePaymentLink: boolean;
+  sendPaymentReceipts: boolean;
+  paymentReceiptEmailSubject: string;
+  paymentReceiptEmailBody: string;
 }

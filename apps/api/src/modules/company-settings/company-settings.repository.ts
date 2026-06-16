@@ -15,6 +15,9 @@ type CompanySettingsRow = {
   chargesSalesTax: boolean;
   defaultSalesTaxBasisPoints: number;
   includeInvoicePaymentLink: boolean;
+  sendPaymentReceipts: boolean;
+  paymentReceiptEmailSubject: string;
+  paymentReceiptEmailBody: string;
   updatedByName: string | null;
   updatedAt: string | Date;
 };
@@ -37,6 +40,9 @@ export class CompanySettingsRepository {
           charges_sales_tax as "chargesSalesTax",
           default_sales_tax_basis_points as "defaultSalesTaxBasisPoints",
           include_invoice_payment_link as "includeInvoicePaymentLink",
+          send_payment_receipts as "sendPaymentReceipts",
+          payment_receipt_email_subject as "paymentReceiptEmailSubject",
+          payment_receipt_email_body as "paymentReceiptEmailBody",
           updated_by_name as "updatedByName",
           updated_at as "updatedAt"
         from company_settings
@@ -60,6 +66,9 @@ export class CompanySettingsRepository {
       chargesSalesTax: row.chargesSalesTax,
       defaultSalesTaxBasisPoints: row.defaultSalesTaxBasisPoints,
       includeInvoicePaymentLink: row.includeInvoicePaymentLink,
+      sendPaymentReceipts: row.sendPaymentReceipts,
+      paymentReceiptEmailSubject: row.paymentReceiptEmailSubject,
+      paymentReceiptEmailBody: row.paymentReceiptEmailBody,
       updatedAt: toIsoString(row.updatedAt),
       updatedByName: row.updatedByName ?? undefined
     };
@@ -77,9 +86,10 @@ export class CompanySettingsRepository {
           invoice_email_subject, invoice_email_body,
           acceptance_link_expiry_days, charges_sales_tax, default_sales_tax_basis_points,
           include_invoice_payment_link,
+          send_payment_receipts, payment_receipt_email_subject, payment_receipt_email_body,
           updated_by_employee_id, updated_by_name, created_at, updated_at
         )
-        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $13)
+        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
         on conflict (id) do update set
           company_name = excluded.company_name,
           reply_to_email = excluded.reply_to_email,
@@ -91,6 +101,9 @@ export class CompanySettingsRepository {
           charges_sales_tax = excluded.charges_sales_tax,
           default_sales_tax_basis_points = excluded.default_sales_tax_basis_points,
           include_invoice_payment_link = excluded.include_invoice_payment_link,
+          send_payment_receipts = excluded.send_payment_receipts,
+          payment_receipt_email_subject = excluded.payment_receipt_email_subject,
+          payment_receipt_email_body = excluded.payment_receipt_email_body,
           updated_by_employee_id = excluded.updated_by_employee_id,
           updated_by_name = excluded.updated_by_name,
           updated_at = excluded.updated_at
@@ -106,6 +119,9 @@ export class CompanySettingsRepository {
         input.chargesSalesTax,
         input.defaultSalesTaxBasisPoints,
         input.includeInvoicePaymentLink,
+        input.sendPaymentReceipts,
+        input.paymentReceiptEmailSubject,
+        input.paymentReceiptEmailBody,
         actor.id,
         actor.displayName,
         now

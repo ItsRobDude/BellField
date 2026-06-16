@@ -57,4 +57,17 @@ export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySetting
 
   @IsBoolean()
   includeInvoicePaymentLink!: boolean;
+
+  @IsBoolean()
+  sendPaymentReceipts!: boolean;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  paymentReceiptEmailSubject!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  paymentReceiptEmailBody!: string;
 }
