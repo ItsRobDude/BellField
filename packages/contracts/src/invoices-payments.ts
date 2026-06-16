@@ -144,6 +144,14 @@ export type PaymentSource = 'manual' | 'bellfieldPayments';
 
 export type PaymentProvider = 'stripe';
 
+/**
+ * WHAT the money was collected as — distinct from the method (how it was paid) and
+ * the source (which rail recorded it). A `deposit` is money taken toward a job
+ * (often before an invoice is posted); a `payment` is an ordinary receipt. Refunds
+ * are NOT a purpose — they are a separate ledger entry (`PaymentRefund`).
+ */
+export type PaymentPurpose = 'payment' | 'deposit';
+
 export interface PaymentAllocation {
   invoiceId: string;
   invoiceKind: InvoiceKind;
@@ -164,6 +172,8 @@ export interface Payment {
   amount: number;
   method: PaymentMethod;
   source: PaymentSource;
+  /** What the money was collected as (ordinary payment vs job deposit). */
+  purpose: PaymentPurpose;
   provider?: PaymentProvider;
   currency: string;
   receivedAt: string;

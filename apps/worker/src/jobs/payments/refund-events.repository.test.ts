@@ -104,6 +104,32 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   assert.match(String(timeline?.values?.[3]), /Online refund of \$100\.00 confirmed/);
 });
 
+test('RefundEventsRepository refunds a deposit (no allocations) — records the refund, reverses nothing', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [], // 1: refund dedup — none
+    [{ id: 'pay-1', jobId: 'job-1', amountCents: 10_000 }], // 2: the deposit payment
+    [{ id: 'job-1' }], // 3: lock job
+    [], // 4: lock posted invoices
+    [{ cents: 0 }], // 5: prior refunds on this payment
+    [], // 6: insert payment_refunds
+    [], // 7: reversal source — EMPTY (a deposit held as credit has no allocations)
+    [{ id: 'orr-1', jobId: 'job-1' }], // 8: find request by refund id
+    [], // 9: update request -> succeeded
+    [], // 10: update jobs
+    [] // 11: insert timeline
+  ];
+  const repository = new RefundEventsRepository(database);
+
+  const outcome = await repository.applyRelayRefundEvent(makeEvent(), occurredAt);
+
+  assert.equal(outcome, 'applied');
+  // The refund row is still written (net paid drops), but there is nothing to reverse.
+  assert.ok(database.find(/insert into payment_refunds/i));
+  assert.equal(database.filter(/insert into payment_refund_allocations/i).length, 0);
+  assert.match(database.find(/update online_refund_requests/i)?.text ?? '', /status = 'succeeded'/);
+});
+
 test('RefundEventsRepository records a confirmed refund but flags one exceeding the remaining refundable', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [

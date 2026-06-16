@@ -51,7 +51,15 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 17_500,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -81,6 +89,8 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   assert.equal(paymentInsert.values?.[8], '1.75');
   assert.equal(paymentInsert.values?.[9], 'pi_123');
   assert.equal(paymentInsert.values?.[10], 'cs_123');
+  // A normal invoice session stamps the payment purpose from the session (not the default).
+  assert.equal(paymentInsert.values?.[12], 'payment');
 
   const allocations = database.queries.filter((query) =>
     /insert into payment_allocations/i.test(query.text)
@@ -101,7 +111,15 @@ test('PaymentEventsRepository records an overpayment in full and surfaces the un
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 20_000, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 20_000,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -139,7 +157,15 @@ test('PaymentEventsRepository allocates a provider re-payment after a refunded p
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 10_000,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -205,11 +231,11 @@ test('PaymentEventsRepository records a confirmation with no local session and f
   assert.match(String(timeline?.values?.[3]), /No local payment-link record/);
 });
 
-test('PaymentEventsRepository records a deposit session as unallocated job credit', async () => {
+test('PaymentEventsRepository records a deposit session as unallocated job credit, stamped deposit', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: null, amountCents: 10_000, currency: 'USD' }],
+    [{ jobId: 'job-1', invoiceId: null, amountCents: 10_000, currency: 'USD', purpose: 'deposit' }],
     [{ id: 'job-1' }],
     [],
     [],
@@ -229,6 +255,8 @@ test('PaymentEventsRepository records a deposit session as unallocated job credi
   assert.equal(paymentInsert?.values?.[1], 'job-1');
   assert.equal(paymentInsert?.values?.[2], null);
   assert.equal(paymentInsert?.values?.[3], '100.00');
+  // Durable purpose is carried from the session onto the payment row (last param).
+  assert.equal(paymentInsert?.values?.[12], 'deposit');
   assert.equal(
     database.queries.some((query) => /insert into payment_allocations/i.test(query.text)),
     false
@@ -236,14 +264,43 @@ test('PaymentEventsRepository records a deposit session as unallocated job credi
   const timeline = database.queries.find((query) =>
     /insert into job_timeline_entries/i.test(query.text)
   );
+  assert.match(String(timeline?.values?.[3]), /Online deposit of \$100\.00 confirmed/);
   assert.match(String(timeline?.values?.[3]), /\$100\.00 exceeds the balance due/);
+});
+
+test('PaymentEventsRepository defaults an out-of-band confirmation (no session) to payment purpose', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [], // no online_payment_sessions row
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ amountCents: 10_000 }),
+    new Date()
+  );
+
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[12], 'payment');
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.match(String(timeline?.values?.[3]), /Online payment of/);
 });
 
 test('PaymentEventsRepository allocates a deposit session when posted charges exist', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: null, amountCents: 10_000, currency: 'USD' }],
+    [{ jobId: 'job-1', invoiceId: null, amountCents: 10_000, currency: 'USD', purpose: 'deposit' }],
     [{ id: 'job-1' }],
     [],
     [],
@@ -283,7 +340,15 @@ test('PaymentEventsRepository records a local session amount mismatch and flags 
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 10_000,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -316,7 +381,15 @@ test('PaymentEventsRepository records a local session currency mismatch and flag
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'CAD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 17_500,
+        currency: 'CAD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],

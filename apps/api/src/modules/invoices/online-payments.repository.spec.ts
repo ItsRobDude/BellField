@@ -24,6 +24,7 @@ function recordCreatedHarness(inserted: boolean) {
     currency: 'USD',
     checkoutUrl: 'https://stripe.test/pay/cs_1',
     status: 'created',
+    purpose: 'payment',
     createdByName: 'Bea Bookkeeper',
     expiresAt: '2026-06-14T00:00:00.000Z',
     paidAt: null,

@@ -453,6 +453,7 @@ export class ReportingService {
       amount: string | number;
       method: string;
       source: 'manual' | 'bellfield_payments';
+      purpose: 'payment' | 'deposit';
       receivedAt: string | Date;
       reference: string | null;
       memo: string | null;
@@ -474,6 +475,7 @@ export class ReportingService {
          p.amount,
          p.method,
          p.source,
+         p.purpose,
          p.received_at as "receivedAt",
          p.reference,
          p.memo,
@@ -490,7 +492,7 @@ export class ReportingService {
        join customers c on c.id = j.bill_to_customer_id
        left join payment_allocations pa on pa.payment_id = p.id
        group by
-         p.id, p.job_id, j.job_number, c.name, p.amount, p.method, p.source,
+         p.id, p.job_id, j.job_number, c.name, p.amount, p.method, p.source, p.purpose,
          p.received_at, p.reference, p.memo, p.recorded_by_name, p.provider,
          p.provider_payment_id, p.processor_fee_amount, p.application_fee_amount,
          p.is_void, p.voided_at, p.void_reason
@@ -508,6 +510,7 @@ export class ReportingService {
       amount: roundMoney(row.amount),
       method: row.method,
       source: row.source === 'bellfield_payments' ? 'bellfieldPayments' : 'manual',
+      purpose: row.purpose,
       receivedAt: new Date(row.receivedAt).toISOString(),
       reference: row.reference ?? undefined,
       memo: row.memo ?? undefined,

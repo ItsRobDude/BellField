@@ -12,6 +12,7 @@ export type OnlinePaymentSessionRecord = {
   currency: string;
   checkoutUrl: string;
   status: 'created' | 'paid' | 'failed';
+  purpose: 'payment' | 'deposit';
   createdByName: string;
   expiresAt: string;
   paidAt?: string;
@@ -29,6 +30,7 @@ type OnlinePaymentSessionRow = {
   currency: string;
   checkoutUrl: string;
   status: OnlinePaymentSessionRecord['status'];
+  purpose: 'payment' | 'deposit';
   createdByName: string;
   expiresAt: string | Date;
   paidAt: string | Date | null;
@@ -46,6 +48,7 @@ const ONLINE_PAYMENT_SESSION_COLUMNS = `
   currency,
   checkout_url as "checkoutUrl",
   status,
+  purpose,
   created_by_name as "createdByName",
   expires_at as "expiresAt",
   paid_at as "paidAt",
@@ -75,10 +78,10 @@ export class OnlinePaymentsRepository {
       const result = await queryable.query<OnlinePaymentSessionRow & { inserted: boolean }>(
         `insert into online_payment_sessions (
            id, job_id, invoice_id, relay_payment_session_id, amount, currency,
-           checkout_url, status, created_by_employee_id, created_by_name, expires_at,
-           created_at, updated_at
+           checkout_url, status, purpose, created_by_employee_id, created_by_name,
+           expires_at, created_at, updated_at
          )
-         values ($1, $2, $3, $4, $5, $6, $7, 'created', $8, $9, $10, $11, $11)
+         values ($1, $2, $3, $4, $5, $6, $7, 'created', $8, $9, $10, $11, $12, $12)
          on conflict (relay_payment_session_id) do update
            set checkout_url = excluded.checkout_url,
                expires_at = excluded.expires_at,
@@ -92,6 +95,7 @@ export class OnlinePaymentsRepository {
           input.amount,
           input.currency,
           input.checkoutUrl,
+          input.purpose ?? 'payment',
           input.createdByEmployeeId,
           input.createdByName,
           input.expiresAt,
@@ -213,6 +217,7 @@ function toRecord(row: OnlinePaymentSessionRow): OnlinePaymentSessionRecord {
     currency: row.currency,
     checkoutUrl: row.checkoutUrl,
     status: row.status,
+    purpose: row.purpose,
     createdByName: row.createdByName,
     expiresAt: new Date(row.expiresAt).toISOString(),
     paidAt: row.paidAt ? new Date(row.paidAt).toISOString() : undefined,

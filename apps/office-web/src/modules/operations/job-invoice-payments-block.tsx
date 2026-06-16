@@ -470,9 +470,12 @@ export function PaymentsBlock({
   );
 }
 
+// Purpose (what the money was collected as) leads; method (how it was paid)
+// follows. A deposit reads "Deposit received · Online card"; an ordinary receipt
+// reads "Payment received · Check".
 function paymentLabel(payment: Payment): string {
-  if (payment.source === 'bellfieldPayments') {
-    return 'Online card';
-  }
-  return paymentMethodLabels[payment.method];
+  const purposeLabel = payment.purpose === 'deposit' ? 'Deposit received' : 'Payment received';
+  const methodLabel =
+    payment.source === 'bellfieldPayments' ? 'Online card' : paymentMethodLabels[payment.method];
+  return `${purposeLabel} · ${methodLabel}`;
 }

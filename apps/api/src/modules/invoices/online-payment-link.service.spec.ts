@@ -75,6 +75,7 @@ function paymentSession(
     currency: 'USD',
     checkoutUrl: 'https://stripe.test/existing',
     status: 'created',
+    purpose: 'payment',
     createdByName: 'Bea Bookkeeper',
     expiresAt: unexpiredExpiresAt,
     createdAt,

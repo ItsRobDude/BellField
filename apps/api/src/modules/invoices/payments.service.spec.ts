@@ -47,6 +47,7 @@ function paymentRecord(overrides: Partial<PaymentRecord> = {}): PaymentRecord {
     amount: 100,
     method: 'card',
     source: 'manual',
+    purpose: 'payment',
     currency: 'USD',
     receivedAt: '2026-06-02T00:00:00.000Z',
     recordedByEmployeeId: 'office-1',
