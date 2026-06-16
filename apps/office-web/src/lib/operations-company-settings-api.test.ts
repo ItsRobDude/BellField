@@ -40,7 +40,10 @@ describe('operations-company-settings-api', () => {
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
       defaultSalesTaxBasisPoints: 825,
-      includeInvoicePaymentLink: false
+      includeInvoicePaymentLink: false,
+      sendPaymentReceipts: true,
+      paymentReceiptEmailSubject: 'Receipt from BellField',
+      paymentReceiptEmailBody: 'We received your payment.'
     });
     await getOfficeEstimateEmailDeliveryStatus({
       sessionToken: 'session-token',

@@ -62,6 +62,9 @@ function normalizeSettings(
   const chargesSalesTax = request.chargesSalesTax === true;
   const defaultSalesTaxBasisPoints = request.defaultSalesTaxBasisPoints;
   const includeInvoicePaymentLink = request.includeInvoicePaymentLink === true;
+  const sendPaymentReceipts = request.sendPaymentReceipts === true;
+  const paymentReceiptEmailSubject = request.paymentReceiptEmailSubject.trim();
+  const paymentReceiptEmailBody = request.paymentReceiptEmailBody.trim();
 
   if (!companyName) {
     throw new BadRequestException('Company name is required.');
@@ -94,6 +97,12 @@ function normalizeSettings(
   ) {
     throw new BadRequestException('Default sales tax rate must be between 0% and 25%.');
   }
+  if (!paymentReceiptEmailSubject) {
+    throw new BadRequestException('Payment receipt email subject is required.');
+  }
+  if (!paymentReceiptEmailBody) {
+    throw new BadRequestException('Payment receipt email body is required.');
+  }
 
   return {
     companyName,
@@ -105,6 +114,9 @@ function normalizeSettings(
     acceptanceLinkExpiryDays,
     chargesSalesTax,
     defaultSalesTaxBasisPoints,
-    includeInvoicePaymentLink
+    includeInvoicePaymentLink,
+    sendPaymentReceipts,
+    paymentReceiptEmailSubject,
+    paymentReceiptEmailBody
   };
 }

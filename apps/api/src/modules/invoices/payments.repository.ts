@@ -27,7 +27,7 @@ import {
   type RefundRow,
   type TargetInvoiceRow
 } from './payments-repository-utils';
-import { insertPaymentRow } from './payments-repository-write-utils';
+import { enqueuePaymentReceipt, insertPaymentRow } from './payments-repository-write-utils';
 
 @Injectable()
 export class PaymentsRepository {
@@ -145,6 +145,19 @@ export class PaymentsRepository {
         message: timelineMessage
       },
       queryable
+    );
+    await enqueuePaymentReceipt(
+      queryable,
+      {
+        paymentId,
+        jobId,
+        amount: input.amount,
+        method: input.method,
+        purpose,
+        currency: 'USD',
+        occurredAt: input.receivedAt
+      },
+      now
     );
     return this.findPaymentById(paymentId, queryable);
   }

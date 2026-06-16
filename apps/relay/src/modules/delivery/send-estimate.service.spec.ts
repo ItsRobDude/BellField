@@ -233,7 +233,7 @@ describe('SendEstimateService', () => {
     expect(store.messages[0]).toMatchObject({ status: 'sent', providerMessageId: 'prov-1' });
     expect(adapter.calls).toHaveLength(1);
     expect(adapter.calls[0]).toMatchObject({
-      documentType: 'estimate',
+      sender: 'estimate',
       idempotencyKey: 'relay/shop_1/estimate-send-msg-1'
     });
   });

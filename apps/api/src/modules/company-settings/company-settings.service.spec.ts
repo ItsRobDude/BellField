@@ -12,7 +12,10 @@ const validSettings: UpdateCompanySettingsRequestDto = {
   acceptanceLinkExpiryDays: 30,
   chargesSalesTax: true,
   defaultSalesTaxBasisPoints: 825,
-  includeInvoicePaymentLink: false
+  includeInvoicePaymentLink: false,
+  sendPaymentReceipts: true,
+  paymentReceiptEmailSubject: 'Receipt from {companyName}',
+  paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.'
 };
 
 function createService() {

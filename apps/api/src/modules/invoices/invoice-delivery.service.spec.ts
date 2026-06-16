@@ -83,6 +83,9 @@ function companySettings(overrides = {}) {
     invoiceEmailBody:
       'Hello {customerName}, attached is your {invoiceLabelLower} for job {jobNumber}.',
     includeInvoicePaymentLink: false,
+    sendPaymentReceipts: true,
+    paymentReceiptEmailSubject: 'Receipt from {companyName}',
+    paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.',
     ...overrides
   };
 }

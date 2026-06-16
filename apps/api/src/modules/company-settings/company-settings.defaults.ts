@@ -11,5 +11,9 @@ export const defaultCompanySettings: CompanySettingsDto = {
   acceptanceLinkExpiryDays: 30,
   chargesSalesTax: false,
   defaultSalesTaxBasisPoints: 0,
-  includeInvoicePaymentLink: false
+  includeInvoicePaymentLink: false,
+  sendPaymentReceipts: true,
+  paymentReceiptEmailSubject: 'Receipt from {companyName}',
+  paymentReceiptEmailBody:
+    'Hello {customerName},\n\nWe received your {receiptKind} of {amount} by {method} on {date} for job {jobNumber}.\n\nThank you,\n{companyName}'
 };

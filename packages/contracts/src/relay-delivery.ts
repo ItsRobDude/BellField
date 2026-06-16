@@ -280,3 +280,36 @@ export interface RelayRefundEventsResponse {
 export interface RelayRefundEventAckResponse {
   acknowledged: boolean;
 }
+
+// --- Receipt messages (transactional payment/refund receipts) -------------------
+
+/**
+ * Customer-facing receipt emails are a SEPARATE message shape from document
+ * sends: no PDF, no acceptance link, and a billing sender identity. They are
+ * intentionally NOT a CustomerDocumentType — that union means estimate/invoice
+ * document snapshots, and the document send DTO requires a PDF. The relay still
+ * composes the From itself; installs supply only the recipient, the shop
+ * display name, and the already-rendered subject/body text.
+ */
+export type RelayReceiptMessageType = 'paymentReceipt' | 'refundReceipt';
+
+export interface RelaySendReceiptMessageRequest {
+  /** Install-side idempotency key; the relay returns the recorded outcome on replays. */
+  idempotencyKey: string;
+  /** Selects receipt copy intent and keeps the payload distinct from document sends. */
+  messageType: RelayReceiptMessageType;
+  recipientEmail: string;
+  /** Shop display name fronting the email (the From display name). */
+  fromName: string;
+  replyToEmail?: string;
+  subject: string;
+  bodyText: string;
+}
+
+/**
+ * Reuses RelaySendResult for the sent/failed shape; receipts never mint an
+ * acceptance link, so the acceptance fields are simply absent on success.
+ */
+export interface RelaySendReceiptMessageResponse {
+  result: RelaySendResult;
+}

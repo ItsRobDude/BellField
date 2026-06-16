@@ -6,7 +6,7 @@ const originalEnv = { ...process.env };
 
 function makeInput(): ProviderSendInput {
   return {
-    documentType: 'estimate',
+    sender: 'estimate',
     fromName: 'Acme HVAC',
     to: 'homeowner@example.com',
     replyToEmail: 'office@acmehvac.example',
@@ -74,7 +74,7 @@ describe('ResendEmailAdapter', () => {
 
     await adapter.send({
       ...makeInput(),
-      documentType: 'invoice',
+      sender: 'invoice',
       attachment: {
         filename: 'invoice.pdf',
         contentType: 'application/pdf',
@@ -86,6 +86,33 @@ describe('ResendEmailAdapter', () => {
     const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(String(options.body)) as Record<string, unknown>;
     expect(body.from).toBe('"Acme HVAC" <billing@bellfield.app>');
+  });
+
+  it('uses the receipt sender and sends no attachment for receipt messages', async () => {
+    process.env.BELLFIELD_RELAY_RECEIPT_FROM_ADDRESS = 'billing@bellfield.app';
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: async () => ({ id: 'prov-receipt-123' })
+    });
+    global.fetch = fetchMock as unknown as typeof fetch;
+    const adapter = new ResendEmailAdapter();
+
+    const result = await adapter.send({
+      sender: 'receipt',
+      fromName: 'Acme HVAC',
+      to: 'homeowner@example.com',
+      replyToEmail: 'office@acmehvac.example',
+      subject: 'Your payment receipt',
+      bodyText: 'We received your payment of $100.00.',
+      idempotencyKey: 'relay/shop_1/receipt-pm-1'
+    });
+
+    expect(result).toEqual({ kind: 'sent', providerMessageId: 'prov-receipt-123' });
+    const [, options] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(String(options.body)) as Record<string, unknown>;
+    expect(body.from).toBe('"Acme HVAC" <billing@bellfield.app>');
+    expect(body.attachments).toBeUndefined();
   });
 
   it('uses the legacy sender env as an estimate fallback only', async () => {
@@ -103,7 +130,7 @@ describe('ResendEmailAdapter', () => {
     await adapter.send(makeInput());
     await adapter.send({
       ...makeInput(),
-      documentType: 'invoice',
+      sender: 'invoice',
       idempotencyKey: 'relay/shop_1/invoice-send-msg-legacy'
     });
 

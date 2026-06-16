@@ -335,6 +335,8 @@ export type JobTimelineEntry = {
     | 'paymentVoided'
     | 'paymentRefunded'
     | 'paymentRefundFailed'
+    | 'paymentReceiptSent'
+    | 'paymentReceiptFailed'
     | 'registerEntryNotReflected'
     | 'mediaAttached'
     | 'mediaCaptionEdited'

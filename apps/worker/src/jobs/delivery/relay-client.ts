@@ -105,6 +105,69 @@ export class RelayClient implements RelayDeliveryClient {
     return { kind: 'failed', code: 'unknown', retryable: false };
   }
 
+  async sendReceiptMessage(input: {
+    idempotencyKey: string;
+    messageType: 'paymentReceipt' | 'refundReceipt';
+    recipientEmail: string;
+    fromName: string;
+    replyToEmail?: string;
+    subject: string;
+    bodyText: string;
+  }): Promise<RelaySendOutcome> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/v1/messages/send-receipt`, {
+        method: 'POST',
+        headers: this.headers({ 'Content-Type': 'application/json' }),
+        signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({
+          idempotencyKey: input.idempotencyKey,
+          messageType: input.messageType,
+          recipientEmail: input.recipientEmail,
+          fromName: input.fromName,
+          replyToEmail: input.replyToEmail,
+          subject: input.subject,
+          bodyText: input.bodyText
+        })
+      });
+    } catch (error) {
+      workerLog('info', 'Relay receipt send request failed; will retry.', {
+        errorMessage: error instanceof Error ? error.message : String(error)
+      });
+      return { kind: 'failed', code: 'deliveryUnavailable', retryable: true };
+    }
+
+    if (response.status === 401 || response.status === 403) {
+      return { kind: 'failed', code: 'deliveryRejected', retryable: false };
+    }
+
+    const body = (await response.json().catch(() => ({}))) as {
+      result?:
+        | { kind: 'sent'; relayMessageId?: string }
+        | { kind: 'failed'; code?: string; retryable?: boolean };
+    };
+    if (!response.ok) {
+      return {
+        kind: 'failed',
+        code: response.status >= 500 ? 'deliveryUnavailable' : 'deliveryRejected',
+        retryable: response.status >= 500
+      };
+    }
+
+    const result = body.result;
+    if (result?.kind === 'sent') {
+      return { kind: 'sent', relayMessageId: result.relayMessageId };
+    }
+    if (result?.kind === 'failed') {
+      return {
+        kind: 'failed',
+        code: result.code ?? 'unknown',
+        retryable: result.retryable === true
+      };
+    }
+    return { kind: 'failed', code: 'unknown', retryable: false };
+  }
+
   async getMessageStatus(relayMessageId: string): Promise<RelayStatusOutcome> {
     let response: Response;
     try {
