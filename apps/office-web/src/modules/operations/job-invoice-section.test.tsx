@@ -379,6 +379,7 @@ describe('JobInvoiceSection posting', () => {
           invoiceId: undefined,
           amount: 100,
           source: 'bellfieldPayments',
+          purpose: 'deposit',
           provider: 'stripe',
           providerPaymentId: 'pi_deposit',
           providerSessionId: 'pay_sess_deposit',
@@ -393,7 +394,7 @@ describe('JobInvoiceSection posting', () => {
 
     expect(await screen.findByText('Job credit')).toBeInTheDocument();
     expect(
-      await screen.findByText('$100.00 - Online card - unallocated credit')
+      await screen.findByText('$100.00 - Deposit received · Online card - unallocated credit')
     ).toBeInTheDocument();
   });
 

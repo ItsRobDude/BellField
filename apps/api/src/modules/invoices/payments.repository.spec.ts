@@ -183,6 +183,8 @@ describe('PaymentsRepository.recordPayment', () => {
     const insert = findCall(calls, /insert into payments/i);
     expect(insert?.params).toContain(200);
     expect(insert?.params).toContain('card');
+    // An invoice-scoped manual payment is recorded with purpose 'payment'.
+    expect(insert?.params).toContain('payment');
     const timeline = findCall(calls, TIMELINE_INSERT);
     // insertJobTimelineEntry values: [id, jobId, occurredAt, actorName, kind, message]
     expect(timeline?.params[3]).toBe('Bea Bookkeeper');

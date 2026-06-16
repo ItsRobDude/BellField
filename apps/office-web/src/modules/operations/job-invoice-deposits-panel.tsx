@@ -427,9 +427,13 @@ function getUnallocatedCredits(
     .filter((row) => row.amount > 0);
 }
 
+// Purpose-aware, matching the main ledger: a held deposit reads "Deposit received
+// · Online card", an unallocated overpayment "Payment received · Check".
 function paymentLabel(payment: Payment): string {
-  if (payment.source === 'bellfieldPayments') {
-    return 'Online card';
-  }
-  return payment.method.charAt(0).toUpperCase() + payment.method.slice(1);
+  const purposeLabel = payment.purpose === 'deposit' ? 'Deposit received' : 'Payment received';
+  const methodLabel =
+    payment.source === 'bellfieldPayments'
+      ? 'Online card'
+      : payment.method.charAt(0).toUpperCase() + payment.method.slice(1);
+  return `${purposeLabel} · ${methodLabel}`;
 }

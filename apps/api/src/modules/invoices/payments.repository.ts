@@ -5,10 +5,8 @@ import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-uti
 import type {
   PaymentAllocationRecord,
   PaymentMethodValue,
-  PaymentProviderValue,
   PaymentRecord,
   PaymentRefundAllocationRecord,
-  PaymentSourceValue,
   PaymentWriteInput,
   RefundRecord,
   RefundWriteInput
@@ -20,7 +18,6 @@ import {
   dollarsToCents,
   formatMoney,
   normalizeCurrency,
-  toDbSource,
   toPaymentRecord,
   toRefundRecord,
   type AllocationRow,
@@ -30,6 +27,7 @@ import {
   type RefundRow,
   type TargetInvoiceRow
 } from './payments-repository-utils';
+import { insertPaymentRow } from './payments-repository-write-utils';
 
 @Injectable()
 export class PaymentsRepository {
@@ -106,7 +104,8 @@ export class PaymentsRepository {
   ): Promise<PaymentRecord> {
     const { jobId, invoiceId, purpose, input, timelineMessage } = args;
     const paymentId = randomUUID();
-    await this.insertPayment(
+    await insertPaymentRow(
+      queryable,
       paymentId,
       {
         jobId,
@@ -127,8 +126,7 @@ export class PaymentsRepository {
         providerPaymentId: undefined,
         providerSessionId: undefined
       },
-      now,
-      queryable
+      now
     );
     await this.insertAutoAllocations(
       paymentId,
@@ -550,63 +548,6 @@ export class PaymentsRepository {
        order by id
        for update`,
       [jobId]
-    );
-  }
-
-  private async insertPayment(
-    paymentId: string,
-    input: {
-      jobId: string;
-      invoiceId: string | null;
-      amount: number;
-      method: PaymentMethodValue;
-      source: PaymentSourceValue;
-      purpose?: 'payment' | 'deposit';
-      provider: PaymentProviderValue | null;
-      currency: string;
-      receivedAt: string;
-      reference?: string;
-      memo?: string;
-      recordedByEmployeeId: string | null;
-      recordedByName: string;
-      processorFee?: number;
-      applicationFee?: number;
-      providerPaymentId?: string;
-      providerSessionId?: string;
-    },
-    now: string,
-    queryable: QueryExecutor
-  ): Promise<void> {
-    await queryable.query(
-      `insert into payments (
-         id, job_id, invoice_id, amount, method, source, purpose, provider, currency,
-         received_at, reference, memo, recorded_by_employee_id, recorded_by_name,
-         processor_fee_amount, application_fee_amount, provider_payment_id,
-         provider_session_id, is_void, created_at, updated_at
-       )
-       values ($1, $2, $3, $4, $5, $6, $19, $7, $8, $9,
-               $10, $11, $12, $13, $14, $15, $16, $17, false, $18, $18)`,
-      [
-        paymentId,
-        input.jobId,
-        input.invoiceId,
-        input.amount,
-        input.method,
-        toDbSource(input.source),
-        input.provider,
-        normalizeCurrency(input.currency),
-        input.receivedAt,
-        input.reference?.trim() || null,
-        input.memo?.trim() || null,
-        input.recordedByEmployeeId,
-        input.recordedByName,
-        input.processorFee ?? null,
-        input.applicationFee ?? null,
-        input.providerPaymentId ?? null,
-        input.providerSessionId ?? null,
-        now,
-        input.purpose ?? 'payment'
-      ]
     );
   }
 
