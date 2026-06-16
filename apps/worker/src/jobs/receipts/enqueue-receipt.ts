@@ -7,8 +7,8 @@ const RECEIPT_QUEUE_EXPIRY_MS = 24 * 60 * 60 * 1000;
  * Enqueue a customer payment-receipt row from inside the worker's online-payment
  * apply transaction (exactly-once with the payment insert; the unique guard on
  * payment_id makes a duplicated enqueue a no-op). Deliberately payment-specific:
- * it always writes a `paymentReceipt` row keyed to a payment_id and never a
- * refund-shaped row — refund receipts get their own path in a later slice.
+ * it always writes a `paymentReceipt` row keyed to a payment_id; refund receipts
+ * use the sibling helper below so each source shape stays explicit.
  *
  * `occurredAt` is the customer's actual paid time (Stripe `paidAt`) so the
  * receipt date matches when they paid; `now` is worker processing time and

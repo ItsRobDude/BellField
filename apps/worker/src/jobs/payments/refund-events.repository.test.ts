@@ -136,9 +136,16 @@ test('RefundEventsRepository refunds a deposit (no allocations) — records the 
 
   assert.equal(outcome, 'applied');
   // The refund row is still written (net paid drops), but there is nothing to reverse.
-  assert.ok(database.find(/insert into payment_refunds/i));
+  const refundInsert = database.find(/insert into payment_refunds/i);
+  assert.ok(refundInsert);
   assert.equal(database.filter(/insert into payment_refund_allocations/i).length, 0);
   assert.match(database.find(/update online_refund_requests/i)?.text ?? '', /status = 'succeeded'/);
+
+  const receipt = database.find(/insert into payment_receipt_messages/i);
+  assert.ok(receipt);
+  assert.match(receipt.text, /'refundReceipt'/);
+  assert.equal(receipt.values?.[2], refundInsert.values?.[0]); // payment_refund_id
+  assert.equal(receipt.values?.[3], '100.00');
 });
 
 test('RefundEventsRepository records a confirmed refund but flags one exceeding the remaining refundable', async () => {
@@ -301,4 +308,12 @@ test('RefundEventsRepository reconciles the request by outstanding (payment, amo
   // The fallback lookup keyed on the outstanding (payment, amount) request ran.
   const fallbackLookup = database.find(/round\(amount \* 100\) = \$2 and status = 'requested'/i);
   assert.ok(fallbackLookup);
+
+  const refundInsert = database.find(/insert into payment_refunds/i);
+  assert.ok(refundInsert);
+  const receipt = database.find(/insert into payment_receipt_messages/i);
+  assert.ok(receipt);
+  assert.match(receipt.text, /'refundReceipt'/);
+  assert.equal(receipt.values?.[2], refundInsert.values?.[0]); // payment_refund_id
+  assert.equal(receipt.values?.[3], '100.00');
 });
