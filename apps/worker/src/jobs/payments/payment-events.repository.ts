@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { workerLog } from '../../common/logger';
+import { enqueuePaymentReceiptRow } from '../receipts/enqueue-receipt';
 import type { RelayPaymentEvent } from '../delivery/delivery-types';
 import type {
   PaymentEventApplyOutcome,
@@ -124,6 +125,22 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         sessionMismatch,
         occurredAt
       });
+      // Enqueue the customer receipt in the same transaction, only on first apply
+      // (a redelivery hits the alreadyApplied branch above, so this never repeats).
+      // Amount/purpose mirror the recorded payment, not the local session.
+      await enqueuePaymentReceiptRow(
+        tx,
+        {
+          paymentId,
+          jobId,
+          amount: centsToDollarsString(event.amountCents),
+          currency: event.currency.trim().toUpperCase(),
+          method: 'card',
+          purpose,
+          occurredAt: paidAt
+        },
+        occurredAt
+      );
       return 'applied';
     });
   }
