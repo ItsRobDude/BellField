@@ -51,7 +51,7 @@ Refresh it after major implementation lanes land.
 - Field-app estimate builder
 - Unsold-estimates worklist / owner "needs attention" view (re-ranked next moves in `docs/fsm-comparison-servicetitan-2026-06-12.md`)
 - Managed remote access tier + guided Tailscale BYO (`docs/remote-access-plan.md`; security prerequisites are launch blockers per `docs/launch-readiness.md`)
-- Customer payment/refund receipt emails and stored-card flows.
+- Online payment receipt emails, customer refund receipt emails, and stored-card flows.
 - Email-first operational comms (booking confirmation, reminder, on-my-way) riding the relay; SMS deferred as a provider decision.
 - GPS/time tracking tied to appointment status, dispatch trust, and job costing, with technician-visible policy.
 - Route optimization and drag/drop dispatch

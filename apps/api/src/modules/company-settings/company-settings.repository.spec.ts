@@ -129,7 +129,7 @@ describe('CompanySettingsRepository', () => {
       updated_by_employee_id: actor.id,
       updated_by_name: actor.displayName
     });
-    // created_at and updated_at share the same bound timestamp ($13).
+    // created_at and updated_at share the same bound timestamp.
     expect(typeof mapping.updated_at).toBe('string');
     expect(mapping.created_at).toBe(mapping.updated_at);
   });

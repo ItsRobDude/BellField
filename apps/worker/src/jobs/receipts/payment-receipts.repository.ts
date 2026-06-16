@@ -53,6 +53,7 @@ export class PaymentReceiptsRepository implements PaymentReceiptStore {
           select prm.id
           from payment_receipt_messages prm
           where prm.status = 'queued'
+            and prm.kind = 'paymentReceipt'
             and (prm.expires_at is null or prm.expires_at > $1)
             and (prm.next_attempt_at is null or prm.next_attempt_at <= $1)
           order by prm.next_attempt_at asc nulls first

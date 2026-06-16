@@ -381,8 +381,9 @@ The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
 display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
-2026-06-16 UTC. Still deferred: stored cards, customer payment/refund receipts,
-per-invoice allocation of pre-post deposits, and processor-fee reconciliation
+2026-06-16 UTC. Manual payment/deposit receipt emails have shipped; still
+deferred are stored cards, online payment receipt emails, manual/online refund
+receipt emails, per-invoice allocation of pre-post deposits, and processor-fee reconciliation
 beyond BellField's application fee. Customer card surcharge / processing-fee
 pass-through is intentionally not planned for v1 unless real customer demand
 justifies a dedicated legal and card-network review.
