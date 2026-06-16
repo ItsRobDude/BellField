@@ -19,6 +19,9 @@ import { PaymentEventsService } from './jobs/payments/payment-events-service';
 import { createRefundEventsJob } from './jobs/payments/refund-events-job';
 import { RefundEventsRepository } from './jobs/payments/refund-events.repository';
 import { RefundEventsService } from './jobs/payments/refund-events-service';
+import { createPaymentReceiptsJob } from './jobs/receipts/payment-receipts-job';
+import { PaymentReceiptsRepository } from './jobs/receipts/payment-receipts.repository';
+import { PaymentReceiptsService } from './jobs/receipts/payment-receipts-service';
 
 const heartbeatMs = 60_000;
 
@@ -75,6 +78,10 @@ async function startWorker(): Promise<void> {
       new RefundEventsRepository(database),
       relayClient
     );
+    const paymentReceiptsService = new PaymentReceiptsService(
+      new PaymentReceiptsRepository(database),
+      relayClient
+    );
     jobs.push(
       createDeliveryRetryJob({
         deliveryService,
@@ -95,6 +102,10 @@ async function startWorker(): Promise<void> {
       createRefundEventsJob({
         refundEventsService,
         intervalMs: runtimeConfig.payments.eventIntervalMs
+      }),
+      createPaymentReceiptsJob({
+        paymentReceiptsService,
+        intervalMs: runtimeConfig.delivery.retryIntervalMs
       })
     );
   }

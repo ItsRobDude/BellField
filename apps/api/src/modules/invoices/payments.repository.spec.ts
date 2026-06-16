@@ -66,6 +66,7 @@ const JOB_LOCK = /select id from jobs where id = \$1 for update/i;
 const POSTED_SET_LOCK = /select id from invoices\s+where job_id = \$1 and status = 'posted'/i;
 const TIMELINE_INSERT = /insert into job_timeline_entries/i;
 const ALLOCATION_SELECT = /from payment_allocations pa\s+join invoices i/i;
+const RECEIPT_ENQUEUE = /insert into payment_receipt_messages/i;
 
 describe('PaymentsRepository.recordDeposit', () => {
   const depositInput = {
@@ -106,6 +107,10 @@ describe('PaymentsRepository.recordDeposit', () => {
     const timeline = findCall(calls, TIMELINE_INSERT);
     expect(timeline?.params[4]).toBe('paymentRecorded');
     expect(String(timeline?.params[5])).toMatch(/Deposit of \$500\.00 recorded \(check\)/);
+    // A deposit receipt is enqueued in the same transaction (purpose 'deposit').
+    const receiptEnqueue = findCall(calls, RECEIPT_ENQUEUE);
+    expect(receiptEnqueue?.sql).toMatch(/'paymentReceipt'/);
+    expect(receiptEnqueue?.params).toContain('deposit');
   });
 
   it('allocates a deposit to posted charges when they exist', async () => {
@@ -189,6 +194,10 @@ describe('PaymentsRepository.recordPayment', () => {
     // insertJobTimelineEntry values: [id, jobId, occurredAt, actorName, kind, message]
     expect(timeline?.params[3]).toBe('Bea Bookkeeper');
     expect(timeline?.params[4]).toBe('paymentRecorded');
+    // A payment receipt is enqueued in the same transaction (purpose 'payment').
+    const receiptEnqueue = findCall(calls, RECEIPT_ENQUEUE);
+    expect(receiptEnqueue?.sql).toMatch(/'paymentReceipt'/);
+    expect(receiptEnqueue?.params).toContain('payment');
   });
 
   it('locks the job row and posted set, never the single target invoice (deadlock-safe order)', async () => {

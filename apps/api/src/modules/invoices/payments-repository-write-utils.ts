@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { type QueryExecutor } from '../../database/database.service';
 import type {
   PaymentMethodValue,
@@ -5,6 +6,8 @@ import type {
   PaymentSourceValue
 } from './payments.types';
 import { normalizeCurrency, toDbSource } from './payments-repository-utils';
+
+const RECEIPT_QUEUE_EXPIRY_MS = 24 * 60 * 60 * 1000;
 
 /**
  * Insert one append-only payment row. Placeholders are SEQUENTIAL and in column
@@ -64,6 +67,49 @@ export async function insertPaymentRow(
       input.applicationFee ?? null,
       input.providerPaymentId ?? null,
       input.providerSessionId ?? null,
+      now
+    ]
+  );
+}
+
+/**
+ * Enqueue a customer payment-receipt email in the SAME transaction as the
+ * payment insert, so the receipt intent is exactly-once with the money write.
+ * The worker resolves the recipient, renders the body, and sends it; the office
+ * toggle is honored there (not here), keeping the money path free of a settings
+ * read. The unique guard on payment_id makes a duplicated enqueue a no-op.
+ */
+export async function enqueuePaymentReceipt(
+  queryable: QueryExecutor,
+  input: {
+    paymentId: string;
+    jobId: string;
+    amount: number;
+    method: PaymentMethodValue;
+    purpose: 'payment' | 'deposit';
+    currency: string;
+    occurredAt: string;
+  },
+  now: string
+): Promise<void> {
+  const expiresAt = new Date(new Date(now).getTime() + RECEIPT_QUEUE_EXPIRY_MS).toISOString();
+  await queryable.query(
+    `insert into payment_receipt_messages (
+       id, kind, status, job_id, payment_id, amount, currency, method, purpose,
+       occurred_at, expires_at, attempt_count, created_at, updated_at
+     )
+     values ($1, 'paymentReceipt', 'queued', $2, $3, $4, $5, $6, $7, $8, $9, 0, $10, $10)
+     on conflict (payment_id) where payment_id is not null do nothing`,
+    [
+      randomUUID(),
+      input.jobId,
+      input.paymentId,
+      input.amount,
+      normalizeCurrency(input.currency),
+      input.method,
+      input.purpose,
+      input.occurredAt,
+      expiresAt,
       now
     ]
   );

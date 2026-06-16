@@ -96,6 +96,12 @@ Default posture for estimate and invoice email:
 - office users can send/resend operational documents
 - estimate email sends from `estimates@bellfield.app`; invoice/payment-document
   email sends from `billing@bellfield.app`
+- payment/refund **receipt** emails also send from the billing sender, but on a
+  separate transactional path (no PDF, no acceptance link) — they are not routed
+  through the PDF-shaped document outbox. Receipts are triggered automatically
+  when money is recorded (not an office "send" action) and are enqueued in the
+  same transaction as the payment/refund; a worker loop resolves the recipient
+  and sends. Slice 1a covers manual payment/deposit receipts.
 - the provider account, provider API key, sending domain, and delivery backend
   are BellField-controlled infrastructure
 - shops never enter email-provider API keys or choose an email provider
@@ -173,6 +179,8 @@ The settings screen should eventually include:
 - default document branding basics
 - estimate email subject/body template defaults
 - invoice email subject/body template defaults
+- payment receipt email subject/body template defaults plus a send toggle
+  (`sendPaymentReceipts`, default on)
 - later document branding basics such as logo and footer text
 
 The settings screen must not ask for email-provider API keys, delivery-provider
