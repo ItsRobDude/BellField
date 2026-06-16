@@ -51,7 +51,15 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 17_500,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -81,6 +89,8 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   assert.equal(paymentInsert.values?.[8], '1.75');
   assert.equal(paymentInsert.values?.[9], 'pi_123');
   assert.equal(paymentInsert.values?.[10], 'cs_123');
+  // A normal invoice session stamps the payment purpose from the session (not the default).
+  assert.equal(paymentInsert.values?.[12], 'payment');
 
   const allocations = database.queries.filter((query) =>
     /insert into payment_allocations/i.test(query.text)
@@ -101,7 +111,15 @@ test('PaymentEventsRepository records an overpayment in full and surfaces the un
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 20_000, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 20_000,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -139,7 +157,15 @@ test('PaymentEventsRepository allocates a provider re-payment after a refunded p
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 10_000,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -314,7 +340,15 @@ test('PaymentEventsRepository records a local session amount mismatch and flags 
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000, currency: 'USD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 10_000,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
@@ -347,7 +381,15 @@ test('PaymentEventsRepository records a local session currency mismatch and flag
   const database = new CapturingDatabase();
   database.rowQueue = [
     [],
-    [{ jobId: 'job-1', invoiceId: 'inv-main', amountCents: 17_500, currency: 'CAD' }],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-main',
+        amountCents: 17_500,
+        currency: 'CAD',
+        purpose: 'payment'
+      }
+    ],
     [{ id: 'job-1' }],
     [],
     [],
