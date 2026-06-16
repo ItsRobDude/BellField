@@ -42,6 +42,20 @@ export async function recordOfficePayment(
   });
 }
 
+/** Record a manual job-level deposit (cash/check/card taken directly). */
+export async function recordOfficeJobDeposit(
+  input: RecordPaymentRequest & { jobId: string; sessionToken: string; apiBaseUrl?: string }
+): Promise<PaymentResponse> {
+  const { jobId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<PaymentResponse>(`/operations/jobs/${jobId}/payments/deposit`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
 /** Create a Stripe-hosted payment link, defaulting to the full current amount due. */
 export async function createOfficeOnlinePaymentLink(
   input: CreateOnlinePaymentLinkRequest & {

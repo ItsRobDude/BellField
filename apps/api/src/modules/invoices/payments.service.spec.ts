@@ -16,6 +16,7 @@ function createService() {
   };
   const paymentsRepository = {
     recordPayment: jest.fn(),
+    recordDeposit: jest.fn(),
     listPaymentsForJob: jest.fn(),
     listRefundsForJob: jest.fn().mockResolvedValue([]),
     refundPayment: jest.fn(),
@@ -123,6 +124,31 @@ describe('PaymentsService.recordPayment', () => {
       'inv-main',
       expect.objectContaining({ receivedAt: '2026-05-30T12:00:00.000Z' })
     );
+  });
+
+  it('records a job-level deposit gated on payments:create', async () => {
+    const { service, identityAccessService, paymentsRepository } = createService();
+    paymentsRepository.recordDeposit.mockResolvedValue(
+      paymentRecord({ purpose: 'deposit', method: 'check', invoiceId: undefined })
+    );
+
+    const result = await service.recordDeposit('token', 'job-1', { amount: 500, method: 'check' });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'payments:create',
+      ['office-web']
+    );
+    expect(paymentsRepository.recordDeposit).toHaveBeenCalledWith(
+      'job-1',
+      expect.objectContaining({
+        amount: 500,
+        method: 'check',
+        actor: expect.objectContaining({ id: 'office-1' })
+      })
+    );
+    expect(result.payment.purpose).toBe('deposit');
+    expect(result.payment).not.toHaveProperty('recordedByEmployeeId');
   });
 
   it('propagates a forbidden session and records nothing', async () => {

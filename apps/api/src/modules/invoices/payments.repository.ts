@@ -45,52 +45,110 @@ export class PaymentsRepository {
     const now = new Date().toISOString();
     return this.databaseService.transaction(async (queryable) => {
       const target = await this.lockJobForPayment(invoiceId, queryable);
-      const paymentId = randomUUID();
-      await this.insertPayment(
-        paymentId,
+      return this.insertManualReceipt(
         {
           jobId: target.jobId,
           invoiceId,
-          amount: input.amount,
-          method: input.method,
-          source: 'manual',
-          provider: null,
-          currency: 'USD',
-          receivedAt: input.receivedAt,
-          reference: input.reference,
-          memo: input.memo,
-          recordedByEmployeeId: input.actor.id,
-          recordedByName: input.actor.displayName,
-          processorFee: undefined,
-          applicationFee: undefined,
-          providerPaymentId: undefined,
-          providerSessionId: undefined
+          purpose: 'payment',
+          input,
+          timelineMessage: `Payment of ${formatMoney(input.amount)} recorded (${input.method}).`
         },
         now,
         queryable
       );
-      await this.insertAutoAllocations(
-        paymentId,
-        target.jobId,
-        dollarsToCents(input.amount),
-        now,
-        queryable
-      );
-
-      await insertJobTimelineEntry(
-        {
-          id: randomUUID(),
-          jobId: target.jobId,
-          occurredAt: now,
-          actorName: input.actor.displayName,
-          kind: 'paymentRecorded',
-          message: `Payment of ${formatMoney(input.amount)} recorded (${input.method}).`
-        },
-        queryable
-      );
-
-      return this.findPaymentById(paymentId, queryable);
     });
+  }
+
+  /**
+   * Record a manual JOB-LEVEL deposit (cash/check/card the office took directly).
+   * Unlike recordPayment it is NOT scoped to a posted invoice — a deposit can be
+   * collected before anything is billed and lands as unallocated job credit until
+   * there are posted charges to apply it to. `purpose = 'deposit'` carries the
+   * durable business meaning; the money otherwise reuses the same insert/allocate core.
+   */
+  async recordDeposit(jobId: string, input: PaymentWriteInput): Promise<PaymentRecord> {
+    const now = new Date().toISOString();
+    return this.databaseService.transaction(async (queryable) => {
+      // Same lock order as recordPayment (job row, then posted invoices) so manual
+      // deposits and payments on a job can't deadlock against each other.
+      await this.lockJobRow(jobId, queryable);
+      await this.lockPostedInvoicesForJob(jobId, queryable);
+      return this.insertManualReceipt(
+        {
+          jobId,
+          invoiceId: null,
+          purpose: 'deposit',
+          input,
+          timelineMessage: `Deposit of ${formatMoney(input.amount)} recorded (${input.method}).`
+        },
+        now,
+        queryable
+      );
+    });
+  }
+
+  /**
+   * Shared core for a manual receipt the office records directly (the caller owns
+   * lock acquisition + the purpose): insert the append-only payment row
+   * (source=manual), auto-allocate it across the job's posted charges main-first
+   * (any unallocated remainder is job credit), and write the timeline entry.
+   */
+  private async insertManualReceipt(
+    args: {
+      jobId: string;
+      invoiceId: string | null;
+      purpose: 'payment' | 'deposit';
+      input: PaymentWriteInput;
+      timelineMessage: string;
+    },
+    now: string,
+    queryable: QueryExecutor
+  ): Promise<PaymentRecord> {
+    const { jobId, invoiceId, purpose, input, timelineMessage } = args;
+    const paymentId = randomUUID();
+    await this.insertPayment(
+      paymentId,
+      {
+        jobId,
+        invoiceId,
+        amount: input.amount,
+        method: input.method,
+        source: 'manual',
+        purpose,
+        provider: null,
+        currency: 'USD',
+        receivedAt: input.receivedAt,
+        reference: input.reference,
+        memo: input.memo,
+        recordedByEmployeeId: input.actor.id,
+        recordedByName: input.actor.displayName,
+        processorFee: undefined,
+        applicationFee: undefined,
+        providerPaymentId: undefined,
+        providerSessionId: undefined
+      },
+      now,
+      queryable
+    );
+    await this.insertAutoAllocations(
+      paymentId,
+      jobId,
+      dollarsToCents(input.amount),
+      now,
+      queryable
+    );
+    await insertJobTimelineEntry(
+      {
+        id: randomUUID(),
+        jobId,
+        occurredAt: now,
+        actorName: input.actor.displayName,
+        kind: 'paymentRecorded',
+        message: timelineMessage
+      },
+      queryable
+    );
+    return this.findPaymentById(paymentId, queryable);
   }
 
   /** List a job's payments (manual and provider-confirmed), newest received first. */
@@ -503,6 +561,7 @@ export class PaymentsRepository {
       amount: number;
       method: PaymentMethodValue;
       source: PaymentSourceValue;
+      purpose?: 'payment' | 'deposit';
       provider: PaymentProviderValue | null;
       currency: string;
       receivedAt: string;
@@ -520,13 +579,13 @@ export class PaymentsRepository {
   ): Promise<void> {
     await queryable.query(
       `insert into payments (
-         id, job_id, invoice_id, amount, method, source, provider, currency,
+         id, job_id, invoice_id, amount, method, source, purpose, provider, currency,
          received_at, reference, memo, recorded_by_employee_id, recorded_by_name,
          processor_fee_amount, application_fee_amount, provider_payment_id,
          provider_session_id, is_void, created_at, updated_at
        )
-       values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
-               $11, $12, $13, $14, $15, $16, $17, false, $18, $18)`,
+       values ($1, $2, $3, $4, $5, $6, $19, $7, $8, $9,
+               $10, $11, $12, $13, $14, $15, $16, $17, false, $18, $18)`,
       [
         paymentId,
         input.jobId,
@@ -545,7 +604,8 @@ export class PaymentsRepository {
         input.applicationFee ?? null,
         input.providerPaymentId ?? null,
         input.providerSessionId ?? null,
-        now
+        now,
+        input.purpose ?? 'payment'
       ]
     );
   }

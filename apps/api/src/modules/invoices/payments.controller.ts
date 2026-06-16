@@ -29,11 +29,16 @@ export class JobPaymentsController {
   }
 }
 
-// Deposit links are job-level: they can be collected before an invoice is posted
-// and land as unallocated job credit until there are posted charges to apply.
+// Deposits are job-level: collected before an invoice is posted and held as
+// unallocated job credit until there are posted charges to apply. Both the online
+// deposit link and a manually recorded deposit (cash/check the office took
+// directly) live here, off the job rather than a specific invoice.
 @Controller('operations/jobs/:jobId/payments')
 export class JobPaymentLinksController {
-  constructor(private readonly onlinePaymentLinkService: OnlinePaymentLinkService) {}
+  constructor(
+    private readonly onlinePaymentLinkService: OnlinePaymentLinkService,
+    private readonly paymentsService: PaymentsService
+  ) {}
 
   @Post('deposit-link')
   async createDepositPaymentLink(
@@ -46,6 +51,15 @@ export class JobPaymentLinksController {
       jobId,
       request
     );
+  }
+
+  @Post('deposit')
+  async recordDeposit(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string,
+    @Body() request: RecordPaymentRequestBodyDto
+  ) {
+    return this.paymentsService.recordDeposit(getBearerToken(authorizationHeader), jobId, request);
   }
 }
 

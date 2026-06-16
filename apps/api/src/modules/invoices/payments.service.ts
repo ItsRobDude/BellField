@@ -56,6 +56,33 @@ export class PaymentsService {
     return { payment: this.toSummary(created) };
   }
 
+  /**
+   * Record a manual job-level deposit (cash/check/card taken directly). Office-only,
+   * gated on payments:create. Not scoped to an invoice — it lands as job credit
+   * until posted charges exist; `purpose = 'deposit'` is the durable label.
+   */
+  async recordDeposit(
+    sessionToken: string,
+    jobId: string,
+    request: RecordPaymentRequestDto
+  ): Promise<PaymentResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'payments:create',
+      ['office-web']
+    );
+
+    const created = await this.paymentsRepository.recordDeposit(jobId, {
+      amount: request.amount,
+      method: request.method,
+      receivedAt: request.receivedAt ?? new Date().toISOString(),
+      reference: request.reference?.trim() || undefined,
+      memo: request.memo?.trim() || undefined,
+      actor: { id: actor.id, displayName: actor.displayName }
+    });
+    return { payment: this.toSummary(created) };
+  }
+
   /** List a job's payments (newest first). Office-only, gated on payments:view. */
   async getJobPayments(sessionToken: string, jobId: string): Promise<JobPaymentsResponseDto> {
     await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'payments:view', [
