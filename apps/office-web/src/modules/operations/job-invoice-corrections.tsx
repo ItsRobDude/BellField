@@ -325,37 +325,62 @@ export function JobInvoiceCorrections({
     const amount = requestedAmountCents / 100;
     setIsCreatingPaymentLink(true);
     try {
-      let response = await requestPaymentLink(false, amount);
-      if (response.state === 'confirmationRequired') {
-        const confirmed = window.confirm(
-          `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
-        );
-        if (!confirmed) {
+      const confirmations = {
+        confirmSameAmountCharge: false,
+        confirmActiveLinkOverage: false
+      };
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await requestPaymentLink(confirmations, amount);
+        if (response.state === 'confirmationRequired') {
+          if (response.code === 'sameAmountPreviouslyPaid') {
+            const confirmed = window.confirm(
+              `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
+            );
+            if (!confirmed) {
+              return;
+            }
+            confirmations.confirmSameAmountCharge = true;
+            continue;
+          }
+          if (response.code === 'activeLinksMayExceedDue') {
+            const confirmed = window.confirm(
+              `${response.message}\n\nCreate this ${formatCurrency(
+                response.amount
+              )} payment link anyway?`
+            );
+            if (!confirmed) {
+              return;
+            }
+            confirmations.confirmActiveLinkOverage = true;
+            continue;
+          }
+          setErrorMessage(response.message ?? 'Online payment links are not available right now.');
           return;
         }
-        response = await requestPaymentLink(true, amount);
-      }
-      if (response.state !== 'created') {
-        setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+        if (response.state !== 'created') {
+          setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+          return;
+        }
+        setOnlinePaymentLink(response);
+        setPaymentLinkDraft(null);
+        setErrorMessage(null);
+        let copied = false;
+        try {
+          await navigator.clipboard?.writeText(response.checkoutUrl);
+          copied = true;
+        } catch {
+          copied = false;
+        }
+        if (response.reusedExisting) {
+          setNoticeMessage(
+            copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
+          );
+        } else {
+          setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
+        }
         return;
       }
-      setOnlinePaymentLink(response);
-      setPaymentLinkDraft(null);
-      setErrorMessage(null);
-      let copied = false;
-      try {
-        await navigator.clipboard?.writeText(response.checkoutUrl);
-        copied = true;
-      } catch {
-        copied = false;
-      }
-      if (response.reusedExisting) {
-        setNoticeMessage(
-          copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
-        );
-      } else {
-        setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
-      }
+      setErrorMessage('Online payment link confirmation could not be completed.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
@@ -363,11 +388,18 @@ export function JobInvoiceCorrections({
     }
   }
 
-  function requestPaymentLink(confirmSameAmountCharge: boolean, amount: number) {
+  function requestPaymentLink(
+    confirmations: {
+      confirmSameAmountCharge: boolean;
+      confirmActiveLinkOverage: boolean;
+    },
+    amount: number
+  ) {
     return createOfficeOnlinePaymentLink({
       invoiceId: mainInvoiceId,
       amount,
-      confirmSameAmountCharge: confirmSameAmountCharge || undefined,
+      confirmSameAmountCharge: confirmations.confirmSameAmountCharge || undefined,
+      ...(confirmations.confirmActiveLinkOverage ? { confirmActiveLinkOverage: true } : {}),
       apiBaseUrl,
       sessionToken
     });

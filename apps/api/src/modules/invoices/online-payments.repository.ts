@@ -164,6 +164,23 @@ export class OnlinePaymentsRepository {
     return result.rows.map(toRecord);
   }
 
+  async sumActiveCreatedSessionCentsForJob(input: {
+    jobId: string;
+    currency: string;
+    now: Date;
+  }): Promise<number> {
+    const result = await this.databaseService.query<{ cents: string | number | null }>(
+      `select coalesce(sum(round(amount * 100)), 0) as cents
+       from online_payment_sessions
+       where job_id = $1
+         and currency = $2
+         and status = 'created'
+         and expires_at > $3`,
+      [input.jobId, input.currency.toUpperCase(), input.now]
+    );
+    return Number(result.rows[0]?.cents ?? 0);
+  }
+
   async markPaid(input: {
     relayPaymentSessionId: string;
     paymentId: string;

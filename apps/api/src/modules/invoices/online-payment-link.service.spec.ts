@@ -29,6 +29,7 @@ function createService() {
   };
   const onlinePaymentsRepository = {
     listForJobAmount: jest.fn().mockResolvedValue([]),
+    sumActiveCreatedSessionCentsForJob: jest.fn().mockResolvedValue(0),
     recordCreated: jest.fn()
   };
   onlinePaymentsRepository.recordCreated.mockImplementation(
@@ -154,7 +155,7 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     expect(requestBody(fetchMock)).toEqual(
       expect.objectContaining({
         amountCents: 25_000,
-        idempotencyKey: 'invoice-payment:job-1:25000:attempt-1'
+        idempotencyKey: 'invoice-payment:job-1:inv-main:25000:attempt-1'
       })
     );
     expect(onlinePaymentsRepository.recordCreated).toHaveBeenCalledWith(
@@ -189,13 +190,37 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     expect(requestBody(fetchMock)).toEqual(
       expect.objectContaining({
         amountCents: 10_000,
-        idempotencyKey: 'invoice-payment:job-1:10000:attempt-1'
+        idempotencyKey: 'invoice-payment:job-1:inv-main:10000:attempt-1'
       })
     );
     expect(onlinePaymentsRepository.recordCreated).toHaveBeenCalledWith(
       expect.objectContaining({
         relayPaymentSessionId: 'pay_sess_partial',
         amount: 100
+      })
+    );
+  });
+
+  it('includes the source invoice id in the idempotency key', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_adjustment');
+    const { service, invoicesRepository } = createService();
+    invoicesRepository.getInvoiceById.mockResolvedValueOnce({
+      id: 'inv-adjustment',
+      jobId: 'job-1',
+      status: 'posted',
+      invoiceKind: 'adjustment',
+      posted: { jobNumber: '1001' }
+    });
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-adjustment', {
+      amount: 100
+    });
+
+    expect(result.state).toBe('created');
+    expect(requestBody(fetchMock)).toEqual(
+      expect.objectContaining({
+        invoiceRef: 'inv-adjustment',
+        idempotencyKey: 'invoice-payment:job-1:inv-adjustment:10000:attempt-1'
       })
     );
   });
@@ -258,7 +283,9 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     const result = await service.createOnlinePaymentLink('token', 'inv-main', {});
 
     expect(result.state).toBe('created');
-    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-2');
+    expect(requestBody(fetchMock).idempotencyKey).toBe(
+      'invoice-payment:job-1:inv-main:25000:attempt-2'
+    );
   });
 
   it('requires confirmation before a new same-amount link after a paid online session', async () => {
@@ -320,7 +347,44 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     });
 
     expect(result.state).toBe('created');
-    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-2');
+    expect(requestBody(fetchMock).idempotencyKey).toBe(
+      'invoice-payment:job-1:inv-main:25000:attempt-2'
+    );
+  });
+
+  it('requires confirmation when active unpaid links could exceed the amount due', async () => {
+    const fetchMock = mockRelayCreated();
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.sumActiveCreatedSessionCentsForJob.mockResolvedValue(20_000);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', { amount: 100 });
+
+    expect(result).toEqual({
+      state: 'confirmationRequired',
+      code: 'activeLinksMayExceedDue',
+      amount: 100,
+      currency: 'USD',
+      message:
+        'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.'
+    });
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(onlinePaymentsRepository.recordCreated).not.toHaveBeenCalled();
+  });
+
+  it('creates the link when active-link overage is confirmed by the office', async () => {
+    const fetchMock = mockRelayCreated('pay_sess_overage_confirmed');
+    const { service, onlinePaymentsRepository } = createService();
+    onlinePaymentsRepository.sumActiveCreatedSessionCentsForJob.mockResolvedValue(20_000);
+
+    const result = await service.createOnlinePaymentLink('token', 'inv-main', {
+      amount: 100,
+      confirmActiveLinkOverage: true
+    });
+
+    expect(result.state).toBe('created');
+    expect(requestBody(fetchMock).idempotencyKey).toBe(
+      'invoice-payment:job-1:inv-main:10000:attempt-1'
+    );
   });
 
   it('uses the same attempt key for repeated same-state requests before local persistence changes', async () => {
@@ -331,11 +395,13 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     await service.createOnlinePaymentLink('token', 'inv-main', {});
 
     expect(fetchMock).toHaveBeenCalledTimes(2);
-    expect(requestBody(fetchMock).idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+    expect(requestBody(fetchMock).idempotencyKey).toBe(
+      'invoice-payment:job-1:inv-main:25000:attempt-1'
+    );
     const secondBody = JSON.parse(fetchMock.mock.calls[1][1].body as string) as {
       idempotencyKey: string;
     };
-    expect(secondBody.idempotencyKey).toBe('invoice-payment:job-1:25000:attempt-1');
+    expect(secondBody.idempotencyKey).toBe('invoice-payment:job-1:inv-main:25000:attempt-1');
   });
 });
 
@@ -374,7 +440,7 @@ describe('OnlinePaymentLinkService.createDepositPaymentLink', () => {
     expect(requestBody(fetchMock)).toEqual(
       expect.objectContaining({
         amountCents: 10_000,
-        idempotencyKey: 'deposit-payment:job-1:10000:attempt-1'
+        idempotencyKey: 'deposit-payment:job-1:deposit:10000:attempt-1'
       })
     );
     const relayBody = requestBody(fetchMock);

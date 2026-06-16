@@ -17,6 +17,10 @@ export class CreateOnlinePaymentLinkRequestBodyDto implements CreateOnlinePaymen
   @IsOptional()
   @IsBoolean()
   confirmSameAmountCharge?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  confirmActiveLinkOverage?: boolean;
 }
 
 export class CreateDepositPaymentLinkRequestBodyDto implements CreateDepositPaymentLinkRequest {

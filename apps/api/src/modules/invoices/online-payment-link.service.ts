@@ -71,8 +71,11 @@ export class OnlinePaymentLinkService {
       currency: 'USD',
       request,
       idempotencyPrefix: 'invoice-payment',
+      idempotencySource: invoice.id,
       description: `BellField invoice ${invoice.posted?.jobNumber ?? invoice.id}`,
       timelinePurpose: 'payment',
+      amountDueCents,
+      confirmActiveLinkOverage: request.confirmActiveLinkOverage === true,
       sameAmountMessage: (amount) =>
         `This job already had an online card payment for ${formatMoney(
           amount
@@ -100,6 +103,7 @@ export class OnlinePaymentLinkService {
       currency: 'USD',
       request,
       idempotencyPrefix: 'deposit-payment',
+      idempotencySource: 'deposit',
       description: `BellField deposit for job ${job.jobNumber ?? job.id}`,
       timelinePurpose: 'deposit',
       sameAmountMessage: (amount) =>
@@ -124,8 +128,11 @@ export class OnlinePaymentLinkService {
       confirmSameAmountCharge?: boolean;
     };
     idempotencyPrefix: 'invoice-payment' | 'deposit-payment';
+    idempotencySource: string;
     description: string;
     timelinePurpose: 'payment' | 'deposit';
+    amountDueCents?: number;
+    confirmActiveLinkOverage?: boolean;
     sameAmountMessage: (amount: number) => string;
   }): Promise<OnlinePaymentLinkResponse> {
     const amount = input.requestedAmountCents / 100;
@@ -162,6 +169,30 @@ export class OnlinePaymentLinkService {
       };
     }
 
+    if (input.amountDueCents !== undefined && !input.confirmActiveLinkOverage) {
+      const activeUnpaidCents =
+        await this.onlinePaymentsRepository.sumActiveCreatedSessionCentsForJob({
+          jobId: input.jobId,
+          currency: input.currency,
+          now
+        });
+      if (activeUnpaidCents + input.requestedAmountCents > input.amountDueCents) {
+        return {
+          state: 'confirmationRequired',
+          code: 'activeLinksMayExceedDue',
+          amount,
+          currency: input.currency,
+          message: `This job already has ${formatMoney(
+            activeUnpaidCents / 100
+          )} in active unpaid online payment links. Creating another ${formatMoney(
+            amount
+          )} link could let the customer pay more than the ${formatMoney(
+            input.amountDueCents / 100
+          )} currently due. Any overpayment will be held as job credit.`
+        };
+      }
+    }
+
     const relay = getApiRuntimeConfig().relay;
     if (!relay) {
       return {
@@ -174,7 +205,7 @@ export class OnlinePaymentLinkService {
     // still allowing a legitimate same-dollar charge after an earlier session
     // is paid or expired. The relay and Stripe both treat the full key as
     // opaque idempotency.
-    const idempotencyKey = `${input.idempotencyPrefix}:${input.jobId}:${
+    const idempotencyKey = `${input.idempotencyPrefix}:${input.jobId}:${input.idempotencySource}:${
       input.requestedAmountCents
     }:attempt-${sameAmountSessions.length + 1}`;
     const relayResponse = await this.requestRelayPaymentSession(relay, {

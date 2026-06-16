@@ -239,6 +239,46 @@ test('PaymentEventsRepository records a deposit session as unallocated job credi
   assert.match(String(timeline?.values?.[3]), /\$100\.00 exceeds the balance due/);
 });
 
+test('PaymentEventsRepository allocates a deposit session when posted charges exist', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [{ jobId: 'job-1', invoiceId: null, amountCents: 10_000, currency: 'USD' }],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [
+      { invoiceId: 'inv-main', invoiceKind: 'main', total: '75.00', allocated: '0.00' },
+      { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' }
+    ],
+    [{ cents: 0 }],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ amountCents: 10_000, invoiceRef: null }),
+    new Date('2026-06-13T12:00:10.000Z')
+  );
+
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[2], null);
+  const allocations = database.queries.filter((query) =>
+    /insert into payment_allocations/i.test(query.text)
+  );
+  assert.equal(allocations.length, 2);
+  assert.equal(allocations[0].values?.[2], 'inv-main');
+  assert.equal(allocations[0].values?.[3], '75.00');
+  assert.equal(allocations[1].values?.[2], 'inv-adj');
+  assert.equal(allocations[1].values?.[3], '25.00');
+  const timeline = database.queries.find((query) =>
+    /insert into job_timeline_entries/i.test(query.text)
+  );
+  assert.doesNotMatch(String(timeline?.values?.[3]), /exceeds the balance due/);
+});
+
 test('PaymentEventsRepository records a local session amount mismatch and flags it', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [

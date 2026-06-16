@@ -765,6 +765,99 @@ describe('JobInvoiceSection posting', () => {
     expect(window.confirm).toHaveBeenCalledTimes(1);
     expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
   });
+
+  it('confirms when active unpaid links could exceed the amount due', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.createOfficeOnlinePaymentLink
+      .mockResolvedValueOnce({
+        state: 'confirmationRequired',
+        code: 'activeLinksMayExceedDue',
+        amount: 100,
+        currency: 'USD',
+        message:
+          'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.'
+      })
+      .mockResolvedValueOnce({
+        state: 'created',
+        checkoutUrl: 'https://checkout.stripe.test/pay/cs_overage',
+        paymentSessionId: 'pay_sess_overage',
+        amount: 100,
+        currency: 'USD',
+        expiresAt: '2026-06-14T00:00:00.000Z'
+      });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Payment link amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
+    expect(window.confirm).toHaveBeenCalledWith(
+      'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.\n\nCreate this $100.00 payment link anyway?'
+    );
+    expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(2, {
+      invoiceId: 'inv-1',
+      amount: 100,
+      confirmSameAmountCharge: undefined,
+      confirmActiveLinkOverage: true,
+      apiBaseUrl: 'http://localhost',
+      sessionToken: 'test-token'
+    });
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_overage')
+    ).toBeInTheDocument();
+  });
+
+  it('does not create an overexposed active-link payment when confirmation is dismissed', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'confirmationRequired',
+      code: 'activeLinksMayExceedDue',
+      amount: 100,
+      currency: 'USD',
+      message:
+        'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Payment link amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
+  });
 });
 
 function manualPayment(overrides: Record<string, unknown> = {}) {

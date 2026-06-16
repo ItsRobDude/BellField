@@ -83,38 +83,50 @@ export function DraftInvoiceDepositsPanel({
     setIsCreating(true);
     setErrorMessage(null);
     try {
-      let response = await requestDepositLink(normalizedAmount, false);
-      if (response.state === 'confirmationRequired') {
-        const confirmed = window.confirm(
-          `Create another ${formatCurrency(response.amount)} deposit link?\n\n${response.message}`
-        );
-        if (!confirmed) {
+      const confirmations = {
+        confirmSameAmountCharge: false
+      };
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await requestDepositLink(normalizedAmount, confirmations);
+        if (response.state === 'confirmationRequired') {
+          if (response.code === 'sameAmountPreviouslyPaid') {
+            const confirmed = window.confirm(
+              `Create another ${formatCurrency(response.amount)} deposit link?\n\n${response.message}`
+            );
+            if (!confirmed) {
+              return;
+            }
+            confirmations.confirmSameAmountCharge = true;
+            continue;
+          }
+          setErrorMessage(response.message ?? 'Deposit links are not available right now.');
           return;
         }
-        response = await requestDepositLink(normalizedAmount, true);
-      }
-      if (response.state !== 'created') {
-        setErrorMessage(response.message ?? 'Deposit links are not available right now.');
+        if (response.state !== 'created') {
+          setErrorMessage(response.message ?? 'Deposit links are not available right now.');
+          return;
+        }
+        setDepositLink(response);
+        setDepositDraft(null);
+        let copied = false;
+        try {
+          await navigator.clipboard?.writeText(response.checkoutUrl);
+          copied = true;
+        } catch {
+          copied = false;
+        }
+        setNoticeMessage(
+          response.reusedExisting
+            ? copied
+              ? 'Existing active deposit link copied.'
+              : 'Existing active deposit link shown.'
+            : copied
+              ? 'Deposit link copied.'
+              : 'Deposit link created.'
+        );
         return;
       }
-      setDepositLink(response);
-      setDepositDraft(null);
-      let copied = false;
-      try {
-        await navigator.clipboard?.writeText(response.checkoutUrl);
-        copied = true;
-      } catch {
-        copied = false;
-      }
-      setNoticeMessage(
-        response.reusedExisting
-          ? copied
-            ? 'Existing active deposit link copied.'
-            : 'Existing active deposit link shown.'
-          : copied
-            ? 'Deposit link copied.'
-            : 'Deposit link created.'
-      );
+      setErrorMessage('Deposit link confirmation could not be completed.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create deposit link.');
     } finally {
@@ -122,12 +134,17 @@ export function DraftInvoiceDepositsPanel({
     }
   }
 
-  function requestDepositLink(amount: number, confirmSameAmountCharge: boolean) {
+  function requestDepositLink(
+    amount: number,
+    confirmations: {
+      confirmSameAmountCharge: boolean;
+    }
+  ) {
     return createOfficeDepositPaymentLink({
       jobId,
       amount,
       customerEmail: billToCustomerEmail,
-      confirmSameAmountCharge: confirmSameAmountCharge || undefined,
+      confirmSameAmountCharge: confirmations.confirmSameAmountCharge || undefined,
       apiBaseUrl,
       sessionToken
     });

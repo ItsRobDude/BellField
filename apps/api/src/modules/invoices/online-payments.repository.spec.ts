@@ -151,3 +151,25 @@ describe('OnlinePaymentsRepository.listForJobAmount', () => {
     ]);
   });
 });
+
+describe('OnlinePaymentsRepository.sumActiveCreatedSessionCentsForJob', () => {
+  it('sums active unpaid sessions for the job and currency', async () => {
+    const now = new Date('2026-06-16T12:00:00.000Z');
+    const databaseService = {
+      query: jest.fn().mockResolvedValue({ rows: [{ cents: '15000' }] })
+    };
+    const repository = new OnlinePaymentsRepository(databaseService as never);
+
+    const result = await repository.sumActiveCreatedSessionCentsForJob({
+      jobId: 'job-1',
+      currency: 'usd',
+      now
+    });
+
+    expect(result).toBe(15_000);
+    expect(databaseService.query).toHaveBeenCalledWith(
+      expect.stringMatching(/status = 'created'[\s\S]*expires_at > \$3/),
+      ['job-1', 'USD', now]
+    );
+  });
+});
