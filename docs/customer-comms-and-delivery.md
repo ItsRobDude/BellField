@@ -355,10 +355,10 @@ through refund allocations.
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
-display. The dated live Stripe sandbox smoke is the remaining gate. Still
-deferred: deposits, partial payments, stored cards, customer surcharge logic,
-customer refund receipts, and processor-fee reconciliation beyond BellField's
-application fee.
+display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
+2026-06-16 UTC. Still deferred: deposits, partial payments, stored cards,
+customer surcharge logic, customer refund receipts, and processor-fee
+reconciliation beyond BellField's application fee.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

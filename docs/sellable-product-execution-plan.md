@@ -636,12 +636,12 @@ surface. Online payments cannot be manually voided locally. Manual
 full/partial refunds for manually recorded payments have since shipped on the
 office invoice tab; the provider-confirmed online refund path has since landed
 through the relay/API/worker flow plus the office Refund-on-card action and
-pending/failed display, with the dated live Stripe sandbox smoke remaining as the
-gate.
+pending/failed display, and the dated live Stripe sandbox smoke passed on
+2026-06-15 Pacific / 2026-06-16 UTC.
 
-Intentionally deferred: the online refund live Stripe sandbox smoke, partial payments,
-deposits, estimate payments, stored cards, customer surcharge math, and
-processor-fee reconciliation beyond BellField's application fee.
+Intentionally deferred: partial payments, deposits, estimate payments, stored
+cards, customer surcharge math, and processor-fee reconciliation beyond
+BellField's application fee.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use

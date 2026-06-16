@@ -701,8 +701,8 @@ Current implementation note:
 - structured register entries exist now
 - every job owns one eager main invoice draft, and register entries reflect into it automatically (create/edit/void) as durable, detach-on-edit line rows
 - approved estimates also convert into the draft (atomic, append/replace)
-- invoice posting/locking, adjustment/credit corrections, manually recorded payments, manual office refunds, invoice PDF/email delivery, full-balance online payment links, and the provider-confirmed online refund path (backend + office Refund-on-card action and pending/failed display) have shipped; the office surfaces a job balance and amount due plus a read-only cross-job bookkeeping worklist
-- still later: the online refund live Stripe sandbox smoke, partial payments, deposits, stored cards, SMS, customer portal behavior, and deeper processor-fee reconciliation
+- invoice posting/locking, adjustment/credit corrections, manually recorded payments, manual office refunds, invoice PDF/email delivery, full-balance online payment links, and the provider-confirmed online refund path (backend + office Refund-on-card action, pending/failed display, and live Stripe sandbox smoke) have shipped; the office surfaces a job balance and amount due plus a read-only cross-job bookkeeping worklist
+- still later: partial payments, deposits, stored cards, SMS, customer portal behavior, and deeper processor-fee reconciliation
 
 This includes things such as:
 
