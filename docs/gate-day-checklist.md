@@ -184,16 +184,18 @@ Run this from the installed release, not from the repo checkout.
 
 ## Payments go-live (separate track, not part of the scratch-machine day)
 
-Online payments (Phase 6b) are built and unit-tested but have **never run
-against live Stripe**. This is a business/onboarding track, not a
-scratch-machine gate — do it before enabling payments for any real shop:
+Online payments (Phase 6b) have passed live-relay Stripe **sandbox** smokes for
+invoice links, amount-scoped partial links, deposit links, and online refunds.
+The remaining go-live proof is a real connected merchant/live-money business
+track, not a scratch-machine gate — do it before enabling payments for any real
+shop:
 
 - [ ] Stripe Connect platform onboarding complete; a real connected account
       linked via `relay-admin set-payments-account`.
 - [ ] Confirm the platform fee basis points
       (`BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS`) is the intended
       rate before the first live charge.
-- [ ] Live webhook smoke: a real (small) card payment through a generated
+- [ ] Live-money webhook smoke: a real (small) card payment through a generated
       link → Stripe webhook reconciles at the relay → worker records the
       payment and marks the session paid → office shows it. Refund the test
       charge afterward.

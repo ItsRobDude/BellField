@@ -239,8 +239,10 @@ are refundable only through this permission; they remain non-voidable.
 
 ## Non-goals (this slice)
 
-- Surcharge, stored cards, and processor-fee reconciliation beyond BellField's
-  application fee — separate slices in the same lane.
+- Stored cards and processor-fee reconciliation beyond BellField's application
+  fee — separate slices in the same lane. Customer card surcharge /
+  processing-fee pass-through is intentionally not planned for v1 unless real
+  customer demand justifies a dedicated legal and card-network review.
 - Refunding an already-refunded amount beyond the original payment.
 - Voiding/reversing a refund.
 - Refund-specific customer email (the existing timeline + office surfaces cover

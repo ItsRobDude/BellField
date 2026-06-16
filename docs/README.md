@@ -240,6 +240,25 @@ Does not own: the relay design (`delivery-relay-plan.md`), the test-relay
 operator recipe (`testing-relay-ops.md`), or the gate-day sold-release proof
 (`gate-day-checklist.md`).
 
+### [payment-link-depth-live-smoke-2026-06-15.md](./payment-link-depth-live-smoke-2026-06-15.md)
+
+Audience: contributors checking the live proof for amount-scoped invoice payment
+links, job-level deposit links, active-link overage confirmation, and worker
+payment-event application.
+
+Purpose: dated evidence for the payment-link depth hardening slice: local API
+and worker against the live testing relay, Stripe Sandbox deposit and partial
+invoice checkouts, overage confirmation, local ledger/balance readback, and the
+current job-level/main-first allocation rule.
+
+Read when: deciding whether the partial/deposit link slice has live sandbox proof,
+or when separating current payment-link behavior from the remaining
+source-invoice-first allocation and sold-release gates.
+
+Does not own: the relay design (`delivery-relay-plan.md`), the refund design
+(`refunds-design.md`), or the gate-day sold-release proof
+(`gate-day-checklist.md`).
+
 ### [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
 
 Audience: contributors checking what Phase 1 install validation has actually been run.

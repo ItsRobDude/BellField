@@ -155,10 +155,13 @@ Payment-link v1 is deliberately narrow:
   `publicBaseUrl`, so a misconfigured install can never point the
   post-checkout redirect at an internal or wrong host.
 - the install's payment-link idempotency key is deterministic per
-  `(job, amount, attempt)` — no random component. The API reuses an active
-  unpaid local link instead of calling the relay again. If a same-dollar online
-  card payment already succeeded but BellField still shows that amount due, the
-  office must confirm before the API creates the next attempt key.
+  `(job, source, amount, attempt)` — no random component. Invoice links use the
+  initiating invoice id as the source; deposit links use a `deposit` source. The
+  API reuses an active unpaid local link instead of calling the relay again. If a
+  same-dollar online card payment already succeeded but BellField still shows
+  that amount due, or if other active unpaid links could let the customer pay
+  more than the current amount due, the office must confirm before the API
+  creates the next attempt key.
 - relay creates a Stripe Checkout Session as a direct charge on the connected
   account, **card-only in v1** (`payment_method_types: ['card']`; delayed
   methods like ACH fire `async_payment_succeeded`, which is not handled yet and

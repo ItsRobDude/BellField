@@ -220,12 +220,14 @@ keys. Phase 6b uses Stripe Connect through the relay:
   auto-allocates the receipt across posted main/adjustment invoices
 
 The first payment-link slice intentionally did not include refunds, deposits,
-estimate payments, customer surcharge math, stored cards, processor fee
-reconciliation beyond the application fee, or invoice email delivery. Invoice
-email delivery, refunds, and job-level deposit links have since shipped; the
-remaining items stay separate slices. Online provider payments cannot be voided
-through the manual payment-void button; refund/correction workflows must be
-designed against the processor before local ledger correction is exposed.
+estimate payments, stored cards, processor fee reconciliation beyond the
+application fee, or invoice email delivery. Invoice email delivery, refunds, and
+job-level deposit links have since shipped; the remaining items stay separate
+slices. Customer card surcharge / processing-fee pass-through is intentionally
+not planned for v1 unless real customer demand justifies a dedicated legal and
+card-network review. Online provider payments cannot be voided through the
+manual payment-void button; refund/correction workflows must be designed against
+the processor before local ledger correction is exposed.
 
 ## Shipping prerequisite (D7 — resolved 2026-06-12)
 
