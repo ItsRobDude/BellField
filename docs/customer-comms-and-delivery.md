@@ -101,8 +101,9 @@ Default posture for estimate and invoice email:
   through the PDF-shaped document outbox. Receipts are triggered automatically
   when money is recorded (not an office "send" action) and are enqueued in the
   same transaction as the payment/refund; a worker loop resolves the recipient
-  and sends. Slices 1a/1b cover manual and online card payment/deposit receipts;
-  refund receipts are a later slice.
+  and sends. Slices 1a/1b cover manual and online card payment/deposit receipts,
+  and 2a covers manual refund receipts; online refund receipts (2b) are the
+  remaining slice.
 - the provider account, provider API key, sending domain, and delivery backend
   are BellField-controlled infrastructure
 - shops never enter email-provider API keys or choose an email provider
@@ -182,6 +183,9 @@ The settings screen should eventually include:
 - invoice email subject/body template defaults
 - payment receipt email subject/body template defaults plus a send toggle
   (`sendPaymentReceipts`, default on)
+- refund receipt email subject/body template defaults plus a send toggle
+  (`sendRefundReceipts`, default on) — refund copy omits a method token, since a
+  manual refund records no refund-method
 - later document branding basics such as logo and footer text
 
 The settings screen must not ask for email-provider API keys, delivery-provider
@@ -383,8 +387,9 @@ end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
 display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
 2026-06-16 UTC. Manual and online card payment/deposit receipt emails have
-shipped (slices 1a/1b); still deferred are stored cards, manual/online refund
-receipt emails, per-invoice allocation of pre-post deposits, and processor-fee reconciliation
+shipped (slices 1a/1b), and manual refund receipt emails have shipped (slice
+2a); still deferred are stored cards, online refund receipt emails (slice 2b),
+per-invoice allocation of pre-post deposits, and processor-fee reconciliation
 beyond BellField's application fee. Customer card surcharge / processing-fee
 pass-through is intentionally not planned for v1 unless real customer demand
 justifies a dedicated legal and card-network review.

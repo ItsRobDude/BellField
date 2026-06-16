@@ -26,7 +26,10 @@ function arrange() {
       includeInvoicePaymentLink: false,
       sendPaymentReceipts: true,
       paymentReceiptEmailSubject: 'Receipt from {companyName}',
-      paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.'
+      paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.',
+      sendRefundReceipts: true,
+      refundReceiptEmailSubject: 'Refund from {companyName}',
+      refundReceiptEmailBody: 'We issued a refund of {amount}.'
     }
   });
   mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
@@ -51,7 +54,10 @@ function arrange() {
       includeInvoicePaymentLink: true,
       sendPaymentReceipts: true,
       paymentReceiptEmailSubject: 'Receipt from {companyName}',
-      paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.'
+      paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.',
+      sendRefundReceipts: true,
+      refundReceiptEmailSubject: 'Refund from {companyName}',
+      refundReceiptEmailBody: 'We issued a refund of {amount}.'
     }
   });
 }

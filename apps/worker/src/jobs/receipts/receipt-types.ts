@@ -33,6 +33,9 @@ export type ReceiptSettings = {
   sendPaymentReceipts: boolean;
   paymentReceiptEmailSubject: string;
   paymentReceiptEmailBody: string;
+  sendRefundReceipts: boolean;
+  refundReceiptEmailSubject: string;
+  refundReceiptEmailBody: string;
 };
 
 export type ReceiptRecipient = {
@@ -41,10 +44,16 @@ export type ReceiptRecipient = {
   jobNumber: string;
 };
 
+export type ReceiptTimelineKind =
+  | 'paymentReceiptSent'
+  | 'paymentReceiptFailed'
+  | 'refundReceiptSent'
+  | 'refundReceiptFailed';
+
 export type ReceiptTimelineEntry = {
   jobId: string;
   occurredAt: Date;
-  kind: 'paymentReceiptSent' | 'paymentReceiptFailed';
+  kind: ReceiptTimelineKind;
   message: string;
 };
 

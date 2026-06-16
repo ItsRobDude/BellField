@@ -43,7 +43,10 @@ describe('operations-company-settings-api', () => {
       includeInvoicePaymentLink: false,
       sendPaymentReceipts: true,
       paymentReceiptEmailSubject: 'Receipt from BellField',
-      paymentReceiptEmailBody: 'We received your payment.'
+      paymentReceiptEmailBody: 'We received your payment.',
+      sendRefundReceipts: true,
+      refundReceiptEmailSubject: 'Refund from BellField',
+      refundReceiptEmailBody: 'We issued a refund.'
     });
     await getOfficeEstimateEmailDeliveryStatus({
       sessionToken: 'session-token',

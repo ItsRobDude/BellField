@@ -21,8 +21,22 @@ function defaultSettings(overrides?: Partial<ReceiptSettings>): ReceiptSettings 
     paymentReceiptEmailSubject: 'Receipt from {companyName}',
     paymentReceiptEmailBody:
       'Hello {customerName}, we received your {receiptKind} of {amount} by {method} on {date} for job {jobNumber}.',
+    sendRefundReceipts: true,
+    refundReceiptEmailSubject: 'Refund from {companyName}',
+    refundReceiptEmailBody:
+      'Hello {customerName}, we issued a refund of {amount} on {date} for job {jobNumber}.',
     ...overrides
   };
+}
+
+function makeRefundDue(overrides?: Partial<DueReceipt>): DueReceipt {
+  return makeDue({
+    id: 'rcpt-refund-1',
+    kind: 'refundReceipt',
+    method: 'check',
+    purpose: null,
+    ...overrides
+  });
 }
 
 function makeDue(overrides?: Partial<DueReceipt>): DueReceipt {
@@ -120,18 +134,25 @@ class FakeStore implements PaymentReceiptStore {
 }
 
 function fakeRelay(outcome: ReceiptSendOutcome) {
-  const calls: { recipientEmail: string; subject: string; bodyText: string; fromName: string }[] =
-    [];
+  const calls: {
+    messageType: string;
+    recipientEmail: string;
+    subject: string;
+    bodyText: string;
+    fromName: string;
+  }[] = [];
   return {
     calls,
     client: {
       async sendReceiptMessage(input: {
+        messageType: string;
         recipientEmail: string;
         subject: string;
         bodyText: string;
         fromName: string;
       }): Promise<ReceiptSendOutcome> {
         calls.push({
+          messageType: input.messageType,
           recipientEmail: input.recipientEmail,
           subject: input.subject,
           bodyText: input.bodyText,
@@ -254,4 +275,67 @@ test('expired queued receipts get an office failure timeline', async () => {
   assert.equal(summary.expired, 1);
   assert.equal(store.recorded.timeline[0]?.kind, 'paymentReceiptFailed');
   assert.match(store.recorded.timeline[0]?.message ?? '', /expired/i);
+});
+
+test('sends a refund receipt using the refund template, message type, and timeline kind', async () => {
+  const store = new FakeStore({ due: [makeRefundDue()] });
+  const relay = fakeRelay({ kind: 'sent', relayMessageId: 'relay-r1' });
+  const summary = await service(store, relay.client).processDueReceipts();
+
+  assert.equal(summary.sent, 1);
+  assert.equal(relay.calls[0].messageType, 'refundReceipt');
+  assert.equal(relay.calls[0].subject, 'Refund from Acme HVAC');
+  // Refund copy: no method, no receiptKind tokens.
+  assert.equal(
+    relay.calls[0].bodyText,
+    'Hello Dana Homeowner, we issued a refund of $100.00 on June 15, 2026 for job J-1001.'
+  );
+  assert.doesNotMatch(relay.calls[0].bodyText, /by Check|by Card|payment|deposit/i);
+  assert.equal(store.recorded.timeline[0]?.kind, 'refundReceiptSent');
+  assert.match(store.recorded.timeline[0]?.message ?? '', /^Refund receipt emailed to/);
+});
+
+test('refund toggle off cancels a refund receipt but leaves payment receipts sending', async () => {
+  const refundStore = new FakeStore({
+    due: [makeRefundDue()],
+    settings: defaultSettings({ sendRefundReceipts: false, sendPaymentReceipts: true })
+  });
+  const refundRelay = fakeRelay({ kind: 'sent' });
+  const refundSummary = await service(refundStore, refundRelay.client).processDueReceipts();
+  assert.equal(refundSummary.canceled, 1);
+  assert.equal(refundRelay.calls.length, 0);
+
+  // Same settings, but a payment receipt still goes out — the toggles are independent.
+  const paymentStore = new FakeStore({
+    due: [makeDue()],
+    settings: defaultSettings({ sendRefundReceipts: false, sendPaymentReceipts: true })
+  });
+  const paymentRelay = fakeRelay({ kind: 'sent' });
+  const paymentSummary = await service(paymentStore, paymentRelay.client).processDueReceipts();
+  assert.equal(paymentSummary.sent, 1);
+});
+
+test('expired refund receipt logs refundReceiptFailed (not paymentReceiptFailed)', async () => {
+  const store = new FakeStore({
+    expired: [{ id: 'rcpt-rold', jobId: 'job-9', kind: 'refundReceipt' }]
+  });
+  const relay = fakeRelay({ kind: 'sent' });
+  await service(store, relay.client).processDueReceipts();
+
+  assert.equal(store.recorded.timeline[0]?.kind, 'refundReceiptFailed');
+  assert.match(store.recorded.timeline[0]?.message ?? '', /Refund receipt.*expired/);
+});
+
+test('no email for a refund logs refundReceiptFailed', async () => {
+  const store = new FakeStore({
+    due: [makeRefundDue()],
+    recipient: { email: null, customerName: 'Dana', jobNumber: 'J-1001' }
+  });
+  const relay = fakeRelay({ kind: 'sent' });
+  const summary = await service(store, relay.client).processDueReceipts();
+
+  assert.equal(summary.failed, 1);
+  assert.equal(relay.calls.length, 0);
+  assert.equal(store.recorded.timeline[0]?.kind, 'refundReceiptFailed');
+  assert.match(store.recorded.timeline[0]?.message ?? '', /Refund receipt not sent/);
 });

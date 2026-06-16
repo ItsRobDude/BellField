@@ -86,6 +86,9 @@ function companySettings(overrides = {}) {
     sendPaymentReceipts: true,
     paymentReceiptEmailSubject: 'Receipt from {companyName}',
     paymentReceiptEmailBody: 'We received your {receiptKind} of {amount}.',
+    sendRefundReceipts: true,
+    refundReceiptEmailSubject: 'Refund from {companyName}',
+    refundReceiptEmailBody: 'We issued a refund of {amount}.',
     ...overrides
   };
 }

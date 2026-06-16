@@ -28,6 +28,9 @@ type SettingsDraft = {
   sendPaymentReceipts: boolean;
   paymentReceiptEmailSubject: string;
   paymentReceiptEmailBody: string;
+  sendRefundReceipts: boolean;
+  refundReceiptEmailSubject: string;
+  refundReceiptEmailBody: string;
 };
 
 const emptyDraft: SettingsDraft = {
@@ -43,7 +46,10 @@ const emptyDraft: SettingsDraft = {
   includeInvoicePaymentLink: false,
   sendPaymentReceipts: true,
   paymentReceiptEmailSubject: '',
-  paymentReceiptEmailBody: ''
+  paymentReceiptEmailBody: '',
+  sendRefundReceipts: true,
+  refundReceiptEmailSubject: '',
+  refundReceiptEmailBody: ''
 };
 
 export function OfficeSettingsSurface({
@@ -119,7 +125,10 @@ export function OfficeSettingsSurface({
         includeInvoicePaymentLink: draft.includeInvoicePaymentLink,
         sendPaymentReceipts: draft.sendPaymentReceipts,
         paymentReceiptEmailSubject: draft.paymentReceiptEmailSubject,
-        paymentReceiptEmailBody: draft.paymentReceiptEmailBody
+        paymentReceiptEmailBody: draft.paymentReceiptEmailBody,
+        sendRefundReceipts: draft.sendRefundReceipts,
+        refundReceiptEmailSubject: draft.refundReceiptEmailSubject,
+        refundReceiptEmailBody: draft.refundReceiptEmailBody
       });
       setSettings(response.settings);
       setDraft(toDraft(response.settings));
@@ -357,6 +366,52 @@ export function OfficeSettingsSurface({
               . Anything else is sent exactly as typed.
             </p>
           </section>
+          <section style={styles.panel} aria-label="Refund receipt email defaults">
+            <h2 style={styles.sectionHeading}>Refund receipt email</h2>
+            <label style={styles.inlineLabel}>
+              <input
+                aria-label="Send a receipt email when a refund is recorded"
+                type="checkbox"
+                checked={draft.sendRefundReceipts}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    sendRefundReceipts: event.target.checked
+                  }))
+                }
+              />
+              Email the customer a receipt when a refund is recorded
+            </label>
+            <label style={styles.fieldLabel}>
+              Subject
+              <input
+                aria-label="Refund receipt email subject"
+                value={draft.refundReceiptEmailSubject}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'refundReceiptEmailSubject', event.target.value)
+                }
+                style={styles.input}
+              />
+            </label>
+            <label style={styles.fieldLabel}>
+              Body
+              <textarea
+                aria-label="Refund receipt email body"
+                value={draft.refundReceiptEmailBody}
+                disabled={!canConfigure}
+                onChange={(event) =>
+                  setDraftValue(setDraft, 'refundReceiptEmailBody', event.target.value)
+                }
+                style={{ ...styles.textarea, minHeight: '10rem' }}
+              />
+            </label>
+            <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
+              Tokens you can use: {'{companyName}, {customerName}, {amount}, {date}, {jobNumber}'}.
+              Anything else is sent exactly as typed.
+            </p>
+          </section>
         </div>
       ) : isLoading ? (
         <p style={styles.notice}>Loading settings...</p>
@@ -389,7 +444,10 @@ function toDraft(settings: CompanySettings): SettingsDraft {
     includeInvoicePaymentLink: settings.includeInvoicePaymentLink,
     sendPaymentReceipts: settings.sendPaymentReceipts,
     paymentReceiptEmailSubject: settings.paymentReceiptEmailSubject,
-    paymentReceiptEmailBody: settings.paymentReceiptEmailBody
+    paymentReceiptEmailBody: settings.paymentReceiptEmailBody,
+    sendRefundReceipts: settings.sendRefundReceipts,
+    refundReceiptEmailSubject: settings.refundReceiptEmailSubject,
+    refundReceiptEmailBody: settings.refundReceiptEmailBody
   };
 }
 

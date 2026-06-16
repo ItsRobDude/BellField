@@ -17,6 +17,12 @@ export interface CompanySettings {
   paymentReceiptEmailSubject: string;
   /** Receipt email body template ({customerName}, {amount}, {method}, {date}, {jobNumber}, {receiptKind}). */
   paymentReceiptEmailBody: string;
+  /** When true, a customer receipt email is sent whenever a refund is recorded. */
+  sendRefundReceipts: boolean;
+  /** Refund receipt subject template ({companyName} etc.). */
+  refundReceiptEmailSubject: string;
+  /** Refund receipt body template ({customerName}, {amount}, {date}, {jobNumber}). No method token — a manual refund has no refund-method field. */
+  refundReceiptEmailBody: string;
   updatedAt?: string;
   updatedByName?: string;
 }
@@ -39,4 +45,7 @@ export interface UpdateCompanySettingsRequest {
   sendPaymentReceipts: boolean;
   paymentReceiptEmailSubject: string;
   paymentReceiptEmailBody: string;
+  sendRefundReceipts: boolean;
+  refundReceiptEmailSubject: string;
+  refundReceiptEmailBody: string;
 }

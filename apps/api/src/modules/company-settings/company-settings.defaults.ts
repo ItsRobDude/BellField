@@ -15,5 +15,9 @@ export const defaultCompanySettings: CompanySettingsDto = {
   sendPaymentReceipts: true,
   paymentReceiptEmailSubject: 'Receipt from {companyName}',
   paymentReceiptEmailBody:
-    'Hello {customerName},\n\nWe received your {receiptKind} of {amount} by {method} on {date} for job {jobNumber}.\n\nThank you,\n{companyName}'
+    'Hello {customerName},\n\nWe received your {receiptKind} of {amount} by {method} on {date} for job {jobNumber}.\n\nThank you,\n{companyName}',
+  sendRefundReceipts: true,
+  refundReceiptEmailSubject: 'Refund from {companyName}',
+  refundReceiptEmailBody:
+    'Hello {customerName},\n\nWe issued a refund of {amount} on {date} for job {jobNumber}.\n\nThank you,\n{companyName}'
 };

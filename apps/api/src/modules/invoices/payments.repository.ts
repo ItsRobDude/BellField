@@ -27,7 +27,11 @@ import {
   type RefundRow,
   type TargetInvoiceRow
 } from './payments-repository-utils';
-import { enqueuePaymentReceipt, insertPaymentRow } from './payments-repository-write-utils';
+import {
+  enqueuePaymentReceipt,
+  enqueueRefundReceipt,
+  insertPaymentRow
+} from './payments-repository-write-utils';
 
 @Injectable()
 export class PaymentsRepository {
@@ -386,6 +390,19 @@ export class PaymentsRepository {
           message: `Refund of ${formatMoney(input.amount)} recorded (${payment.method}).`
         },
         queryable
+      );
+
+      await enqueueRefundReceipt(
+        queryable,
+        {
+          paymentRefundId: refundId,
+          jobId: payment.jobId,
+          amount: input.amount,
+          method: payment.method,
+          currency: payment.currency,
+          occurredAt: now
+        },
+        now
       );
 
       return this.findRefundById(refundId, queryable);

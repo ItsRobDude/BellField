@@ -459,6 +459,11 @@ describe('PaymentsRepository.refundPayment', () => {
     expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
     const timeline = findCall(calls, TIMELINE_INSERT);
     expect(timeline?.params[4]).toBe('paymentRefunded');
+    // A refund receipt is enqueued in the same transaction, keyed to the refund.
+    const receiptEnqueue = findCall(calls, RECEIPT_ENQUEUE);
+    expect(receiptEnqueue?.sql).toMatch(/'refundReceipt'/);
+    expect(receiptEnqueue?.params).toContain(170); // amount
+    expect(receiptEnqueue?.params?.[2]).toBe(refundInsert?.params?.[0]); // payment_refund_id
   });
 
   it('refunds a manual deposit (no allocations) — records the refund, reverses nothing', async () => {
@@ -480,6 +485,8 @@ describe('PaymentsRepository.refundPayment', () => {
       ConflictException
     );
     expect(findCall(calls, INSERT_REFUND)).toBeUndefined();
+    // A rejected refund writes nothing — including no receipt enqueue.
+    expect(findCall(calls, RECEIPT_ENQUEUE)).toBeUndefined();
   });
 
   it('rejects a refund beyond the amount still refundable after prior refunds', async () => {

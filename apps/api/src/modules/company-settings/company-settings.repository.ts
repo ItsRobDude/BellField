@@ -18,6 +18,9 @@ type CompanySettingsRow = {
   sendPaymentReceipts: boolean;
   paymentReceiptEmailSubject: string;
   paymentReceiptEmailBody: string;
+  sendRefundReceipts: boolean;
+  refundReceiptEmailSubject: string;
+  refundReceiptEmailBody: string;
   updatedByName: string | null;
   updatedAt: string | Date;
 };
@@ -43,6 +46,9 @@ export class CompanySettingsRepository {
           send_payment_receipts as "sendPaymentReceipts",
           payment_receipt_email_subject as "paymentReceiptEmailSubject",
           payment_receipt_email_body as "paymentReceiptEmailBody",
+          send_refund_receipts as "sendRefundReceipts",
+          refund_receipt_email_subject as "refundReceiptEmailSubject",
+          refund_receipt_email_body as "refundReceiptEmailBody",
           updated_by_name as "updatedByName",
           updated_at as "updatedAt"
         from company_settings
@@ -69,6 +75,9 @@ export class CompanySettingsRepository {
       sendPaymentReceipts: row.sendPaymentReceipts,
       paymentReceiptEmailSubject: row.paymentReceiptEmailSubject,
       paymentReceiptEmailBody: row.paymentReceiptEmailBody,
+      sendRefundReceipts: row.sendRefundReceipts,
+      refundReceiptEmailSubject: row.refundReceiptEmailSubject,
+      refundReceiptEmailBody: row.refundReceiptEmailBody,
       updatedAt: toIsoString(row.updatedAt),
       updatedByName: row.updatedByName ?? undefined
     };
@@ -87,9 +96,10 @@ export class CompanySettingsRepository {
           acceptance_link_expiry_days, charges_sales_tax, default_sales_tax_basis_points,
           include_invoice_payment_link,
           send_payment_receipts, payment_receipt_email_subject, payment_receipt_email_body,
+          send_refund_receipts, refund_receipt_email_subject, refund_receipt_email_body,
           updated_by_employee_id, updated_by_name, created_at, updated_at
         )
-        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $16)
+        values ('default', $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $19)
         on conflict (id) do update set
           company_name = excluded.company_name,
           reply_to_email = excluded.reply_to_email,
@@ -104,6 +114,9 @@ export class CompanySettingsRepository {
           send_payment_receipts = excluded.send_payment_receipts,
           payment_receipt_email_subject = excluded.payment_receipt_email_subject,
           payment_receipt_email_body = excluded.payment_receipt_email_body,
+          send_refund_receipts = excluded.send_refund_receipts,
+          refund_receipt_email_subject = excluded.refund_receipt_email_subject,
+          refund_receipt_email_body = excluded.refund_receipt_email_body,
           updated_by_employee_id = excluded.updated_by_employee_id,
           updated_by_name = excluded.updated_by_name,
           updated_at = excluded.updated_at
@@ -122,6 +135,9 @@ export class CompanySettingsRepository {
         input.sendPaymentReceipts,
         input.paymentReceiptEmailSubject,
         input.paymentReceiptEmailBody,
+        input.sendRefundReceipts,
+        input.refundReceiptEmailSubject,
+        input.refundReceiptEmailBody,
         actor.id,
         actor.displayName,
         now
