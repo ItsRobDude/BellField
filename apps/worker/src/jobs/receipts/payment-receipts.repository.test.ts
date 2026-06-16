@@ -30,7 +30,7 @@ class CapturingDatabase implements QueryExecutor {
   }
 }
 
-test('PaymentReceiptsRepository claimDueQueued claims only payment receipts for slice 1a', async () => {
+test('PaymentReceiptsRepository claimDueQueued claims both payment and refund receipts', async () => {
   const database = new CapturingDatabase();
   const repository = new PaymentReceiptsRepository(database);
 
@@ -38,5 +38,9 @@ test('PaymentReceiptsRepository claimDueQueued claims only payment receipts for 
 
   assert.equal(claimed.length, 1);
   assert.equal(claimed[0]?.kind, 'paymentReceipt');
-  assert.match(database.queries[0]?.text ?? '', /and prm\.kind = 'paymentReceipt'/);
+  // Both receipt kinds are claimable now (refund receipts shipped in slice 2a).
+  assert.match(
+    database.queries[0]?.text ?? '',
+    /and prm\.kind in \('paymentReceipt', 'refundReceipt'\)/
+  );
 });

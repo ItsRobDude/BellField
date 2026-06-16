@@ -114,3 +114,44 @@ export async function enqueuePaymentReceipt(
     ]
   );
 }
+
+/**
+ * Enqueue a customer refund-receipt email in the SAME transaction as the
+ * payment_refunds insert (exactly-once; the unique guard on payment_refund_id
+ * makes a duplicated enqueue a no-op). Refund rows carry no `purpose` and the
+ * worker's refund copy never uses the method, but the column is stored for the
+ * record. The office toggle is honored at send time, not here.
+ */
+export async function enqueueRefundReceipt(
+  queryable: QueryExecutor,
+  input: {
+    paymentRefundId: string;
+    jobId: string;
+    amount: number;
+    method: PaymentMethodValue;
+    currency: string;
+    occurredAt: string;
+  },
+  now: string
+): Promise<void> {
+  const expiresAt = new Date(new Date(now).getTime() + RECEIPT_QUEUE_EXPIRY_MS).toISOString();
+  await queryable.query(
+    `insert into payment_receipt_messages (
+       id, kind, status, job_id, payment_refund_id, amount, currency, method, purpose,
+       occurred_at, expires_at, attempt_count, created_at, updated_at
+     )
+     values ($1, 'refundReceipt', 'queued', $2, $3, $4, $5, $6, null, $7, $8, 0, $9, $9)
+     on conflict (payment_refund_id) where payment_refund_id is not null do nothing`,
+    [
+      randomUUID(),
+      input.jobId,
+      input.paymentRefundId,
+      input.amount,
+      normalizeCurrency(input.currency),
+      input.method,
+      input.occurredAt,
+      expiresAt,
+      now
+    ]
+  );
+}

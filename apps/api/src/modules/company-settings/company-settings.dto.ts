@@ -70,4 +70,17 @@ export class UpdateCompanySettingsRequestBodyDto implements UpdateCompanySetting
   @MinLength(1)
   @MaxLength(4000)
   paymentReceiptEmailBody!: string;
+
+  @IsBoolean()
+  sendRefundReceipts!: boolean;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  refundReceiptEmailSubject!: string;
+
+  @IsString()
+  @MinLength(1)
+  @MaxLength(4000)
+  refundReceiptEmailBody!: string;
 }

@@ -2,10 +2,43 @@ import { workerLog } from '../../common/logger';
 import { nextDeliveryRetryDelayMs } from '../delivery/delivery-retry-policy';
 import type {
   DueReceipt,
+  PaymentReceiptKind,
   PaymentReceiptStore,
   ReceiptRelayClient,
-  ReceiptSettings
+  ReceiptSettings,
+  ReceiptTimelineKind
 } from './receipt-types';
+
+/** Per-kind copy/toggle/timeline policy so every branch reads the right one. */
+type ReceiptPolicy = {
+  enabled: boolean;
+  subjectTemplate: string;
+  bodyTemplate: string;
+  sentKind: ReceiptTimelineKind;
+  failedKind: ReceiptTimelineKind;
+  noun: string;
+};
+
+function receiptPolicy(kind: PaymentReceiptKind, settings: ReceiptSettings): ReceiptPolicy {
+  if (kind === 'refundReceipt') {
+    return {
+      enabled: settings.sendRefundReceipts,
+      subjectTemplate: settings.refundReceiptEmailSubject,
+      bodyTemplate: settings.refundReceiptEmailBody,
+      sentKind: 'refundReceiptSent',
+      failedKind: 'refundReceiptFailed',
+      noun: 'Refund receipt'
+    };
+  }
+  return {
+    enabled: settings.sendPaymentReceipts,
+    subjectTemplate: settings.paymentReceiptEmailSubject,
+    bodyTemplate: settings.paymentReceiptEmailBody,
+    sentKind: 'paymentReceiptSent',
+    failedKind: 'paymentReceiptFailed',
+    noun: 'Receipt'
+  };
+}
 
 const DUE_BATCH_SIZE = 10;
 
@@ -50,21 +83,21 @@ export class PaymentReceiptsService {
 
     const expired = await this.store.expireDue(now);
     summary.expired = expired.length;
-    for (const receipt of expired) {
-      await this.store.addTimelineEntry({
-        jobId: receipt.jobId,
-        occurredAt: now,
-        kind: 'paymentReceiptFailed',
-        message: 'Receipt email could not be sent before it expired.'
-      });
-    }
-
     const due = await this.store.claimDueQueued(now, DUE_BATCH_SIZE);
-    if (due.length === 0) {
+    if (expired.length === 0 && due.length === 0) {
       return summary;
     }
 
     const settings = await this.store.loadSettings();
+    for (const receipt of expired) {
+      const policy = receiptPolicy(receipt.kind, settings);
+      await this.store.addTimelineEntry({
+        jobId: receipt.jobId,
+        occurredAt: now,
+        kind: policy.failedKind,
+        message: `${policy.noun} email could not be sent before it expired.`
+      });
+    }
     for (const receipt of due) {
       if (input?.signal?.aborted) {
         break;
@@ -80,10 +113,11 @@ export class PaymentReceiptsService {
     summary: ProcessReceiptsResult
   ): Promise<void> {
     const now = this.now();
+    const policy = receiptPolicy(receipt.kind, settings);
 
     // Honor the office toggle at send time: a receipt enqueued while sending was
-    // on is canceled (not sent) if the owner has since turned receipts off.
-    if (!settings.sendPaymentReceipts) {
+    // on is canceled (not sent) if the owner has since turned that kind off.
+    if (!policy.enabled) {
       await this.store.cancel(receipt.id, now);
       summary.canceled += 1;
       return;
@@ -101,16 +135,16 @@ export class PaymentReceiptsService {
         await this.store.addTimelineEntry({
           jobId: receipt.jobId,
           occurredAt: now,
-          kind: 'paymentReceiptFailed',
-          message: 'Receipt not sent — no email address on file for this customer.'
+          kind: policy.failedKind,
+          message: `${policy.noun} not sent — no email address on file for this customer.`
         });
         summary.failed += 1;
         return;
       }
       recipientEmail = recipient.email;
       const tokens = receiptTokens(receipt, settings, recipient.customerName, recipient.jobNumber);
-      subject = renderTemplate(settings.paymentReceiptEmailSubject, tokens);
-      bodyText = renderTemplate(settings.paymentReceiptEmailBody, tokens);
+      subject = renderTemplate(policy.subjectTemplate, tokens);
+      bodyText = renderTemplate(policy.bodyTemplate, tokens);
       await this.store.pinRendered(receipt.id, { recipientEmail, subject, bodyText }, now);
     }
 
@@ -129,8 +163,8 @@ export class PaymentReceiptsService {
       await this.store.addTimelineEntry({
         jobId: receipt.jobId,
         occurredAt: now,
-        kind: 'paymentReceiptSent',
-        message: `Receipt emailed to ${recipientEmail}.`
+        kind: policy.sentKind,
+        message: `${policy.noun} emailed to ${recipientEmail}.`
       });
       summary.sent += 1;
       return;
@@ -141,8 +175,8 @@ export class PaymentReceiptsService {
       await this.store.addTimelineEntry({
         jobId: receipt.jobId,
         occurredAt: now,
-        kind: 'paymentReceiptFailed',
-        message: `Receipt email to ${recipientEmail} could not be delivered.`
+        kind: policy.failedKind,
+        message: `${policy.noun} email to ${recipientEmail} could not be delivered.`
       });
       summary.failed += 1;
       return;
@@ -168,13 +202,22 @@ function receiptTokens(
   customerName: string,
   jobNumber: string
 ): Record<string, string> {
-  return {
+  const base: Record<string, string> = {
     companyName: settings.companyName,
     customerName,
     jobNumber,
     amount: formatMoney(receipt.amount, receipt.currency),
+    date: formatReceiptDate(receipt.occurredAt)
+  };
+  // Refund receipts deliberately expose neither {method} (a manual refund has no
+  // refund-method field — the row carries the original payment's method, which
+  // may not be how the refund was issued) nor {receiptKind} (refunds have none).
+  if (receipt.kind === 'refundReceipt') {
+    return base;
+  }
+  return {
+    ...base,
     method: capitalize(receipt.method),
-    date: formatReceiptDate(receipt.occurredAt),
     receiptKind: receipt.purpose === 'deposit' ? 'deposit' : 'payment'
   };
 }

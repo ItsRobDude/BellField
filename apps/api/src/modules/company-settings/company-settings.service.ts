@@ -65,6 +65,9 @@ function normalizeSettings(
   const sendPaymentReceipts = request.sendPaymentReceipts === true;
   const paymentReceiptEmailSubject = request.paymentReceiptEmailSubject.trim();
   const paymentReceiptEmailBody = request.paymentReceiptEmailBody.trim();
+  const sendRefundReceipts = request.sendRefundReceipts === true;
+  const refundReceiptEmailSubject = request.refundReceiptEmailSubject.trim();
+  const refundReceiptEmailBody = request.refundReceiptEmailBody.trim();
 
   if (!companyName) {
     throw new BadRequestException('Company name is required.');
@@ -103,6 +106,12 @@ function normalizeSettings(
   if (!paymentReceiptEmailBody) {
     throw new BadRequestException('Payment receipt email body is required.');
   }
+  if (!refundReceiptEmailSubject) {
+    throw new BadRequestException('Refund receipt email subject is required.');
+  }
+  if (!refundReceiptEmailBody) {
+    throw new BadRequestException('Refund receipt email body is required.');
+  }
 
   return {
     companyName,
@@ -117,6 +126,9 @@ function normalizeSettings(
     includeInvoicePaymentLink,
     sendPaymentReceipts,
     paymentReceiptEmailSubject,
-    paymentReceiptEmailBody
+    paymentReceiptEmailBody,
+    sendRefundReceipts,
+    refundReceiptEmailSubject,
+    refundReceiptEmailBody
   };
 }

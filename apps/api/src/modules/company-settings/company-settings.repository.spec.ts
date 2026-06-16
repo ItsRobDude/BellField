@@ -2,8 +2,8 @@ import { CompanySettingsRepository } from './company-settings.repository';
 import { defaultCompanySettings } from './company-settings.defaults';
 import type { UpdateCompanySettingsRequestDto } from './company-settings.types';
 
-// The upsert binds 16 positional params across 18 columns (created_at/updated_at
-// reuse $16). The service spec mocks this repository, so without this round-trip
+// The upsert binds 19 positional params across 21 columns (created_at/updated_at
+// reuse $19). The service spec mocks this repository, so without this round-trip
 // a column<->param desync — e.g. invoice_email_subject pointed at the wrong $N —
 // would slip through typecheck and unit tests and only surface as silently
 // corrupted saved settings. These tests pin the mapping in both directions.
@@ -82,7 +82,10 @@ const input: UpdateCompanySettingsRequestDto = {
   includeInvoicePaymentLink: true,
   sendPaymentReceipts: true,
   paymentReceiptEmailSubject: 'PMT-RCPT-SUBJECT',
-  paymentReceiptEmailBody: 'PMT-RCPT-BODY'
+  paymentReceiptEmailBody: 'PMT-RCPT-BODY',
+  sendRefundReceipts: true,
+  refundReceiptEmailSubject: 'REF-RCPT-SUBJECT',
+  refundReceiptEmailBody: 'REF-RCPT-BODY'
 };
 
 // Distinct sentinel per column so a SELECT mis-mapping is visible.
@@ -100,6 +103,9 @@ const row = {
   sendPaymentReceipts: false,
   paymentReceiptEmailSubject: 'row-pmt-rcpt-subject',
   paymentReceiptEmailBody: 'row-pmt-rcpt-body',
+  sendRefundReceipts: false,
+  refundReceiptEmailSubject: 'row-ref-rcpt-subject',
+  refundReceiptEmailBody: 'row-ref-rcpt-body',
   updatedByName: 'row-actor',
   updatedAt: '2026-06-14T12:00:00.000Z'
 };
@@ -126,6 +132,9 @@ describe('CompanySettingsRepository', () => {
       send_payment_receipts: input.sendPaymentReceipts,
       payment_receipt_email_subject: input.paymentReceiptEmailSubject,
       payment_receipt_email_body: input.paymentReceiptEmailBody,
+      send_refund_receipts: input.sendRefundReceipts,
+      refund_receipt_email_subject: input.refundReceiptEmailSubject,
+      refund_receipt_email_body: input.refundReceiptEmailBody,
       updated_by_employee_id: actor.id,
       updated_by_name: actor.displayName
     });
@@ -161,6 +170,9 @@ describe('CompanySettingsRepository', () => {
       sendPaymentReceipts: false,
       paymentReceiptEmailSubject: 'row-pmt-rcpt-subject',
       paymentReceiptEmailBody: 'row-pmt-rcpt-body',
+      sendRefundReceipts: false,
+      refundReceiptEmailSubject: 'row-ref-rcpt-subject',
+      refundReceiptEmailBody: 'row-ref-rcpt-body',
       updatedAt: '2026-06-14T12:00:00.000Z',
       updatedByName: 'row-actor'
     });

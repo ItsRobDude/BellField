@@ -245,8 +245,11 @@ are refundable only through this permission; they remain non-voidable.
   customer demand justifies a dedicated legal and card-network review.
 - Refunding an already-refunded amount beyond the original payment.
 - Voiding/reversing a refund.
-- Refund-specific customer email (the existing timeline + office surfaces cover
-  it; a customer refund receipt can come later).
+- ~~Refund-specific customer email~~ **Shipped (slice 2a, manual refunds):** a
+  recorded refund enqueues a `refundReceipt` in the same transaction and the
+  worker send-loop emails it from the owner-editable refund template
+  (`sendRefundReceipts` toggle). The refund copy omits a method token (a manual
+  refund records no refund-method). Online refund receipts are slice 2b.
 
 ## Test plan
 
