@@ -20,6 +20,7 @@ export type PaymentRow = {
   amount: string | number;
   method: PaymentMethodValue;
   source: 'manual' | 'bellfield_payments';
+  purpose: 'payment' | 'deposit';
   provider: PaymentProviderValue | null;
   currency: string;
   receivedAt: string | Date;
@@ -92,6 +93,7 @@ export const PAYMENT_COLUMNS = `
   amount,
   method,
   source,
+  purpose,
   provider,
   currency,
   received_at as "receivedAt",
@@ -169,6 +171,7 @@ export function toPaymentRecord(
     amount: Number(row.amount),
     method: row.method,
     source: fromDbSource(row.source),
+    purpose: row.purpose,
     provider: row.provider ?? undefined,
     currency: row.currency,
     receivedAt: toIsoString(row.receivedAt),

@@ -17,6 +17,7 @@ type OnlinePaymentSessionRow = {
   invoiceId: string | null;
   amountCents: number;
   currency: string;
+  purpose: 'payment' | 'deposit';
 };
 
 type ChargeInvoiceRow = {
@@ -60,6 +61,10 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       );
       const jobId = sessionMismatch ? event.jobRef : (session?.jobId ?? event.jobRef);
       const invoiceId = sessionMismatch ? null : (session?.invoiceId ?? null);
+      // Purpose is durable business meaning carried from the link; a missing session
+      // (out-of-band confirmation) defaults to an ordinary payment. An amount/currency
+      // mismatch doesn't change WHAT the money was collected as, so keep the session's.
+      const purpose = session?.purpose ?? 'payment';
 
       if (sessionMismatch && session) {
         workerLog('error', 'Online payment event did not match its local session.', {
@@ -77,12 +82,12 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       const paymentId = randomUUID();
       await tx.query(
         `insert into payments (
-           id, job_id, invoice_id, amount, method, source, provider, currency,
+           id, job_id, invoice_id, amount, method, source, purpose, provider, currency,
            received_at, reference, memo, recorded_by_employee_id, recorded_by_name,
            processor_fee_amount, application_fee_amount, provider_payment_id,
            provider_session_id, is_void, created_at, updated_at
          )
-         values ($1, $2, $3, $4, 'card', 'bellfield_payments', 'stripe', $5,
+         values ($1, $2, $3, $4, 'card', 'bellfield_payments', $13, 'stripe', $5,
                  $6, $7, null, null, 'BellField Payments',
                  $8, $9, $10, $11, false, $12, $12)`,
         [
@@ -97,7 +102,8 @@ export class PaymentEventsRepository implements PaymentEventsStore {
           centsToDollarsString(event.applicationFeeCents),
           event.providerPaymentId,
           event.providerSessionId,
-          occurredAt
+          occurredAt,
+          purpose
         ]
       );
 
@@ -113,6 +119,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         jobId,
         amountCents: event.amountCents,
         allocatedCents,
+        purpose,
         sessionMissing: session === null,
         sessionMismatch,
         occurredAt
@@ -144,9 +151,10 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       invoiceId: string | null;
       amountCents: string | number;
       currency: string;
+      purpose: 'payment' | 'deposit';
     }>(
       `select job_id as "jobId", invoice_id as "invoiceId",
-              round(amount * 100) as "amountCents", currency
+              round(amount * 100) as "amountCents", currency, purpose
        from online_payment_sessions
        where relay_payment_session_id = $1
        for update`,
@@ -160,7 +168,8 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       jobId: row.jobId,
       invoiceId: row.invoiceId,
       amountCents: Number(row.amountCents),
-      currency: row.currency
+      currency: row.currency,
+      purpose: row.purpose
     };
   }
 
@@ -210,6 +219,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
       jobId: string;
       amountCents: number;
       allocatedCents: number;
+      purpose: 'payment' | 'deposit';
       sessionMissing: boolean;
       sessionMismatch: boolean;
       occurredAt: Date;
@@ -229,7 +239,8 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     const mismatchNote = input.sessionMismatch
       ? ' The local payment-link record did not match this confirmation — please review.'
       : '';
-    const message = `Online payment of ${formatCents(input.amountCents)} confirmed.${overpaymentNote}${sessionNote}${mismatchNote}`;
+    const label = input.purpose === 'deposit' ? 'Online deposit' : 'Online payment';
+    const message = `${label} of ${formatCents(input.amountCents)} confirmed.${overpaymentNote}${sessionNote}${mismatchNote}`;
     await tx.query('update jobs set updated_at = $2 where id = $1', [
       input.jobId,
       input.occurredAt

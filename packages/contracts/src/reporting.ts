@@ -99,6 +99,8 @@ export interface PaymentLedgerExportRow {
   amount: number;
   method: string;
   source: 'manual' | 'bellfieldPayments';
+  /** What a payment was collected as (payment vs deposit). Omitted for refund rows. */
+  purpose?: 'payment' | 'deposit';
   receivedAt: string;
   reference?: string;
   memo?: string;

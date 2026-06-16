@@ -61,6 +61,7 @@ export const PAYMENT_LEDGER_CSV_COLUMNS: CsvColumn<PaymentLedgerExportRow>[] = [
   { header: 'Amount', value: (row) => row.amount },
   { header: 'Method', value: (row) => row.method },
   { header: 'Source', value: (row) => row.source },
+  { header: 'Purpose', value: (row) => row.purpose ?? '' },
   { header: 'Received at', value: (row) => row.receivedAt },
   { header: 'Reference', value: (row) => row.reference ?? '' },
   { header: 'Memo', value: (row) => row.memo ?? '' },

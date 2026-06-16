@@ -4,6 +4,7 @@ import type {
   Payment,
   PaymentAllocation,
   PaymentProvider,
+  PaymentPurpose,
   PaymentMethod,
   PaymentRefund,
   PaymentRefundAllocation,
@@ -19,6 +20,7 @@ import type {
 // how the rest of the invoices module aliases its DTOs to shared contract types.
 export type PaymentMethodValue = PaymentMethod;
 export type PaymentSourceValue = PaymentSource;
+export type PaymentPurposeValue = PaymentPurpose;
 export type PaymentProviderValue = PaymentProvider;
 export type PaymentAllocationRecord = PaymentAllocation;
 export type PaymentRefundAllocationRecord = PaymentRefundAllocation;
@@ -51,6 +53,7 @@ export type PaymentRecord = {
   amount: number;
   method: PaymentMethodValue;
   source: PaymentSourceValue;
+  purpose: PaymentPurposeValue;
   provider?: PaymentProviderValue;
   currency: string;
   receivedAt: string;

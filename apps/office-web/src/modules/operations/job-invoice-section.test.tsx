@@ -868,6 +868,7 @@ function manualPayment(overrides: Record<string, unknown> = {}) {
     amount: 250,
     method: 'card' as const,
     source: 'manual' as const,
+    purpose: 'payment' as const,
     currency: 'USD',
     receivedAt: '2026-06-13T00:00:00.000Z',
     recordedByName: 'Olivia Owner',
@@ -1026,12 +1027,32 @@ describe('JobInvoiceSection refunds', () => {
     renderSection(true);
 
     expect(
-      await screen.findByText((_, element) => element?.textContent === '$250.00 · Online card')
+      await screen.findByText(
+        (_, element) => element?.textContent === '$250.00 · Payment received · Online card'
+      )
     ).toBeInTheDocument();
     // Online card payments now get an online Refund action, but never a local Void
     // (the refund is their reversal path; they are not manually voidable).
     expect(await screen.findByRole('button', { name: 'Refund' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Void' })).not.toBeInTheDocument();
+  });
+
+  it('labels a deposit payment by its purpose, not just its method', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [onlinePayment({ amount: 500, purpose: 'deposit' })],
+      refunds: [],
+      onlineRefundRequests: []
+    });
+
+    renderSection(true);
+
+    expect(
+      await screen.findByText(
+        (_, element) => element?.textContent === '$500.00 · Deposit received · Online card'
+      )
+    ).toBeInTheDocument();
   });
 
   it('hides competing payment actions while a refund draft is open', async () => {

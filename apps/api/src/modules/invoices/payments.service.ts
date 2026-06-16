@@ -139,6 +139,7 @@ export class PaymentsService {
       amount: record.amount,
       method: record.method,
       source: record.source,
+      purpose: record.purpose,
       provider: record.provider,
       currency: record.currency,
       receivedAt: record.receivedAt,

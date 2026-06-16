@@ -119,6 +119,7 @@ type PaymentLedgerPaymentDbRow = {
   amount: string;
   method: string;
   source: 'manual' | 'bellfield_payments';
+  purpose: 'payment' | 'deposit';
   receivedAt: string;
   reference: string | null;
   memo: string | null;
@@ -198,6 +199,7 @@ describe('ReportingService.exportPaymentLedger', () => {
           amount: '100.00',
           method: 'card',
           source: 'bellfield_payments',
+          purpose: 'deposit',
           receivedAt: '2026-06-13T10:00:00.000Z',
           reference: 'Stripe pi_123',
           memo: null,
@@ -237,13 +239,14 @@ describe('ReportingService.exportPaymentLedger', () => {
     expect(out.filename).toMatch(/^payment-ledger-\d{4}-\d{2}-\d{2}\.csv$/);
     const lines = out.csv.split('\n');
     expect(lines[0]).toBe(
-      'Entry type,Entry ID,Payment ID,Invoice IDs,Job #,Customer,Amount,Method,Source,Received at,Reference,Memo,Recorded by,Provider,Provider transaction ID,Processor fee,BellField fee,Void,Voided at,Void reason'
+      'Entry type,Entry ID,Payment ID,Invoice IDs,Job #,Customer,Amount,Method,Source,Purpose,Received at,Reference,Memo,Recorded by,Provider,Provider transaction ID,Processor fee,BellField fee,Void,Voided at,Void reason'
     );
+    // Refund rows carry no purpose (they are their own entry type) → empty column.
     expect(lines[1]).toBe(
-      'refund,refund-1,pay-1,inv-main,1001,Acme,40,card,bellfieldPayments,2026-06-13T11:00:00.000Z,,Returned part,BellField Payments,stripe,re_123,,0.4,no,,'
+      'refund,refund-1,pay-1,inv-main,1001,Acme,40,card,bellfieldPayments,,2026-06-13T11:00:00.000Z,,Returned part,BellField Payments,stripe,re_123,,0.4,no,,'
     );
     expect(lines[2]).toBe(
-      'payment,pay-1,pay-1,inv-main,1001,Acme,100,card,bellfieldPayments,2026-06-13T10:00:00.000Z,Stripe pi_123,,BellField Payments,stripe,pi_123,3.2,1,no,,'
+      'payment,pay-1,pay-1,inv-main,1001,Acme,100,card,bellfieldPayments,deposit,2026-06-13T10:00:00.000Z,Stripe pi_123,,BellField Payments,stripe,pi_123,3.2,1,no,,'
     );
   });
 });
