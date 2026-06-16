@@ -12,6 +12,7 @@ import {
   RELAY_MESSAGES_STORE,
   SendEstimateService
 } from './send-estimate.service';
+import { SendReceiptService } from './send-receipt.service';
 
 @Module({
   imports: [IdentityModule, AcceptanceModule],
@@ -23,6 +24,7 @@ import {
     { provide: EMAIL_SEND_ADAPTER, useExisting: ResendEmailAdapter },
     shopSuspenderProvider,
     SendEstimateService,
+    SendReceiptService,
     EntitlementService,
     ProviderWebhookService
   ]

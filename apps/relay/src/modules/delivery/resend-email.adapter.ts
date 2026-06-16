@@ -1,10 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { CustomerDocumentType } from '@bellfield/contracts';
 import { getRelayRuntimeConfig, type RelayRuntimeConfig } from '../../common/config/runtime-config';
 import type {
   EmailSendAdapter,
   ProviderSendInput,
-  ProviderSendResult
+  ProviderSendResult,
+  RelaySenderIdentity
 } from './relay-delivery.types';
 
 const sendFailedMessage = 'The delivery provider did not accept this message.';
@@ -42,18 +42,22 @@ export class ResendEmailAdapter implements EmailSendAdapter {
       },
       signal: AbortSignal.timeout(15_000),
       body: JSON.stringify({
-        from: formatFrom(input.fromName, fromAddressForDocument(config, input.documentType)),
+        from: formatFrom(input.fromName, fromAddressForSender(config, input.sender)),
         to: [input.to],
         reply_to: input.replyToEmail ? [input.replyToEmail] : undefined,
         subject: input.subject,
         text: input.bodyText,
-        attachments: [
-          {
-            filename: input.attachment.filename,
-            content: input.attachment.bytes.toString('base64'),
-            content_type: input.attachment.contentType
-          }
-        ]
+        // Receipt sends carry no PDF; omit attachments entirely rather than
+        // send an empty array.
+        attachments: input.attachment
+          ? [
+              {
+                filename: input.attachment.filename,
+                content: input.attachment.bytes.toString('base64'),
+                content_type: input.attachment.contentType
+              }
+            ]
+          : undefined
       })
     }).catch((error: unknown) => {
       const message = error instanceof Error ? error.message : 'Provider request failed.';
@@ -89,8 +93,14 @@ export class ResendEmailAdapter implements EmailSendAdapter {
   }
 }
 
-function fromAddressForDocument(config: RelayRuntimeConfig, documentType: CustomerDocumentType) {
-  return documentType === 'invoice' ? config.invoiceFromAddress : config.estimateFromAddress;
+function fromAddressForSender(config: RelayRuntimeConfig, sender: RelaySenderIdentity) {
+  if (sender === 'invoice') {
+    return config.invoiceFromAddress;
+  }
+  if (sender === 'receipt') {
+    return config.receiptFromAddress;
+  }
+  return config.estimateFromAddress;
 }
 
 // The display name lands in a mail header and is shop-edited content, so strip

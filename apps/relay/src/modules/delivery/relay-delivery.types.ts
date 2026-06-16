@@ -1,4 +1,7 @@
-import type { CustomerDocumentType, RelaySendFailureCode } from '@bellfield/contracts';
+import type { RelaySendFailureCode } from '@bellfield/contracts';
+
+/** Selects which relay-owned From address fronts a send. */
+export type RelaySenderIdentity = 'estimate' | 'invoice' | 'receipt';
 
 export type RelayMessageStatus = 'sent' | 'delivered' | 'bounced' | 'complained' | 'failed';
 
@@ -18,13 +21,14 @@ export type RelayMessageRecord = {
 export type SuppressionReason = 'bounce' | 'complaint' | 'manual';
 
 export type ProviderSendInput = {
-  documentType: CustomerDocumentType;
+  sender: RelaySenderIdentity;
   fromName: string;
   to: string;
   replyToEmail?: string;
   subject: string;
   bodyText: string;
-  attachment: {
+  /** Absent for receipt sends, which carry no PDF attachment. */
+  attachment?: {
     filename: string;
     contentType: 'application/pdf';
     bytes: Buffer;

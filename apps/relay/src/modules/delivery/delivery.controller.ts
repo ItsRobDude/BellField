@@ -12,7 +12,8 @@ import {
 import type {
   RelayEntitlementResponse,
   RelayMessageStatusResponse,
-  RelaySendEstimateDocumentResponse
+  RelaySendEstimateDocumentResponse,
+  RelaySendReceiptMessageResponse
 } from '@bellfield/contracts';
 import {
   getAuthenticatedShop,
@@ -21,7 +22,9 @@ import {
 } from '../identity/relay-auth.guard';
 import { EntitlementService } from './entitlement.service';
 import { RELAY_MESSAGES_STORE, SendEstimateService } from './send-estimate.service';
+import { SendReceiptService } from './send-receipt.service';
 import { SendEstimateDocumentRequestDto } from './dto/send-estimate-document.dto';
+import { SendReceiptMessageRequestDto } from './dto/send-receipt-message.dto';
 import type { RelayMessagesStore } from './relay-delivery.types';
 
 @Controller('v1')
@@ -29,6 +32,7 @@ import type { RelayMessagesStore } from './relay-delivery.types';
 export class DeliveryController {
   constructor(
     private readonly sendEstimateService: SendEstimateService,
+    private readonly sendReceiptService: SendReceiptService,
     private readonly entitlementService: EntitlementService,
     @Inject(RELAY_MESSAGES_STORE) private readonly messagesStore: RelayMessagesStore
   ) {}
@@ -58,6 +62,16 @@ export class DeliveryController {
       ...body,
       documentType: body.documentType ?? 'estimate'
     });
+    return { result };
+  }
+
+  @Post('messages/send-receipt')
+  async sendReceiptMessage(
+    @Req() request: RelayAuthenticatedRequest,
+    @Body() body: SendReceiptMessageRequestDto
+  ): Promise<RelaySendReceiptMessageResponse> {
+    const shop = getAuthenticatedShop(request);
+    const result = await this.sendReceiptService.sendReceiptMessage(shop, body);
     return { result };
   }
 

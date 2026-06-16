@@ -2,6 +2,7 @@ const DEFAULT_PORT = 3201;
 const DEFAULT_DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/bellfield_relay';
 const DEFAULT_ESTIMATE_FROM_ADDRESS = 'estimates@bellfield.app';
 const DEFAULT_INVOICE_FROM_ADDRESS = 'billing@bellfield.app';
+const DEFAULT_RECEIPT_FROM_ADDRESS = 'billing@bellfield.app';
 const DEFAULT_MONTHLY_SEND_QUOTA = 1000;
 const DEFAULT_REBIND_FLAP_THRESHOLD = 5;
 const DEFAULT_REBIND_FLAP_WINDOW_MINUTES = 60;
@@ -18,6 +19,8 @@ export type RelayRuntimeConfig = {
   resendApiKey?: string;
   estimateFromAddress: string;
   invoiceFromAddress: string;
+  /** Billing sender identity fronting customer payment/refund receipt emails. */
+  receiptFromAddress: string;
   webhookSigningSecret?: string;
   defaultMonthlySendQuota: number;
   rebindFlapThreshold: number;
@@ -65,6 +68,8 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     DEFAULT_ESTIMATE_FROM_ADDRESS;
   const invoiceFromAddress =
     process.env.BELLFIELD_RELAY_INVOICE_FROM_ADDRESS?.trim() || DEFAULT_INVOICE_FROM_ADDRESS;
+  const receiptFromAddress =
+    process.env.BELLFIELD_RELAY_RECEIPT_FROM_ADDRESS?.trim() || DEFAULT_RECEIPT_FROM_ADDRESS;
   const webhookSigningSecret = process.env.BELLFIELD_RELAY_WEBHOOK_SIGNING_SECRET || undefined;
   const stripeSecretKey = process.env.BELLFIELD_RELAY_STRIPE_SECRET_KEY || undefined;
   const stripeWebhookSecret = process.env.BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET || undefined;
@@ -103,6 +108,9 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     if (!invoiceFromAddress.includes('@')) {
       problems.push('BELLFIELD_RELAY_INVOICE_FROM_ADDRESS must be an email address.');
     }
+    if (!receiptFromAddress.includes('@')) {
+      problems.push('BELLFIELD_RELAY_RECEIPT_FROM_ADDRESS must be an email address.');
+    }
   }
   if ((stripeSecretKey && !stripeWebhookSecret) || (!stripeSecretKey && stripeWebhookSecret)) {
     problems.push(
@@ -121,6 +129,7 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     resendApiKey,
     estimateFromAddress,
     invoiceFromAddress,
+    receiptFromAddress,
     webhookSigningSecret,
     defaultMonthlySendQuota,
     rebindFlapThreshold,

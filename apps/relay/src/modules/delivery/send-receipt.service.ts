@@ -1,83 +1,57 @@
 import { randomUUID } from 'node:crypto';
 import { Inject, Injectable, Optional } from '@nestjs/common';
 import {
-  type CustomerDocumentType,
-  estimateEmailMaxAttachmentBytes,
-  type RelayAcceptancePayload,
+  type RelayReceiptMessageType,
   type RelaySendFailureCode,
   type RelaySendResult
 } from '@bellfield/contracts';
 import { log } from '../../common/logger';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
-import {
-  AcceptanceLinksService,
-  spliceAcceptanceUrl,
-  type PreparedAcceptanceLink
-} from '../acceptance/acceptance.service';
+import { EMAIL_SEND_ADAPTER, RELAY_MESSAGES_STORE } from './send-estimate.service';
 import type { EmailSendAdapter, RelayMessagesStore } from './relay-delivery.types';
 
-export const RELAY_MESSAGES_STORE = 'RELAY_MESSAGES_STORE';
-export const EMAIL_SEND_ADAPTER = 'EMAIL_SEND_ADAPTER';
-
-export type SendEstimateDocumentInput = {
+export type SendReceiptMessageInput = {
   idempotencyKey: string;
-  documentType: CustomerDocumentType;
+  messageType: RelayReceiptMessageType;
   recipientEmail: string;
   fromName: string;
   replyToEmail?: string;
   subject: string;
   bodyText: string;
-  document: {
-    filename: string;
-    contentType: 'application/pdf';
-    bytesBase64: string;
-  };
-  acceptance?: RelayAcceptancePayload;
 };
 
 const recipientUnavailableMessage = 'This recipient is not currently able to receive email.';
 const sendingLimitMessage = 'The monthly sending limit for this shop has been reached.';
-const attachmentTooLargeMessage = 'The document attachment is too large to send.';
-const invoiceAcceptanceRejectedMessage =
-  'Invoice document sends cannot include estimate acceptance.';
 
+/**
+ * Sends a customer-facing payment/refund receipt. Receipts reuse the shared
+ * message store (quota, suppression, idempotency, status) but carry no PDF and
+ * no acceptance link, and front the billing sender identity. Kept separate from
+ * SendEstimateService so the document send path stays document-shaped.
+ */
 @Injectable()
-export class SendEstimateService {
+export class SendReceiptService {
   constructor(
     @Inject(RELAY_MESSAGES_STORE) private readonly messagesStore: RelayMessagesStore,
     @Inject(EMAIL_SEND_ADAPTER) private readonly emailAdapter: EmailSendAdapter,
-    private readonly acceptanceLinksService: AcceptanceLinksService,
     @Optional() private readonly now: () => Date = () => new Date()
   ) {}
 
-  async sendEstimateDocument(
+  async sendReceiptMessage(
     shop: AuthenticatedRelayShop,
-    input: SendEstimateDocumentInput
+    input: SendReceiptMessageInput
   ): Promise<RelaySendResult> {
     return await this.messagesStore.withIdempotencyLock(shop.shopId, input.idempotencyKey, () =>
-      this.sendEstimateDocumentLocked(shop, input)
+      this.sendReceiptMessageLocked(shop, input)
     );
   }
 
-  private async sendEstimateDocumentLocked(
+  private async sendReceiptMessageLocked(
     shop: AuthenticatedRelayShop,
-    input: SendEstimateDocumentInput
+    input: SendReceiptMessageInput
   ): Promise<RelaySendResult> {
     const now = this.now();
 
-    if (input.documentType === 'invoice' && input.acceptance) {
-      return {
-        kind: 'failed',
-        code: 'deliveryRejected',
-        retryable: false,
-        message: invoiceAcceptanceRejectedMessage
-      };
-    }
-
-    // Replays return the recorded outcome instead of re-sending; the install
-    // reuses its idempotency key across worker retries of the same intent.
-    // No acceptanceUrl on replays: the plaintext token is never stored, so
-    // the URL cannot be reconstructed — the sent email always carries it.
     const replayed = await this.messagesStore.findByIdempotencyKey(
       shop.shopId,
       input.idempotencyKey
@@ -97,16 +71,6 @@ export class SendEstimateService {
         kind: 'sent',
         relayMessageId: replayed.id,
         providerMessageId: replayed.providerMessageId ?? undefined
-      };
-    }
-
-    const attachmentBytes = Buffer.from(input.document.bytesBase64, 'base64');
-    if (attachmentBytes.length === 0 || attachmentBytes.length > estimateEmailMaxAttachmentBytes) {
-      return {
-        kind: 'failed',
-        code: 'deliveryRejected',
-        retryable: false,
-        message: attachmentTooLargeMessage
       };
     }
 
@@ -134,28 +98,13 @@ export class SendEstimateService {
       };
     }
 
-    // The link must be minted before the send because its URL goes into the
-    // email body. Nothing is persisted yet: a retryable failure below drops
-    // the token entirely and the retry mints a fresh one.
-    let acceptanceLink: PreparedAcceptanceLink | undefined;
-    let bodyText = input.bodyText;
-    if (input.acceptance) {
-      acceptanceLink = this.acceptanceLinksService.prepareLink();
-      bodyText = spliceAcceptanceUrl(bodyText, acceptanceLink.url);
-    }
-
     const providerResult = await this.emailAdapter.send({
-      sender: input.documentType,
+      sender: 'receipt',
       fromName: input.fromName,
       to: input.recipientEmail,
       replyToEmail: input.replyToEmail,
       subject: input.subject,
-      bodyText,
-      attachment: {
-        filename: input.document.filename,
-        contentType: input.document.contentType,
-        bytes: attachmentBytes
-      },
+      bodyText: input.bodyText,
       // Namespaced per shop so two shops can never collide provider-side.
       idempotencyKey: `relay/${shop.shopId}/${input.idempotencyKey}`
     });
@@ -180,27 +129,17 @@ export class SendEstimateService {
         acceptedAt: now
       });
       if (providerResult.kind === 'sent') {
-        const recordedLink = await this.recordAcceptanceLink(
-          shop,
-          input.acceptance,
-          acceptanceLink,
-          record.id,
-          now
-        );
         return {
           kind: 'sent',
           relayMessageId: record.id,
-          providerMessageId: record.providerMessageId ?? undefined,
-          acceptanceUrl: recordedLink ? acceptanceLink?.url : undefined,
-          acceptanceLinkId: recordedLink ? acceptanceLink?.linkId : undefined
+          providerMessageId: record.providerMessageId ?? undefined
         };
       }
       return providerResult;
     } catch (error) {
-      // The provider already has the message; never tell the install it
-      // failed. Status polling for this message will come up empty, which is
-      // the lesser harm — log loudly for operations.
-      log('error', 'Relay failed to record a provider-accepted message.', {
+      // The provider already has the message; never tell the install it failed.
+      // Status polling will come up empty, the lesser harm — log for operations.
+      log('error', 'Relay failed to record a provider-accepted receipt message.', {
         shopId: shop.shopId,
         error
       });
@@ -212,43 +151,6 @@ export class SendEstimateService {
         };
       }
       return providerResult;
-    }
-  }
-
-  /**
-   * Persisted only after the message recorded as sent: a failed message has
-   * no email in the world, so it needs no link. When this write fails the
-   * email is already out with a now-dead link — the homeowner sees the
-   * neutral not-found page and the shop resends. Do not return the link to the
-   * install in that case; the office should not display a link BellField failed
-   * to persist.
-   */
-  private async recordAcceptanceLink(
-    shop: AuthenticatedRelayShop,
-    acceptance: RelayAcceptancePayload | undefined,
-    acceptanceLink: PreparedAcceptanceLink | undefined,
-    relayMessageId: string,
-    now: Date
-  ): Promise<boolean> {
-    if (!acceptance || !acceptanceLink) {
-      return false;
-    }
-    try {
-      await this.acceptanceLinksService.recordMintedLink({
-        prepared: acceptanceLink,
-        shopId: shop.shopId,
-        relayMessageId,
-        acceptance,
-        now
-      });
-      return true;
-    } catch (error) {
-      log('error', 'Relay failed to record an acceptance link for a sent message.', {
-        shopId: shop.shopId,
-        relayMessageId,
-        error
-      });
-      return false;
     }
   }
 }
