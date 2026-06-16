@@ -26,6 +26,11 @@ export type PaymentDraft = {
   reference: string;
   memo: string;
 };
+
+export type PaymentLinkDraft = {
+  amount: string;
+};
+
 // `kind` routes the save: 'manual' records a refund immediately; 'online' opens a
 // pending Stripe-via-relay refund the worker confirms later.
 export type RefundDraft = {
@@ -53,9 +58,13 @@ export function PaymentsBlock({
   isCreatingPaymentLink,
   amountDue,
   onlinePaymentLink,
+  paymentLinkDraft,
   paymentDraft,
   refundDraft,
   onStartRecord,
+  onStartPaymentLink,
+  onCancelPaymentLink,
+  onChangePaymentLinkDraft,
   onCreatePaymentLink,
   onCancelRecord,
   onChangeDraft,
@@ -77,9 +86,13 @@ export function PaymentsBlock({
   isCreatingPaymentLink: boolean;
   amountDue: number;
   onlinePaymentLink: Extract<OnlinePaymentLinkResponse, { state: 'created' }> | null;
+  paymentLinkDraft: PaymentLinkDraft | null;
   paymentDraft: PaymentDraft | null;
   refundDraft: RefundDraft | null;
   onStartRecord: () => void;
+  onStartPaymentLink: () => void;
+  onCancelPaymentLink: () => void;
+  onChangePaymentLinkDraft: (draft: PaymentLinkDraft) => void;
   onCreatePaymentLink: () => void;
   onCancelRecord: () => void;
   onChangeDraft: (draft: PaymentDraft) => void;
@@ -98,6 +111,11 @@ export function PaymentsBlock({
       onChangeDraft({ ...paymentDraft, ...values });
     }
   }
+  function patchPaymentLink(values: Partial<PaymentLinkDraft>) {
+    if (paymentLinkDraft) {
+      onChangePaymentLinkDraft({ ...paymentLinkDraft, ...values });
+    }
+  }
   // Refunds keyed by the payment they reverse, so each payment row can show its
   // refunds and compute how much is still refundable (in whole cents).
   const refundsByPayment = new Map<string, PaymentRefund[]>();
@@ -113,22 +131,23 @@ export function PaymentsBlock({
   for (const request of onlineRefundRequests) {
     onlineRefundByPayment.set(request.paymentId, request);
   }
+  const hasOpenPaymentLinkDraft = paymentLinkDraft !== null;
   const hasOpenRefundDraft = refundDraft !== null;
 
   return (
     <div style={styles.subpanel}>
       <div style={styles.row}>
         <h3 style={styles.sectionHeading}>Payments</h3>
-        {canRecord && !paymentDraft && !hasOpenRefundDraft ? (
+        {canRecord && !paymentDraft && !hasOpenPaymentLinkDraft && !hasOpenRefundDraft ? (
           <div style={styles.badgeRow}>
             {amountDue > 0 ? (
               <button
                 type="button"
                 style={styles.primaryButton}
                 disabled={isSaving || isCreatingPaymentLink}
-                onClick={onCreatePaymentLink}
+                onClick={onStartPaymentLink}
               >
-                {isCreatingPaymentLink ? 'Creating…' : 'Create payment link'}
+                Create payment link
               </button>
             ) : null}
             <button type="button" style={styles.button} disabled={isSaving} onClick={onStartRecord}>
@@ -148,6 +167,41 @@ export function PaymentsBlock({
             {formatCurrency(onlinePaymentLink.amount)} · expires{' '}
             {onlinePaymentLink.expiresAt.slice(0, 10)}
           </p>
+        </div>
+      ) : null}
+
+      {paymentLinkDraft ? (
+        <div style={styles.drawerPanel}>
+          <label style={styles.fieldLabel}>
+            <span>Payment link amount</span>
+            <input
+              style={styles.input}
+              type="number"
+              step="0.01"
+              aria-label="Payment link amount"
+              value={paymentLinkDraft.amount}
+              onChange={(event) => patchPaymentLink({ amount: event.target.value })}
+            />
+          </label>
+          <p style={styles.tinyMuted}>Up to {formatCurrency(amountDue)} due.</p>
+          <div style={styles.inlineActionBar}>
+            <button
+              type="button"
+              style={styles.primaryButton}
+              disabled={isCreatingPaymentLink}
+              onClick={onCreatePaymentLink}
+            >
+              {isCreatingPaymentLink ? 'Creating…' : 'Create link'}
+            </button>
+            <button
+              type="button"
+              style={styles.button}
+              disabled={isCreatingPaymentLink}
+              onClick={onCancelPaymentLink}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -226,6 +280,11 @@ export function PaymentsBlock({
             (sum, refund) => sum + Math.round(refund.amount * 100),
             0
           );
+          const allocatedCents = payment.allocations.reduce(
+            (sum, allocation) => sum + Math.round(allocation.amount * 100),
+            0
+          );
+          const unallocatedCents = Math.max(amountCents - allocatedCents - refundedCents, 0);
           const refundableCents = amountCents - refundedCents;
           const isRefunding = refundDraft?.paymentId === payment.id;
           const isOnline = payment.source === 'bellfieldPayments';
@@ -251,6 +310,7 @@ export function PaymentsBlock({
             !pendingSubmitted &&
             !pendingNeedsResubmit &&
             !recordingFailed &&
+            !hasOpenPaymentLinkDraft &&
             !hasOpenRefundDraft &&
             !isRefunding;
           return (
@@ -269,6 +329,9 @@ export function PaymentsBlock({
                     {!payment.isVoid && refundedCents > 0
                       ? ` · ${formatCurrency(refundedCents / 100)} refunded`
                       : ''}
+                    {!payment.isVoid && unallocatedCents > 0
+                      ? ` · ${formatCurrency(unallocatedCents / 100)} unallocated credit`
+                      : ''}
                   </p>
                 </div>
                 <div style={styles.badgeRow}>
@@ -282,7 +345,11 @@ export function PaymentsBlock({
                       Refund
                     </button>
                   ) : null}
-                  {pendingNeedsResubmit && canRefund && !hasOpenRefundDraft && onlineRequest ? (
+                  {pendingNeedsResubmit &&
+                  canRefund &&
+                  !hasOpenPaymentLinkDraft &&
+                  !hasOpenRefundDraft &&
+                  onlineRequest ? (
                     <button
                       type="button"
                       style={styles.button}
@@ -298,6 +365,7 @@ export function PaymentsBlock({
                   !payment.isVoid &&
                   payment.source === 'manual' &&
                   refundedCents === 0 &&
+                  !hasOpenPaymentLinkDraft &&
                   !hasOpenRefundDraft ? (
                     <button
                       type="button"

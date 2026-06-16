@@ -1,20 +1,30 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  NotFoundException
+} from '@nestjs/common';
 import {
   relayServerInstanceHeader,
   type OnlinePaymentLinkResponse,
   type RelayCreatePaymentSessionResponse
 } from '@bellfield/contracts';
 import { getApiRuntimeConfig, type ApiRelayConfig } from '../../common/config/runtime-config';
+import { JobsDataService } from '../company-data/jobs-data.service';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { InvoicesRepository } from './invoices.repository';
 import { PaymentsRepository } from './payments.repository';
 import { OnlinePaymentsRepository } from './online-payments.repository';
-import type { CreateOnlinePaymentLinkRequestBodyDto } from './online-payment-link.dto';
+import type {
+  CreateDepositPaymentLinkRequestBodyDto,
+  CreateOnlinePaymentLinkRequestBodyDto
+} from './online-payment-link.dto';
 
 @Injectable()
 export class OnlinePaymentLinkService {
   constructor(
     private readonly identityAccessService: IdentityAccessService,
+    private readonly jobsDataService: JobsDataService,
     private readonly invoicesRepository: InvoicesRepository,
     private readonly paymentsRepository: PaymentsRepository,
     private readonly onlinePaymentsRepository: OnlinePaymentsRepository
@@ -25,11 +35,7 @@ export class OnlinePaymentLinkService {
     invoiceId: string,
     request: CreateOnlinePaymentLinkRequestBodyDto
   ): Promise<OnlinePaymentLinkResponse> {
-    const actor = await this.identityAccessService.getAuthorizedEmployee(
-      sessionToken,
-      'payments:create',
-      ['office-web']
-    );
+    const actor = await this.requireCreatePaymentActor(sessionToken);
     const invoice = await this.invoicesRepository.getInvoiceById(invoiceId);
     if (!invoice) {
       throw new NotFoundException('Invoice not found.');
@@ -46,12 +52,95 @@ export class OnlinePaymentLinkService {
       throw new ConflictException('This job does not have an outstanding balance.');
     }
 
-    const currency = 'USD';
-    const amount = amountDueCents / 100;
-    const sameAmountSessions = await this.onlinePaymentsRepository.listForJobAmount({
+    const requestedAmountCents =
+      request.amount === undefined ? amountDueCents : dollarsToCents(request.amount);
+    if (!isValidDollarAmountCents(request.amount, requestedAmountCents)) {
+      throw new BadRequestException('Payment link amount must be a positive dollar amount.');
+    }
+    if (requestedAmountCents > amountDueCents) {
+      throw new ConflictException(
+        `Payment link amount cannot exceed the ${formatMoney(amountDueCents / 100)} currently due.`
+      );
+    }
+
+    return this.createRelayPaymentSession({
+      actor,
       jobId: invoice.jobId,
+      invoiceId: invoice.id,
+      requestedAmountCents,
+      currency: 'USD',
+      request,
+      idempotencyPrefix: 'invoice-payment',
+      idempotencySource: invoice.id,
+      description: `BellField invoice ${invoice.posted?.jobNumber ?? invoice.id}`,
+      timelinePurpose: 'payment',
+      amountDueCents,
+      confirmActiveLinkOverage: request.confirmActiveLinkOverage === true,
+      sameAmountMessage: (amount) =>
+        `This job already had an online card payment for ${formatMoney(
+          amount
+        )}. BellField still shows ${formatMoney(amountDueCents / 100)} due.`
+    });
+  }
+
+  async createDepositPaymentLink(
+    sessionToken: string,
+    jobId: string,
+    request: CreateDepositPaymentLinkRequestBodyDto
+  ): Promise<OnlinePaymentLinkResponse> {
+    const actor = await this.requireCreatePaymentActor(sessionToken);
+    const job = await this.jobsDataService.getJobById(jobId);
+    const requestedAmountCents = dollarsToCents(request.amount);
+    if (!isValidDollarAmountCents(request.amount, requestedAmountCents)) {
+      throw new BadRequestException('Deposit link amount must be a positive dollar amount.');
+    }
+
+    return this.createRelayPaymentSession({
+      actor,
+      jobId,
+      invoiceId: null,
+      requestedAmountCents,
+      currency: 'USD',
+      request,
+      idempotencyPrefix: 'deposit-payment',
+      idempotencySource: 'deposit',
+      description: `BellField deposit for job ${job.jobNumber ?? job.id}`,
+      timelinePurpose: 'deposit',
+      sameAmountMessage: (amount) =>
+        `This job already had an online card deposit for ${formatMoney(amount)}.`
+    });
+  }
+
+  private async requireCreatePaymentActor(sessionToken: string) {
+    return this.identityAccessService.getAuthorizedEmployee(sessionToken, 'payments:create', [
+      'office-web'
+    ]);
+  }
+
+  private async createRelayPaymentSession(input: {
+    actor: { id: string; displayName: string };
+    jobId: string;
+    invoiceId: string | null;
+    requestedAmountCents: number;
+    currency: string;
+    request: {
+      customerEmail?: string;
+      confirmSameAmountCharge?: boolean;
+    };
+    idempotencyPrefix: 'invoice-payment' | 'deposit-payment';
+    idempotencySource: string;
+    description: string;
+    timelinePurpose: 'payment' | 'deposit';
+    amountDueCents?: number;
+    confirmActiveLinkOverage?: boolean;
+    sameAmountMessage: (amount: number) => string;
+  }): Promise<OnlinePaymentLinkResponse> {
+    const amount = input.requestedAmountCents / 100;
+    const sameAmountSessions = await this.onlinePaymentsRepository.listForJobAmount({
+      jobId: input.jobId,
+      invoiceId: input.invoiceId,
       amount,
-      currency
+      currency: input.currency
     });
     const now = new Date();
     const activeSession = sameAmountSessions.find((session) => isActiveSession(session, now));
@@ -61,7 +150,7 @@ export class OnlinePaymentLinkService {
         checkoutUrl: activeSession.checkoutUrl,
         paymentSessionId: activeSession.relayPaymentSessionId,
         amount,
-        currency,
+        currency: input.currency,
         expiresAt: activeSession.expiresAt,
         reusedExisting: true
       };
@@ -70,14 +159,38 @@ export class OnlinePaymentLinkService {
     const hasPaidSameAmountSession = sameAmountSessions.some(
       (session) => session.status === 'paid'
     );
-    if (hasPaidSameAmountSession && request.confirmSameAmountCharge !== true) {
+    if (hasPaidSameAmountSession && input.request.confirmSameAmountCharge !== true) {
       return {
         state: 'confirmationRequired',
         code: 'sameAmountPreviouslyPaid',
         amount,
-        currency,
-        message: `This job already had an online card payment for ${formatMoney(amount)}. BellField still shows ${formatMoney(amount)} due.`
+        currency: input.currency,
+        message: input.sameAmountMessage(amount)
       };
+    }
+
+    if (input.amountDueCents !== undefined && !input.confirmActiveLinkOverage) {
+      const activeUnpaidCents =
+        await this.onlinePaymentsRepository.sumActiveCreatedSessionCentsForJob({
+          jobId: input.jobId,
+          currency: input.currency,
+          now
+        });
+      if (activeUnpaidCents + input.requestedAmountCents > input.amountDueCents) {
+        return {
+          state: 'confirmationRequired',
+          code: 'activeLinksMayExceedDue',
+          amount,
+          currency: input.currency,
+          message: `This job already has ${formatMoney(
+            activeUnpaidCents / 100
+          )} in active unpaid online payment links. Creating another ${formatMoney(
+            amount
+          )} link could let the customer pay more than the ${formatMoney(
+            input.amountDueCents / 100
+          )} currently due. Any overpayment will be held as job credit.`
+        };
+      }
     }
 
     const relay = getApiRuntimeConfig().relay;
@@ -92,15 +205,17 @@ export class OnlinePaymentLinkService {
     // still allowing a legitimate same-dollar charge after an earlier session
     // is paid or expired. The relay and Stripe both treat the full key as
     // opaque idempotency.
-    const idempotencyKey = `invoice-payment:${invoice.jobId}:${amountDueCents}:attempt-${sameAmountSessions.length + 1}`;
+    const idempotencyKey = `${input.idempotencyPrefix}:${input.jobId}:${input.idempotencySource}:${
+      input.requestedAmountCents
+    }:attempt-${sameAmountSessions.length + 1}`;
     const relayResponse = await this.requestRelayPaymentSession(relay, {
       idempotencyKey,
-      jobRef: invoice.jobId,
-      invoiceRef: invoice.id,
-      amountCents: amountDueCents,
-      currency,
-      description: `BellField invoice ${invoice.posted?.jobNumber ?? invoice.id}`,
-      customerEmail: request.customerEmail?.trim() || undefined
+      jobRef: input.jobId,
+      invoiceRef: input.invoiceId ?? undefined,
+      amountCents: input.requestedAmountCents,
+      currency: input.currency,
+      description: input.description,
+      customerEmail: input.request.customerEmail?.trim() || undefined
     });
 
     const result = relayResponse.result;
@@ -117,15 +232,16 @@ export class OnlinePaymentLinkService {
     }
 
     await this.onlinePaymentsRepository.recordCreated({
-      jobId: invoice.jobId,
-      invoiceId: invoice.id,
+      jobId: input.jobId,
+      invoiceId: input.invoiceId,
       relayPaymentSessionId: result.paymentSessionId,
       amount,
-      currency,
+      currency: input.currency,
       checkoutUrl: result.checkoutUrl,
-      createdByEmployeeId: actor.id,
-      createdByName: actor.displayName,
-      expiresAt: result.expiresAt
+      createdByEmployeeId: input.actor.id,
+      createdByName: input.actor.displayName,
+      expiresAt: result.expiresAt,
+      purpose: input.timelinePurpose
     });
 
     return {
@@ -133,7 +249,7 @@ export class OnlinePaymentLinkService {
       checkoutUrl: result.checkoutUrl,
       paymentSessionId: result.paymentSessionId,
       amount,
-      currency,
+      currency: input.currency,
       expiresAt: result.expiresAt
     };
   }
@@ -159,7 +275,7 @@ export class OnlinePaymentLinkService {
     payload: {
       idempotencyKey: string;
       jobRef: string;
-      invoiceRef: string;
+      invoiceRef?: string;
       amountCents: number;
       currency: string;
       description: string;
@@ -192,6 +308,13 @@ export class OnlinePaymentLinkService {
 
 function dollarsToCents(value: number): number {
   return Math.round(value * 100);
+}
+
+function isValidDollarAmountCents(value: number | undefined, cents: number): boolean {
+  if (value === undefined) {
+    return cents > 0;
+  }
+  return Number.isFinite(value) && value > 0 && Math.abs(value * 100 - cents) < 0.000001;
 }
 
 function isActiveSession(session: { status: string; expiresAt: string }, now: Date): boolean {

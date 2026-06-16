@@ -37,6 +37,7 @@ import {
 import {
   emptyPaymentDraft,
   PaymentsBlock,
+  type PaymentLinkDraft,
   type PaymentDraft,
   type RefundDraft
 } from './job-invoice-payments-block';
@@ -97,6 +98,7 @@ export function JobInvoiceCorrections({
     draft: InvoiceLineDraft;
   } | null>(null);
   const [paymentDraft, setPaymentDraft] = useState<PaymentDraft | null>(null);
+  const [paymentLinkDraft, setPaymentLinkDraft] = useState<PaymentLinkDraft | null>(null);
   const [refundDraft, setRefundDraft] = useState<RefundDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
@@ -286,43 +288,99 @@ export function JobInvoiceCorrections({
     }
   }
 
-  async function createPaymentLink() {
+  function startPaymentLink() {
     if (!balance || balance.amountDue <= 0) {
       setErrorMessage('This job does not have an outstanding balance.');
       return;
     }
+    setPaymentDraft(null);
+    setRefundDraft(null);
+    setPaymentLinkDraft({ amount: balance.amountDue.toFixed(2) });
+    setErrorMessage(null);
+  }
+
+  async function createPaymentLink() {
+    if (!paymentLinkDraft) return;
+    if (!balance || balance.amountDue <= 0) {
+      setErrorMessage('This job does not have an outstanding balance.');
+      return;
+    }
+    const requestedAmount = Number(paymentLinkDraft.amount);
+    const requestedAmountCents = Math.round(requestedAmount * 100);
+    if (
+      !Number.isFinite(requestedAmount) ||
+      requestedAmount <= 0 ||
+      Math.abs(requestedAmount * 100 - requestedAmountCents) > 0.000001
+    ) {
+      setErrorMessage('Enter a payment link amount greater than zero in dollars and cents.');
+      return;
+    }
+    const amountDueCents = Math.round(balance.amountDue * 100);
+    if (requestedAmountCents > amountDueCents) {
+      setErrorMessage(
+        `Payment link amount cannot exceed the ${formatCurrency(balance.amountDue)} currently due.`
+      );
+      return;
+    }
+    const amount = requestedAmountCents / 100;
     setIsCreatingPaymentLink(true);
     try {
-      let response = await requestPaymentLink(false);
-      if (response.state === 'confirmationRequired') {
-        const confirmed = window.confirm(
-          `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
-        );
-        if (!confirmed) {
+      const confirmations = {
+        confirmSameAmountCharge: false,
+        confirmActiveLinkOverage: false
+      };
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const response = await requestPaymentLink(confirmations, amount);
+        if (response.state === 'confirmationRequired') {
+          if (response.code === 'sameAmountPreviouslyPaid') {
+            const confirmed = window.confirm(
+              `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
+            );
+            if (!confirmed) {
+              return;
+            }
+            confirmations.confirmSameAmountCharge = true;
+            continue;
+          }
+          if (response.code === 'activeLinksMayExceedDue') {
+            const confirmed = window.confirm(
+              `${response.message}\n\nCreate this ${formatCurrency(
+                response.amount
+              )} payment link anyway?`
+            );
+            if (!confirmed) {
+              return;
+            }
+            confirmations.confirmActiveLinkOverage = true;
+            continue;
+          }
+          setErrorMessage(response.message ?? 'Online payment links are not available right now.');
           return;
         }
-        response = await requestPaymentLink(true);
-      }
-      if (response.state !== 'created') {
-        setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+        if (response.state !== 'created') {
+          setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+          return;
+        }
+        setOnlinePaymentLink(response);
+        setPaymentLinkDraft(null);
+        setErrorMessage(null);
+        let copied = false;
+        try {
+          await navigator.clipboard?.writeText(response.checkoutUrl);
+          copied = true;
+        } catch {
+          copied = false;
+        }
+        if (response.reusedExisting) {
+          setNoticeMessage(
+            copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
+          );
+        } else {
+          setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
+        }
         return;
       }
-      setOnlinePaymentLink(response);
-      setErrorMessage(null);
-      let copied = false;
-      try {
-        await navigator.clipboard?.writeText(response.checkoutUrl);
-        copied = true;
-      } catch {
-        copied = false;
-      }
-      if (response.reusedExisting) {
-        setNoticeMessage(
-          copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
-        );
-      } else {
-        setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
-      }
+      setErrorMessage('Online payment link confirmation could not be completed.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
@@ -330,10 +388,18 @@ export function JobInvoiceCorrections({
     }
   }
 
-  function requestPaymentLink(confirmSameAmountCharge: boolean) {
+  function requestPaymentLink(
+    confirmations: {
+      confirmSameAmountCharge: boolean;
+      confirmActiveLinkOverage: boolean;
+    },
+    amount: number
+  ) {
     return createOfficeOnlinePaymentLink({
       invoiceId: mainInvoiceId,
-      confirmSameAmountCharge: confirmSameAmountCharge || undefined,
+      amount,
+      confirmSameAmountCharge: confirmations.confirmSameAmountCharge || undefined,
+      ...(confirmations.confirmActiveLinkOverage ? { confirmActiveLinkOverage: true } : {}),
       apiBaseUrl,
       sessionToken
     });
@@ -561,9 +627,16 @@ export function JobInvoiceCorrections({
           isCreatingPaymentLink={isCreatingPaymentLink}
           amountDue={balance?.amountDue ?? 0}
           onlinePaymentLink={onlinePaymentLink}
+          paymentLinkDraft={paymentLinkDraft}
           paymentDraft={paymentDraft}
           refundDraft={refundDraft}
-          onStartRecord={() => setPaymentDraft(emptyPaymentDraft())}
+          onStartRecord={() => {
+            setPaymentLinkDraft(null);
+            setPaymentDraft(emptyPaymentDraft());
+          }}
+          onStartPaymentLink={startPaymentLink}
+          onCancelPaymentLink={() => setPaymentLinkDraft(null)}
+          onChangePaymentLinkDraft={setPaymentLinkDraft}
           onCreatePaymentLink={() => void createPaymentLink()}
           onCancelRecord={() => setPaymentDraft(null)}
           onChangeDraft={setPaymentDraft}

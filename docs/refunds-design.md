@@ -1,14 +1,12 @@
 # Refunds Design
 
 Status: manual install-side refund slice shipped (2026-06-14); online
-Stripe/relay refunds PR1 (the money path — relay + API pending model + worker
-apply/dead-letter) merged 2026-06-15. PR2 — the office Refund-on-card action,
-the pending/failed read model on the job-payments response, and the retry/poll
-UX — is built and unit-tested; the dated live Stripe sandbox smoke
-(`online-refund-live-smoke-2026-06-15.md`) is the remaining gate before it counts
-as shipped. Controlling doc for the refunds slice of the money-path-depth lane.
-Decisions confirmed with Rob via Q&A on 2026-06-14; PR1/PR2 build refinements on
-2026-06-15.
+Stripe/relay refunds shipped end to end on 2026-06-15, including the relay
+refund path, API pending model, worker apply/dead-letter, office Refund-on-card
+action, pending/failed read model, retry/poll UX, and the dated live Stripe
+sandbox smoke (`online-refund-live-smoke-2026-06-15.md`). Controlling doc for
+the refunds slice of the money-path-depth lane. Decisions confirmed with Rob via
+Q&A on 2026-06-14; online-refund build refinements on 2026-06-15.
 
 ## What this adds
 
@@ -22,9 +20,8 @@ ledger entries, exactly like payments.
 
 - **Scope of the full refunds lane:** online (Stripe) **and** manual refunds;
   full **or** partial amounts; gated behind a new `payments:refund` permission.
-  The shipped first implementation exposes manual full/partial refunds in the
-  office; online refunds are split into PR1 backend money path and PR2 office
-  surface/live proof.
+  The shipped implementation exposes manual full/partial refunds in the office
+  and provider-confirmed online refunds through the relay/API/worker/office flow.
 - **Application fee on a card refund:** refunded **proportionally**. When a shop
   refunds a customer's card payment, BellField returns its application fee for
   the refunded portion (Stripe `refund_application_fee` / proportional). The shop
@@ -157,14 +154,13 @@ money ledger the moment refunds are recordable.
    allocations into `payment_refund_allocations`.
 4. Job timeline entry: `paymentRefunded`, "Refund of $X recorded (method)."
 
-### Online (Stripe) refund (relay + worker) — SLICE 2, IN PROGRESS
+### Online (Stripe) refund (relay + worker) — SHIPPED
 
 Built around a real refund-event lifecycle (not a thin extension of the payment
-pipeline — `relay_payment_events` is payment-only and can't hold refunds). **Two
-PRs, split at the cross-app contract boundary** so nothing lands as unusable
-plumbing.
+pipeline — `relay_payment_events` is payment-only and can't hold refunds). The
+implementation landed in two layers split at the cross-app contract boundary.
 
-**PR 1 — foundation + money path, no office button (proven in tests):**
+**Layer 1 — foundation + money path, no office button (proven in tests):**
 
 - **Contracts** (`relay-delivery.ts`): `RelayCreateRefundRequest` /
   `RelayRefundResult` / `RelayRefundEventRecord` (status `succeeded|failed`); an
@@ -224,7 +220,7 @@ paymentsNotConfigured`. A `failed` request with `apply_attempt_count > 0` is
   event marks the request failed (+ `paymentRefundFailed` timeline) **without**
   writing a refund row. The refund poll **reuses the payment-event interval**.
 
-**PR 2 — office UI + live smoke:** enable Refund on card (`bellfieldPayments`)
+**Layer 2 — office UI + live smoke:** enable Refund on card (`bellfieldPayments`)
 payments with a **confirm dialog** ("Request a $X online refund?"), a "refund
 requested" pending state, duplicate-request blocking, and confirmed/failed
 display; dated Stripe sandbox smoke (card payment → partial + full refund →
@@ -243,7 +239,10 @@ are refundable only through this permission; they remain non-voidable.
 
 ## Non-goals (this slice)
 
-- Surcharge, deposits, partial-payment links — separate slices in the same lane.
+- Stored cards and processor-fee reconciliation beyond BellField's application
+  fee — separate slices in the same lane. Customer card surcharge /
+  processing-fee pass-through is intentionally not planned for v1 unless real
+  customer demand justifies a dedicated legal and card-network review.
 - Refunding an already-refunded amount beyond the original payment.
 - Voiding/reversing a refund.
 - Refund-specific customer email (the existing timeline + office surfaces cover

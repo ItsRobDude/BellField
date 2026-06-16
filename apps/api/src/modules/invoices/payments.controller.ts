@@ -7,7 +7,10 @@ import {
   VoidPaymentRequestBodyDto
 } from './payments.dto';
 import { OnlinePaymentLinkService } from './online-payment-link.service';
-import { CreateOnlinePaymentLinkRequestBodyDto } from './online-payment-link.dto';
+import {
+  CreateDepositPaymentLinkRequestBodyDto,
+  CreateOnlinePaymentLinkRequestBodyDto
+} from './online-payment-link.dto';
 import { OnlineRefundService } from './online-refund.service';
 import { RequestOnlineRefundBodyDto } from './online-refund.dto';
 
@@ -23,6 +26,26 @@ export class JobPaymentsController {
     @Param('jobId') jobId: string
   ) {
     return this.paymentsService.getJobPayments(getBearerToken(authorizationHeader), jobId);
+  }
+}
+
+// Deposit links are job-level: they can be collected before an invoice is posted
+// and land as unallocated job credit until there are posted charges to apply.
+@Controller('operations/jobs/:jobId/payments')
+export class JobPaymentLinksController {
+  constructor(private readonly onlinePaymentLinkService: OnlinePaymentLinkService) {}
+
+  @Post('deposit-link')
+  async createDepositPaymentLink(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('jobId') jobId: string,
+    @Body() request: CreateDepositPaymentLinkRequestBodyDto
+  ) {
+    return this.onlinePaymentLinkService.createDepositPaymentLink(
+      getBearerToken(authorizationHeader),
+      jobId,
+      request
+    );
   }
 }
 

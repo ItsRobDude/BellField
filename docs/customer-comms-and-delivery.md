@@ -62,10 +62,11 @@ Estimate PDF email delivery has shipped and rides the production relay with
 queue/retry/cancel semantics (status stamps in §10). Estimate acceptance links
 have also shipped: the relay hosts the public decision page and the worker
 polls decisions back into the self-hosted install. The first payment-link slice
-has shipped too: the office can create a full-balance Stripe Checkout link for a
-posted invoice, the relay receives Stripe webhooks, and the worker records
-confirmed payments locally. This document continues to define the guardrails for
-the next delivery slices.
+has shipped too: the office can create a Stripe Checkout link for a posted
+invoice, defaulting to the full amount due while allowing a smaller amount, and
+can create a job-level deposit link before posting; the relay receives Stripe
+webhooks, and the worker records confirmed payments locally. This document
+continues to define the guardrails for the next delivery slices.
 
 ---
 
@@ -318,7 +319,7 @@ retry/expiry/status-poll jobs.
   per-send overrides still available from the invoice send preview
 - when the owner enables the `includeInvoicePaymentLink` setting, sending a
   posted **main** invoice with an outstanding balance appends an online pay-now
-  link (the existing full-balance link) to the email body. The link is minted
+  link (the default full-due link) to the email body. The link is minted
   only after the send is reserved and the PDF renders, and the invoice send is
   never blocked if the link cannot be created (no balance, payments not
   configured, same-amount confirmation, etc.). Credits/adjustments/zero-balance
@@ -334,31 +335,49 @@ The controlling design is [acceptance-links-design.md](./acceptance-links-design
   immutable estimate version are preserved
 - office still controls scheduling and conversion
 
-### Phase 5 - Payment Links — FIRST SLICE SHIPPED
+### Phase 5 - Payment Links — SHIPPED, WITH DEPOSIT CREDIT
 
-- payment links are allowed only for posted invoices
+- invoice payment links are allowed only for posted invoices; deposit links are job-level credits
 - payments are recorded from confirmed gateway state
 - BellField stores provider reference and operational result
 - payments remain online-only in v1
 
-Shipped 2026-06-13: full-balance Stripe Checkout links through the BellField
-relay, Stripe webhook intake on the relay, install worker poll/ack for confirmed
-payment events, and local append-only job-level payment records with
-auto-allocation across posted charge invoices. Payment-link idempotency is now
-per `(job, amount, attempt)`: active unpaid links are reused locally, and a
-same-dollar repeat after a prior online card payment requires office
-confirmation before BellField creates the next Stripe Checkout attempt. Manual
-full/partial refunds for manually recorded payments have also shipped on the
-office invoice tab; they are append-only, permission-gated, and raise amount due
-through refund allocations.
+Shipped 2026-06-13 and expanded afterward: Stripe Checkout links through the
+BellField relay, Stripe webhook intake on the relay, install worker poll/ack for
+confirmed payment events, and local append-only job-level payment records with
+auto-allocation across posted charge invoices. Office users can now choose an
+amount up to the current amount due; leaving the default collects the full due
+balance. Payment-link idempotency is per `(job, source, amount, attempt)`:
+invoice links include the initiating invoice id and deposit links use a deposit
+source. Active unpaid links are reused locally, a same-dollar repeat after a
+prior online card payment requires office confirmation before BellField creates
+the next Stripe Checkout attempt, and invoice links that could overexpose the
+current amount due because other unpaid links are still active require explicit
+office confirmation. A dated live Stripe sandbox smoke passed for amount-scoped
+invoice links, deposit links, active-link overage confirmation, worker
+payment-event apply, and local ledger/balance readback on 2026-06-15 Pacific /
+2026-06-16 UTC. Manual full/partial refunds for manually recorded payments have
+also shipped on the office invoice tab; they are append-only, permission-gated,
+and raise amount due through refund allocations.
+
+Deposit links have now shipped as a separate job-level path: the draft invoice
+surface can create a Stripe Checkout deposit link for an explicit amount, and a
+confirmed deposit records as an unallocated job payment/credit. The job balance
+reflects that credit immediately, including before the invoice posts. Per-invoice
+allocation of pre-post deposits remains intentionally deferred; the credit is
+still visible and safe because amount due is job-level. Deposit links are
+explicit payment links: the customer sees the deposit amount in Stripe Checkout
+before paying. BellField does not add deposit-rule enforcement in this slice.
 
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
-display. The dated live Stripe sandbox smoke is the remaining gate. Still
-deferred: deposits, partial payments, stored cards, customer surcharge logic,
-customer refund receipts, and processor-fee reconciliation beyond BellField's
-application fee.
+display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
+2026-06-16 UTC. Still deferred: stored cards, customer payment/refund receipts,
+per-invoice allocation of pre-post deposits, and processor-fee reconciliation
+beyond BellField's application fee. Customer card surcharge / processing-fee
+pass-through is intentionally not planned for v1 unless real customer demand
+justifies a dedicated legal and card-network review.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

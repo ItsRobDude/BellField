@@ -13,6 +13,7 @@ import { InvoicesService } from './invoices.service';
 import { InvoiceDeliveryService } from './invoice-delivery.service';
 import {
   InvoicePaymentsController,
+  JobPaymentLinksController,
   JobPaymentsController,
   PaymentController
 } from './payments.controller';
@@ -35,6 +36,7 @@ import { OnlineRefundsRepository } from './online-refunds.repository';
     InvoiceLineController,
     InvoiceController,
     JobPaymentsController,
+    JobPaymentLinksController,
     InvoicePaymentsController,
     PaymentController
   ],

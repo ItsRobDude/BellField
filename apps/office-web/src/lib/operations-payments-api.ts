@@ -1,5 +1,6 @@
 import type {
   CreateOnlinePaymentLinkRequest,
+  CreateDepositPaymentLinkRequest,
   JobPaymentsResponse,
   OnlinePaymentLinkResponse,
   OnlineRefundRequest,
@@ -41,7 +42,7 @@ export async function recordOfficePayment(
   });
 }
 
-/** Create a Stripe-hosted payment link for the full outstanding job balance. */
+/** Create a Stripe-hosted payment link, defaulting to the full current amount due. */
 export async function createOfficeOnlinePaymentLink(
   input: CreateOnlinePaymentLinkRequest & {
     invoiceId: string;
@@ -60,6 +61,24 @@ export async function createOfficeOnlinePaymentLink(
       body: JSON.stringify(payload)
     }
   );
+}
+
+/** Create a Stripe-hosted deposit link for job credit before invoicing. */
+export async function createOfficeDepositPaymentLink(
+  input: CreateDepositPaymentLinkRequest & {
+    jobId: string;
+    sessionToken: string;
+    apiBaseUrl?: string;
+  }
+): Promise<OnlinePaymentLinkResponse> {
+  const { jobId, sessionToken, apiBaseUrl, ...payload } = input;
+
+  return requestJson<OnlinePaymentLinkResponse>(`/operations/jobs/${jobId}/payments/deposit-link`, {
+    apiBaseUrl,
+    sessionToken,
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
 }
 
 /** Void a payment by id (the correction path; payments are never edited in place). */

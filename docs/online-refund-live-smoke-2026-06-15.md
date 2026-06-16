@@ -122,4 +122,6 @@ Operational notes from the run:
 
 - production/live-money refund (sandbox only)
 - refund of a refund / reversal
-- deposits, partial-payment links, stored cards, surcharge, customer refund receipt
+- stored cards and customer refund receipt. Customer surcharge / processing-fee
+  pass-through is intentionally not planned for v1 unless real customer demand
+  justifies a dedicated legal and card-network review.

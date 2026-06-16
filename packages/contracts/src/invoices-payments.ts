@@ -292,6 +292,16 @@ export type OnlinePaymentLinkState =
 
 export interface CreateOnlinePaymentLinkRequest {
   customerEmail?: string;
+  /** Positive dollar amount to collect. Defaults to the full current amount due. */
+  amount?: number;
+  confirmSameAmountCharge?: boolean;
+  confirmActiveLinkOverage?: boolean;
+}
+
+export interface CreateDepositPaymentLinkRequest {
+  customerEmail?: string;
+  /** Positive dollar amount to collect as job credit before invoicing. */
+  amount: number;
   confirmSameAmountCharge?: boolean;
 }
 
@@ -307,7 +317,7 @@ export type OnlinePaymentLinkResponse =
     }
   | {
       state: 'confirmationRequired';
-      code: 'sameAmountPreviouslyPaid';
+      code: 'sameAmountPreviouslyPaid' | 'activeLinksMayExceedDue';
       amount: number;
       currency: string;
       message: string;

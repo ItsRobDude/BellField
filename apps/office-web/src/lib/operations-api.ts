@@ -995,6 +995,7 @@ export {
   listOfficeJobPayments,
   recordOfficePayment,
   createOfficeOnlinePaymentLink,
+  createOfficeDepositPaymentLink,
   voidOfficePayment,
   refundOfficePayment,
   requestOfficeOnlineRefund

@@ -31,8 +31,10 @@ Still not claimed:
 - real merchant onboarding for a production customer
 - production/live-money payment run
 - custom-domain sending
-- refunds, deposits, stored cards, partial-payment logic, surcharge logic, SMS,
-  reminders, or field-mobile send UI
+- refunds, deposits, stored cards, partial-payment logic, SMS, reminders, or
+  field-mobile send UI. Customer surcharge / processing-fee pass-through is
+  intentionally not planned for v1 unless real customer demand justifies a
+  dedicated legal and card-network review.
 
 ## Environment
 

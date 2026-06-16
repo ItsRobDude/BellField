@@ -21,6 +21,7 @@ vi.mock('@/lib/operations-api', () => ({
   postOfficeInvoiceById: vi.fn(),
   listOfficeJobPayments: vi.fn(),
   createOfficeOnlinePaymentLink: vi.fn(),
+  createOfficeDepositPaymentLink: vi.fn(),
   recordOfficePayment: vi.fn(),
   voidOfficePayment: vi.fn(),
   refundOfficePayment: vi.fn(),
@@ -63,6 +64,14 @@ beforeEach(() => {
     checkoutUrl: 'https://checkout.stripe.test/pay/cs_123',
     paymentSessionId: 'pay_sess_123',
     amount: 250,
+    currency: 'USD',
+    expiresAt: '2026-06-14T00:00:00.000Z'
+  });
+  mockedApi.createOfficeDepositPaymentLink.mockResolvedValue({
+    state: 'created',
+    checkoutUrl: 'https://checkout.stripe.test/pay/deposit_123',
+    paymentSessionId: 'pay_sess_deposit_123',
+    amount: 100,
     currency: 'USD',
     expiresAt: '2026-06-14T00:00:00.000Z'
   });
@@ -301,6 +310,83 @@ describe('JobInvoiceSection posting', () => {
     expect(screen.queryByRole('button', { name: 'Email invoice' })).not.toBeInTheDocument();
   });
 
+  it('creates a job-level deposit link before the invoice is posted', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+
+    renderSection(true, { customerEmail: 'billing@example.com' });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create deposit link' }));
+    fireEvent.change(await screen.findByLabelText('Deposit amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create deposit link' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeDepositPaymentLink).toHaveBeenCalledWith({
+        jobId: 'job-1',
+        amount: 100,
+        customerEmail: 'billing@example.com',
+        confirmSameAmountCharge: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/deposit_123')
+    ).toBeInTheDocument();
+  });
+
+  it('shows unallocated deposit credit on a draft invoice', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'draft',
+      postedMainTotal: 0,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 0,
+      paidTotal: 100,
+      refundedTotal: 0,
+      amountDue: -100
+    });
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [
+        manualPayment({
+          id: 'pay-deposit',
+          invoiceId: undefined,
+          amount: 100,
+          source: 'bellfieldPayments',
+          provider: 'stripe',
+          providerPaymentId: 'pi_deposit',
+          providerSessionId: 'pay_sess_deposit',
+          allocations: []
+        })
+      ],
+      refunds: [],
+      onlineRefundRequests: []
+    });
+
+    renderSection(true);
+
+    expect(await screen.findByText('Job credit')).toBeInTheDocument();
+    expect(
+      await screen.findByText('$100.00 - Online card - unallocated credit')
+    ).toBeInTheDocument();
+  });
+
+  it('hides draft deposits without payment view permission', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+
+    renderSection(true, { paymentPermissions: { canView: false } });
+
+    expect(
+      await screen.findByText(
+        'This draft is empty. Register work and converted estimates appear here.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create deposit link' })).not.toBeInTheDocument();
+  });
+
   it('previews and sends a posted invoice email with the bill-to email default', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     vi.spyOn(window, 'confirm').mockReturnValue(true);
@@ -467,7 +553,7 @@ describe('JobInvoiceSection posting', () => {
     expect(await screen.findByText('Queued email canceled.')).toBeInTheDocument();
   });
 
-  it('creates a full-balance online payment link from the posted invoice screen', async () => {
+  it('creates a default full-due online payment link from the posted invoice screen', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
       jobId: 'job-1',
@@ -484,10 +570,14 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    expect(await screen.findByLabelText('Payment link amount')).toHaveValue(250);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
 
     await waitFor(() =>
       expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
         invoiceId: 'inv-1',
+        amount: 250,
         confirmSameAmountCharge: undefined,
         apiBaseUrl: 'http://localhost',
         sessionToken: 'test-token'
@@ -495,6 +585,50 @@ describe('JobInvoiceSection posting', () => {
     );
     expect(
       await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_123')
+    ).toBeInTheDocument();
+  });
+
+  it('creates a partial online payment link from the posted invoice screen', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'created',
+      checkoutUrl: 'https://checkout.stripe.test/pay/cs_partial',
+      paymentSessionId: 'pay_sess_partial',
+      amount: 125,
+      currency: 'USD',
+      expiresAt: '2026-06-14T00:00:00.000Z'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Payment link amount'), {
+      target: { value: '125' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
+        invoiceId: 'inv-1',
+        amount: 125,
+        confirmSameAmountCharge: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_partial')
     ).toBeInTheDocument();
   });
 
@@ -529,6 +663,7 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
     expect(
       await screen.findByDisplayValue('https://checkout.stripe.test/pay/reused')
@@ -573,6 +708,7 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
     expect(window.confirm).toHaveBeenCalledWith(
@@ -580,12 +716,14 @@ describe('JobInvoiceSection posting', () => {
     );
     expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(1, {
       invoiceId: 'inv-1',
+      amount: 250,
       confirmSameAmountCharge: undefined,
       apiBaseUrl: 'http://localhost',
       sessionToken: 'test-token'
     });
     expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(2, {
       invoiceId: 'inv-1',
+      amount: 250,
       confirmSameAmountCharge: true,
       apiBaseUrl: 'http://localhost',
       sessionToken: 'test-token'
@@ -621,6 +759,100 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
+    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
+  });
+
+  it('confirms when active unpaid links could exceed the amount due', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.createOfficeOnlinePaymentLink
+      .mockResolvedValueOnce({
+        state: 'confirmationRequired',
+        code: 'activeLinksMayExceedDue',
+        amount: 100,
+        currency: 'USD',
+        message:
+          'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.'
+      })
+      .mockResolvedValueOnce({
+        state: 'created',
+        checkoutUrl: 'https://checkout.stripe.test/pay/cs_overage',
+        paymentSessionId: 'pay_sess_overage',
+        amount: 100,
+        currency: 'USD',
+        expiresAt: '2026-06-14T00:00:00.000Z'
+      });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Payment link amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
+    expect(window.confirm).toHaveBeenCalledWith(
+      'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.\n\nCreate this $100.00 payment link anyway?'
+    );
+    expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(2, {
+      invoiceId: 'inv-1',
+      amount: 100,
+      confirmSameAmountCharge: undefined,
+      confirmActiveLinkOverage: true,
+      apiBaseUrl: 'http://localhost',
+      sessionToken: 'test-token'
+    });
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_overage')
+    ).toBeInTheDocument();
+  });
+
+  it('does not create an overexposed active-link payment when confirmation is dismissed', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'confirmationRequired',
+      code: 'activeLinksMayExceedDue',
+      amount: 100,
+      currency: 'USD',
+      message:
+        'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Payment link amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
 
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
     expect(window.confirm).toHaveBeenCalledTimes(1);
