@@ -178,6 +178,7 @@ export type PaymentPurpose = 'payment' | 'deposit';
 export interface PaymentAllocation {
   invoiceId: string;
   invoiceKind: InvoiceKind;
+  invoiceNumber?: string;
   amount: number;
 }
 
@@ -238,6 +239,7 @@ export interface PaymentResponse {
 export interface PaymentRefundAllocation {
   invoiceId: string;
   invoiceKind: InvoiceKind;
+  invoiceNumber?: string;
   amount: number;
 }
 

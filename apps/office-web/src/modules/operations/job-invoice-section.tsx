@@ -545,6 +545,7 @@ export function JobInvoiceSection({
         <JobInvoiceCorrections
           jobId={jobId}
           mainInvoiceId={invoice.id}
+          mainInvoiceNumber={invoice.invoiceNumber}
           apiBaseUrl={apiBaseUrl}
           sessionToken={sessionToken}
           canEdit={canEdit}

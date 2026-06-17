@@ -21,6 +21,12 @@ type OnlinePaymentSessionRow = {
   purpose: 'payment' | 'deposit';
 };
 
+type SourceInvoiceRow = {
+  jobId: string;
+  status: string;
+  invoiceKind: string;
+};
+
 type ChargeInvoiceRow = {
   invoiceId: string;
   invoiceKind: 'main' | 'adjustment';
@@ -61,7 +67,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
             session.currency.toUpperCase() !== event.currency.trim().toUpperCase())
       );
       const jobId = sessionMismatch ? event.jobRef : (session?.jobId ?? event.jobRef);
-      const invoiceId = sessionMismatch ? null : (session?.invoiceId ?? null);
+      const candidateInvoiceId = sessionMismatch ? null : (session?.invoiceId ?? null);
       // Purpose is durable business meaning carried from the link; a missing session
       // (out-of-band confirmation) defaults to an ordinary payment. An amount/currency
       // mismatch doesn't change WHAT the money was collected as, so keep the session's.
@@ -79,6 +85,11 @@ export class PaymentEventsRepository implements PaymentEventsStore {
 
       await this.lockJob(tx, jobId);
       await this.lockPostedInvoicesForJob(tx, jobId);
+      const invoiceId = await this.resolveSourceInvoiceId(tx, {
+        paymentSessionId: event.paymentSessionId,
+        jobId,
+        invoiceId: candidateInvoiceId
+      });
 
       const paymentId = randomUUID();
       await tx.query(
@@ -112,6 +123,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         tx,
         paymentId,
         jobId,
+        invoiceId,
         event.amountCents,
         occurredAt
       );
@@ -212,6 +224,43 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     );
   }
 
+  private async resolveSourceInvoiceId(
+    tx: PaymentEventsQueryExecutor,
+    input: { paymentSessionId: string; jobId: string; invoiceId: string | null }
+  ): Promise<string | null> {
+    if (!input.invoiceId) {
+      return null;
+    }
+
+    const result = await tx.query<SourceInvoiceRow>(
+      `select job_id as "jobId", status, invoice_kind as "invoiceKind"
+       from invoices
+       where id = $1
+       limit 1`,
+      [input.invoiceId]
+    );
+    const invoice = result.rows[0];
+    if (
+      invoice &&
+      invoice.jobId === input.jobId &&
+      invoice.status === 'posted' &&
+      (invoice.invoiceKind === 'main' || invoice.invoiceKind === 'adjustment')
+    ) {
+      return input.invoiceId;
+    }
+
+    workerLog('warn', 'Online payment session source invoice is no longer payable.', {
+      paymentSessionId: input.paymentSessionId,
+      jobId: input.jobId,
+      invoiceId: input.invoiceId,
+      invoiceJobId: invoice?.jobId ?? null,
+      invoiceStatus: invoice?.status ?? 'missing',
+      invoiceKind: invoice?.invoiceKind ?? null,
+      fallback: 'job-level'
+    });
+    return null;
+  }
+
   private async markOnlinePaymentSessionPaid(
     tx: PaymentEventsQueryExecutor,
     relayPaymentSessionId: string,
@@ -273,12 +322,13 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     tx: PaymentEventsQueryExecutor,
     paymentId: string,
     jobId: string,
+    sourceInvoiceId: string | null,
     paymentCents: number,
     occurredAt: Date
   ): Promise<number> {
     const [chargeRows, creditTotalCents, activePaidBeforeThisCents, refundedBeforeThisCents] =
       await Promise.all([
-        this.listPostedChargeInvoiceBalances(tx, jobId),
+        this.listPostedChargeInvoiceBalances(tx, jobId, sourceInvoiceId),
         this.sumPostedCreditCentsForJob(tx, jobId),
         this.sumActivePaymentCentsForJob(tx, jobId, paymentId),
         this.sumRefundCentsForJob(tx, jobId)
@@ -335,7 +385,8 @@ export class PaymentEventsRepository implements PaymentEventsStore {
 
   private async listPostedChargeInvoiceBalances(
     tx: PaymentEventsQueryExecutor,
-    jobId: string
+    jobId: string,
+    sourceInvoiceId: string | null
   ): Promise<Array<ChargeInvoiceRow & { remainingCents: number }>> {
     const result = await tx.query<ChargeInvoiceRow>(
       `with active_allocations as (
@@ -358,14 +409,15 @@ export class PaymentEventsRepository implements PaymentEventsStore {
        from invoices i
        left join active_allocations aa on aa.invoice_id = i.id
        left join refunded_allocations ra on ra.invoice_id = i.id
-       where i.job_id = $1
-         and i.status = 'posted'
-         and i.invoice_kind in ('main', 'adjustment')
-       order by
-         case when i.invoice_kind = 'main' then 0 else 1 end,
-         i.posted_at asc nulls last,
-         i.id asc`,
-      [jobId]
+        where i.job_id = $1
+          and i.status = 'posted'
+          and i.invoice_kind in ('main', 'adjustment')
+        order by
+          case when $2::text is not null and i.id = $2 then 0 else 1 end,
+          case when i.invoice_kind = 'main' then 0 else 1 end,
+          i.posted_at asc nulls last,
+          i.id asc`,
+      [jobId, sourceInvoiceId]
     );
     return result.rows
       .map((row) => ({

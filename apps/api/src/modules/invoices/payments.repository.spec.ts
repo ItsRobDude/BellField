@@ -65,7 +65,7 @@ const INVOICE_READ = /from invoices where id = \$1 limit 1(?! for update)/i;
 const JOB_LOCK = /select id from jobs where id = \$1 for update/i;
 const POSTED_SET_LOCK = /select id from invoices\s+where job_id = \$1 and status = 'posted'/i;
 const TIMELINE_INSERT = /insert into job_timeline_entries/i;
-const ALLOCATION_SELECT = /from payment_allocations pa\s+join invoices i/i;
+const ALLOCATION_SELECT = /from payment_allocations pa[\s\S]+join invoices i/i;
 const RECEIPT_ENQUEUE = /insert into payment_receipt_messages/i;
 
 describe('PaymentsRepository.recordDeposit', () => {
@@ -113,14 +113,17 @@ describe('PaymentsRepository.recordDeposit', () => {
     expect(receiptEnqueue?.params).toContain('deposit');
   });
 
-  it('allocates a deposit to posted charges when they exist', async () => {
+  it('allocates a deposit to posted charges main-first when they exist', async () => {
     const { repository, calls } = repositoryWith([
       { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
       { match: POSTED_SET_LOCK, rows: [] },
       { match: /insert into payments/i, rowCount: 1 },
       {
         match: /from invoices i\s+left join active_allocations/i,
-        rows: [{ invoiceId: 'inv-main', invoiceKind: 'main', total: '300.00', allocated: '0.00' }]
+        rows: [
+          { invoiceId: 'inv-main', invoiceKind: 'main', total: '75.00', allocated: '0.00' },
+          { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' }
+        ]
       },
       { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
       { match: /and id <> \$2/i, rows: [{ cents: 0 }] },
@@ -135,11 +138,15 @@ describe('PaymentsRepository.recordDeposit', () => {
       { match: ALLOCATION_SELECT, rows: [] }
     ]);
 
-    await repository.recordDeposit('job-1', { ...depositInput, amount: 200 });
+    await repository.recordDeposit('job-1', { ...depositInput, amount: 100 });
 
-    const allocation = findCall(calls, /insert into payment_allocations/i);
-    expect(allocation?.params).toContain('inv-main');
-    expect(allocation?.params).toContain(200);
+    const balanceSelect = findCall(calls, /from invoices i\s+left join active_allocations/i);
+    expect(balanceSelect?.sql).toMatch(/case when \$2::text is not null and i\.id = \$2/i);
+    expect(balanceSelect?.params).toEqual(['job-1', null]);
+    const allocations = calls.filter((c) => /insert into payment_allocations/i.test(c.sql));
+    expect(allocations).toHaveLength(2);
+    expect(allocations[0].params).toEqual(expect.arrayContaining(['inv-main', 75]));
+    expect(allocations[1].params).toEqual(expect.arrayContaining(['inv-adj', 25]));
   });
 
   it('throws NotFound for an unknown job before writing', async () => {
@@ -253,6 +260,150 @@ describe('PaymentsRepository.recordPayment', () => {
     await expect(
       repository.recordPayment('inv-cred', { amount: 50, method: 'cash', receivedAt: 'x', actor })
     ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('allocates an adjustment-scoped payment to the adjustment first', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: INVOICE_READ,
+        rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'adjustment' }]
+      },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      {
+        match: /from invoices i\s+left join active_allocations/i,
+        rows: [
+          { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' },
+          { invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' }
+        ]
+      },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      { match: /and id <> \$2/i, rows: [{ cents: 0 }] },
+      { match: /insert into payment_allocations/i, rowCount: 1 },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      {
+        match: /from payments where id = \$1/i,
+        rows: [{ ...PAYMENT_ROW, invoiceId: 'inv-adj', amount: '40.00' }]
+      },
+      {
+        match: ALLOCATION_SELECT,
+        rows: [
+          {
+            paymentId: 'pay-1',
+            invoiceId: 'inv-adj',
+            invoiceKind: 'adjustment',
+            invoiceNumber: 'ADJ-1002',
+            amount: '40.00'
+          }
+        ]
+      }
+    ]);
+
+    const result = await repository.recordPayment('inv-adj', {
+      amount: 40,
+      method: 'card',
+      receivedAt: '2026-06-03T00:00:00.000Z',
+      actor
+    });
+
+    const balanceSelect = findCall(calls, /from invoices i\s+left join active_allocations/i);
+    expect(balanceSelect?.params).toEqual(['job-1', 'inv-adj']);
+    const allocations = calls.filter((c) => /insert into payment_allocations/i.test(c.sql));
+    expect(allocations).toHaveLength(1);
+    expect(allocations[0].params).toEqual(expect.arrayContaining(['inv-adj', 40]));
+    const hydrateSelect = findCall(calls, ALLOCATION_SELECT);
+    expect(hydrateSelect?.sql).toMatch(/join payments p on p\.id = pa\.payment_id/i);
+    expect(hydrateSelect?.sql).toMatch(
+      /case when p\.invoice_id is not null and i\.id = p\.invoice_id/i
+    );
+    expect(result.allocations[0]).toMatchObject({
+      invoiceId: 'inv-adj',
+      invoiceKind: 'adjustment',
+      invoiceNumber: 'ADJ-1002',
+      amount: 40
+    });
+  });
+
+  it('spills an adjustment-scoped payment to main after the source invoice is paid', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: INVOICE_READ,
+        rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'adjustment' }]
+      },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      {
+        match: /from invoices i\s+left join active_allocations/i,
+        rows: [
+          { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' },
+          { invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' }
+        ]
+      },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      { match: /and id <> \$2/i, rows: [{ cents: 0 }] },
+      { match: /insert into payment_allocations/i, rowCount: 1 },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      {
+        match: /from payments where id = \$1/i,
+        rows: [{ ...PAYMENT_ROW, invoiceId: 'inv-adj', amount: '125.00' }]
+      },
+      { match: ALLOCATION_SELECT, rows: [] }
+    ]);
+
+    await repository.recordPayment('inv-adj', {
+      amount: 125,
+      method: 'card',
+      receivedAt: '2026-06-03T00:00:00.000Z',
+      actor
+    });
+
+    const allocations = calls.filter((c) => /insert into payment_allocations/i.test(c.sql));
+    expect(allocations).toHaveLength(2);
+    expect(allocations[0].params).toEqual(expect.arrayContaining(['inv-adj', 50]));
+    expect(allocations[1].params).toEqual(expect.arrayContaining(['inv-main', 75]));
+  });
+
+  it('falls back to main-first when the source invoice is already fully paid', async () => {
+    const { repository, calls } = repositoryWith([
+      {
+        match: INVOICE_READ,
+        rows: [{ jobId: 'job-1', status: 'posted', invoiceKind: 'adjustment' }]
+      },
+      { match: JOB_LOCK, rows: [{ id: 'job-1' }] },
+      { match: POSTED_SET_LOCK, rows: [] },
+      { match: /insert into payments/i, rowCount: 1 },
+      {
+        match: /from invoices i\s+left join active_allocations/i,
+        rows: [
+          { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '50.00' },
+          { invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' }
+        ]
+      },
+      { match: /and invoice_kind = 'credit'/i, rows: [{ cents: 0 }] },
+      { match: /and id <> \$2/i, rows: [{ cents: 5000 }] },
+      { match: /insert into payment_allocations/i, rowCount: 1 },
+      { match: TIMELINE_INSERT, rowCount: 1 },
+      {
+        match: /from payments where id = \$1/i,
+        rows: [{ ...PAYMENT_ROW, invoiceId: 'inv-adj', amount: '75.00' }]
+      },
+      { match: ALLOCATION_SELECT, rows: [] }
+    ]);
+
+    await repository.recordPayment('inv-adj', {
+      amount: 75,
+      method: 'card',
+      receivedAt: '2026-06-03T00:00:00.000Z',
+      actor
+    });
+
+    const balanceSelect = findCall(calls, /from invoices i\s+left join active_allocations/i);
+    expect(balanceSelect?.params).toEqual(['job-1', 'inv-adj']);
+    const allocations = calls.filter((c) => /insert into payment_allocations/i.test(c.sql));
+    expect(allocations).toHaveLength(1);
+    expect(allocations[0].params).toEqual(expect.arrayContaining(['inv-main', 75]));
   });
 
   it('allocates a re-payment after a full refund (refund-aware net-due cap)', async () => {
@@ -464,6 +615,33 @@ describe('PaymentsRepository.refundPayment', () => {
     expect(receiptEnqueue?.sql).toMatch(/'refundReceipt'/);
     expect(receiptEnqueue?.params).toContain(170); // amount
     expect(receiptEnqueue?.params?.[2]).toBe(refundInsert?.params?.[0]); // payment_refund_id
+  });
+
+  it('keeps refund reversal main-first for adjustment-sourced payments until source-aware refunds ship', async () => {
+    const { repository, calls } = repositoryWith(
+      refundHandlers({
+        allocations: [
+          { invoiceId: 'inv-main', allocatedCents: '15000', refundedCents: '0' },
+          { invoiceId: 'inv-adj', allocatedCents: '5000', refundedCents: '0' }
+        ]
+      })
+    );
+
+    await repository.refundPayment('pay-1', {
+      amount: 170,
+      reason: 'returned',
+      actor
+    });
+
+    const reversalSelect = findCall(calls, REVERSAL_SELECT);
+    expect(reversalSelect?.sql).toMatch(/case when i\.invoice_kind = 'main' then 0 else 1 end/i);
+    expect(reversalSelect?.sql).not.toMatch(/p\.invoice_id/i);
+    // Even though source-first payments may have paid the adjustment first, refunds
+    // remain job-level/main-first until the explicit refund-allocation slice.
+    const allocInserts = calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql));
+    expect(allocInserts).toHaveLength(2);
+    expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-main', 150]));
+    expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
   });
 
   it('refunds a manual deposit (no allocations) — records the refund, reverses nothing', async () => {

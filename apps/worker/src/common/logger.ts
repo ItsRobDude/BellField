@@ -30,7 +30,7 @@ function sanitizeContext(context: WorkerLogContext | undefined): WorkerLogContex
 }
 
 export function workerLog(
-  level: 'info' | 'error',
+  level: 'info' | 'warn' | 'error',
   message: string,
   context?: WorkerLogContext
 ): void {
@@ -45,6 +45,10 @@ export function workerLog(
   // Future structured logging can swap this console transport for external sinks.
   if (level === 'error') {
     console.error(entry);
+    return;
+  }
+  if (level === 'warn') {
+    console.warn(entry);
     return;
   }
 
