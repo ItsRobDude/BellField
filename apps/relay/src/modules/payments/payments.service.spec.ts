@@ -227,6 +227,7 @@ function paidSession(overrides?: Partial<RelayPaymentSessionRecord>): RelayPayme
 describe('RelayPaymentsService.createPaymentSession', () => {
   beforeEach(() => {
     process.env.BELLFIELD_RELAY_PUBLIC_BASE_URL = 'https://relay.example';
+    delete process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS;
   });
 
   it('mints success/cancel URLs from the relay public base, not from the install', async () => {
@@ -243,6 +244,16 @@ describe('RelayPaymentsService.createPaymentSession', () => {
     expect(ctx.getRecordSessionInput()?.successUrl).toBe(
       'https://relay.example/payment-return/success'
     );
+  });
+
+  it('creates free-account sessions with no BellField platform fee', async () => {
+    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '0';
+    const ctx = makeService();
+    const result = await ctx.service.createPaymentSession(shop, baseRequest);
+
+    expect(result.kind).toBe('created');
+    expect(ctx.getCreateCheckoutInput()?.applicationFeeCents).toBe(0);
+    expect(ctx.getRecordSessionInput()?.applicationFeeCents).toBe(0);
   });
 
   it('rejects a non-positive amount before touching Stripe', async () => {
