@@ -86,11 +86,12 @@ Reverses the original payment's allocations so per-invoice balances stay exact.
 - `created_at timestamptz not null`
 - unique `(refund_id, invoice_id)`
 
-At refund time we walk the payment's existing allocations **main-first** (same
-order auto-allocation uses) and reverse up to the refund amount, producing one
-refund-allocation per touched invoice. A full refund reverses all of the
-payment's allocations; a partial refund reverses the first N dollars. This keeps
-the reversal deterministic and explainable.
+At refund time we walk the payment's existing allocations source-invoice-first
+when `payments.invoice_id` is present, then fall back to the job-level
+main-first order. Null-source deposits/payments keep the job-level/main-first
+behavior. A full refund reverses all of the payment's allocations; a partial
+refund reverses the first N dollars in that order. This keeps the reversal
+deterministic and explainable.
 
 ## The "paid total" sites that must subtract refunds
 
@@ -207,7 +208,8 @@ paymentsNotConfigured`. A `failed` request with `apply_attempt_count > 0` is
   for that payment until support reconciles it.
 - **Worker** `applyRelayRefundEvent`: write `payment_refunds`
   (`bellfield_payments`/`stripe`/`provider_refund_id`/proportional
-  `application_fee_refunded`) + reverse allocations main-first, **idempotent on
+  `application_fee_refunded`) + reverse allocations source-invoice-first with
+  job-level/main-first fallback, **idempotent on
   `provider_refund_id`**, **only after the local payment exists** (match
   `provider_payment_id`) — never fabricate from `jobRef`. Reconcile the pending
   request to `succeeded` by **`provider_refund_id` → `relay_refund_request_id` →
@@ -257,7 +259,8 @@ are refundable only through this permission; they remain non-voidable.
 ## Test plan
 
 - Repository: full + partial manual refund round-trips; over-refund rejected;
-  void payment cannot be refunded; allocation reversal main-first; the four
+  void payment cannot be refunded; allocation reversal source-invoice-first with
+  job-level/main-first fallback; the four
   paid-total sites each subtract active refunds (refund-then-balance,
   refund-then-reallocate).
 - Service/controller: permission gate; not-found; conflict copy.

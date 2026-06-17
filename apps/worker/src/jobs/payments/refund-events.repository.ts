@@ -113,6 +113,7 @@ export class RefundEventsRepository implements RefundEventsStore {
         tx,
         refundId,
         payment.id,
+        payment.invoiceId,
         event.amountCents,
         occurredAt
       );
@@ -160,15 +161,29 @@ export class RefundEventsRepository implements RefundEventsStore {
   private async findPaymentByProviderPaymentId(
     tx: RefundEventsQueryExecutor,
     event: RelayRefundEvent
-  ): Promise<{ id: string; jobId: string; amountCents: number } | null> {
-    const result = await tx.query<{ id: string; jobId: string; amountCents: string | number }>(
-      `select id, job_id as "jobId", round(amount * 100) as "amountCents" from payments
+  ): Promise<{ id: string; jobId: string; invoiceId: string | null; amountCents: number } | null> {
+    const result = await tx.query<{
+      id: string;
+      jobId: string;
+      invoiceId: string | null;
+      amountCents: string | number;
+    }>(
+      `select id, job_id as "jobId", invoice_id as "invoiceId",
+              round(amount * 100) as "amountCents"
+       from payments
        where provider = $1 and provider_payment_id = $2
        limit 1`,
       [event.provider, event.providerPaymentId]
     );
     const row = result.rows[0];
-    return row ? { id: row.id, jobId: row.jobId, amountCents: Number(row.amountCents) } : null;
+    return row
+      ? {
+          id: row.id,
+          jobId: row.jobId,
+          invoiceId: row.invoiceId ?? null,
+          amountCents: Number(row.amountCents)
+        }
+      : null;
   }
 
   private async sumRefundedCentsForPayment(
@@ -331,14 +346,13 @@ export class RefundEventsRepository implements RefundEventsStore {
     tx: RefundEventsQueryExecutor,
     refundId: string,
     paymentId: string,
+    sourceInvoiceId: string | null,
     refundCents: number,
     occurredAt: Date
   ): Promise<void> {
-    // Reverse the payment's allocations main-first, up to the refund amount, net of
-    // any allocations earlier refunds already reversed (mirrors the API manual
-    // refund). Any remainder maps to an unallocated/overpayment portion of the
-    // payment and needs no allocation row — it still reduces net paid via the
-    // payment_refunds.amount.
+    // Reverse source-invoice allocations first when the payment has one, then use
+    // the job-level main-first order. Any remainder maps to unallocated credit and
+    // needs no allocation row; payment_refunds.amount still reduces net paid.
     const result = await tx.query<RefundAllocationRow>(
       `select
          pa.invoice_id as "invoiceId",
@@ -353,10 +367,11 @@ export class RefundEventsRepository implements RefundEventsStore {
        join invoices i on i.id = pa.invoice_id
        where pa.payment_id = $1
        order by
+         case when $2::text is not null and pa.invoice_id = $2 then 0 else 1 end,
          case when i.invoice_kind = 'main' then 0 else 1 end,
          i.posted_at asc nulls last,
          i.id asc`,
-      [paymentId]
+      [paymentId, sourceInvoiceId]
     );
 
     let remainingCents = refundCents;

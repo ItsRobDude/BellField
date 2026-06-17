@@ -62,7 +62,7 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   const database = new CapturingDatabase();
   database.rowQueue = [
     [], // 1: refund dedup — none
-    [{ id: 'pay-1', jobId: 'job-1', amountCents: 10_000 }], // 2: original payment
+    [{ id: 'pay-1', jobId: 'job-1', invoiceId: 'inv-main', amountCents: 10_000 }], // 2: original payment
     [{ id: 'job-1' }], // 3: lock job
     [], // 4: lock posted invoices
     [{ cents: 0 }], // 5: prior refunds on this payment
@@ -95,6 +95,13 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   assert.equal(allocations.length, 1);
   assert.equal(allocations[0].values?.[2], 'inv-main');
   assert.equal(allocations[0].values?.[3], '100.00');
+  const reversalSource = database.find(/from payment_allocations pa\s+join invoices i/i);
+  assert.ok(reversalSource);
+  assert.match(
+    reversalSource.text,
+    /case when \$2::text is not null and pa\.invoice_id = \$2 then 0 else 1 end/i
+  );
+  assert.deepEqual(reversalSource.values, ['pay-1', 'inv-main']);
 
   const requestUpdate = database.find(/update online_refund_requests/i);
   assert.match(requestUpdate?.text ?? '', /status = 'succeeded'/);
@@ -115,11 +122,89 @@ test('RefundEventsRepository writes a confirmed refund, reverses allocations, an
   assert.equal((receipt.values?.[8] as Date).getTime(), occurredAt.getTime());
 });
 
+test('RefundEventsRepository reverses source invoice allocations before job-level fallback', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [], // 1: refund dedup — none
+    [{ id: 'pay-1', jobId: 'job-1', invoiceId: 'inv-adj', amountCents: 20_000 }], // 2: original payment
+    [{ id: 'job-1' }], // 3: lock job
+    [], // 4: lock posted invoices
+    [{ cents: 0 }], // 5: prior refunds on this payment
+    [], // 6: insert payment_refunds
+    [
+      { invoiceId: 'inv-adj', allocatedCents: 5_000, refundedCents: 0 },
+      { invoiceId: 'inv-main', allocatedCents: 15_000, refundedCents: 0 }
+    ], // 7: reversal source
+    [], // 8: insert adjustment refund allocation
+    [], // 9: insert main refund allocation
+    [{ id: 'orr-1', jobId: 'job-1' }], // 10: find request by refund id
+    [], // 11: update request -> succeeded
+    [], // 12: update jobs
+    [] // 13: insert timeline
+  ];
+  const repository = new RefundEventsRepository(database);
+
+  const outcome = await repository.applyRelayRefundEvent(
+    makeEvent({ amountCents: 7_000 }),
+    occurredAt
+  );
+
+  assert.equal(outcome, 'applied');
+  const reversalSource = database.find(/from payment_allocations pa\s+join invoices i/i);
+  assert.deepEqual(reversalSource?.values, ['pay-1', 'inv-adj']);
+
+  const allocations = database.filter(/insert into payment_refund_allocations/i);
+  assert.equal(allocations.length, 2);
+  assert.equal(allocations[0].values?.[2], 'inv-adj');
+  assert.equal(allocations[0].values?.[3], '50.00');
+  assert.equal(allocations[1].values?.[2], 'inv-main');
+  assert.equal(allocations[1].values?.[3], '20.00');
+});
+
+test('RefundEventsRepository uses remaining source allocation after prior refunds before fallback', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [], // 1: refund dedup — none
+    [{ id: 'pay-1', jobId: 'job-1', invoiceId: 'inv-adj', amountCents: 20_000 }], // 2: original payment
+    [{ id: 'job-1' }], // 3: lock job
+    [], // 4: lock posted invoices
+    [{ cents: 3_000 }], // 5: prior refunds on this payment
+    [], // 6: insert payment_refunds
+    [
+      { invoiceId: 'inv-adj', allocatedCents: 5_000, refundedCents: 3_000 },
+      { invoiceId: 'inv-main', allocatedCents: 15_000, refundedCents: 0 }
+    ], // 7: reversal source
+    [], // 8: insert remaining adjustment refund allocation
+    [], // 9: insert main refund allocation
+    [{ id: 'orr-1', jobId: 'job-1' }], // 10: find request by refund id
+    [], // 11: update request -> succeeded
+    [], // 12: update jobs
+    [] // 13: insert timeline
+  ];
+  const repository = new RefundEventsRepository(database);
+
+  const outcome = await repository.applyRelayRefundEvent(
+    makeEvent({ amountCents: 7_000 }),
+    occurredAt
+  );
+
+  assert.equal(outcome, 'applied');
+  const reversalSource = database.find(/from payment_allocations pa\s+join invoices i/i);
+  assert.deepEqual(reversalSource?.values, ['pay-1', 'inv-adj']);
+
+  const allocations = database.filter(/insert into payment_refund_allocations/i);
+  assert.equal(allocations.length, 2);
+  assert.equal(allocations[0].values?.[2], 'inv-adj');
+  assert.equal(allocations[0].values?.[3], '20.00');
+  assert.equal(allocations[1].values?.[2], 'inv-main');
+  assert.equal(allocations[1].values?.[3], '50.00');
+});
+
 test('RefundEventsRepository refunds a deposit (no allocations) — records the refund, reverses nothing', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [
     [], // 1: refund dedup — none
-    [{ id: 'pay-1', jobId: 'job-1', amountCents: 10_000 }], // 2: the deposit payment
+    [{ id: 'pay-1', jobId: 'job-1', invoiceId: null, amountCents: 10_000 }], // 2: the deposit payment
     [{ id: 'job-1' }], // 3: lock job
     [], // 4: lock posted invoices
     [{ cents: 0 }], // 5: prior refunds on this payment
@@ -138,6 +223,10 @@ test('RefundEventsRepository refunds a deposit (no allocations) — records the 
   // The refund row is still written (net paid drops), but there is nothing to reverse.
   const refundInsert = database.find(/insert into payment_refunds/i);
   assert.ok(refundInsert);
+  assert.deepEqual(database.find(/from payment_allocations pa\s+join invoices i/i)?.values, [
+    'pay-1',
+    null
+  ]);
   assert.equal(database.filter(/insert into payment_refund_allocations/i).length, 0);
   assert.match(database.find(/update online_refund_requests/i)?.text ?? '', /status = 'succeeded'/);
 
