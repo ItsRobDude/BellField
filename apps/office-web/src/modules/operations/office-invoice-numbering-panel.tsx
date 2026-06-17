@@ -5,7 +5,6 @@ import {
   getOfficeInvoiceNumbering,
   updateOfficeInvoiceNumbering
 } from '@/lib/operations-company-settings-api';
-import { maxInvoiceNumber } from '@bellfield/contracts';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeInvoiceNumberingPanelProps = {
@@ -13,6 +12,13 @@ export type OfficeInvoiceNumberingPanelProps = {
   sessionToken: string;
   canConfigure: boolean;
 };
+
+// Mirrors maxInvoiceNumber in @bellfield/contracts for a client-side hint only.
+// The API is the authoritative bound (DTO @Max + service). Kept as a local value
+// so office-web keeps importing contracts as types only — a runtime value import
+// would pull the contracts barrel into the bundle (its .js ESM re-exports don't
+// resolve under next build without transpilePackages).
+const MAX_INVOICE_NUMBER = 999_999_999;
 
 /**
  * Owner control for the shared invoice-number counter: shows the number that will
@@ -50,9 +56,9 @@ export function OfficeInvoiceNumberingPanel({
 
   async function save() {
     const parsed = Number(draft.trim());
-    if (!Number.isInteger(parsed) || parsed < 1 || parsed > maxInvoiceNumber) {
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_INVOICE_NUMBER) {
       setErrorMessage(
-        `Next invoice number must be a whole number from 1 to ${maxInvoiceNumber.toLocaleString('en-US')}.`
+        `Next invoice number must be a whole number from 1 to ${MAX_INVOICE_NUMBER.toLocaleString('en-US')}.`
       );
       return;
     }
@@ -85,7 +91,7 @@ export function OfficeInvoiceNumberingPanel({
           aria-label="Next invoice number"
           type="number"
           min="1"
-          max={maxInvoiceNumber}
+          max={MAX_INVOICE_NUMBER}
           step="1"
           value={draft}
           disabled={!canConfigure || isLoading}
