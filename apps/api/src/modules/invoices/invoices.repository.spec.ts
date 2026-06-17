@@ -335,6 +335,20 @@ describe('InvoicesRepository.postInvoice', () => {
     expect(numberUpdate?.params).toEqual(['inv-credit', '1043', 'CR-1043']);
   });
 
+  it('formats the number by kind: a posted adjustment gets the ADJ- prefix on the shared counter', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'adjustment' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1044' }] },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-adjustment', snapshot, actor);
+
+    const numberUpdate = findCall(calls, NUMBER_UPDATE);
+    expect(numberUpdate?.params).toEqual(['inv-adjustment', '1044', 'ADJ-1044']);
+  });
+
   it('fails the post if the number series row is missing (data-integrity fault, not silent)', async () => {
     const { repository } = repositoryWith([
       { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },

@@ -5,7 +5,11 @@ import { toIsoString } from '../../database/database-row.utils';
 import type { PostedInvoiceContext } from '@bellfield/contracts';
 import { recalculateInvoiceTotals } from '../company-data/invoice-reflection-utils';
 import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-utils';
-import { assignInvoiceNumber } from './invoice-number-utils';
+import {
+  assignInvoiceNumber,
+  getNextInvoiceNumber,
+  setNextInvoiceNumber
+} from './invoice-number-utils';
 import { INVOICE_COLUMNS, INVOICE_LINE_COLUMNS } from './invoices-repository-columns';
 import type {
   InvoiceDiscountValue,
@@ -608,6 +612,16 @@ export class InvoicesRepository {
         queryable
       );
     });
+  }
+
+  /** The number that will be issued to the next posted invoice. */
+  async getInvoiceNumberingNextNumber(): Promise<number> {
+    return getNextInvoiceNumber(this.databaseService);
+  }
+
+  /** Set the next invoice number (guarded forward-only); returns the new value. */
+  async setInvoiceNumberingNextNumber(nextNumber: number): Promise<number> {
+    return setNextInvoiceNumber(this.databaseService, nextNumber, new Date().toISOString());
   }
 
   /**

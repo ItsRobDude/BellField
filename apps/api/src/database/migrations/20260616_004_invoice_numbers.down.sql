@@ -1,3 +1,4 @@
+drop index if exists invoices_invoice_sequence_idx;
 drop index if exists invoices_invoice_number_idx;
 
 alter table invoices

@@ -34,7 +34,9 @@ function createService() {
     postInvoice: jest.fn(),
     createAdjustment: jest.fn(),
     listAdjustmentsForJob: jest.fn(),
-    listInvoiceTotalsForJob: jest.fn()
+    listInvoiceTotalsForJob: jest.fn(),
+    getInvoiceNumberingNextNumber: jest.fn().mockResolvedValue(1042),
+    setInvoiceNumberingNextNumber: jest.fn().mockResolvedValue(5000)
   };
   const paymentsRepository = {
     sumActivePaymentCentsForJob: jest.fn().mockResolvedValue(0),
@@ -734,5 +736,41 @@ describe('InvoicesService job adjustments list', () => {
       NotFoundException
     );
     expect(invoicesRepository.listAdjustmentsForJob).not.toHaveBeenCalled();
+  });
+
+  it('reads invoice numbering gated on companySettings:view', async () => {
+    const { service, identityAccessService } = createService();
+
+    const result = await service.getInvoiceNumbering('token');
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'companySettings:view',
+      ['office-web']
+    );
+    expect(result).toEqual({ numbering: { nextNumber: 1042 } });
+  });
+
+  it('sets invoice numbering gated on companySettings:configure and returns the new value', async () => {
+    const { service, identityAccessService, invoicesRepository } = createService();
+
+    const result = await service.setInvoiceNumbering('token', { nextNumber: 5000 });
+
+    expect(identityAccessService.getAuthorizedEmployee).toHaveBeenCalledWith(
+      'token',
+      'companySettings:configure',
+      ['office-web']
+    );
+    expect(invoicesRepository.setInvoiceNumberingNextNumber).toHaveBeenCalledWith(5000);
+    expect(result).toEqual({ numbering: { nextNumber: 5000 } });
+  });
+
+  it('rejects a non-positive next number before touching the counter', async () => {
+    const { service, invoicesRepository } = createService();
+
+    await expect(service.setInvoiceNumbering('token', { nextNumber: 0 })).rejects.toBeInstanceOf(
+      BadRequestException
+    );
+    expect(invoicesRepository.setInvoiceNumberingNextNumber).not.toHaveBeenCalled();
   });
 });

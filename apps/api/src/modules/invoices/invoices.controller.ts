@@ -6,6 +6,7 @@ import {
   CreateAdjustmentRequestBodyDto,
   InvoiceLineItemInputDto,
   SendInvoiceRequestBodyDto,
+  UpdateInvoiceNumberingRequestBodyDto,
   VoidInvoiceLineItemRequestBodyDto
 } from './invoices.dto';
 
@@ -74,6 +75,26 @@ export class JobInvoiceController {
       jobId,
       request
     );
+  }
+}
+
+// Invoice numbering config (the shared counter's next value). A dedicated path so
+// it never collides with the `operations/invoices/:invoiceId` routes below.
+@Controller('operations/invoice-numbering')
+export class InvoiceNumberingController {
+  constructor(private readonly invoicesService: InvoicesService) {}
+
+  @Get()
+  async getNumbering(@Headers('authorization') authorizationHeader: string | undefined) {
+    return this.invoicesService.getInvoiceNumbering(getBearerToken(authorizationHeader));
+  }
+
+  @Put()
+  async setNumbering(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Body() request: UpdateInvoiceNumberingRequestBodyDto
+  ) {
+    return this.invoicesService.setInvoiceNumbering(getBearerToken(authorizationHeader), request);
   }
 }
 

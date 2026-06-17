@@ -1,6 +1,7 @@
 import type {
   CompanySettingsResponse,
   EstimateEmailDeliveryStatusResponse,
+  InvoiceNumberingSettingsResponse,
   UpdateCompanySettingsRequest
 } from '@bellfield/contracts';
 import { requestJson } from './operations-api-base';
@@ -24,6 +25,29 @@ export async function updateOfficeCompanySettings(
     sessionToken,
     method: 'PUT',
     body: JSON.stringify(payload)
+  });
+}
+
+export async function getOfficeInvoiceNumbering(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceNumberingSettingsResponse> {
+  return requestJson<InvoiceNumberingSettingsResponse>('/operations/invoice-numbering', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken
+  });
+}
+
+export async function updateOfficeInvoiceNumbering(input: {
+  nextNumber: number;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceNumberingSettingsResponse> {
+  return requestJson<InvoiceNumberingSettingsResponse>('/operations/invoice-numbering', {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'PUT',
+    body: JSON.stringify({ nextNumber: input.nextNumber })
   });
 }
 

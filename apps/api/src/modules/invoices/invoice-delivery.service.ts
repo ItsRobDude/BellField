@@ -449,6 +449,9 @@ function buildInvoiceEmailTokens(
     customerName: context.billTo.name,
     invoiceLabel,
     invoiceLabelLower: invoiceLabel.toLowerCase(),
+    // A posted invoice always has a number by the time it can be emailed; fall
+    // back to empty so the token never renders the literal '{invoiceNumber}'.
+    invoiceNumber: invoice.invoiceNumber ?? '',
     jobNumber: context.jobNumber,
     locationName: context.serviceLocation.name
   };

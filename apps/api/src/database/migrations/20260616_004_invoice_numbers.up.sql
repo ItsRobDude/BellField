@@ -32,3 +32,11 @@ alter table invoices
 create unique index if not exists invoices_invoice_number_idx
   on invoices(invoice_number)
   where invoice_number is not null;
+
+-- One shared counter means the raw sequence is globally unique too, so the DB
+-- enforces the product rule directly: a bug that formatted two kinds at the same
+-- number (e.g. INV-1042 and CR-1042 — distinct invoice_number strings) would
+-- still collide here and be rejected.
+create unique index if not exists invoices_invoice_sequence_idx
+  on invoices(invoice_sequence)
+  where invoice_sequence is not null;

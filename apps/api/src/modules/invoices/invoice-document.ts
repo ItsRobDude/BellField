@@ -6,7 +6,11 @@ export type InvoiceDocument = {
 };
 
 export function renderInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
-  const title = `${invoiceKindLabel(invoice.invoiceKind)} ${invoice.id}`;
+  // Prefer the durable invoice number (e.g. 'Invoice INV-1042'); a draft has none
+  // yet, so it shows just the kind label rather than a raw internal id.
+  const title = invoice.invoiceNumber
+    ? `${invoiceKindLabel(invoice.invoiceKind)} ${invoice.invoiceNumber}`
+    : invoiceKindLabel(invoice.invoiceKind);
   const context = invoice.posted;
   const statusLabel = invoice.status === 'posted' ? 'Posted' : 'Draft';
   const jobNumber = context?.jobNumber ?? invoice.jobId;

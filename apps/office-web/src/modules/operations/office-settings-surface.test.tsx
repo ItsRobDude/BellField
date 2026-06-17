@@ -6,7 +6,9 @@ import { OfficeSettingsSurface } from './office-settings-surface';
 vi.mock('@/lib/operations-company-settings-api', () => ({
   getOfficeEstimateEmailDeliveryStatus: vi.fn(),
   getOfficeCompanySettings: vi.fn(),
-  updateOfficeCompanySettings: vi.fn()
+  updateOfficeCompanySettings: vi.fn(),
+  getOfficeInvoiceNumbering: vi.fn(),
+  updateOfficeInvoiceNumbering: vi.fn()
 }));
 
 const mockedApi = vi.mocked(settingsApi);
@@ -32,6 +34,7 @@ function arrange() {
       refundReceiptEmailBody: 'We issued a refund of {amount}.'
     }
   });
+  mockedApi.getOfficeInvoiceNumbering.mockResolvedValue({ numbering: { nextNumber: 1 } });
   mockedApi.getOfficeEstimateEmailDeliveryStatus.mockResolvedValue({
     deliveryStatus: {
       configured: true,

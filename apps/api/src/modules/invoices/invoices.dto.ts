@@ -2,6 +2,7 @@ import {
   IsBoolean,
   IsEmail,
   IsIn,
+  IsInt,
   IsNumber,
   IsOptional,
   IsString,
@@ -14,6 +15,7 @@ import type {
   InvoiceAdjustmentKind,
   InvoiceLineItemInput,
   SendInvoiceRequest,
+  UpdateInvoiceNumberingRequest,
   VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
 import {
@@ -79,4 +81,10 @@ export class SendInvoiceRequestBodyDto implements SendInvoiceRequest {
   @IsString()
   @MaxLength(2000)
   bodyText?: string;
+}
+
+export class UpdateInvoiceNumberingRequestBodyDto implements UpdateInvoiceNumberingRequest {
+  @IsInt()
+  @Min(1)
+  nextNumber!: number;
 }
