@@ -574,7 +574,7 @@ Payments are job-level ledger records with optional source-invoice context.
 Current implementation note:
 
 - A payment recorded from a posted charge invoice applies to that source invoice first, then spills to other open posted charges job-wide.
-- A null-source deposit remains job-level. If no posted charges exist, it is unallocated credit; if posted charges exist, it allocates job-wide/main-first.
+- A null-source deposit remains job-level. If no posted charges exist, it is unallocated credit; if posted charges exist, it allocates job-wide/main-first. Existing unallocated deposit credit collected before posting allocates to the main invoice when that main invoice posts, up to the posted main's remaining balance.
 - Refund reversal intentionally remains job-level/main-first for now, even when the original payment was source-first. Source-aware refund allocation is a later explicit accounting behavior slice.
 
 ---

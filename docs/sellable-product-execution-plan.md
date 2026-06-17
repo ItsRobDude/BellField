@@ -634,8 +634,10 @@ payment or a link that could exceed current amount due while other unpaid links
 are still active.
 Deposit links are job-level, can be created from the draft invoice surface for
 an explicit amount, and record confirmed payments as unallocated job credit until
-posted charges exist. The customer sees the deposit amount in Stripe Checkout
-before paying; BellField does not add deposit-rule enforcement in this slice.
+posted charges exist. Existing pre-post deposit credit allocates to the main
+invoice when that invoice posts, capped by the posted main's remaining balance.
+The customer sees the deposit amount in Stripe Checkout before paying; BellField
+does not add deposit-rule enforcement in this slice.
 The dated live Stripe sandbox smoke for amount-scoped invoice links, deposit
 links, active-link overage confirmation, worker payment-event apply, and local
 ledger/balance readback passed on 2026-06-15 Pacific / 2026-06-16 UTC.
@@ -650,11 +652,10 @@ through the relay/API/worker flow plus the office Refund-on-card action and
 pending/failed display, and the dated live Stripe sandbox smoke passed on
 2026-06-15 Pacific / 2026-06-16 UTC.
 
-Intentionally deferred: estimate payments, stored cards, per-invoice allocation
-polish for pre-post deposits, and processor-fee reconciliation beyond
-BellField's application fee. Customer card surcharge / processing-fee
-pass-through is intentionally not planned for v1 unless real customer demand
-justifies a dedicated legal and card-network review.
+Intentionally deferred: estimate payments, stored cards, and processor-fee
+reconciliation beyond BellField's application fee. Customer card surcharge /
+processing-fee pass-through is intentionally not planned for v1 unless real
+customer demand justifies a dedicated legal and card-network review.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use

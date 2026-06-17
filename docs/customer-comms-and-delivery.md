@@ -377,12 +377,13 @@ and raise amount due through refund allocations.
 
 Deposit links have now shipped as a separate job-level path: the draft invoice
 surface can create a Stripe Checkout deposit link for an explicit amount, and a
-confirmed deposit records as an unallocated job payment/credit. The job balance
-reflects that credit immediately, including before the invoice posts. Per-invoice
-allocation of pre-post deposits remains intentionally deferred; the credit is
-still visible and safe because amount due is job-level. Deposit links are
-explicit payment links: the customer sees the deposit amount in Stripe Checkout
-before paying. BellField does not add deposit-rule enforcement in this slice.
+confirmed deposit records as an unallocated job payment/credit until the main
+invoice posts. The job balance reflects that credit immediately, including before
+the invoice posts. When the main invoice posts, BellField allocates existing
+pre-post deposit credit to that posted main invoice up to its remaining balance;
+leftover credit stays job-level/unallocated. Deposit links are explicit payment
+links: the customer sees the deposit amount in Stripe Checkout before paying.
+BellField does not add deposit-rule enforcement in this slice.
 
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
@@ -390,10 +391,10 @@ apply and dead-letter) plus the office Refund-on-card action and pending/failed
 display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
 2026-06-16 UTC. Customer payment and refund receipt emails have fully shipped
 (slices 1a–2b: manual + online card payments/deposits, manual + online refunds);
-still deferred are stored cards, per-invoice allocation of pre-post deposits, and
-processor-fee reconciliation beyond BellField's application fee. Customer card surcharge / processing-fee
-pass-through is intentionally not planned for v1 unless real customer demand
-justifies a dedicated legal and card-network review.
+still deferred are stored cards and processor-fee reconciliation beyond
+BellField's application fee. Customer card surcharge / processing-fee pass-through
+is intentionally not planned for v1 unless real customer demand justifies a
+dedicated legal and card-network review.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 
