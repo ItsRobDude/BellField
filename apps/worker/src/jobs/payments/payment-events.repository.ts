@@ -112,6 +112,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
         tx,
         paymentId,
         jobId,
+        invoiceId,
         event.amountCents,
         occurredAt
       );
@@ -273,12 +274,13 @@ export class PaymentEventsRepository implements PaymentEventsStore {
     tx: PaymentEventsQueryExecutor,
     paymentId: string,
     jobId: string,
+    sourceInvoiceId: string | null,
     paymentCents: number,
     occurredAt: Date
   ): Promise<number> {
     const [chargeRows, creditTotalCents, activePaidBeforeThisCents, refundedBeforeThisCents] =
       await Promise.all([
-        this.listPostedChargeInvoiceBalances(tx, jobId),
+        this.listPostedChargeInvoiceBalances(tx, jobId, sourceInvoiceId),
         this.sumPostedCreditCentsForJob(tx, jobId),
         this.sumActivePaymentCentsForJob(tx, jobId, paymentId),
         this.sumRefundCentsForJob(tx, jobId)
@@ -335,7 +337,8 @@ export class PaymentEventsRepository implements PaymentEventsStore {
 
   private async listPostedChargeInvoiceBalances(
     tx: PaymentEventsQueryExecutor,
-    jobId: string
+    jobId: string,
+    sourceInvoiceId: string | null
   ): Promise<Array<ChargeInvoiceRow & { remainingCents: number }>> {
     const result = await tx.query<ChargeInvoiceRow>(
       `with active_allocations as (
@@ -358,14 +361,15 @@ export class PaymentEventsRepository implements PaymentEventsStore {
        from invoices i
        left join active_allocations aa on aa.invoice_id = i.id
        left join refunded_allocations ra on ra.invoice_id = i.id
-       where i.job_id = $1
-         and i.status = 'posted'
-         and i.invoice_kind in ('main', 'adjustment')
-       order by
-         case when i.invoice_kind = 'main' then 0 else 1 end,
-         i.posted_at asc nulls last,
-         i.id asc`,
-      [jobId]
+        where i.job_id = $1
+          and i.status = 'posted'
+          and i.invoice_kind in ('main', 'adjustment')
+        order by
+          case when $2::text is not null and i.id = $2 then 0 else 1 end,
+          case when i.invoice_kind = 'main' then 0 else 1 end,
+          i.posted_at asc nulls last,
+          i.id asc`,
+      [jobId, sourceInvoiceId]
     );
     return result.rows
       .map((row) => ({

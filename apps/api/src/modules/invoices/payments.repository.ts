@@ -92,8 +92,9 @@ export class PaymentsRepository {
   /**
    * Shared core for a manual receipt the office records directly (the caller owns
    * lock acquisition + the purpose): insert the append-only payment row
-   * (source=manual), auto-allocate it across the job's posted charges main-first
-   * (any unallocated remainder is job credit), and write the timeline entry.
+   * (source=manual), auto-allocate it across the job's posted charges with the
+   * source invoice first when present (any unallocated remainder is job credit),
+   * and write the timeline entry.
    */
   private async insertManualReceipt(
     args: {
@@ -135,6 +136,7 @@ export class PaymentsRepository {
     await this.insertAutoAllocations(
       paymentId,
       jobId,
+      invoiceId,
       dollarsToCents(input.amount),
       now,
       queryable
@@ -505,6 +507,7 @@ export class PaymentsRepository {
          ra.refund_id as "refundId",
          ra.invoice_id as "invoiceId",
          i.invoice_kind as "invoiceKind",
+         i.invoice_number as "invoiceNumber",
          ra.amount
        from payment_refund_allocations ra
        join invoices i on i.id = ra.invoice_id
@@ -522,6 +525,7 @@ export class PaymentsRepository {
       current.push({
         invoiceId: allocation.invoiceId,
         invoiceKind: allocation.invoiceKind,
+        invoiceNumber: allocation.invoiceNumber ?? undefined,
         amount: Number(allocation.amount)
       });
       allocationsByRefund.set(allocation.refundId, current);
@@ -584,13 +588,14 @@ export class PaymentsRepository {
   private async insertAutoAllocations(
     paymentId: string,
     jobId: string,
+    sourceInvoiceId: string | null,
     paymentCents: number,
     now: string,
     queryable: QueryExecutor
   ): Promise<void> {
     const [chargeRows, creditTotalCents, activePaidBeforeThisCents, refundedBeforeThisCents] =
       await Promise.all([
-        this.listPostedChargeInvoiceBalances(jobId, queryable),
+        this.listPostedChargeInvoiceBalances(jobId, sourceInvoiceId, queryable),
         this.sumPostedCreditCentsForJob(jobId, queryable),
         this.sumActivePaymentCentsForJobInTransaction(jobId, paymentId, queryable),
         this.sumRefundCentsForJobInTransaction(jobId, queryable)
@@ -637,6 +642,7 @@ export class PaymentsRepository {
 
   private async listPostedChargeInvoiceBalances(
     jobId: string,
+    sourceInvoiceId: string | null,
     queryable: QueryExecutor
   ): Promise<Array<ChargeInvoiceRow & { remainingCents: number }>> {
     const result = await queryable.query<ChargeInvoiceRow>(
@@ -660,14 +666,15 @@ export class PaymentsRepository {
        from invoices i
        left join active_allocations aa on aa.invoice_id = i.id
        left join refunded_allocations ra on ra.invoice_id = i.id
-       where i.job_id = $1
-         and i.status = 'posted'
-         and i.invoice_kind in ('main', 'adjustment')
-       order by
-         case when i.invoice_kind = 'main' then 0 else 1 end,
-         i.posted_at asc nulls last,
-         i.id asc`,
-      [jobId]
+        where i.job_id = $1
+          and i.status = 'posted'
+          and i.invoice_kind in ('main', 'adjustment')
+        order by
+          case when $2::text is not null and i.id = $2 then 0 else 1 end,
+          case when i.invoice_kind = 'main' then 0 else 1 end,
+          i.posted_at asc nulls last,
+          i.id asc`,
+      [jobId, sourceInvoiceId]
     );
     return result.rows
       .map((row) => ({
@@ -750,14 +757,17 @@ export class PaymentsRepository {
          pa.payment_id as "paymentId",
          pa.invoice_id as "invoiceId",
          i.invoice_kind as "invoiceKind",
+         i.invoice_number as "invoiceNumber",
          pa.amount
-       from payment_allocations pa
-       join invoices i on i.id = pa.invoice_id
-       where pa.payment_id = any($1::text[])
-       order by
-         pa.payment_id,
-         case when i.invoice_kind = 'main' then 0 else 1 end,
-         i.posted_at asc nulls last,
+        from payment_allocations pa
+        join payments p on p.id = pa.payment_id
+        join invoices i on i.id = pa.invoice_id
+        where pa.payment_id = any($1::text[])
+        order by
+          pa.payment_id,
+          case when p.invoice_id is not null and i.id = p.invoice_id then 0 else 1 end,
+          case when i.invoice_kind = 'main' then 0 else 1 end,
+          i.posted_at asc nulls last,
          i.id asc`,
       [paymentIds]
     );
@@ -767,6 +777,7 @@ export class PaymentsRepository {
       current.push({
         invoiceId: allocation.invoiceId,
         invoiceKind: allocation.invoiceKind,
+        invoiceNumber: allocation.invoiceNumber ?? undefined,
         amount: Number(allocation.amount)
       });
       allocationsByPayment.set(allocation.paymentId, current);

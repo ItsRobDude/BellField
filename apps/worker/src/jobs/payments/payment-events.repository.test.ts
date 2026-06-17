@@ -104,6 +104,8 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   assert.equal(allocations[0].values?.[3], '125.00');
   assert.equal(allocations[1].values?.[2], 'inv-adj');
   assert.equal(allocations[1].values?.[3], '50.00');
+  const balanceQuery = database.queries.find((query) => /from invoices i/i.test(query.text));
+  assert.deepEqual(balanceQuery?.values, ['job-1', 'inv-main']);
 
   const sessionUpdate = database.queries.find((query) =>
     /update online_payment_sessions/i.test(query.text)
@@ -122,6 +124,55 @@ test('PaymentEventsRepository records a provider payment and allocates it across
   assert.equal(receipt.values?.[6], 'payment'); // purpose
   assert.equal((receipt.values?.[7] as Date).getTime(), Date.parse('2026-06-13T12:00:00.000Z'));
   assert.equal((receipt.values?.[9] as Date).getTime(), occurredAt.getTime());
+});
+
+test('PaymentEventsRepository allocates an adjustment-scoped provider payment source-first', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-adj',
+        amountCents: 17_500,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
+    [{ id: 'job-1' }],
+    [],
+    [],
+    [
+      { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' },
+      { invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' }
+    ],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+
+  const outcome = await repository.applyRelayPaymentEvent(
+    makeEvent({ invoiceRef: 'inv-adj' }),
+    new Date('2026-06-13T12:00:10.000Z')
+  );
+
+  assert.equal(outcome, 'applied');
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[2], 'inv-adj');
+  const balanceQuery = database.queries.find((query) => /from invoices i/i.test(query.text));
+  assert.deepEqual(balanceQuery?.values, ['job-1', 'inv-adj']);
+  assert.match(
+    String(balanceQuery?.text),
+    /case when \$2::text is not null and i\.id = \$2 then 0 else 1 end/i
+  );
+  const allocations = database.queries.filter((query) =>
+    /insert into payment_allocations/i.test(query.text)
+  );
+  assert.equal(allocations.length, 2);
+  assert.equal(allocations[0].values?.[2], 'inv-adj');
+  assert.equal(allocations[0].values?.[3], '50.00');
+  assert.equal(allocations[1].values?.[2], 'inv-main');
+  assert.equal(allocations[1].values?.[3], '125.00');
 });
 
 test('PaymentEventsRepository records an overpayment in full and surfaces the unallocated remainder', async () => {
@@ -355,6 +406,8 @@ test('PaymentEventsRepository allocates a deposit session when posted charges ex
     /insert into payment_allocations/i.test(query.text)
   );
   assert.equal(allocations.length, 2);
+  const balanceQuery = database.queries.find((query) => /from invoices i/i.test(query.text));
+  assert.deepEqual(balanceQuery?.values, ['job-1', null]);
   assert.equal(allocations[0].values?.[2], 'inv-main');
   assert.equal(allocations[0].values?.[3], '75.00');
   assert.equal(allocations[1].values?.[2], 'inv-adj');

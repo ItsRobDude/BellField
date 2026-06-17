@@ -44,6 +44,7 @@ export type AllocationRow = {
   paymentId: string;
   invoiceId: string;
   invoiceKind: 'main' | 'adjustment' | 'credit';
+  invoiceNumber: string | null;
   amount: string | number;
 };
 
@@ -83,6 +84,7 @@ export type RefundAllocationRow = {
   refundId: string;
   invoiceId: string;
   invoiceKind: 'main' | 'adjustment' | 'credit';
+  invoiceNumber: string | null;
   amount: string | number;
 };
 
