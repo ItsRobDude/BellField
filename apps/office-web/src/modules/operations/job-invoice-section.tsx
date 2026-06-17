@@ -381,6 +381,9 @@ export function JobInvoiceSection({
             {invoice ? (
               <span style={styles.badge}>{invoice.status === 'posted' ? 'Posted' : 'Draft'}</span>
             ) : null}
+            {invoice?.invoiceNumber ? (
+              <span style={styles.badge}>{invoice.invoiceNumber}</span>
+            ) : null}
             {invoice ? (
               <button
                 type="button"

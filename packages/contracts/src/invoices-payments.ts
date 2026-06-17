@@ -94,6 +94,12 @@ export interface InvoiceSummary {
   totals: InvoiceTotals;
   /** Frozen display context, set once the invoice is posted (see PostedInvoiceContext). */
   posted?: PostedInvoiceContext;
+  /**
+   * The durable, customer-facing invoice number, assigned when the invoice is
+   * posted (e.g. 'INV-1042'; 'CR-1043' for a credit). Absent on drafts and on
+   * invoices posted before invoice numbering shipped.
+   */
+  invoiceNumber?: string;
   /** For an adjustment/credit, the main invoice it corrects. Null for the main invoice. */
   adjustsInvoiceId?: string;
   createdAt: string;
