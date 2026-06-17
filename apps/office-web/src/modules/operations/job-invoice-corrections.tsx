@@ -702,7 +702,10 @@ function CorrectionCard({
   return (
     <div style={styles.subpanel}>
       <div style={styles.row}>
-        <strong>{kindLabel}</strong>
+        <strong>
+          {kindLabel}
+          {correction.invoiceNumber ? ` · ${correction.invoiceNumber}` : ''}
+        </strong>
         <div style={styles.badgeRow}>
           <span style={styles.badge}>{isDraft ? 'Draft' : 'Posted'}</span>
           {actionsEnabled ? (

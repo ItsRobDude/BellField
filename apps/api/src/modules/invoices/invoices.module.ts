@@ -6,6 +6,7 @@ import { IdentityAccessModule } from '../identity-access/identity-access.module'
 import {
   InvoiceController,
   InvoiceLineController,
+  InvoiceNumberingController,
   JobInvoiceController
 } from './invoices.controller';
 import { InvoicesRepository } from './invoices.repository';
@@ -34,6 +35,7 @@ import { OnlineRefundsRepository } from './online-refunds.repository';
   controllers: [
     JobInvoiceController,
     InvoiceLineController,
+    InvoiceNumberingController,
     InvoiceController,
     JobPaymentsController,
     JobPaymentLinksController,

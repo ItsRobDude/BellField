@@ -83,6 +83,23 @@ export interface PostedInvoiceContext {
   workOrderNumber?: string;
 }
 
+export const maxInvoiceNumber = 999_999_999;
+
+/** Owner-facing invoice-numbering configuration (the shared counter's next value). */
+export interface InvoiceNumberingSettings {
+  /** The number that will be issued to the next posted invoice (raw, unprefixed). */
+  nextNumber: number;
+}
+
+export interface InvoiceNumberingSettingsResponse {
+  numbering: InvoiceNumberingSettings;
+}
+
+export interface UpdateInvoiceNumberingRequest {
+  /** New next number; must be 1..maxInvoiceNumber and exceed the highest issued number. */
+  nextNumber: number;
+}
+
 export interface InvoiceSummary {
   id: string;
   jobId: string;
@@ -94,6 +111,12 @@ export interface InvoiceSummary {
   totals: InvoiceTotals;
   /** Frozen display context, set once the invoice is posted (see PostedInvoiceContext). */
   posted?: PostedInvoiceContext;
+  /**
+   * The durable, customer-facing invoice number, assigned when the invoice is
+   * posted (e.g. 'INV-1042'; 'CR-1043' for a credit). Absent on drafts and on
+   * invoices posted before invoice numbering shipped.
+   */
+  invoiceNumber?: string;
   /** For an adjustment/credit, the main invoice it corrects. Null for the main invoice. */
   adjustsInvoiceId?: string;
   createdAt: string;

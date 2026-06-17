@@ -4,11 +4,14 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import type {
-  CreateAdjustmentRequest,
-  InvoiceLineItemInput,
-  JobInvoiceBalance,
-  VoidInvoiceLineItemRequest
+import {
+  maxInvoiceNumber,
+  type CreateAdjustmentRequest,
+  type InvoiceLineItemInput,
+  type InvoiceNumberingSettingsResponse,
+  type JobInvoiceBalance,
+  type UpdateInvoiceNumberingRequest,
+  type VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
@@ -45,6 +48,44 @@ export class InvoicesService {
 
     const invoice = await this.requireMainInvoice(jobId);
     return { invoice: this.toSummary(invoice) };
+  }
+
+  /** Read the next invoice number that will be issued. Office-only, companySettings:view. */
+  async getInvoiceNumbering(sessionToken: string): Promise<InvoiceNumberingSettingsResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(sessionToken, 'companySettings:view', [
+      'office-web'
+    ]);
+    const nextNumber = await this.invoicesRepository.getInvoiceNumberingNextNumber();
+    return { numbering: { nextNumber } };
+  }
+
+  /**
+   * Set the next invoice number (e.g. to continue a series migrated from another
+   * system). Office-only, companySettings:configure. The repository prevents
+   * reuse of any number already issued.
+   */
+  async setInvoiceNumbering(
+    sessionToken: string,
+    request: UpdateInvoiceNumberingRequest
+  ): Promise<InvoiceNumberingSettingsResponse> {
+    await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'companySettings:configure',
+      ['office-web']
+    );
+    if (
+      !Number.isInteger(request.nextNumber) ||
+      request.nextNumber < 1 ||
+      request.nextNumber > maxInvoiceNumber
+    ) {
+      throw new BadRequestException(
+        `The next invoice number must be a whole number from 1 to ${maxInvoiceNumber.toLocaleString('en-US')}.`
+      );
+    }
+    const nextNumber = await this.invoicesRepository.setInvoiceNumberingNextNumber(
+      request.nextNumber
+    );
+    return { numbering: { nextNumber } };
   }
 
   /** Load any single invoice by id (main or an adjustment/credit). Office-only, invoices:view. */

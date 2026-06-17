@@ -7,6 +7,7 @@ import {
   updateOfficeCompanySettings
 } from '@/lib/operations-company-settings-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
+import { OfficeInvoiceNumberingPanel } from './office-invoice-numbering-panel';
 
 export type OfficeSettingsSurfaceProps = {
   apiBaseUrl: string;
@@ -263,7 +264,7 @@ export function OfficeSettingsSurface({
             <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
               Tokens you can use:{' '}
               {
-                '{companyName}, {customerName}, {invoiceLabel}, {invoiceLabelLower}, {jobNumber}, {locationName}'
+                '{companyName}, {customerName}, {invoiceNumber}, {invoiceReference}, {invoiceLabel}, {invoiceLabelLower}, {jobNumber}, {locationName}'
               }
               . Anything else is sent exactly as typed.
             </p>
@@ -412,6 +413,11 @@ export function OfficeSettingsSurface({
               Anything else is sent exactly as typed.
             </p>
           </section>
+          <OfficeInvoiceNumberingPanel
+            apiBaseUrl={apiBaseUrl}
+            sessionToken={sessionToken}
+            canConfigure={canConfigure}
+          />
         </div>
       ) : isLoading ? (
         <p style={styles.notice}>Loading settings...</p>

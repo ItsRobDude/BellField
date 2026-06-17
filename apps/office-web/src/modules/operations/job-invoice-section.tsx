@@ -215,8 +215,10 @@ export function JobInvoiceSection({
         apiBaseUrl,
         sessionToken
       });
-      const jobNumber = invoice.posted?.jobNumber ?? invoice.jobId;
-      downloadBlob(`invoice-${safeFilenamePart(jobNumber)}-${invoice.id}.html`, blob);
+      const filename = invoice.invoiceNumber
+        ? `${safeFilenamePart(invoice.invoiceNumber)}.html`
+        : `invoice-${safeFilenamePart(invoice.posted?.jobNumber ?? invoice.jobId)}-${invoice.id}.html`;
+      downloadBlob(filename, blob);
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to download the invoice.');
     }
@@ -380,6 +382,9 @@ export function JobInvoiceSection({
           <div style={styles.badgeRow}>
             {invoice ? (
               <span style={styles.badge}>{invoice.status === 'posted' ? 'Posted' : 'Draft'}</span>
+            ) : null}
+            {invoice?.invoiceNumber ? (
+              <span style={styles.badge}>{invoice.invoiceNumber}</span>
             ) : null}
             {invoice ? (
               <button

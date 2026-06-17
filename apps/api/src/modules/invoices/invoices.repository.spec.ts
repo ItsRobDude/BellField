@@ -280,11 +280,14 @@ describe('InvoicesRepository.postInvoice', () => {
   };
   const actor = { id: 'owner-1', displayName: 'Olivia Owner' };
   const POST_UPDATE = /update invoices set\s+status = 'posted'/i;
+  const SERIES_INCREMENT = /update invoice_number_series\s+set next_value = next_value \+ 1/i;
+  const NUMBER_UPDATE = /update invoices\s+set invoice_sequence/i;
 
   it('locks the draft by id, freezes the snapshot, bumps version, and logs the post', async () => {
     const { repository, calls } = repositoryWith([
       // The guarded update returns the job id (and kind) for the timeline.
       { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1042' }] },
       HANDLERS_TOUCH_JOB,
       HANDLERS_TIMELINE
     ]);
@@ -310,6 +313,51 @@ describe('InvoicesRepository.postInvoice', () => {
     const timeline = findCall(calls, /insert into job_timeline_entries/i);
     expect(timeline?.params).toContain('invoicePosted');
     expect(findCall(calls, /update invoices set\s+subtotal_amount/i)).toBeUndefined();
+    // It reserves the next shared number (single-statement increment, gapless on
+    // rollback) and stamps the formatted number on the invoice (main => INV-).
+    const reserve = findCall(calls, SERIES_INCREMENT);
+    expect(reserve?.sql).toMatch(/returning \(next_value - 1\)::bigint as "assigned"/i);
+    const numberUpdate = findCall(calls, NUMBER_UPDATE);
+    expect(numberUpdate?.params).toEqual(['inv-1', '1042', 'INV-1042']);
+  });
+
+  it('formats the number by kind: a posted credit gets the CR- prefix on the shared counter', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'credit' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1043' }] },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-credit', snapshot, actor);
+
+    const numberUpdate = findCall(calls, NUMBER_UPDATE);
+    expect(numberUpdate?.params).toEqual(['inv-credit', '1043', 'CR-1043']);
+  });
+
+  it('formats the number by kind: a posted adjustment gets the ADJ- prefix on the shared counter', async () => {
+    const { repository, calls } = repositoryWith([
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'adjustment' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1044' }] },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-adjustment', snapshot, actor);
+
+    const numberUpdate = findCall(calls, NUMBER_UPDATE);
+    expect(numberUpdate?.params).toEqual(['inv-adjustment', '1044', 'ADJ-1044']);
+  });
+
+  it('fails the post if the number series row is missing (data-integrity fault, not silent)', async () => {
+    const { repository } = repositoryWith([
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
+      { match: SERIES_INCREMENT, rowCount: 0, rows: [] }
+    ]);
+
+    await expect(repository.postInvoice('inv-1', snapshot, actor)).rejects.toBeInstanceOf(
+      ConflictException
+    );
   });
 
   it('rejects with a conflict and writes no timeline when the invoice is no longer a draft', async () => {

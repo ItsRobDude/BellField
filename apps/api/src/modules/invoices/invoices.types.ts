@@ -46,6 +46,8 @@ export type InvoiceRecord = {
   totals: InvoiceTotalsValue;
   /** Frozen customer/location/job display context; present only once posted. */
   posted?: PostedInvoiceContext;
+  /** Durable customer-facing invoice number, assigned at post (e.g. 'INV-1042'). */
+  invoiceNumber?: string;
   /** For an adjustment/credit, the main invoice it corrects. Undefined for the main. */
   adjustsInvoiceId?: string;
   createdAt: string;

@@ -44,6 +44,7 @@ function postedInvoice(overrides: Partial<InvoiceRecord> = {}): InvoiceRecord {
       serviceLocation: { locationId: 'location-1', name: 'Acme HQ' },
       jobNumber: '1001'
     },
+    invoiceNumber: 'INV-1042',
     createdAt: '2026-06-01T00:00:00.000Z',
     updatedAt: '2026-06-01T12:00:00.000Z',
     version: 2,
@@ -61,7 +62,7 @@ function outboundMessage(overrides = {}) {
     invoiceId: 'invoice-1',
     documentSnapshotId: 'snapshot-1',
     recipientEmail: 'customer@example.com',
-    subject: 'Invoice 1001 from Acme HVAC',
+    subject: 'Invoice INV-1042 from Acme HVAC',
     bodyText: 'Hello Acme Co, attached is your invoice for job 1001.',
     fromName: 'Acme HVAC',
     replyToEmail: 'office@acme.example',
@@ -79,9 +80,9 @@ function companySettings(overrides = {}) {
     replyToEmail: 'office@acme.example',
     estimateEmailSubject: 'Estimate from {companyName}',
     estimateEmailBody: 'Attached is your estimate.',
-    invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+    invoiceEmailSubject: 'Invoice {invoiceReference} from {companyName}',
     invoiceEmailBody:
-      'Hello {customerName}, attached is your {invoiceLabelLower} for job {jobNumber}.',
+      'Hello {customerName}, attached is your {invoiceLabelLower} {invoiceReference}.',
     includeInvoicePaymentLink: false,
     sendPaymentReceipts: true,
     paymentReceiptEmailSubject: 'Receipt from {companyName}',
@@ -127,7 +128,7 @@ function createService() {
       jobId: 'job-1',
       invoiceId: 'invoice-1',
       sourceVersion: 2,
-      filename: 'invoice-1001-invoice-1.pdf',
+      filename: 'INV-1042.pdf',
       contentType: 'application/pdf',
       storagePath: 'customer-documents/jobs/job-1/invoices/invoice-1/snapshot-1.pdf',
       sha256: 'a'.repeat(64),
@@ -208,8 +209,8 @@ describe('InvoiceDeliveryService', () => {
       'invoices:send',
       ['office-web']
     );
-    expect(result.preview.subject).toBe('Invoice 1001 from Acme HVAC');
-    expect(result.preview.bodyText).toContain('Hello Acme Co');
+    expect(result.preview.subject).toBe('Invoice INV-1042 from Acme HVAC');
+    expect(result.preview.bodyText).toBe('Hello Acme Co, attached is your invoice INV-1042.');
     expect(result.deliveryStatus.message).toBe('Invoice email is ready.');
     expect(emailProviderService.getInvoiceEmailDeliveryStatus).toHaveBeenCalledTimes(1);
   });
@@ -227,6 +228,29 @@ describe('InvoiceDeliveryService', () => {
 
     expect(result.preview.subject).toBe('Invoice ready for 1001');
     expect(result.preview.bodyText).toBe('Hi Acme Co, Acme HVAC attached invoice.');
+  });
+
+  it('exposes invoice number and fallback invoice reference tokens for email templates', async () => {
+    const { service, companySettingsRepository, invoicesRepository } = createService();
+    companySettingsRepository.getSettings.mockResolvedValue(
+      companySettings({
+        invoiceEmailSubject: 'Invoice {invoiceReference}',
+        invoiceEmailBody: 'Number: {invoiceNumber}. Reference: {invoiceReference}'
+      })
+    );
+
+    const numbered = await service.getInvoiceSendPreview('token', 'invoice-1');
+
+    expect(numbered.preview.subject).toBe('Invoice INV-1042');
+    expect(numbered.preview.bodyText).toBe('Number: INV-1042. Reference: INV-1042');
+
+    invoicesRepository.getInvoiceById.mockResolvedValueOnce(
+      postedInvoice({ invoiceNumber: undefined })
+    );
+    const legacy = await service.getInvoiceSendPreview('token', 'invoice-1');
+
+    expect(legacy.preview.subject).toBe('Invoice for job 1001');
+    expect(legacy.preview.bodyText).toBe('Number: . Reference: for job 1001');
   });
 
   it('rejects draft invoices and posted invoices missing frozen context', async () => {
@@ -263,7 +287,7 @@ describe('InvoiceDeliveryService', () => {
         jobId: 'job-1',
         invoiceId: 'invoice-1',
         recipientEmail: 'customer@example.com',
-        subject: 'Invoice 1001 from Acme HVAC'
+        subject: 'Invoice INV-1042 from Acme HVAC'
       })
     );
     expect(customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0]).not.toHaveProperty(
@@ -288,7 +312,8 @@ describe('InvoiceDeliveryService', () => {
       expect.objectContaining({
         documentType: 'invoice',
         invoiceId: 'invoice-1',
-        sourceVersion: 2
+        sourceVersion: 2,
+        filename: 'INV-1042.pdf'
       })
     );
     const sendIntent = customerDeliveryRepository.createInvoiceSendIntent.mock.calls[0][0];

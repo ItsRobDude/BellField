@@ -79,8 +79,8 @@ beforeEach(() => {
   mockedApi.downloadOfficeInvoiceDocument.mockResolvedValue(new Blob(['html']));
   mockedInvoiceDeliveryApi.getOfficeInvoiceSendPreview.mockResolvedValue({
     preview: {
-      subject: 'Invoice 1001 from Acme HVAC',
-      bodyText: 'Hello Acme Co, attached is your invoice for job 1001.'
+      subject: 'Invoice INV-1042 from Acme HVAC',
+      bodyText: 'Hello Acme Co, attached is your invoice INV-1042.'
     },
     deliveryStatus: {
       configured: true,
@@ -101,7 +101,7 @@ beforeEach(() => {
       invoiceId: 'inv-1',
       documentSnapshotId: 'snapshot-1',
       recipientEmail: 'customer@example.com',
-      subject: 'Invoice 1001 from Acme HVAC',
+      subject: 'Invoice INV-1042 from Acme HVAC',
       sentByName: 'Olivia Owner',
       queuedAt: '2026-06-01T12:00:00.000Z',
       sentAt: '2026-06-01T12:00:01.000Z'
@@ -112,7 +112,7 @@ beforeEach(() => {
       jobId: 'job-1',
       invoiceId: 'inv-1',
       sourceVersion: 2,
-      filename: 'invoice-1001-inv-1.pdf',
+      filename: 'INV-1042.pdf',
       contentType: 'application/pdf',
       sha256: 'a'.repeat(64),
       byteSize: 123,
@@ -156,6 +156,7 @@ function postedInvoice(): InvoiceSummary {
   return draftInvoice({
     status: 'posted',
     version: 2,
+    invoiceNumber: 'INV-1042',
     posted: {
       postedAt: '2026-06-01T12:00:00.000Z',
       postedByName: 'Olivia Owner',
@@ -276,10 +277,7 @@ describe('JobInvoiceSection posting', () => {
         sessionToken: 'test-token'
       })
     );
-    expect(mockedDownload.downloadBlob).toHaveBeenCalledWith(
-      'invoice-1001-inv-1.html',
-      expect.any(Blob)
-    );
+    expect(mockedDownload.downloadBlob).toHaveBeenCalledWith('INV-1042.html', expect.any(Blob));
   });
 
   it('hides the Post button when the user lacks invoices:post', async () => {
@@ -423,7 +421,7 @@ describe('JobInvoiceSection posting', () => {
       'customer@example.com'
     );
     expect(await screen.findByLabelText('Invoice email subject')).toHaveValue(
-      'Invoice 1001 from Acme HVAC'
+      'Invoice INV-1042 from Acme HVAC'
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
@@ -434,8 +432,8 @@ describe('JobInvoiceSection posting', () => {
         apiBaseUrl: 'http://localhost',
         sessionToken: 'test-token',
         recipientEmail: 'customer@example.com',
-        subject: 'Invoice 1001 from Acme HVAC',
-        bodyText: 'Hello Acme Co, attached is your invoice for job 1001.'
+        subject: 'Invoice INV-1042 from Acme HVAC',
+        bodyText: 'Hello Acme Co, attached is your invoice INV-1042.'
       })
     );
     expect(await screen.findByText('Invoice sent.')).toBeInTheDocument();
@@ -453,7 +451,7 @@ describe('JobInvoiceSection posting', () => {
         invoiceId: 'inv-1',
         documentSnapshotId: 'snapshot-1',
         recipientEmail: 'customer@example.com',
-        subject: 'Invoice 1001 from Acme HVAC',
+        subject: 'Invoice INV-1042 from Acme HVAC',
         sentByName: 'Olivia Owner',
         queuedAt: '2026-06-01T12:00:00.000Z',
         sentAt: '2026-06-01T12:00:01.000Z'
@@ -464,7 +462,7 @@ describe('JobInvoiceSection posting', () => {
         jobId: 'job-1',
         invoiceId: 'inv-1',
         sourceVersion: 2,
-        filename: 'invoice-1001-inv-1.pdf',
+        filename: 'INV-1042.pdf',
         contentType: 'application/pdf',
         sha256: 'a'.repeat(64),
         byteSize: 123,
@@ -495,7 +493,7 @@ describe('JobInvoiceSection posting', () => {
         invoiceId: 'inv-1',
         documentSnapshotId: 'snapshot-1',
         recipientEmail: 'customer@example.com',
-        subject: 'Invoice 1001 from Acme HVAC',
+        subject: 'Invoice INV-1042 from Acme HVAC',
         sentByName: 'Olivia Owner',
         queuedAt: '2026-06-01T12:00:00.000Z',
         sentAt: '2026-06-01T12:00:01.000Z'
@@ -506,7 +504,7 @@ describe('JobInvoiceSection posting', () => {
         jobId: 'job-1',
         invoiceId: 'inv-1',
         sourceVersion: 2,
-        filename: 'invoice-1001-inv-1.pdf',
+        filename: 'INV-1042.pdf',
         contentType: 'application/pdf',
         sha256: 'a'.repeat(64),
         byteSize: 123,
@@ -537,7 +535,7 @@ describe('JobInvoiceSection posting', () => {
           jobId: 'job-1',
           invoiceId: 'inv-1',
           recipientEmail: 'customer@example.com',
-          subject: 'Invoice 1001 from Acme HVAC',
+          subject: 'Invoice INV-1042 from Acme HVAC',
           sentByName: 'Olivia Owner',
           queuedAt: '2026-06-01T12:00:00.000Z'
         }
@@ -551,7 +549,7 @@ describe('JobInvoiceSection posting', () => {
         jobId: 'job-1',
         invoiceId: 'inv-1',
         recipientEmail: 'customer@example.com',
-        subject: 'Invoice 1001 from Acme HVAC',
+        subject: 'Invoice INV-1042 from Acme HVAC',
         sentByName: 'Olivia Owner',
         queuedAt: '2026-06-01T12:00:00.000Z',
         deliveryMessage: 'Canceled before sending.'
