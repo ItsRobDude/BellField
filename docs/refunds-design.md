@@ -249,7 +249,10 @@ are refundable only through this permission; they remain non-voidable.
   recorded refund enqueues a `refundReceipt` in the same transaction and the
   worker send-loop emails it from the owner-editable refund template
   (`sendRefundReceipts` toggle). The refund copy omits a method token (a manual
-  refund records no refund-method). Online refund receipts are slice 2b.
+  refund records no refund-method). **Online refund receipts shipped too (slice
+  2b):** the worker enqueues a `refundReceipt` only when it records a
+  provider-confirmed Stripe refund (`'applied'`) — never on the failed, deferred,
+  dead-lettered, or already-applied paths.
 
 ## Test plan
 
