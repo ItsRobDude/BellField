@@ -295,9 +295,10 @@ export class PaymentsRepository {
   /**
    * Record a manual refund of all or part of a payment (the slice-1 path; online
    * card refunds are recorded by the worker from a confirmed Stripe event). The
-   * refund reverses the payment's allocations main-first so each posted charge
-   * invoice's remaining balance stays exact, and the job's amount due rises by the
-   * refunded amount. Append-only — it never edits the payment or a posted invoice.
+   * refund reverses the payment's allocations main-first, even if the payment was
+   * originally scoped to an adjustment invoice. Source-aware refund reversal is a
+   * later explicit accounting slice. Append-only — it never edits the payment or a
+   * posted invoice.
    */
   async refundPayment(paymentId: string, input: RefundWriteInput): Promise<RefundRecord> {
     const now = new Date().toISOString();
@@ -427,9 +428,11 @@ export class PaymentsRepository {
 
   /**
    * Reverse the payment's allocations main-first, up to the refund amount, net of
-   * any allocations already reversed by prior partial refunds. Any remainder maps
-   * to an unallocated (overpayment) portion of the payment and needs no allocation
-   * row — it still reduces job-level net paid via payment_refunds.amount.
+   * any allocations already reversed by prior partial refunds. This intentionally
+   * ignores payments.invoice_id until source-aware refund reversal is designed.
+   * Any remainder maps to an unallocated (overpayment) portion of the payment and
+   * needs no allocation row — it still reduces job-level net paid via
+   * payment_refunds.amount.
    */
   private async insertRefundReversalAllocations(
     refundId: string,

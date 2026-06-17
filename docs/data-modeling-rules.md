@@ -567,6 +567,16 @@ Current implementation note:
 - Money is not part of this snapshot — totals and per-line amounts already freeze on write.
 - A draft invoice intentionally has no snapshot and resolves current names; freezing only matters once the invoice becomes the locked accounting record.
 
+### Payment allocation rule
+
+Payments are job-level ledger records with optional source-invoice context.
+
+Current implementation note:
+
+- A payment recorded from a posted charge invoice applies to that source invoice first, then spills to other open posted charges job-wide.
+- A null-source deposit remains job-level. If no posted charges exist, it is unallocated credit; if posted charges exist, it allocates job-wide/main-first.
+- Refund reversal intentionally remains job-level/main-first for now, even when the original payment was source-first. Source-aware refund allocation is a later explicit accounting behavior slice.
+
 ---
 
 ## 11. Register and Line Item Modeling Rules

@@ -617,6 +617,33 @@ describe('PaymentsRepository.refundPayment', () => {
     expect(receiptEnqueue?.params?.[2]).toBe(refundInsert?.params?.[0]); // payment_refund_id
   });
 
+  it('keeps refund reversal main-first for adjustment-sourced payments until source-aware refunds ship', async () => {
+    const { repository, calls } = repositoryWith(
+      refundHandlers({
+        allocations: [
+          { invoiceId: 'inv-main', allocatedCents: '15000', refundedCents: '0' },
+          { invoiceId: 'inv-adj', allocatedCents: '5000', refundedCents: '0' }
+        ]
+      })
+    );
+
+    await repository.refundPayment('pay-1', {
+      amount: 170,
+      reason: 'returned',
+      actor
+    });
+
+    const reversalSelect = findCall(calls, REVERSAL_SELECT);
+    expect(reversalSelect?.sql).toMatch(/case when i\.invoice_kind = 'main' then 0 else 1 end/i);
+    expect(reversalSelect?.sql).not.toMatch(/p\.invoice_id/i);
+    // Even though source-first payments may have paid the adjustment first, refunds
+    // remain job-level/main-first until the explicit refund-allocation slice.
+    const allocInserts = calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql));
+    expect(allocInserts).toHaveLength(2);
+    expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-main', 150]));
+    expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
+  });
+
   it('refunds a manual deposit (no allocations) — records the refund, reverses nothing', async () => {
     // A deposit held as job credit has no allocations to reverse; the refund still
     // records and lowers net paid. (Deposits are source=manual, so they refund here.)
