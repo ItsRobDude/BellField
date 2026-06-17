@@ -11,6 +11,7 @@ import {
   setNextInvoiceNumber
 } from './invoice-number-utils';
 import { INVOICE_COLUMNS, INVOICE_LINE_COLUMNS } from './invoices-repository-columns';
+import { allocatePrePostDepositsToPostedMainInvoice } from './pre-post-deposit-allocation';
 import type {
   InvoiceDiscountValue,
   InvoiceKindValue,
@@ -532,6 +533,8 @@ export class InvoicesRepository {
   ): Promise<void> {
     const now = new Date().toISOString();
     await this.databaseService.transaction(async (queryable) => {
+      await this.lockJobForInvoicePost(invoiceId, queryable);
+
       // Guarded by id + status='draft' so it works for any invoice (the main or an
       // adjustment/credit) and is atomic against a concurrent post. `returning job_id`
       // gives us the job for the timeline without a second read.
@@ -592,6 +595,14 @@ export class InvoicesRepository {
 
       await assignInvoiceNumber(queryable, invoiceId, posted.invoiceKind, now);
 
+      if (posted.invoiceKind === 'main') {
+        await allocatePrePostDepositsToPostedMainInvoice(queryable, {
+          jobId: posted.jobId,
+          invoiceId,
+          now
+        });
+      }
+
       const message =
         posted.invoiceKind === 'credit'
           ? 'Credit posted and locked.'
@@ -612,6 +623,18 @@ export class InvoicesRepository {
         queryable
       );
     });
+  }
+
+  private async lockJobForInvoicePost(invoiceId: string, queryable: QueryExecutor): Promise<void> {
+    const invoice = await queryable.query<{ jobId: string }>(
+      `select job_id as "jobId" from invoices where id = $1 limit 1`,
+      [invoiceId]
+    );
+    const jobId = invoice.rows[0]?.jobId;
+    if (!jobId) {
+      return;
+    }
+    await queryable.query(`select id from jobs where id = $1 for update`, [jobId]);
   }
 
   /** The number that will be issued to the next posted invoice. */

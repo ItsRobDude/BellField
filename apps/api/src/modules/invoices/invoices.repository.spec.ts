@@ -279,12 +279,21 @@ describe('InvoicesRepository.postInvoice', () => {
     workOrderNumber: 'WO-9'
   };
   const actor = { id: 'owner-1', displayName: 'Olivia Owner' };
+  const INVOICE_JOB_READ = /select job_id as "jobId" from invoices where id = \$1 limit 1/i;
+  const JOB_LOCK = /select id from jobs where id = \$1 for update/i;
   const POST_UPDATE = /update invoices set\s+status = 'posted'/i;
   const SERIES_INCREMENT = /update invoice_number_series\s+set next_value = next_value \+ 1/i;
   const NUMBER_UPDATE = /update invoices\s+set invoice_sequence/i;
+  const DEPOSIT_CAPACITY_SELECT = /i\.total_amount as total/i;
+  const DEPOSIT_CREDIT_SELECT = /from payments p\s+left join refunded/i;
+  const ALLOCATION_INSERT = /insert into payment_allocations/i;
+  const HANDLERS_POST_JOB_READ = { match: INVOICE_JOB_READ, rows: [{ jobId: 'job-1' }] };
+  const HANDLERS_JOB_LOCK = { match: JOB_LOCK, rows: [{ id: 'job-1' }] };
 
   it('locks the draft by id, freezes the snapshot, bumps version, and logs the post', async () => {
     const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
       // The guarded update returns the job id (and kind) for the timeline.
       { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
       { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1042' }] },
@@ -303,6 +312,10 @@ describe('InvoicesRepository.postInvoice', () => {
     expect(post?.sql).toMatch(/version = version \+ 1/i);
     expect(post?.params).toContain('Acme Co');
     expect(post?.params).toContain('1001');
+    const jobLockIndex = calls.findIndex((call) => JOB_LOCK.test(call.sql));
+    const postIndex = calls.findIndex((call) => POST_UPDATE.test(call.sql));
+    expect(jobLockIndex).toBeGreaterThanOrEqual(0);
+    expect(jobLockIndex).toBeLessThan(postIndex);
     // Posting must NOT change job status — only touch updated_at, keyed on the job id
     // returned by the update.
     const jobTouch = findCall(calls, /update jobs set/i);
@@ -323,6 +336,8 @@ describe('InvoicesRepository.postInvoice', () => {
 
   it('formats the number by kind: a posted credit gets the CR- prefix on the shared counter', async () => {
     const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
       { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'credit' }] },
       { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1043' }] },
       HANDLERS_TOUCH_JOB,
@@ -333,10 +348,14 @@ describe('InvoicesRepository.postInvoice', () => {
 
     const numberUpdate = findCall(calls, NUMBER_UPDATE);
     expect(numberUpdate?.params).toEqual(['inv-credit', '1043', 'CR-1043']);
+    expect(findCall(calls, DEPOSIT_CAPACITY_SELECT)).toBeUndefined();
+    expect(findCall(calls, ALLOCATION_INSERT)).toBeUndefined();
   });
 
   it('formats the number by kind: a posted adjustment gets the ADJ- prefix on the shared counter', async () => {
     const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
       { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'adjustment' }] },
       { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1044' }] },
       HANDLERS_TOUCH_JOB,
@@ -347,10 +366,108 @@ describe('InvoicesRepository.postInvoice', () => {
 
     const numberUpdate = findCall(calls, NUMBER_UPDATE);
     expect(numberUpdate?.params).toEqual(['inv-adjustment', '1044', 'ADJ-1044']);
+    expect(findCall(calls, DEPOSIT_CAPACITY_SELECT)).toBeUndefined();
+    expect(findCall(calls, ALLOCATION_INSERT)).toBeUndefined();
+  });
+
+  it('allocates pre-post deposits to the newly posted main invoice FIFO with the invoice cap', async () => {
+    const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1042' }] },
+      { match: DEPOSIT_CAPACITY_SELECT, rows: [{ total: '125.00', netAllocated: '0.00' }] },
+      {
+        match: DEPOSIT_CREDIT_SELECT,
+        rows: [
+          { paymentId: 'dep-old', amount: '75.00', refunded: '0.00' },
+          { paymentId: 'dep-new', amount: '100.00', refunded: '0.00' }
+        ]
+      },
+      { match: ALLOCATION_INSERT, rowCount: 1 },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-1', snapshot, actor);
+
+    const depositRead = findCall(calls, DEPOSIT_CREDIT_SELECT);
+    expect(depositRead?.sql).toMatch(/order by p\.received_at asc, p\.created_at asc, p\.id asc/i);
+    const allocations = calls.filter((call) => ALLOCATION_INSERT.test(call.sql));
+    expect(allocations).toHaveLength(2);
+    expect(allocations[0].params).toEqual(expect.arrayContaining(['dep-old', 'inv-1', 75]));
+    expect(allocations[1].params).toEqual(expect.arrayContaining(['dep-new', 'inv-1', 50]));
+  });
+
+  it('allocates only the unrefunded portion of a pre-post deposit', async () => {
+    const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1042' }] },
+      { match: DEPOSIT_CAPACITY_SELECT, rows: [{ total: '500.00', netAllocated: '0.00' }] },
+      {
+        match: DEPOSIT_CREDIT_SELECT,
+        rows: [{ paymentId: 'dep-1', amount: '200.00', refunded: '50.00' }]
+      },
+      { match: ALLOCATION_INSERT, rowCount: 1 },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-1', snapshot, actor);
+
+    const allocation = findCall(calls, ALLOCATION_INSERT);
+    expect(allocation?.params).toEqual(expect.arrayContaining(['dep-1', 'inv-1', 150]));
+  });
+
+  it('filters the sweep to unallocated non-void null-source deposits only', async () => {
+    const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1042' }] },
+      { match: DEPOSIT_CAPACITY_SELECT, rows: [{ total: '500.00', netAllocated: '0.00' }] },
+      { match: DEPOSIT_CREDIT_SELECT, rows: [] },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-1', snapshot, actor);
+
+    const depositRead = findCall(calls, DEPOSIT_CREDIT_SELECT);
+    expect(depositRead?.sql).toMatch(/p\.invoice_id is null/i);
+    expect(depositRead?.sql).toMatch(/p\.purpose = 'deposit'/i);
+    expect(depositRead?.sql).toMatch(/p\.is_void = false/i);
+    expect(depositRead?.sql).toMatch(/not exists \(/i);
+    expect(depositRead?.sql).toMatch(/from payment_allocations pa_existing/i);
+    expect(findCall(calls, ALLOCATION_INSERT)).toBeUndefined();
+  });
+
+  it.each([
+    ['zero-dollar', '0.00', '0.00'],
+    ['fully covered', '100.00', '100.00']
+  ])('skips the deposit sweep for a %s main invoice', async (_label, total, netAllocated) => {
+    const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
+      { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
+      { match: SERIES_INCREMENT, rowCount: 1, rows: [{ assigned: '1042' }] },
+      { match: DEPOSIT_CAPACITY_SELECT, rows: [{ total, netAllocated }] },
+      HANDLERS_TOUCH_JOB,
+      HANDLERS_TIMELINE
+    ]);
+
+    await repository.postInvoice('inv-1', snapshot, actor);
+
+    expect(findCall(calls, DEPOSIT_CREDIT_SELECT)).toBeUndefined();
+    expect(findCall(calls, ALLOCATION_INSERT)).toBeUndefined();
   });
 
   it('fails the post if the number series row is missing (data-integrity fault, not silent)', async () => {
     const { repository } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
       { match: POST_UPDATE, rowCount: 1, rows: [{ jobId: 'job-1', invoiceKind: 'main' }] },
       { match: SERIES_INCREMENT, rowCount: 0, rows: [] }
     ]);
@@ -361,7 +478,11 @@ describe('InvoicesRepository.postInvoice', () => {
   });
 
   it('rejects with a conflict and writes no timeline when the invoice is no longer a draft', async () => {
-    const { repository, calls } = repositoryWith([{ match: POST_UPDATE, rowCount: 0 }]);
+    const { repository, calls } = repositoryWith([
+      HANDLERS_POST_JOB_READ,
+      HANDLERS_JOB_LOCK,
+      { match: POST_UPDATE, rowCount: 0 }
+    ]);
 
     await expect(repository.postInvoice('inv-1', snapshot, actor)).rejects.toBeInstanceOf(
       ConflictException
