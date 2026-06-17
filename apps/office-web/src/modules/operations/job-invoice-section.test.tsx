@@ -183,6 +183,48 @@ function postedInvoice(): InvoiceSummary {
   });
 }
 
+function postedAdjustment(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
+  return draftInvoice({
+    id: 'adj-1',
+    invoiceKind: 'adjustment',
+    status: 'posted',
+    invoiceNumber: 'ADJ-1043',
+    adjustsInvoiceId: 'inv-1',
+    totals: {
+      subtotal: 75,
+      discount: 0,
+      taxableBase: 0,
+      tax: 0,
+      total: 75,
+      totalCost: 0,
+      profit: 75,
+      marginBasisPoints: 10000,
+      costComplete: true
+    },
+    ...overrides
+  });
+}
+
+function postedCredit(overrides: Partial<InvoiceSummary> = {}): InvoiceSummary {
+  return postedAdjustment({
+    id: 'credit-1',
+    invoiceKind: 'credit',
+    invoiceNumber: 'CR-1044',
+    totals: {
+      subtotal: 25,
+      discount: 0,
+      taxableBase: 0,
+      tax: 0,
+      total: 25,
+      totalCost: 0,
+      profit: 25,
+      marginBasisPoints: 10000,
+      costComplete: true
+    },
+    ...overrides
+  });
+}
+
 function renderSection(
   canPost: boolean,
   options?: {
@@ -654,6 +696,130 @@ describe('JobInvoiceSection posting', () => {
     ).toBeInTheDocument();
   });
 
+  it('creates a payment link against a selected posted adjustment first', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 25,
+      netBilled: 300,
+      paidTotal: 50,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment(), postedCredit()]
+    });
+    mockedApi.listOfficeJobPayments.mockResolvedValueOnce({
+      payments: [
+        manualPayment({
+          amount: 50,
+          allocations: [
+            {
+              invoiceId: 'inv-1',
+              invoiceKind: 'main',
+              invoiceNumber: 'INV-1042',
+              amount: 50
+            }
+          ]
+        })
+      ],
+      refunds: [],
+      onlineRefundRequests: []
+    });
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'created',
+      checkoutUrl: 'https://checkout.stripe.test/pay/cs_adj',
+      paymentSessionId: 'pay_sess_adj',
+      amount: 75,
+      currency: 'USD',
+      expiresAt: '2026-06-14T00:00:00.000Z'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    const targetSelect = await screen.findByLabelText('Apply to first');
+    const options = Array.from(targetSelect.querySelectorAll('option')).map(
+      (option) => option.textContent
+    );
+    expect(options).toEqual(['INV-1042 - $200.00 remaining', 'ADJ-1043 - $75.00 remaining']);
+
+    fireEvent.change(targetSelect, { target: { value: 'adj-1' } });
+    expect(screen.getByLabelText('Payment link amount')).toHaveValue(75);
+    fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
+
+    await waitFor(() =>
+      expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledWith({
+        invoiceId: 'adj-1',
+        amount: 75,
+        confirmSameAmountCharge: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(
+      await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_adj')
+    ).toBeInTheDocument();
+  });
+
+  it('records a manual payment against the selected posted adjustment first', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 0,
+      netBilled: 325,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 325
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment()]
+    });
+    mockedApi.recordOfficePayment.mockResolvedValueOnce({
+      payment: manualPayment({
+        id: 'pay-adj',
+        invoiceId: 'adj-1',
+        amount: 60,
+        allocations: [
+          {
+            invoiceId: 'adj-1',
+            invoiceKind: 'adjustment',
+            invoiceNumber: 'ADJ-1043',
+            amount: 60
+          }
+        ]
+      })
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
+    fireEvent.change(await screen.findByLabelText('Apply to first'), {
+      target: { value: 'adj-1' }
+    });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+
+    await waitFor(() =>
+      expect(mockedApi.recordOfficePayment).toHaveBeenCalledWith({
+        invoiceId: 'adj-1',
+        amount: 60,
+        method: 'card',
+        reference: undefined,
+        memo: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
+    expect(await screen.findByText('Payment recorded.')).toBeInTheDocument();
+  });
+
   it('shows the reused active payment link notice when the API returns an existing session', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
@@ -1073,6 +1239,42 @@ describe('JobInvoiceSection refunds', () => {
     expect(
       await screen.findByText(
         (_, element) => element?.textContent === '$500.00 · Deposit received · Online card'
+      )
+    ).toBeInTheDocument();
+  });
+
+  it('shows invoice-number allocation breakdowns on payments', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValue(paidBalance);
+    mockedApi.listOfficeJobPayments.mockResolvedValue({
+      payments: [
+        manualPayment({
+          amount: 75,
+          allocations: [
+            {
+              invoiceId: 'adj-1',
+              invoiceKind: 'adjustment',
+              invoiceNumber: 'ADJ-1043',
+              amount: 50
+            },
+            {
+              invoiceId: 'inv-1',
+              invoiceKind: 'main',
+              invoiceNumber: 'INV-1042',
+              amount: 25
+            }
+          ]
+        })
+      ],
+      refunds: [],
+      onlineRefundRequests: []
+    });
+
+    renderSection(true);
+
+    expect(
+      await screen.findByText(
+        (_, element) => element?.textContent === '↳ Applied to ADJ-1043: $50.00 · INV-1042: $25.00'
       )
     ).toBeInTheDocument();
   });

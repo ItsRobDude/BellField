@@ -25,15 +25,7 @@ import {
   type PaymentRefund
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import {
-  formatCurrency,
-  InvoiceLineEditor,
-  InvoiceTotals,
-  invoiceSourceLabels,
-  PostedInvoiceSummary,
-  SummaryRow,
-  type InvoicePaymentPermissions
-} from './job-invoice-shared';
+import { formatCurrency, SummaryRow, type InvoicePaymentPermissions } from './job-invoice-shared';
 import {
   emptyPaymentDraft,
   PaymentsBlock,
@@ -42,27 +34,29 @@ import {
   type RefundDraft
 } from './job-invoice-payments-block';
 import {
+  buildPaymentTargetOptions,
+  defaultPaymentLinkAmountForTarget,
+  findPaymentTarget,
+  type PaymentTargetOption
+} from './job-invoice-payment-targets';
+import {
   buildInvoiceLineDraft,
   createEmptyInvoiceLineDraft,
-  invoiceLineKindLabels,
   parseInvoiceLineDraft,
   type InvoiceLineDraft
 } from './job-invoice-types';
+import { CorrectionCard, correctionKindLabels } from './job-invoice-correction-card';
 
 type JobInvoiceCorrectionsProps = {
   jobId: string;
   mainInvoiceId: string;
+  mainInvoiceNumber?: string;
   apiBaseUrl: string;
   sessionToken: string;
   canEdit: boolean;
   canPost: boolean;
   canCreate: boolean;
   paymentPermissions: InvoicePaymentPermissions;
-};
-
-const correctionKindLabels: Record<InvoiceAdjustmentKind, string> = {
-  adjustment: 'Adjustment',
-  credit: 'Credit'
 };
 
 // The job-level money rollup, shown once the main invoice is posted: the net billed
@@ -73,6 +67,7 @@ const correctionKindLabels: Record<InvoiceAdjustmentKind, string> = {
 export function JobInvoiceCorrections({
   jobId,
   mainInvoiceId,
+  mainInvoiceNumber,
   apiBaseUrl,
   sessionToken,
   canEdit,
@@ -108,6 +103,22 @@ export function JobInvoiceCorrections({
   > | null>(null);
 
   const canViewPayments = paymentPermissions.canView;
+  const paymentTargets = balance
+    ? buildPaymentTargetOptions({
+        mainInvoiceId,
+        mainInvoiceNumber,
+        balance,
+        corrections,
+        payments,
+        refunds
+      })
+    : [
+        {
+          invoiceId: mainInvoiceId,
+          label: mainInvoiceNumber ?? 'Main invoice',
+          remainingAmount: 0
+        }
+      ];
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -268,7 +279,7 @@ export function JobInvoiceCorrections({
     setIsSaving(true);
     try {
       const response = await recordOfficePayment({
-        invoiceId: mainInvoiceId,
+        invoiceId: paymentDraft.invoiceId,
         amount,
         method: paymentDraft.method,
         reference: paymentDraft.reference.trim() || undefined,
@@ -295,12 +306,17 @@ export function JobInvoiceCorrections({
     }
     setPaymentDraft(null);
     setRefundDraft(null);
-    setPaymentLinkDraft({ amount: balance.amountDue.toFixed(2) });
+    const target = getDefaultPaymentTarget(paymentTargets, mainInvoiceId);
+    setPaymentLinkDraft({
+      invoiceId: target.invoiceId,
+      amount: defaultPaymentLinkAmountForTarget(target, balance.amountDue)
+    });
     setErrorMessage(null);
   }
 
   async function createPaymentLink() {
     if (!paymentLinkDraft) return;
+    const targetInvoiceId = paymentLinkDraft.invoiceId;
     if (!balance || balance.amountDue <= 0) {
       setErrorMessage('This job does not have an outstanding balance.');
       return;
@@ -330,7 +346,7 @@ export function JobInvoiceCorrections({
         confirmActiveLinkOverage: false
       };
       for (let attempt = 0; attempt < 3; attempt += 1) {
-        const response = await requestPaymentLink(confirmations, amount);
+        const response = await requestPaymentLink(confirmations, amount, targetInvoiceId);
         if (response.state === 'confirmationRequired') {
           if (response.code === 'sameAmountPreviouslyPaid') {
             const confirmed = window.confirm(
@@ -393,10 +409,11 @@ export function JobInvoiceCorrections({
       confirmSameAmountCharge: boolean;
       confirmActiveLinkOverage: boolean;
     },
-    amount: number
+    amount: number,
+    targetInvoiceId: string
   ) {
     return createOfficeOnlinePaymentLink({
-      invoiceId: mainInvoiceId,
+      invoiceId: targetInvoiceId,
       amount,
       confirmSameAmountCharge: confirmations.confirmSameAmountCharge || undefined,
       ...(confirmations.confirmActiveLinkOverage ? { confirmActiveLinkOverage: true } : {}),
@@ -629,10 +646,13 @@ export function JobInvoiceCorrections({
           onlinePaymentLink={onlinePaymentLink}
           paymentLinkDraft={paymentLinkDraft}
           paymentDraft={paymentDraft}
+          paymentTargets={paymentTargets}
           refundDraft={refundDraft}
           onStartRecord={() => {
             setPaymentLinkDraft(null);
-            setPaymentDraft(emptyPaymentDraft());
+            setPaymentDraft(
+              emptyPaymentDraft(getDefaultPaymentTarget(paymentTargets, mainInvoiceId).invoiceId)
+            );
           }}
           onStartPaymentLink={startPaymentLink}
           onCancelPaymentLink={() => setPaymentLinkDraft(null)}
@@ -660,136 +680,15 @@ export function JobInvoiceCorrections({
   );
 }
 
-function CorrectionCard({
-  correction,
-  canEdit,
-  canPost,
-  isSaving,
-  lineEdit,
-  otherEditInProgress,
-  onStartAddLine,
-  onStartEditLine,
-  onCancelLineEdit,
-  onChangeLineDraft,
-  onSaveLine,
-  onRemoveLine,
-  onPost
-}: {
-  correction: InvoiceSummary;
-  canEdit: boolean;
-  canPost: boolean;
-  isSaving: boolean;
-  lineEdit: { invoiceId: string; lineId: string | null; draft: InvoiceLineDraft } | null;
-  otherEditInProgress: boolean;
-  onStartAddLine: () => void;
-  onStartEditLine: (line: InvoiceLineItemSummary) => void;
-  onCancelLineEdit: () => void;
-  onChangeLineDraft: (draft: InvoiceLineDraft) => void;
-  onSaveLine: () => void;
-  onRemoveLine: (line: InvoiceLineItemSummary) => void;
-  onPost: () => void;
-}) {
-  const isDraft = correction.status === 'draft';
-  const kindLabel =
-    correctionKindLabels[correction.invoiceKind === 'credit' ? 'credit' : 'adjustment'];
-  const isAddingLine = lineEdit !== null && lineEdit.lineId === null;
-  const editingLineId = lineEdit?.lineId ?? null;
-  const isBusyEditing = lineEdit !== null;
-  // While a line is being edited on ANOTHER card, suppress this card's actions so a
-  // stray click can't discard that unsaved edit (one editor is open at a time).
-  const actionsEnabled = isDraft && canEdit && !isBusyEditing && !otherEditInProgress;
-
+function getDefaultPaymentTarget(
+  paymentTargets: PaymentTargetOption[],
+  mainInvoiceId: string
+): PaymentTargetOption {
   return (
-    <div style={styles.subpanel}>
-      <div style={styles.row}>
-        <strong>
-          {kindLabel}
-          {correction.invoiceNumber ? ` · ${correction.invoiceNumber}` : ''}
-        </strong>
-        <div style={styles.badgeRow}>
-          <span style={styles.badge}>{isDraft ? 'Draft' : 'Posted'}</span>
-          {actionsEnabled ? (
-            <button type="button" style={styles.button} onClick={onStartAddLine}>
-              Add line
-            </button>
-          ) : null}
-          {isDraft &&
-          canPost &&
-          !isBusyEditing &&
-          !otherEditInProgress &&
-          correction.lineItems.length > 0 ? (
-            <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onPost}>
-              Post {kindLabel.toLowerCase()}
-            </button>
-          ) : null}
-        </div>
-      </div>
-
-      {correction.lineItems.length === 0 ? (
-        <p style={styles.tinyMuted}>No lines yet.</p>
-      ) : (
-        correction.lineItems.map((line) =>
-          editingLineId === line.id && lineEdit ? (
-            <InvoiceLineEditor
-              key={line.id}
-              heading={`Edit: ${line.description}`}
-              draft={lineEdit.draft}
-              isSaving={isSaving}
-              onChange={onChangeLineDraft}
-              onSave={onSaveLine}
-              onCancel={onCancelLineEdit}
-            />
-          ) : (
-            <div key={line.id} style={styles.row}>
-              <div style={{ minWidth: 0 }}>
-                <span>{line.description}</span>
-                <p style={styles.tinyMuted}>
-                  {invoiceLineKindLabels[line.kind]} · {invoiceSourceLabels[line.sourceKind]} ·{' '}
-                  {line.quantity}
-                  {line.unitOfMeasure ? ` ${line.unitOfMeasure}` : ''} ×{' '}
-                  {formatCurrency(line.unitPrice)}
-                  {line.taxable ? '' : ' · non-taxable'}
-                </p>
-              </div>
-              <div style={styles.badgeRow}>
-                <strong>{formatCurrency(line.lineSubtotal)}</strong>
-                {actionsEnabled ? (
-                  <>
-                    <button
-                      type="button"
-                      style={styles.button}
-                      onClick={() => onStartEditLine(line)}
-                    >
-                      Edit
-                    </button>
-                    <button
-                      type="button"
-                      style={styles.dangerButton}
-                      onClick={() => onRemoveLine(line)}
-                    >
-                      Remove
-                    </button>
-                  </>
-                ) : null}
-              </div>
-            </div>
-          )
-        )
-      )}
-
-      {isAddingLine && lineEdit ? (
-        <InvoiceLineEditor
-          heading={`New ${kindLabel.toLowerCase()} line`}
-          draft={lineEdit.draft}
-          isSaving={isSaving}
-          onChange={onChangeLineDraft}
-          onSave={onSaveLine}
-          onCancel={onCancelLineEdit}
-        />
-      ) : null}
-
-      <InvoiceTotals invoice={correction} />
-      {correction.posted ? <PostedInvoiceSummary posted={correction.posted} /> : null}
-    </div>
+    findPaymentTarget(paymentTargets, mainInvoiceId) ?? {
+      invoiceId: mainInvoiceId,
+      label: 'Main invoice',
+      remainingAmount: 0
+    }
   );
 }

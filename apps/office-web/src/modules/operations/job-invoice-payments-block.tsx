@@ -9,6 +9,11 @@ import type {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from './job-invoice-shared';
+import {
+  defaultPaymentLinkAmountForTarget,
+  findPaymentTarget,
+  type PaymentTargetOption
+} from './job-invoice-payment-targets';
 
 const paymentMethodLabels: Record<PaymentMethod, string> = {
   cash: 'Cash',
@@ -21,6 +26,7 @@ const paymentMethodLabels: Record<PaymentMethod, string> = {
 const paymentMethodOptions: PaymentMethod[] = ['cash', 'check', 'card', 'ach', 'other'];
 
 export type PaymentDraft = {
+  invoiceId: string;
   amount: string;
   method: PaymentMethod;
   reference: string;
@@ -28,6 +34,7 @@ export type PaymentDraft = {
 };
 
 export type PaymentLinkDraft = {
+  invoiceId: string;
   amount: string;
 };
 
@@ -40,8 +47,8 @@ export type RefundDraft = {
   kind: 'manual' | 'online';
 };
 
-export function emptyPaymentDraft(): PaymentDraft {
-  return { amount: '', method: 'card', reference: '', memo: '' };
+export function emptyPaymentDraft(invoiceId: string): PaymentDraft {
+  return { invoiceId, amount: '', method: 'card', reference: '', memo: '' };
 }
 
 // The job's payment ledger: record manual payments / online links, void or refund
@@ -60,6 +67,7 @@ export function PaymentsBlock({
   onlinePaymentLink,
   paymentLinkDraft,
   paymentDraft,
+  paymentTargets,
   refundDraft,
   onStartRecord,
   onStartPaymentLink,
@@ -88,6 +96,7 @@ export function PaymentsBlock({
   onlinePaymentLink: Extract<OnlinePaymentLinkResponse, { state: 'created' }> | null;
   paymentLinkDraft: PaymentLinkDraft | null;
   paymentDraft: PaymentDraft | null;
+  paymentTargets: PaymentTargetOption[];
   refundDraft: RefundDraft | null;
   onStartRecord: () => void;
   onStartPaymentLink: () => void;
@@ -133,6 +142,13 @@ export function PaymentsBlock({
   }
   const hasOpenPaymentLinkDraft = paymentLinkDraft !== null;
   const hasOpenRefundDraft = refundDraft !== null;
+  const showPaymentTargetSelector = paymentTargets.length > 1;
+  const selectedPaymentLinkTarget = paymentLinkDraft
+    ? findPaymentTarget(paymentTargets, paymentLinkDraft.invoiceId)
+    : null;
+  const selectedPaymentTarget = paymentDraft
+    ? findPaymentTarget(paymentTargets, paymentDraft.invoiceId)
+    : null;
 
   return (
     <div style={styles.subpanel}>
@@ -172,6 +188,31 @@ export function PaymentsBlock({
 
       {paymentLinkDraft ? (
         <div style={styles.drawerPanel}>
+          {showPaymentTargetSelector ? (
+            <label style={styles.fieldLabel}>
+              <span>Apply to first</span>
+              <select
+                style={styles.input}
+                aria-label="Apply to first"
+                value={paymentLinkDraft.invoiceId}
+                onChange={(event) => {
+                  const target = findPaymentTarget(paymentTargets, event.target.value);
+                  patchPaymentLink({
+                    invoiceId: event.target.value,
+                    amount: target
+                      ? defaultPaymentLinkAmountForTarget(target, amountDue)
+                      : paymentLinkDraft.amount
+                  });
+                }}
+              >
+                {paymentTargets.map((target) => (
+                  <option key={target.invoiceId} value={target.invoiceId}>
+                    {target.label} - {formatCurrency(target.remainingAmount)} remaining
+                  </option>
+                ))}
+              </select>
+            </label>
+          ) : null}
           <label style={styles.fieldLabel}>
             <span>Payment link amount</span>
             <input
@@ -183,7 +224,12 @@ export function PaymentsBlock({
               onChange={(event) => patchPaymentLink({ amount: event.target.value })}
             />
           </label>
-          <p style={styles.tinyMuted}>Up to {formatCurrency(amountDue)} due.</p>
+          <p style={styles.tinyMuted}>
+            Up to {formatCurrency(amountDue)} due.
+            {selectedPaymentLinkTarget
+              ? ` Applies first to ${selectedPaymentLinkTarget.label}; extra amount applies to other open charges.`
+              : ''}
+          </p>
           <div style={styles.inlineActionBar}>
             <button
               type="button"
@@ -208,6 +254,23 @@ export function PaymentsBlock({
       {paymentDraft ? (
         <div style={styles.drawerPanel}>
           <div style={styles.formGridCompact}>
+            {showPaymentTargetSelector ? (
+              <label style={styles.fieldLabel}>
+                <span>Apply to first</span>
+                <select
+                  style={styles.input}
+                  aria-label="Apply to first"
+                  value={paymentDraft.invoiceId}
+                  onChange={(event) => patch({ invoiceId: event.target.value })}
+                >
+                  {paymentTargets.map((target) => (
+                    <option key={target.invoiceId} value={target.invoiceId}>
+                      {target.label} - {formatCurrency(target.remainingAmount)} remaining
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label style={styles.fieldLabel}>
               <span>Amount</span>
               <input
@@ -249,6 +312,12 @@ export function PaymentsBlock({
               />
             </label>
           </div>
+          {selectedPaymentTarget ? (
+            <p style={styles.tinyMuted}>
+              Applies first to {selectedPaymentTarget.label}; extra amount applies to other open
+              charges.
+            </p>
+          ) : null}
           <div style={styles.inlineActionBar}>
             <button
               type="button"
@@ -386,6 +455,12 @@ export function PaymentsBlock({
                 </p>
               ))}
 
+              {!payment.isVoid && payment.allocations.length > 0 ? (
+                <p style={styles.tinyMuted}>
+                  ↳ Applied to {payment.allocations.map(formatAllocation).join(' · ')}
+                </p>
+              ) : null}
+
               {onlineRequest ? (
                 <p style={styles.tinyMuted}>
                   ↳ Online refund of {formatCurrency(onlineRequest.amount)}{' '}
@@ -478,4 +553,15 @@ function paymentLabel(payment: Payment): string {
   const methodLabel =
     payment.source === 'bellfieldPayments' ? 'Online card' : paymentMethodLabels[payment.method];
   return `${purposeLabel} · ${methodLabel}`;
+}
+
+function formatAllocation(allocation: Payment['allocations'][number]): string {
+  const label =
+    allocation.invoiceNumber ??
+    (allocation.invoiceKind === 'main'
+      ? 'Main invoice'
+      : allocation.invoiceKind === 'adjustment'
+        ? 'Adjustment'
+        : 'Credit');
+  return `${label}: ${formatCurrency(allocation.amount)}`;
 }
