@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   addOfficeInvoiceLineById,
   createOfficeJobAdjustment,
@@ -46,6 +46,9 @@ import {
   type InvoiceLineDraft
 } from './job-invoice-types';
 import { CorrectionCard, correctionKindLabels } from './job-invoice-correction-card';
+
+const stalePaymentTargetMessage =
+  'The selected invoice is no longer available. Start the payment again.';
 
 type JobInvoiceCorrectionsProps = {
   jobId: string;
@@ -103,22 +106,26 @@ export function JobInvoiceCorrections({
   > | null>(null);
 
   const canViewPayments = paymentPermissions.canView;
-  const paymentTargets = balance
-    ? buildPaymentTargetOptions({
-        mainInvoiceId,
-        mainInvoiceNumber,
-        balance,
-        corrections,
-        payments,
-        refunds
-      })
-    : [
-        {
-          invoiceId: mainInvoiceId,
-          label: mainInvoiceNumber ?? 'Main invoice',
-          remainingAmount: 0
-        }
-      ];
+  const paymentTargets = useMemo(
+    () =>
+      balance
+        ? buildPaymentTargetOptions({
+            mainInvoiceId,
+            mainInvoiceNumber,
+            balance,
+            corrections,
+            payments,
+            refunds
+          })
+        : [
+            {
+              invoiceId: mainInvoiceId,
+              label: mainInvoiceNumber ?? 'Main invoice',
+              remainingAmount: 0
+            }
+          ],
+    [balance, corrections, mainInvoiceId, mainInvoiceNumber, payments, refunds]
+  );
 
   const load = useCallback(async () => {
     setIsLoading(true);
@@ -146,6 +153,24 @@ export function JobInvoiceCorrections({
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    const stalePaymentDraft =
+      paymentDraft !== null && findPaymentTarget(paymentTargets, paymentDraft.invoiceId) === null;
+    const stalePaymentLinkDraft =
+      paymentLinkDraft !== null &&
+      findPaymentTarget(paymentTargets, paymentLinkDraft.invoiceId) === null;
+    if (!stalePaymentDraft && !stalePaymentLinkDraft) {
+      return;
+    }
+    if (stalePaymentDraft) {
+      setPaymentDraft(null);
+    }
+    if (stalePaymentLinkDraft) {
+      setPaymentLinkDraft(null);
+    }
+    setErrorMessage(stalePaymentTargetMessage);
+  }, [paymentDraft, paymentLinkDraft, paymentTargets]);
 
   // While an accepted online refund awaits worker confirmation, poll so the pending
   // row becomes the confirmed refund without a manual reload (smooth demo/smoke).
@@ -276,10 +301,29 @@ export function JobInvoiceCorrections({
       setErrorMessage('Enter a payment amount greater than zero.');
       return;
     }
+    const target = findPaymentTarget(paymentTargets, paymentDraft.invoiceId);
+    if (!target) {
+      setPaymentDraft(null);
+      setErrorMessage(stalePaymentTargetMessage);
+      return;
+    }
+    const amountCents = Math.round(amount * 100);
+    const amountDueCents = Math.max(Math.round((balance?.amountDue ?? 0) * 100), 0);
+    if (amountCents > amountDueCents) {
+      const extraCents = amountCents - amountDueCents;
+      const confirmed = window.confirm(
+        `Record a ${formatCurrency(amount)} payment when this job only has ${formatCurrency(
+          amountDueCents / 100
+        )} due?\n\nThe extra ${formatCurrency(extraCents / 100)} will be held as job credit.`
+      );
+      if (!confirmed) {
+        return;
+      }
+    }
     setIsSaving(true);
     try {
       const response = await recordOfficePayment({
-        invoiceId: paymentDraft.invoiceId,
+        invoiceId: target.invoiceId,
         amount,
         method: paymentDraft.method,
         reference: paymentDraft.reference.trim() || undefined,
@@ -316,7 +360,13 @@ export function JobInvoiceCorrections({
 
   async function createPaymentLink() {
     if (!paymentLinkDraft) return;
-    const targetInvoiceId = paymentLinkDraft.invoiceId;
+    const target = findPaymentTarget(paymentTargets, paymentLinkDraft.invoiceId);
+    if (!target) {
+      setPaymentLinkDraft(null);
+      setErrorMessage(stalePaymentTargetMessage);
+      return;
+    }
+    const targetInvoiceId = target.invoiceId;
     if (!balance || balance.amountDue <= 0) {
       setErrorMessage('This job does not have an outstanding balance.');
       return;
@@ -685,7 +735,8 @@ function getDefaultPaymentTarget(
   mainInvoiceId: string
 ): PaymentTargetOption {
   return (
-    findPaymentTarget(paymentTargets, mainInvoiceId) ?? {
+    findPaymentTarget(paymentTargets, mainInvoiceId) ??
+    paymentTargets[0] ?? {
       invoiceId: mainInvoiceId,
       label: 'Main invoice',
       remainingAmount: 0

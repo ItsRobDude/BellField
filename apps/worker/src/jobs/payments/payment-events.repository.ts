@@ -21,6 +21,12 @@ type OnlinePaymentSessionRow = {
   purpose: 'payment' | 'deposit';
 };
 
+type SourceInvoiceRow = {
+  jobId: string;
+  status: string;
+  invoiceKind: string;
+};
+
 type ChargeInvoiceRow = {
   invoiceId: string;
   invoiceKind: 'main' | 'adjustment';
@@ -61,7 +67,7 @@ export class PaymentEventsRepository implements PaymentEventsStore {
             session.currency.toUpperCase() !== event.currency.trim().toUpperCase())
       );
       const jobId = sessionMismatch ? event.jobRef : (session?.jobId ?? event.jobRef);
-      const invoiceId = sessionMismatch ? null : (session?.invoiceId ?? null);
+      const candidateInvoiceId = sessionMismatch ? null : (session?.invoiceId ?? null);
       // Purpose is durable business meaning carried from the link; a missing session
       // (out-of-band confirmation) defaults to an ordinary payment. An amount/currency
       // mismatch doesn't change WHAT the money was collected as, so keep the session's.
@@ -79,6 +85,11 @@ export class PaymentEventsRepository implements PaymentEventsStore {
 
       await this.lockJob(tx, jobId);
       await this.lockPostedInvoicesForJob(tx, jobId);
+      const invoiceId = await this.resolveSourceInvoiceId(tx, {
+        paymentSessionId: event.paymentSessionId,
+        jobId,
+        invoiceId: candidateInvoiceId
+      });
 
       const paymentId = randomUUID();
       await tx.query(
@@ -211,6 +222,43 @@ export class PaymentEventsRepository implements PaymentEventsStore {
        for update`,
       [jobId]
     );
+  }
+
+  private async resolveSourceInvoiceId(
+    tx: PaymentEventsQueryExecutor,
+    input: { paymentSessionId: string; jobId: string; invoiceId: string | null }
+  ): Promise<string | null> {
+    if (!input.invoiceId) {
+      return null;
+    }
+
+    const result = await tx.query<SourceInvoiceRow>(
+      `select job_id as "jobId", status, invoice_kind as "invoiceKind"
+       from invoices
+       where id = $1
+       limit 1`,
+      [input.invoiceId]
+    );
+    const invoice = result.rows[0];
+    if (
+      invoice &&
+      invoice.jobId === input.jobId &&
+      invoice.status === 'posted' &&
+      (invoice.invoiceKind === 'main' || invoice.invoiceKind === 'adjustment')
+    ) {
+      return input.invoiceId;
+    }
+
+    workerLog('warn', 'Online payment session source invoice is no longer payable.', {
+      paymentSessionId: input.paymentSessionId,
+      jobId: input.jobId,
+      invoiceId: input.invoiceId,
+      invoiceJobId: invoice?.jobId ?? null,
+      invoiceStatus: invoice?.status ?? 'missing',
+      invoiceKind: invoice?.invoiceKind ?? null,
+      fallback: 'job-level'
+    });
+    return null;
   }
 
   private async markOnlinePaymentSessionPaid(

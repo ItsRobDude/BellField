@@ -19,6 +19,7 @@ export function buildPaymentTargetOptions(input: {
   payments: Payment[];
   refunds: PaymentRefund[];
 }): PaymentTargetOption[] {
+  const maxTargetRemainingCents = Math.max(dollarsToCents(input.balance.amountDue), 0);
   const allocatedByInvoice = new Map<string, number>();
   for (const payment of input.payments) {
     if (payment.isVoid) {
@@ -41,6 +42,7 @@ export function buildPaymentTargetOptions(input: {
       invoiceId: input.mainInvoiceId,
       label: input.mainInvoiceNumber ?? 'Main invoice',
       totalAmount: input.balance.postedMainTotal,
+      maxRemainingCents: maxTargetRemainingCents,
       allocatedByInvoice,
       refundedByInvoice
     })
@@ -55,6 +57,7 @@ export function buildPaymentTargetOptions(input: {
         invoiceId: correction.id,
         label: correction.invoiceNumber ?? 'Adjustment',
         totalAmount: correction.totals.total,
+        maxRemainingCents: maxTargetRemainingCents,
         allocatedByInvoice,
         refundedByInvoice
       })
@@ -68,15 +71,14 @@ export function findPaymentTarget(
   targets: PaymentTargetOption[],
   invoiceId: string
 ): PaymentTargetOption | null {
-  return targets.find((target) => target.invoiceId === invoiceId) ?? targets[0] ?? null;
+  return targets.find((target) => target.invoiceId === invoiceId) ?? null;
 }
 
 export function defaultPaymentLinkAmountForTarget(
   target: PaymentTargetOption,
   amountDue: number
 ): string {
-  const amount =
-    target.remainingAmount > 0 ? Math.min(target.remainingAmount, amountDue) : amountDue;
+  const amount = Math.min(target.remainingAmount, amountDue);
   return Math.max(amount, 0).toFixed(2);
 }
 
@@ -84,15 +86,17 @@ function buildTargetOption(input: {
   invoiceId: string;
   label: string;
   totalAmount: number;
+  maxRemainingCents: number;
   allocatedByInvoice: Map<string, number>;
   refundedByInvoice: Map<string, number>;
 }): PaymentTargetOption {
-  const remainingCents = Math.max(
+  const invoiceRemainingCents = Math.max(
     dollarsToCents(input.totalAmount) -
       (input.allocatedByInvoice.get(input.invoiceId) ?? 0) +
       (input.refundedByInvoice.get(input.invoiceId) ?? 0),
     0
   );
+  const remainingCents = Math.min(invoiceRemainingCents, input.maxRemainingCents);
   return {
     invoiceId: input.invoiceId,
     label: input.label,

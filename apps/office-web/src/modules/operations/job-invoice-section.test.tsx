@@ -765,6 +765,66 @@ describe('JobInvoiceSection posting', () => {
     ).toBeInTheDocument();
   });
 
+  it('caps selectable payment target remaining amounts to the current amount due', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 275,
+      netBilled: 50,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 50
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment(), postedCredit()]
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    const targetSelect = await screen.findByLabelText('Apply to first');
+    const options = Array.from(targetSelect.querySelectorAll('option')).map(
+      (option) => option.textContent
+    );
+    expect(options).toEqual(['INV-1042 - $50.00 remaining', 'ADJ-1043 - $50.00 remaining']);
+
+    fireEvent.change(targetSelect, { target: { value: 'adj-1' } });
+    expect(screen.getByLabelText('Payment link amount')).toHaveValue(50);
+  });
+
+  it('shows zero target remaining and hides payment links when credits fully offset the job', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 325,
+      netBilled: 0,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 0
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment(), postedCredit()]
+    });
+
+    renderSection(true);
+
+    expect(await screen.findByRole('button', { name: 'Record payment' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Create payment link' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    const targetSelect = await screen.findByLabelText('Apply to first');
+    const options = Array.from(targetSelect.querySelectorAll('option')).map(
+      (option) => option.textContent
+    );
+    expect(options).toEqual(['INV-1042 - $0.00 remaining', 'ADJ-1043 - $0.00 remaining']);
+  });
+
   it('records a manual payment against the selected posted adjustment first', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
     mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
@@ -818,6 +878,144 @@ describe('JobInvoiceSection posting', () => {
       })
     );
     expect(await screen.findByText('Payment recorded.')).toBeInTheDocument();
+  });
+
+  it('rejects a stale manual payment target before calling the API', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 0,
+      netBilled: 325,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 325
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment()]
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
+    fireEvent.change(await screen.findByLabelText('Apply to first'), {
+      target: { value: 'stale-invoice' }
+    });
+
+    expect(
+      await screen.findByText(
+        'The selected invoice is no longer available. Start the payment again.'
+      )
+    ).toBeInTheDocument();
+    expect(mockedApi.recordOfficePayment).not.toHaveBeenCalled();
+  });
+
+  it('rejects a stale payment-link target before calling the API', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 0,
+      netBilled: 325,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 325
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment()]
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.change(await screen.findByLabelText('Apply to first'), {
+      target: { value: 'stale-invoice' }
+    });
+
+    expect(
+      await screen.findByText(
+        'The selected invoice is no longer available. Start the payment again.'
+      )
+    ).toBeInTheDocument();
+    expect(mockedApi.createOfficeOnlinePaymentLink).not.toHaveBeenCalled();
+  });
+
+  it('does not record a manual overpayment when confirmation is dismissed', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 200,
+      refundedTotal: 0,
+      amountDue: 50
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(false);
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+
+    expect(window.confirm).toHaveBeenCalledWith(
+      'Record a $60.00 payment when this job only has $50.00 due?\n\nThe extra $10.00 will be held as job credit.'
+    );
+    expect(mockedApi.recordOfficePayment).not.toHaveBeenCalled();
+  });
+
+  it('records a manual overpayment after confirmation and keeps the selected invoice', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 75,
+      postedCreditsTotal: 0,
+      netBilled: 325,
+      paidTotal: 275,
+      refundedTotal: 0,
+      amountDue: 50
+    });
+    mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
+      adjustments: [postedAdjustment()]
+    });
+    vi.spyOn(window, 'confirm').mockReturnValue(true);
+    mockedApi.recordOfficePayment.mockResolvedValueOnce({
+      payment: manualPayment({
+        id: 'pay-over',
+        invoiceId: 'adj-1',
+        amount: 60
+      })
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
+    fireEvent.change(await screen.findByLabelText('Apply to first'), {
+      target: { value: 'adj-1' }
+    });
+    fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '60' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+
+    await waitFor(() =>
+      expect(mockedApi.recordOfficePayment).toHaveBeenCalledWith({
+        invoiceId: 'adj-1',
+        amount: 60,
+        method: 'card',
+        reference: undefined,
+        memo: undefined,
+        apiBaseUrl: 'http://localhost',
+        sessionToken: 'test-token'
+      })
+    );
   });
 
   it('shows the reused active payment link notice when the API returns an existing session', async () => {

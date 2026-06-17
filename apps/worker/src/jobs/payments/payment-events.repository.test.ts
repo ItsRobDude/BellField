@@ -66,6 +66,7 @@ test('PaymentEventsRepository records a provider payment and allocates it across
     ],
     [{ id: 'job-1' }],
     [],
+    [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }],
     [],
     [
       { invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' },
@@ -141,6 +142,7 @@ test('PaymentEventsRepository allocates an adjustment-scoped provider payment so
     ],
     [{ id: 'job-1' }],
     [],
+    [{ jobId: 'job-1', status: 'posted', invoiceKind: 'adjustment' }],
     [],
     [
       { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' },
@@ -175,6 +177,57 @@ test('PaymentEventsRepository allocates an adjustment-scoped provider payment so
   assert.equal(allocations[1].values?.[3], '125.00');
 });
 
+test('PaymentEventsRepository falls back to job-level allocation for an invalid session source invoice', async () => {
+  const database = new CapturingDatabase();
+  database.rowQueue = [
+    [],
+    [
+      {
+        jobId: 'job-1',
+        invoiceId: 'inv-credit',
+        amountCents: 17_500,
+        currency: 'USD',
+        purpose: 'payment'
+      }
+    ],
+    [{ id: 'job-1' }],
+    [],
+    [{ jobId: 'job-1', status: 'posted', invoiceKind: 'credit' }],
+    [],
+    [
+      { invoiceId: 'inv-main', invoiceKind: 'main', total: '125.00', allocated: '0.00' },
+      { invoiceId: 'inv-adj', invoiceKind: 'adjustment', total: '50.00', allocated: '0.00' }
+    ],
+    [{ cents: 0 }],
+    [{ cents: 0 }]
+  ];
+  const repository = new PaymentEventsRepository(database);
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (message?: unknown) => {
+    warnings.push(String(message));
+  };
+
+  try {
+    const outcome = await repository.applyRelayPaymentEvent(
+      makeEvent({ invoiceRef: 'inv-credit' }),
+      new Date('2026-06-13T12:00:10.000Z')
+    );
+
+    assert.equal(outcome, 'applied');
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  const paymentInsert = database.queries.find((query) => /insert into payments/i.test(query.text));
+  assert.equal(paymentInsert?.values?.[2], null);
+  const balanceQuery = database.queries.find((query) => /from invoices i/i.test(query.text));
+  assert.deepEqual(balanceQuery?.values, ['job-1', null]);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /source invoice is no longer payable/);
+  assert.match(warnings[0], /inv-credit/);
+});
+
 test('PaymentEventsRepository records an overpayment in full and surfaces the unallocated remainder', async () => {
   const database = new CapturingDatabase();
   database.rowQueue = [
@@ -190,6 +243,7 @@ test('PaymentEventsRepository records an overpayment in full and surfaces the un
     ],
     [{ id: 'job-1' }],
     [],
+    [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }],
     [],
     // Only $125 is still due, but the customer paid $200 (balance moved after
     // the link was created).
@@ -236,6 +290,7 @@ test('PaymentEventsRepository allocates a provider re-payment after a refunded p
     ],
     [{ id: 'job-1' }],
     [],
+    [{ jobId: 'job-1', status: 'posted', invoiceKind: 'main' }],
     [],
     [{ invoiceId: 'inv-main', invoiceKind: 'main', total: '100.00', allocated: '0.00' }],
     [{ cents: 0 }],
