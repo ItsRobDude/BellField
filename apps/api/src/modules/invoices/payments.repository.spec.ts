@@ -568,6 +568,7 @@ function refundHandlers(
           method: 'card',
           currency: 'USD',
           source: 'manual',
+          invoiceId: 'inv-main',
           isVoid: false,
           ...overrides.forUpdate
         }
@@ -590,7 +591,7 @@ function refundHandlers(
 }
 
 describe('PaymentsRepository.refundPayment', () => {
-  it('records a manual refund and reverses the payment allocations main-first', async () => {
+  it('records a manual refund and reverses the payment allocations from the source invoice', async () => {
     const { repository, calls } = repositoryWith(refundHandlers());
 
     const result = await repository.refundPayment('pay-1', {
@@ -603,7 +604,13 @@ describe('PaymentsRepository.refundPayment', () => {
     const refundInsert = findCall(calls, INSERT_REFUND);
     expect(refundInsert?.params).toContain(170);
     expect(refundInsert?.sql).toMatch(/'manual'/);
-    // $170 reverses the full $150 main allocation, then $20 of the adjustment.
+    const reversalSelect = findCall(calls, REVERSAL_SELECT);
+    expect(reversalSelect?.params).toEqual(['pay-1', 'inv-main']);
+    expect(reversalSelect?.sql).toMatch(
+      /case when \$2::text is not null and pa\.invoice_id = \$2 then 0 else 1 end/i
+    );
+    // A main-sourced $170 refund reverses the full $150 main allocation, then $20
+    // of the adjustment.
     const allocInserts = calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql));
     expect(allocInserts).toHaveLength(2);
     expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-main', 150]));
@@ -617,12 +624,13 @@ describe('PaymentsRepository.refundPayment', () => {
     expect(receiptEnqueue?.params?.[2]).toBe(refundInsert?.params?.[0]); // payment_refund_id
   });
 
-  it('keeps refund reversal main-first for adjustment-sourced payments until source-aware refunds ship', async () => {
+  it('reverses adjustment-sourced payment allocations from the adjustment invoice first', async () => {
     const { repository, calls } = repositoryWith(
       refundHandlers({
+        forUpdate: { invoiceId: 'inv-adj' },
         allocations: [
-          { invoiceId: 'inv-main', allocatedCents: '15000', refundedCents: '0' },
-          { invoiceId: 'inv-adj', allocatedCents: '5000', refundedCents: '0' }
+          { invoiceId: 'inv-adj', allocatedCents: '5000', refundedCents: '0' },
+          { invoiceId: 'inv-main', allocatedCents: '15000', refundedCents: '0' }
         ]
       })
     );
@@ -634,25 +642,56 @@ describe('PaymentsRepository.refundPayment', () => {
     });
 
     const reversalSelect = findCall(calls, REVERSAL_SELECT);
-    expect(reversalSelect?.sql).toMatch(/case when i\.invoice_kind = 'main' then 0 else 1 end/i);
-    expect(reversalSelect?.sql).not.toMatch(/p\.invoice_id/i);
-    // Even though source-first payments may have paid the adjustment first, refunds
-    // remain job-level/main-first until the explicit refund-allocation slice.
+    expect(reversalSelect?.params).toEqual(['pay-1', 'inv-adj']);
+    expect(reversalSelect?.sql).toMatch(
+      /case when \$2::text is not null and pa\.invoice_id = \$2 then 0 else 1 end/i
+    );
+    // $170 reverses the full $50 source adjustment allocation, then $120 of main.
     const allocInserts = calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql));
     expect(allocInserts).toHaveLength(2);
-    expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-main', 150]));
-    expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
+    expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-adj', 50]));
+    expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-main', 120]));
+  });
+
+  it('uses remaining source invoice allocation after prior refunds before falling back', async () => {
+    const { repository, calls } = repositoryWith(
+      refundHandlers({
+        forUpdate: { invoiceId: 'inv-adj' },
+        priorRefundCents: 3000,
+        allocations: [
+          { invoiceId: 'inv-adj', allocatedCents: '5000', refundedCents: '3000' },
+          { invoiceId: 'inv-main', allocatedCents: '15000', refundedCents: '0' }
+        ]
+      })
+    );
+
+    await repository.refundPayment('pay-1', {
+      amount: 70,
+      reason: 'returned',
+      actor
+    });
+
+    const reversalSelect = findCall(calls, REVERSAL_SELECT);
+    expect(reversalSelect?.params).toEqual(['pay-1', 'inv-adj']);
+
+    const allocInserts = calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql));
+    expect(allocInserts).toHaveLength(2);
+    expect(allocInserts[0].params).toEqual(expect.arrayContaining(['inv-adj', 20]));
+    expect(allocInserts[1].params).toEqual(expect.arrayContaining(['inv-main', 50]));
   });
 
   it('refunds a manual deposit (no allocations) — records the refund, reverses nothing', async () => {
     // A deposit held as job credit has no allocations to reverse; the refund still
     // records and lowers net paid. (Deposits are source=manual, so they refund here.)
-    const { repository, calls } = repositoryWith(refundHandlers({ allocations: [] }));
+    const { repository, calls } = repositoryWith(
+      refundHandlers({ forUpdate: { invoiceId: null }, allocations: [] })
+    );
 
     await repository.refundPayment('pay-1', { amount: 200, actor });
 
     const refundInsert = findCall(calls, INSERT_REFUND);
     expect(refundInsert?.params).toContain(200);
+    expect(findCall(calls, REVERSAL_SELECT)?.params).toEqual(['pay-1', null]);
     expect(calls.filter((c) => INSERT_REFUND_ALLOC.test(c.sql))).toHaveLength(0);
   });
 

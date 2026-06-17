@@ -32,6 +32,7 @@ import {
   enqueueRefundReceipt,
   insertPaymentRow
 } from './payments-repository-write-utils';
+import { insertRefundReversalAllocations } from './payment-refund-allocation';
 
 @Injectable()
 export class PaymentsRepository {
@@ -295,10 +296,9 @@ export class PaymentsRepository {
   /**
    * Record a manual refund of all or part of a payment (the slice-1 path; online
    * card refunds are recorded by the worker from a confirmed Stripe event). The
-   * refund reverses the payment's allocations main-first, even if the payment was
-   * originally scoped to an adjustment invoice. Source-aware refund reversal is a
-   * later explicit accounting slice. Append-only — it never edits the payment or a
-   * posted invoice.
+   * refund reverses the payment's allocations, starting with the payment's source
+   * invoice when one exists, then falling back to the job-level main-first order.
+   * Append-only — it never edits the payment or a posted invoice.
    */
   async refundPayment(paymentId: string, input: RefundWriteInput): Promise<RefundRecord> {
     const now = new Date().toISOString();
@@ -323,9 +323,11 @@ export class PaymentsRepository {
         method: PaymentMethodValue;
         currency: string;
         source: PaymentRow['source'];
+        invoiceId: string | null;
         isVoid: boolean;
       }>(
-        `select job_id as "jobId", amount, method, currency, source, is_void as "isVoid"
+        `select job_id as "jobId", amount, method, currency, source,
+                invoice_id as "invoiceId", is_void as "isVoid"
          from payments where id = $1 for update`,
         [paymentId]
       );
@@ -375,13 +377,13 @@ export class PaymentsRepository {
         ]
       );
 
-      await this.insertRefundReversalAllocations(
+      await insertRefundReversalAllocations(queryable, {
         refundId,
         paymentId,
-        requestedCents,
-        now,
-        queryable
-      );
+        sourceInvoiceId: payment.invoiceId,
+        refundCents: requestedCents,
+        now
+      });
 
       await insertJobTimelineEntry(
         {
@@ -424,64 +426,6 @@ export class PaymentsRepository {
       [paymentId]
     );
     return Number(result.rows[0]?.cents ?? 0);
-  }
-
-  /**
-   * Reverse the payment's allocations main-first, up to the refund amount, net of
-   * any allocations already reversed by prior partial refunds. This intentionally
-   * ignores payments.invoice_id until source-aware refund reversal is designed.
-   * Any remainder maps to an unallocated (overpayment) portion of the payment and
-   * needs no allocation row — it still reduces job-level net paid via
-   * payment_refunds.amount.
-   */
-  private async insertRefundReversalAllocations(
-    refundId: string,
-    paymentId: string,
-    refundCents: number,
-    now: string,
-    queryable: QueryExecutor
-  ): Promise<void> {
-    const result = await queryable.query<{
-      invoiceId: string;
-      allocatedCents: string | number;
-      refundedCents: string | number;
-    }>(
-      `select
-         pa.invoice_id as "invoiceId",
-         round(pa.amount * 100) as "allocatedCents",
-         coalesce((
-           select round(sum(ra.amount) * 100)
-           from payment_refund_allocations ra
-           join payment_refunds r on r.id = ra.refund_id
-           where r.payment_id = pa.payment_id and ra.invoice_id = pa.invoice_id
-         ), 0) as "refundedCents"
-       from payment_allocations pa
-       join invoices i on i.id = pa.invoice_id
-       where pa.payment_id = $1
-       order by
-         case when i.invoice_kind = 'main' then 0 else 1 end,
-         i.posted_at asc nulls last,
-         i.id asc`,
-      [paymentId]
-    );
-
-    let remainingCents = refundCents;
-    for (const row of result.rows) {
-      if (remainingCents <= 0) {
-        break;
-      }
-      const reversibleCents = Number(row.allocatedCents) - Number(row.refundedCents);
-      if (reversibleCents <= 0) {
-        continue;
-      }
-      const reverseCents = Math.min(reversibleCents, remainingCents);
-      await queryable.query(
-        `insert into payment_refund_allocations (id, refund_id, invoice_id, amount, created_at)
-         values ($1, $2, $3, $4, $5)`,
-        [randomUUID(), refundId, row.invoiceId, centsToDollars(reverseCents), now]
-      );
-      remainingCents -= reverseCents;
-    }
   }
 
   private async findRefundById(refundId: string, queryable: QueryExecutor): Promise<RefundRecord> {
