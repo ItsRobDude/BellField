@@ -17,15 +17,16 @@ export type InvoicePdfRenderInput = {
 @Injectable()
 export class InvoicePdfRendererService {
   async renderInvoicePdf(input: InvoicePdfRenderInput): Promise<Buffer> {
+    const title = invoicePdfDisplayTitle(input.invoice);
     return new Promise<Buffer>((resolve, reject) => {
       const doc = new PDFDocument({
         autoFirstPage: true,
         margin: 48,
         size: 'LETTER',
         info: {
-          Title: `${invoiceKindLabel(input.invoice.invoiceKind)} ${input.invoice.id}`,
+          Title: title,
           Author: input.settings.companyName,
-          Subject: `${invoiceKindLabel(input.invoice.invoiceKind)} ${input.invoice.id}`
+          Subject: title
         }
       });
       const chunks: Buffer[] = [];
@@ -46,7 +47,7 @@ function renderPdf(doc: PDFKit.PDFDocument, input: InvoicePdfRenderInput): void 
     throw new Error('Invoice PDF email rendering requires posted invoice context.');
   }
 
-  const invoiceLabel = invoiceKindLabel(invoice.invoiceKind);
+  const title = invoicePdfDisplayTitle(invoice);
   doc.fontSize(20).fillColor('#1f2933').text(settings.companyName, { continued: false });
   doc.moveDown(0.4);
   if (settings.replyToEmail) {
@@ -55,7 +56,7 @@ function renderPdf(doc: PDFKit.PDFDocument, input: InvoicePdfRenderInput): void 
   }
   doc.moveDown(1.2);
 
-  doc.fontSize(18).fillColor('#111827').text(`${invoiceLabel} ${invoice.id}`);
+  doc.fontSize(18).fillColor('#111827').text(title);
   doc.fontSize(10).fillColor('#52606d').text('Status: Posted');
   doc.text(`Job: ${context.jobNumber}`);
   if (context.workOrderNumber) {
@@ -215,6 +216,15 @@ function invoiceKindLabel(kind: InvoiceRecord['invoiceKind']): string {
   if (kind === 'adjustment') return 'Adjustment';
   if (kind === 'credit') return 'Credit';
   return 'Invoice';
+}
+
+export function invoicePdfDisplayTitle(invoice: InvoiceRecord): string {
+  const label = invoiceKindLabel(invoice.invoiceKind);
+  if (invoice.invoiceNumber) {
+    return `${label} ${invoice.invoiceNumber}`;
+  }
+  const jobNumber = invoice.posted?.jobNumber;
+  return jobNumber ? `${label} for job ${jobNumber}` : label;
 }
 
 function money(value: number): string {

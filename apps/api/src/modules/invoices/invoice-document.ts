@@ -17,7 +17,9 @@ export function renderInvoiceDocument(invoice: InvoiceRecord): InvoiceDocument {
   const billToName = context?.billTo.name ?? 'Bill-to details are not available on this draft.';
   const serviceLocationName =
     context?.serviceLocation.name ?? 'Service location details are not available on this draft.';
-  const filename = `invoice-${safeFilenamePart(jobNumber)}-${invoice.id}.html`;
+  const filename = invoice.invoiceNumber
+    ? `${safeFilenamePart(invoice.invoiceNumber)}.html`
+    : `invoice-${safeFilenamePart(jobNumber)}-${invoice.id}.html`;
 
   return {
     filename,

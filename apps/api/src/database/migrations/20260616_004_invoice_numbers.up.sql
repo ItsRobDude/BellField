@@ -29,6 +29,27 @@ alter table invoices
   add column if not exists invoice_sequence bigint,
   add column if not exists invoice_number text;
 
+do $$
+begin
+  if not exists (
+    select 1
+    from pg_constraint
+    where conname = 'invoices_invoice_number_shape'
+  ) then
+    alter table invoices
+      add constraint invoices_invoice_number_shape
+      check (
+        (invoice_sequence is null and invoice_number is null)
+        or (
+          invoice_sequence is not null
+          and invoice_sequence >= 1
+          and invoice_number is not null
+          and length(trim(invoice_number)) > 0
+        )
+      );
+  end if;
+end $$;
+
 create unique index if not exists invoices_invoice_number_idx
   on invoices(invoice_number)
   where invoice_number is not null;

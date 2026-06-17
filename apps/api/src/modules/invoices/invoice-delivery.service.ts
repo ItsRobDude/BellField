@@ -444,20 +444,25 @@ function buildInvoiceEmailTokens(
     throw new Error('Invoice email rendering requires posted invoice context.');
   }
   const invoiceLabel = invoiceKindLabel(invoice.invoiceKind);
+  const invoiceNumber = invoice.invoiceNumber ?? '';
   return {
     companyName: settings.companyName,
     customerName: context.billTo.name,
     invoiceLabel,
     invoiceLabelLower: invoiceLabel.toLowerCase(),
-    // A posted invoice always has a number by the time it can be emailed; fall
-    // back to empty so the token never renders the literal '{invoiceNumber}'.
-    invoiceNumber: invoice.invoiceNumber ?? '',
+    // Forward-only numbering means older posted invoices may not have a durable
+    // invoice number; invoiceReference stays customer-readable in either case.
+    invoiceNumber,
+    invoiceReference: invoiceNumber || `for job ${context.jobNumber}`,
     jobNumber: context.jobNumber,
     locationName: context.serviceLocation.name
   };
 }
 
 function invoicePdfFilename(invoice: InvoiceRecord): string {
+  if (invoice.invoiceNumber) {
+    return `${safeFilenamePart(invoice.invoiceNumber, 'invoice')}.pdf`;
+  }
   const jobNumber = invoice.posted?.jobNumber ?? invoice.jobId;
   return `invoice-${safeFilenamePart(jobNumber, 'invoice')}-${invoice.id}.pdf`;
 }

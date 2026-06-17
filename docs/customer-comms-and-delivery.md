@@ -321,6 +321,9 @@ retry/expiry/status-poll jobs.
 - behavior respects invoice posting and correction rules
 - invoice PDFs render from the posted invoice context, so later CRM edits do
   not rewrite what was sent
+- invoice PDFs and invoice email templates prefer durable invoice numbers when
+  present; `{invoiceReference}` falls back to job context for legacy posted rows
+  without a number
 - the recipient email is chosen at send time and may default from the
   customer's current email address
 - invoice sends reuse the relay document-send route (`POST /v1/messages/send`)

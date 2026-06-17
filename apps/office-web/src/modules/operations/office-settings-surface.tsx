@@ -264,7 +264,7 @@ export function OfficeSettingsSurface({
             <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
               Tokens you can use:{' '}
               {
-                '{companyName}, {customerName}, {invoiceNumber}, {invoiceLabel}, {invoiceLabelLower}, {jobNumber}, {locationName}'
+                '{companyName}, {customerName}, {invoiceNumber}, {invoiceReference}, {invoiceLabel}, {invoiceLabelLower}, {jobNumber}, {locationName}'
               }
               . Anything else is sent exactly as typed.
             </p>

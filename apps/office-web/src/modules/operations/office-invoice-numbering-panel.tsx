@@ -5,6 +5,7 @@ import {
   getOfficeInvoiceNumbering,
   updateOfficeInvoiceNumbering
 } from '@/lib/operations-company-settings-api';
+import { maxInvoiceNumber } from '@bellfield/contracts';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeInvoiceNumberingPanelProps = {
@@ -17,7 +18,7 @@ export type OfficeInvoiceNumberingPanelProps = {
  * Owner control for the shared invoice-number counter: shows the number that will
  * be issued next and lets the owner set it (e.g. to continue a series migrated
  * from another system). Loads/saves independently of company settings — it has
- * its own endpoint and forward-only guard server-side.
+ * its own endpoint and issued-number guard server-side.
  */
 export function OfficeInvoiceNumberingPanel({
   apiBaseUrl,
@@ -49,8 +50,10 @@ export function OfficeInvoiceNumberingPanel({
 
   async function save() {
     const parsed = Number(draft.trim());
-    if (!Number.isInteger(parsed) || parsed < 1) {
-      setErrorMessage('Next invoice number must be a whole number of at least 1.');
+    if (!Number.isInteger(parsed) || parsed < 1 || parsed > maxInvoiceNumber) {
+      setErrorMessage(
+        `Next invoice number must be a whole number from 1 to ${maxInvoiceNumber.toLocaleString('en-US')}.`
+      );
       return;
     }
     setIsSaving(true);
@@ -82,6 +85,7 @@ export function OfficeInvoiceNumberingPanel({
           aria-label="Next invoice number"
           type="number"
           min="1"
+          max={maxInvoiceNumber}
           step="1"
           value={draft}
           disabled={!canConfigure || isLoading}
@@ -91,8 +95,8 @@ export function OfficeInvoiceNumberingPanel({
       </label>
       <p style={{ ...styles.muted, fontSize: '0.75rem', marginTop: '0.35rem' }}>
         Posted invoices share one running number with kind prefixes (INV- for invoices, ADJ- for
-        adjustments, CR- for credits). Set this to continue an existing series; it can only move
-        forward, past numbers already issued.
+        adjustments, CR- for credits). Set this to continue an existing series; it cannot be set to
+        a number already issued or below the highest issued number.
       </p>
       {canConfigure ? (
         <button

@@ -6,17 +6,19 @@ import {
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   MaxLength,
   Min,
   MinLength
 } from 'class-validator';
-import type {
-  CreateAdjustmentRequest,
-  InvoiceAdjustmentKind,
-  InvoiceLineItemInput,
-  SendInvoiceRequest,
-  UpdateInvoiceNumberingRequest,
-  VoidInvoiceLineItemRequest
+import {
+  maxInvoiceNumber,
+  type CreateAdjustmentRequest,
+  type InvoiceAdjustmentKind,
+  type InvoiceLineItemInput,
+  type SendInvoiceRequest,
+  type UpdateInvoiceNumberingRequest,
+  type VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
 import {
   estimateLineItemKinds,
@@ -86,5 +88,6 @@ export class SendInvoiceRequestBodyDto implements SendInvoiceRequest {
 export class UpdateInvoiceNumberingRequestBodyDto implements UpdateInvoiceNumberingRequest {
   @IsInt()
   @Min(1)
+  @Max(maxInvoiceNumber)
   nextNumber!: number;
 }

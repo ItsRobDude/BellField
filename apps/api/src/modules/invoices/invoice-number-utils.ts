@@ -4,8 +4,8 @@ import type { InvoiceKindValue } from './invoices.types';
 
 // Human prefix per posted invoice kind. All three kinds draw the same shared
 // counter (invoice_number_series); only the prefix differs, so a credit reads as
-// 'CR-1043' while still sharing one gapless sequence (the Xero model). Fixed in
-// v1; configurable copy is a later slice.
+// 'CR-1043' while still sharing one gapless sequence (the Xero model). Prefixes
+// are fixed in v1; owners can configure the next raw number from settings.
 const INVOICE_NUMBER_PREFIXES: Record<InvoiceKindValue, string> = {
   main: 'INV-',
   adjustment: 'ADJ-',
@@ -63,9 +63,9 @@ export async function getNextInvoiceNumber(queryable: QueryExecutor): Promise<nu
 
 /**
  * Set the next number (e.g. a migrating shop continuing its existing series).
- * Guarded so it can only move FORWARD past every number already issued — setting
- * it at or below the highest issued sequence would risk reusing a number (and is
- * rejected by the unique index anyway). Returns the new next number.
+ * Guarded so it can never be set to an already-issued number. Owners may correct
+ * an unused high starting number downward, but not at or below the highest
+ * issued sequence (the unique index is the backstop). Returns the new next number.
  */
 export async function setNextInvoiceNumber(
   queryable: QueryExecutor,

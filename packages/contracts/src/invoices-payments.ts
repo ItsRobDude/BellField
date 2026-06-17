@@ -83,6 +83,8 @@ export interface PostedInvoiceContext {
   workOrderNumber?: string;
 }
 
+export const maxInvoiceNumber = 999_999_999;
+
 /** Owner-facing invoice-numbering configuration (the shared counter's next value). */
 export interface InvoiceNumberingSettings {
   /** The number that will be issued to the next posted invoice (raw, unprefixed). */
@@ -94,7 +96,7 @@ export interface InvoiceNumberingSettingsResponse {
 }
 
 export interface UpdateInvoiceNumberingRequest {
-  /** New next number; must exceed the highest number already issued. */
+  /** New next number; must be 1..maxInvoiceNumber and exceed the highest issued number. */
   nextNumber: number;
 }
 

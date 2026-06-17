@@ -4,13 +4,14 @@ import {
   Injectable,
   NotFoundException
 } from '@nestjs/common';
-import type {
-  CreateAdjustmentRequest,
-  InvoiceLineItemInput,
-  InvoiceNumberingSettingsResponse,
-  JobInvoiceBalance,
-  UpdateInvoiceNumberingRequest,
-  VoidInvoiceLineItemRequest
+import {
+  maxInvoiceNumber,
+  type CreateAdjustmentRequest,
+  type InvoiceLineItemInput,
+  type InvoiceNumberingSettingsResponse,
+  type JobInvoiceBalance,
+  type UpdateInvoiceNumberingRequest,
+  type VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
 import { IdentityAccessService } from '../identity-access/identity-access.service';
 import { JobsDataService } from '../company-data/jobs-data.service';
@@ -60,8 +61,8 @@ export class InvoicesService {
 
   /**
    * Set the next invoice number (e.g. to continue a series migrated from another
-   * system). Office-only, companySettings:configure. The repository guards it
-   * forward-only past any number already issued.
+   * system). Office-only, companySettings:configure. The repository prevents
+   * reuse of any number already issued.
    */
   async setInvoiceNumbering(
     sessionToken: string,
@@ -72,9 +73,13 @@ export class InvoicesService {
       'companySettings:configure',
       ['office-web']
     );
-    if (!Number.isInteger(request.nextNumber) || request.nextNumber < 1) {
+    if (
+      !Number.isInteger(request.nextNumber) ||
+      request.nextNumber < 1 ||
+      request.nextNumber > maxInvoiceNumber
+    ) {
       throw new BadRequestException(
-        'The next invoice number must be a whole number of at least 1.'
+        `The next invoice number must be a whole number from 1 to ${maxInvoiceNumber.toLocaleString('en-US')}.`
       );
     }
     const nextNumber = await this.invoicesRepository.setInvoiceNumberingNextNumber(

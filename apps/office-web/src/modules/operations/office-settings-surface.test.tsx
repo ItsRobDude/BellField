@@ -20,7 +20,7 @@ function arrange() {
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.',
-      invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+      invoiceEmailSubject: 'Invoice {invoiceReference} from {companyName}',
       invoiceEmailBody: 'Attached is your invoice.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
@@ -49,7 +49,7 @@ function arrange() {
       replyToEmail: 'office@example.com',
       estimateEmailSubject: 'Estimate from {companyName}',
       estimateEmailBody: 'Attached is your estimate.',
-      invoiceEmailSubject: 'Invoice {jobNumber} from {companyName}',
+      invoiceEmailSubject: 'Invoice {invoiceReference} from {companyName}',
       invoiceEmailBody: 'Attached is your invoice.',
       acceptanceLinkExpiryDays: 30,
       chargesSalesTax: true,
@@ -118,7 +118,7 @@ describe('OfficeSettingsSurface', () => {
 
     expect(await screen.findByLabelText('Reply-to email')).toHaveValue('office@example.com');
     expect(screen.getByLabelText('Invoice email subject')).toHaveValue(
-      'Invoice {jobNumber} from {companyName}'
+      'Invoice {invoiceReference} from {companyName}'
     );
     expect(screen.getByLabelText('Charge sales tax')).toBeChecked();
     expect(screen.getByLabelText('Default sales tax rate')).toHaveValue(8.25);

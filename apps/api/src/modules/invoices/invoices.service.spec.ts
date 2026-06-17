@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   NotFoundException
 } from '@nestjs/common';
+import { maxInvoiceNumber } from '@bellfield/contracts';
 import { InvoicesService } from './invoices.service';
 import type { InvoiceRecord } from './invoices.types';
 
@@ -213,7 +214,8 @@ describe('InvoicesService', () => {
           billTo: { customerId: 'cust-1', name: 'Acme' },
           serviceLocation: { locationId: 'loc-1', name: 'Shop' },
           jobNumber: '1003'
-        }
+        },
+        invoiceNumber: 'INV-1042'
       })
     );
 
@@ -224,7 +226,8 @@ describe('InvoicesService', () => {
       'invoices:view',
       ['office-web']
     );
-    expect(document.filename).toContain('invoice-1003');
+    expect(document.filename).toBe('INV-1042.html');
+    expect(document.html).toContain('Invoice INV-1042');
     expect(document.html).toContain('Diagnostic visit');
     expect(document.html).toContain('Acme');
     expect(document.html).toContain('$99.00');
@@ -765,12 +768,15 @@ describe('InvoicesService job adjustments list', () => {
     expect(result).toEqual({ numbering: { nextNumber: 5000 } });
   });
 
-  it('rejects a non-positive next number before touching the counter', async () => {
+  it('rejects an out-of-range next number before touching the counter', async () => {
     const { service, invoicesRepository } = createService();
 
     await expect(service.setInvoiceNumbering('token', { nextNumber: 0 })).rejects.toBeInstanceOf(
       BadRequestException
     );
+    await expect(
+      service.setInvoiceNumbering('token', { nextNumber: maxInvoiceNumber + 1 })
+    ).rejects.toBeInstanceOf(BadRequestException);
     expect(invoicesRepository.setInvoiceNumberingNextNumber).not.toHaveBeenCalled();
   });
 });

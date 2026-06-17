@@ -619,7 +619,7 @@ export class InvoicesRepository {
     return getNextInvoiceNumber(this.databaseService);
   }
 
-  /** Set the next invoice number (guarded forward-only); returns the new value. */
+  /** Set the next invoice number (guarded against reuse); returns the new value. */
   async setInvoiceNumberingNextNumber(nextNumber: number): Promise<number> {
     return setNextInvoiceNumber(this.databaseService, nextNumber, new Date().toISOString());
   }

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { maxInvoiceNumber } from '@bellfield/contracts';
 import * as settingsApi from '@/lib/operations-company-settings-api';
 import { OfficeInvoiceNumberingPanel } from './office-invoice-numbering-panel';
 
@@ -48,7 +49,7 @@ describe('OfficeInvoiceNumberingPanel', () => {
     expect(await screen.findByText('Invoice numbering saved.')).toBeInTheDocument();
   });
 
-  it('surfaces the server forward-only guard error without crashing', async () => {
+  it('surfaces the server issued-number guard error without crashing', async () => {
     mockedApi.updateOfficeInvoiceNumbering.mockRejectedValue(
       new Error('The next invoice number must be greater than the highest number already issued.')
     );
@@ -62,7 +63,7 @@ describe('OfficeInvoiceNumberingPanel', () => {
     expect(await screen.findByText(/must be greater than the highest number/)).toBeInTheDocument();
   });
 
-  it('rejects a non-positive number client-side before calling the API', async () => {
+  it('rejects out-of-range numbers client-side before calling the API', async () => {
     renderPanel();
     const input = await screen.findByLabelText<HTMLInputElement>('Next invoice number');
     await waitFor(() => expect(input.value).toBe('1'));
@@ -70,7 +71,13 @@ describe('OfficeInvoiceNumberingPanel', () => {
     fireEvent.change(input, { target: { value: '0' } });
     fireEvent.click(screen.getByRole('button', { name: 'Save numbering' }));
 
-    expect(await screen.findByText(/whole number of at least 1/)).toBeInTheDocument();
+    expect(await screen.findByText(/whole number from 1 to/)).toBeInTheDocument();
+    expect(mockedApi.updateOfficeInvoiceNumbering).not.toHaveBeenCalled();
+
+    fireEvent.change(input, { target: { value: String(maxInvoiceNumber + 1) } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save numbering' }));
+
+    expect(await screen.findByText(/whole number from 1 to/)).toBeInTheDocument();
     expect(mockedApi.updateOfficeInvoiceNumbering).not.toHaveBeenCalled();
   });
 });
