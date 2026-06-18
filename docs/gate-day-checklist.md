@@ -191,6 +191,10 @@ track, not a scratch-machine gate — do it before enabling payments for any rea
 shop:
 
 - [ ] Bell Software LLC Stripe Connect platform onboarding complete.
+- [ ] Confirm Stripe Connect platform setup matches the BellField SaaS/direct
+      charge posture: connected accounts are Stripe-responsible for losses,
+      Stripe collects processing fees from the connected account, requirements
+      collection is Stripe-hosted, and full Stripe Dashboard access is expected.
 - [ ] In BellField Settings → Online payments, complete the one-time setup for
       the real merchant shop through the Stripe-hosted onboarding page. Confirm
       the office shows `Online payments ready` before creating any live link.

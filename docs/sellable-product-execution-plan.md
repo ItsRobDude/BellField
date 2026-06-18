@@ -649,7 +649,9 @@ Checkout payments; Stripe remains the hosted checkout surface. Online payments
 setup is now owner/admin-driven from Settings: the install proxies setup status
 and setup-link requests to the relay, the relay creates/reuses the shop's Stripe
 connected account, and Stripe-hosted onboarding collects required business,
-bank, and tax verification. Payment links remain blocked until the relay reports
+bank, and tax verification. Those connected accounts use direct charges with
+Stripe responsible for connected-account losses, fee collection, and
+requirements collection. Payment links remain blocked until the relay reports
 the shop is ready. Online payments cannot be manually voided locally. Manual
 full/partial refunds for manually recorded payments have since shipped on the
 office invoice tab; the provider-confirmed online refund path has since landed

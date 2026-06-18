@@ -151,9 +151,13 @@ Payment-link v1 is deliberately narrow:
   `POST /v1/payments/setup-refresh`) using the shop relay token. The relay
   creates or reuses one Stripe connected account for that shop and returns a
   Stripe-hosted onboarding/account-link URL for legally required business,
-  bank, and tax verification. BellField stores only the connected account id
-  and setup status; it never stores bank, SSN, tax ID, owner DOB, or similar
-  compliance details. Payment links stay blocked until the relay reports
+  bank, and tax verification. The account is created for direct charges with
+  Stripe responsible for connected-account losses, fee collection, and
+  requirements collection; the shop may receive full Stripe Dashboard access for
+  Stripe-managed risk/compliance surfaces, while normal payment-link work stays
+  in BellField. BellField stores only the connected account id and setup status;
+  it never stores bank, SSN, tax ID, owner DOB, or similar compliance details.
+  Payment links stay blocked until the relay reports
   `ready` — meaning Stripe confirms the connected account can both accept card
   charges (`charges_enabled` + `card_payments` active) and receive payouts
   (`payouts_enabled`), so a shop is never told it is ready before it can
