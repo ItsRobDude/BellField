@@ -2,6 +2,8 @@ import { Body, Controller, Get, HttpCode, Param, Post, Req, UseGuards } from '@n
 import type {
   RelayCreatePaymentSessionResponse,
   RelayCreateRefundResponse,
+  RelayPaymentSetupLinkResponse,
+  RelayPaymentSetupStatusResponse,
   RelayPaymentEventAckResponse,
   RelayPaymentEventsResponse,
   RelayRefundEventAckResponse,
@@ -14,12 +16,16 @@ import {
 } from '../identity/relay-auth.guard';
 import { CreatePaymentSessionRequestDto } from './dto/create-payment-session.dto';
 import { CreateRefundRequestDto } from './dto/create-refund.dto';
+import { RelayPaymentSetupService } from './payment-setup.service';
 import { RelayPaymentsService } from './payments.service';
 
 @Controller('v1')
 @UseGuards(RelayAuthGuard)
 export class PaymentsController {
-  constructor(private readonly relayPaymentsService: RelayPaymentsService) {}
+  constructor(
+    private readonly relayPaymentsService: RelayPaymentsService,
+    private readonly relayPaymentSetupService: RelayPaymentSetupService
+  ) {}
 
   @Post('payment-sessions')
   async createPaymentSession(
@@ -29,6 +35,32 @@ export class PaymentsController {
     const shop = getAuthenticatedShop(request);
     const result = await this.relayPaymentsService.createPaymentSession(shop, body);
     return { result };
+  }
+
+  @Get('payments/setup-status')
+  async getPaymentSetupStatus(
+    @Req() request: RelayAuthenticatedRequest
+  ): Promise<RelayPaymentSetupStatusResponse> {
+    const shop = getAuthenticatedShop(request);
+    return this.relayPaymentSetupService.getSetupStatus(shop);
+  }
+
+  @Post('payments/setup-link')
+  @HttpCode(200)
+  async createPaymentSetupLink(
+    @Req() request: RelayAuthenticatedRequest
+  ): Promise<RelayPaymentSetupLinkResponse> {
+    const shop = getAuthenticatedShop(request);
+    return this.relayPaymentSetupService.createSetupLink(shop);
+  }
+
+  @Post('payments/setup-refresh')
+  @HttpCode(200)
+  async refreshPaymentSetupLink(
+    @Req() request: RelayAuthenticatedRequest
+  ): Promise<RelayPaymentSetupLinkResponse> {
+    const shop = getAuthenticatedShop(request);
+    return this.relayPaymentSetupService.refreshSetupLink(shop);
   }
 
   @Get('payment-events')

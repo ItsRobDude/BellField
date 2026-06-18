@@ -9,6 +9,7 @@ import type {
   RelayPaymentsStore,
   RelayShopPaymentsConfig
 } from './payments.types';
+import type { RelayPaymentSetupStore, RelayShopPaymentSetupRecord } from './payment-setup.types';
 import type { RelayPaymentEventRecord, RelayRefundEventRecord } from '@bellfield/contracts';
 
 type PaymentSessionRow = {
@@ -47,6 +48,17 @@ type PaymentEventRow = {
   application_fee_cents: number;
   processor_fee_cents: number | null;
   paid_at: Date;
+};
+
+type ShopPaymentSetupRow = {
+  shop_id: string;
+  payments_status: 'disabled' | 'enabled';
+  stripe_connected_account_id: string | null;
+  payments_setup_status: RelayShopPaymentSetupRecord['paymentsSetupStatus'];
+  payments_setup_url_expires_at: Date | null;
+  payments_enabled_at: Date | null;
+  payments_setup_created_at: Date | null;
+  payments_ready_at: Date | null;
 };
 
 const PAYMENT_SESSION_COLUMNS = `id, shop_id, idempotency_key, job_ref, invoice_ref,
@@ -92,7 +104,7 @@ const REFUND_REQUEST_COLUMNS = `id, shop_id, payment_session_id, idempotency_key
   application_fee_refunded_cents, status, failure_reason, created_at, updated_at`;
 
 @Injectable()
-export class RelayPaymentsRepository implements RelayPaymentsStore {
+export class RelayPaymentsRepository implements RelayPaymentsStore, RelayPaymentSetupStore {
   constructor(private readonly database: DatabaseService) {}
 
   async withPaymentSessionLock<T>(
@@ -127,6 +139,71 @@ export class RelayPaymentsRepository implements RelayPaymentsStore {
           stripeConnectedAccountId: row.stripe_connected_account_id
         }
       : null;
+  }
+
+  async withShopPaymentSetupLock<T>(shopId: string, callback: () => Promise<T>): Promise<T> {
+    return this.database.transaction(async (queryable) => {
+      await queryable.query('SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))', [
+        `relay-payment-setup:${shopId}`
+      ]);
+      return callback();
+    });
+  }
+
+  async findShopPaymentSetup(shopId: string): Promise<RelayShopPaymentSetupRecord | null> {
+    const result = await this.database.query<ShopPaymentSetupRow>(
+      `select id as shop_id,
+              payments_status,
+              stripe_connected_account_id,
+              payments_setup_status,
+              payments_setup_url_expires_at,
+              payments_enabled_at,
+              payments_setup_created_at,
+              payments_ready_at
+       from relay_shops
+       where id = $1`,
+      [shopId]
+    );
+    return result.rows[0] ? toShopPaymentSetupRecord(result.rows[0]) : null;
+  }
+
+  async saveStripeConnectedAccount(
+    input: Parameters<RelayPaymentSetupStore['saveStripeConnectedAccount']>[0]
+  ): Promise<void> {
+    await this.database.query(
+      `update relay_shops
+       set stripe_connected_account_id = coalesce(stripe_connected_account_id, $2),
+           payments_status = 'disabled',
+           payments_enabled_at = null,
+           payments_setup_status = $3,
+           payments_setup_created_at = coalesce(payments_setup_created_at, $4),
+           payments_setup_url_expires_at = null,
+           updated_at = $4
+       where id = $1`,
+      [input.shopId, input.stripeConnectedAccountId, input.setupStatus, input.occurredAt]
+    );
+  }
+
+  async updateShopPaymentSetup(
+    input: Parameters<RelayPaymentSetupStore['updateShopPaymentSetup']>[0]
+  ): Promise<void> {
+    await this.database.query(
+      `update relay_shops
+       set payments_status = $2,
+           payments_enabled_at = case when $2 = 'enabled' then coalesce(payments_enabled_at, $5) else null end,
+           payments_setup_status = $3,
+           payments_setup_url_expires_at = $4,
+           payments_ready_at = case when $2 = 'enabled' then coalesce(payments_ready_at, $5) else payments_ready_at end,
+           updated_at = $5
+       where id = $1`,
+      [
+        input.shopId,
+        input.paymentsEnabled ? 'enabled' : 'disabled',
+        input.setupStatus,
+        input.setupUrlExpiresAt ?? null,
+        input.occurredAt
+      ]
+    );
   }
 
   async findSessionByIdempotencyKey(
@@ -606,6 +683,19 @@ function toEventRecord(row: PaymentEventRow): RelayPaymentEventRecord {
     applicationFeeCents: row.application_fee_cents,
     processorFeeCents: row.processor_fee_cents,
     paidAt: row.paid_at.toISOString()
+  };
+}
+
+function toShopPaymentSetupRecord(row: ShopPaymentSetupRow): RelayShopPaymentSetupRecord {
+  return {
+    shopId: row.shop_id,
+    paymentsStatus: row.payments_status,
+    stripeConnectedAccountId: row.stripe_connected_account_id,
+    paymentsSetupStatus: row.payments_setup_status,
+    paymentsSetupUrlExpiresAt: row.payments_setup_url_expires_at,
+    paymentsEnabledAt: row.payments_enabled_at,
+    paymentsSetupCreatedAt: row.payments_setup_created_at,
+    paymentsReadyAt: row.payments_ready_at
   };
 }
 

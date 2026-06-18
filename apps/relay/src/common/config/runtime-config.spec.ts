@@ -12,17 +12,29 @@ describe('getRelayRuntimeConfig', () => {
     process.env = originalEnv;
   });
 
-  it('allows zero payment platform fee basis points for free accounts', () => {
-    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '0';
-
-    expect(getRelayRuntimeConfig().paymentsPlatformFeeBasisPoints).toBe(0);
+  it('defaults to the fixed 1% payment platform fee', () => {
+    expect(getRelayRuntimeConfig().paymentsPlatformFeeBasisPoints).toBe(100);
   });
 
-  it('rejects negative payment platform fee basis points', () => {
-    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '-1';
+  it('allows the fixed 1% payment platform fee to be explicit', () => {
+    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '100';
+
+    expect(getRelayRuntimeConfig().paymentsPlatformFeeBasisPoints).toBe(100);
+  });
+
+  it('rejects disabling the fixed payment platform fee', () => {
+    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '0';
 
     expect(() => getRelayRuntimeConfig()).toThrow(
-      'BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS must be a non-negative integer.'
+      'BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS must be exactly 100 basis points (1%).'
+    );
+  });
+
+  it('rejects non-policy payment platform fee basis points', () => {
+    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '250';
+
+    expect(() => getRelayRuntimeConfig()).toThrow(
+      'BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS must be exactly 100 basis points (1%).'
     );
   });
 });

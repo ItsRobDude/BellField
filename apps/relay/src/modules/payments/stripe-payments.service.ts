@@ -7,6 +7,11 @@ import type {
   StripeRefundCreateInput,
   StripeRefundCreateResult
 } from './payments.types';
+import type {
+  StripeAccountOnboardingLinkResult,
+  StripeConnectedAccountCreateResult,
+  StripeConnectedAccountReadiness
+} from './payment-setup.types';
 
 // Pin the API version so refund/checkout response shapes (and the version Stripe
 // uses for our outbound calls) can't drift under us on an SDK bump. The webhook
@@ -58,6 +63,76 @@ export class StripePaymentsService {
 
   get isConfigured(): boolean {
     return Boolean(this.stripe && this.stripeWebhookSecret);
+  }
+
+  async createConnectedAccount(input: {
+    shopId: string;
+    displayName: string;
+  }): Promise<StripeConnectedAccountCreateResult> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured.');
+    }
+    const account = await this.stripe.accounts.create(
+      {
+        type: 'express',
+        country: 'US',
+        capabilities: {
+          card_payments: { requested: true },
+          transfers: { requested: true }
+        },
+        business_profile: {
+          name: input.displayName,
+          product_description: 'Home service payments through BellField'
+        },
+        metadata: {
+          bellfieldShopId: input.shopId
+        }
+      },
+      {
+        idempotencyKey: `bellfield-connected-account:${input.shopId}`
+      }
+    );
+    return { connectedAccountId: account.id };
+  }
+
+  async retrieveConnectedAccount(
+    connectedAccountId: string
+  ): Promise<StripeConnectedAccountReadiness> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured.');
+    }
+    const account = await this.stripe.accounts.retrieve(connectedAccountId);
+    return {
+      connectedAccountId: account.id,
+      chargesEnabled: account.charges_enabled === true,
+      payoutsEnabled: account.payouts_enabled === true,
+      detailsSubmitted: account.details_submitted === true,
+      cardPaymentsCapability: account.capabilities?.card_payments ?? null,
+      transfersCapability: account.capabilities?.transfers ?? null,
+      currentlyDue: [...(account.requirements?.currently_due ?? [])],
+      pastDue: [...(account.requirements?.past_due ?? [])],
+      disabledReason: account.requirements?.disabled_reason ?? null
+    };
+  }
+
+  async createAccountOnboardingLink(input: {
+    connectedAccountId: string;
+    refreshUrl: string;
+    returnUrl: string;
+  }): Promise<StripeAccountOnboardingLinkResult> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured.');
+    }
+    const accountLink = await this.stripe.accountLinks.create({
+      account: input.connectedAccountId,
+      refresh_url: input.refreshUrl,
+      return_url: input.returnUrl,
+      type: 'account_onboarding'
+    });
+    return {
+      onboardingUrl: accountLink.url,
+      expiresAt: new Date(accountLink.expires_at * 1000)
+    };
   }
 
   async createCheckoutSession(

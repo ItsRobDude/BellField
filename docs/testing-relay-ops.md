@@ -103,7 +103,16 @@ BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS=100
 Those secrets stay on the relay host only. Customer installs keep only their
 relay token triplet and poll payment events from the relay.
 
-Enable a shop after a Stripe connected account exists:
+Normal shop setup is owner/admin-driven from BellField Settings → Online
+payments. The office API proxies setup status/link requests to the relay, and
+the relay creates or reuses the shop's Stripe connected account behind the
+scenes before returning a Stripe-hosted onboarding URL. The shop completes that
+one-time BellField-branded setup flow; after the relay reports `ready`, invoice
+and deposit Checkout links can be created without the shop managing Stripe
+manually.
+
+Emergency override only, after BellField support has verified the Stripe
+connected account:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `

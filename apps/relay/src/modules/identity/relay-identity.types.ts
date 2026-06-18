@@ -18,8 +18,16 @@ export type RelayShopRecord = {
   /** YYYY-MM-DD from the shop's license; gates release downloads. */
   updateWindowEnd: string | null;
   paymentsStatus: 'disabled' | 'enabled';
+  paymentsSetupStatus:
+    | 'notStarted'
+    | 'actionRequired'
+    | 'pendingReview'
+    | 'ready'
+    | 'disabled'
+    | 'providerError';
   stripeConnectedAccountId: string | null;
   paymentsEnabledAt: Date | null;
+  paymentsReadyAt: Date | null;
   createdAt: Date;
 };
 

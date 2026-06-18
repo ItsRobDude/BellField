@@ -55,14 +55,18 @@ function readPositiveInteger(name: string, fallback: number, problems: string[])
   return parsed;
 }
 
-function readNonNegativeInteger(name: string, fallback: number, problems: string[]): number {
+function readFixedPlatformFeeBasisPoints(
+  name: string,
+  fallback: number,
+  problems: string[]
+): number {
   const raw = process.env[name];
   if (raw === undefined || raw === '') {
     return fallback;
   }
   const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed < 0) {
-    problems.push(`${name} must be a non-negative integer.`);
+  if (!Number.isInteger(parsed) || parsed !== fallback) {
+    problems.push(`${name} must be exactly 100 basis points (1%).`);
     return fallback;
   }
   return parsed;
@@ -102,7 +106,7 @@ export function getRelayRuntimeConfig(): RelayRuntimeConfig {
     DEFAULT_REBIND_FLAP_WINDOW_MINUTES,
     problems
   );
-  const paymentsPlatformFeeBasisPoints = readNonNegativeInteger(
+  const paymentsPlatformFeeBasisPoints = readFixedPlatformFeeBasisPoints(
     'BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS',
     DEFAULT_PAYMENTS_PLATFORM_FEE_BASIS_POINTS,
     problems

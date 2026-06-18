@@ -385,6 +385,15 @@ leftover credit stays job-level/unallocated. Deposit links are explicit payment
 links: the customer sees the deposit amount in Stripe Checkout before paying.
 BellField does not add deposit-rule enforcement in this slice.
 
+Online payments setup is now BellField-branded and owner/admin driven: Settings
+shows the setup status, opens a Stripe-hosted onboarding page when action is
+required, and reports "Online payments ready" only after the relay confirms the
+shop's connected account can accept card payments. Shops do not place Stripe
+keys on their install or manage Stripe manually when sending invoice/deposit
+links. The relay stores only the connected account id and setup status; legally
+required business, payout, and tax details are collected by Stripe-hosted
+onboarding.
+
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger
 apply and dead-letter) plus the office Refund-on-card action and pending/failed
@@ -392,9 +401,12 @@ display. The dated live Stripe sandbox smoke passed on 2026-06-15 Pacific /
 2026-06-16 UTC. Customer payment and refund receipt emails have fully shipped
 (slices 1a–2b: manual + online card payments/deposits, manual + online refunds);
 still deferred are stored cards and processor-fee reconciliation beyond
-BellField's application fee. Customer card surcharge / processing-fee pass-through
-is intentionally not planned for v1 unless real customer demand justifies a
-dedicated legal and card-network review.
+BellField's fixed 100 bps / 1% application fee. That fee applies to every online
+invoice or deposit Checkout payment through BellField and is collected from the
+transaction as a Stripe Connect application fee; it is not an added customer
+checkout charge. Customer card surcharge / processing-fee pass-through is
+intentionally not planned for v1 unless real customer demand justifies a dedicated
+legal and card-network review.
 
 ### Phase 6 - Operational Comms and SMS — NOT STARTED (email-first, decided 2026-06-12)
 

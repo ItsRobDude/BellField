@@ -644,18 +644,25 @@ ledger/balance readback passed on 2026-06-15 Pacific / 2026-06-16 UTC.
 
 Status: landed as a first slice. Payments are now job-level append-only ledger
 rows with invoice allocations. BellField's platform fee is one fixed rate for
-all shops (default 100 basis points) and Stripe remains the hosted checkout
-surface. Online payments cannot be manually voided locally. Manual
+all shops (100 basis points / 1%) and applies to online invoice and deposit
+Checkout payments; Stripe remains the hosted checkout surface. Online payments
+setup is now owner/admin-driven from Settings: the install proxies setup status
+and setup-link requests to the relay, the relay creates/reuses the shop's Stripe
+connected account, and Stripe-hosted onboarding collects required business,
+bank, and tax verification. Payment links remain blocked until the relay reports
+the shop is ready. Online payments cannot be manually voided locally. Manual
 full/partial refunds for manually recorded payments have since shipped on the
 office invoice tab; the provider-confirmed online refund path has since landed
 through the relay/API/worker flow plus the office Refund-on-card action and
 pending/failed display, and the dated live Stripe sandbox smoke passed on
 2026-06-15 Pacific / 2026-06-16 UTC.
 
-Intentionally deferred: estimate payments, stored cards, and processor-fee
-reconciliation beyond BellField's application fee. Customer card surcharge /
-processing-fee pass-through is intentionally not planned for v1 unless real
-customer demand justifies a dedicated legal and card-network review.
+Intentionally deferred: Bell Software LLC as merchant of record,
+BellField-managed payout operations, estimate payments, stored cards, ACH/in-person
+payments, and processor-fee reconciliation beyond BellField's fixed application
+fee. Customer card surcharge / processing-fee pass-through is intentionally not
+planned for v1 unless real customer demand justifies a dedicated legal and
+card-network review.
 
 Owner decisions, confirmed 2026-06-12: link expiry is per-shop configurable
 (Company Settings field, 7–90 days, default 30, relay clamps); declines use

@@ -210,8 +210,9 @@ keys. Phase 6b uses Stripe Connect through the relay:
   balance; deposit links are a separate job-level credit path
 - the install asks the relay to create a Stripe Checkout Session on the shop's
   connected Stripe account
-- BellField applies the same platform fee to every shop (default **100 basis
-  points / 1.0%**), in addition to Stripe's own processor fees
+- BellField applies the same fixed platform fee to every shop (**100 basis
+  points / 1.0%**) on invoice and deposit Checkout payments; this is a Connect
+  application fee, not a customer surcharge or added checkout charge
 - the customer pays on Stripe-hosted Checkout, then lands on a plain relay
   return page
 - Stripe webhooks terminate at the relay; the install worker polls confirmed

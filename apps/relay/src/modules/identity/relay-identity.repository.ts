@@ -20,8 +20,10 @@ type ShopRow = {
   suspended_reason: string | null;
   update_window_end: string | null;
   payments_status: 'disabled' | 'enabled';
+  payments_setup_status: RelayShopRecord['paymentsSetupStatus'];
   stripe_connected_account_id: string | null;
   payments_enabled_at: Date | null;
+  payments_ready_at: Date | null;
   created_at: Date;
 };
 
@@ -111,13 +113,22 @@ export class RelayIdentityRepository implements RelayIdentityStore {
        SET stripe_connected_account_id = $2,
            payments_status = $3,
            payments_enabled_at = $4,
-           updated_at = $4
+           payments_setup_status = $5,
+           payments_setup_url_expires_at = null,
+           payments_setup_created_at = case
+             when $2 is not null then coalesce(payments_setup_created_at, $6)
+             else payments_setup_created_at
+           end,
+           payments_ready_at = case when $3 = 'enabled' then coalesce(payments_ready_at, $6) else payments_ready_at end,
+           updated_at = $6
        WHERE id = $1`,
       [
         input.shopId,
         input.stripeConnectedAccountId,
         input.enabled ? 'enabled' : 'disabled',
-        input.enabled ? input.occurredAt : null
+        input.enabled ? input.occurredAt : null,
+        input.enabled ? 'ready' : 'disabled',
+        input.occurredAt
       ]
     );
   }
@@ -246,8 +257,9 @@ export class RelayIdentityRepository implements RelayIdentityStore {
   async findShopById(shopId: string): Promise<RelayShopRecord | null> {
     const result = await this.database.query<ShopRow>(
       `SELECT id, display_name, license_id, status, monthly_send_quota, suspended_reason,
-              update_window_end, payments_status, stripe_connected_account_id,
-              payments_enabled_at, created_at
+              update_window_end, payments_status, payments_setup_status,
+              stripe_connected_account_id, payments_enabled_at, payments_ready_at,
+              created_at
        FROM relay_shops
        WHERE id = $1`,
       [shopId]
@@ -265,8 +277,10 @@ export class RelayIdentityRepository implements RelayIdentityStore {
       suspendedReason: row.suspended_reason,
       updateWindowEnd: row.update_window_end,
       paymentsStatus: row.payments_status,
+      paymentsSetupStatus: row.payments_setup_status,
       stripeConnectedAccountId: row.stripe_connected_account_id,
       paymentsEnabledAt: row.payments_enabled_at,
+      paymentsReadyAt: row.payments_ready_at,
       createdAt: row.created_at
     };
   }

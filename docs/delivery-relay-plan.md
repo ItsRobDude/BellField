@@ -145,8 +145,22 @@ legacy compatibility alias for older estimate-only clients.
 
 Payment-link v1 is deliberately narrow:
 
-- relay admin links a shop to a Stripe connected account with
-  `relay-admin set-payments-account --shop-id=<shop> --stripe-account-id=acct_...`
+- an owner/admin opens Settings → Online payments and chooses **Set up online
+  payments**. The install calls relay-owned setup APIs
+  (`GET /v1/payments/setup-status`, `POST /v1/payments/setup-link`, and
+  `POST /v1/payments/setup-refresh`) using the shop relay token. The relay
+  creates or reuses one Stripe connected account for that shop and returns a
+  Stripe-hosted onboarding/account-link URL for legally required business,
+  bank, and tax verification. BellField stores only the connected account id
+  and setup status; it never stores bank, SSN, tax ID, owner DOB, or similar
+  compliance details. Payment links stay blocked until the relay reports
+  `ready` — meaning Stripe confirms the connected account can both accept card
+  charges (`charges_enabled` + `card_payments` active) and receive payouts
+  (`payouts_enabled`), so a shop is never told it is ready before it can
+  actually get paid. Deadline-driven `currently_due`/`past_due` items do not by
+  themselves un-ready a shop that can already charge and pay out.
+- `relay-admin set-payments-account --shop-id=<shop> --stripe-account-id=acct_...`
+  remains an emergency/operator override, not the normal shop setup path.
 - install calls `POST /v1/payment-sessions` with the job ref, an optional
   invoice ref, and the install-validated amount in cents. Invoice links include
   the initiating invoice id; deposit links omit it and record as job credit. The
@@ -165,8 +179,8 @@ Payment-link v1 is deliberately narrow:
 - relay creates a Stripe Checkout Session as a direct charge on the connected
   account, **card-only in v1** (`payment_method_types: ['card']`; delayed
   methods like ACH fire `async_payment_succeeded`, which is not handled yet and
-  would otherwise be silently dropped), and applies BellField's platform fee
-  (default 100 basis points)
+  would otherwise be silently dropped), and applies BellField's fixed platform
+  fee (100 basis points / 1%) to invoice and deposit Checkout payments
 - Stripe webhooks terminate at `POST /webhooks/stripe`. The relay **reconciles
   every paid event against the stored session** (amount, currency, connected
   account) and refuses mismatches; a zero-amount paid session is a no-op, not a
