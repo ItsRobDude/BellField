@@ -18,6 +18,7 @@ import type {
 // endpoint's delivered-event version is configured separately in the Stripe
 // dashboard (see docs/refunds-design.md) and must track this.
 const STRIPE_API_VERSION = '2026-05-27.dahlia';
+const CONNECTED_ACCOUNT_IDEMPOTENCY_VERSION = 'stripe-responsible-v1';
 
 type CheckoutPaymentIntentData = {
   metadata: Record<string, string>;
@@ -74,8 +75,13 @@ export class StripePaymentsService {
     }
     const account = await this.stripe.accounts.create(
       {
-        type: 'express',
         country: 'US',
+        controller: {
+          losses: { payments: 'stripe' },
+          fees: { payer: 'account' },
+          requirement_collection: 'stripe',
+          stripe_dashboard: { type: 'full' }
+        },
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true }
@@ -89,7 +95,7 @@ export class StripePaymentsService {
         }
       },
       {
-        idempotencyKey: `bellfield-connected-account:${input.shopId}`
+        idempotencyKey: `bellfield-connected-account:${CONNECTED_ACCOUNT_IDEMPOTENCY_VERSION}:${input.shopId}`
       }
     );
     return { connectedAccountId: account.id };

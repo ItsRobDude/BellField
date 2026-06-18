@@ -392,7 +392,10 @@ shop's connected account can accept card payments. Shops do not place Stripe
 keys on their install or manage Stripe manually when sending invoice/deposit
 links. The relay stores only the connected account id and setup status; legally
 required business, payout, and tax details are collected by Stripe-hosted
-onboarding.
+onboarding. BellField uses direct charges with Stripe responsible for
+connected-account losses, fee collection, and requirements collection; connected
+shops may have full Stripe Dashboard access for Stripe-managed risk/compliance
+surfaces.
 
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger

@@ -109,7 +109,10 @@ the relay creates or reuses the shop's Stripe connected account behind the
 scenes before returning a Stripe-hosted onboarding URL. The shop completes that
 one-time BellField-branded setup flow; after the relay reports `ready`, invoice
 and deposit Checkout links can be created without the shop managing Stripe
-manually.
+manually. The connected account is created for direct charges with Stripe
+responsible for connected-account losses, fee collection, and requirements
+collection; full Stripe Dashboard access is expected for Stripe-managed
+risk/compliance surfaces.
 
 Emergency override only, after BellField support has verified the Stripe
 connected account:

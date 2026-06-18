@@ -27,7 +27,7 @@ describe('StripePaymentsService', () => {
     expect(service.isConfigured).toBe(true);
   });
 
-  it('creates an Express connected account for BellField online payments', async () => {
+  it('creates a Stripe-responsible connected account for BellField online payments', async () => {
     process.env.BELLFIELD_RELAY_STRIPE_SECRET_KEY = 'sk_test_configured_for_constructor';
     process.env.BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET = 'whsec_configured_for_constructor';
     const service = new StripePaymentsService();
@@ -42,15 +42,20 @@ describe('StripePaymentsService', () => {
     expect(result.connectedAccountId).toBe('acct_1');
     expect(create).toHaveBeenCalledWith(
       expect.objectContaining({
-        type: 'express',
         country: 'US',
+        controller: {
+          losses: { payments: 'stripe' },
+          fees: { payer: 'account' },
+          requirement_collection: 'stripe',
+          stripe_dashboard: { type: 'full' }
+        },
         capabilities: {
           card_payments: { requested: true },
           transfers: { requested: true }
         },
         metadata: { bellfieldShopId: 'shop_1' }
       }),
-      { idempotencyKey: 'bellfield-connected-account:shop_1' }
+      { idempotencyKey: 'bellfield-connected-account:stripe-responsible-v1:shop_1' }
     );
   });
 
