@@ -1,3 +1,9 @@
+import type {
+  RelayPaymentSetupLinkResponse,
+  RelayPaymentSetupStatus,
+  RelayPaymentSetupStatusResponse
+} from './relay-delivery.js';
+
 export interface CompanySettings {
   companyName: string;
   replyToEmail?: string;
@@ -49,3 +55,9 @@ export interface UpdateCompanySettingsRequest {
   refundReceiptEmailSubject: string;
   refundReceiptEmailBody: string;
 }
+
+export type OnlinePaymentsSetupStatus = RelayPaymentSetupStatus;
+
+export type OnlinePaymentsSetupStatusResponse = RelayPaymentSetupStatusResponse;
+
+export type OnlinePaymentsSetupLinkResponse = RelayPaymentSetupLinkResponse;

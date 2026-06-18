@@ -2,6 +2,8 @@ import type {
   CompanySettingsResponse,
   EstimateEmailDeliveryStatusResponse,
   InvoiceNumberingSettingsResponse,
+  OnlinePaymentsSetupLinkResponse,
+  OnlinePaymentsSetupStatusResponse,
   UpdateCompanySettingsRequest
 } from '@bellfield/contracts';
 import { requestJson } from './operations-api-base';
@@ -60,6 +62,47 @@ export async function getOfficeEstimateEmailDeliveryStatus(input: {
     {
       apiBaseUrl: input.apiBaseUrl,
       sessionToken: input.sessionToken
+    }
+  );
+}
+
+export async function getOfficeOnlinePaymentsSetupStatus(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<OnlinePaymentsSetupStatusResponse> {
+  return requestJson<OnlinePaymentsSetupStatusResponse>(
+    '/operations/company-settings/payments/setup-status',
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
+}
+
+export async function createOfficeOnlinePaymentsSetupLink(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<OnlinePaymentsSetupLinkResponse> {
+  return requestJson<OnlinePaymentsSetupLinkResponse>(
+    '/operations/company-settings/payments/setup-link',
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken,
+      method: 'POST'
+    }
+  );
+}
+
+export async function refreshOfficeOnlinePaymentsSetupLink(input: {
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<OnlinePaymentsSetupLinkResponse> {
+  return requestJson<OnlinePaymentsSetupLinkResponse>(
+    '/operations/company-settings/payments/setup-refresh',
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken,
+      method: 'POST'
     }
   );
 }

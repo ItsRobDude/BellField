@@ -246,10 +246,18 @@ describe('RelayPaymentsService.createPaymentSession', () => {
     );
   });
 
-  it('creates free-account sessions with no BellField platform fee', async () => {
-    process.env.BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS = '0';
+  it('creates sessions with BellField fixed 1% platform fee', async () => {
     const ctx = makeService();
     const result = await ctx.service.createPaymentSession(shop, baseRequest);
+
+    expect(result.kind).toBe('created');
+    expect(ctx.getCreateCheckoutInput()?.applicationFeeCents).toBe(845);
+    expect(ctx.getRecordSessionInput()?.applicationFeeCents).toBe(845);
+  });
+
+  it('caps tiny payment application fees below the full charge amount', async () => {
+    const ctx = makeService();
+    const result = await ctx.service.createPaymentSession(shop, { ...baseRequest, amountCents: 1 });
 
     expect(result.kind).toBe('created');
     expect(ctx.getCreateCheckoutInput()?.applicationFeeCents).toBe(0);
@@ -263,6 +271,20 @@ describe('RelayPaymentsService.createPaymentSession', () => {
     if (result.kind === 'failed') {
       expect(result.code).toBe('invalidAmount');
     }
+    expect(ctx.getCreateCheckoutInput()).toBeUndefined();
+  });
+
+  it('blocks payment-session creation before online payments are ready', async () => {
+    const ctx = makeService({ config: { paymentsStatus: 'disabled', connectedAccount: 'acct_1' } });
+
+    const result = await ctx.service.createPaymentSession(shop, baseRequest);
+
+    expect(result).toEqual({
+      kind: 'failed',
+      code: 'paymentsDisabled',
+      retryable: false,
+      message: 'Online payments are not set up yet. An owner can set them up in Settings.'
+    });
     expect(ctx.getCreateCheckoutInput()).toBeUndefined();
   });
 

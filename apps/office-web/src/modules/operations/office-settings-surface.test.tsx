@@ -8,7 +8,10 @@ vi.mock('@/lib/operations-company-settings-api', () => ({
   getOfficeCompanySettings: vi.fn(),
   updateOfficeCompanySettings: vi.fn(),
   getOfficeInvoiceNumbering: vi.fn(),
-  updateOfficeInvoiceNumbering: vi.fn()
+  updateOfficeInvoiceNumbering: vi.fn(),
+  getOfficeOnlinePaymentsSetupStatus: vi.fn(),
+  createOfficeOnlinePaymentsSetupLink: vi.fn(),
+  refreshOfficeOnlinePaymentsSetupLink: vi.fn()
 }));
 
 const mockedApi = vi.mocked(settingsApi);
@@ -42,6 +45,19 @@ function arrange() {
       status: 'ready',
       message: 'Estimate email is ready.'
     }
+  });
+  mockedApi.getOfficeOnlinePaymentsSetupStatus.mockResolvedValue({
+    status: 'notStarted'
+  });
+  mockedApi.createOfficeOnlinePaymentsSetupLink.mockResolvedValue({
+    status: 'actionRequired',
+    onboardingUrl: 'https://connect.stripe.test/setup',
+    onboardingUrlExpiresAt: '2026-06-18T12:00:00.000Z'
+  });
+  mockedApi.refreshOfficeOnlinePaymentsSetupLink.mockResolvedValue({
+    status: 'actionRequired',
+    onboardingUrl: 'https://connect.stripe.test/setup-refresh',
+    onboardingUrlExpiresAt: '2026-06-18T12:00:00.000Z'
   });
   mockedApi.updateOfficeCompanySettings.mockResolvedValue({
     settings: {
@@ -199,5 +215,12 @@ describe('OfficeSettingsSurface', () => {
     expect(screen.getByLabelText('Default sales tax rate')).toBeDisabled();
     expect(screen.queryByRole('button', { name: 'Save settings' })).toBeNull();
     expect(screen.queryByLabelText(/api key/i)).toBeNull();
+  });
+
+  it('shows the online payments setup lane', async () => {
+    renderSurface();
+
+    expect(await screen.findByText('Online payments are not set up yet.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Set up online payments' })).toBeInTheDocument();
   });
 });

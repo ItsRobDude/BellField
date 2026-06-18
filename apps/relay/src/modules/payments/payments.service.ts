@@ -76,7 +76,7 @@ export class RelayPaymentsService {
             kind: 'failed',
             code: 'paymentsDisabled',
             retryable: false,
-            message: 'BellField Payments is not enabled for this shop.'
+            message: 'Online payments are not set up yet. An owner can set them up in Settings.'
           };
         }
 

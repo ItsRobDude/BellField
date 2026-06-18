@@ -577,6 +577,11 @@ Current implementation note:
 - A null-source deposit remains job-level. If no posted charges exist, it is unallocated credit; if posted charges exist, it allocates job-wide/main-first. Existing unallocated deposit credit collected before posting allocates to the main invoice when that main invoice posts, up to the posted main's remaining balance.
 - Refund reversal applies the payment's source invoice first when one exists, then falls back to the job-level/main-first order for any remaining reversible allocations. Null-source deposits/payments keep the job-level/main-first behavior.
 
+Relay payment setup state is intentionally metadata-only: the relay may store a
+shop's Stripe connected account id, setup status, onboarding-link expiry, and
+ready/enabled timestamps. BellField must not store bank account numbers, SSNs,
+tax IDs, owner dates of birth, or other Stripe onboarding/compliance details.
+
 ---
 
 ## 11. Register and Line Item Modeling Rules

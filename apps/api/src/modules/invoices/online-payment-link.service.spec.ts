@@ -404,6 +404,36 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     };
     expect(secondBody.idempotencyKey).toBe('invoice-payment:job-1:inv-main:25000:attempt-1');
   });
+
+  it('returns owner-facing setup copy when the relay reports payments disabled', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        result: {
+          kind: 'failed',
+          code: 'paymentsDisabled',
+          retryable: false,
+          message: 'BellField Payments is not enabled for this shop.'
+        }
+      })
+    }) as never;
+    const { service } = createService();
+
+    await expect(service.createOnlinePaymentLink('token', 'inv-main', {})).resolves.toEqual({
+      state: 'paymentsDisabled',
+      message: 'Online payments are not set up yet. An owner can set them up in Settings.'
+    });
+  });
+
+  it('keeps relay transport errors as generic provider errors', async () => {
+    global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 401 }) as never;
+    const { service } = createService();
+
+    await expect(service.createOnlinePaymentLink('token', 'inv-main', {})).resolves.toEqual({
+      state: 'providerError',
+      message: 'Online payment links are not available right now.'
+    });
+  });
 });
 
 describe('OnlinePaymentLinkService.createDepositPaymentLink', () => {

@@ -8,6 +8,7 @@ import {
 } from '@/lib/operations-company-settings-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { OfficeInvoiceNumberingPanel } from './office-invoice-numbering-panel';
+import { OnlinePaymentsSettingsPanel } from './online-payments-settings-panel';
 
 export type OfficeSettingsSurfaceProps = {
   apiBaseUrl: string;
@@ -318,6 +319,11 @@ export function OfficeSettingsSurface({
               Include a pay-now link in invoice emails (posted invoices with a balance)
             </label>
           </section>
+          <OnlinePaymentsSettingsPanel
+            apiBaseUrl={apiBaseUrl}
+            sessionToken={sessionToken}
+            canConfigure={canConfigure}
+          />
           <section style={styles.panel} aria-label="Payment receipt email defaults">
             <h2 style={styles.sectionHeading}>Payment receipt email</h2>
             <label style={styles.inlineLabel}>

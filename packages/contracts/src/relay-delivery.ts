@@ -175,6 +175,27 @@ export interface RelayCreatePaymentSessionResponse {
   result: RelayPaymentSessionResult;
 }
 
+// --- Online payments setup ------------------------------------------------------
+
+export type RelayPaymentSetupStatus =
+  | 'notStarted'
+  | 'actionRequired'
+  | 'pendingReview'
+  | 'ready'
+  | 'disabled'
+  | 'providerError';
+
+export interface RelayPaymentSetupStatusResponse {
+  status: RelayPaymentSetupStatus;
+  onboardingUrlExpiresAt?: string;
+  paymentsEnabledAt?: string;
+  message?: string;
+}
+
+export interface RelayPaymentSetupLinkResponse extends RelayPaymentSetupStatusResponse {
+  onboardingUrl?: string;
+}
+
 /** A confirmed payment awaiting install pickup, delivered at-least-once until acked. */
 export interface RelayPaymentEventRecord {
   paymentEventId: string;

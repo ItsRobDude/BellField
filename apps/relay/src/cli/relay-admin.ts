@@ -197,8 +197,10 @@ async function main(): Promise<number> {
         suspendedReason: shop.suspendedReason,
         updateWindowEnd: shop.updateWindowEnd,
         paymentsStatus: shop.paymentsStatus,
+        paymentsSetupStatus: shop.paymentsSetupStatus,
         stripeConnectedAccountId: shop.stripeConnectedAccountId,
         paymentsEnabledAt: shop.paymentsEnabledAt?.toISOString() ?? null,
+        paymentsReadyAt: shop.paymentsReadyAt?.toISOString() ?? null,
         createdAt: shop.createdAt.toISOString()
       },
       tokens: tokens.map((token) => ({

@@ -227,7 +227,7 @@ export class OnlinePaymentLinkService {
             : result.code === 'paymentsDisabled'
               ? 'paymentsDisabled'
               : 'providerError',
-        message: result.message
+        message: result.code === 'paymentsDisabled' ? paymentsDisabledSetupMessage : result.message
       };
     }
 
@@ -296,7 +296,7 @@ export class OnlinePaymentLinkService {
       return {
         result: {
           kind: 'failed',
-          code: response.status >= 500 ? 'providerError' : 'paymentsDisabled',
+          code: 'providerError',
           retryable: response.status >= 500,
           message: 'Online payment links are not available right now.'
         }
@@ -324,3 +324,6 @@ function isActiveSession(session: { status: string; expiresAt: string }, now: Da
 function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
+
+const paymentsDisabledSetupMessage =
+  'Online payments are not set up yet. An owner can set them up in Settings.';
