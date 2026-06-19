@@ -7,7 +7,7 @@
 BellField can do what pure-SaaS competitors can't: keep the low-cost promise on **one** product and price the other at what hosted responsibility actually costs.
 
 - **Self-hosted** = ownership product, buy once + 1% on facilitated payments. Price-sensitive small shops live here. This keeps the "low-cost / practical for small shops" identity.
-- **Cloud** = convenience product, priced for hosting + support + onboarding. It can carry a real floor *because the cheap door (self-host) stays open.* At launch, Cloud is for shops that can pay to make the server problem disappear, not the cheapest possible way to use BellField.
+- **Cloud** = convenience product, priced for hosting + support + onboarding. It can carry a real floor _because the cheap door (self-host) stays open._ At launch, Cloud is for shops that can pay to make the server problem disappear, not the cheapest possible way to use BellField.
 
 This framing is what makes the Cloud floor defensible without betraying the small-shop identity. A pure-SaaS competitor has to serve cheapskates on the same SKU and gets pinned low; BellField segments by deployment instead.
 
@@ -23,12 +23,12 @@ should not be incentivized to keep card rates high just to make money.
 
 ## 3. Plans (planning defaults — included users + per-user overage, NOT wide hard caps)
 
-| Plan | Monthly | Annual | Included active users | Overage | Best for |
-|---|---:|---:|---:|---:|---|
-| Cloud Starter | $149 | $129 | 3 | +$25/user | Small shops that still want zero-ops hosting |
-| Cloud Shop | $299 | $249 | 10 | +$20/user | Normal serious small shop |
-| Cloud Growth | $599 | $499 | 25 | +$15/user | ~15-35 users, heavier usage/support |
-| Dedicated Cloud | from $1,200 | custom | 40+ / custom | custom | 35+ users, multi-location, dedicated resources/SLA |
+| Plan            |     Monthly | Annual | Included active users |   Overage | Best for                                           |
+| --------------- | ----------: | -----: | --------------------: | --------: | -------------------------------------------------- |
+| Cloud Starter   |        $149 |   $129 |                     3 | +$25/user | Small shops that still want zero-ops hosting       |
+| Cloud Shop      |        $299 |   $249 |                    10 | +$20/user | Normal serious small shop                          |
+| Cloud Growth    |        $599 |   $499 |                    25 | +$15/user | ~15-35 users, heavier usage/support                |
+| Dedicated Cloud | from $1,200 | custom |          40+ / custom |    custom | 35+ users, multi-location, dedicated resources/SLA |
 
 **Amendment vs. hard caps:** each plan **includes a user count, then charges a modest per-user overage** (e.g., +$25/user) rather than a wide "up to 15 users" band. This closes the margin hole where a 14-user, BYO-processor, mostly-cash shop sits at the top of a cheap band and payments don't backstop the cost. Bands give predictability; the overage makes cost track usage when payments don't.
 
@@ -93,7 +93,7 @@ This gate applies to the whole Cloud offering, not just setup (see status note).
 
 - **Tenancy:** container-per-tenant + database-per-tenant on **pooled** compute nodes and **pooled** Postgres clusters (separate DB per tenant), per-tenant backups/restores; heavy customers graduate to dedicated resources (Dedicated Cloud). Preserves isolation without one VPS/managed-DB per tiny tenant wrecking margins.
 - **Revenue engine stays license / Cloud floor first:** payments can add convenience revenue, but the durable business should not depend on customers accepting worse card rates. Lower-cost rails and BYO processing are part of the ownership promise.
-- **The binding constraint at scale is support + onboarding, not infra.** Invest in self-serve onboarding and in-product guidance to keep cheap tiers low-touch. This is also *why* §6 is staffing-gated.
+- **The binding constraint at scale is support + onboarding, not infra.** Invest in self-serve onboarding and in-product guidance to keep cheap tiers low-touch. This is also _why_ §6 is staffing-gated.
 
 ## 8. Launch decisions now accepted
 

@@ -156,7 +156,7 @@ is chosen to be asynchronous, written or recorded alone, and proof-driven:
   dated 7-user ST quote at $64,800/36mo, the MobiLogic quote) and stay
   **grievance-free by rule**: dated quotes, neutral math, zero editorializing
   - let the table do the talking. Ownership, durability, straight math; never
-  "they're robbing you."
+    "they're robbing you."
 - **YouTube walkthroughs second**: screen + voiceover, never on camera.
   Includes the full install video.
 - **Founder story, written once**: "I work in a real HVAC office; we got
