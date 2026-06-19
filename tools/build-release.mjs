@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   writeFileSync
 } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
@@ -189,6 +190,52 @@ function copyNodeRuntime() {
   copyFileRequired(process.execPath, nodeTarget);
 }
 
+function copyOptionalGateDayDependencies() {
+  const postgresBin = args['postgres-bin'] ?? process.env.BELLFIELD_RELEASE_POSTGRES_BIN;
+  const winSwExe = args['winsw-exe'] ?? process.env.BELLFIELD_RELEASE_WINSW_EXE;
+
+  if (postgresBin) {
+    copyPostgresBin(String(postgresBin));
+  }
+  if (winSwExe) {
+    copyWinSwExe(String(winSwExe));
+  }
+}
+
+function copyPostgresBin(postgresBin) {
+  const source = resolve(postgresBin);
+  if (!existsSync(source) || !statSync(source).isDirectory()) {
+    throw new Error(`PostgreSQL bin directory was not found: ${source}`);
+  }
+
+  const requiredTools = [
+    'postgres.exe',
+    'pg_ctl.exe',
+    'initdb.exe',
+    'psql.exe',
+    'pg_dump.exe',
+    'pg_restore.exe',
+    'createdb.exe',
+    'dropdb.exe'
+  ];
+  for (const tool of requiredTools) {
+    const toolPath = join(source, tool);
+    if (!existsSync(toolPath) || !statSync(toolPath).isFile()) {
+      throw new Error(`PostgreSQL bin directory is missing required tool: ${toolPath}`);
+    }
+  }
+
+  copyRequired(source, join(releaseRoot, 'postgres', 'bin'));
+}
+
+function copyWinSwExe(winSwExe) {
+  const source = resolve(winSwExe);
+  if (!existsSync(source) || !statSync(source).isFile()) {
+    throw new Error(`WinSW executable was not found: ${source}`);
+  }
+  copyFileRequired(source, join(releaseRoot, 'tools', 'winsw', 'WinSW-x64.exe'));
+}
+
 function deployWorkspacePackage(filter, target) {
   run('pnpm', ['--filter', filter, 'deploy', '--prod', '--legacy', target]);
 }
@@ -314,6 +361,8 @@ copyFileRequired(
   join(repoRoot, 'tools', 'update', 'license-verification.mjs'),
   join(releaseRoot, 'tools', 'update', 'license-verification.mjs')
 );
+
+copyOptionalGateDayDependencies();
 
 writeFileSync(
   join(releaseRoot, 'README.txt'),
