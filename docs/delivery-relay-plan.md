@@ -196,6 +196,11 @@ Payment-link v1 is deliberately narrow:
   unallocated remainder as an overpayment timeline note — a confirmed payment
   is never dropped or refused, even if the balance moved after the link was
   created.
+- As a safety net, each payment-event poll also asks Stripe about recent
+  relay-owned Checkout Sessions still marked `created` locally and records any
+  already-paid session through the same stored-session reconciliation path.
+  Webhooks remain the primary required path; the poll fallback is not a
+  substitute for configuring the Connect webhook correctly.
 
 No card data, Stripe secret key, or shop processor credential is ever present on
 the customer-owned install.

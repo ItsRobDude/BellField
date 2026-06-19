@@ -22,6 +22,7 @@ import {
 import type { RelayPaymentRefundRequestRecord, RelayPaymentsStore } from './payments.types';
 
 export const RELAY_PAYMENTS_STORE = 'RELAY_PAYMENTS_STORE';
+const paymentReconciliationPollLimit = 25;
 
 @Injectable()
 export class RelayPaymentsService {
@@ -186,8 +187,70 @@ export class RelayPaymentsService {
   }
 
   async listUndeliveredPaymentEvents(shopId: string): Promise<RelayPaymentEventsResponse> {
+    await this.reconcileCreatedPaymentSessions(shopId);
     const events = await this.paymentsStore.listUndeliveredPaymentEvents(shopId);
     return { events };
+  }
+
+  private async reconcileCreatedPaymentSessions(shopId: string): Promise<void> {
+    if (!this.stripePaymentsService.isConfigured) {
+      return;
+    }
+    const sessions = await this.paymentsStore.listCreatedPaymentSessionsForReconciliation(
+      shopId,
+      paymentReconciliationPollLimit
+    );
+    for (const session of sessions) {
+      try {
+        const stripeSession = await this.stripePaymentsService.retrieveCheckoutSession({
+          connectedAccountId: session.stripeConnectedAccountId,
+          stripeCheckoutSessionId: session.stripeCheckoutSessionId
+        });
+        if (stripeSession.paymentStatus !== 'paid') {
+          continue;
+        }
+        if (
+          !stripeSession.stripePaymentIntentId ||
+          typeof stripeSession.amountCents !== 'number' ||
+          !stripeSession.currency
+        ) {
+          log('error', 'Paid Stripe session poll result was missing required payment fields.', {
+            shopId,
+            paymentSessionId: session.id,
+            stripeCheckoutSessionId: session.stripeCheckoutSessionId
+          });
+          continue;
+        }
+        if (stripeSession.amountCents <= 0) {
+          continue;
+        }
+        const outcome = await this.paymentsStore.recordPaidEvent({
+          stripeEventId: `stripe_poll:${stripeSession.stripeCheckoutSessionId}`,
+          stripeCheckoutSessionId: stripeSession.stripeCheckoutSessionId,
+          stripePaymentIntentId: stripeSession.stripePaymentIntentId,
+          connectedAccountId: session.stripeConnectedAccountId,
+          amountCents: stripeSession.amountCents,
+          currency: stripeSession.currency.toUpperCase(),
+          paidAt: stripeSession.paidAt ?? new Date(),
+          occurredAt: new Date()
+        });
+        if (outcome === 'mismatch' || outcome === 'sessionNotFound') {
+          log('error', 'Paid Stripe session poll did not reconcile against a stored session.', {
+            outcome,
+            shopId,
+            paymentSessionId: session.id,
+            stripeCheckoutSessionId: session.stripeCheckoutSessionId
+          });
+        }
+      } catch (error) {
+        log('error', 'Stripe checkout session poll failed.', {
+          shopId,
+          paymentSessionId: session.id,
+          stripeCheckoutSessionId: session.stripeCheckoutSessionId,
+          error
+        });
+      }
+    }
   }
 
   async acknowledgePaymentEvent(

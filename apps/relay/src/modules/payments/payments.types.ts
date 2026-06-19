@@ -49,6 +49,15 @@ export type StripeCheckoutSessionCreateResult = {
   expiresAt: Date;
 };
 
+export type StripeCheckoutSessionReadResult = {
+  stripeCheckoutSessionId: string;
+  paymentStatus: string | null;
+  stripePaymentIntentId: string | null;
+  amountCents: number | null;
+  currency: string | null;
+  paidAt: Date | null;
+};
+
 export type StripeRefundCreateInput = {
   connectedAccountId: string;
   paymentIntentId: string;
@@ -133,6 +142,10 @@ export interface RelayPaymentsStore {
     paidAt: Date;
     occurredAt: Date;
   }): Promise<RecordPaidEventOutcome>;
+  listCreatedPaymentSessionsForReconciliation(
+    shopId: string,
+    limit: number
+  ): Promise<RelayPaymentSessionRecord[]>;
   listUndeliveredPaymentEvents(shopId: string): Promise<RelayPaymentEventRecord[]>;
   acknowledgePaymentEvent(
     shopId: string,

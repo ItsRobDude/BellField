@@ -4,6 +4,7 @@ import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
 import type {
   StripeCheckoutSessionCreateInput,
   StripeCheckoutSessionCreateResult,
+  StripeCheckoutSessionReadResult,
   StripeRefundCreateInput,
   StripeRefundCreateResult
 } from './payments.types';
@@ -23,6 +24,12 @@ const CONNECTED_ACCOUNT_IDEMPOTENCY_VERSION = 'stripe-responsible-v1';
 type CheckoutPaymentIntentData = {
   metadata: Record<string, string>;
   application_fee_amount?: number;
+};
+
+type StripePaymentIntentLike = {
+  id?: string;
+  created?: number;
+  latest_charge?: string | { created?: number } | null;
 };
 
 export type StripeWebhookEvent = {
@@ -203,6 +210,40 @@ export class StripePaymentsService {
         typeof session.payment_intent === 'string' ? session.payment_intent : null,
       checkoutUrl: session.url,
       expiresAt: new Date((session.expires_at ?? Math.floor(Date.now() / 1000)) * 1000)
+    };
+  }
+
+  async retrieveCheckoutSession(input: {
+    connectedAccountId: string;
+    stripeCheckoutSessionId: string;
+  }): Promise<StripeCheckoutSessionReadResult> {
+    if (!this.stripe) {
+      throw new Error('Stripe is not configured.');
+    }
+    const session = await this.stripe.checkout.sessions.retrieve(
+      input.stripeCheckoutSessionId,
+      { expand: ['payment_intent.latest_charge'] },
+      { stripeAccount: input.connectedAccountId }
+    );
+    const paymentIntent =
+      typeof session.payment_intent === 'object' && session.payment_intent !== null
+        ? (session.payment_intent as StripePaymentIntentLike)
+        : null;
+    const latestCharge =
+      typeof paymentIntent?.latest_charge === 'object' && paymentIntent.latest_charge !== null
+        ? paymentIntent.latest_charge
+        : null;
+    const paidAtSeconds = latestCharge?.created ?? paymentIntent?.created ?? null;
+    return {
+      stripeCheckoutSessionId: session.id,
+      paymentStatus: session.payment_status ?? null,
+      stripePaymentIntentId:
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : (paymentIntent?.id ?? null),
+      amountCents: typeof session.amount_total === 'number' ? session.amount_total : null,
+      currency: session.currency ?? null,
+      paidAt: paidAtSeconds ? new Date(paidAtSeconds * 1000) : null
     };
   }
 
