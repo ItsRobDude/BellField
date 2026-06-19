@@ -21,6 +21,12 @@ function renderPanel(canConfigure = true) {
   );
 }
 
+async function findEnabledButton(name: string | RegExp) {
+  const button = await screen.findByRole('button', { name });
+  await waitFor(() => expect(button).toBeEnabled());
+  return button;
+}
+
 beforeEach(() => {
   mockedApi.getOfficeOnlinePaymentsSetupStatus.mockResolvedValue({ status: 'notStarted' });
   mockedApi.createOfficeOnlinePaymentsSetupLink.mockResolvedValue({
@@ -69,7 +75,7 @@ describe('OnlinePaymentsSettingsPanel', () => {
   it('opens the hosted setup link for a new setup', async () => {
     renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Set up online payments' }));
+    fireEvent.click(await findEnabledButton('Set up online payments'));
 
     await waitFor(() => {
       expect(mockedApi.createOfficeOnlinePaymentsSetupLink).toHaveBeenCalledWith({
@@ -89,7 +95,7 @@ describe('OnlinePaymentsSettingsPanel', () => {
     vi.mocked(window.open).mockReturnValueOnce(null);
     renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Set up online payments' }));
+    fireEvent.click(await findEnabledButton('Set up online payments'));
 
     expect(
       await screen.findByText('Online payments setup could not open. Allow pop-ups and try again.')
@@ -102,7 +108,7 @@ describe('OnlinePaymentsSettingsPanel', () => {
     });
     renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Continue setup' }));
+    fireEvent.click(await findEnabledButton('Continue setup'));
 
     await waitFor(() => {
       expect(mockedApi.refreshOfficeOnlinePaymentsSetupLink).toHaveBeenCalledWith({
@@ -123,7 +129,7 @@ describe('OnlinePaymentsSettingsPanel', () => {
       .mockResolvedValueOnce({ status: 'ready' });
     renderPanel();
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Refresh status' }));
+    fireEvent.click(await findEnabledButton('Refresh status'));
 
     expect(await screen.findByText('Online payments ready.')).toBeInTheDocument();
     expect(window.open).not.toHaveBeenCalled();
