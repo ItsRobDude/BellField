@@ -5,7 +5,9 @@ import {
   NotFoundException
 } from '@nestjs/common';
 import {
+  onlinePaymentsDisabledReasons,
   relayServerInstanceHeader,
+  type OnlinePaymentsDisabledReason,
   type OnlinePaymentLinkResponse,
   type RelayCreatePaymentSessionResponse
 } from '@bellfield/contracts';
@@ -221,6 +223,13 @@ export class OnlinePaymentLinkService {
     const result = relayResponse.result;
     if (result.kind === 'failed') {
       if (result.code === 'paymentsDisabled') {
+        if (!isOnlinePaymentsDisabledReason(result.reason)) {
+          return {
+            state: 'paymentsDisabled',
+            reason: 'providerError',
+            message: 'Online payment links are not available right now.'
+          };
+        }
         return {
           state: 'paymentsDisabled',
           reason: result.reason,
@@ -325,4 +334,11 @@ function isActiveSession(session: { status: string; expiresAt: string }, now: Da
 
 function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
+}
+
+function isOnlinePaymentsDisabledReason(value: unknown): value is OnlinePaymentsDisabledReason {
+  return (
+    typeof value === 'string' &&
+    (onlinePaymentsDisabledReasons as readonly string[]).includes(value)
+  );
 }

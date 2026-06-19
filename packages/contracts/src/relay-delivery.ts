@@ -138,12 +138,15 @@ export interface RelayAcceptanceDecisionAckResponse {
 
 // --- Payment links (Phase 6b) ---------------------------------------------------
 
-export type OnlinePaymentsDisabledReason =
-  | 'notStarted'
-  | 'actionRequired'
-  | 'pendingReview'
-  | 'disabled'
-  | 'providerError';
+export const onlinePaymentsDisabledReasons = [
+  'notStarted',
+  'actionRequired',
+  'pendingReview',
+  'disabled',
+  'providerError'
+] as const;
+
+export type OnlinePaymentsDisabledReason = (typeof onlinePaymentsDisabledReasons)[number];
 
 export type RelayPaymentSessionResult =
   | {

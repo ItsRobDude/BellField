@@ -391,14 +391,14 @@ BellField does not add deposit-rule enforcement in this slice.
 Online payments setup is now BellField-branded and owner/admin driven: Settings
 shows the setup status, opens a Stripe-hosted onboarding page when action is
 required, and reports "Online payments ready" only after the relay confirms the
-shop's connected account can accept card payments. Shops do not place Stripe
-keys on their install or manage Stripe manually when sending invoice/deposit
-links. The relay stores only the connected account id and setup status; legally
-required business, payout, and tax details are collected by Stripe-hosted
-onboarding. BellField uses direct charges with Stripe responsible for
-connected-account losses, fee collection, and requirements collection; connected
-shops may have full Stripe Dashboard access for Stripe-managed risk/compliance
-surfaces.
+shop's connected account can accept card payments, use the requested transfer
+capability, and receive payouts. Shops do not place Stripe keys on their install
+or manage Stripe manually when sending invoice/deposit links. The relay stores
+only the connected account id and setup status; legally required business,
+payout, and tax details are collected by Stripe-hosted onboarding. BellField uses
+direct charges with Stripe responsible for connected-account losses, fee
+collection, and requirements collection; connected shops may have full Stripe
+Dashboard access for Stripe-managed risk/compliance surfaces.
 
 The provider-confirmed online refund path through Stripe/relay now exists end to
 end: the backend (pending API request, relay refund, worker-confirmed ledger

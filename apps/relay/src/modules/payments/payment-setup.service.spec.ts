@@ -51,14 +51,22 @@ function makeService(overrides?: {
   retrieve?: StripeConnectedAccountReadiness;
   createAccountThrows?: boolean;
   retrieveThrows?: boolean;
+  events?: string[];
 }) {
   let setup = overrides?.setup ?? makeSetup();
   const savedAccounts: string[] = [];
   const updates: Parameters<RelayPaymentSetupStore['updateShopPaymentSetup']>[0][] = [];
   const store: RelayPaymentSetupStore = {
-    withShopPaymentSetupLock: async <T>(_shopId: string, callback: () => Promise<T>) => callback(),
-    findShopPaymentSetup: async () => setup,
+    withShopPaymentSetupLock: async <T>(_shopId: string, callback: () => Promise<T>) => {
+      overrides?.events?.push('lock');
+      return callback();
+    },
+    findShopPaymentSetup: async () => {
+      overrides?.events?.push('findShop');
+      return setup;
+    },
     findShopPaymentSetupByConnectedAccountId: async (connectedAccountId) => {
+      overrides?.events?.push('findByConnectedAccount');
       if (overrides && 'setupByConnectedAccount' in overrides) {
         return overrides.setupByConnectedAccount ?? null;
       }
@@ -96,6 +104,7 @@ function makeService(overrides?: {
       return { connectedAccountId: 'acct_1' };
     }),
     retrieveConnectedAccount: jest.fn().mockImplementation(async () => {
+      overrides?.events?.push('retrieveAccount');
       if (overrides?.retrieveThrows) {
         throw new Error('stripe retrieve failed');
       }
@@ -150,7 +159,7 @@ describe('RelayPaymentSetupService', () => {
     );
   });
 
-  it('returns ready only when Stripe reports card-charge and payout readiness', async () => {
+  it('returns ready only when Stripe reports charge, card, payout, and transfer readiness', async () => {
     const ctx = makeService({
       setup: makeSetup({ stripeConnectedAccountId: 'acct_1' }),
       retrieve: readiness({
@@ -158,6 +167,7 @@ describe('RelayPaymentSetupService', () => {
         payoutsEnabled: true,
         detailsSubmitted: true,
         cardPaymentsCapability: 'active',
+        transfersCapability: 'active',
         currentlyDue: []
       })
     });
@@ -178,6 +188,45 @@ describe('RelayPaymentSetupService', () => {
 
     expect(response.status).toBe('providerError');
     expect(ctx.getUpdates()).toEqual([]);
+  });
+
+  it('rethrows account.updated Stripe read failures so Stripe can retry', async () => {
+    const ctx = makeService({
+      setup: makeSetup({ stripeConnectedAccountId: 'acct_1' }),
+      retrieveThrows: true
+    });
+
+    await expect(ctx.service.refreshSetupStatusForConnectedAccount('acct_1')).rejects.toThrow(
+      'stripe retrieve failed'
+    );
+
+    expect(ctx.getUpdates()).toEqual([]);
+  });
+
+  it('retrieves account health before taking the shop setup lock on account.updated', async () => {
+    const events: string[] = [];
+    const ctx = makeService({
+      events,
+      setup: makeSetup({
+        paymentsStatus: 'enabled',
+        paymentsSetupStatus: 'ready',
+        stripeConnectedAccountId: 'acct_1'
+      }),
+      retrieve: readiness({
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        detailsSubmitted: true,
+        cardPaymentsCapability: 'pending',
+        currentlyDue: ['external_account']
+      })
+    });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_1');
+
+    expect(events).toEqual(['findByConnectedAccount', 'retrieveAccount', 'lock', 'findShop']);
+    expect(ctx.getUpdates().at(-1)).toEqual(
+      expect.objectContaining({ paymentsEnabled: false, setupStatus: 'actionRequired' })
+    );
   });
 
   it('disables a ready shop when account.updated reports action required', async () => {
@@ -219,6 +268,7 @@ describe('RelayPaymentSetupService', () => {
         payoutsEnabled: false,
         detailsSubmitted: true,
         cardPaymentsCapability: 'active',
+        transfersCapability: 'active',
         currentlyDue: []
       })
     });
@@ -242,6 +292,7 @@ describe('RelayPaymentSetupService', () => {
         payoutsEnabled: true,
         detailsSubmitted: true,
         cardPaymentsCapability: 'active',
+        transfersCapability: 'active',
         currentlyDue: []
       })
     });
@@ -268,6 +319,7 @@ describe('RelayPaymentSetupService', () => {
         payoutsEnabled: true,
         detailsSubmitted: true,
         cardPaymentsCapability: 'active',
+        transfersCapability: 'active',
         currentlyDue: []
       })
     });
@@ -301,7 +353,7 @@ describe('RelayPaymentSetupService', () => {
 
     await ctx.service.refreshSetupStatusForConnectedAccount('acct_old');
 
-    expect(ctx.stripe.retrieveConnectedAccount).not.toHaveBeenCalled();
+    expect(ctx.stripe.retrieveConnectedAccount).toHaveBeenCalledWith('acct_old');
     expect(ctx.getUpdates()).toEqual([]);
   });
 });
@@ -331,13 +383,14 @@ describe('classifyAccountReadiness', () => {
     ).toBe('disabled');
   });
 
-  it('stays ready when charges and payouts are live even with future requirements due', () => {
+  it('stays ready when charge, payout, and transfer gates are live even with future requirements due', () => {
     expect(
       classifyAccountReadiness(
         readiness({
           chargesEnabled: true,
           payoutsEnabled: true,
           cardPaymentsCapability: 'active',
+          transfersCapability: 'active',
           detailsSubmitted: true,
           currentlyDue: ['business_profile.url']
         })
@@ -352,6 +405,7 @@ describe('classifyAccountReadiness', () => {
           chargesEnabled: true,
           payoutsEnabled: false,
           cardPaymentsCapability: 'active',
+          transfersCapability: 'active',
           detailsSubmitted: true,
           currentlyDue: []
         })
@@ -366,10 +420,26 @@ describe('classifyAccountReadiness', () => {
           chargesEnabled: true,
           payoutsEnabled: false,
           cardPaymentsCapability: 'active',
+          transfersCapability: 'active',
           detailsSubmitted: true,
           currentlyDue: ['external_account']
         })
       )
     ).toBe('actionRequired');
+  });
+
+  it('returns pendingReview when transfers are not active yet', () => {
+    expect(
+      classifyAccountReadiness(
+        readiness({
+          chargesEnabled: true,
+          payoutsEnabled: true,
+          cardPaymentsCapability: 'active',
+          transfersCapability: 'pending',
+          detailsSubmitted: true,
+          currentlyDue: []
+        })
+      )
+    ).toBe('pendingReview');
   });
 });

@@ -71,6 +71,18 @@ export class RelayPaymentSetupService {
       return;
     }
 
+    let readiness: StripeConnectedAccountReadiness;
+    try {
+      readiness = await this.stripePaymentsService.retrieveConnectedAccount(connectedAccountId);
+    } catch (error) {
+      log('error', 'Stripe connected account status retrieval failed for account update.', {
+        shopId: setup.shopId,
+        connectedAccountId,
+        error
+      });
+      throw error;
+    }
+
     await this.setupStore.withShopPaymentSetupLock(setup.shopId, async () => {
       const lockedSetup = await this.setupStore.findShopPaymentSetup(setup.shopId);
       if (!lockedSetup || lockedSetup.stripeConnectedAccountId !== connectedAccountId) {
@@ -80,7 +92,7 @@ export class RelayPaymentSetupService {
         });
         return;
       }
-      await this.refreshStatusFromStripe(lockedSetup);
+      await this.persistReadinessStatus(lockedSetup, readiness);
     });
   }
 
@@ -209,6 +221,13 @@ export class RelayPaymentSetupService {
       return providerError('Stripe could not report the online payments setup status.');
     }
 
+    return this.persistReadinessStatus(setup, readiness);
+  }
+
+  private async persistReadinessStatus(
+    setup: RelayShopPaymentSetupRecord,
+    readiness: StripeConnectedAccountReadiness
+  ): Promise<RelayPaymentSetupStatusResponse> {
     const status = classifyAccountReadiness(readiness);
     const paymentsEnabled = status === 'ready';
     const occurredAt = new Date();
@@ -269,15 +288,15 @@ export function classifyAccountReadiness(
   readiness: StripeConnectedAccountReadiness
 ): RelayPaymentSetupStatus {
   // "ready" must mean the shop can both charge a customer and actually receive
-  // the money: card charges enabled AND payouts enabled. currently_due/past_due
-  // are deadline-driven remediation Stripe surfaces while the account is still
+  // the money: card charges enabled, payouts enabled, and the requested
+  // card_payments/transfers capabilities active. currently_due/past_due are
+  // deadline-driven remediation Stripe surfaces while the account is still
   // live, so they only split actionRequired vs pendingReview below — they never
-  // gate "ready" (an account can charge and pay out today with paperwork due
-  // later). transfers is requested at onboarding but the direct-charge path
-  // never creates transfers, so it is intentionally not part of this gate.
+  // gate "ready" when the account can charge, transfer, and pay out today.
   const canCharge = readiness.chargesEnabled && readiness.cardPaymentsCapability === 'active';
   const canReceivePayouts = readiness.payoutsEnabled;
-  if (canCharge && canReceivePayouts) {
+  const canUseTransfers = readiness.transfersCapability === 'active';
+  if (canCharge && canReceivePayouts && canUseTransfers) {
     return 'ready';
   }
   if (isTerminalDisabledReason(readiness.disabledReason)) {
