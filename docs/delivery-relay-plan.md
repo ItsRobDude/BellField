@@ -159,10 +159,11 @@ Payment-link v1 is deliberately narrow:
   it never stores bank, SSN, tax ID, owner DOB, or similar compliance details.
   Payment links stay blocked until the relay reports
   `ready` — meaning Stripe confirms the connected account can both accept card
-  charges (`charges_enabled` + `card_payments` active) and receive payouts
-  (`payouts_enabled`), so a shop is never told it is ready before it can
-  actually get paid. Deadline-driven `currently_due`/`past_due` items do not by
-  themselves un-ready a shop that can already charge and pay out.
+  charges (`charges_enabled` + `card_payments` active), use the requested
+  `transfers` capability, and receive payouts (`payouts_enabled`), so a shop is
+  never told it is ready before it can actually get paid. Deadline-driven
+  `currently_due`/`past_due` items do not by themselves un-ready a shop that can
+  already charge, transfer, and pay out.
 - `relay-admin set-payments-account --shop-id=<shop> --stripe-account-id=acct_...`
   remains an emergency/operator override, not the normal shop setup path.
 - install calls `POST /v1/payment-sessions` with the job ref, an optional

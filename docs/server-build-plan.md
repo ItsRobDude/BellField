@@ -79,7 +79,7 @@ These still assume the single-Windows-PC model and should be updated when the re
 
 Rob plans a hosted SaaS version eventually; it is deliberately deferred, not on the current plate. Do **not** build it now. The only job today is to avoid foreclosing it cheaply.
 
-Recommended model: **isolated instance per tenant — database-per-tenant, container-per-tenant.** The hosted product is "BellField runs the same self-hosted stack, one isolated instance per customer, on BellField infra." This fits the data-ownership identity (each customer's data stays in its own database), makes onboarding/offboarding and per-customer backup/restore clean, and — critically — is what a self-hosted install already *is* (N=1). Shared-database row-level tenancy (`tenant_id` on every table) is the opposite path and would be brutal to retrofit onto the existing schema, repositories, and 160+ migrations; for a B2B FSM tool with modest tenant counts it buys nothing.
+Recommended model: **isolated instance per tenant — database-per-tenant, container-per-tenant.** The hosted product is "BellField runs the same self-hosted stack, one isolated instance per customer, on BellField infra." This fits the data-ownership identity (each customer's data stays in its own database), makes onboarding/offboarding and per-customer backup/restore clean, and — critically — is what a self-hosted install already _is_ (N=1). Shared-database row-level tenancy (`tenant_id` on every table) is the opposite path and would be brutal to retrofit onto the existing schema, repositories, and 160+ migrations; for a B2B FSM tool with modest tenant counts it buys nothing.
 
 What this means now (all cheap, mostly non-actions):
 

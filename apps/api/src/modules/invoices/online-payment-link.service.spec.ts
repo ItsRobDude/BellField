@@ -427,6 +427,28 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     });
   });
 
+  it('maps an unrecognized relay disabled reason to a safe provider error', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        result: {
+          kind: 'failed',
+          code: 'paymentsDisabled',
+          reason: 'legacyDisabledState',
+          retryable: false,
+          message: 'Legacy relay copy should not leak through this state.'
+        }
+      })
+    }) as never;
+    const { service } = createService();
+
+    await expect(service.createOnlinePaymentLink('token', 'inv-main', {})).resolves.toEqual({
+      state: 'paymentsDisabled',
+      reason: 'providerError',
+      message: 'Online payment links are not available right now.'
+    });
+  });
+
   it('keeps relay transport errors as generic provider errors', async () => {
     global.fetch = jest.fn().mockResolvedValue({ ok: false, status: 401 }) as never;
     const { service } = createService();
@@ -551,6 +573,29 @@ describe('OnlinePaymentLinkService.createDepositPaymentLink', () => {
       reason: 'pendingReview',
       message:
         'Online payments are under review. Check Settings for the latest status before creating payment links.'
+    });
+  });
+
+  it('maps a relay disabled response without a reason to a safe provider error for deposits', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        result: {
+          kind: 'failed',
+          code: 'paymentsDisabled',
+          retryable: false,
+          message: 'Legacy relay copy should not leak through this state.'
+        }
+      })
+    }) as never;
+    const { service } = createService();
+
+    await expect(
+      service.createDepositPaymentLink('token', 'job-1', { amount: 100 })
+    ).resolves.toEqual({
+      state: 'paymentsDisabled',
+      reason: 'providerError',
+      message: 'Online payment links are not available right now.'
     });
   });
 });

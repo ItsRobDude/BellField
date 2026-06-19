@@ -444,6 +444,24 @@ describe('RelayPaymentsService.handleStripeWebhook', () => {
     expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
   });
 
+  it('propagates account.updated setup refresh failures so Stripe can retry', async () => {
+    const ctx = makeService();
+    ctx.stripe.constructWebhookEvent = () => ({
+      id: 'evt_account',
+      type: 'account.updated',
+      created: 1,
+      account: 'acct_1',
+      data: { object: { object: 'account', id: 'acct_1' } }
+    });
+    ctx.paymentSetupService.refreshSetupStatusForConnectedAccount.mockRejectedValueOnce(
+      new Error('stripe setup refresh failed')
+    );
+
+    await expect(ctx.service.handleStripeWebhook(Buffer.from(''), 'sig')).rejects.toThrow(
+      'stripe setup refresh failed'
+    );
+  });
+
   it('ignores account.updated events without connected account context', async () => {
     const ctx = makeService();
     ctx.stripe.constructWebhookEvent = () => ({
