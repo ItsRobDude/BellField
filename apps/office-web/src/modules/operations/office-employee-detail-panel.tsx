@@ -17,6 +17,9 @@ import {
   pickablePermissionKeys
 } from './office-employee-permissions';
 
+const minimumPasswordLength = 12;
+const passwordMinimumCopy = 'At least 12 characters.';
+
 export type OfficeEmployeeDetailPanelProps = {
   detail: EmployeeAdminDetailResponse;
   roles: RoleTemplate[];
@@ -470,7 +473,7 @@ function PasswordResetPanel({
   const [isResetting, setIsResetting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const tooShort = password.length < 8;
+  const tooShort = password.length < minimumPasswordLength;
   const mismatch = password !== confirm;
   const submitDisabled = isResetting || tooShort || mismatch;
 
@@ -547,7 +550,7 @@ function PasswordResetPanel({
             Cancel
           </button>
           {password.length > 0 && tooShort ? (
-            <span style={noteStyle}>At least 8 characters.</span>
+            <span style={noteStyle}>{passwordMinimumCopy}</span>
           ) : confirm.length > 0 && mismatch ? (
             <span style={noteStyle}>Passwords don&apos;t match.</span>
           ) : null}

@@ -52,6 +52,20 @@ type SessionSummaryRow = {
   issuedAt: string | Date;
 };
 
+type LoginAttemptRow = {
+  failedCount: number;
+  windowStartedAt: string | Date;
+  lastFailedAt: string | Date;
+  blockedUntil: string | Date | null;
+};
+
+export type LoginAttemptState = {
+  failedCount: number;
+  windowStartedAt: string;
+  lastFailedAt: string;
+  blockedUntil?: string;
+};
+
 @Injectable()
 export class IdentityAccessRepository {
   constructor(private readonly databaseService: DatabaseService) {}
@@ -117,6 +131,101 @@ export class IdentityAccessRepository {
     );
 
     return Number(result.rows[0]?.count ?? 0);
+  }
+
+  async findLoginAttemptState(bucketKey: string): Promise<LoginAttemptState | null> {
+    const result = await this.databaseService.query<LoginAttemptRow>(
+      `
+        select
+          failed_count as "failedCount",
+          window_started_at as "windowStartedAt",
+          last_failed_at as "lastFailedAt",
+          blocked_until as "blockedUntil"
+        from identity_login_attempts
+        where bucket_key = $1
+        limit 1
+      `,
+      [bucketKey]
+    );
+
+    return result.rows[0] ? this.toLoginAttemptState(result.rows[0]) : null;
+  }
+
+  async recordFailedLoginAttempt(input: {
+    bucketKey: string;
+    occurredAt: string;
+    windowCutoff: string;
+    failureThreshold: number;
+    blockedUntil: string;
+  }): Promise<LoginAttemptState> {
+    const result = await this.databaseService.query<LoginAttemptRow>(
+      `
+        insert into identity_login_attempts (
+          bucket_key,
+          failed_count,
+          window_started_at,
+          last_failed_at,
+          blocked_until,
+          updated_at
+        )
+        values ($1, 1, $2, $2, null, $2)
+        on conflict (bucket_key) do update set
+          failed_count = case
+            when identity_login_attempts.window_started_at < $3 then 1
+            else identity_login_attempts.failed_count + 1
+          end,
+          window_started_at = case
+            when identity_login_attempts.window_started_at < $3 then $2
+            else identity_login_attempts.window_started_at
+          end,
+          last_failed_at = $2,
+          blocked_until = case
+            when identity_login_attempts.window_started_at < $3 then null
+            when identity_login_attempts.failed_count + 1 >= $4 then $5
+            else null
+          end,
+          updated_at = $2
+        returning
+          failed_count as "failedCount",
+          window_started_at as "windowStartedAt",
+          last_failed_at as "lastFailedAt",
+          blocked_until as "blockedUntil"
+      `,
+      [
+        input.bucketKey,
+        input.occurredAt,
+        input.windowCutoff,
+        input.failureThreshold,
+        input.blockedUntil
+      ]
+    );
+
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error('Failed login attempt could not be recorded.');
+    }
+
+    return this.toLoginAttemptState(row);
+  }
+
+  async clearLoginAttemptState(bucketKey: string): Promise<number> {
+    const result = await this.databaseService.query(
+      'delete from identity_login_attempts where bucket_key = $1',
+      [bucketKey]
+    );
+
+    return result.rowCount ?? 0;
+  }
+
+  async pruneStaleLoginAttemptStates(cutoff: string): Promise<void> {
+    await this.databaseService.query(
+      `
+        delete from identity_login_attempts
+        where updated_at < $1
+          and (blocked_until is null or blocked_until < $1)
+      `,
+      [cutoff]
+    );
   }
 
   private async listEmployeesWithin(queryable: QueryExecutor): Promise<EmployeeRecord[]> {
@@ -483,6 +592,15 @@ export class IdentityAccessRepository {
       surface: row.surface,
       deviceLabel: row.deviceLabel ?? undefined,
       issuedAt: toIsoString(row.issuedAt)
+    };
+  }
+
+  private toLoginAttemptState(row: LoginAttemptRow): LoginAttemptState {
+    return {
+      failedCount: Number(row.failedCount),
+      windowStartedAt: toIsoString(row.windowStartedAt),
+      lastFailedAt: toIsoString(row.lastFailedAt),
+      blockedUntil: row.blockedUntil ? toIsoString(row.blockedUntil) : undefined
     };
   }
 }

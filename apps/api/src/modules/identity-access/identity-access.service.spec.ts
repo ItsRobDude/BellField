@@ -7,7 +7,12 @@ import {
 } from '@nestjs/common';
 import { IdentityAccessRepository } from './identity-access.repository';
 import { IdentityAccessService } from './identity-access.service';
-import { hashPassword, isHashed } from './password-hash';
+import {
+  dummyLoginPasswordHash,
+  loginFailureThreshold,
+  loginLockoutMessage
+} from './login-attempt-policy';
+import * as passwordHash from './password-hash';
 
 type Role = 'owner' | 'admin' | 'csr';
 
@@ -204,24 +209,54 @@ describe('IdentityAccessService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  function loginRepo(password: string) {
+  function loginRepo(
+    password: string,
+    opts: {
+      employee?: EmployeeLike | null;
+      loginAttemptState?: {
+        failedCount?: number;
+        windowStartedAt?: string;
+        lastFailedAt?: string;
+        blockedUntil?: string;
+      } | null;
+      recordedAttemptState?: {
+        failedCount?: number;
+        windowStartedAt?: string;
+        lastFailedAt?: string;
+        blockedUntil?: string;
+      };
+    } = {}
+  ) {
+    const employee =
+      opts.employee === undefined
+        ? {
+            id: 'employee-1',
+            email: 'owner@bellfield.local',
+            displayName: 'Olivia Owner',
+            roleId: 'owner' as const,
+            isActive: true,
+            password,
+            permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+          }
+        : opts.employee;
     return {
-      findEmployeeByEmail: jest.fn().mockResolvedValue({
-        id: 'employee-1',
-        email: 'owner@bellfield.local',
-        displayName: 'Olivia Owner',
-        roleId: 'owner',
-        isActive: true,
-        password,
-        permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+      findLoginAttemptState: jest.fn().mockResolvedValue(opts.loginAttemptState ?? null),
+      recordFailedLoginAttempt: jest.fn().mockResolvedValue({
+        failedCount: opts.recordedAttemptState?.failedCount ?? 1,
+        windowStartedAt: opts.recordedAttemptState?.windowStartedAt ?? '2026-06-19T12:00:00.000Z',
+        lastFailedAt: opts.recordedAttemptState?.lastFailedAt ?? '2026-06-19T12:00:00.000Z',
+        blockedUntil: opts.recordedAttemptState?.blockedUntil
       }),
+      clearLoginAttemptState: jest.fn().mockResolvedValue(1),
+      pruneStaleLoginAttemptStates: jest.fn().mockResolvedValue(undefined),
+      findEmployeeByEmail: jest.fn().mockResolvedValue(employee),
       createSession: jest.fn().mockResolvedValue(undefined),
       updateEmployeePassword: jest.fn().mockResolvedValue(undefined)
     };
   }
 
   it('logs in with a hashed password and does not rehash', async () => {
-    const repo = loginRepo(await hashPassword('bellfield-owner'));
+    const repo = loginRepo(await passwordHash.hashPassword('bellfield-owner'));
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.login({
       email: 'owner@bellfield.local',
@@ -230,6 +265,7 @@ describe('IdentityAccessService', () => {
     });
     expect(result.sessionToken).toBeTruthy();
     expect(repo.updateEmployeePassword).not.toHaveBeenCalled();
+    expect(repo.clearLoginAttemptState).toHaveBeenCalledTimes(1);
   });
 
   it('logs in with a legacy plaintext password and rehashes it to scrypt', async () => {
@@ -243,16 +279,88 @@ describe('IdentityAccessService', () => {
     expect(repo.updateEmployeePassword).toHaveBeenCalledTimes(1);
     const [employeeId, newStored] = repo.updateEmployeePassword.mock.calls[0];
     expect(employeeId).toBe('employee-1');
-    expect(isHashed(newStored)).toBe(true);
+    expect(passwordHash.isHashed(newStored)).toBe(true);
   });
 
   it('rejects a wrong password', async () => {
-    const repo = loginRepo(await hashPassword('bellfield-owner'));
+    const repo = loginRepo(await passwordHash.hashPassword('bellfield-owner'));
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
       service.login({ email: 'owner@bellfield.local', password: 'nope', surface: 'office-web' })
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(repo.createSession).not.toHaveBeenCalled();
+    expect(repo.pruneStaleLoginAttemptStates).toHaveBeenCalledTimes(1);
+    expect(repo.recordFailedLoginAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({ failureThreshold: loginFailureThreshold })
+    );
+    expect(repo.clearLoginAttemptState).not.toHaveBeenCalled();
+  });
+
+  it('blocks a locked email before loading the employee or checking the password', async () => {
+    const blockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const repo = loginRepo(await passwordHash.hashPassword('bellfield-owner'), {
+      loginAttemptState: {
+        failedCount: loginFailureThreshold,
+        windowStartedAt: '2026-06-19T12:00:00.000Z',
+        lastFailedAt: '2026-06-19T12:01:00.000Z',
+        blockedUntil
+      }
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+
+    await expect(
+      service.login({
+        email: 'owner@bellfield.local',
+        password: 'bellfield-owner',
+        surface: 'office-web'
+      })
+    ).rejects.toMatchObject({ status: 429, message: loginLockoutMessage });
+    expect(repo.findEmployeeByEmail).not.toHaveBeenCalled();
+    expect(repo.createSession).not.toHaveBeenCalled();
+  });
+
+  it('locks on the failed attempt that reaches the threshold', async () => {
+    const blockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const repo = loginRepo(await passwordHash.hashPassword('bellfield-owner'), {
+      recordedAttemptState: {
+        failedCount: loginFailureThreshold,
+        windowStartedAt: '2026-06-19T12:00:00.000Z',
+        lastFailedAt: '2026-06-19T12:04:00.000Z',
+        blockedUntil
+      }
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+
+    await expect(
+      service.login({ email: 'owner@bellfield.local', password: 'nope', surface: 'office-web' })
+    ).rejects.toMatchObject({ status: 429, message: loginLockoutMessage });
+    expect(repo.createSession).not.toHaveBeenCalled();
+  });
+
+  it('uses the dummy password hash for nonexistent emails before recording a failure', async () => {
+    const verifySpy = jest.spyOn(passwordHash, 'verifyPassword');
+    const repo = loginRepo('', { employee: null });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+
+    await expect(
+      service.login({ email: 'missing@example.com', password: 'nope', surface: 'office-web' })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(verifySpy).toHaveBeenCalledWith('nope', dummyLoginPasswordHash);
+    expect(repo.recordFailedLoginAttempt).toHaveBeenCalledTimes(1);
+    verifySpy.mockRestore();
+  });
+
+  it('pads failed legacy plaintext password checks with the dummy hash', async () => {
+    const verifySpy = jest.spyOn(passwordHash, 'verifyPassword');
+    const repo = loginRepo('bellfield-owner');
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+
+    await expect(
+      service.login({ email: 'owner@bellfield.local', password: 'nope', surface: 'office-web' })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+    expect(verifySpy).toHaveBeenCalledWith('nope', 'bellfield-owner');
+    expect(verifySpy).toHaveBeenCalledWith('nope', dummyLoginPasswordHash);
+    verifySpy.mockRestore();
   });
 
   it('lists an employee session summaries without exposing the bearer token', async () => {
@@ -487,7 +595,7 @@ describe('IdentityAccessService', () => {
     expect(result).not.toHaveProperty('password');
     expect(result.roleId).toBe('csr');
     const createdEmployee = repo.createEmployeeWithAudit.mock.calls[0][1] as { password: string };
-    expect(isHashed(createdEmployee.password)).toBe(true);
+    expect(passwordHash.isHashed(createdEmployee.password)).toBe(true);
     expect(createdEmployee.password).not.toContain('supersecret123');
     expect(captured.createAudit?.action).toBe('employee_created');
     expect(captured.createAudit?.summary).not.toContain('supersecret123');
@@ -517,7 +625,7 @@ describe('IdentityAccessService', () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'owner' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
-      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever123' })
+      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever1234' })
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -525,14 +633,14 @@ describe('IdentityAccessService', () => {
     const { repo } = adminSessionRepo({ actorRole: 'admin', targetRole: 'csr' });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     const result = await service.resetEmployeePassword('tok', 'target-1', {
-      password: 'brandnew123'
+      password: 'brandnew1234'
     });
     expect(result).toEqual({ revokedSessionCount: 2 });
-    const [actorId, employeeId, passwordHash] = repo.runPasswordReset.mock.calls[0];
+    const [actorId, employeeId, storedPassword] = repo.runPasswordReset.mock.calls[0];
     expect(actorId).toBe('actor-1');
     expect(employeeId).toBe('target-1');
-    expect(isHashed(passwordHash)).toBe(true);
-    expect(passwordHash).not.toContain('brandnew123');
+    expect(passwordHash.isHashed(storedPassword)).toBe(true);
+    expect(storedPassword).not.toContain('brandnew1234');
   });
 
   const freshOwnerTarget: EmployeeLike = {
@@ -553,7 +661,7 @@ describe('IdentityAccessService', () => {
     });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
-      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever123' })
+      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever1234' })
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -600,7 +708,7 @@ describe('IdentityAccessService', () => {
     });
     const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
     await expect(
-      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever123' })
+      service.resetEmployeePassword('tok', 'target-1', { password: 'whatever1234' })
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
@@ -688,7 +796,7 @@ describe('IdentityAccessService', () => {
     };
     expect(createdEmployee.roleId).toBe('owner');
     expect(createdEmployee.isActive).toBe(true);
-    expect(isHashed(createdEmployee.password)).toBe(true);
+    expect(passwordHash.isHashed(createdEmployee.password)).toBe(true);
     expect(createdEmployee.password).not.toContain('first-owner-pass');
     expect(repo.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ employeeId: result.employee.id, surface: 'office-web' })

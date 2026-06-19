@@ -50,6 +50,24 @@ describe('OfficeAuthShell', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the API lockout message on sign-in', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(identityApi.loginToOfficeApi).mockRejectedValue(
+      new Error('Too many sign-in attempts. Try again in 5 minutes.')
+    );
+
+    render(<OfficeAuthShell />);
+
+    expect(screen.getByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'wrong-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(
+      await screen.findByText('Too many sign-in attempts. Try again in 5 minutes.')
+    ).toBeInTheDocument();
+  });
+
   it('swaps to first-owner setup when the API reports setup mode', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     vi.mocked(identityApi.getOfficeSetupStatus).mockResolvedValue({ setupRequired: true });
@@ -89,5 +107,24 @@ describe('OfficeAuthShell', () => {
       );
     });
     expect(await screen.findByText('Workspace for First Owner')).toBeInTheDocument();
+  });
+
+  it('blocks first-owner setup passwords under twelve characters', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(identityApi.getOfficeSetupStatus).mockResolvedValue({ setupRequired: true });
+
+    render(<OfficeAuthShell />);
+
+    expect(
+      await screen.findByRole('heading', { name: 'Create owner account' })
+    ).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('Setup token'), { target: { value: 'setup-token' } });
+    fireEvent.change(screen.getByLabelText('Display name'), { target: { value: 'First Owner' } });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'shortpass11' } });
+
+    expect(screen.getByText('At least 12 characters.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create owner' })).toBeDisabled();
+    expect(identityApi.createFirstOwner).not.toHaveBeenCalled();
   });
 });

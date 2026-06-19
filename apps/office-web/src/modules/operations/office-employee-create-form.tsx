@@ -9,6 +9,9 @@ import {
 } from '@/lib/identity-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
+const minimumPasswordLength = 12;
+const passwordMinimumCopy = 'At least 12 characters.';
+
 export type OfficeEmployeeCreateFormProps = {
   roles: RoleTemplate[];
   actorRoleId: EmployeeRoleId;
@@ -63,7 +66,7 @@ export function OfficeEmployeeCreateForm({
 
   const hasRoleOptions = roles.length > 0;
   const emailValid = /.+@.+\..+/.test(email.trim());
-  const tooShort = password.length < 8;
+  const tooShort = password.length < minimumPasswordLength;
   const mismatch = password !== confirm;
   const submitDisabled =
     isCreating ||
@@ -201,7 +204,7 @@ export function OfficeEmployeeCreateForm({
           Cancel
         </button>
         {password.length > 0 && tooShort ? (
-          <span style={noteStyle}>At least 8 characters.</span>
+          <span style={noteStyle}>{passwordMinimumCopy}</span>
         ) : confirm.length > 0 && mismatch ? (
           <span style={noteStyle}>Passwords don&apos;t match.</span>
         ) : null}

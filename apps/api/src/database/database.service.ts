@@ -42,6 +42,10 @@ export class DatabaseService implements OnModuleDestroy {
 
   async onModuleDestroy(): Promise<void> {
     this.logger.log('Closing PostgreSQL pool.');
+    await this.close();
+  }
+
+  async close(): Promise<void> {
     await this.pool.end();
   }
 }

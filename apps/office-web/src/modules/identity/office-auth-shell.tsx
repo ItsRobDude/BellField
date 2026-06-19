@@ -37,6 +37,8 @@ const demoAccounts: DemoLoginAccount[] =
         }
       ];
 
+const minimumPasswordLength = 12;
+
 export function OfficeAuthShell() {
   const showDemoAccounts = shouldShowDemoLoginAccounts() && demoAccounts.length > 0;
   const initialCredentials = resolveInitialLoginCredentials(demoAccounts);
@@ -53,6 +55,9 @@ export function OfficeAuthShell() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locale, setLocale] = useState<BellFieldLocale>(defaultBellFieldLocale);
   const t = createBellFieldTranslator(locale);
+  const setupPasswordTooShort =
+    setupRequired && password.length > 0 && password.length < minimumPasswordLength;
+  const setupPasswordInvalid = setupRequired && password.length < minimumPasswordLength;
 
   useEffect(() => {
     const browserLanguages =
@@ -222,7 +227,14 @@ export function OfficeAuthShell() {
             type="password"
             style={styles.input}
           />
-          <button type="submit" disabled={isSubmitting} style={styles.button}>
+          {setupPasswordTooShort ? (
+            <p style={styles.helperText}>{t('officeAuth.passwordMinimum')}</p>
+          ) : null}
+          <button
+            type="submit"
+            disabled={isSubmitting || setupPasswordInvalid}
+            style={styles.button}
+          >
             {setupRequired
               ? isSubmitting
                 ? t('officeAuth.creatingOwner')
