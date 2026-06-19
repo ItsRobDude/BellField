@@ -22,6 +22,9 @@ import {
   type UpdateEmployeeRequestDto
 } from './identity-access.types';
 
+const minimumPasswordLength = 12;
+const passwordMinimumMessage = 'Password must be at least 12 characters.';
+
 export class LoginRequestBodyDto implements LoginRequestDto {
   @IsEmail()
   email!: string;
@@ -55,7 +58,7 @@ export class CreateFirstOwnerRequestBodyDto implements CreateFirstOwnerRequestDt
   displayName!: string;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(minimumPasswordLength, { message: passwordMinimumMessage })
   @MaxLength(200)
   password!: string;
 }
@@ -95,7 +98,7 @@ export class CreateEmployeeRequestBodyDto implements CreateEmployeeRequestDto {
   roleId!: EmployeeRoleId;
 
   @IsString()
-  @MinLength(8)
+  @MinLength(minimumPasswordLength, { message: passwordMinimumMessage })
   @MaxLength(200)
   password!: string;
 
@@ -117,7 +120,7 @@ export class CreateEmployeeRequestBodyDto implements CreateEmployeeRequestDto {
 
 export class ResetEmployeePasswordRequestBodyDto implements ResetEmployeePasswordRequestDto {
   @IsString()
-  @MinLength(8)
+  @MinLength(minimumPasswordLength, { message: passwordMinimumMessage })
   @MaxLength(200)
   password!: string;
 }

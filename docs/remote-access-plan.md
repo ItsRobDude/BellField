@@ -51,11 +51,21 @@ shop servers end up indexed on the public internet.
 Exposing office-web/API beyond the LAN — even behind an unguessable
 hostname — means the login page is internet-reachable. Before day-1 sale:
 
-1. Login endpoint throttling/lockout (verify current state; the setup
-   endpoint is rate-limited, login must match or better).
-2. Password posture review for office accounts (minimum strength; the
-   seeded-dev convenience logins must never exist on a sold install —
-   already true via first-owner setup).
+1. Login endpoint throttling/lockout. Closed 2026-06-19 for normal login:
+   failed sign-ins are DB-backed and normalized-email-bucketed. Five failed
+   attempts inside 15 minutes creates a 5-minute lockout. A locked-out account
+   is recoverable from the server console with
+   `C:\BellField\release\runtime\node\node.exe C:\BellField\release\tools\install\clear-login-attempts.mjs --email=<employee@example.com>`.
+   In a source checkout, the equivalent is
+   `pnpm --filter @bellfield/api identity-admin clear-login-attempts --email=<employee@example.com>`.
+   The first-owner setup endpoint remains in-memory rate-limited and should move
+   to DB-backed throttling in a later hardening pass.
+2. Password posture review for office accounts. Closed 2026-06-19 for newly
+   set passwords: first-owner setup, employee creation, and password reset now
+   require at least 12 characters. Existing shorter passwords can still log in
+   so sold installs are not forced through an unplanned rotation. Seeded-dev
+   convenience logins must never exist on a sold install — already true via
+   first-owner setup and production seed-bootstrap refusal.
 3. Session hardening review (expiry, revocation already exist in Employees
    surface; confirm fit for internet exposure).
 4. Optional hardening to evaluate, not promise: tunnel-level access policy

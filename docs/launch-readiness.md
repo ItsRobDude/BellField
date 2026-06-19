@@ -90,7 +90,11 @@ Gate day is validation debt, not build debt — it never blocks build lanes.
       [remote-access-plan.md](./remote-access-plan.md) — login throttling,
       office password posture, session hardening, field-mobile base-URL
       handling. Managed access is a day-1 sale item, so these are launch
-      blockers, not later polish.
+      blockers, not later polish. Login throttling was closed on 2026-06-19
+      with 5 failed attempts inside 15 minutes creating a 5-minute lockout, and
+      the new-password minimum was closed the same day; session expiry/fit,
+      setup-throttle persistence, tunnel-level policy, and field-mobile remote
+      URL handling remain open.
 
 ---
 

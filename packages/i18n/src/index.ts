@@ -30,6 +30,7 @@ const englishMessages = {
   'officeAuth.creatingOwner': 'Creating owner...',
   'officeAuth.displayName': 'Display name',
   'officeAuth.productName': 'BellField Office',
+  'officeAuth.passwordMinimum': 'At least 12 characters.',
   'officeAuth.serverSetupStatus': 'Checking server setup status...',
   'officeAuth.serverUrlHelp': 'Enter the BellField API address for this office server.',
   'officeAuth.setupToken': 'Setup token',
@@ -292,6 +293,7 @@ const spanishMessages = {
   'officeAuth.creatingOwner': 'Creando propietario...',
   'officeAuth.displayName': 'Nombre visible',
   'officeAuth.productName': 'BellField Office',
+  'officeAuth.passwordMinimum': 'Al menos 12 caracteres.',
   'officeAuth.serverSetupStatus': 'Revisando el estado de configuración del servidor...',
   'officeAuth.serverUrlHelp':
     'Ingresa la dirección de la API de BellField para este servidor de oficina.',

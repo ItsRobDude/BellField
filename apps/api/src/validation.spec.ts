@@ -15,10 +15,13 @@ describe('Runtime validation', () => {
   let app: INestApplication;
   const identityAccessService = {
     login: jest.fn(),
+    createFirstOwner: jest.fn(),
     getCurrentEmployee: jest.fn(),
     getRoleTemplatesForOffice: jest.fn(),
     getEmployees: jest.fn(),
-    updateEmployee: jest.fn()
+    createEmployee: jest.fn(),
+    updateEmployee: jest.fn(),
+    resetEmployeePassword: jest.fn()
   };
   const jobsAppointmentsService = {
     createJob: jest.fn(),
@@ -83,6 +86,46 @@ describe('Runtime validation', () => {
 
     expect(response.status).toBe(400);
     expect(identityAccessService.login).not.toHaveBeenCalled();
+  });
+
+  it('rejects first-owner setup passwords under twelve characters with 400', async () => {
+    const response = await request(app.getHttpServer()).post('/identity/setup/first-owner').send({
+      setupToken: 'setup-token-12345',
+      email: 'owner@example.com',
+      displayName: 'Owner',
+      password: 'shortpass11'
+    });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Password must be at least 12 characters.');
+    expect(identityAccessService.createFirstOwner).not.toHaveBeenCalled();
+  });
+
+  it('rejects employee create passwords under twelve characters with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/identity/employees')
+      .set('authorization', 'Bearer session-token')
+      .send({
+        email: 'new@example.com',
+        displayName: 'New Employee',
+        roleId: 'csr',
+        password: 'shortpass11'
+      });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Password must be at least 12 characters.');
+    expect(identityAccessService.createEmployee).not.toHaveBeenCalled();
+  });
+
+  it('rejects password reset passwords under twelve characters with 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/identity/employees/employee-1/password-reset')
+      .set('authorization', 'Bearer session-token')
+      .send({ password: 'shortpass11' });
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toContain('Password must be at least 12 characters.');
+    expect(identityAccessService.resetEmployeePassword).not.toHaveBeenCalled();
   });
 
   it('rejects invalid job status payloads with 400', async () => {

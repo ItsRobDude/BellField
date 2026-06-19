@@ -336,14 +336,14 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
     renderSurface({ canConfigure: true, actorId: 'e-owner', actorRoleId: 'owner' });
     await selectEmployee('Tina Tech');
     fireEvent.click(await screen.findByRole('button', { name: 'Reset password' }));
-    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'brandnew123' } });
+    fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'brandnew1234' } });
     fireEvent.change(screen.getByLabelText('Confirm new password'), {
-      target: { value: 'brandnew123' }
+      target: { value: 'brandnew1234' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Reset password' }));
     await waitFor(() => {
       expect(mockedApi.resetOfficeEmployeePassword).toHaveBeenCalledWith(
-        expect.objectContaining({ employeeId: 'e-tech', password: 'brandnew123' })
+        expect.objectContaining({ employeeId: 'e-tech', password: 'brandnew1234' })
       );
     });
     expect(await screen.findByText(/Revoked 2 session\(s\)/)).toBeInTheDocument();
@@ -356,6 +356,7 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
     fireEvent.change(screen.getByLabelText('New password'), { target: { value: 'short' } });
     fireEvent.change(screen.getByLabelText('Confirm new password'), { target: { value: 'short' } });
     expect(screen.getByRole('button', { name: 'Reset password' })).toBeDisabled();
+    expect(screen.getByText('At least 12 characters.')).toBeInTheDocument();
     expect(mockedApi.resetOfficeEmployeePassword).not.toHaveBeenCalled();
   });
 

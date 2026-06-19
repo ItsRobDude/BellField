@@ -18,8 +18,14 @@ import type {
   RevokeEmployeeSessionResponse
 } from '@bellfield/contracts';
 import { defaultRoleTemplates } from './default-role-templates';
-import { hashPassword, verifyPassword } from './password-hash';
+import { hashPassword, isHashed, verifyPassword } from './password-hash';
 import { IdentityAccessRepository } from './identity-access.repository';
+import { assertLoginRateLimit, recordFailedLoginAttempt } from './identity-login-throttle';
+import {
+  dummyLoginPasswordHash,
+  loginAttemptBucketKey,
+  normalizeLoginEmail
+} from './login-attempt-policy';
 import type {
   AdminAuditAction,
   AdminAuditEntry,
@@ -139,14 +145,22 @@ export class IdentityAccessService implements OnModuleInit {
   }
 
   async login(loginRequest: LoginRequestDto): Promise<LoginResponseDto> {
-    const normalizedEmail = loginRequest.email.trim().toLowerCase();
+    const normalizedEmail = normalizeLoginEmail(loginRequest.email);
+    const attemptBucketKey = loginAttemptBucketKey(normalizedEmail);
+    await assertLoginRateLimit(this.identityAccessRepository, attemptBucketKey, new Date());
+
     const employee = await this.identityAccessRepository.findEmployeeByEmail(normalizedEmail);
 
     const verification = employee
       ? await verifyPassword(loginRequest.password, employee.password)
-      : { ok: false, needsRehash: false };
+      : await verifyPassword(loginRequest.password, dummyLoginPasswordHash);
+
+    if (employee && !verification.ok && !isHashed(employee.password)) {
+      await verifyPassword(loginRequest.password, dummyLoginPasswordHash);
+    }
 
     if (!employee || !verification.ok) {
+      await recordFailedLoginAttempt(this.identityAccessRepository, attemptBucketKey, new Date());
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -171,6 +185,7 @@ export class IdentityAccessService implements OnModuleInit {
       deviceLabel: loginRequest.deviceLabel?.trim() || undefined,
       issuedAt: new Date().toISOString()
     });
+    await this.identityAccessRepository.clearLoginAttemptState(attemptBucketKey);
 
     return {
       sessionToken,
