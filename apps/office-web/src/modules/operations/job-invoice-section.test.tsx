@@ -1016,6 +1016,7 @@ describe('JobInvoiceSection posting', () => {
 
     renderSection(true);
 
+    expect(await screen.findByText('$50.00')).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Record payment' }));
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '60' } });
     fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
