@@ -79,7 +79,7 @@ ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
   "cd /home/rob/bellfield/deploy/relay && ./backup-relay-db.sh /mnt/bellfield-backups/relay"
 
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
-  "cd /home/rob/bellfield/deploy/relay && docker compose --env-file relay-host.env exec -T postgres psql -U relay -d bellfield_relay -c ""select stripe_connected_account_id, count(*) from relay_shops where stripe_connected_account_id is not null group by stripe_connected_account_id having count(*) > 1;"""
+  "cd /home/rob/bellfield/deploy/relay && docker compose --env-file relay-host.env exec -T relay-postgres psql -U relay -d bellfield_relay -c ""select stripe_connected_account_id, count(*) from relay_shops where stripe_connected_account_id is not null group by stripe_connected_account_id having count(*) > 1;"""
 
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
   "git -C /home/rob/bellfield pull --ff-only"
@@ -92,6 +92,13 @@ curl.exe -fsS https://relay.bellfield.app/health
 
 The duplicate connected-account preflight must return zero rows before the
 deployment proceeds. Expected health response contains `"status":"ok"`.
+
+Deployment boundary: this procedure updates the BellField-hosted relay only
+(`apps/relay`). API, office-web, and worker changes are install-side code; they
+reach customers through the sold-shaped release/update path in
+[release-operator-route.md](./release-operator-route.md), not through a relay
+deploy. When a PR touches both relay and install-side code, the relay deploy
+only covers the hosted relay half.
 
 ## Payment-Link Operations
 

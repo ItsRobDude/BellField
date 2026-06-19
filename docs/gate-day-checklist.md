@@ -209,12 +209,18 @@ shop:
       `refund.updated`, `refund.failed`, and `account.updated`. The relay's
       `BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET` must be this Connect endpoint's
       signing secret, not a platform-account webhook secret.
-- [ ] Live-money webhook smoke: a real (small) card payment through a generated
-      link → Stripe webhook reconciles at the relay → worker records the
-      payment and marks the session paid → office shows it. Refund the test
-      charge afterward. Confirm this used the normal Connect webhook path; the
-      relay's payment-event poll fallback is only a safety net for missed
-      webhooks.
+- [ ] Live-money webhook smoke: a real card payment through a generated link,
+      using the lowest practical live-test amount and never more than `$2.00`
+      unless the owner explicitly approves a higher amount at action time →
+      Stripe webhook reconciles at the relay → worker records the payment and
+      marks the session paid → office shows it. Confirm this used the normal
+      Connect webhook path; the relay's payment-event poll fallback is only a
+      safety net for missed webhooks.
+- [ ] Refund smoke is separate from the payment smoke. Do not refund a live
+      payment automatically, especially when the platform and connected account
+      are both Bell Software LLC-controlled. Only run a live refund when the
+      owner explicitly approves the refund at action time, and record that
+      approval in the evidence notes. Prefer the smallest practical amount.
 - [ ] Confirm `success`/`cancel` redirects land on a reachable public host
       (the relay's `publicBaseUrl`), not an internal address.
 - [ ] **Stripe customer-receipt setting per connected account.** BellField now

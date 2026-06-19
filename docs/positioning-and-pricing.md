@@ -125,6 +125,17 @@ to cover payments-support noise (payout holds and chargebacks generate the
 loudest support traffic there is). Marketing copy must say "never forced" —
 never "we never touch your money," which would foreclose this.
 
+Payments positioning clarification (2026-06-19): BellField Payments is a
+convenience path, not a "best card rate" promise and not the core business
+engine. Stripe/Connect is the practical first rail, but Stripe retail card
+pricing plus a BellField platform fee can be more expensive than processors
+that own a wholesale/payfac spread. Do not let this surface cold in a sales
+call. The honest answer is choice: BellField can offer the easiest built-in
+payment link, should make bank/ACH attractive for large invoices where the
+settlement/return tradeoffs fit, and must keep BYO processor / negotiated
+merchant-rate paths first-class over time. BellField earns primarily on the
+license or Cloud floor; payment margin is optional convenience revenue.
+
 ## Go-to-market posture (decided 2026-06-12)
 
 The buyer is a small service-business owner, not someone who lives online —
@@ -137,12 +148,15 @@ is chosen to be asynchronous, written or recorded alone, and proof-driven:
   waitlist with a specific promise ("get notified when founding-shop slots
   open") — never a "newsletter." Going up early because the SEO clock only
   starts when pages exist.
-- **SEO cost/comparison content is the primary channel**: 3–5 pages built on
-  real quote data nobody else publishes (the dated 7-user ST quote at
-  $64,800/36mo, the MobiLogic quote), plus a self-hosted/one-time-purchase
-  explainer. **Grievance-free by rule**: dated quotes, neutral math, zero
-  editorializing — let the table do the talking. Ownership, durability,
-  straight math; never "they're robbing you."
+- **SEO cost/ownership content is the primary channel**: start with the
+  self-hosted/one-time-purchase explainer and real proof content. Comparison
+  pages against named vendors are drafted privately until BellField has the
+  clean-install proof, a real shop testimonial, and a boring demo path. When
+  published, the pages should use real quote data nobody else publishes (the
+  dated 7-user ST quote at $64,800/36mo, the MobiLogic quote) and stay
+  **grievance-free by rule**: dated quotes, neutral math, zero editorializing
+  - let the table do the talking. Ownership, durability, straight math; never
+  "they're robbing you."
 - **YouTube walkthroughs second**: screen + voiceover, never on camera.
   Includes the full install video.
 - **Founder story, written once**: "I work in a real HVAC office; we got
@@ -162,6 +176,13 @@ is chosen to be asynchronous, written or recorded alone, and proof-driven:
 
 The pre-release page copy and founder story live in
 [prerelease-site-draft.md](./prerelease-site-draft.md).
+
+Low-lock-in is a practical trial/switching message, not just a values pitch:
+"try it, and if it is not right, your data is yours." Back that up with real
+export, documented backup/restore, BYO processor, published pricing, optional
+updates, and the paid-version-never-bricks sacred line. This directly answers
+the common buyer fear that switching field-service systems means getting
+trapped after a price hike.
 
 ## The supported-path support philosophy (owner rule, 2026-06-12)
 
