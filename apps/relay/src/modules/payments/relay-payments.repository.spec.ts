@@ -47,6 +47,20 @@ function storedSession(overrides?: Partial<Record<string, unknown>>) {
   };
 }
 
+function storedShopSetup(overrides?: Partial<Record<string, unknown>>) {
+  return {
+    shop_id: 'shop_1',
+    payments_status: 'disabled',
+    stripe_connected_account_id: 'acct_good',
+    payments_setup_status: 'actionRequired',
+    payments_setup_url_expires_at: null,
+    payments_enabled_at: null,
+    payments_setup_created_at: new Date('2026-06-18T00:00:00.000Z'),
+    payments_ready_at: null,
+    ...overrides
+  };
+}
+
 const baseInput = {
   stripeEventId: 'evt_1',
   stripeCheckoutSessionId: 'cs_1',
@@ -62,6 +76,9 @@ const SESSION_SELECT = /from relay_payment_sessions\s+where stripe_checkout_sess
 const EVENT_INSERT = /insert into relay_payment_events/i;
 const CREATED_SESSIONS_SELECT =
   /from relay_payment_sessions[\s\S]*where shop_id = \$1[\s\S]*status = 'created'/i;
+const SHOP_CONFIG_SELECT = /select id as shop_id, payments_status, payments_setup_status/i;
+const SHOP_SETUP_BY_ACCOUNT_SELECT =
+  /from relay_shops[\s\S]*where stripe_connected_account_id = \$1/i;
 
 function repoWith(handlers: Array<{ match: RegExp; rows?: unknown[]; rowCount?: number }>) {
   const { database, calls } = scriptedDatabase(handlers);
@@ -137,6 +154,39 @@ describe('RelayPaymentsRepository.recordPaidEvent', () => {
     const insert = calls.find((c) => EVENT_INSERT.test(c.sql));
     expect(insert?.sql).toMatch(/on conflict do nothing/i);
     expect(insert?.sql).not.toMatch(/on conflict \(/i);
+  });
+});
+
+describe('RelayPaymentsRepository shop payment setup reads', () => {
+  it('returns setup status with the payment-session gate config', async () => {
+    const { repo, calls } = repoWith([
+      { match: SHOP_CONFIG_SELECT, rows: [storedShopSetup({ payments_status: 'disabled' })] }
+    ]);
+
+    const config = await repo.findShopPaymentsConfig('shop_1');
+
+    expect(config).toEqual({
+      shopId: 'shop_1',
+      paymentsStatus: 'disabled',
+      paymentsSetupStatus: 'actionRequired',
+      stripeConnectedAccountId: 'acct_good'
+    });
+    expect(calls.find((c) => SHOP_CONFIG_SELECT.test(c.sql))?.params).toEqual(['shop_1']);
+  });
+
+  it('finds payment setup by connected account id', async () => {
+    const { repo, calls } = repoWith([
+      { match: SHOP_SETUP_BY_ACCOUNT_SELECT, rows: [storedShopSetup()] }
+    ]);
+
+    const setup = await repo.findShopPaymentSetupByConnectedAccountId('acct_good');
+
+    expect(setup?.shopId).toBe('shop_1');
+    expect(setup?.stripeConnectedAccountId).toBe('acct_good');
+    expect(setup?.paymentsSetupStatus).toBe('actionRequired');
+    expect(calls.find((c) => SHOP_SETUP_BY_ACCOUNT_SELECT.test(c.sql))?.params).toEqual([
+      'acct_good'
+    ]);
   });
 });
 

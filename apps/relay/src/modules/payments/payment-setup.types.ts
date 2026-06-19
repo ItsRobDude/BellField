@@ -37,6 +37,9 @@ export type RelayPaymentSetupLinkResult = RelayPaymentSetupLinkResponse;
 export interface RelayPaymentSetupStore {
   withShopPaymentSetupLock<T>(shopId: string, callback: () => Promise<T>): Promise<T>;
   findShopPaymentSetup(shopId: string): Promise<RelayShopPaymentSetupRecord | null>;
+  findShopPaymentSetupByConnectedAccountId(
+    connectedAccountId: string
+  ): Promise<RelayShopPaymentSetupRecord | null>;
   saveStripeConnectedAccount(input: {
     shopId: string;
     stripeConnectedAccountId: string;

@@ -79,6 +79,9 @@ ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
   "cd /home/rob/bellfield/deploy/relay && ./backup-relay-db.sh /mnt/bellfield-backups/relay"
 
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
+  "cd /home/rob/bellfield/deploy/relay && docker compose --env-file relay-host.env exec -T postgres psql -U relay -d bellfield_relay -c ""select stripe_connected_account_id, count(*) from relay_shops where stripe_connected_account_id is not null group by stripe_connected_account_id having count(*) > 1;"""
+
+ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
   "git -C /home/rob/bellfield pull --ff-only"
 
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
@@ -87,7 +90,8 @@ ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
 curl.exe -fsS https://relay.bellfield.app/health
 ```
 
-Expected health response contains `"status":"ok"`.
+The duplicate connected-account preflight must return zero rows before the
+deployment proceeds. Expected health response contains `"status":"ok"`.
 
 ## Payment-Link Operations
 
@@ -103,11 +107,15 @@ BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS=100
 Those secrets stay on the relay host only. Customer installs keep only their
 relay token triplet and poll payment events from the relay.
 
-The Stripe webhook endpoint must be a Connect / connected-accounts endpoint.
-Payment-event polling also reconciles recent relay-owned Checkout Sessions that
-Stripe already shows as paid but the relay still has as `created`; that protects
-customers from a missed webhook, but it is a backup path, not a replacement for
-the Connect webhook.
+The Stripe webhook endpoint must be a Connect / connected-accounts endpoint
+subscribed to `checkout.session.completed`, `refund.created`, `refund.updated`,
+`refund.failed`, and `account.updated`. Payment-event polling also reconciles
+recent relay-owned Checkout Sessions that Stripe already shows as paid but the
+relay still has as `created`; that protects customers from a missed webhook, but
+it is a backup path, not a replacement for the Connect webhook. If account
+health changes after a Checkout link has already been created, that already
+issued link may still fail in Stripe Checkout; the account health sync blocks
+new links once Stripe reports the account is no longer ready.
 
 Normal shop setup is owner/admin-driven from BellField Settings → Online
 payments. The office API proxies setup status/link requests to the relay, and

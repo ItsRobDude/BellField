@@ -35,22 +35,27 @@ BellField should be designed with future cloud options in mind, but should not d
 
 ## 2. Default Deployment Model
 
-BellField should be designed around this normal setup:
+BellField is one product with one architecture, packaged for three self-hosted deployment tiers. The application layer is identical across all three; only the install/service/deploy layer differs.
 
-### Main deployment layout
+### Deployment tiers
 
-- one main server PC at the customer office
-- multiple office desktop computers connecting to that server
-- technicians using the field app on mobile devices
-- mobile devices connecting securely back to the customer-owned system
+- **Entry tier — single Windows PC.** One always-on Windows PC becomes the local server. For small shops (1–5 office, 1–5 techs) that do not have or want dedicated server hardware. This is the SMB on-ramp and a genuine acquisition advantage versus cloud-only competitors — not the ceiling.
+- **Server build #1 — dedicated/headless Windows Server (priority for serious shops).** A machine that exists only to be the server: unattended install, recoverable Windows services, no interactive-desktop dependency, bundled Postgres + WinSW. For Windows shops with real server hardware or IT.
+- **Server build #2 — Linux/Docker (priority for serious shops).** Containerized api/worker/office-web/Postgres for a VM, VPS, or the shop's existing virtualization/IT infra. Lowest licensing cost, fits modern IT/MSP deployment, and is the substrate for any future BellField-hosted option.
+
+Serious companies should be deployed on a real server (#1 or #2), not a sitting desktop. The entry tier remains fully supported for small shops. Detailed planning lives in [server-build-plan.md](./server-build-plan.md).
+
+### Main deployment layout (all tiers)
+
+- the server (whichever tier) holds shared storage and core application data
+- multiple office desktop computers connect to it by browser — nothing is installed on them
+- technicians use the field app on mobile devices, syncing securely back to the customer-owned server
 
 ### Day-to-day expectation
 
 - office users work from their own desktops
-- shared storage and core application data live on the main server machine
 - the server should stay on whenever the company expects service activity, such as business hours or 24-hour emergency service
-
-This is the default deployment model BellField should optimize for first.
+- on the entry tier especially, the designated PC must stay on and reachable; serious shops should use a real server so uptime does not depend on a workstation
 
 ---
 
@@ -151,10 +156,14 @@ If BellField must choose between flashy complexity and dependable operation, it 
 
 ## 7. Supported Server Environment
 
-### Primary supported environment
+### Primary supported environments
 
-- Windows server PC at the customer office
-- multiple office desktops connecting to it
+- **Entry tier:** a Windows PC at the customer office acting as the server
+- **Server build #1:** a dedicated or headless Windows Server box
+- **Server build #2:** a Linux host (bare metal, VM, or VPS) running the containerized stack
+- in every case, multiple office desktops connect by browser and field devices sync back
+
+Windows remains first-class because many small shops already run Windows. Linux/Docker (#2) is first-class for serious and IT-mature shops, where "server" usually means a VM or container dropped into existing infrastructure rather than a physical Windows box. See [server-build-plan.md](./server-build-plan.md).
 
 ### General recommendation
 
@@ -542,14 +551,16 @@ BellField does not need to solve every deployment style at once.
 It should first be excellent at this:
 
 - one company
-- one main office server PC
-- office desktops connecting to it
+- a single self-hosted server (entry-tier Windows PC today; a real server build for serious shops)
+- office desktops connecting to it by browser
 - Android field app
 - local data ownership
 - secure remote field access
 - local backup and restore capability
 
-Early paid pilots should assume assisted setup until the BellField Server install path has been proven from a clean runbook, including backup, restore, update, office-desktop access, and field-device sync.
+The entry-tier (single Windows PC) install path is closest to done and should be proven from a clean runbook first — backup, restore, update, office-desktop access, and field-device sync. The two server builds (#1 dedicated/headless Windows Server, #2 Linux/Docker) are the priority target for serious shops and are planned in [server-build-plan.md](./server-build-plan.md); they reuse the same proven application core.
+
+Early paid pilots should assume assisted setup until the relevant install path has been proven from a clean runbook.
 
 ---
 

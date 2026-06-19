@@ -124,9 +124,10 @@ export class RelayPaymentsRepository implements RelayPaymentsStore, RelayPayment
     const result = await this.database.query<{
       shop_id: string;
       payments_status: 'disabled' | 'enabled';
+      payments_setup_status: RelayShopPaymentsConfig['paymentsSetupStatus'];
       stripe_connected_account_id: string | null;
     }>(
-      `select id as shop_id, payments_status, stripe_connected_account_id
+      `select id as shop_id, payments_status, payments_setup_status, stripe_connected_account_id
        from relay_shops
        where id = $1`,
       [shopId]
@@ -136,6 +137,7 @@ export class RelayPaymentsRepository implements RelayPaymentsStore, RelayPayment
       ? {
           shopId: row.shop_id,
           paymentsStatus: row.payments_status,
+          paymentsSetupStatus: row.payments_setup_status,
           stripeConnectedAccountId: row.stripe_connected_account_id
         }
       : null;
@@ -163,6 +165,25 @@ export class RelayPaymentsRepository implements RelayPaymentsStore, RelayPayment
        from relay_shops
        where id = $1`,
       [shopId]
+    );
+    return result.rows[0] ? toShopPaymentSetupRecord(result.rows[0]) : null;
+  }
+
+  async findShopPaymentSetupByConnectedAccountId(
+    connectedAccountId: string
+  ): Promise<RelayShopPaymentSetupRecord | null> {
+    const result = await this.database.query<ShopPaymentSetupRow>(
+      `select id as shop_id,
+              payments_status,
+              stripe_connected_account_id,
+              payments_setup_status,
+              payments_setup_url_expires_at,
+              payments_enabled_at,
+              payments_setup_created_at,
+              payments_ready_at
+       from relay_shops
+       where stripe_connected_account_id = $1`,
+      [connectedAccountId]
     );
     return result.rows[0] ? toShopPaymentSetupRecord(result.rows[0]) : null;
   }

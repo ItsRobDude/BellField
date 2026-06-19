@@ -138,6 +138,13 @@ export interface RelayAcceptanceDecisionAckResponse {
 
 // --- Payment links (Phase 6b) ---------------------------------------------------
 
+export type OnlinePaymentsDisabledReason =
+  | 'notStarted'
+  | 'actionRequired'
+  | 'pendingReview'
+  | 'disabled'
+  | 'providerError';
+
 export type RelayPaymentSessionResult =
   | {
       kind: 'created';
@@ -150,7 +157,14 @@ export type RelayPaymentSessionResult =
     }
   | {
       kind: 'failed';
-      code: 'paymentsNotConfigured' | 'paymentsDisabled' | 'invalidAmount' | 'providerError';
+      code: 'paymentsDisabled';
+      reason: OnlinePaymentsDisabledReason;
+      retryable: false;
+      message: string;
+    }
+  | {
+      kind: 'failed';
+      code: 'paymentsNotConfigured' | 'invalidAmount' | 'providerError';
       retryable: boolean;
       message: string;
     };
@@ -177,13 +191,7 @@ export interface RelayCreatePaymentSessionResponse {
 
 // --- Online payments setup ------------------------------------------------------
 
-export type RelayPaymentSetupStatus =
-  | 'notStarted'
-  | 'actionRequired'
-  | 'pendingReview'
-  | 'ready'
-  | 'disabled'
-  | 'providerError';
+export type RelayPaymentSetupStatus = OnlinePaymentsDisabledReason | 'ready';
 
 export interface RelayPaymentSetupStatusResponse {
   status: RelayPaymentSetupStatus;

@@ -1,6 +1,7 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import type {
+  OnlinePaymentsDisabledReason,
   RelayCreatePaymentSessionRequest,
   RelayCreateRefundRequest,
   RelayPaymentEventAckResponse,
@@ -13,6 +14,7 @@ import type {
 import { getRelayRuntimeConfig } from '../../common/config/runtime-config';
 import { log } from '../../common/logger';
 import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
+import { RelayPaymentSetupService } from './payment-setup.service';
 import {
   isStripeCheckoutSession,
   isStripeRefund,
@@ -31,7 +33,8 @@ export class RelayPaymentsService {
 
   constructor(
     @Inject(RELAY_PAYMENTS_STORE) private readonly paymentsStore: RelayPaymentsStore,
-    private readonly stripePaymentsService: StripePaymentsService
+    private readonly stripePaymentsService: StripePaymentsService,
+    private readonly paymentSetupService: RelayPaymentSetupService
   ) {}
 
   async createPaymentSession(
@@ -73,12 +76,11 @@ export class RelayPaymentsService {
           paymentsConfig.paymentsStatus !== 'enabled' ||
           !paymentsConfig.stripeConnectedAccountId
         ) {
-          return {
-            kind: 'failed',
-            code: 'paymentsDisabled',
-            retryable: false,
-            message: 'Online payments are not set up yet. An owner can set them up in Settings.'
-          };
+          const reason =
+            paymentsConfig && paymentsConfig.paymentsSetupStatus !== 'ready'
+              ? paymentsConfig.paymentsSetupStatus
+              : 'providerError';
+          return paymentDisabledResult(reason);
         }
 
         const applicationFeeCents = calculateApplicationFeeCents(
@@ -135,6 +137,16 @@ export class RelayPaymentsService {
 
   async handleStripeWebhook(rawBody: Buffer, signature: string | undefined): Promise<void> {
     const event = this.stripePaymentsService.constructWebhookEvent(rawBody, signature);
+    if (event.type === 'account.updated') {
+      if (!event.account) {
+        log('warn', 'Stripe account.updated webhook did not include a connected account id.', {
+          stripeEventId: event.id
+        });
+        return;
+      }
+      await this.paymentSetupService.refreshSetupStatusForConnectedAccount(event.account);
+      return;
+    }
     if (
       event.type === 'refund.created' ||
       event.type === 'refund.updated' ||
@@ -490,6 +502,31 @@ function sessionResult(session: {
     currency: session.currency,
     applicationFeeCents: session.applicationFeeCents
   };
+}
+
+function paymentDisabledResult(reason: OnlinePaymentsDisabledReason): RelayPaymentSessionResult {
+  return {
+    kind: 'failed',
+    code: 'paymentsDisabled',
+    reason,
+    retryable: false,
+    message: paymentDisabledMessage(reason)
+  };
+}
+
+function paymentDisabledMessage(reason: OnlinePaymentsDisabledReason): string {
+  switch (reason) {
+    case 'notStarted':
+      return 'Online payments are not set up yet. An owner can set them up in Settings.';
+    case 'actionRequired':
+      return 'Online payments need attention. An owner can continue setup in Settings.';
+    case 'pendingReview':
+      return 'Online payments are under review. Check Settings for the latest status before creating payment links.';
+    case 'disabled':
+      return 'Online payments are disabled for this shop. Contact BellField support.';
+    case 'providerError':
+      return 'Online payments are not available right now.';
+  }
 }
 
 function requestedResult(request: RelayPaymentRefundRequestRecord): RelayRefundResult {

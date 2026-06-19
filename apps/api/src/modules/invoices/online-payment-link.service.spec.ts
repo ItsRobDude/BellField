@@ -405,15 +405,16 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
     expect(secondBody.idempotencyKey).toBe('invoice-payment:job-1:inv-main:25000:attempt-1');
   });
 
-  it('returns owner-facing setup copy when the relay reports payments disabled', async () => {
+  it('preserves relay disabled reason and message when payments are disabled', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
         result: {
           kind: 'failed',
           code: 'paymentsDisabled',
+          reason: 'actionRequired',
           retryable: false,
-          message: 'BellField Payments is not enabled for this shop.'
+          message: 'Online payments need attention. An owner can continue setup in Settings.'
         }
       })
     }) as never;
@@ -421,7 +422,8 @@ describe('OnlinePaymentLinkService.createOnlinePaymentLink', () => {
 
     await expect(service.createOnlinePaymentLink('token', 'inv-main', {})).resolves.toEqual({
       state: 'paymentsDisabled',
-      message: 'Online payments are not set up yet. An owner can set them up in Settings.'
+      reason: 'actionRequired',
+      message: 'Online payments need attention. An owner can continue setup in Settings.'
     });
   });
 
@@ -524,5 +526,31 @@ describe('OnlinePaymentLinkService.createDepositPaymentLink', () => {
 
     expect(onlinePaymentsRepository.listForJobAmount).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('preserves relay disabled reason and message for deposit links', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        result: {
+          kind: 'failed',
+          code: 'paymentsDisabled',
+          reason: 'pendingReview',
+          retryable: false,
+          message:
+            'Online payments are under review. Check Settings for the latest status before creating payment links.'
+        }
+      })
+    }) as never;
+    const { service } = createService();
+
+    await expect(
+      service.createDepositPaymentLink('token', 'job-1', { amount: 100 })
+    ).resolves.toEqual({
+      state: 'paymentsDisabled',
+      reason: 'pendingReview',
+      message:
+        'Online payments are under review. Check Settings for the latest status before creating payment links.'
+    });
   });
 });

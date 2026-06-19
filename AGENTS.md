@@ -24,12 +24,13 @@ BellField is:
 - history-preserving, accounting-safe, and permission-aware
 - intended to stay boring, explicit, and maintainable
 
-Default deployment model:
+Deployment targets (all the same product, customer-owned data, different packaging):
 
-- one main office server PC
-- multiple office desktops connecting to it
-- field devices syncing back to the customer-owned server
-- no BellField-hosted customer data assumption
+- **Entry tier** — a single always-on Windows PC that becomes the local server; for small shops (1–5 office, 1–5 techs). This is the SMB on-ramp, not the ceiling.
+- **Server build #1 (priority for serious shops)** — a dedicated/headless Windows Server box: unattended install, recoverable services, no interactive-desktop dependency, bundled Postgres + WinSW.
+- **Server build #2 (priority for serious shops)** — a Linux/Docker deployment: containerized api/worker/office-web/Postgres for a VM, VPS, or existing virtualization infra; also the substrate for any future BellField-hosted option.
+
+In every tier: office desktops connect by browser, field devices sync back to the customer-owned server, and there is no BellField-hosted customer data assumption. See `docs/server-build-plan.md`.
 
 ---
 
@@ -230,6 +231,8 @@ These rules should not drift unless the docs are intentionally updated.
 - No BellField-hosted customer data assumptions
 - Small-shop-friendly
 - Windows-friendly deployment matters
+- The two "legit server" builds are first-class targets for serious shops: dedicated/headless Windows Server (#1) and Linux/Docker (#2). The single-Windows-PC model is the entry tier, not the ceiling. See `docs/server-build-plan.md`.
+- Keep the application layer (`apps/api`, `apps/worker`, `apps/office-web`, `packages/*`) OS-neutral. Confine OS-specific logic to the install/service/deploy layer (`tools/install`, `deploy/`). Today only the worker backup job shells out to OS tools — keep it that way.
 - Avoid bash-only or Linux-only assumptions where a cross-platform option is practical
 
 ### Dependency rules

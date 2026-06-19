@@ -1,4 +1,5 @@
 import type { EstimateLineItemKind, EstimateDiscount } from './estimates.js';
+import type { OnlinePaymentsDisabledReason } from './relay-delivery.js';
 
 // --- Invoices (Milestone 7 draft + Milestone 8 posting/lock) --------------------
 
@@ -358,7 +359,15 @@ export type OnlinePaymentLinkResponse =
       message: string;
     }
   | {
-      state: Exclude<OnlinePaymentLinkState, 'created' | 'confirmationRequired'>;
+      state: 'paymentsDisabled';
+      reason: OnlinePaymentsDisabledReason;
+      message?: string;
+    }
+  | {
+      state: Exclude<
+        OnlinePaymentLinkState,
+        'created' | 'confirmationRequired' | 'paymentsDisabled'
+      >;
       message?: string;
     };
 

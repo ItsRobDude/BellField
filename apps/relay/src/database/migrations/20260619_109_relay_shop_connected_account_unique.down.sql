@@ -1,0 +1,1 @@
+drop index if exists relay_shops_stripe_connected_account_idx;

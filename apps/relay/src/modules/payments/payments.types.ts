@@ -1,4 +1,5 @@
 import type {
+  OnlinePaymentsDisabledReason,
   RelayCreatePaymentSessionRequest,
   RelayPaymentEventRecord,
   RelayRefundEventRecord
@@ -7,6 +8,7 @@ import type {
 export type RelayShopPaymentsConfig = {
   shopId: string;
   paymentsStatus: 'disabled' | 'enabled';
+  paymentsSetupStatus: OnlinePaymentsDisabledReason | 'ready';
   stripeConnectedAccountId: string | null;
 };
 

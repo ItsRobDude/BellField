@@ -206,7 +206,7 @@ shop:
 - [ ] Confirm the Stripe live webhook endpoint is a **Connect / connected
       accounts** endpoint for `https://relay.bellfield.app/webhooks/stripe`,
       subscribed to `checkout.session.completed`, `refund.created`,
-      `refund.updated`, and `refund.failed`. The relay's
+      `refund.updated`, `refund.failed`, and `account.updated`. The relay's
       `BELLFIELD_RELAY_STRIPE_WEBHOOK_SECRET` must be this Connect endpoint's
       signing secret, not a platform-account webhook secret.
 - [ ] Live-money webhook smoke: a real (small) card payment through a generated

@@ -1,6 +1,7 @@
+import type { OnlinePaymentsDisabledReason } from '@bellfield/contracts';
+import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
 import { RelayPaymentsService } from './payments.service';
 import type { StripeWebhookEvent } from './stripe-payments.service';
-import type { AuthenticatedRelayShop } from '../identity/relay-identity.types';
 import type {
   RecordPaidEventOutcome,
   RecordRefundEventOutcome,
@@ -21,7 +22,11 @@ const shop: AuthenticatedRelayShop = {
 function makeService(overrides?: {
   existingSession?: RelayPaymentSessionRecord | null;
   recordPaidEvent?: (input: unknown) => Promise<RecordPaidEventOutcome>;
-  config?: { paymentsStatus?: 'enabled' | 'disabled'; connectedAccount?: string | null };
+  config?: {
+    paymentsStatus?: 'enabled' | 'disabled';
+    paymentsSetupStatus?: OnlinePaymentsDisabledReason | 'ready';
+    connectedAccount?: string | null;
+  };
   existingRefundRequest?: RelayPaymentRefundRequestRecord | null;
   paidSession?: RelayPaymentSessionRecord | null;
   consumedRefundCents?: number;
@@ -52,6 +57,7 @@ function makeService(overrides?: {
     findShopPaymentsConfig: async () => ({
       shopId: 'shop_1',
       paymentsStatus: overrides?.config?.paymentsStatus ?? 'enabled',
+      paymentsSetupStatus: overrides?.config?.paymentsSetupStatus ?? 'ready',
       stripeConnectedAccountId:
         overrides?.config?.connectedAccount === undefined
           ? 'acct_1'
@@ -155,10 +161,19 @@ function makeService(overrides?: {
     }
   };
 
-  const service = new RelayPaymentsService(store as never, stripe as never);
+  const paymentSetupService = {
+    refreshSetupStatusForConnectedAccount: jest.fn()
+  };
+
+  const service = new RelayPaymentsService(
+    store as never,
+    stripe as never,
+    paymentSetupService as never
+  );
   return {
     service,
     stripe,
+    paymentSetupService,
     getRecordPaidEventCalls: () => recordPaidEventCalls,
     getRecordRefundEventCalls: () => recordRefundEventCalls,
     getRecordSessionInput: () => recordSessionInput,
@@ -301,17 +316,44 @@ describe('RelayPaymentsService.createPaymentSession', () => {
   });
 
   it('blocks payment-session creation before online payments are ready', async () => {
-    const ctx = makeService({ config: { paymentsStatus: 'disabled', connectedAccount: 'acct_1' } });
+    const ctx = makeService({
+      config: {
+        paymentsStatus: 'disabled',
+        paymentsSetupStatus: 'notStarted',
+        connectedAccount: 'acct_1'
+      }
+    });
 
     const result = await ctx.service.createPaymentSession(shop, baseRequest);
 
     expect(result).toEqual({
       kind: 'failed',
       code: 'paymentsDisabled',
+      reason: 'notStarted',
       retryable: false,
       message: 'Online payments are not set up yet. An owner can set them up in Settings.'
     });
     expect(ctx.getCreateCheckoutInput()).toBeUndefined();
+  });
+
+  it('returns precise disabled reasons when account setup needs attention', async () => {
+    const ctx = makeService({
+      config: {
+        paymentsStatus: 'disabled',
+        paymentsSetupStatus: 'actionRequired',
+        connectedAccount: 'acct_1'
+      }
+    });
+
+    const result = await ctx.service.createPaymentSession(shop, baseRequest);
+
+    expect(result).toEqual({
+      kind: 'failed',
+      code: 'paymentsDisabled',
+      reason: 'actionRequired',
+      retryable: false,
+      message: 'Online payments need attention. An owner can continue setup in Settings.'
+    });
   });
 
   it('reuses an existing session with the same idempotency key without touching Stripe', async () => {
@@ -382,6 +424,38 @@ describe('RelayPaymentsService.handleStripeWebhook', () => {
     });
     await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
     expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
+  });
+
+  it('refreshes connected account status on account.updated', async () => {
+    const ctx = makeService();
+    ctx.stripe.constructWebhookEvent = () => ({
+      id: 'evt_account',
+      type: 'account.updated',
+      created: 1,
+      account: 'acct_1',
+      data: { object: { object: 'account', id: 'acct_1' } }
+    });
+
+    await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
+
+    expect(ctx.paymentSetupService.refreshSetupStatusForConnectedAccount).toHaveBeenCalledWith(
+      'acct_1'
+    );
+    expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
+  });
+
+  it('ignores account.updated events without connected account context', async () => {
+    const ctx = makeService();
+    ctx.stripe.constructWebhookEvent = () => ({
+      id: 'evt_account',
+      type: 'account.updated',
+      created: 1,
+      data: { object: { object: 'account', id: 'acct_1' } }
+    });
+
+    await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
+
+    expect(ctx.paymentSetupService.refreshSetupStatusForConnectedAccount).not.toHaveBeenCalled();
   });
 });
 

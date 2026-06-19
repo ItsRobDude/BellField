@@ -47,6 +47,7 @@ function readiness(
 
 function makeService(overrides?: {
   setup?: RelayShopPaymentSetupRecord;
+  setupByConnectedAccount?: RelayShopPaymentSetupRecord | null;
   retrieve?: StripeConnectedAccountReadiness;
   createAccountThrows?: boolean;
   retrieveThrows?: boolean;
@@ -57,6 +58,12 @@ function makeService(overrides?: {
   const store: RelayPaymentSetupStore = {
     withShopPaymentSetupLock: async <T>(_shopId: string, callback: () => Promise<T>) => callback(),
     findShopPaymentSetup: async () => setup,
+    findShopPaymentSetupByConnectedAccountId: async (connectedAccountId) => {
+      if (overrides && 'setupByConnectedAccount' in overrides) {
+        return overrides.setupByConnectedAccount ?? null;
+      }
+      return setup.stripeConnectedAccountId === connectedAccountId ? setup : null;
+    },
     saveStripeConnectedAccount: async (input) => {
       savedAccounts.push(input.stripeConnectedAccountId);
       setup = {
@@ -73,7 +80,10 @@ function makeService(overrides?: {
         paymentsStatus: input.paymentsEnabled ? 'enabled' : 'disabled',
         paymentsSetupStatus: input.setupStatus,
         paymentsSetupUrlExpiresAt: input.setupUrlExpiresAt ?? null,
-        paymentsEnabledAt: input.paymentsEnabled ? input.occurredAt : null
+        paymentsEnabledAt: input.paymentsEnabled ? input.occurredAt : null,
+        paymentsReadyAt: input.paymentsEnabled
+          ? (setup.paymentsReadyAt ?? input.occurredAt)
+          : setup.paymentsReadyAt
       };
     }
   };
@@ -167,6 +177,131 @@ describe('RelayPaymentSetupService', () => {
     const response = await ctx.service.getSetupStatus(shop);
 
     expect(response.status).toBe('providerError');
+    expect(ctx.getUpdates()).toEqual([]);
+  });
+
+  it('disables a ready shop when account.updated reports action required', async () => {
+    const ctx = makeService({
+      setup: makeSetup({
+        paymentsStatus: 'enabled',
+        paymentsSetupStatus: 'ready',
+        stripeConnectedAccountId: 'acct_1',
+        paymentsEnabledAt: new Date('2026-06-18T10:00:00.000Z'),
+        paymentsReadyAt: new Date('2026-06-18T10:00:00.000Z')
+      }),
+      retrieve: readiness({
+        chargesEnabled: false,
+        payoutsEnabled: false,
+        detailsSubmitted: true,
+        cardPaymentsCapability: 'pending',
+        currentlyDue: ['external_account']
+      })
+    });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_1');
+
+    expect(ctx.getUpdates().at(-1)).toEqual(
+      expect.objectContaining({ paymentsEnabled: false, setupStatus: 'actionRequired' })
+    );
+  });
+
+  it('disables a ready shop when account.updated reports pending review', async () => {
+    const ctx = makeService({
+      setup: makeSetup({
+        paymentsStatus: 'enabled',
+        paymentsSetupStatus: 'ready',
+        stripeConnectedAccountId: 'acct_1',
+        paymentsEnabledAt: new Date('2026-06-18T10:00:00.000Z'),
+        paymentsReadyAt: new Date('2026-06-18T10:00:00.000Z')
+      }),
+      retrieve: readiness({
+        chargesEnabled: true,
+        payoutsEnabled: false,
+        detailsSubmitted: true,
+        cardPaymentsCapability: 'active',
+        currentlyDue: []
+      })
+    });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_1');
+
+    expect(ctx.getUpdates().at(-1)).toEqual(
+      expect.objectContaining({ paymentsEnabled: false, setupStatus: 'pendingReview' })
+    );
+  });
+
+  it('re-enables a disabled shop when account.updated reports ready', async () => {
+    const ctx = makeService({
+      setup: makeSetup({
+        paymentsStatus: 'disabled',
+        paymentsSetupStatus: 'actionRequired',
+        stripeConnectedAccountId: 'acct_1'
+      }),
+      retrieve: readiness({
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+        cardPaymentsCapability: 'active',
+        currentlyDue: []
+      })
+    });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_1');
+
+    expect(ctx.getUpdates().at(-1)).toEqual(
+      expect.objectContaining({ paymentsEnabled: true, setupStatus: 'ready' })
+    );
+  });
+
+  it('does not persist duplicate account.updated events when status is unchanged', async () => {
+    const readyAt = new Date('2026-06-18T10:00:00.000Z');
+    const ctx = makeService({
+      setup: makeSetup({
+        paymentsStatus: 'enabled',
+        paymentsSetupStatus: 'ready',
+        stripeConnectedAccountId: 'acct_1',
+        paymentsEnabledAt: readyAt,
+        paymentsReadyAt: readyAt
+      }),
+      retrieve: readiness({
+        chargesEnabled: true,
+        payoutsEnabled: true,
+        detailsSubmitted: true,
+        cardPaymentsCapability: 'active',
+        currentlyDue: []
+      })
+    });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_1');
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_1');
+
+    expect(ctx.getUpdates()).toEqual([]);
+  });
+
+  it('ignores account.updated for an unknown connected account', async () => {
+    const ctx = makeService({ setupByConnectedAccount: null });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_missing');
+
+    expect(ctx.stripe.retrieveConnectedAccount).not.toHaveBeenCalled();
+    expect(ctx.getUpdates()).toEqual([]);
+  });
+
+  it('ignores account.updated when the shop was relinked before the lock was taken', async () => {
+    const ctx = makeService({
+      setupByConnectedAccount: makeSetup({
+        shopId: 'shop_1',
+        stripeConnectedAccountId: 'acct_old'
+      }),
+      setup: makeSetup({
+        shopId: 'shop_1',
+        stripeConnectedAccountId: 'acct_new'
+      })
+    });
+
+    await ctx.service.refreshSetupStatusForConnectedAccount('acct_old');
+
+    expect(ctx.stripe.retrieveConnectedAccount).not.toHaveBeenCalled();
     expect(ctx.getUpdates()).toEqual([]);
   });
 });

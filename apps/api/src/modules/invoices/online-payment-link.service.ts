@@ -220,14 +220,16 @@ export class OnlinePaymentLinkService {
 
     const result = relayResponse.result;
     if (result.kind === 'failed') {
+      if (result.code === 'paymentsDisabled') {
+        return {
+          state: 'paymentsDisabled',
+          reason: result.reason,
+          message: result.message
+        };
+      }
       return {
-        state:
-          result.code === 'paymentsNotConfigured'
-            ? 'paymentsNotConfigured'
-            : result.code === 'paymentsDisabled'
-              ? 'paymentsDisabled'
-              : 'providerError',
-        message: result.code === 'paymentsDisabled' ? paymentsDisabledSetupMessage : result.message
+        state: result.code === 'paymentsNotConfigured' ? 'paymentsNotConfigured' : 'providerError',
+        message: result.message
       };
     }
 
@@ -324,6 +326,3 @@ function isActiveSession(session: { status: string; expiresAt: string }, now: Da
 function formatMoney(amount: number): string {
   return `$${amount.toFixed(2)}`;
 }
-
-const paymentsDisabledSetupMessage =
-  'Online payments are not set up yet. An owner can set them up in Settings.';

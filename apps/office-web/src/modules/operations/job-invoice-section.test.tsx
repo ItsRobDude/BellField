@@ -377,6 +377,30 @@ describe('JobInvoiceSection posting', () => {
     ).toBeInTheDocument();
   });
 
+  it('shows the server message when deposit links are disabled', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
+    mockedApi.createOfficeDepositPaymentLink.mockResolvedValueOnce({
+      state: 'paymentsDisabled',
+      reason: 'pendingReview',
+      message:
+        'Online payments are under review. Check Settings for the latest status before creating payment links.'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create deposit link' }));
+    fireEvent.change(await screen.findByLabelText('Deposit amount'), {
+      target: { value: '100' }
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Create deposit link' }));
+
+    expect(
+      await screen.findByText(
+        'Online payments are under review. Check Settings for the latest status before creating payment links.'
+      )
+    ).toBeInTheDocument();
+  });
+
   it('records a manual job-level deposit before the invoice is posted', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
     mockedApi.recordOfficeJobDeposit.mockResolvedValue({
@@ -649,6 +673,37 @@ describe('JobInvoiceSection posting', () => {
     );
     expect(
       await screen.findByDisplayValue('https://checkout.stripe.test/pay/cs_123')
+    ).toBeInTheDocument();
+  });
+
+  it('shows the server message when invoice payment links are disabled', async () => {
+    mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
+    mockedApi.getOfficeJobInvoiceBalance.mockResolvedValueOnce({
+      jobId: 'job-1',
+      mainInvoiceStatus: 'posted',
+      postedMainTotal: 250,
+      postedAdjustmentsTotal: 0,
+      postedCreditsTotal: 0,
+      netBilled: 250,
+      paidTotal: 0,
+      refundedTotal: 0,
+      amountDue: 250
+    });
+    mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
+      state: 'paymentsDisabled',
+      reason: 'actionRequired',
+      message: 'Online payments need attention. An owner can continue setup in Settings.'
+    });
+
+    renderSection(true);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
+
+    expect(
+      await screen.findByText(
+        'Online payments need attention. An owner can continue setup in Settings.'
+      )
     ).toBeInTheDocument();
   });
 

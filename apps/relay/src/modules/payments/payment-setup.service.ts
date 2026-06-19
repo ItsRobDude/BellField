@@ -57,6 +57,33 @@ export class RelayPaymentSetupService {
     return this.createOrRefreshSetupLink(shop);
   }
 
+  async refreshSetupStatusForConnectedAccount(connectedAccountId: string): Promise<void> {
+    if (!this.stripePaymentsService.isConfigured) {
+      return;
+    }
+
+    const setup =
+      await this.setupStore.findShopPaymentSetupByConnectedAccountId(connectedAccountId);
+    if (!setup) {
+      log('warn', 'Stripe account update did not match a BellField relay shop.', {
+        connectedAccountId
+      });
+      return;
+    }
+
+    await this.setupStore.withShopPaymentSetupLock(setup.shopId, async () => {
+      const lockedSetup = await this.setupStore.findShopPaymentSetup(setup.shopId);
+      if (!lockedSetup || lockedSetup.stripeConnectedAccountId !== connectedAccountId) {
+        log('warn', 'Stripe account update ignored because the shop account changed.', {
+          shopId: setup.shopId,
+          connectedAccountId
+        });
+        return;
+      }
+      await this.refreshStatusFromStripe(lockedSetup);
+    });
+  }
+
   private async createOrRefreshSetupLink(
     shop: AuthenticatedRelayShop
   ): Promise<RelayPaymentSetupLinkResponse> {
