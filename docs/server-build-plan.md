@@ -86,3 +86,5 @@ What this means now (all cheap, mostly non-actions):
 - **Keep every install a clean single-tenant unit.** Do not bolt on a premature shared-tenant `tenant_id` model. Single-tenant is the door-open position, not the limitation.
 - When #2 is built, make its two forward-looking choices SaaS-friendly anyway: **env-driven provisioning with no interactive install step** (so instances can be spun up programmatically) and **an object-storage media adapter** behind the existing `media-storage.service.ts` seam (per-tenant prefixes/buckets later).
 - Everything else — the control plane (provisioning, subdomain routing, metering/billing), tenant lifecycle, hosted licensing posture — is genuinely net-new and safely deferred. It is not foreclosed by anything in #1 or #2.
+
+The pricing model for the hosted tier is sketched in [saas-pricing-plan.md](./saas-pricing-plan.md) (also deferred, and additionally gated on BellField having staff — managed hosting/support/onboarding is an ops business a solo founder can't run alone).
