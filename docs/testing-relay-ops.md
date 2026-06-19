@@ -103,6 +103,12 @@ BELLFIELD_RELAY_PAYMENTS_PLATFORM_FEE_BASIS_POINTS=100
 Those secrets stay on the relay host only. Customer installs keep only their
 relay token triplet and poll payment events from the relay.
 
+The Stripe webhook endpoint must be a Connect / connected-accounts endpoint.
+Payment-event polling also reconciles recent relay-owned Checkout Sessions that
+Stripe already shows as paid but the relay still has as `created`; that protects
+customers from a missed webhook, but it is a backup path, not a replacement for
+the Connect webhook.
+
 Normal shop setup is owner/admin-driven from BellField Settings → Online
 payments. The office API proxies setup status/link requests to the relay, and
 the relay creates or reuses the shop's Stripe connected account behind the

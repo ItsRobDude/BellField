@@ -360,9 +360,12 @@ The controlling design is [acceptance-links-design.md](./acceptance-links-design
 Shipped 2026-06-13 and expanded afterward: Stripe Checkout links through the
 BellField relay, Stripe webhook intake on the relay, install worker poll/ack for
 confirmed payment events, and local append-only job-level payment records with
-auto-allocation across posted charge invoices. Office users can now choose an
-amount up to the current amount due; leaving the default collects the full due
-balance. Payment-link idempotency is per `(job, source, amount, attempt)`:
+auto-allocation across posted charge invoices. Payment-event polling now also
+reconciles recent relay-owned Checkout Sessions that Stripe already reports as
+paid but the relay still has as `created`, so a missed webhook does not leave a
+customer payment invisible. Office users can now choose an amount up to the
+current amount due; leaving the default collects the full due balance.
+Payment-link idempotency is per `(job, source, amount, attempt)`:
 invoice links include the initiating invoice id and deposit links use a deposit
 source. Active unpaid links are reused locally, a same-dollar repeat after a
 prior online card payment requires office confirmation before BellField creates

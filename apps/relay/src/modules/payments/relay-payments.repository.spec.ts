@@ -60,6 +60,8 @@ const baseInput = {
 
 const SESSION_SELECT = /from relay_payment_sessions\s+where stripe_checkout_session_id = \$1/i;
 const EVENT_INSERT = /insert into relay_payment_events/i;
+const CREATED_SESSIONS_SELECT =
+  /from relay_payment_sessions[\s\S]*where shop_id = \$1[\s\S]*status = 'created'/i;
 
 function repoWith(handlers: Array<{ match: RegExp; rows?: unknown[]; rowCount?: number }>) {
   const { database, calls } = scriptedDatabase(handlers);
@@ -135,6 +137,23 @@ describe('RelayPaymentsRepository.recordPaidEvent', () => {
     const insert = calls.find((c) => EVENT_INSERT.test(c.sql));
     expect(insert?.sql).toMatch(/on conflict do nothing/i);
     expect(insert?.sql).not.toMatch(/on conflict \(/i);
+  });
+});
+
+describe('RelayPaymentsRepository.listCreatedPaymentSessionsForReconciliation', () => {
+  it('returns recent created sessions for Stripe poll reconciliation', async () => {
+    const { repo, calls } = repoWith([
+      { match: CREATED_SESSIONS_SELECT, rows: [storedSession({ id: 'pay_sess_created' })] }
+    ]);
+
+    const sessions = await repo.listCreatedPaymentSessionsForReconciliation('shop_1', 25);
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.id).toBe('pay_sess_created');
+    const query = calls.find((c) => CREATED_SESSIONS_SELECT.test(c.sql));
+    expect(query?.sql).toMatch(/expires_at > now\(\) - interval '1 day'/i);
+    expect(query?.sql).toMatch(/order by created_at desc/i);
+    expect(query?.params).toEqual(['shop_1', 25]);
   });
 });
 

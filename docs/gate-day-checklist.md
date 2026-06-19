@@ -212,7 +212,9 @@ shop:
 - [ ] Live-money webhook smoke: a real (small) card payment through a generated
       link → Stripe webhook reconciles at the relay → worker records the
       payment and marks the session paid → office shows it. Refund the test
-      charge afterward.
+      charge afterward. Confirm this used the normal Connect webhook path; the
+      relay's payment-event poll fallback is only a safety net for missed
+      webhooks.
 - [ ] Confirm `success`/`cancel` redirects land on a reachable public host
       (the relay's `publicBaseUrl`), not an internal address.
 - [ ] **Stripe customer-receipt setting per connected account.** BellField now

@@ -6,7 +6,8 @@ import type {
   RecordRefundEventOutcome,
   RelayPaymentRefundRequestRecord,
   RelayPaymentSessionRecord,
-  RelayPaymentsStore
+  RelayPaymentsStore,
+  StripeCheckoutSessionReadResult
 } from './payments.types';
 
 const shop: AuthenticatedRelayShop = {
@@ -26,6 +27,11 @@ function makeService(overrides?: {
   consumedRefundCents?: number;
   recordRefundOutcome?: RecordRefundEventOutcome;
   createRefundThrows?: boolean;
+  createdSessionsForReconciliation?: RelayPaymentSessionRecord[];
+  retrieveCheckoutSession?: (
+    input: Record<string, unknown>
+  ) => Promise<StripeCheckoutSessionReadResult>;
+  retrieveCheckoutSessionThrows?: boolean;
 }) {
   const recordPaidEventCalls: unknown[] = [];
   const recordRefundEventCalls: unknown[] = [];
@@ -38,6 +44,7 @@ function makeService(overrides?: {
   let setRefundStripeIdInput:
     | Parameters<RelayPaymentsStore['setRefundRequestStripeRefundId']>[0]
     | undefined;
+  const retrieveCheckoutSessionCalls: Record<string, unknown>[] = [];
 
   const store: RelayPaymentsStore = {
     withPaymentSessionLock: async <T>(_shopId: string, _key: string, cb: () => Promise<T>) => cb(),
@@ -69,6 +76,8 @@ function makeService(overrides?: {
       recordPaidEventCalls.push(input);
       return (await overrides?.recordPaidEvent?.(input)) ?? 'recorded';
     },
+    listCreatedPaymentSessionsForReconciliation: async () =>
+      overrides?.createdSessionsForReconciliation ?? [],
     listUndeliveredPaymentEvents: async () => [],
     acknowledgePaymentEvent: async () => true,
     withRefundSessionLock: async <T>(_shopId: string, _sessionId: string, cb: () => Promise<T>) =>
@@ -127,7 +136,23 @@ function makeService(overrides?: {
       type: 'noop',
       created: 0,
       data: { object: {} }
-    })
+    }),
+    retrieveCheckoutSession: async (input: Record<string, unknown>) => {
+      retrieveCheckoutSessionCalls.push(input);
+      if (overrides?.retrieveCheckoutSessionThrows) {
+        throw new Error('stripe session read failed');
+      }
+      return (
+        (await overrides?.retrieveCheckoutSession?.(input)) ?? {
+          stripeCheckoutSessionId: String(input.stripeCheckoutSessionId),
+          paymentStatus: 'open',
+          stripePaymentIntentId: null,
+          amountCents: null,
+          currency: null,
+          paidAt: null
+        }
+      );
+    }
   };
 
   const service = new RelayPaymentsService(store as never, stripe as never);
@@ -140,7 +165,8 @@ function makeService(overrides?: {
     getCreateCheckoutInput: () => createCheckoutInput,
     getCreateRefundRequestInput: () => createRefundRequestInput,
     getCreateRefundInput: () => createRefundInput,
-    getSetRefundStripeIdInput: () => setRefundStripeIdInput
+    getSetRefundStripeIdInput: () => setRefundStripeIdInput,
+    getRetrieveCheckoutSessionCalls: () => retrieveCheckoutSessionCalls
   };
 }
 
@@ -355,6 +381,96 @@ describe('RelayPaymentsService.handleStripeWebhook', () => {
       data: { object: { object: 'payment_intent' } }
     });
     await ctx.service.handleStripeWebhook(Buffer.from(''), 'sig');
+    expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
+  });
+});
+
+describe('RelayPaymentsService.listUndeliveredPaymentEvents', () => {
+  it('poll-reconciles paid created Checkout sessions before listing events', async () => {
+    const created = makeSession({
+      id: 'pay_sess_poll',
+      stripeConnectedAccountId: 'acct_poll',
+      stripeCheckoutSessionId: 'cs_poll'
+    });
+    const ctx = makeService({
+      createdSessionsForReconciliation: [created],
+      retrieveCheckoutSession: async () => ({
+        stripeCheckoutSessionId: 'cs_poll',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_poll',
+        amountCents: 84_500,
+        currency: 'usd',
+        paidAt: new Date('2026-06-15T12:00:00.000Z')
+      })
+    });
+
+    const result = await ctx.service.listUndeliveredPaymentEvents('shop_1');
+
+    expect(result.events).toEqual([]);
+    expect(ctx.getRetrieveCheckoutSessionCalls()).toEqual([
+      { connectedAccountId: 'acct_poll', stripeCheckoutSessionId: 'cs_poll' }
+    ]);
+    expect(ctx.getRecordPaidEventCalls()).toEqual([
+      {
+        stripeEventId: 'stripe_poll:cs_poll',
+        stripeCheckoutSessionId: 'cs_poll',
+        stripePaymentIntentId: 'pi_poll',
+        connectedAccountId: 'acct_poll',
+        amountCents: 84_500,
+        currency: 'USD',
+        paidAt: new Date('2026-06-15T12:00:00.000Z'),
+        occurredAt: expect.any(Date)
+      }
+    ]);
+  });
+
+  it('leaves unpaid polled sessions alone', async () => {
+    const ctx = makeService({
+      createdSessionsForReconciliation: [makeSession({ stripeCheckoutSessionId: 'cs_open' })],
+      retrieveCheckoutSession: async () => ({
+        stripeCheckoutSessionId: 'cs_open',
+        paymentStatus: 'open',
+        stripePaymentIntentId: null,
+        amountCents: null,
+        currency: null,
+        paidAt: null
+      })
+    });
+
+    await ctx.service.listUndeliveredPaymentEvents('shop_1');
+
+    expect(ctx.getRetrieveCheckoutSessionCalls()).toHaveLength(1);
+    expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
+  });
+
+  it('ignores a zero-amount paid polled session instead of recording it', async () => {
+    const ctx = makeService({
+      createdSessionsForReconciliation: [makeSession({ stripeCheckoutSessionId: 'cs_zero' })],
+      retrieveCheckoutSession: async () => ({
+        stripeCheckoutSessionId: 'cs_zero',
+        paymentStatus: 'paid',
+        stripePaymentIntentId: 'pi_zero',
+        amountCents: 0,
+        currency: 'usd',
+        paidAt: new Date('2026-06-15T12:00:00.000Z')
+      })
+    });
+
+    await ctx.service.listUndeliveredPaymentEvents('shop_1');
+
+    expect(ctx.getRetrieveCheckoutSessionCalls()).toHaveLength(1);
+    expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
+  });
+
+  it('does not block event polling when Stripe session reconciliation fails', async () => {
+    const ctx = makeService({
+      createdSessionsForReconciliation: [makeSession({ stripeCheckoutSessionId: 'cs_error' })],
+      retrieveCheckoutSessionThrows: true
+    });
+
+    await expect(ctx.service.listUndeliveredPaymentEvents('shop_1')).resolves.toEqual({
+      events: []
+    });
     expect(ctx.getRecordPaidEventCalls()).toHaveLength(0);
   });
 });

@@ -334,6 +334,23 @@ export class RelayPaymentsRepository implements RelayPaymentsStore, RelayPayment
     });
   }
 
+  async listCreatedPaymentSessionsForReconciliation(
+    shopId: string,
+    limit: number
+  ): Promise<RelayPaymentSessionRecord[]> {
+    const result = await this.database.query<PaymentSessionRow>(
+      `select ${PAYMENT_SESSION_COLUMNS}
+       from relay_payment_sessions
+       where shop_id = $1
+         and status = 'created'
+         and expires_at > now() - interval '1 day'
+       order by created_at desc
+       limit $2`,
+      [shopId, limit]
+    );
+    return result.rows.map(toSessionRecord);
+  }
+
   async listUndeliveredPaymentEvents(shopId: string): Promise<RelayPaymentEventRecord[]> {
     const result = await this.database.query<PaymentEventRow>(
       `select
