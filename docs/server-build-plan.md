@@ -30,7 +30,7 @@ Net: the only genuinely new lane is **#2's container/deploy layer**, plus a smal
 
 Building on the existing entry-tier install path:
 
-- Bundle Postgres binaries + WinSW into the release (currently expected-to-be-staged and unvalidated — see `install-runbook.md` "Not yet validated").
+- Bundle Postgres binaries + WinSW into the release before signing (tooling now supports this; clean-machine execution remains the gate; see `install-runbook.md` "Not yet validated").
 - Unattended/headless install: no interactive desktop step; services auto-start and recover; run under a dedicated service account.
 - Service recovery + reboot persistence proof.
 - Execute the clean-machine gate on a Windows Server target (see §5).

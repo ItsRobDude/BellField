@@ -55,8 +55,11 @@ jobs:
         shell: pwsh
         run: |
           $keyPath = Join-Path $env:RUNNER_TEMP 'bellfield-release-ci-key.pem'
-          node -e "const c=require('node:crypto');const fs=require('node:fs');const {privateKey}=c.generateKeyPairSync('ed25519');fs.writeFileSync(process.argv[1],privateKey.export({type:'pkcs8',format:'pem'}));" $keyPath
+          $publicKeyPath = Join-Path $env:RUNNER_TEMP 'bellfield-release-ci-public-key.pem'
+          node -e "const c=require('node:crypto');const fs=require('node:fs');const {privateKey,publicKey}=c.generateKeyPairSync('ed25519');fs.writeFileSync(process.argv[1],privateKey.export({type:'pkcs8',format:'pem'}));fs.writeFileSync(process.argv[2],publicKey.export({type:'spki',format:'pem'}));" $keyPath $publicKeyPath
           $env:BELLFIELD_RELEASE_PRIVATE_KEY_PATH = $keyPath
+          $env:BELLFIELD_RELEASE_PUBLIC_KEY_PATH = $publicKeyPath
+          "BELLFIELD_RELEASE_PUBLIC_KEY_PATH=$publicKeyPath" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
           pnpm build:release
 
       - name: Validate packaged release

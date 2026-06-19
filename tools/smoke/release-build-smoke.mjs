@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeSmokeEvidence } from './smoke-evidence.mjs';
+import { verifyReleaseArtifact } from '../update/release-artifact.mjs';
 
 // Validates that `pnpm build:release` produced a coherent, production-shaped
 // release tree. This is the cheap automated stand-in for the manual gate-day
@@ -12,6 +13,9 @@ import { writeSmokeEvidence } from './smoke-evidence.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const releaseRoot = resolve(getArgValue('--release-root') ?? join(repoRoot, 'release'));
+const releasePublicKeyPath =
+  getArgValue('--release-public-key') ?? process.env.BELLFIELD_RELEASE_PUBLIC_KEY_PATH;
+const requireGateDayDeps = getBooleanArg('--require-gate-day-deps', false);
 
 const evidence = {
   name: 'Release build smoke',
@@ -69,6 +73,18 @@ try {
     'update signature exists',
     existsSync(join(releaseRoot, 'bellfield-update-signature.json'))
   );
+  const verifiedArtifact = verifyReleaseArtifact({
+    releaseRoot,
+    publicKeyPem: releasePublicKeyPath
+      ? readFileSync(resolve(releasePublicKeyPath), 'utf8')
+      : undefined
+  });
+  check('signed update artifact verifies release tree', true, {
+    version: verifiedArtifact.build.version,
+    releaseDate: verifiedArtifact.build.releaseDate,
+    fileCount: verifiedArtifact.files.length,
+    releasePublicKeyPath: releasePublicKeyPath ? resolve(releasePublicKeyPath) : 'embedded'
+  });
 
   // Bundled Node runtime (node.exe on a Windows build, node on a POSIX build).
   const nodeDir = join(releaseRoot, 'runtime', 'node');
@@ -147,6 +163,28 @@ try {
   check('env example forces production mode', /^NODE_ENV=production$/m.test(envExample));
   check('env example disables bootstrap seeding', /^BOOTSTRAP_SEED_DATA=false$/m.test(envExample));
 
+  if (requireGateDayDeps) {
+    for (const tool of [
+      'postgres.exe',
+      'pg_ctl.exe',
+      'initdb.exe',
+      'psql.exe',
+      'pg_dump.exe',
+      'pg_restore.exe',
+      'createdb.exe',
+      'dropdb.exe'
+    ]) {
+      check(
+        `gate-day PostgreSQL tool is packaged: ${tool}`,
+        existsSync(join(releaseRoot, 'postgres', 'bin', tool))
+      );
+    }
+    check(
+      'gate-day WinSW executable is packaged',
+      existsSync(join(releaseRoot, 'tools', 'winsw', 'WinSW-x64.exe'))
+    );
+  }
+
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
   console.log(JSON.stringify(evidence, null, 2));
@@ -164,6 +202,14 @@ function getArgValue(name) {
   const prefix = `${name}=`;
   const match = process.argv.find((arg) => arg.startsWith(prefix));
   return match ? match.slice(prefix.length) : undefined;
+}
+
+function getBooleanArg(name, defaultValue) {
+  const value = getArgValue(name);
+  if (value === undefined) {
+    return process.argv.includes(name) ? true : defaultValue;
+  }
+  return ['1', 'true', 'yes', 'on'].includes(value.toLowerCase());
 }
 
 function check(name, passed, details = {}) {

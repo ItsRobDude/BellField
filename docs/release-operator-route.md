@@ -30,16 +30,26 @@ pnpm lint
 pnpm format:check
 pnpm check:architecture
 pnpm check:ui-copy
-pnpm build:release --version=<version> --release-date=<YYYY-MM-DD>
+pnpm build:release `
+  --version=<version> `
+  --release-date=<YYYY-MM-DD> `
+  --postgres-bin=<path-to-PG16-x64-bin> `
+  --winsw-exe=<path-to-approved-WinSW-x64.exe>
+pnpm smoke:release-build -- --require-gate-day-deps=true
 ```
 
 The release builder uses the release signing key path configured in
 `tools/update/release-artifact.mjs`, currently under the owner's API Keys
 folder. The generated `release/` folder is ignored by git.
 
-Before publishing, package the release folder as the agreed zip and keep the
-signed manifest/artifact files together. Gate-day still owns the clean-machine
-proof that a stranger can install, update, restore, and send through the relay.
+The PostgreSQL and WinSW inputs are copied into `release/` before the signed
+update manifest is written. Do not manually copy or replace files after
+`build:release`; post-sign edits invalidate the artifact hashes.
+
+Before publishing, package the verified release folder as the agreed zip and
+keep the signed manifest/artifact files together. Gate-day still owns the
+clean-machine proof that a stranger can install, update, restore, and send
+through the relay.
 
 ## Publish Through A Relay
 

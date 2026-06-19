@@ -25,6 +25,9 @@ Validated on the development machine:
   refuses bootstrap seed data
 - release assembly signs update artifacts with `bellfield-update-manifest.json`
   and `bellfield-update-signature.json`
+- release assembly can package operator-provided PostgreSQL 16 binaries and
+  WinSW before signing, and `pnpm smoke:release-build -- --require-gate-day-deps=true`
+  verifies those dependencies are present in the signed tree
 - worker scheduled backup foundation exists: backup run table, configured
   backup directory, `pg_dump` + media backup set creation, retention, and
   System-surface freshness status
@@ -56,8 +59,7 @@ Validated on the development machine:
 Not yet validated in this repo:
 
 - clean Windows machine with no developer tooling
-- bundled PostgreSQL binaries placed in `release/postgres/bin`
-- WinSW binary placed in `release/tools/winsw/WinSW-x64.exe`
+- real clean-machine execution of the bundled PostgreSQL and WinSW binaries
 - reboot/service recovery proof
 - real Windows ACL readback after service install
 - second office desktop and Android field-device proof
@@ -73,6 +75,22 @@ From the repo root:
 pnpm build:release
 ```
 
+For gate-day or sold-shaped Windows artifacts, include the runtime
+dependencies before the update manifest is signed:
+
+```powershell
+pnpm build:release `
+  --version=<version> `
+  --release-date=<YYYY-MM-DD> `
+  --postgres-bin=<path-to-PG16-x64-bin> `
+  --winsw-exe=<path-to-approved-WinSW-x64.exe>
+pnpm smoke:release-build -- --require-gate-day-deps=true
+```
+
+Do not add PostgreSQL, WinSW, or any other release file after `build:release`
+finishes. The signed update manifest covers the release file list and hashes;
+post-sign edits make the artifact fail update verification.
+
 The script creates `release/` with:
 
 - `runtime/node/node.exe`
@@ -83,6 +101,8 @@ The script creates `release/` with:
 - install helper scripts under `tools/install`
 - update verifier helpers under `tools/update`
 - signed update manifest files
+- `postgres/bin` and `tools/winsw/WinSW-x64.exe` when the gate-day dependency
+  inputs are provided
 
 `release/` is a generated local artifact and is intentionally not committed.
 
