@@ -682,8 +682,10 @@ laptop hosts until the first paying customer has acceptance links live
 Decided: in scope, managed tier (`shopname.bellfield.app`, ~$15/mo) from day
 1 plus guided bring-your-own (Tailscale walkthrough). Controlling plan:
 [remote-access-plan.md](./remote-access-plan.md). Security prerequisites
-(login throttling, password posture, session review) gate the managed tier;
-positioning/pricing context in
+(login/setup throttling, password posture, and session hardening) are closed;
+field-mobile remote URL handling remains required before the managed tier ships.
+Tunnel-level access policy is optional hardening to evaluate, not a promised
+blocker. Positioning/pricing context in
 [positioning-and-pricing.md](./positioning-and-pricing.md). Slicing happens
 when the lane opens for build.
 

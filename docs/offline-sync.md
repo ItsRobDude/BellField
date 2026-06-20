@@ -264,7 +264,8 @@ If a device is lost or access is revoked:
 
 Important protection rule:
 
-- BellField should try to sync local work first as best as it can before wiping, so the company does not lose valid work already entered on that device
+- Before the server has confirmed access loss, BellField should try to sync local work as best as it can so the company does not lose valid work already entered on that device.
+- Once the server confirms the session/device/employee is no longer allowed, that rejected bearer token cannot safely replay work; the field app should treat this as a destructive device cutoff and wipe BellField local field data.
 
 If the device never reconnects, BellField can only act on the next successful connection.
 
@@ -320,6 +321,6 @@ BellField version 1 offline/sync behavior should work like this:
 - large media can take longer and should not block work
 - unsynced work should remain until safely synced or intentionally cleared
 - if the server is down, the phone keeps retrying later
-- revoked devices lose access and wipe BellField data on next successful connection after best-effort sync
+- revoked/inactive access wipes BellField data on next server-confirmed access loss; ordinary session expiry returns to sign-in without wiping employee-scoped queued work
 
 BellField should always favor protecting the company’s work over forcing perfect online behavior.

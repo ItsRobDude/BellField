@@ -9,6 +9,9 @@ import { IdentityAccessRepository } from './identity-access.repository';
 import { IdentityAccessService } from './identity-access.service';
 import {
   dummyLoginPasswordHash,
+  firstOwnerSetupAttemptBucketKey,
+  firstOwnerSetupFailureThreshold,
+  firstOwnerSetupLockoutMessage,
   loginFailureThreshold,
   loginLockoutMessage
 } from './login-attempt-policy';
@@ -419,15 +422,15 @@ describe('IdentityAccessService', () => {
           }
         : opts.employee;
     return {
-      findLoginAttemptState: jest.fn().mockResolvedValue(opts.loginAttemptState ?? null),
-      recordFailedLoginAttempt: jest.fn().mockResolvedValue({
+      findIdentityAttemptState: jest.fn().mockResolvedValue(opts.loginAttemptState ?? null),
+      recordFailedIdentityAttempt: jest.fn().mockResolvedValue({
         failedCount: opts.recordedAttemptState?.failedCount ?? 1,
         windowStartedAt: opts.recordedAttemptState?.windowStartedAt ?? '2026-06-19T12:00:00.000Z',
         lastFailedAt: opts.recordedAttemptState?.lastFailedAt ?? '2026-06-19T12:00:00.000Z',
         blockedUntil: opts.recordedAttemptState?.blockedUntil
       }),
-      clearLoginAttemptState: jest.fn().mockResolvedValue(1),
-      pruneStaleLoginAttemptStates: jest.fn().mockResolvedValue(undefined),
+      clearIdentityAttemptState: jest.fn().mockResolvedValue(1),
+      pruneStaleIdentityAttemptStates: jest.fn().mockResolvedValue(undefined),
       findEmployeeByEmail: jest.fn().mockResolvedValue(employee),
       createSession: jest.fn().mockResolvedValue(undefined),
       updateEmployeePassword: jest.fn().mockResolvedValue(undefined)
@@ -444,7 +447,7 @@ describe('IdentityAccessService', () => {
     });
     expect(result.sessionToken).toBeTruthy();
     expect(repo.updateEmployeePassword).not.toHaveBeenCalled();
-    expect(repo.clearLoginAttemptState).toHaveBeenCalledTimes(1);
+    expect(repo.clearIdentityAttemptState).toHaveBeenCalledTimes(1);
   });
 
   it('logs in with a legacy plaintext password and rehashes it to scrypt', async () => {
@@ -468,11 +471,11 @@ describe('IdentityAccessService', () => {
       service.login({ email: 'owner@bellfield.local', password: 'nope', surface: 'office-web' })
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(repo.createSession).not.toHaveBeenCalled();
-    expect(repo.pruneStaleLoginAttemptStates).toHaveBeenCalledTimes(1);
-    expect(repo.recordFailedLoginAttempt).toHaveBeenCalledWith(
+    expect(repo.pruneStaleIdentityAttemptStates).toHaveBeenCalledTimes(1);
+    expect(repo.recordFailedIdentityAttempt).toHaveBeenCalledWith(
       expect.objectContaining({ failureThreshold: loginFailureThreshold })
     );
-    expect(repo.clearLoginAttemptState).not.toHaveBeenCalled();
+    expect(repo.clearIdentityAttemptState).not.toHaveBeenCalled();
   });
 
   it('blocks a locked email before loading the employee or checking the password', async () => {
@@ -525,7 +528,7 @@ describe('IdentityAccessService', () => {
       service.login({ email: 'missing@example.com', password: 'nope', surface: 'office-web' })
     ).rejects.toBeInstanceOf(UnauthorizedException);
     expect(verifySpy).toHaveBeenCalledWith('nope', dummyLoginPasswordHash);
-    expect(repo.recordFailedLoginAttempt).toHaveBeenCalledTimes(1);
+    expect(repo.recordFailedIdentityAttempt).toHaveBeenCalledTimes(1);
     verifySpy.mockRestore();
   });
 
@@ -930,9 +933,35 @@ describe('IdentityAccessService', () => {
     ).rejects.toBeInstanceOf(ForbiddenException);
   });
 
-  function firstOwnerSetupRepo(opts: { activeEmployeeCount?: number; created?: boolean } = {}) {
+  function firstOwnerSetupRepo(
+    opts: {
+      activeEmployeeCount?: number;
+      created?: boolean;
+      setupAttemptState?: {
+        failedCount: number;
+        windowStartedAt: string;
+        lastFailedAt: string;
+        blockedUntil?: string;
+      } | null;
+      recordedAttemptState?: {
+        failedCount?: number;
+        windowStartedAt?: string;
+        lastFailedAt?: string;
+        blockedUntil?: string;
+      };
+    } = {}
+  ) {
     return {
       countActiveEmployees: jest.fn().mockResolvedValue(opts.activeEmployeeCount ?? 0),
+      findIdentityAttemptState: jest.fn().mockResolvedValue(opts.setupAttemptState ?? null),
+      recordFailedIdentityAttempt: jest.fn().mockResolvedValue({
+        failedCount: opts.recordedAttemptState?.failedCount ?? 1,
+        windowStartedAt: opts.recordedAttemptState?.windowStartedAt ?? '2026-06-19T12:00:00.000Z',
+        lastFailedAt: opts.recordedAttemptState?.lastFailedAt ?? '2026-06-19T12:00:00.000Z',
+        blockedUntil: opts.recordedAttemptState?.blockedUntil
+      }),
+      clearIdentityAttemptState: jest.fn().mockResolvedValue(1),
+      pruneStaleIdentityAttemptStates: jest.fn().mockResolvedValue(undefined),
       findEmployeeByEmail: jest.fn().mockResolvedValue(null),
       createFirstOwnerIfNoActiveEmployees: jest.fn().mockResolvedValue(opts.created ?? true),
       createSession: jest.fn().mockResolvedValue(undefined)
@@ -980,6 +1009,7 @@ describe('IdentityAccessService', () => {
     expect(repo.createSession).toHaveBeenCalledWith(
       expect.objectContaining({ employeeId: result.employee.id, surface: 'office-web' })
     );
+    expect(repo.clearIdentityAttemptState).toHaveBeenCalledWith(firstOwnerSetupAttemptBucketKey);
   });
 
   it('hides first-owner setup once an active employee exists', async () => {
@@ -1008,12 +1038,104 @@ describe('IdentityAccessService', () => {
       displayName: 'Owner',
       password: 'first-owner-pass'
     };
+    const blockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    repo.findIdentityAttemptState
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({
+        failedCount: firstOwnerSetupFailureThreshold,
+        windowStartedAt: '2026-06-19T12:00:00.000Z',
+        lastFailedAt: '2026-06-19T12:04:00.000Z',
+        blockedUntil
+      });
 
     for (let attempt = 0; attempt < 5; attempt += 1) {
       await expect(service.createFirstOwner(request)).rejects.toBeInstanceOf(UnauthorizedException);
     }
 
     await expect(service.createFirstOwner(request)).rejects.toHaveProperty('status', 429);
+    expect(repo.recordFailedIdentityAttempt).toHaveBeenCalledTimes(5);
+    expect(repo.createFirstOwnerIfNoActiveEmployees).not.toHaveBeenCalled();
+  });
+
+  it('records invalid setup tokens to the fixed setup bucket only', async () => {
+    const repo = firstOwnerSetupRepo();
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await issueSetupToken(service);
+
+    await expect(
+      service.createFirstOwner({
+        setupToken: 'wrong-token-but-long-enough',
+        email: 'owner@example.com',
+        displayName: 'Owner',
+        password: 'first-owner-pass'
+      })
+    ).rejects.toBeInstanceOf(UnauthorizedException);
+
+    expect(repo.recordFailedIdentityAttempt).toHaveBeenCalledWith(
+      expect.objectContaining({
+        bucketKey: firstOwnerSetupAttemptBucketKey,
+        failureThreshold: firstOwnerSetupFailureThreshold
+      })
+    );
+    expect(repo.recordFailedIdentityAttempt.mock.calls[0][0].bucketKey).not.toContain(
+      'wrong-token-but-long-enough'
+    );
+  });
+
+  it('rejects a persisted setup lockout before owner creation work', async () => {
+    const blockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const repo = firstOwnerSetupRepo({
+      setupAttemptState: {
+        failedCount: firstOwnerSetupFailureThreshold,
+        windowStartedAt: '2026-06-19T12:00:00.000Z',
+        lastFailedAt: '2026-06-19T12:04:00.000Z',
+        blockedUntil
+      }
+    });
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    await issueSetupToken(service);
+
+    await expect(
+      service.createFirstOwner({
+        setupToken: 'wrong-token-but-long-enough',
+        email: 'owner@example.com',
+        displayName: 'Owner',
+        password: 'first-owner-pass'
+      })
+    ).rejects.toMatchObject({ status: 429, message: firstOwnerSetupLockoutMessage });
+
+    expect(repo.recordFailedIdentityAttempt).not.toHaveBeenCalled();
+    expect(repo.findEmployeeByEmail).not.toHaveBeenCalled();
+    expect(repo.createFirstOwnerIfNoActiveEmployees).not.toHaveBeenCalled();
+    expect(repo.createSession).not.toHaveBeenCalled();
+  });
+
+  it('honors a persisted setup lockout in a new service instance', async () => {
+    const blockedUntil = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+    const repo = firstOwnerSetupRepo({
+      setupAttemptState: {
+        failedCount: firstOwnerSetupFailureThreshold,
+        windowStartedAt: '2026-06-19T12:00:00.000Z',
+        lastFailedAt: '2026-06-19T12:04:00.000Z',
+        blockedUntil
+      }
+    });
+    const restartedService = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+    const setupToken = await issueSetupToken(restartedService);
+
+    await expect(
+      restartedService.createFirstOwner({
+        setupToken,
+        email: 'owner@example.com',
+        displayName: 'Owner',
+        password: 'first-owner-pass'
+      })
+    ).rejects.toMatchObject({ status: 429, message: firstOwnerSetupLockoutMessage });
+
     expect(repo.createFirstOwnerIfNoActiveEmployees).not.toHaveBeenCalled();
   });
 });

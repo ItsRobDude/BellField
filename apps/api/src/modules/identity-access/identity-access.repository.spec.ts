@@ -10,8 +10,8 @@ function makeRepository() {
   };
 }
 
-describe('IdentityAccessRepository login attempts', () => {
-  it('records a failed login with an atomic upsert counter', async () => {
+describe('IdentityAccessRepository identity attempts', () => {
+  it('records a failed identity attempt with an atomic upsert counter', async () => {
     const { databaseService, repository } = makeRepository();
     databaseService.query.mockResolvedValueOnce({
       rows: [
@@ -24,8 +24,8 @@ describe('IdentityAccessRepository login attempts', () => {
       ]
     });
 
-    const result = await repository.recordFailedLoginAttempt({
-      bucketKey: 'email:hash',
+    const result = await repository.recordFailedIdentityAttempt({
+      bucketKey: 'setup:first-owner',
       occurredAt: '2026-06-19T12:04:00.000Z',
       windowCutoff: '2026-06-19T11:49:00.000Z',
       failureThreshold: 5,
@@ -37,7 +37,7 @@ describe('IdentityAccessRepository login attempts', () => {
     expect(sql).toMatch(/failed_count = case/i);
     expect(sql).toMatch(/identity_login_attempts\.failed_count \+ 1 >= \$4/i);
     expect(params).toEqual([
-      'email:hash',
+      'setup:first-owner',
       '2026-06-19T12:04:00.000Z',
       '2026-06-19T11:49:00.000Z',
       5,
@@ -51,13 +51,13 @@ describe('IdentityAccessRepository login attempts', () => {
     });
   });
 
-  it('clears and prunes login-attempt rows by bucket/timestamp only', async () => {
+  it('clears and prunes identity-attempt rows by bucket/timestamp only', async () => {
     const { databaseService, repository } = makeRepository();
     databaseService.query.mockResolvedValueOnce({ rows: [], rowCount: 1 });
     databaseService.query.mockResolvedValueOnce({ rows: [], rowCount: 7 });
 
-    await expect(repository.clearLoginAttemptState('email:hash')).resolves.toBe(1);
-    await repository.pruneStaleLoginAttemptStates('2026-06-18T12:00:00.000Z');
+    await expect(repository.clearIdentityAttemptState('email:hash')).resolves.toBe(1);
+    await repository.pruneStaleIdentityAttemptStates('2026-06-18T12:00:00.000Z');
 
     expect(databaseService.query.mock.calls[0]).toEqual([
       'delete from identity_login_attempts where bucket_key = $1',

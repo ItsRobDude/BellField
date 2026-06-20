@@ -51,15 +51,18 @@ shop servers end up indexed on the public internet.
 Exposing office-web/API beyond the LAN — even behind an unguessable
 hostname — means the login page is internet-reachable. Before day-1 sale:
 
-1. Login endpoint throttling/lockout. Closed 2026-06-19 for normal login:
-   failed sign-ins are DB-backed and normalized-email-bucketed. Five failed
-   attempts inside 15 minutes creates a 5-minute lockout. A locked-out account
-   is recoverable from the server console with
+1. Login/setup endpoint throttling/lockout. Closed 2026-06-19 for normal login
+   and first-owner setup: failed sign-ins are DB-backed and
+   normalized-email-bucketed. Five failed sign-in attempts inside 15 minutes
+   creates a 5-minute lockout. First-owner setup failures use the same
+   DB-backed bucket table under a fixed setup bucket, with five invalid setup
+   tokens inside 10 minutes creating a 5-minute lockout. A locked-out sign-in
+   account is recoverable from the server console with
    `C:\BellField\release\runtime\node\node.exe C:\BellField\release\tools\install\clear-login-attempts.mjs --email=<employee@example.com>`.
    In a source checkout, the equivalent is
    `pnpm --filter @bellfield/api identity-admin clear-login-attempts --email=<employee@example.com>`.
-   The first-owner setup endpoint remains in-memory rate-limited and should move
-   to DB-backed throttling in a later hardening pass.
+   The recovery helper remains email-only; first-owner setup lockouts clear by
+   waiting out the 5-minute setup lockout.
 2. Password posture review for office accounts. Closed 2026-06-19 for newly
    set passwords: first-owner setup, employee creation, and password reset now
    require at least 12 characters. Existing shorter passwords can still log in

@@ -30,7 +30,7 @@ Audit refreshed after the register/media backend, field register queue, and offi
 - Shared contracts export media upload intent, metadata, update, and void shapes.
 - API endpoints exist for media metadata, upload intents, raw `application/octet-stream` blob upload, signed-token download, caption edit, and void.
 - Office-web can review media metadata from job detail.
-- Field-mobile image/video capture or pick, app-owned local staging, SHA-256 queue metadata, upload-intent replay, and blob finalization are implemented with Expo ImagePicker, FileSystem, and Crypto.
+- Field-mobile image/video capture or pick, employee-scoped app-owned local staging, SHA-256 queue metadata, upload-intent replay, blob finalization, successful-sync staged-file cleanup, and revoked-device staged-media wipe are implemented with Expo ImagePicker, FileSystem, and Crypto.
 
 ### Migrations
 
@@ -409,7 +409,6 @@ Inline-tagged above, summarized here. Slice 1 answered the first three as implem
 - Invoice posting/locking and payments (M8 lane). Invoice-draft reflection and estimate conversion already landed.
 - Discount/fee/tax kinds if not in v1.
 - Voided-undo affordance UX.
-- Lost/revoked device wipe of locally-staged media bytes (touches the broader device-revoke work that's still absent on the field side).
 - Cloud blob storage adapter for hosted BellField deployments. Filesystem is sufficient until then.
 
 ---
@@ -420,6 +419,7 @@ Captured for traceability:
 
 - **`docs/data-modeling-rules.md` §11 + `docs/workflows-and-state-machines.md` §6** call for structured register lines feeding invoice draft. Backend register entries shipped (without removing `registerFollowUpNote`), and register-to-invoice-draft reflection is now implemented; this disagreement is resolved.
 - **`docs/offline-sync.md` §4 and §9** call for queued photo/video/file uploads. Backend metadata/blob storage is present, and field-mobile now stages image/video media locally before replaying upload intents and raw blob uploads on Sync Now. Generic document attachment remains deferred.
+- **Lost/revoked device wipe** is now implemented on the field side for server-confirmed access loss: assigned-work cache, pending queue, truck-stock snapshot, sync metadata, and staged media are cleared before returning to sign-in. Ordinary session expiry intentionally preserves employee-scoped queued work and staged media.
 - No other doc/code disagreements found in this audit.
 
 ---

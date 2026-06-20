@@ -52,14 +52,14 @@ type SessionSummaryRow = {
   issuedAt: string | Date;
 };
 
-type LoginAttemptRow = {
+type IdentityAttemptRow = {
   failedCount: number;
   windowStartedAt: string | Date;
   lastFailedAt: string | Date;
   blockedUntil: string | Date | null;
 };
 
-export type LoginAttemptState = {
+export type IdentityAttemptState = {
   failedCount: number;
   windowStartedAt: string;
   lastFailedAt: string;
@@ -133,8 +133,9 @@ export class IdentityAccessRepository {
     return Number(result.rows[0]?.count ?? 0);
   }
 
-  async findLoginAttemptState(bucketKey: string): Promise<LoginAttemptState | null> {
-    const result = await this.databaseService.query<LoginAttemptRow>(
+  // Bucket keys are namespaced identity-attempt keys, such as email:<hash> or setup:first-owner.
+  async findIdentityAttemptState(bucketKey: string): Promise<IdentityAttemptState | null> {
+    const result = await this.databaseService.query<IdentityAttemptRow>(
       `
         select
           failed_count as "failedCount",
@@ -148,17 +149,17 @@ export class IdentityAccessRepository {
       [bucketKey]
     );
 
-    return result.rows[0] ? this.toLoginAttemptState(result.rows[0]) : null;
+    return result.rows[0] ? this.toIdentityAttemptState(result.rows[0]) : null;
   }
 
-  async recordFailedLoginAttempt(input: {
+  async recordFailedIdentityAttempt(input: {
     bucketKey: string;
     occurredAt: string;
     windowCutoff: string;
     failureThreshold: number;
     blockedUntil: string;
-  }): Promise<LoginAttemptState> {
-    const result = await this.databaseService.query<LoginAttemptRow>(
+  }): Promise<IdentityAttemptState> {
+    const result = await this.databaseService.query<IdentityAttemptRow>(
       `
         insert into identity_login_attempts (
           bucket_key,
@@ -202,13 +203,13 @@ export class IdentityAccessRepository {
 
     const row = result.rows[0];
     if (!row) {
-      throw new Error('Failed login attempt could not be recorded.');
+      throw new Error('Failed identity attempt could not be recorded.');
     }
 
-    return this.toLoginAttemptState(row);
+    return this.toIdentityAttemptState(row);
   }
 
-  async clearLoginAttemptState(bucketKey: string): Promise<number> {
+  async clearIdentityAttemptState(bucketKey: string): Promise<number> {
     const result = await this.databaseService.query(
       'delete from identity_login_attempts where bucket_key = $1',
       [bucketKey]
@@ -217,7 +218,7 @@ export class IdentityAccessRepository {
     return result.rowCount ?? 0;
   }
 
-  async pruneStaleLoginAttemptStates(cutoff: string): Promise<void> {
+  async pruneStaleIdentityAttemptStates(cutoff: string): Promise<void> {
     await this.databaseService.query(
       `
         delete from identity_login_attempts
@@ -599,7 +600,7 @@ export class IdentityAccessRepository {
     };
   }
 
-  private toLoginAttemptState(row: LoginAttemptRow): LoginAttemptState {
+  private toIdentityAttemptState(row: IdentityAttemptRow): IdentityAttemptState {
     return {
       failedCount: Number(row.failedCount),
       windowStartedAt: toIsoString(row.windowStartedAt),
