@@ -55,11 +55,20 @@ Validated on the development machine:
   office-web standalone, release-packaged migrations, first-owner setup, health,
   and a scheduled-job creation path all ran against an isolated temporary
   database; see [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
+- first clean Windows gate-day attempt ran on 2026-06-20 and failed before
+  migrations because the signed artifacts packaged `release\postgres\bin` but
+  not PostgreSQL `lib`/`share` runtime files required by the bundled tools; see
+  [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md)
+- release-build smoke now functionally validates bundled PostgreSQL by running
+  packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
+  directory when gate-day dependencies are included, and checks the app-local
+  VC++ runtime DLLs required by the Windows PostgreSQL bundle
 
 Not yet validated in this repo:
 
-- clean Windows machine with no developer tooling
-- real clean-machine execution of the bundled PostgreSQL and WinSW binaries
+- successful clean Windows machine install with no developer tooling
+- successful clean-machine execution of the bundled PostgreSQL and WinSW
+  binaries after the PostgreSQL full-runtime packaging fix
 - reboot/service recovery proof
 - real Windows ACL readback after service install
 - second office desktop and Android field-device proof
@@ -82,7 +91,8 @@ dependencies before the update manifest is signed:
 pnpm build:release `
   --version=<version> `
   --release-date=<YYYY-MM-DD> `
-  --postgres-bin=<path-to-PG16-x64-bin> `
+  --postgres-root=<path-to-PG16-x64-root> `
+  --vc-redist-root=<path-to-VC-redist-x64-root> `
   --winsw-exe=<path-to-approved-WinSW-x64.exe>
 pnpm smoke:release-build -- --require-gate-day-deps=true
 ```
@@ -101,8 +111,9 @@ The script creates `release/` with:
 - install helper scripts under `tools/install`
 - update verifier helpers under `tools/update`
 - signed update manifest files
-- `postgres/bin` and `tools/winsw/WinSW-x64.exe` when the gate-day dependency
-  inputs are provided
+- the complete PostgreSQL runtime tree under `postgres` (`bin`, `lib`, and
+  `share`), app-local VC++ runtime DLLs in `postgres/bin`, and
+  `tools/winsw/WinSW-x64.exe` when the gate-day dependency inputs are provided
 
 `release/` is a generated local artifact and is intentionally not committed.
 

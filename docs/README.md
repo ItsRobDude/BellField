@@ -269,6 +269,39 @@ Read when: deciding whether Phase 1 repo-side install foundations are ready to b
 
 Does not own: the install recipe (`install-runbook.md`) or the broader install posture (`self-hosted-installation-strategy.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md)
+
+Audience: contributors checking what the first clean Windows gate-day attempt
+actually proved and where it failed.
+
+Purpose: dated evidence for the first fresh Windows install smoke:
+scratch-machine baseline, artifact/license set, PostgreSQL provisioning failure,
+blocked downstream gates, relay provisioning note, and the required
+release-packaging fix and rerun requirements.
+
+Read when: fixing release packaging, rerunning gate day, reviewing install
+sellability, or planning the relay activation-code provisioning path.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the relay token design
+(`relay-token-design.md`).
+
+### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
+
+Audience: contributors assembling a gate-day USB or reviewing release artifact
+readiness before a clean-machine install smoke.
+
+Purpose: operator checklist for reproducible source provenance, full PostgreSQL
+runtime packaging, app-local VC++ runtime DLLs, signed artifact contents, USB
+layout, SHA refresh, secret hygiene, and smoke cleanup before the USB leaves the
+dev machine.
+
+Read when: building or refreshing a gate-day USB, replacing failed artifacts, or
+reviewing whether a release package is ready for clean Windows validation.
+
+Does not own: the gate execution sequence (`gate-day-checklist.md`), the install
+recipe (`install-runbook.md`), or the failed-run evidence docs.
+
 ### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
 
 Audience: contributors working on licensing, distribution, updates, or commercial protection posture.

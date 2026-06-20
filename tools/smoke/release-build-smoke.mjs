@@ -1,4 +1,6 @@
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import net from 'node:net';
+import { tmpdir } from 'node:os';
 import { dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -6,16 +8,16 @@ import { writeSmokeEvidence } from './smoke-evidence.mjs';
 import { verifyReleaseArtifact } from '../update/release-artifact.mjs';
 
 // Validates that `pnpm build:release` produced a coherent, production-shaped
-// release tree. This is the cheap automated stand-in for the manual gate-day
-// "does the artifact assemble" check: it does NOT install or boot the release,
-// only asserts the packaged manifest and static layout are intact so a broken
-// build:release is caught in CI instead of on gate day.
+// release tree. With gate-day dependencies present it also exercises packaged
+// PostgreSQL end to end, and on Windows checks app-local VC++ runtime DLLs, so
+// incomplete bundles fail before they reach a clean Windows install.
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const releaseRoot = resolve(getArgValue('--release-root') ?? join(repoRoot, 'release'));
 const releasePublicKeyPath =
   getArgValue('--release-public-key') ?? process.env.BELLFIELD_RELEASE_PUBLIC_KEY_PATH;
 const requireGateDayDeps = getBooleanArg('--require-gate-day-deps', false);
+const requiredPostgresVcRuntimeFiles = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll'];
 
 const evidence = {
   name: 'Release build smoke',
@@ -88,11 +90,12 @@ try {
 
   // Bundled Node runtime (node.exe on a Windows build, node on a POSIX build).
   const nodeDir = join(releaseRoot, 'runtime', 'node');
-  check(
-    'bundled node runtime exists',
-    existsSync(join(nodeDir, 'node.exe')) || existsSync(join(nodeDir, 'node')),
-    { nodeDir }
-  );
+  const nodeExe = firstExisting([join(nodeDir, 'node.exe'), join(nodeDir, 'node')]);
+  check('bundled node runtime exists', Boolean(nodeExe), { nodeDir });
+  const nodeVersion = runCommand(nodeExe, ['--version'], { capture: true }).stdout.trim();
+  check('bundled node runtime executes', /^v\d+\.\d+\.\d+/.test(nodeVersion), {
+    nodeVersion
+  });
 
   // Compiled apps.
   check(
@@ -163,22 +166,42 @@ try {
   check('env example forces production mode', /^NODE_ENV=production$/m.test(envExample));
   check('env example disables bootstrap seeding', /^BOOTSTRAP_SEED_DATA=false$/m.test(envExample));
 
-  if (requireGateDayDeps) {
+  const postgresBin = join(releaseRoot, 'postgres', 'bin');
+  const shouldCheckPostgres = requireGateDayDeps || existsSync(postgresBin);
+  if (shouldCheckPostgres) {
     for (const tool of [
-      'postgres.exe',
-      'pg_ctl.exe',
-      'initdb.exe',
-      'psql.exe',
-      'pg_dump.exe',
-      'pg_restore.exe',
-      'createdb.exe',
-      'dropdb.exe'
+      'postgres',
+      'pg_ctl',
+      'initdb',
+      'psql',
+      'pg_dump',
+      'pg_restore',
+      'createdb',
+      'dropdb'
     ]) {
-      check(
-        `gate-day PostgreSQL tool is packaged: ${tool}`,
-        existsSync(join(releaseRoot, 'postgres', 'bin', tool))
-      );
+      check(`gate-day PostgreSQL tool is packaged: ${tool}`, existsSync(pgTool(postgresBin, tool)));
     }
+    check(
+      'gate-day PostgreSQL lib runtime is packaged',
+      existsSync(join(releaseRoot, 'postgres', 'lib'))
+    );
+    check(
+      'gate-day PostgreSQL share runtime is packaged',
+      existsSync(join(releaseRoot, 'postgres', 'share', 'postgres.bki'))
+    );
+    if (process.platform === 'win32') {
+      for (const file of requiredPostgresVcRuntimeFiles) {
+        check(
+          `gate-day PostgreSQL app-local VC++ runtime is packaged: ${file}`,
+          existsSync(join(postgresBin, file))
+        );
+      }
+    }
+    const postgresSmoke = await runPackagedPostgresSmoke(postgresBin);
+    check('gate-day packaged PostgreSQL initializes, starts, and answers SQL', true, postgresSmoke);
+  }
+
+  if (requireGateDayDeps) {
     check(
       'gate-day WinSW executable is packaged',
       existsSync(join(releaseRoot, 'tools', 'winsw', 'WinSW-x64.exe'))
@@ -240,6 +263,162 @@ function hasFileMatching(root, pattern) {
   }
 
   return false;
+}
+
+function pgTool(postgresBin, name) {
+  return join(postgresBin, process.platform === 'win32' ? `${name}.exe` : name);
+}
+
+function runCommand(command, args, options = {}) {
+  const capture = options.capture === true;
+  const result = spawnSync(command, args, {
+    cwd: options.cwd ?? repoRoot,
+    encoding: 'utf8',
+    env: options.env ?? process.env,
+    shell: false,
+    stdio: capture ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'ignore', 'ignore'],
+    timeout: options.timeoutMs ?? 60_000
+  });
+  if (result.error) {
+    throw new Error(`Failed to run ${command}: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    const stdout = result.stdout?.trim();
+    const stderr = result.stderr?.trim();
+    throw new Error(
+      `${command} ${args.join(' ')} exited with ${result.status}${
+        stdout ? `\nstdout:\n${stdout}` : ''
+      }${stderr ? `\nstderr:\n${stderr}` : ''}`
+    );
+  }
+  return result;
+}
+
+async function runPackagedPostgresSmoke(postgresBin) {
+  const root = mkdtempSync(join(tmpdir(), 'bellfield-release-postgres-smoke-'));
+  const dataDir = join(root, 'data');
+  const port = await getAvailablePort();
+  let started = false;
+  try {
+    runCommand(pgTool(postgresBin, 'initdb'), [
+      '-D',
+      dataDir,
+      '-U',
+      'postgres',
+      '--encoding=UTF8',
+      '--locale=C',
+      '--auth=trust'
+    ]);
+    runCommand(pgTool(postgresBin, 'pg_ctl'), [
+      '-D',
+      dataDir,
+      '-o',
+      `-h 127.0.0.1 -p ${port}`,
+      '-w',
+      'start'
+    ]);
+    started = true;
+    const query = runCommand(
+      pgTool(postgresBin, 'psql'),
+      [
+        '--host',
+        '127.0.0.1',
+        '--port',
+        String(port),
+        '--username',
+        'postgres',
+        '--dbname',
+        'postgres',
+        '--no-password',
+        '--tuples-only',
+        '--no-align',
+        '--command',
+        'select 1;'
+      ],
+      { capture: true, env: { ...process.env, PGCONNECT_TIMEOUT: '5' } }
+    );
+    const queryOutput = query.stdout.trim();
+    if (queryOutput !== '1') {
+      throw new Error(`Packaged psql returned unexpected output: ${queryOutput}`);
+    }
+    stopPostgres(postgresBin, dataDir);
+    started = false;
+    return { port, queryOutput };
+  } finally {
+    if (started || readPostmasterPid(dataDir)) {
+      cleanupPostgres(postgresBin, dataDir);
+    }
+    removeTemporaryDirectory(root);
+  }
+}
+
+async function getAvailablePort() {
+  return await new Promise((resolve, reject) => {
+    const server = net.createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const address = server.address();
+      server.close(() => {
+        if (!address || typeof address === 'string') {
+          reject(new Error('Could not allocate a local TCP port.'));
+          return;
+        }
+        resolve(address.port);
+      });
+    });
+  });
+}
+
+function stopPostgres(postgresBin, dataDir) {
+  runCommand(pgTool(postgresBin, 'pg_ctl'), ['-D', dataDir, '-m', 'fast', '-w', 'stop']);
+}
+
+function cleanupPostgres(postgresBin, dataDir) {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      stopPostgres(postgresBin, dataDir);
+      return;
+    } catch {
+      // Try once more before falling back to killing the postmaster pid below.
+    }
+  }
+  const pid = readPostmasterPid(dataDir);
+  if (!pid) {
+    return;
+  }
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+        shell: false,
+        stdio: ['ignore', 'ignore', 'ignore']
+      });
+    } else {
+      process.kill(pid, 'SIGKILL');
+    }
+  } catch {
+    // Cleanup is best-effort; the original smoke failure remains visible.
+  }
+}
+
+function readPostmasterPid(dataDir) {
+  try {
+    const raw = readFileSync(join(dataDir, 'postmaster.pid'), 'utf8');
+    const pid = Number(raw.split(/\r?\n/, 1)[0]);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
+function removeTemporaryDirectory(root) {
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      rmSync(root, { force: true, recursive: true, maxRetries: 2, retryDelay: 250 });
+      return;
+    } catch {
+      // Windows can briefly hold PostgreSQL files after shutdown; retry below.
+    }
+  }
 }
 
 function runCapture(command, args) {
