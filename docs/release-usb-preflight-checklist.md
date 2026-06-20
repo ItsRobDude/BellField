@@ -45,11 +45,20 @@ does not replace the clean-machine run.
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
   pnpm smoke:release-build -- --require-gate-day-deps=true
+  pnpm package:release-zip -- --release-root=release --output=<artifact-A.zip>
+  pnpm smoke:release-zip -- --zip=<artifact-A.zip> --require-gate-day-deps=true
   ```
 
 - [ ] Artifact B was built after A, from the same clean source commit unless the
       update scenario intentionally tests a later commit.
-- [ ] `pnpm smoke:release-office-web` passed against the final release tree.
+- [ ] Each active artifact ZIP was created with `pnpm package:release-zip`;
+      do not use an ad hoc manual ZIP command for gate-day artifacts.
+- [ ] `pnpm smoke:release-zip -- --zip=<artifact.zip> --require-gate-day-deps=true`
+      passed for each active artifact. This smoke extracts with the Windows
+      operator path, verifies API/worker dependency resolution, boots
+      office-web from the extracted ZIP, fetches root HTML and referenced
+      Next static JavaScript assets, and runs packaged migrations against a
+      temporary packaged PostgreSQL database.
 - [ ] `pnpm format:check` passed after any doc/checklist updates.
 
 ## Artifact Contents
@@ -68,6 +77,12 @@ For each active release zip:
       `release/postgres/bin/vcruntime140_1.dll`, and
       `release/postgres/bin/msvcp140.dll`.
 - [ ] The zip contains `release/tools/winsw/WinSW-x64.exe`.
+- [ ] After extraction, top-level runtime dependencies are resolvable from
+      `release/apps/api/node_modules`, `release/apps/worker/node_modules`, and
+      the office-web standalone server root; do not rely on a `.pnpm` store
+      existing without the top-level package entries Node needs.
+- [ ] After extraction, the full `release/` tree contains no symlinks,
+      junctions, or Windows reparse points.
 
 ## USB Layout
 
@@ -87,6 +102,9 @@ For each active release zip:
 ## Secret Hygiene
 
 - [ ] Relay token values appear only in the private relay config location.
+- [ ] Gate-day relay private config supplies only `BELLFIELD_RELAY_BASE_URL`
+      and `BELLFIELD_RELAY_TOKEN`; it must not overwrite the locally generated
+      `BELLFIELD_RELAY_SERVER_INSTANCE_ID`.
 - [ ] Docs, `START-HERE.txt`, evidence templates, command logs, and build
       evidence do not contain live relay token values.
 - [ ] Evidence files instruct the operator to redact relay token values.
@@ -103,6 +121,9 @@ rg -n "bfrt1_[A-Za-z0-9]|BELLFIELD_RELAY_TOKEN=[^C\r\n]|BEGIN (RSA|OPENSSH|PRIVA
 
 - [ ] No packaged PostgreSQL process remains from release smoke.
 - [ ] No `bellfield-release-postgres-smoke-*` temp directory remains.
+- [ ] No `bellfield-release-zip-smoke-*` or
+      `bellfield-release-migration-smoke-*` temp directory remains.
+- [ ] No office-web/Next server process remains from release ZIP smoke.
 - [ ] No malformed local path artifacts, such as accidental semicolon-suffixed
       directories, were created during packaging.
 - [ ] The USB can be removed and reinserted, and `START-HERE.txt`,

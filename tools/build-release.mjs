@@ -2,6 +2,8 @@ import {
   copyFileSync,
   cpSync,
   existsSync,
+  lstatSync,
+  mkdtempSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -14,6 +16,13 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getBoolean, readArgs } from './install/install-utils.mjs';
 import { writeSignedReleaseArtifact } from './update/release-artifact.mjs';
+import {
+  assertDependencyPackageJsons,
+  assertNoReparsePoints,
+  assertNodeResolves,
+  officeServerPath,
+  packageDependencyNames
+} from './release-portability.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
@@ -189,6 +198,7 @@ function copyNodeRuntime() {
     process.platform === 'win32' ? 'node.exe' : 'node'
   );
   copyFileRequired(process.execPath, nodeTarget);
+  return nodeTarget;
 }
 
 function copyOptionalGateDayDependencies() {
@@ -346,11 +356,98 @@ function copyWinSwExe(winSwExe) {
 }
 
 function deployWorkspacePackage(filter, target) {
-  run('pnpm', ['--filter', filter, 'deploy', '--prod', '--legacy', target]);
+  // pnpm legacy deploy is most reliable with repo-relative targets on Windows;
+  // absolute or cross-drive paths can be folded into the workspace path.
+  const deployTarget = relative(repoRoot, target);
+  run('pnpm', [
+    '--filter',
+    filter,
+    'deploy',
+    '--prod',
+    '--legacy',
+    '--config.node-linker=hoisted',
+    deployTarget
+  ]);
 }
 
-function firstExisting(paths) {
-  return paths.find((candidate) => existsSync(candidate)) ?? null;
+function assertReleasePackageDependencies(input) {
+  const dependencies = packageDependencyNames(input.sourcePackageJson);
+  assertDependencyPackageJsons(input.packageRoot, dependencies, input.label);
+  const resolved = assertNodeResolves({
+    nodeExe: input.nodeExe,
+    fromFile: join(input.packageRoot, 'package.json'),
+    dependencies,
+    label: input.label
+  });
+  console.log(
+    `${input.label} production dependency resolution verified (${resolved.length} package(s)).`
+  );
+}
+
+function copyNodeModules(source, target) {
+  if (!existsSync(source) || !statSync(source).isDirectory()) {
+    throw new Error(`Required node_modules directory was not found: ${source}`);
+  }
+  rmSync(target, { force: true, recursive: true });
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(source, target, { dereference: true, recursive: true });
+}
+
+function removeNestedNodeModules(root) {
+  if (!existsSync(root)) {
+    return;
+  }
+
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    const entryPath = join(root, entry.name);
+    const entryStats = lstatSync(entryPath);
+    if (entry.name === 'node_modules' && entryStats.isDirectory()) {
+      rmSync(entryPath, { force: true, recursive: true });
+      continue;
+    }
+    if (entryStats.isDirectory()) {
+      removeNestedNodeModules(entryPath);
+    }
+  }
+}
+
+function packageOfficeWebRuntime(nodeExe) {
+  const officeReleaseRoot = join(releaseRoot, 'apps', 'office-web');
+  copyRequired(join(repoRoot, 'apps', 'office-web', '.next', 'standalone'), officeReleaseRoot);
+
+  const officeServer = officeServerPath(releaseRoot);
+  if (!officeServer) {
+    throw new Error('Office standalone server.js was not found in the release artifact.');
+  }
+  const officeServerRoot = dirname(officeServer);
+
+  // Replace all traced Next node_modules with one hoisted production tree next
+  // to server.js so the artifact does not depend on pnpm store reparse points.
+  removeNestedNodeModules(officeReleaseRoot);
+  // Keep the temp deploy on the repo drive; pnpm legacy deploy can mis-handle
+  // cross-drive absolute targets on Windows CI.
+  const deployRoot = mkdtempSync(join(repoRoot, 'bellfield-office-web-deploy-'));
+  try {
+    deployWorkspacePackage('@bellfield/office-web', deployRoot);
+    copyNodeModules(join(deployRoot, 'node_modules'), join(officeServerRoot, 'node_modules'));
+  } finally {
+    rmSync(deployRoot, { force: true, recursive: true, maxRetries: 3, retryDelay: 250 });
+  }
+
+  assertReleasePackageDependencies({
+    nodeExe,
+    sourcePackageJson: join(repoRoot, 'apps', 'office-web', 'package.json'),
+    packageRoot: officeServerRoot,
+    label: 'office-web release'
+  });
+
+  copyRequired(
+    join(repoRoot, 'apps', 'office-web', '.next', 'static'),
+    join(officeServerRoot, '.next', 'static')
+  );
+  if (existsSync(join(repoRoot, 'apps', 'office-web', 'public'))) {
+    copyRequired(join(repoRoot, 'apps', 'office-web', 'public'), join(officeServerRoot, 'public'));
+  }
 }
 
 function readPackageVersion() {
@@ -413,14 +510,27 @@ rmSync(releaseRoot, { force: true, recursive: true });
 mkdirSync(releaseRoot, { recursive: true });
 
 run('pnpm', ['--filter', '@bellfield/contracts', 'build']);
+run('pnpm', ['--filter', '@bellfield/i18n', 'build']);
 run('pnpm', ['--filter', '@bellfield/api', 'build']);
 run('pnpm', ['--filter', '@bellfield/worker', 'build']);
 run('pnpm', ['--filter', '@bellfield/office-web', 'build']);
 
-copyNodeRuntime();
+const nodeExe = copyNodeRuntime();
 
 deployWorkspacePackage('@bellfield/api', join(releaseRoot, 'apps', 'api'));
 deployWorkspacePackage('@bellfield/worker', join(releaseRoot, 'apps', 'worker'));
+assertReleasePackageDependencies({
+  nodeExe,
+  sourcePackageJson: join(repoRoot, 'apps', 'api', 'package.json'),
+  packageRoot: join(releaseRoot, 'apps', 'api'),
+  label: 'api release'
+});
+assertReleasePackageDependencies({
+  nodeExe,
+  sourcePackageJson: join(repoRoot, 'apps', 'worker', 'package.json'),
+  packageRoot: join(releaseRoot, 'apps', 'worker'),
+  label: 'worker release'
+});
 
 const buildManifest = {
   schemaVersion: 1,
@@ -458,26 +568,7 @@ copyRequired(
   join(releaseRoot, 'apps', 'api', 'scripts', 'migrations')
 );
 
-copyRequired(
-  join(repoRoot, 'apps', 'office-web', '.next', 'standalone'),
-  join(releaseRoot, 'apps', 'office-web')
-);
-
-const officeServer = firstExisting([
-  join(releaseRoot, 'apps', 'office-web', 'server.js'),
-  join(releaseRoot, 'apps', 'office-web', 'apps', 'office-web', 'server.js')
-]);
-if (!officeServer) {
-  throw new Error('Office standalone server.js was not found in the release artifact.');
-}
-const officeServerRoot = dirname(officeServer);
-copyRequired(
-  join(repoRoot, 'apps', 'office-web', '.next', 'static'),
-  join(officeServerRoot, '.next', 'static')
-);
-if (existsSync(join(repoRoot, 'apps', 'office-web', 'public'))) {
-  copyRequired(join(repoRoot, 'apps', 'office-web', 'public'), join(officeServerRoot, 'public'));
-}
+packageOfficeWebRuntime(nodeExe);
 
 copyFileRequired(
   join(repoRoot, 'bellfield-server.env.example'),
@@ -498,6 +589,8 @@ copyFileRequired(
 );
 
 copyOptionalGateDayDependencies();
+
+assertNoReparsePoints(releaseRoot, 'release tree before signing');
 
 writeFileSync(
   join(releaseRoot, 'README.txt'),

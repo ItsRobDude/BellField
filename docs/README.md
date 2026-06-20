@@ -286,6 +286,24 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
 (`relay-token-design.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md)
+
+Audience: contributors checking what the second clean Windows gate-day attempt
+proved and where it failed.
+
+Purpose: dated evidence for the second fresh Windows install smoke: the
+PostgreSQL full-runtime and app-local VC++ packaging fix passed, packaged
+PostgreSQL provisioning completed, then migrations failed because the extracted
+ZIP could not resolve API Node dependencies such as `pg`.
+
+Read when: fixing release ZIP dependency packaging, adding post-extraction
+release smoke coverage, rerunning gate day, or replacing manual relay triplet
+setup with a professional activation flow.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the relay token design
+(`relay-token-design.md`).
+
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
 Audience: contributors assembling a gate-day USB or reviewing release artifact

@@ -6,6 +6,12 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeSmokeEvidence } from './smoke-evidence.mjs';
 import { verifyReleaseArtifact } from '../update/release-artifact.mjs';
+import {
+  assertDependencyPackageJsons,
+  assertNoReparsePoints,
+  assertNodeResolves,
+  packageDependencyNames
+} from '../release-portability.mjs';
 
 // Validates that `pnpm build:release` produced a coherent, production-shaped
 // release tree. With gate-day dependencies present it also exercises packaged
@@ -30,6 +36,8 @@ const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 try {
   check('release root exists', existsSync(releaseRoot), { releaseRoot });
+  assertNoReparsePoints(releaseRoot, 'release tree smoke');
+  check('release tree contains no reparse points or symlinks', true, { releaseRoot });
   const expectedSourceCommit =
     getArgValue('--expected-source-commit') ?? runCapture('git', ['rev-parse', '--short', 'HEAD']);
 
@@ -96,6 +104,7 @@ try {
   check('bundled node runtime executes', /^v\d+\.\d+\.\d+/.test(nodeVersion), {
     nodeVersion
   });
+  verifyRuntimeDependencies(nodeExe);
 
   // Compiled apps.
   check(
@@ -114,6 +123,15 @@ try {
     officeServer: officeServer ? relative(repoRoot, officeServer) : null
   });
   const officeServerRoot = dirname(officeServer);
+  const officeDeps = verifyPackageDependencies({
+    nodeExe,
+    packageRoot: officeServerRoot,
+    sourcePackageJson: join(repoRoot, 'apps', 'office-web', 'package.json'),
+    label: 'office-web release'
+  });
+  check('office-web production dependencies resolve from release tree', true, {
+    count: officeDeps.length
+  });
   const officeStaticRoot = join(officeServerRoot, '.next', 'static');
   check('office-web static assets are beside the standalone server', existsSync(officeStaticRoot), {
     officeServerRoot: relative(repoRoot, officeServerRoot),
@@ -267,6 +285,38 @@ function hasFileMatching(root, pattern) {
 
 function pgTool(postgresBin, name) {
   return join(postgresBin, process.platform === 'win32' ? `${name}.exe` : name);
+}
+
+function verifyRuntimeDependencies(nodeExe) {
+  const apiDeps = verifyPackageDependencies({
+    nodeExe,
+    packageRoot: join(releaseRoot, 'apps', 'api'),
+    sourcePackageJson: join(repoRoot, 'apps', 'api', 'package.json'),
+    label: 'api release'
+  });
+  check('api production dependencies resolve from release tree', true, { count: apiDeps.length });
+
+  const workerDeps = verifyPackageDependencies({
+    nodeExe,
+    packageRoot: join(releaseRoot, 'apps', 'worker'),
+    sourcePackageJson: join(repoRoot, 'apps', 'worker', 'package.json'),
+    label: 'worker release'
+  });
+  check('worker production dependencies resolve from release tree', true, {
+    count: workerDeps.length
+  });
+}
+
+function verifyPackageDependencies(input) {
+  const dependencies = packageDependencyNames(input.sourcePackageJson);
+  assertDependencyPackageJsons(input.packageRoot, dependencies, input.label);
+  assertNodeResolves({
+    nodeExe: input.nodeExe,
+    fromFile: join(input.packageRoot, 'package.json'),
+    dependencies,
+    label: input.label
+  });
+  return dependencies;
 }
 
 function runCommand(command, args, options = {}) {

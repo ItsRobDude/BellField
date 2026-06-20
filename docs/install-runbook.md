@@ -28,6 +28,11 @@ Validated on the development machine:
 - release assembly can package operator-provided PostgreSQL 16 binaries and
   WinSW before signing, and `pnpm smoke:release-build -- --require-gate-day-deps=true`
   verifies those dependencies are present in the signed tree
+- release assembly now builds API, worker, and office-web runtime dependencies
+  into a portable non-junction layout before signing; `pnpm smoke:release-zip`
+  extracts the final ZIP with the Windows operator path and validates the
+  extracted dependency graph, office-web SSR/static assets, packaged
+  PostgreSQL, and migrations
 - worker scheduled backup foundation exists: backup run table, configured
   backup directory, `pg_dump` + media backup set creation, retention, and
   System-surface freshness status
@@ -59,6 +64,11 @@ Validated on the development machine:
   migrations because the signed artifacts packaged `release\postgres\bin` but
   not PostgreSQL `lib`/`share` runtime files required by the bundled tools; see
   [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md)
+- second clean Windows gate-day attempt ran on 2026-06-20 and got past
+  PostgreSQL provisioning with the full runtime/app-local VC++ bundle, then
+  failed during migrations because the extracted ZIP could not resolve the API
+  package dependency `pg`; see
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -68,7 +78,8 @@ Not yet validated in this repo:
 
 - successful clean Windows machine install with no developer tooling
 - successful clean-machine execution of the bundled PostgreSQL and WinSW
-  binaries after the PostgreSQL full-runtime packaging fix
+  binaries after the post-ZIP dependency packaging fix is rerun on the scratch
+  machine
 - reboot/service recovery proof
 - real Windows ACL readback after service install
 - second office desktop and Android field-device proof
@@ -95,17 +106,27 @@ pnpm build:release `
   --vc-redist-root=<path-to-VC-redist-x64-root> `
   --winsw-exe=<path-to-approved-WinSW-x64.exe>
 pnpm smoke:release-build -- --require-gate-day-deps=true
+pnpm package:release-zip -- --release-root=release --output=<artifact.zip>
+pnpm smoke:release-zip -- --zip=<artifact.zip> --require-gate-day-deps=true
 ```
 
 Do not add PostgreSQL, WinSW, or any other release file after `build:release`
 finishes. The signed update manifest covers the release file list and hashes;
 post-sign edits make the artifact fail update verification.
 
+Do not package gate-day artifacts with an ad hoc ZIP command. Use
+`pnpm package:release-zip` and then `pnpm smoke:release-zip` so the artifact is
+validated after ordinary Windows extraction, including API/worker dependency
+resolution and office-web startup from the extracted tree.
+
 The script creates `release/` with:
 
 - `runtime/node/node.exe`
 - compiled API and worker packages
 - the office-web standalone server
+- production `node_modules` for API, worker, and the office-web standalone
+  server root in a ZIP-portable layout with no symlinks, junctions, or reparse
+  points
 - API migration scripts and SQL files
 - `bellfield-server.env.example`
 - install helper scripts under `tools/install`

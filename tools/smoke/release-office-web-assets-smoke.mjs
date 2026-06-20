@@ -1,4 +1,4 @@
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, writeFile } from 'node:fs/promises';
 import net from 'node:net';
@@ -32,6 +32,8 @@ const evidence = {
 };
 
 let child;
+let stdout = '';
+let stderr = '';
 
 try {
   check('release root exists', existsSync(releaseRoot), { releaseRoot });
@@ -56,8 +58,6 @@ try {
     stdio: ['ignore', 'pipe', 'pipe']
   });
 
-  let stdout = '';
-  let stderr = '';
   child.stdout.on('data', (chunk) => {
     stdout += chunk.toString();
   });
@@ -89,19 +89,19 @@ try {
 
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
+  recordProcessOutput();
   await writeEvidence();
   console.log(`Release office-web asset smoke passed. Evidence: ${evidencePath}`);
 } catch (error) {
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'failed';
   evidence.error = error instanceof Error ? error.message : String(error);
+  recordProcessOutput();
   await writeEvidence();
   console.error(`Release office-web asset smoke failed. Evidence: ${evidencePath}`);
   throw error;
 } finally {
-  if (child && !child.killed) {
-    child.kill();
-  }
+  await stopChildProcess(child);
 }
 
 function getArgValue(name) {
@@ -163,4 +163,75 @@ function check(name, passed, details = {}) {
 async function writeEvidence() {
   await mkdir(evidenceDir, { recursive: true });
   await writeFile(evidencePath, `${JSON.stringify(evidence, null, 2)}\n`, 'utf8');
+}
+
+function recordProcessOutput() {
+  if (!child) {
+    return;
+  }
+  evidence.process = {
+    ...evidence.process,
+    exitCode: child.exitCode,
+    signalCode: child.signalCode,
+    stdout: truncateForEvidence(stdout),
+    stderr: truncateForEvidence(stderr)
+  };
+}
+
+function truncateForEvidence(value) {
+  const limit = 12_000;
+  if (value.length <= limit) {
+    return value;
+  }
+  return `${value.slice(0, limit)}\n[truncated ${value.length - limit} chars]`;
+}
+
+async function stopChildProcess(processHandle) {
+  if (!processHandle || processHandle.exitCode !== null || processHandle.signalCode !== null) {
+    return;
+  }
+
+  processHandle.kill();
+  if (await waitForExit(processHandle, 5_000)) {
+    return;
+  }
+
+  forceKillProcessTree(processHandle.pid);
+  await waitForExit(processHandle, 5_000);
+}
+
+async function waitForExit(processHandle, timeoutMs) {
+  if (processHandle.exitCode !== null || processHandle.signalCode !== null) {
+    return true;
+  }
+
+  return await new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      processHandle.off('exit', onExit);
+      resolve(false);
+    }, timeoutMs);
+    function onExit() {
+      clearTimeout(timer);
+      resolve(true);
+    }
+    processHandle.once('exit', onExit);
+  });
+}
+
+function forceKillProcessTree(pid) {
+  if (!pid) {
+    return;
+  }
+  try {
+    if (process.platform === 'win32') {
+      spawnSync('taskkill.exe', ['/PID', String(pid), '/T', '/F'], {
+        shell: false,
+        stdio: ['ignore', 'ignore', 'ignore']
+      });
+      return;
+    }
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    // Best-effort cleanup; the smoke failure remains visible in the evidence.
+  }
 }

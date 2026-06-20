@@ -67,7 +67,11 @@ required by the bundled tools; see
 [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md).
 The release packaging fix now includes the full PostgreSQL runtime, app-local
 VC++ runtime DLLs, and a release-build smoke that functionally runs packaged
-PostgreSQL, but the remaining clean-machine proofs are still owned by
+PostgreSQL. The second clean-machine attempt ran on 2026-06-20, got through
+PostgreSQL provisioning, and then failed during migrations because the extracted
+ZIP could not resolve API Node dependencies such as `pg`; see
+[gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md).
+The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
 - [ ] clean-machine stranger install from the runbook (service/reboot/ACL
