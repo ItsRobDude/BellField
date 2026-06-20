@@ -26,9 +26,18 @@ import {
   loginAttemptBucketKey,
   normalizeLoginEmail
 } from './login-attempt-policy';
+import { getApiRuntimeConfig, type ApiSessionTtlConfig } from '../../common/config/runtime-config';
+import {
+  buildSessionExpiredException,
+  getStaleSessionPruneCutoff,
+  isIdentitySessionExpired,
+  sessionPruneIntervalMs
+} from './identity-session-expiry';
+import {
+  buildEmployeeUpdateAuditEntries,
+  buildIdentityAuditEntry
+} from './identity-audit-builders';
 import type {
-  AdminAuditAction,
-  AdminAuditEntry,
   AuthorizedEmployee,
   CreateEmployeeRequestDto,
   CreateFirstOwnerRequestDto,
@@ -55,13 +64,17 @@ function isUniqueViolation(error: unknown): boolean {
 @Injectable()
 export class IdentityAccessService implements OnModuleInit {
   private readonly logger = new Logger(IdentityAccessService.name);
+  private readonly sessionTtl: ApiSessionTtlConfig;
+  private lastSessionPruneAt = 0;
   private setupTokenHash: Buffer | null = null;
   private setupTokenConsumed = false;
   private setupFailedAttempts = 0;
   private setupFailureWindowStartedAt = 0;
   private setupBlockedUntil = 0;
 
-  constructor(private readonly identityAccessRepository: IdentityAccessRepository) {}
+  constructor(private readonly identityAccessRepository: IdentityAccessRepository) {
+    this.sessionTtl = getApiRuntimeConfig().sessionTtl;
+  }
 
   async onModuleInit(): Promise<void> {
     try {
@@ -336,7 +349,7 @@ export class IdentityAccessService implements OnModuleInit {
             grantedPermissions: resulting.permissionOverrides.grantedPermissions,
             revokedPermissions: resulting.permissionOverrides.revokedPermissions
           },
-          auditEntries: this.buildUpdateAuditEntries(freshActor, resulting, before),
+          auditEntries: buildEmployeeUpdateAuditEntries(freshActor, resulting, before),
           revokeSessions: target.isActive && !resulting.isActive
         };
       }
@@ -360,7 +373,7 @@ export class IdentityAccessService implements OnModuleInit {
     if (!employee) {
       throw new NotFoundException('Employee not found.');
     }
-    const sessions = await this.identityAccessRepository.listSessionsForEmployee(employeeId);
+    const sessions = await this.listUnexpiredSessionsForEmployee(employeeId, new Date());
     return { sessions };
   }
 
@@ -381,7 +394,7 @@ export class IdentityAccessService implements OnModuleInit {
       ({ actor: freshActor, target }) => {
         this.assertActorCan(freshActor, 'employeesPermissions:configure');
         this.assertCanActOnTarget(freshActor.roleId, target.roleId);
-        return this.buildAuditEntry(
+        return buildIdentityAuditEntry(
           freshActor,
           target,
           'employee_session_revoked',
@@ -444,7 +457,7 @@ export class IdentityAccessService implements OnModuleInit {
               `You cannot grant a permission you do not hold: ${escalated}.`
             );
           }
-          return this.buildAuditEntry(
+          return buildIdentityAuditEntry(
             freshActor,
             employee,
             'employee_created',
@@ -472,7 +485,7 @@ export class IdentityAccessService implements OnModuleInit {
     if (!employee) {
       throw new NotFoundException('Employee not found.');
     }
-    const sessions = await this.identityAccessRepository.listSessionsForEmployee(employeeId);
+    const sessions = await this.listUnexpiredSessionsForEmployee(employeeId, new Date());
     return { employee: this.toEmployeeSummary(employee), sessions };
   }
 
@@ -495,7 +508,7 @@ export class IdentityAccessService implements OnModuleInit {
       ({ actor: freshActor, target }) => {
         this.assertActorCan(freshActor, 'employeesPermissions:configure');
         this.assertCanActOnTarget(freshActor.roleId, target.roleId);
-        return this.buildAuditEntry(
+        return buildIdentityAuditEntry(
           freshActor,
           target,
           'employee_password_reset',
@@ -514,77 +527,6 @@ export class IdentityAccessService implements OnModuleInit {
     if (!this.resolveEffectivePermissions(actor).includes(permissionKey)) {
       throw new ForbiddenException('You no longer have permission to perform this action.');
     }
-  }
-
-  /** Build the per-action audit rows for an employee update (role / active / overrides). */
-  private buildUpdateAuditEntries(
-    actor: { id: string; displayName: string; email: string },
-    resulting: EmployeeRecord,
-    before: {
-      roleId: EmployeeRecord['roleId'];
-      isActive: boolean;
-      granted: string[];
-      revoked: string[];
-    }
-  ): AdminAuditEntry[] {
-    const entries: AdminAuditEntry[] = [];
-    if (resulting.roleId !== before.roleId) {
-      entries.push(
-        this.buildAuditEntry(
-          actor,
-          resulting,
-          'employee_role_changed',
-          `Role changed from ${before.roleId} to ${resulting.roleId}.`
-        )
-      );
-    }
-    if (resulting.isActive !== before.isActive) {
-      entries.push(
-        this.buildAuditEntry(
-          actor,
-          resulting,
-          resulting.isActive ? 'employee_activated' : 'employee_deactivated',
-          resulting.isActive ? 'Reactivated the account.' : 'Deactivated the account.'
-        )
-      );
-    }
-    const afterGranted = [...resulting.permissionOverrides.grantedPermissions].sort();
-    const afterRevoked = [...resulting.permissionOverrides.revokedPermissions].sort();
-    if (
-      JSON.stringify(afterGranted) !== JSON.stringify(before.granted) ||
-      JSON.stringify(afterRevoked) !== JSON.stringify(before.revoked)
-    ) {
-      entries.push(
-        this.buildAuditEntry(
-          actor,
-          resulting,
-          'employee_overrides_changed',
-          `Updated permission overrides (granted: ${afterGranted.length}, revoked: ${afterRevoked.length}).`
-        )
-      );
-    }
-    return entries;
-  }
-
-  /** Build one non-secret audit row (no passwords/tokens in the summary). */
-  private buildAuditEntry(
-    actor: { id: string; displayName: string; email: string },
-    target: { id: string; displayName: string; email: string },
-    action: AdminAuditAction,
-    summary: string
-  ): AdminAuditEntry {
-    return {
-      id: randomUUID(),
-      occurredAt: new Date().toISOString(),
-      actorEmployeeId: actor.id,
-      actorName: actor.displayName,
-      actorEmail: actor.email,
-      targetEmployeeId: target.id,
-      targetName: target.displayName,
-      targetEmail: target.email,
-      action,
-      summary
-    };
   }
 
   /** Owner-protection: only an Owner may act on an Owner (reset/deactivate/role/override/revoke). */
@@ -631,6 +573,7 @@ export class IdentityAccessService implements OnModuleInit {
   private async getEmployeeFromSession(
     sessionToken: string
   ): Promise<{ employee: EmployeeRecord; session: SessionRecord }> {
+    const now = new Date();
     const session = await this.identityAccessRepository.findSessionByToken(sessionToken);
 
     if (!session) {
@@ -649,7 +592,38 @@ export class IdentityAccessService implements OnModuleInit {
       throw new ForbiddenException('This employee account is inactive.');
     }
 
+    if (isIdentitySessionExpired(session, this.sessionTtl, now)) {
+      throw buildSessionExpiredException();
+    }
+
+    await this.pruneExpiredSessionsIfDue(now);
+
     return { employee, session };
+  }
+
+  private async listUnexpiredSessionsForEmployee(
+    employeeId: string,
+    now: Date
+  ): Promise<EmployeeSessionsResponse['sessions']> {
+    const sessions = await this.identityAccessRepository.listSessionsForEmployee(employeeId);
+    return sessions.filter((session) => !isIdentitySessionExpired(session, this.sessionTtl, now));
+  }
+
+  private async pruneExpiredSessionsIfDue(now: Date): Promise<void> {
+    const nowMs = now.getTime();
+    if (nowMs - this.lastSessionPruneAt < sessionPruneIntervalMs) {
+      return;
+    }
+
+    this.lastSessionPruneAt = nowMs;
+
+    try {
+      await this.identityAccessRepository.pruneSessionsIssuedBefore(
+        getStaleSessionPruneCutoff(now, this.sessionTtl)
+      );
+    } catch {
+      this.logger.warn('Stale session pruning skipped; continuing auth request.');
+    }
   }
 
   private toEmployeeSummary(employee: EmployeeRecord): EmployeeSummary {

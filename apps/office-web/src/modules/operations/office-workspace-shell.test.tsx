@@ -16,7 +16,7 @@ import type {
   RegisterEntrySummary
 } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
-import type { EmployeeSummary } from '@/lib/identity-api';
+import { OfficeIdentityApiError, type EmployeeSummary } from '@/lib/identity-api';
 import * as identityApi from '@/lib/identity-api';
 import { OfficeWorkspaceShell } from './office-workspace-shell';
 import type { CrmNavigationTarget } from './crm-panel-types';
@@ -63,7 +63,23 @@ vi.mock('@/lib/operations-api', () => ({
 }));
 
 vi.mock('@/lib/identity-api', () => ({
-  getCurrentOfficeSession: vi.fn()
+  getCurrentOfficeSession: vi.fn(),
+  OfficeIdentityApiError: class OfficeIdentityApiError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly code?: string
+    ) {
+      super(message);
+      this.name = 'OfficeIdentityApiError';
+    }
+  },
+  isOfficeSessionExpiredError: (error: unknown) =>
+    error instanceof Error &&
+    'status' in error &&
+    (error as { status?: number }).status === 401 &&
+    'code' in error &&
+    (error as { code?: string }).code === 'sessionExpired'
 }));
 
 type MockCrmPanelProps = {
@@ -586,10 +602,12 @@ function arrangeWorkspace(workspace: JobsWorkspaceResponse) {
 
 function renderShell({
   initialEmployee = employee,
-  onSignOut = vi.fn()
+  onSignOut = vi.fn(),
+  onSessionExpired = vi.fn()
 }: {
   initialEmployee?: EmployeeSummary;
   onSignOut?: () => void;
+  onSessionExpired?: (message: string) => void;
 } = {}) {
   return render(
     <OfficeWorkspaceShell
@@ -597,6 +615,7 @@ function renderShell({
       initialEmployee={initialEmployee}
       sessionToken="session-token"
       onSignOut={onSignOut}
+      onSessionExpired={onSessionExpired}
     />
   );
 }
@@ -687,6 +706,26 @@ describe('OfficeWorkspaceShell IA', () => {
       );
     });
     expect(screen.queryByRole('menu', { name: 'Account menu' })).not.toBeInTheDocument();
+  });
+
+  it('reports an expired session from workspace refresh without leaving the workspace active', async () => {
+    const onSessionExpired = vi.fn();
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedIdentityApi.getCurrentOfficeSession
+      .mockResolvedValueOnce({ employee })
+      .mockRejectedValueOnce(
+        new OfficeIdentityApiError('Session expired. Please sign in again.', 401, 'sessionExpired')
+      );
+
+    renderShell({ onSessionExpired });
+
+    await screen.findByRole('region', { name: 'Dispatch board' });
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu for Office User' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh workspace' }));
+
+    await waitFor(() => {
+      expect(onSessionExpired).toHaveBeenCalledWith('Session expired. Please sign in again.');
+    });
   });
 
   it('hides the Employees nav without employeesPermissions:view', async () => {

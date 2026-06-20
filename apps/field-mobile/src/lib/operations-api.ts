@@ -48,7 +48,8 @@ export type {
 export class FieldApiError extends Error {
   constructor(
     message: string,
-    readonly status: number
+    readonly status: number,
+    readonly code?: string
   ) {
     super(message);
     this.name = 'FieldApiError';
@@ -59,13 +60,17 @@ export function isFieldApiError(error: unknown): error is FieldApiError {
   return error instanceof FieldApiError;
 }
 
+export function isFieldSessionExpiredError(error: unknown): error is FieldApiError {
+  return isFieldApiError(error) && error.status === 401 && error.code === 'sessionExpired';
+}
+
 export function isFieldSessionAccessLostError(error: unknown): boolean {
   if (!isFieldApiError(error)) {
     return false;
   }
 
   if (error.status === 401) {
-    return true;
+    return error.code !== 'sessionExpired';
   }
 
   if (error.status !== 403) {
@@ -91,8 +96,15 @@ async function requestJson<TResponse>(
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new FieldApiError(errorBody?.message ?? 'Request failed.', response.status);
+    const errorBody = (await response.json().catch(() => null)) as {
+      message?: string;
+      code?: string;
+    } | null;
+    throw new FieldApiError(
+      errorBody?.message ?? 'Request failed.',
+      response.status,
+      typeof errorBody?.code === 'string' ? errorBody.code : undefined
+    );
   }
 
   return (await response.json()) as TResponse;

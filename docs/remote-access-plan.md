@@ -66,8 +66,11 @@ hostname — means the login page is internet-reachable. Before day-1 sale:
    so sold installs are not forced through an unplanned rotation. Seeded-dev
    convenience logins must never exist on a sold install — already true via
    first-owner setup and production seed-bootstrap refusal.
-3. Session hardening review (expiry, revocation already exist in Employees
-   surface; confirm fit for internet exposure).
+3. Session hardening. Closed 2026-06-19: sessions now have backend-enforced
+   absolute expiry computed from `issued_at` (12 hours for office-web, 30 days
+   for field-mobile by default). Expired field sessions force re-login without
+   wiping queued offline work; revoked/inactive devices still use the destructive
+   device-cutoff path.
 4. Optional hardening to evaluate, not promise: tunnel-level access policy
    (e.g., Cloudflare Access in front of the hostname) as a second wall.
 5. Field-mobile base URL handling: tablets need the remote hostname when off

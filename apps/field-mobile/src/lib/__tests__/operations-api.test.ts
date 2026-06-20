@@ -3,7 +3,8 @@ import {
   createFieldMediaUploadIntent,
   FieldApiError,
   isFieldApiError,
-  isFieldSessionAccessLostError
+  isFieldSessionAccessLostError,
+  isFieldSessionExpiredError
 } from '../operations-api';
 
 describe('operations API error handling', () => {
@@ -17,7 +18,10 @@ describe('operations API error handling', () => {
       vi.fn().mockResolvedValue({
         ok: false,
         status: 413,
-        json: async () => ({ message: 'Media exceeds the configured maximum of 50000000 bytes.' })
+        json: async () => ({
+          message: 'Media exceeds the configured maximum of 50000000 bytes.',
+          code: 'mediaTooLarge'
+        })
       })
     );
 
@@ -42,7 +46,8 @@ describe('operations API error handling', () => {
     expect(isFieldApiError(capturedError)).toBe(true);
     expect(capturedError).toMatchObject({
       status: 413,
-      message: 'Media exceeds the configured maximum of 50000000 bytes.'
+      message: 'Media exceeds the configured maximum of 50000000 bytes.',
+      code: 'mediaTooLarge'
     });
   });
 
@@ -50,9 +55,20 @@ describe('operations API error handling', () => {
     expect(isFieldSessionAccessLostError(new FieldApiError('Session not found.', 401))).toBe(true);
     expect(
       isFieldSessionAccessLostError(
+        new FieldApiError('Session expired. Please sign in again.', 401, 'sessionExpired')
+      )
+    ).toBe(false);
+    expect(
+      isFieldSessionExpiredError(
+        new FieldApiError('Session expired. Please sign in again.', 401, 'sessionExpired')
+      )
+    ).toBe(true);
+    expect(
+      isFieldSessionAccessLostError(
         new FieldApiError('You no longer have permission to perform this action.', 403)
       )
     ).toBe(true);
+    expect(isFieldSessionExpiredError(new FieldApiError('Session not found.', 401))).toBe(false);
     expect(isFieldSessionAccessLostError(new FieldApiError('Permission denied.', 403))).toBe(false);
     expect(isFieldSessionAccessLostError(new FieldApiError('Server unavailable.', 500))).toBe(
       false

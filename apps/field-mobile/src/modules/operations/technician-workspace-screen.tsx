@@ -14,7 +14,8 @@ import { createBellFieldTranslator, type BellFieldLocale } from '@bellfield/i18n
 import {
   getAssignedFieldWork,
   getFieldTruckStock,
-  isFieldSessionAccessLostError
+  isFieldSessionAccessLostError,
+  isFieldSessionExpiredError
 } from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import {
@@ -60,6 +61,8 @@ import {
   type FieldWorkspaceTab
 } from './field-workspace-shell';
 import { fieldWorkspaceStyles as styles } from './field-workspace-styles';
+
+const sessionExpiredFallbackMessage = 'Session expired. Please sign in again.';
 
 type Props = {
   apiBaseUrl: string;
@@ -186,6 +189,14 @@ export function TechnicianWorkspaceScreen({
     [onSessionAccessLost, t]
   );
 
+  const returnToSignInForSessionExpiry = useCallback(
+    async (serverMessage: string) => {
+      setErrorMessage(serverMessage);
+      onSessionAccessLost(serverMessage);
+    },
+    [onSessionAccessLost]
+  );
+
   useEffect(() => {
     async function initializeWorkspace() {
       setIsInitializing(true);
@@ -222,6 +233,13 @@ export function TechnicianWorkspaceScreen({
         setSyncMetadata(nextSyncMetadata);
         await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
       } catch (error) {
+        if (isFieldSessionExpiredError(error)) {
+          await returnToSignInForSessionExpiry(
+            error instanceof Error ? error.message : sessionExpiredFallbackMessage
+          );
+          return;
+        }
+
         if (isFieldSessionAccessLostError(error)) {
           await clearLocalStateForSessionAccessLoss(
             error instanceof Error ? error.message : t('fieldWorkspace.deviceAccessEnded')
@@ -238,7 +256,13 @@ export function TechnicianWorkspaceScreen({
     }
 
     void initializeWorkspace();
-  }, [apiBaseUrl, clearLocalStateForSessionAccessLoss, sessionToken, t]);
+  }, [
+    apiBaseUrl,
+    clearLocalStateForSessionAccessLoss,
+    returnToSignInForSessionExpiry,
+    sessionToken,
+    t
+  ]);
 
   async function refreshAssignedWork(showSpinner = true, metadataOverride?: SyncMetadata) {
     if (showSpinner) {
@@ -265,6 +289,13 @@ export function TechnicianWorkspaceScreen({
       setSyncMetadata(nextSyncMetadata);
       await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
     } catch (error) {
+      if (isFieldSessionExpiredError(error)) {
+        await returnToSignInForSessionExpiry(
+          error instanceof Error ? error.message : sessionExpiredFallbackMessage
+        );
+        return;
+      }
+
       if (isFieldSessionAccessLostError(error)) {
         await clearLocalStateForSessionAccessLoss(
           error instanceof Error ? error.message : t('fieldWorkspace.deviceAccessEnded')
@@ -329,6 +360,7 @@ export function TechnicianWorkspaceScreen({
         setSyncMetadata,
         setPendingOperations,
         setErrorMessage,
+        onSessionExpired: returnToSignInForSessionExpiry,
         onSessionAccessLost: clearLocalStateForSessionAccessLoss
       },
       options

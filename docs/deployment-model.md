@@ -230,6 +230,8 @@ Runtime configuration:
 - `BOOTSTRAP_SEED_DATA` - explicit development-only seed toggle; production startup refuses `true`
 - `BELLFIELD_API_PORT` - production/server-config API port override; falls back to `PORT`
 - `BELLFIELD_OFFICE_ORIGINS` - comma-separated office-web origins allowed to call the API in production
+- `BELLFIELD_OFFICE_SESSION_TTL_HOURS` - optional office-web absolute session expiry, default 12 hours
+- `BELLFIELD_FIELD_SESSION_TTL_DAYS` - optional field-mobile absolute session expiry, default 30 days
 - `BELLFIELD_MEDIA_ROOT` - absolute path where uploaded media blobs are stored
 - `BELLFIELD_MEDIA_TOKEN_SECRET` - long random secret used to sign upload/download tokens
 - `BELLFIELD_MEDIA_MAX_BYTES` - optional raw upload size limit, default 50 MB

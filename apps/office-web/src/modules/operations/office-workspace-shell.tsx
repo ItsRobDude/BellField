@@ -24,7 +24,11 @@ import {
   type JobsQueueKey,
   type JobsQueueResponse
 } from '@/lib/operations-api';
-import { getCurrentOfficeSession, type EmployeeSummary } from '@/lib/identity-api';
+import {
+  getCurrentOfficeSession,
+  isOfficeSessionExpiredError,
+  type EmployeeSummary
+} from '@/lib/identity-api';
 import { getDateInputValue } from './dispatch-date-picker';
 import {
   createEmptyAppointmentDraft,
@@ -58,13 +62,15 @@ type Props = {
   initialEmployee: EmployeeSummary;
   sessionToken: string;
   onSignOut: () => void;
+  onSessionExpired?: (message: string) => void;
 };
 
 export function OfficeWorkspaceShell({
   apiBaseUrl,
   initialEmployee,
   sessionToken,
-  onSignOut
+  onSignOut,
+  onSessionExpired
 }: Props) {
   const [employee, setEmployee] = useState(initialEmployee);
   const [jobsQueue, setJobsQueue] = useState<JobsQueueResponse | null>(null);
@@ -218,6 +224,11 @@ export function OfficeWorkspaceShell({
       setEmployee(currentSession.employee);
       return true;
     } catch (error) {
+      if (isOfficeSessionExpiredError(error)) {
+        onSessionExpired?.(error.message);
+        return false;
+      }
+
       setErrorMessage(
         error instanceof Error ? error.message : 'Unable to refresh the office workspace.'
       );
@@ -226,7 +237,7 @@ export function OfficeWorkspaceShell({
       refreshInFlightRef.current = false;
       setIsRefreshing(false);
     }
-  }, [apiBaseUrl, sessionToken]);
+  }, [apiBaseUrl, onSessionExpired, sessionToken]);
 
   const refreshCoreWorkspace = useCallback(async (): Promise<boolean> => {
     const results = await Promise.all([

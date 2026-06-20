@@ -380,6 +380,10 @@ export class IdentityAccessRepository {
     await this.databaseService.query('delete from sessions where token = $1', [sessionToken]);
   }
 
+  async pruneSessionsIssuedBefore(cutoff: string): Promise<void> {
+    await this.databaseService.query('delete from sessions where issued_at < $1', [cutoff]);
+  }
+
   /** Non-secret session summaries for an employee (newest first) — never includes the bearer token. */
   async listSessionsForEmployee(employeeId: string): Promise<EmployeeSessionSummary[]> {
     const result = await this.databaseService.query<SessionSummaryRow>(

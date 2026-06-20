@@ -3,6 +3,8 @@ import {
   createFirstOwner,
   createOfficeEmployee,
   getOfficeSetupStatus,
+  isOfficeSessionExpiredError,
+  OfficeIdentityApiError,
   resetOfficeEmployeePassword,
   revokeOfficeEmployeeSession,
   updateOfficeEmployee
@@ -135,10 +137,38 @@ describe('identity-api employee admin helpers', () => {
   it('throws the server-provided message on a non-ok response', async () => {
     fetchMock.mockResolvedValue({
       ok: false,
-      json: async () => ({ message: 'Only an owner can do that.' })
+      status: 401,
+      json: async () => ({
+        message: 'Session expired. Please sign in again.',
+        code: 'sessionExpired'
+      })
     });
-    await expect(
-      updateOfficeEmployee({ employeeId: 'e1', sessionToken: 'tok', apiBaseUrl: 'http://api.test' })
-    ).rejects.toThrow('Only an owner can do that.');
+    let capturedError: unknown;
+
+    try {
+      await updateOfficeEmployee({
+        employeeId: 'e1',
+        sessionToken: 'tok',
+        apiBaseUrl: 'http://api.test'
+      });
+    } catch (error) {
+      capturedError = error;
+    }
+
+    expect(capturedError).toBeInstanceOf(OfficeIdentityApiError);
+    expect(capturedError).toMatchObject({
+      message: 'Session expired. Please sign in again.',
+      status: 401,
+      code: 'sessionExpired'
+    });
+    expect(isOfficeSessionExpiredError(capturedError)).toBe(true);
+  });
+
+  it('does not classify a non-401 response as session expiry just because it has a code', () => {
+    expect(
+      isOfficeSessionExpiredError(
+        new OfficeIdentityApiError('Only an owner can do that.', 403, 'sessionExpired')
+      )
+    ).toBe(false);
   });
 });
