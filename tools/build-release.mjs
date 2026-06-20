@@ -510,6 +510,7 @@ rmSync(releaseRoot, { force: true, recursive: true });
 mkdirSync(releaseRoot, { recursive: true });
 
 run('pnpm', ['--filter', '@bellfield/contracts', 'build']);
+run('pnpm', ['--filter', '@bellfield/i18n', 'build']);
 run('pnpm', ['--filter', '@bellfield/api', 'build']);
 run('pnpm', ['--filter', '@bellfield/worker', 'build']);
 run('pnpm', ['--filter', '@bellfield/office-web', 'build']);
