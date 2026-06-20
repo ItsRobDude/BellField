@@ -144,7 +144,16 @@ The customer should not need to know the repo's package manager or development c
 
 Current Phase 1 implementation note: the repo now contains an assisted install runbook and release/service tooling in [install-runbook.md](./install-runbook.md). That is a repo-side install path, not yet a passed clean-machine self-serve installer gate.
 
-A same-machine compiled-release smoke passed on 2026-06-11 and is recorded in [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md). Because all available Windows machines have some existing development tooling, the clean-machine gate remains a later confidence gate rather than a blocker for continued product work.
+A same-machine compiled-release smoke passed on 2026-06-11 and is recorded in
+[phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md).
+The first clean Windows gate-day attempt ran on 2026-06-20 and failed before
+migrations because the release artifact omitted PostgreSQL runtime support
+files (`lib`/`share`) required by the bundled PostgreSQL tools; see
+[gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md).
+The release packaging gap is fixed repo-side, including app-local VC++ runtime
+DLLs for the bundled Windows PostgreSQL tools, and the release-build smoke now
+functionally runs packaged PostgreSQL. The clean-machine gate remains open
+until the refreshed artifact passes the runbook end to end.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

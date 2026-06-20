@@ -9,16 +9,17 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { readArgs } from './install/install-utils.mjs';
+import { getBoolean, readArgs } from './install/install-utils.mjs';
 import { writeSignedReleaseArtifact } from './update/release-artifact.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
 const args = readArgs();
 let cachedPnpmExecutable;
+const requiredPostgresVcRuntimeFiles = ['vcruntime140.dll', 'vcruntime140_1.dll', 'msvcp140.dll'];
 
 function expectedPnpmVersion() {
   const packageJson = JSON.parse(readFileSync(join(repoRoot, 'package.json'), 'utf8'));
@@ -191,41 +192,149 @@ function copyNodeRuntime() {
 }
 
 function copyOptionalGateDayDependencies() {
+  const postgresRoot = args['postgres-root'] ?? process.env.BELLFIELD_RELEASE_POSTGRES_ROOT;
   const postgresBin = args['postgres-bin'] ?? process.env.BELLFIELD_RELEASE_POSTGRES_BIN;
+  const vcRedistRoot = args['vc-redist-root'] ?? process.env.BELLFIELD_RELEASE_VC_REDIST_ROOT;
   const winSwExe = args['winsw-exe'] ?? process.env.BELLFIELD_RELEASE_WINSW_EXE;
+  let copiedPostgres = false;
 
-  if (postgresBin) {
-    copyPostgresBin(String(postgresBin));
+  if (postgresRoot || postgresBin) {
+    copyPostgresRuntime({ postgresRoot, postgresBin });
+    copiedPostgres = true;
+  }
+  if (copiedPostgres && process.platform === 'win32') {
+    copyPostgresVcRuntime(vcRedistRoot ? String(vcRedistRoot) : null);
   }
   if (winSwExe) {
     copyWinSwExe(String(winSwExe));
   }
 }
 
-function copyPostgresBin(postgresBin) {
-  const source = resolve(postgresBin);
-  if (!existsSync(source) || !statSync(source).isDirectory()) {
-    throw new Error(`PostgreSQL bin directory was not found: ${source}`);
+function copyPostgresRuntime(input) {
+  const root = resolvePostgresRoot(input);
+  if (!existsSync(root) || !statSync(root).isDirectory()) {
+    throw new Error(`PostgreSQL root directory was not found: ${root}`);
   }
 
-  const requiredTools = [
-    'postgres.exe',
-    'pg_ctl.exe',
-    'initdb.exe',
-    'psql.exe',
-    'pg_dump.exe',
-    'pg_restore.exe',
-    'createdb.exe',
-    'dropdb.exe'
-  ];
-  for (const tool of requiredTools) {
-    const toolPath = join(source, tool);
-    if (!existsSync(toolPath) || !statSync(toolPath).isFile()) {
-      throw new Error(`PostgreSQL bin directory is missing required tool: ${toolPath}`);
+  const bin = join(root, 'bin');
+  const lib = join(root, 'lib');
+  const share = join(root, 'share');
+  assertDirectory(bin, 'PostgreSQL bin directory');
+  assertDirectory(lib, 'PostgreSQL lib directory');
+  assertDirectory(share, 'PostgreSQL share directory');
+  assertPostgresTools(bin);
+  assertFile(join(share, 'postgres.bki'), 'PostgreSQL share runtime file');
+
+  copyRequired(bin, join(releaseRoot, 'postgres', 'bin'));
+  copyRequired(lib, join(releaseRoot, 'postgres', 'lib'));
+  copyRequired(share, join(releaseRoot, 'postgres', 'share'));
+}
+
+function resolvePostgresRoot(input) {
+  if (input.postgresRoot) {
+    return resolve(String(input.postgresRoot));
+  }
+
+  const candidate = resolve(String(input.postgresBin));
+  if (basename(candidate).toLowerCase() === 'bin') {
+    return dirname(candidate);
+  }
+
+  // Be tolerant when an operator accidentally passes the root to the legacy
+  // --postgres-bin flag; the validation below still enforces the real shape.
+  if (existsSync(join(candidate, 'bin'))) {
+    return candidate;
+  }
+
+  return dirname(candidate);
+}
+
+function assertDirectory(path, label) {
+  if (!existsSync(path) || !statSync(path).isDirectory()) {
+    throw new Error(`${label} was not found: ${path}`);
+  }
+}
+
+function assertFile(path, label) {
+  if (!existsSync(path) || !statSync(path).isFile()) {
+    throw new Error(`${label} was not found: ${path}`);
+  }
+}
+
+function assertPostgresTools(postgresBin) {
+  for (const tool of [
+    'postgres',
+    'pg_ctl',
+    'initdb',
+    'psql',
+    'pg_dump',
+    'pg_restore',
+    'createdb',
+    'dropdb'
+  ]) {
+    assertFile(
+      join(postgresBin, process.platform === 'win32' ? `${tool}.exe` : tool),
+      `PostgreSQL required tool ${tool}`
+    );
+  }
+}
+
+function copyPostgresVcRuntime(vcRedistRoot) {
+  const postgresBinTarget = join(releaseRoot, 'postgres', 'bin');
+  if (hasRequiredPostgresVcRuntime(postgresBinTarget)) {
+    return;
+  }
+  if (!vcRedistRoot) {
+    throw new Error(
+      [
+        'PostgreSQL bin is missing app-local VC++ runtime DLLs.',
+        'Pass --vc-redist-root=<Visual Studio redist x64 folder> or set BELLFIELD_RELEASE_VC_REDIST_ROOT.'
+      ].join(' ')
+    );
+  }
+
+  const crtDirectory = resolveVcRedistCrtDirectory(vcRedistRoot);
+  for (const entry of readdirSync(crtDirectory)) {
+    if (entry.toLowerCase().endsWith('.dll')) {
+      copyFileRequired(join(crtDirectory, entry), join(postgresBinTarget, entry));
+    }
+  }
+  assertRequiredPostgresVcRuntime(postgresBinTarget, 'PostgreSQL app-local VC++ runtime');
+}
+
+function resolveVcRedistCrtDirectory(vcRedistRoot) {
+  const root = resolve(vcRedistRoot);
+  assertDirectory(root, 'Visual C++ redistributable root directory');
+  if (hasRequiredPostgresVcRuntime(root)) {
+    return root;
+  }
+
+  for (const entry of readdirSync(root, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !/^Microsoft\.VC\d+\.CRT$/i.test(entry.name)) {
+      continue;
+    }
+    const candidate = join(root, entry.name);
+    if (hasRequiredPostgresVcRuntime(candidate)) {
+      return candidate;
     }
   }
 
-  copyRequired(source, join(releaseRoot, 'postgres', 'bin'));
+  throw new Error(
+    `Visual C++ redistributable root does not contain the required CRT DLLs: ${root}`
+  );
+}
+
+function hasRequiredPostgresVcRuntime(directory) {
+  return requiredPostgresVcRuntimeFiles.every((file) => {
+    const path = join(directory, file);
+    return existsSync(path) && statSync(path).isFile();
+  });
+}
+
+function assertRequiredPostgresVcRuntime(directory, label) {
+  for (const file of requiredPostgresVcRuntimeFiles) {
+    assertFile(join(directory, file), `${label} file ${file}`);
+  }
 }
 
 function copyWinSwExe(winSwExe) {
@@ -273,6 +382,32 @@ function assertIsoDate(value, name) {
   }
   return checked;
 }
+
+function assertCleanSourceTree() {
+  const allowDirty = getBoolean(
+    args['allow-dirty'] ?? process.env.BELLFIELD_RELEASE_ALLOW_DIRTY,
+    false
+  );
+  if (allowDirty) {
+    return;
+  }
+
+  const status = runCapture('git', ['status', '--porcelain=v1', '--untracked-files=all']);
+  if (status === null) {
+    throw new Error('Refusing to build a release because git status could not be read.');
+  }
+  if (status.trim()) {
+    throw new Error(
+      [
+        'Refusing to build a signed release from a dirty working tree.',
+        'Commit or stash changes so bellfield-build-manifest.json points at reproducible source.',
+        'For diagnostic-only builds, pass --allow-dirty=true.'
+      ].join(' ')
+    );
+  }
+}
+
+assertCleanSourceTree();
 
 rmSync(releaseRoot, { force: true, recursive: true });
 mkdirSync(releaseRoot, { recursive: true });

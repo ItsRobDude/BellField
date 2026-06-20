@@ -60,8 +60,14 @@ Built, tested, and (where marked) deployed. Each line names its evidence.
 
 ## 2. Validation gates (gate day)
 
-Local same-machine proof exists for everything above; the clean-machine
-proofs are deliberately batched. Owned by
+Local same-machine proof exists for everything above. The first clean-machine
+attempt ran on 2026-06-20 and failed before migrations because the signed
+artifacts packaged PostgreSQL `bin` but not the `lib`/`share` runtime files
+required by the bundled tools; see
+[gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md).
+The release packaging fix now includes the full PostgreSQL runtime, app-local
+VC++ runtime DLLs, and a release-build smoke that functionally runs packaged
+PostgreSQL, but the remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
 - [ ] clean-machine stranger install from the runbook (service/reboot/ACL

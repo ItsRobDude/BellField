@@ -269,6 +269,23 @@ Read when: deciding whether Phase 1 repo-side install foundations are ready to b
 
 Does not own: the install recipe (`install-runbook.md`) or the broader install posture (`self-hosted-installation-strategy.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md)
+
+Audience: contributors checking what the first clean Windows gate-day attempt
+actually proved and where it failed.
+
+Purpose: dated evidence for the first fresh Windows install smoke:
+scratch-machine baseline, artifact/license set, PostgreSQL provisioning failure,
+blocked downstream gates, relay provisioning note, and the required
+release-packaging fix and rerun requirements.
+
+Read when: fixing release packaging, rerunning gate day, reviewing install
+sellability, or planning the relay activation-code provisioning path.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the relay token design
+(`relay-token-design.md`).
+
 ### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
 
 Audience: contributors working on licensing, distribution, updates, or commercial protection posture.

@@ -43,16 +43,21 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
   pnpm build:release `
     --version=<N> `
     --release-date=<YYYY-MM-DD> `
-    --postgres-bin=<path-to-PG16-x64-bin> `
+    --postgres-root=<path-to-PG16-x64-root> `
+    --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
   pnpm smoke:release-build -- --require-gate-day-deps=true
   ```
 
-- [ ] Confirm the release smoke passed with PostgreSQL 16 x64 binaries under
-      `release\postgres\bin` and the approved WinSW binary at
-      `release\tools\winsw\WinSW-x64.exe`. These files must be copied by
-      `build:release` before the signed update manifest is written; do not
-      add or replace release files after signing.
+- [ ] Confirm the release smoke passed with the complete PostgreSQL 16 x64
+      runtime under `release\postgres` (including
+      `release\postgres\lib` and `release\postgres\share\postgres.bki`) and
+      app-local VC++ runtime DLLs in `release\postgres\bin`, plus the approved
+      WinSW binary at `release\tools\winsw\WinSW-x64.exe`. The
+      smoke must functionally run packaged `initdb`, `pg_ctl`, and `psql`
+      against a temporary data directory, not only presence-check files. These
+      files must be copied by `build:release` before the signed update manifest
+      is written; do not add or replace release files after signing.
 - [ ] **Zip artifact A** as `bellfield-vN.zip`.
 - [ ] **Build artifact B — v(N+1):** same steps (PG16 + WinSW included), with
       a bumped `--version` and a `--release-date` the same day or later than
@@ -243,6 +248,9 @@ shop:
 
 - [ ] Write the evidence doc `docs/gate-day-<YYYY-MM-DD>.md` using the
       template below.
+- [ ] If the run failed before all gates, write a dated failed-run evidence doc
+      anyway. The first clean Windows attempt is recorded in
+      [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md).
 - [ ] Update [install-runbook.md](./install-runbook.md) §Current Boundary:
       move every proven item out of "Not yet validated" with the date.
 - [ ] Update sellable-product-execution-plan §Open validation debt: date the
