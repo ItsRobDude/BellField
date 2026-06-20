@@ -27,6 +27,7 @@ const evidence = {
 };
 const evidenceRunId = evidence.startedAt.replace(/[:.]/g, '-');
 const evidenceDir = join(repoRoot, 'artifacts', 'validation', evidenceRunId);
+const zipExtractionTimeoutMs = 900_000;
 
 let tempRoot;
 
@@ -118,8 +119,9 @@ function check(name, passed, details = {}) {
 
 function extractZip(zip, destination) {
   if (process.platform === 'win32') {
+    const shell = findWindowsPowerShell();
     runCommand(
-      'powershell.exe',
+      shell,
       [
         '-NoProfile',
         '-ExecutionPolicy',
@@ -133,12 +135,27 @@ function extractZip(zip, destination) {
           BELLFIELD_ZIP_PATH: zip,
           BELLFIELD_ZIP_DESTINATION: destination
         },
-        timeoutMs: 300_000
+        timeoutMs: zipExtractionTimeoutMs
       }
     );
     return;
   }
-  runCommand('unzip', ['-q', zip, '-d', destination], { timeoutMs: 300_000 });
+  runCommand('unzip', ['-q', zip, '-d', destination], { timeoutMs: zipExtractionTimeoutMs });
+}
+
+function findWindowsPowerShell() {
+  for (const candidate of ['pwsh.exe', 'powershell.exe']) {
+    const result = spawnSync(candidate, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion'], {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'ignore', 'ignore'],
+      timeout: 10_000
+    });
+    if (!result.error && result.status === 0) {
+      return candidate;
+    }
+  }
+  return 'powershell.exe';
 }
 
 function runReleaseBuildSmoke(releaseRoot, expectedSourceCommit) {
