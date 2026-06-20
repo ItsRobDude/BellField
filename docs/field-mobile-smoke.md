@@ -211,3 +211,15 @@ adb reverse --remove tcp:3001
   - the active field session was revoked through the admin API; the next tablet refresh returned to sign-in and displayed "Device access ended. BellField cleared local field data from this device."
 - Evidence (gitignored): `artifacts/validation/2026-06-08T17-40-49-960Z/field/`.
 - Not repeated in this run: media capture/pick and transient media retry. The prior 2026-06-05 media upload smoke remains the current real-device media proof; media transient retry remains the next hardening/smoke target.
+
+### 2026-06-19 — offline queue ownership — PASS
+
+- Base commit: `f0574fd` with the offline queue ownership patch in the working tree.
+- Device: Samsung Galaxy Tab S9 Ultra (SM-X910), Android 16, Expo Go 56.0.1, real hardware.
+- API: `http://127.0.0.1:3001`; Docker Postgres; `pnpm dev:field-smoke-data` prepared the today/tomorrow work window.
+- Result: **PASS** for same-employee preservation, different-employee isolation, and owner-scoped drain:
+  - Taylor Technician queued an appointment status change while the tablet could not reach the API; the app showed `1 change waiting to sync`, and Postgres did not change.
+  - after Expo Go force-stop and re-login as Taylor, the queue was still present and Sync Now drained it server-side.
+  - Taylor then queued another status change for the same appointment, switched to Dylan Dispatcher, and Dylan saw `Synced` / `No assigned jobs` with no inherited queue.
+  - Taylor returned and still saw the queued operation; Sync Now applied it and cleared the queue.
+- Evidence note: [field-mobile-offline-queue-ownership-smoke-2026-06-19.md](./field-mobile-offline-queue-ownership-smoke-2026-06-19.md).

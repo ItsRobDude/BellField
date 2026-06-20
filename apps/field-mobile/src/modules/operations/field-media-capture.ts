@@ -14,18 +14,22 @@ export type FieldMediaSource = 'camera' | 'library';
 
 export const fieldMediaMaxBytes = 50 * 1024 * 1024;
 
-export async function pickFieldMedia(source: FieldMediaSource): Promise<StagedFieldMedia | null> {
+export async function pickFieldMedia(
+  source: FieldMediaSource,
+  ownerEmployeeId: string
+): Promise<StagedFieldMedia | null> {
   const result = source === 'camera' ? await launchCameraPicker() : await launchLibraryPicker();
 
   if (result.canceled || !result.assets[0]) {
     return null;
   }
 
-  return stagePickedFieldMediaAsset(result.assets[0]);
+  return stagePickedFieldMediaAsset(result.assets[0], ownerEmployeeId);
 }
 
 export async function stagePickedFieldMediaAsset(
-  asset: PickedFieldMediaAsset
+  asset: PickedFieldMediaAsset,
+  ownerEmployeeId: string
 ): Promise<StagedFieldMedia> {
   const baseDirectory = FileSystem.documentDirectory;
 
@@ -40,10 +44,11 @@ export async function stagePickedFieldMediaAsset(
   const normalizedAsset = normalizePickedFieldMediaAsset(asset, localMediaId, capturedAt);
   const localUri = buildLocalMediaUri(
     baseDirectory,
+    ownerEmployeeId,
     localMediaId,
     normalizedAsset.originalFilename
   );
-  const mediaDirectory = `${baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`}bellfield-media/`;
+  const mediaDirectory = getStagedFieldMediaDirectory(baseDirectory, ownerEmployeeId);
 
   try {
     await FileSystem.makeDirectoryAsync(mediaDirectory, { intermediates: true });
@@ -87,6 +92,11 @@ export async function clearStagedFieldMediaDirectory(): Promise<void> {
 
   const mediaDirectory = `${baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`}bellfield-media/`;
   await FileSystem.deleteAsync(mediaDirectory, { idempotent: true });
+}
+
+function getStagedFieldMediaDirectory(baseDirectory: string, ownerEmployeeId: string): string {
+  const localUri = buildLocalMediaUri(baseDirectory, ownerEmployeeId, 'placeholder', 'file.bin');
+  return localUri.slice(0, localUri.lastIndexOf('/') + 1);
 }
 
 function ensureFieldMediaSizeIsAllowed(byteSize: number | undefined): void {

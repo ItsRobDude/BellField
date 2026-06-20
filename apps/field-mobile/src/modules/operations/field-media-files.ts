@@ -1,5 +1,5 @@
 import type { MediaAttachmentKind } from '@/lib/operations-api';
-import type { PendingOperation } from './field-sync-types';
+import type { OwnedPendingOperation } from './field-sync-types';
 
 const base64Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
 
@@ -44,26 +44,29 @@ export function normalizePickedFieldMediaAsset(
 
 export function buildLocalMediaUri(
   baseDirectory: string,
+  ownerEmployeeId: string,
   localMediaId: string,
   originalFilename: string
 ): string {
   const normalizedBase = baseDirectory.endsWith('/') ? baseDirectory : `${baseDirectory}/`;
   const extension = getFileExtension(originalFilename);
-  return `${normalizedBase}bellfield-media/${localMediaId}${extension}`;
+  return `${normalizedBase}bellfield-media/${sanitizeMediaPathSegment(ownerEmployeeId)}/${localMediaId}${extension}`;
 }
 
 export function buildMediaUploadOperation(input: {
+  ownerEmployeeId: string;
   jobId: string;
   appointmentId?: string;
   stagedMedia: StagedFieldMedia;
   caption?: string;
   baseUpdatedAt?: string;
   occurredAt?: string;
-}): PendingOperation {
+}): OwnedPendingOperation {
   const occurredAt = input.occurredAt ?? new Date().toISOString();
 
   return {
     id: `${input.stagedMedia.localMediaId}-upload`,
+    ownerEmployeeId: input.ownerEmployeeId,
     kind: 'mediaUpload',
     jobId: input.jobId,
     appointmentId: input.appointmentId,
@@ -168,6 +171,11 @@ function sanitizeOriginalFilename(value: string): string {
     .trim();
 
   return safeName || 'field-media.jpg';
+}
+
+function sanitizeMediaPathSegment(value: string): string {
+  const safeSegment = value.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '');
+  return safeSegment || 'unknown-employee';
 }
 
 function getFileExtension(filename: string): string {

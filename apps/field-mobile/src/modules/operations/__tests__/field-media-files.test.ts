@@ -37,8 +37,8 @@ describe('field media file helpers', () => {
   });
 
   it('builds durable app-owned media URIs under the BellField media folder', () => {
-    expect(buildLocalMediaUri('file:///app/Documents', 'media-1', 'IMG_0001.JPG')).toBe(
-      'file:///app/Documents/bellfield-media/media-1.jpg'
+    expect(buildLocalMediaUri('file:///app/Documents', 'tech-1', 'media-1', 'IMG_0001.JPG')).toBe(
+      'file:///app/Documents/bellfield-media/tech-1/media-1.jpg'
     );
   });
 
@@ -50,7 +50,7 @@ describe('field media file helpers', () => {
   it('builds a media upload pending operation with sha and local URI preserved', () => {
     const stagedMedia: StagedFieldMedia = {
       localMediaId: 'media-1',
-      localUri: 'file:///app/Documents/bellfield-media/media-1.jpg',
+      localUri: 'file:///app/Documents/bellfield-media/tech-1/media-1.jpg',
       originalFilename: 'media-1.jpg',
       mediaKind: 'image',
       contentType: 'image/jpeg',
@@ -61,6 +61,7 @@ describe('field media file helpers', () => {
 
     expect(
       buildMediaUploadOperation({
+        ownerEmployeeId: 'tech-1',
         jobId: 'job-1',
         appointmentId: 'appointment-1',
         stagedMedia,
@@ -70,6 +71,7 @@ describe('field media file helpers', () => {
       })
     ).toMatchObject({
       id: 'media-1-upload',
+      ownerEmployeeId: 'tech-1',
       kind: 'mediaUpload',
       jobId: 'job-1',
       appointmentId: 'appointment-1',

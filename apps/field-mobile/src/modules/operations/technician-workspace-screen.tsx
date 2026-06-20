@@ -19,11 +19,11 @@ import {
 } from '@/lib/operations-api';
 import type { EmployeeSummary } from '@/lib/identity-api';
 import {
-  initializeFieldSyncStore,
   loadAssignedWorkSnapshot,
   loadPendingOperations,
   loadSyncMetadata,
   loadTruckStockSnapshot,
+  prepareFieldSyncStoreForEmployee,
   saveAssignedWorkSnapshot,
   saveSyncMetadata,
   saveTruckStockSnapshot
@@ -87,12 +87,15 @@ const defaultSyncMetadata: SyncMetadata = {
  * never surfaces an error or blocks assigned-work loading.
  */
 async function syncTruckStock(
-  input: { sessionToken: string; apiBaseUrl: string },
+  input: { sessionToken: string; apiBaseUrl: string; ownerEmployeeId: string },
   apply: (snapshot: TruckStockSnapshot) => void
 ): Promise<void> {
   try {
-    const snapshot = await getFieldTruckStock(input);
-    await saveTruckStockSnapshot(snapshot);
+    const snapshot = await getFieldTruckStock({
+      sessionToken: input.sessionToken,
+      apiBaseUrl: input.apiBaseUrl
+    });
+    await saveTruckStockSnapshot(snapshot, input.ownerEmployeeId);
     apply(snapshot);
   } catch {
     // Swallowed by design — see the doc comment above.
@@ -203,13 +206,13 @@ export function TechnicianWorkspaceScreen({
       setErrorMessage(null);
 
       try {
-        await initializeFieldSyncStore();
+        await prepareFieldSyncStoreForEmployee(employee.id);
         const [persistedSnapshot, persistedOperations, persistedMetadata, persistedTruckStock] =
           await Promise.all([
-            loadAssignedWorkSnapshot(),
-            loadPendingOperations(),
-            loadSyncMetadata(),
-            loadTruckStockSnapshot()
+            loadAssignedWorkSnapshot(employee.id),
+            loadPendingOperations(employee.id),
+            loadSyncMetadata(employee.id),
+            loadTruckStockSnapshot(employee.id)
           ]);
 
         setServerSnapshot(persistedSnapshot);
@@ -224,14 +227,17 @@ export function TechnicianWorkspaceScreen({
           fetchedAt
         );
 
-        await saveAssignedWorkSnapshot(nextAssignedWork);
-        await saveSyncMetadata(nextSyncMetadata);
+        await saveAssignedWorkSnapshot(nextAssignedWork, employee.id);
+        await saveSyncMetadata(nextSyncMetadata, employee.id);
         setOfficeChangeMessages(
           summarizeOfficeAppointmentChanges(persistedSnapshot, nextAssignedWork, t)
         );
         setServerSnapshot(nextAssignedWork);
         setSyncMetadata(nextSyncMetadata);
-        await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
+        await syncTruckStock(
+          { sessionToken, apiBaseUrl, ownerEmployeeId: employee.id },
+          setTruckStock
+        );
       } catch (error) {
         if (isFieldSessionExpiredError(error)) {
           await returnToSignInForSessionExpiry(
@@ -259,6 +265,7 @@ export function TechnicianWorkspaceScreen({
   }, [
     apiBaseUrl,
     clearLocalStateForSessionAccessLoss,
+    employee.id,
     returnToSignInForSessionExpiry,
     sessionToken,
     t
@@ -280,14 +287,17 @@ export function TechnicianWorkspaceScreen({
         fetchedAt
       );
 
-      await saveAssignedWorkSnapshot(nextAssignedWork);
-      await saveSyncMetadata(nextSyncMetadata);
+      await saveAssignedWorkSnapshot(nextAssignedWork, employee.id);
+      await saveSyncMetadata(nextSyncMetadata, employee.id);
       setOfficeChangeMessages(
         summarizeOfficeAppointmentChanges(serverSnapshot, nextAssignedWork, t)
       );
       setServerSnapshot(nextAssignedWork);
       setSyncMetadata(nextSyncMetadata);
-      await syncTruckStock({ sessionToken, apiBaseUrl }, setTruckStock);
+      await syncTruckStock(
+        { sessionToken, apiBaseUrl, ownerEmployeeId: employee.id },
+        setTruckStock
+      );
     } catch (error) {
       if (isFieldSessionExpiredError(error)) {
         await returnToSignInForSessionExpiry(
@@ -329,6 +339,7 @@ export function TechnicianWorkspaceScreen({
   } = createFieldOperationHandlers({
     sessionToken,
     apiBaseUrl,
+    ownerEmployeeId: employee.id,
     serverSnapshot,
     setPendingOperations,
     setErrorMessage,
@@ -354,6 +365,7 @@ export function TechnicianWorkspaceScreen({
       {
         sessionToken,
         apiBaseUrl,
+        ownerEmployeeId: employee.id,
         syncMetadata,
         pendingOperations,
         setServerSnapshot,

@@ -12,7 +12,11 @@ import {
   removePendingOperation,
   updatePendingOperationState
 } from './field-sync-store';
-import type { AssignedWorkSnapshot, PendingOperation } from './field-sync-types';
+import type {
+  AssignedWorkSnapshot,
+  OwnedPendingOperation,
+  PendingOperation
+} from './field-sync-types';
 import {
   findAppointmentBaseUpdatedAt,
   findEquipmentBaseUpdatedAt,
@@ -40,6 +44,7 @@ import {
 export type FieldOperationHandlerDeps = {
   sessionToken: string;
   apiBaseUrl: string;
+  ownerEmployeeId: string;
   serverSnapshot: AssignedWorkSnapshot | null;
   setPendingOperations: Dispatch<SetStateAction<PendingOperation[]>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
@@ -50,6 +55,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
   const {
     sessionToken,
     apiBaseUrl,
+    ownerEmployeeId,
     serverSnapshot,
     setPendingOperations,
     setErrorMessage,
@@ -63,8 +69,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
       return false;
     }
 
-    const operation: PendingOperation = {
+    const operation: OwnedPendingOperation = {
       id: `${jobId}-note-${Date.now()}`,
+      ownerEmployeeId,
       kind: 'jobNote',
       jobId,
       note,
@@ -92,7 +99,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
     setErrorMessage(null);
 
     try {
-      const stagedMedia = await pickFieldMedia(source);
+      const stagedMedia = await pickFieldMedia(source, ownerEmployeeId);
 
       if (!stagedMedia) {
         return false;
@@ -100,6 +107,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
 
       const caption = captionDraft?.trim();
       const operation = buildMediaUploadOperation({
+        ownerEmployeeId,
         jobId: job.id,
         appointmentId,
         stagedMedia,
@@ -127,10 +135,11 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
       return false;
     }
 
-    const operation: PendingOperation = {
+    const operation: OwnedPendingOperation = {
       // Collision-proof idempotency key: this id is sent as the server clientOperationId, so a
       // random UUID avoids two same-millisecond creates on one job colliding (unlike Date.now()).
       id: `${job.id}-register-${Crypto.randomUUID()}`,
+      ownerEmployeeId,
       kind: 'registerEntryCreate',
       jobId: job.id,
       appointmentId: draft.appointmentId || undefined,
@@ -174,8 +183,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
       return false;
     }
 
-    const operation: PendingOperation = {
+    const operation: OwnedPendingOperation = {
       id: `${entry.id}-register-edit-${Date.now()}`,
+      ownerEmployeeId,
       kind: 'registerEntryEdit',
       jobId: entry.jobId,
       registerEntryId: entry.id,
@@ -199,6 +209,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
         ...current.filter(
           (pendingOperation) =>
             !(
+              pendingOperation.ownerEmployeeId === ownerEmployeeId &&
               (pendingOperation.kind === 'registerEntryEdit' ||
                 pendingOperation.kind === 'registerEntryVoid') &&
               pendingOperation.registerEntryId === entry.id
@@ -237,8 +248,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
   async function queueRegisterEntryVoid(
     entry: NonNullable<FieldAssignedWorkResponse['jobs'][number]['registerEntries']>[number]
   ) {
-    const operation: PendingOperation = {
+    const operation: OwnedPendingOperation = {
       id: `${entry.id}-register-void-${Date.now()}`,
+      ownerEmployeeId,
       kind: 'registerEntryVoid',
       jobId: entry.jobId,
       registerEntryId: entry.id,
@@ -253,6 +265,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
         ...current.filter(
           (pendingOperation) =>
             !(
+              pendingOperation.ownerEmployeeId === ownerEmployeeId &&
               (pendingOperation.kind === 'registerEntryEdit' ||
                 pendingOperation.kind === 'registerEntryVoid') &&
               pendingOperation.registerEntryId === entry.id
@@ -272,8 +285,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
     status: AppointmentStatus
   ): Promise<boolean> {
     const baseUpdatedAt = findAppointmentBaseUpdatedAt(serverSnapshot, appointmentId);
-    const nextOperation: PendingOperation = {
+    const nextOperation: OwnedPendingOperation = {
       id: `${appointmentId}-status-${Date.now()}`,
+      ownerEmployeeId,
       kind: 'appointmentStatus',
       appointmentId,
       status,
@@ -288,6 +302,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
         ...current.filter(
           (operation) =>
             !(
+              operation.ownerEmployeeId === ownerEmployeeId &&
               (operation.kind === 'appointmentStatus' ||
                 operation.kind === 'appointmentFinishReview') &&
               operation.appointmentId === appointmentId
@@ -311,8 +326,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
       serverSnapshot,
       currentFinishReview.appointmentId
     );
-    const nextOperation: PendingOperation = {
+    const nextOperation: OwnedPendingOperation = {
       id: `${currentFinishReview.appointmentId}-finish-${Date.now()}`,
+      ownerEmployeeId,
       kind: 'appointmentFinishReview',
       appointmentId: currentFinishReview.appointmentId,
       status: 'finished',
@@ -331,6 +347,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
         ...current.filter(
           (operation) =>
             !(
+              operation.ownerEmployeeId === ownerEmployeeId &&
               (operation.kind === 'appointmentStatus' ||
                 operation.kind === 'appointmentFinishReview') &&
               operation.appointmentId === currentFinishReview.appointmentId
@@ -351,8 +368,9 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
     record: FieldAssignedWorkResponse['equipment'][number],
     draft: EquipmentDraft
   ): Promise<boolean> {
-    const nextOperation: PendingOperation = {
+    const nextOperation: OwnedPendingOperation = {
       id: `${record.id}-equipment-${Date.now()}`,
+      ownerEmployeeId,
       kind: 'equipmentUpdate',
       equipmentId: record.id,
       model: draft.model.trim(),
@@ -375,7 +393,11 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
       setPendingOperations((current) => [
         ...current.filter(
           (operation) =>
-            !(operation.kind === 'equipmentUpdate' && operation.equipmentId === record.id)
+            !(
+              operation.ownerEmployeeId === ownerEmployeeId &&
+              operation.kind === 'equipmentUpdate' &&
+              operation.equipmentId === record.id
+            )
         ),
         nextOperation
       ]);
@@ -496,7 +518,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
     setErrorMessage(null);
 
     try {
-      await updatePendingOperationState(operationId, 'pending');
+      await updatePendingOperationState(operationId, ownerEmployeeId, 'pending');
       setPendingOperations((current) => markPendingOperationForRetry(current, operationId));
     } catch (error) {
       setErrorMessage(
@@ -526,7 +548,7 @@ export function createFieldOperationHandlers(deps: FieldOperationHandlerDeps) {
     setErrorMessage(null);
 
     try {
-      await removePendingOperation(operationId);
+      await removePendingOperation(operationId, ownerEmployeeId);
       setPendingOperations((current) => discardPendingOperationFromQueue(current, operationId));
     } catch (error) {
       setErrorMessage(

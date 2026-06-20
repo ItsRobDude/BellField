@@ -17,7 +17,12 @@ import {
   saveSyncMetadata,
   updatePendingOperationState
 } from './field-sync-store';
-import type { AssignedWorkSnapshot, PendingOperation, SyncMetadata } from './field-sync-types';
+import type {
+  AssignedWorkSnapshot,
+  OwnedPendingOperation,
+  PendingOperation,
+  SyncMetadata
+} from './field-sync-types';
 import {
   mergeEquipmentMutationIntoAssignedWork,
   mergeJobMutationIntoAssignedWork
@@ -33,6 +38,7 @@ import { uploadFieldMediaBlob } from './field-media-upload';
 export type FieldSyncDrainContext = {
   sessionToken: string;
   apiBaseUrl: string;
+  ownerEmployeeId: string;
   syncMetadata: SyncMetadata;
   pendingOperations: PendingOperation[];
   setServerSnapshot: Dispatch<SetStateAction<AssignedWorkSnapshot | null>>;
@@ -54,6 +60,7 @@ export async function drainFieldSyncQueue(
   const {
     sessionToken,
     apiBaseUrl,
+    ownerEmployeeId,
     syncMetadata,
     pendingOperations,
     setServerSnapshot,
@@ -75,12 +82,12 @@ export async function drainFieldSyncQueue(
     lastSyncError: null
   };
 
-  await saveSyncMetadata(attemptedMetadata);
+  await saveSyncMetadata(attemptedMetadata, ownerEmployeeId);
   setSyncMetadata(attemptedMetadata);
 
   try {
     const latestSnapshot = await getAssignedFieldWork({ sessionToken, apiBaseUrl });
-    await saveAssignedWorkSnapshot(latestSnapshot);
+    await saveAssignedWorkSnapshot(latestSnapshot, ownerEmployeeId);
     setServerSnapshot(latestSnapshot);
 
     let currentServerSnapshot: AssignedWorkSnapshot = latestSnapshot;
@@ -92,13 +99,13 @@ export async function drainFieldSyncQueue(
       nextSnapshot: AssignedWorkSnapshot
     ) {
       currentServerSnapshot = nextSnapshot;
-      await saveAssignedWorkSnapshot(currentServerSnapshot);
+      await saveAssignedWorkSnapshot(currentServerSnapshot, ownerEmployeeId);
       setServerSnapshot(currentServerSnapshot);
-      await removePendingOperation(operationId);
+      await removePendingOperation(operationId, ownerEmployeeId);
       setPendingOperations((current) => current.filter((entry) => entry.id !== operationId));
     }
 
-    for (const operation of getReplayablePendingOperations(pendingOperations)) {
+    for (const operation of getOwnedReplayableOperations(pendingOperations, ownerEmployeeId)) {
       if (shouldStopEarly) {
         break;
       }
@@ -117,6 +124,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -134,6 +142,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -169,6 +178,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -186,6 +196,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -225,6 +236,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -242,6 +254,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -292,6 +305,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -309,6 +323,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -352,6 +367,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -369,6 +385,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -404,6 +421,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -421,6 +439,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -469,7 +488,12 @@ export async function drainFieldSyncQueue(
           });
 
           if (response.status === 'rejected') {
-            await updatePendingOperationState(operation.id, 'rejected', response.message);
+            await updatePendingOperationState(
+              operation.id,
+              ownerEmployeeId,
+              'rejected',
+              response.message
+            );
             setPendingOperations((current) =>
               current.map((entry) =>
                 entry.id === operation.id
@@ -503,6 +527,7 @@ export async function drainFieldSyncQueue(
           if (response.syncResult?.status === 'conflict') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'conflict',
               response.syncResult.message
             );
@@ -520,6 +545,7 @@ export async function drainFieldSyncQueue(
           } else if (response.syncResult?.status === 'rejected') {
             await updatePendingOperationState(
               operation.id,
+              ownerEmployeeId,
               'rejected',
               response.syncResult.message
             );
@@ -560,7 +586,7 @@ export async function drainFieldSyncQueue(
           lastSyncError: nextErrorMessage
         };
 
-        await saveSyncMetadata(failedMetadata);
+        await saveSyncMetadata(failedMetadata, ownerEmployeeId);
         setSyncMetadata(failedMetadata);
         setErrorMessage(nextErrorMessage);
         hadSyncFailure = true;
@@ -580,8 +606,8 @@ export async function drainFieldSyncQueue(
       attemptedAt
     );
 
-    await saveAssignedWorkSnapshot(refreshedSnapshot);
-    await saveSyncMetadata(nextSyncMetadata);
+    await saveAssignedWorkSnapshot(refreshedSnapshot, ownerEmployeeId);
+    await saveSyncMetadata(nextSyncMetadata, ownerEmployeeId);
     setServerSnapshot(refreshedSnapshot);
     setSyncMetadata(nextSyncMetadata);
     return { ok: true };
@@ -604,7 +630,7 @@ export async function drainFieldSyncQueue(
       lastSyncError: nextErrorMessage
     };
 
-    await saveSyncMetadata(failedMetadata);
+    await saveSyncMetadata(failedMetadata, ownerEmployeeId);
     setSyncMetadata(failedMetadata);
     // Surface a visible error message only when the drain was user-initiated.
     // Background failures stay quiet; the sync indicator card already
@@ -614,4 +640,13 @@ export async function drainFieldSyncQueue(
     }
     return { ok: false };
   }
+}
+
+function getOwnedReplayableOperations(
+  pendingOperations: PendingOperation[],
+  ownerEmployeeId: string
+): OwnedPendingOperation[] {
+  return getReplayablePendingOperations(pendingOperations).filter(
+    (operation): operation is OwnedPendingOperation => operation.ownerEmployeeId === ownerEmployeeId
+  );
 }

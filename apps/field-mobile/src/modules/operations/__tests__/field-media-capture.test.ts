@@ -48,7 +48,7 @@ describe('pickFieldMedia', () => {
     fileSystemMock.deleteAsync.mockResolvedValue(undefined);
     fileSystemMock.getInfoAsync.mockResolvedValue({
       exists: true,
-      uri: 'file:///app/Documents/bellfield-media/media-1.jpg',
+      uri: 'file:///app/Documents/bellfield-media/tech-1/media-1.jpg',
       isDirectory: false,
       size: 5,
       modificationTime: 0
@@ -80,7 +80,7 @@ describe('pickFieldMedia', () => {
       ]
     });
 
-    const result = await pickFieldMedia('camera');
+    const result = await pickFieldMedia('camera', 'tech-1');
 
     expect(result).toMatchObject({
       originalFilename: 'photo.jpg',
@@ -91,10 +91,10 @@ describe('pickFieldMedia', () => {
       capturedAt: '2026-05-23T12:00:00.000Z'
     });
     expect(result?.localUri).toBe(
-      'file:///app/Documents/bellfield-media/media-11111111-2222-4333-8444-555555555555.jpg'
+      'file:///app/Documents/bellfield-media/tech-1/media-11111111-2222-4333-8444-555555555555.jpg'
     );
     expect(fileSystemMock.makeDirectoryAsync).toHaveBeenCalledWith(
-      'file:///app/Documents/bellfield-media/',
+      'file:///app/Documents/bellfield-media/tech-1/',
       {
         intermediates: true
       }
@@ -112,7 +112,7 @@ describe('pickFieldMedia', () => {
   it('returns null when the picker is cancelled', async () => {
     imagePickerMock.launchImageLibraryAsync.mockResolvedValue({ canceled: true, assets: null });
 
-    await expect(pickFieldMedia('library')).resolves.toBeNull();
+    await expect(pickFieldMedia('library', 'tech-1')).resolves.toBeNull();
   });
 
   it('rejects oversized picker assets before copying or hashing them', async () => {
@@ -129,7 +129,7 @@ describe('pickFieldMedia', () => {
       ]
     });
 
-    await expect(pickFieldMedia('library')).rejects.toThrow('50 MB');
+    await expect(pickFieldMedia('library', 'tech-1')).rejects.toThrow('50 MB');
 
     expect(fileSystemMock.copyAsync).not.toHaveBeenCalled();
     expect(fileSystemMock.readAsStringAsync).not.toHaveBeenCalled();
@@ -139,7 +139,7 @@ describe('pickFieldMedia', () => {
   it('deletes a staged local copy when copied media is too large', async () => {
     fileSystemMock.getInfoAsync.mockResolvedValue({
       exists: true,
-      uri: 'file:///app/Documents/bellfield-media/media-1.mov',
+      uri: 'file:///app/Documents/bellfield-media/tech-1/media-1.mov',
       isDirectory: false,
       size: fieldMediaMaxBytes + 1,
       modificationTime: 0
@@ -156,10 +156,10 @@ describe('pickFieldMedia', () => {
       ]
     });
 
-    await expect(pickFieldMedia('library')).rejects.toThrow('50 MB');
+    await expect(pickFieldMedia('library', 'tech-1')).rejects.toThrow('50 MB');
 
     expect(fileSystemMock.deleteAsync).toHaveBeenCalledWith(
-      'file:///app/Documents/bellfield-media/media-11111111-2222-4333-8444-555555555555.mov',
+      'file:///app/Documents/bellfield-media/tech-1/media-11111111-2222-4333-8444-555555555555.mov',
       { idempotent: true }
     );
     expect(fileSystemMock.readAsStringAsync).not.toHaveBeenCalled();
