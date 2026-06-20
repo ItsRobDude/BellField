@@ -12,7 +12,6 @@ import {
   writeFileSync
 } from 'node:fs';
 import { basename, dirname, join, relative, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getBoolean, readArgs } from './install/install-utils.mjs';
@@ -357,6 +356,9 @@ function copyWinSwExe(winSwExe) {
 }
 
 function deployWorkspacePackage(filter, target) {
+  // pnpm legacy deploy is most reliable with repo-relative targets on Windows;
+  // absolute or cross-drive paths can be folded into the workspace path.
+  const deployTarget = relative(repoRoot, target);
   run('pnpm', [
     '--filter',
     filter,
@@ -364,7 +366,7 @@ function deployWorkspacePackage(filter, target) {
     '--prod',
     '--legacy',
     '--config.node-linker=hoisted',
-    target
+    deployTarget
   ]);
 }
 
@@ -422,7 +424,9 @@ function packageOfficeWebRuntime(nodeExe) {
   // Replace all traced Next node_modules with one hoisted production tree next
   // to server.js so the artifact does not depend on pnpm store reparse points.
   removeNestedNodeModules(officeReleaseRoot);
-  const deployRoot = mkdtempSync(join(tmpdir(), 'bellfield-office-web-deploy-'));
+  // Keep the temp deploy on the repo drive; pnpm legacy deploy can mis-handle
+  // cross-drive absolute targets on Windows CI.
+  const deployRoot = mkdtempSync(join(repoRoot, 'bellfield-office-web-deploy-'));
   try {
     deployWorkspacePackage('@bellfield/office-web', deployRoot);
     copyNodeModules(join(deployRoot, 'node_modules'), join(officeServerRoot, 'node_modules'));
