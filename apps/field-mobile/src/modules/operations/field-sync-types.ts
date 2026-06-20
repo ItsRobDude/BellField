@@ -14,6 +14,7 @@ export type PendingOperationState = 'pending' | 'conflict' | 'rejected';
 
 type PendingOperationBase = {
   id: string;
+  ownerEmployeeId?: string;
   occurredAt: string;
   state: PendingOperationState;
   lastResultMessage?: string;
@@ -111,6 +112,10 @@ export type PendingOperation =
     });
 
 export type AssignedWorkSnapshot = FieldAssignedWorkResponse;
+
+export type OwnedPendingOperation = PendingOperation & {
+  ownerEmployeeId: string;
+};
 
 /** The technician's cached truck-stock snapshot (Slice 1b part-add picker). */
 export type TruckStockSnapshot = FieldTruckStockResponse;

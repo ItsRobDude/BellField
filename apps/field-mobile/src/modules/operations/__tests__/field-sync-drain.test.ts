@@ -42,6 +42,19 @@ const defaultSyncMetadata: SyncMetadata = {
   lastSyncError: null
 };
 
+const assignedWorkSnapshot = {
+  jobs: [],
+  locations: [],
+  customers: [],
+  equipment: [],
+  catalogItems: [],
+  agreementCoverage: [],
+  serverTime: '2026-05-23T12:00:00.000Z',
+  snapshotVersion: 'snapshot-1',
+  windowStartDate: '2026-05-23',
+  windowEndDate: '2026-05-24'
+};
+
 describe('drainFieldSyncQueue session handling', () => {
   it('returns to sign-in on session expiry without clearing pending operations', async () => {
     const error = new Error('Session expired. Please sign in again.');
@@ -57,6 +70,7 @@ describe('drainFieldSyncQueue session handling', () => {
       {
         sessionToken: 'session-token',
         apiBaseUrl: 'http://server.local',
+        ownerEmployeeId: 'tech-1',
         syncMetadata: defaultSyncMetadata,
         pendingOperations: [{ id: 'pending-1' } as PendingOperation],
         setServerSnapshot: vi.fn(),
@@ -73,5 +87,39 @@ describe('drainFieldSyncQueue session handling', () => {
     expect(onSessionExpired).toHaveBeenCalledWith('Session expired. Please sign in again.');
     expect(onSessionAccessLost).not.toHaveBeenCalled();
     expect(setPendingOperations).not.toHaveBeenCalled();
+  });
+
+  it('does not replay an operation owned by a different employee', async () => {
+    vi.mocked(operationsApi.getAssignedFieldWork).mockResolvedValue(assignedWorkSnapshot);
+    vi.mocked(operationsApi.isFieldSessionExpiredError).mockReturnValue(false);
+    vi.mocked(operationsApi.isFieldSessionAccessLostError).mockReturnValue(false);
+
+    const result = await drainFieldSyncQueue(
+      {
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://server.local',
+        ownerEmployeeId: 'tech-b',
+        syncMetadata: defaultSyncMetadata,
+        pendingOperations: [
+          {
+            id: 'note-1',
+            ownerEmployeeId: 'tech-a',
+            kind: 'jobNote',
+            jobId: 'job-1',
+            note: 'A local note',
+            occurredAt: '2026-05-23T12:00:00.000Z',
+            state: 'pending'
+          }
+        ],
+        setServerSnapshot: vi.fn(),
+        setSyncMetadata: vi.fn(),
+        setPendingOperations: vi.fn(),
+        setErrorMessage: vi.fn()
+      },
+      { visible: true }
+    );
+
+    expect(result).toEqual({ ok: true });
+    expect(operationsApi.addFieldJobNote).not.toHaveBeenCalled();
   });
 });
