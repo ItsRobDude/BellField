@@ -5,6 +5,7 @@ import {
   createFieldRegisterEntry,
   getAssignedFieldWork,
   isFieldSessionAccessLostError,
+  isFieldSessionExpiredError,
   updateFieldAppointmentStatus,
   updateFieldEquipment,
   updateFieldRegisterEntry,
@@ -38,6 +39,7 @@ export type FieldSyncDrainContext = {
   setSyncMetadata: Dispatch<SetStateAction<SyncMetadata>>;
   setPendingOperations: Dispatch<SetStateAction<PendingOperation[]>>;
   setErrorMessage: Dispatch<SetStateAction<string | null>>;
+  onSessionExpired?: (message: string) => Promise<void>;
   onSessionAccessLost?: (message: string) => Promise<void>;
 };
 
@@ -58,6 +60,7 @@ export async function drainFieldSyncQueue(
     setSyncMetadata,
     setPendingOperations,
     setErrorMessage,
+    onSessionExpired,
     onSessionAccessLost
   } = ctx;
 
@@ -542,6 +545,11 @@ export async function drainFieldSyncQueue(
         const nextErrorMessage =
           error instanceof Error ? error.message : 'Unable to sync queued field work.';
 
+        if (isFieldSessionExpiredError(error)) {
+          await onSessionExpired?.(nextErrorMessage);
+          return { ok: false };
+        }
+
         if (isFieldSessionAccessLostError(error)) {
           await onSessionAccessLost?.(nextErrorMessage);
           return { ok: false };
@@ -580,6 +588,11 @@ export async function drainFieldSyncQueue(
   } catch (error) {
     const nextErrorMessage =
       error instanceof Error ? error.message : 'Unable to sync queued field work.';
+
+    if (isFieldSessionExpiredError(error)) {
+      await onSessionExpired?.(nextErrorMessage);
+      return { ok: false };
+    }
 
     if (isFieldSessionAccessLostError(error)) {
       await onSessionAccessLost?.(nextErrorMessage);

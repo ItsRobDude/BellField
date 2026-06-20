@@ -5,6 +5,10 @@ type NodeEnvironment = 'development' | 'test' | 'production';
 
 const defaultPort = 3001;
 const defaultDatabaseUrl = 'postgresql://postgres:postgres@localhost:5432/bellfield';
+const defaultOfficeSessionTtlHours = 12;
+const defaultFieldSessionTtlDays = 30;
+const hourInMs = 60 * 60 * 1000;
+const dayInMs = 24 * hourInMs;
 
 function getNodeEnv(value: string | undefined): NodeEnvironment {
   if (value === 'test' || value === 'production') {
@@ -57,10 +61,42 @@ function getBoolean(value: string | undefined, defaultValue: boolean): boolean {
   return defaultValue;
 }
 
+function resolvePositiveInteger(
+  envName: string,
+  value: string | undefined,
+  defaultValue: number,
+  unitLabel: string,
+  problems: string[]
+): number {
+  const trimmed = value?.trim();
+
+  if (!trimmed) {
+    return defaultValue;
+  }
+
+  const parsed = Number(trimmed);
+
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    problems.push(
+      `${envName} must be a positive integer number of ${unitLabel}; received ${JSON.stringify(
+        value
+      )}.`
+    );
+    return defaultValue;
+  }
+
+  return parsed;
+}
+
 export type ApiRelayConfig = {
   baseUrl: string;
   token: string;
   serverInstanceId: string;
+};
+
+export type ApiSessionTtlConfig = {
+  officeWebMs: number;
+  fieldMobileMs: number;
 };
 
 export type ApiRuntimeConfig = {
@@ -71,6 +107,7 @@ export type ApiRuntimeConfig = {
   officeOrigins: string[] | true;
   licenseRequired: boolean;
   licensePath?: string;
+  sessionTtl: ApiSessionTtlConfig;
   buildManifest: RuntimeBuildManifest | null;
   /**
    * BellField delivery relay client credentials. Absent means relay-backed
@@ -121,6 +158,20 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     buildManifest?.licenseRequired === true ||
     getBoolean(process.env.BELLFIELD_LICENSE_REQUIRED, false);
   const licensePath = process.env.BELLFIELD_LICENSE_PATH?.trim() || undefined;
+  const officeSessionTtlHours = resolvePositiveInteger(
+    'BELLFIELD_OFFICE_SESSION_TTL_HOURS',
+    process.env.BELLFIELD_OFFICE_SESSION_TTL_HOURS,
+    defaultOfficeSessionTtlHours,
+    'hours',
+    problems
+  );
+  const fieldSessionTtlDays = resolvePositiveInteger(
+    'BELLFIELD_FIELD_SESSION_TTL_DAYS',
+    process.env.BELLFIELD_FIELD_SESSION_TTL_DAYS,
+    defaultFieldSessionTtlDays,
+    'days',
+    problems
+  );
 
   if (buildManifest?.buildKind === 'release' && !isProduction) {
     problems.push('Release artifacts must run with NODE_ENV=production.');
@@ -154,6 +205,10 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
     officeOrigins,
     licenseRequired,
     licensePath,
+    sessionTtl: {
+      officeWebMs: officeSessionTtlHours * hourInMs,
+      fieldMobileMs: fieldSessionTtlDays * dayInMs
+    },
     buildManifest,
     relay
   };

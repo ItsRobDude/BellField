@@ -9,9 +9,22 @@ vi.mock('@/lib/identity-api', () => ({
   loginToOfficeApi: vi.fn()
 }));
 
+type MockWorkspaceProps = {
+  initialEmployee: { displayName: string };
+  onSessionExpired?: (message: string) => void;
+};
+
 vi.mock('@/modules/operations/office-workspace-shell', () => ({
-  OfficeWorkspaceShell: ({ initialEmployee }: { initialEmployee: { displayName: string } }) => (
-    <div>Workspace for {initialEmployee.displayName}</div>
+  OfficeWorkspaceShell: ({ initialEmployee, onSessionExpired }: MockWorkspaceProps) => (
+    <div>
+      Workspace for {initialEmployee.displayName}
+      <button
+        type="button"
+        onClick={() => onSessionExpired?.('Session expired. Please sign in again.')}
+      >
+        Expire workspace session
+      </button>
+    </div>
   )
 }));
 
@@ -66,6 +79,35 @@ describe('OfficeAuthShell', () => {
     expect(
       await screen.findByText('Too many sign-in attempts. Try again in 5 minutes.')
     ).toBeInTheDocument();
+  });
+
+  it('returns to sign-in with the server message when the workspace session expires', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(identityApi.loginToOfficeApi).mockResolvedValue({
+      sessionToken: 'session-1',
+      employee: {
+        id: 'owner-1',
+        email: 'owner@example.com',
+        displayName: 'First Owner',
+        roleId: 'owner',
+        roleName: 'Owner',
+        isActive: true,
+        effectivePermissions: [],
+        permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+      }
+    });
+
+    render(<OfficeAuthShell />);
+
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'owner-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(await screen.findByText('Workspace for First Owner')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Expire workspace session' }));
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByText('Session expired. Please sign in again.')).toBeInTheDocument();
   });
 
   it('swaps to first-owner setup when the API reports setup mode', async () => {

@@ -15,6 +15,7 @@ type ErrorResponseBody = {
   statusCode: number;
   message: string;
   error: string;
+  code?: string;
   timestamp: string;
   path: string;
 };
@@ -56,11 +57,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         typeof response === 'string'
           ? response
           : this.getExceptionMessage(response, defaultMessage);
+      const code = this.getExceptionCode(response);
 
       return {
         statusCode,
         message,
         error: HttpStatus[statusCode] ?? 'HttpException',
+        ...(code ? { code } : {}),
         timestamp: new Date().toISOString(),
         path
       };
@@ -89,5 +92,13 @@ export class GlobalExceptionFilter implements ExceptionFilter {
     }
 
     return defaultMessage;
+  }
+
+  private getExceptionCode(response: unknown): string | undefined {
+    if (!response || typeof response !== 'object' || !('code' in response)) {
+      return undefined;
+    }
+
+    return typeof response.code === 'string' ? response.code : undefined;
   }
 }

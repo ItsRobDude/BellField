@@ -31,6 +31,25 @@ export type {
 
 type RoleListResponse = RoleTemplateListResponse;
 
+export class OfficeIdentityApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly code?: string
+  ) {
+    super(message);
+    this.name = 'OfficeIdentityApiError';
+  }
+}
+
+export function isOfficeSessionExpiredError(error: unknown): error is OfficeIdentityApiError {
+  return (
+    error instanceof OfficeIdentityApiError &&
+    error.status === 401 &&
+    error.code === 'sessionExpired'
+  );
+}
+
 async function requestJson<TResponse>(
   path: string,
   options: RequestInit & { apiBaseUrl?: string } = {}
@@ -46,8 +65,15 @@ async function requestJson<TResponse>(
   });
 
   if (!response.ok) {
-    const errorBody = (await response.json().catch(() => null)) as { message?: string } | null;
-    throw new Error(errorBody?.message ?? 'Request failed.');
+    const errorBody = (await response.json().catch(() => null)) as {
+      message?: string;
+      code?: string;
+    } | null;
+    throw new OfficeIdentityApiError(
+      errorBody?.message ?? 'Request failed.',
+      response.status,
+      typeof errorBody?.code === 'string' ? errorBody.code : undefined
+    );
   }
 
   return (await response.json()) as TResponse;

@@ -57,6 +57,8 @@ Root runtime settings:
 - `BELLFIELD_API_PORT` is the production/server-config API port override; it takes precedence over `PORT` when set.
 - `BOOTSTRAP_SEED_DATA=true` opts local development into seeded demo accounts; omitted means no seed bootstrap.
 - `BELLFIELD_OFFICE_ORIGINS` lists allowed office-web origins in production. Development/test are permissive when it is omitted.
+- `BELLFIELD_OFFICE_SESSION_TTL_HOURS` controls office-web absolute session expiry. The default is 12 hours.
+- `BELLFIELD_FIELD_SESSION_TTL_DAYS` controls field-mobile absolute session expiry. The default is 30 days.
 - `BELLFIELD_MEDIA_ROOT` controls where uploaded media blobs are stored.
 - `BELLFIELD_MEDIA_TOKEN_SECRET` signs short-lived upload/download tokens for media blobs.
 - `BELLFIELD_MEDIA_MAX_BYTES` controls the raw blob upload limit. The default is 50 MB.

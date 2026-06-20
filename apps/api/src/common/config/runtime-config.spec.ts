@@ -32,7 +32,9 @@ describe('getApiRuntimeConfig', () => {
     'BELLFIELD_LICENSE_PATH',
     'BELLFIELD_RELAY_BASE_URL',
     'BELLFIELD_RELAY_TOKEN',
-    'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
+    'BELLFIELD_RELAY_SERVER_INSTANCE_ID',
+    'BELLFIELD_OFFICE_SESSION_TTL_HOURS',
+    'BELLFIELD_FIELD_SESSION_TTL_DAYS'
   ] as const;
   const original: Record<string, string | undefined> = {};
 
@@ -64,6 +66,10 @@ describe('getApiRuntimeConfig', () => {
     expect(config.officeOrigins).toBe(true);
     expect(config.licenseRequired).toBe(false);
     expect(config.licensePath).toBeUndefined();
+    expect(config.sessionTtl).toEqual({
+      officeWebMs: 12 * 60 * 60 * 1000,
+      fieldMobileMs: 30 * 24 * 60 * 60 * 1000
+    });
     expect(config.buildManifest).toBeNull();
     expect(config.relay).toBeUndefined();
   });
@@ -77,6 +83,36 @@ describe('getApiRuntimeConfig', () => {
     expect(config.databaseUrl).toBe(defaultDatabaseUrl);
     expect(config.bootstrapSeedData).toBe(false);
     expect(config.officeOrigins).toBe(true);
+  });
+
+  it('reads explicit positive session TTLs', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.BELLFIELD_OFFICE_SESSION_TTL_HOURS = '8';
+    process.env.BELLFIELD_FIELD_SESSION_TTL_DAYS = '14';
+
+    const config = getApiRuntimeConfig();
+
+    expect(config.sessionTtl).toEqual({
+      officeWebMs: 8 * 60 * 60 * 1000,
+      fieldMobileMs: 14 * 24 * 60 * 60 * 1000
+    });
+  });
+
+  it('rejects invalid explicit session TTLs', () => {
+    process.env.NODE_ENV = 'development';
+    process.env.BELLFIELD_OFFICE_SESSION_TTL_HOURS = '0';
+    process.env.BELLFIELD_FIELD_SESSION_TTL_DAYS = 'half';
+
+    expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_OFFICE_SESSION_TTL_HOURS/);
+
+    try {
+      getApiRuntimeConfig();
+      throw new Error('expected getApiRuntimeConfig to throw');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      expect(message).toContain('BELLFIELD_OFFICE_SESSION_TTL_HOURS');
+      expect(message).toContain('BELLFIELD_FIELD_SESSION_TTL_DAYS');
+    }
   });
 
   it('runs seed bootstrap only when explicitly enabled outside production', () => {

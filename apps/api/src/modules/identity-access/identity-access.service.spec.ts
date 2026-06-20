@@ -26,6 +26,8 @@ type EmployeeLike = {
   permissionOverrides: { grantedPermissions: string[]; revokedPermissions: string[] };
 };
 
+const issuedNow = () => new Date().toISOString();
+
 function adminSessionRepo(
   opts: {
     actorRole?: Role;
@@ -65,7 +67,7 @@ function adminSessionRepo(
       id: 's0',
       employeeId: 'actor-1',
       surface: 'office-web',
-      issuedAt: '2026-01-01T00:00:00.000Z'
+      issuedAt: issuedNow()
     }),
     findEmployeeById: jest.fn((id: string) =>
       Promise.resolve(id === 'actor-1' ? actor : id === 'target-1' ? target : null)
@@ -141,12 +143,64 @@ function adminSessionRepo(
     ),
     // Actor + target + (by default) a standing active Owner, so the authority and active-owner
     // guards pass for ordinary updates.
-    listEmployees: jest.fn().mockResolvedValue([actor, target, ...others])
+    listEmployees: jest.fn().mockResolvedValue([actor, target, ...others]),
+    pruneSessionsIssuedBefore: jest.fn().mockResolvedValue(undefined)
   };
   return { repo, actor, target, captured };
 }
 
 describe('IdentityAccessService', () => {
+  function activeEmployee(overrides: Partial<EmployeeLike> = {}): EmployeeLike {
+    return {
+      id: 'employee-1',
+      email: 'employee@bellfield.local',
+      displayName: 'Employee One',
+      roleId: 'owner',
+      isActive: true,
+      password: 'x',
+      permissionOverrides: { grantedPermissions: [], revokedPermissions: [] },
+      ...overrides
+    };
+  }
+
+  function sessionIssuedAgo(input: { hours?: number; days?: number }): string {
+    const elapsedMs = (input.hours ?? 0) * 60 * 60 * 1000 + (input.days ?? 0) * 24 * 60 * 60 * 1000;
+    return new Date(Date.now() - elapsedMs).toISOString();
+  }
+
+  function currentSessionRepo(
+    opts: {
+      surface?: 'office-web' | 'field-mobile';
+      issuedAt?: string;
+      employee?: EmployeeLike | null;
+      sessionPresent?: boolean;
+      pruneRejects?: boolean;
+    } = {}
+  ) {
+    const session =
+      opts.sessionPresent === false
+        ? null
+        : {
+            token: 'session-token',
+            id: 'session-1',
+            employeeId: 'employee-1',
+            surface: opts.surface ?? 'office-web',
+            issuedAt: opts.issuedAt ?? issuedNow()
+          };
+    return {
+      findSessionByToken: jest.fn().mockResolvedValue(session),
+      findEmployeeById: jest
+        .fn()
+        .mockResolvedValue(opts.employee === undefined ? activeEmployee() : opts.employee),
+      deleteSession: jest.fn().mockResolvedValue(undefined),
+      pruneSessionsIssuedBefore: jest
+        .fn()
+        .mockImplementation(() =>
+          opts.pruneRejects ? Promise.reject(new Error('cleanup failed')) : Promise.resolve()
+        )
+    };
+  }
+
   it('pins technician default permissions to field equipment and agreement coverage without true delete', () => {
     const service = new IdentityAccessService({} as IdentityAccessRepository);
     const technicianRole = service.getRoleTemplates().find((role) => role.id === 'technician');
@@ -183,9 +237,10 @@ describe('IdentityAccessService', () => {
     const repository = {
       findSessionByToken: jest.fn().mockResolvedValue({
         token: 'session-token',
+        id: 'session-1',
         employeeId: 'employee-1',
         surface: 'field-mobile',
-        issuedAt: '2026-04-14T10:00:00.000Z'
+        issuedAt: issuedNow()
       }),
       findEmployeeById: jest.fn().mockResolvedValue({
         id: 'employee-1',
@@ -199,7 +254,8 @@ describe('IdentityAccessService', () => {
           revokedPermissions: []
         }
       }),
-      deleteSession: jest.fn()
+      deleteSession: jest.fn(),
+      pruneSessionsIssuedBefore: jest.fn().mockResolvedValue(undefined)
     } satisfies Partial<IdentityAccessRepository>;
 
     const service = new IdentityAccessService(repository as unknown as IdentityAccessRepository);
@@ -207,6 +263,129 @@ describe('IdentityAccessService', () => {
     await expect(
       service.getAuthorizedEmployee('session-token', undefined, ['office-web'])
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('authenticates a fresh office session and prunes stale sessions at a bounded cadence', async () => {
+    const repository = currentSessionRepo();
+    const service = new IdentityAccessService(repository as unknown as IdentityAccessRepository);
+
+    await expect(service.getCurrentEmployee('session-token')).resolves.toMatchObject({
+      id: 'employee-1'
+    });
+    await expect(service.getCurrentEmployee('session-token')).resolves.toMatchObject({
+      id: 'employee-1'
+    });
+
+    expect(repository.pruneSessionsIssuedBefore).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fail a normal auth request when stale session pruning fails', async () => {
+    const repository = currentSessionRepo({ pruneRejects: true });
+    const service = new IdentityAccessService(repository as unknown as IdentityAccessRepository);
+
+    await expect(service.getCurrentEmployee('session-token')).resolves.toMatchObject({
+      id: 'employee-1'
+    });
+  });
+
+  it('returns a structured sessionExpired code for expired office sessions without deleting them', async () => {
+    const repository = currentSessionRepo({ issuedAt: sessionIssuedAgo({ hours: 13 }) });
+    const service = new IdentityAccessService(repository as unknown as IdentityAccessRepository);
+
+    await expect(service.getCurrentEmployee('session-token')).rejects.toBeInstanceOf(
+      UnauthorizedException
+    );
+
+    try {
+      await service.getCurrentEmployee('session-token');
+      throw new Error('expected the session to expire');
+    } catch (error) {
+      expect((error as UnauthorizedException).getResponse()).toMatchObject({
+        message: 'Session expired. Please sign in again.',
+        code: 'sessionExpired'
+      });
+    }
+
+    expect(repository.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('uses the longer field-mobile TTL before expiring field sessions', async () => {
+    const freshFieldRepository = currentSessionRepo({
+      surface: 'field-mobile',
+      issuedAt: sessionIssuedAgo({ days: 29 })
+    });
+    const freshFieldService = new IdentityAccessService(
+      freshFieldRepository as unknown as IdentityAccessRepository
+    );
+
+    await expect(
+      freshFieldService.getAuthorizedEmployee('session-token', undefined, ['field-mobile'])
+    ).resolves.toMatchObject({ id: 'employee-1', sessionSurface: 'field-mobile' });
+
+    const expiredFieldRepository = currentSessionRepo({
+      surface: 'field-mobile',
+      issuedAt: sessionIssuedAgo({ days: 31 })
+    });
+    const expiredFieldService = new IdentityAccessService(
+      expiredFieldRepository as unknown as IdentityAccessRepository
+    );
+
+    await expect(expiredFieldService.getCurrentEmployee('session-token')).rejects.toMatchObject({
+      status: 401
+    });
+    await expect(expiredFieldService.getCurrentEmployee('session-token')).rejects.toHaveProperty(
+      'response.code',
+      'sessionExpired'
+    );
+    expect(expiredFieldRepository.deleteSession).not.toHaveBeenCalled();
+  });
+
+  it('keeps missing and inactive sessions on the destructive access-loss paths', async () => {
+    const missingRepository = currentSessionRepo({ sessionPresent: false });
+    const missingService = new IdentityAccessService(
+      missingRepository as unknown as IdentityAccessRepository
+    );
+
+    await expect(missingService.getCurrentEmployee('session-token')).rejects.toMatchObject({
+      status: 401,
+      message: 'Session not found. Please log in again.'
+    });
+
+    const inactiveRepository = currentSessionRepo({
+      issuedAt: sessionIssuedAgo({ days: 31 }),
+      employee: activeEmployee({ isActive: false })
+    });
+    const inactiveService = new IdentityAccessService(
+      inactiveRepository as unknown as IdentityAccessRepository
+    );
+
+    await expect(inactiveService.getCurrentEmployee('session-token')).rejects.toBeInstanceOf(
+      ForbiddenException
+    );
+    expect(inactiveRepository.deleteSession).toHaveBeenCalledWith('session-token');
+  });
+
+  it('omits expired sessions from admin device session summaries', async () => {
+    const { repo } = adminSessionRepo();
+    repo.listSessionsForEmployee.mockResolvedValue([
+      {
+        id: 'expired-office-session',
+        surface: 'office-web',
+        deviceLabel: 'Old Browser',
+        issuedAt: sessionIssuedAgo({ hours: 13 })
+      },
+      {
+        id: 'fresh-field-session',
+        surface: 'field-mobile',
+        deviceLabel: 'Tablet',
+        issuedAt: sessionIssuedAgo({ days: 1 })
+      }
+    ]);
+    const service = new IdentityAccessService(repo as unknown as IdentityAccessRepository);
+
+    const result = await service.listEmployeeSessions('tok', 'target-1');
+
+    expect(result.sessions.map((session) => session.id)).toEqual(['fresh-field-session']);
   });
 
   function loginRepo(

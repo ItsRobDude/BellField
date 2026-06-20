@@ -154,6 +154,11 @@ export function OfficeAuthShell() {
           setEmployee(null);
           setErrorMessage(null);
         }}
+        onSessionExpired={(message) => {
+          setSessionToken(null);
+          setEmployee(null);
+          setErrorMessage(message);
+        }}
       />
     );
   }
