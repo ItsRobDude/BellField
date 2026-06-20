@@ -2,8 +2,6 @@ import {
   BadRequestException,
   ConflictException,
   ForbiddenException,
-  HttpException,
-  HttpStatus,
   Injectable,
   Logger,
   NotFoundException,
@@ -20,10 +18,14 @@ import type {
 import { defaultRoleTemplates } from './default-role-templates';
 import { hashPassword, isHashed, verifyPassword } from './password-hash';
 import { IdentityAccessRepository } from './identity-access.repository';
-import { assertLoginRateLimit, recordFailedLoginAttempt } from './identity-login-throttle';
+import {
+  assertIdentityAttemptRateLimit,
+  recordFailedIdentityAttempt
+} from './identity-login-throttle';
 import {
   dummyLoginPasswordHash,
-  loginAttemptBucketKey,
+  firstOwnerSetupAttemptThrottlePolicy,
+  loginAttemptThrottlePolicy,
   normalizeLoginEmail
 } from './login-attempt-policy';
 import { getApiRuntimeConfig, type ApiSessionTtlConfig } from '../../common/config/runtime-config';
@@ -68,9 +70,6 @@ export class IdentityAccessService implements OnModuleInit {
   private lastSessionPruneAt = 0;
   private setupTokenHash: Buffer | null = null;
   private setupTokenConsumed = false;
-  private setupFailedAttempts = 0;
-  private setupFailureWindowStartedAt = 0;
-  private setupBlockedUntil = 0;
 
   constructor(private readonly identityAccessRepository: IdentityAccessRepository) {
     this.sessionTtl = getApiRuntimeConfig().sessionTtl;
@@ -99,10 +98,19 @@ export class IdentityAccessService implements OnModuleInit {
       throw new NotFoundException('First-owner setup is not available.');
     }
 
-    this.assertSetupRateLimit();
+    const setupAttemptPolicy = firstOwnerSetupAttemptThrottlePolicy();
+    await assertIdentityAttemptRateLimit(
+      this.identityAccessRepository,
+      setupAttemptPolicy,
+      new Date()
+    );
 
     if (!this.verifySetupToken(request.setupToken.trim())) {
-      this.recordFailedSetupAttempt();
+      await recordFailedIdentityAttempt(
+        this.identityAccessRepository,
+        setupAttemptPolicy,
+        new Date()
+      );
       throw new UnauthorizedException('Invalid setup token.');
     }
 
@@ -138,7 +146,7 @@ export class IdentityAccessService implements OnModuleInit {
 
     this.setupTokenConsumed = true;
     this.clearSetupToken();
-    this.resetSetupRateLimit();
+    await this.identityAccessRepository.clearIdentityAttemptState(setupAttemptPolicy.bucketKey);
     this.logger.log('First-owner setup completed; setup token permanently consumed.');
 
     const sessionToken = randomUUID();
@@ -159,8 +167,8 @@ export class IdentityAccessService implements OnModuleInit {
 
   async login(loginRequest: LoginRequestDto): Promise<LoginResponseDto> {
     const normalizedEmail = normalizeLoginEmail(loginRequest.email);
-    const attemptBucketKey = loginAttemptBucketKey(normalizedEmail);
-    await assertLoginRateLimit(this.identityAccessRepository, attemptBucketKey, new Date());
+    const attemptPolicy = loginAttemptThrottlePolicy(normalizedEmail);
+    await assertIdentityAttemptRateLimit(this.identityAccessRepository, attemptPolicy, new Date());
 
     const employee = await this.identityAccessRepository.findEmployeeByEmail(normalizedEmail);
 
@@ -173,7 +181,7 @@ export class IdentityAccessService implements OnModuleInit {
     }
 
     if (!employee || !verification.ok) {
-      await recordFailedLoginAttempt(this.identityAccessRepository, attemptBucketKey, new Date());
+      await recordFailedIdentityAttempt(this.identityAccessRepository, attemptPolicy, new Date());
       throw new UnauthorizedException('Invalid email or password.');
     }
 
@@ -198,7 +206,7 @@ export class IdentityAccessService implements OnModuleInit {
       deviceLabel: loginRequest.deviceLabel?.trim() || undefined,
       issuedAt: new Date().toISOString()
     });
-    await this.identityAccessRepository.clearLoginAttemptState(attemptBucketKey);
+    await this.identityAccessRepository.clearIdentityAttemptState(attemptPolicy.bucketKey);
 
     return {
       sessionToken,
@@ -705,34 +713,6 @@ export class IdentityAccessService implements OnModuleInit {
 
   private hashSetupToken(token: string): Buffer {
     return createHash('sha256').update(token, 'utf8').digest();
-  }
-
-  private assertSetupRateLimit(): void {
-    if (Date.now() < this.setupBlockedUntil) {
-      throw new HttpException(
-        'Too many invalid setup attempts. Try again shortly.',
-        HttpStatus.TOO_MANY_REQUESTS
-      );
-    }
-  }
-
-  private recordFailedSetupAttempt(): void {
-    const now = Date.now();
-    if (now - this.setupFailureWindowStartedAt > 10 * 60 * 1000) {
-      this.setupFailureWindowStartedAt = now;
-      this.setupFailedAttempts = 0;
-    }
-
-    this.setupFailedAttempts += 1;
-    if (this.setupFailedAttempts >= 5) {
-      this.setupBlockedUntil = now + 5 * 60 * 1000;
-    }
-  }
-
-  private resetSetupRateLimit(): void {
-    this.setupFailedAttempts = 0;
-    this.setupFailureWindowStartedAt = 0;
-    this.setupBlockedUntil = 0;
   }
 
   private clearSetupToken(): void {

@@ -1,42 +1,48 @@
 import { Logger } from '@nestjs/common';
 import type { IdentityAccessRepository } from './identity-access.repository';
 import {
-  recordFailedLoginAttempt,
-  resetLoginAttemptPruneCadenceForTests
+  assertIdentityAttemptRateLimit,
+  recordFailedIdentityAttempt,
+  resetIdentityAttemptPruneCadenceForTests
 } from './identity-login-throttle';
 import {
-  loginAttemptPruneIntervalMs,
+  firstOwnerSetupAttemptThrottlePolicy,
+  firstOwnerSetupFailureThreshold,
+  firstOwnerSetupLockoutMessage,
+  identityAttemptPruneIntervalMs,
+  loginAttemptThrottlePolicy,
   loginFailureThreshold,
   loginLockoutMessage
 } from './login-attempt-policy';
 
 function makeRepository() {
   return {
-    findLoginAttemptState: jest.fn().mockResolvedValue(null),
-    recordFailedLoginAttempt: jest.fn().mockResolvedValue({
+    findIdentityAttemptState: jest.fn().mockResolvedValue(null),
+    recordFailedIdentityAttempt: jest.fn().mockResolvedValue({
       failedCount: 1,
       windowStartedAt: '2026-06-19T12:00:00.000Z',
       lastFailedAt: '2026-06-19T12:00:00.000Z'
     }),
-    pruneStaleLoginAttemptStates: jest.fn().mockResolvedValue(undefined)
+    pruneStaleIdentityAttemptStates: jest.fn().mockResolvedValue(undefined)
   } as unknown as jest.Mocked<
     Pick<
       IdentityAccessRepository,
-      'findLoginAttemptState' | 'recordFailedLoginAttempt' | 'pruneStaleLoginAttemptStates'
+      'findIdentityAttemptState' | 'recordFailedIdentityAttempt' | 'pruneStaleIdentityAttemptStates'
     >
   >;
 }
 
-describe('identity login throttle cleanup cadence', () => {
+describe('identity attempt throttle cleanup cadence', () => {
   beforeEach(() => {
-    resetLoginAttemptPruneCadenceForTests();
+    resetIdentityAttemptPruneCadenceForTests();
     jest.restoreAllMocks();
   });
 
-  it('records the failed login before pruning stale rows', async () => {
+  it('records the failed identity attempt before pruning stale rows', async () => {
     const repository = makeRepository();
+    const policy = loginAttemptThrottlePolicy('owner@example.com');
     const callOrder: string[] = [];
-    repository.recordFailedLoginAttempt.mockImplementationOnce(async () => {
+    repository.recordFailedIdentityAttempt.mockImplementationOnce(async () => {
       callOrder.push('record');
       return {
         failedCount: 1,
@@ -44,13 +50,13 @@ describe('identity login throttle cleanup cadence', () => {
         lastFailedAt: '2026-06-19T12:00:00.000Z'
       };
     });
-    repository.pruneStaleLoginAttemptStates.mockImplementationOnce(async () => {
+    repository.pruneStaleIdentityAttemptStates.mockImplementationOnce(async () => {
       callOrder.push('prune');
     });
 
-    await recordFailedLoginAttempt(
+    await recordFailedIdentityAttempt(
       repository as unknown as IdentityAccessRepository,
-      'email:hash',
+      policy,
       new Date('2026-06-19T12:00:00.000Z')
     );
 
@@ -59,45 +65,100 @@ describe('identity login throttle cleanup cadence', () => {
 
   it('prunes at most once per process-local interval', async () => {
     const repository = makeRepository();
+    const policy = loginAttemptThrottlePolicy('owner@example.com');
 
-    await recordFailedLoginAttempt(
+    await recordFailedIdentityAttempt(
       repository as unknown as IdentityAccessRepository,
-      'email:hash',
+      policy,
       new Date('2026-06-19T12:00:00.000Z')
     );
-    await recordFailedLoginAttempt(
+    await recordFailedIdentityAttempt(
       repository as unknown as IdentityAccessRepository,
-      'email:hash',
+      policy,
       new Date('2026-06-19T12:05:00.000Z')
     );
-    await recordFailedLoginAttempt(
+    await recordFailedIdentityAttempt(
       repository as unknown as IdentityAccessRepository,
-      'email:hash',
-      new Date(new Date('2026-06-19T12:00:00.000Z').getTime() + loginAttemptPruneIntervalMs)
+      policy,
+      new Date(new Date('2026-06-19T12:00:00.000Z').getTime() + identityAttemptPruneIntervalMs)
     );
 
-    expect(repository.recordFailedLoginAttempt).toHaveBeenCalledTimes(3);
-    expect(repository.pruneStaleLoginAttemptStates).toHaveBeenCalledTimes(2);
+    expect(repository.recordFailedIdentityAttempt).toHaveBeenCalledTimes(3);
+    expect(repository.pruneStaleIdentityAttemptStates).toHaveBeenCalledTimes(2);
   });
 
-  it('keeps the lockout response when best-effort prune fails', async () => {
+  it('throws the login lockout on the threshold failure', async () => {
     const repository = makeRepository();
-    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
-    repository.recordFailedLoginAttempt.mockResolvedValueOnce({
+    const policy = loginAttemptThrottlePolicy('owner@example.com');
+    repository.recordFailedIdentityAttempt.mockResolvedValueOnce({
       failedCount: loginFailureThreshold,
       windowStartedAt: '2026-06-19T12:00:00.000Z',
       lastFailedAt: '2026-06-19T12:04:00.000Z',
       blockedUntil: '2026-06-19T12:09:00.000Z'
     });
-    repository.pruneStaleLoginAttemptStates.mockRejectedValueOnce(new Error('prune down'));
 
     await expect(
-      recordFailedLoginAttempt(
+      recordFailedIdentityAttempt(
         repository as unknown as IdentityAccessRepository,
-        'email:hash',
+        policy,
         new Date('2026-06-19T12:04:00.000Z')
       )
     ).rejects.toMatchObject({ status: 429, message: loginLockoutMessage });
-    expect(repository.pruneStaleLoginAttemptStates).toHaveBeenCalledTimes(1);
+  });
+
+  it('records setup threshold failures but blocks only on a later assertion', async () => {
+    const repository = makeRepository();
+    const policy = firstOwnerSetupAttemptThrottlePolicy();
+    repository.recordFailedIdentityAttempt.mockResolvedValueOnce({
+      failedCount: firstOwnerSetupFailureThreshold,
+      windowStartedAt: '2026-06-19T12:00:00.000Z',
+      lastFailedAt: '2026-06-19T12:04:00.000Z',
+      blockedUntil: '2026-06-19T12:09:00.000Z'
+    });
+
+    await expect(
+      recordFailedIdentityAttempt(
+        repository as unknown as IdentityAccessRepository,
+        policy,
+        new Date('2026-06-19T12:04:00.000Z')
+      )
+    ).resolves.toBeUndefined();
+
+    repository.findIdentityAttemptState.mockResolvedValueOnce({
+      failedCount: firstOwnerSetupFailureThreshold,
+      windowStartedAt: '2026-06-19T12:00:00.000Z',
+      lastFailedAt: '2026-06-19T12:04:00.000Z',
+      blockedUntil: '2026-06-19T12:09:00.000Z'
+    });
+
+    await expect(
+      assertIdentityAttemptRateLimit(
+        repository as unknown as IdentityAccessRepository,
+        policy,
+        new Date('2026-06-19T12:04:00.000Z')
+      )
+    ).rejects.toMatchObject({ status: 429, message: firstOwnerSetupLockoutMessage });
+  });
+
+  it('keeps the lockout response when best-effort prune fails', async () => {
+    const repository = makeRepository();
+    const policy = loginAttemptThrottlePolicy('owner@example.com');
+    jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+    repository.recordFailedIdentityAttempt.mockResolvedValueOnce({
+      failedCount: loginFailureThreshold,
+      windowStartedAt: '2026-06-19T12:00:00.000Z',
+      lastFailedAt: '2026-06-19T12:04:00.000Z',
+      blockedUntil: '2026-06-19T12:09:00.000Z'
+    });
+    repository.pruneStaleIdentityAttemptStates.mockRejectedValueOnce(new Error('prune down'));
+
+    await expect(
+      recordFailedIdentityAttempt(
+        repository as unknown as IdentityAccessRepository,
+        policy,
+        new Date('2026-06-19T12:04:00.000Z')
+      )
+    ).rejects.toMatchObject({ status: 429, message: loginLockoutMessage });
+    expect(repository.pruneStaleIdentityAttemptStates).toHaveBeenCalledTimes(1);
   });
 });

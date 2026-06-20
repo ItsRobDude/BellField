@@ -48,7 +48,7 @@ async function main(): Promise<number> {
 
   try {
     const normalizedEmail = normalizeLoginEmail(parsed.command.email);
-    const clearedCount = await repository.clearLoginAttemptState(
+    const clearedCount = await repository.clearIdentityAttemptState(
       loginAttemptBucketKey(normalizedEmail)
     );
     console.log(

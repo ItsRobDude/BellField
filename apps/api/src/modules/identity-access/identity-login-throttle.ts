@@ -1,66 +1,69 @@
 import { HttpException, HttpStatus, Logger } from '@nestjs/common';
 import { IdentityAccessRepository } from './identity-access.repository';
 import {
-  loginAttemptBlockedUntil,
-  loginAttemptPruneCutoff,
-  loginAttemptPruneIntervalMs,
-  loginAttemptWindowCutoff,
-  loginFailureThreshold,
-  loginLockoutMessage
+  identityAttemptBlockedUntil,
+  identityAttemptPruneCutoff,
+  identityAttemptPruneIntervalMs,
+  identityAttemptWindowCutoff,
+  type IdentityAttemptThrottlePolicy
 } from './login-attempt-policy';
 
-const logger = new Logger('IdentityLoginThrottle');
-let nextLoginAttemptPruneAtMs = 0;
+const logger = new Logger('IdentityAttemptThrottle');
+let nextIdentityAttemptPruneAtMs = 0;
 
-export function resetLoginAttemptPruneCadenceForTests(): void {
-  nextLoginAttemptPruneAtMs = 0;
+export function resetIdentityAttemptPruneCadenceForTests(): void {
+  nextIdentityAttemptPruneAtMs = 0;
 }
 
-export async function assertLoginRateLimit(
+export async function assertIdentityAttemptRateLimit(
   identityAccessRepository: IdentityAccessRepository,
-  bucketKey: string,
+  policy: IdentityAttemptThrottlePolicy,
   now: Date
 ): Promise<void> {
-  const state = await identityAccessRepository.findLoginAttemptState(bucketKey);
+  const state = await identityAccessRepository.findIdentityAttemptState(policy.bucketKey);
   if (state?.blockedUntil && new Date(state.blockedUntil).getTime() > now.getTime()) {
-    throw new HttpException(loginLockoutMessage, HttpStatus.TOO_MANY_REQUESTS);
+    throw new HttpException(policy.lockoutMessage, HttpStatus.TOO_MANY_REQUESTS);
   }
 }
 
-export async function recordFailedLoginAttempt(
+export async function recordFailedIdentityAttempt(
   identityAccessRepository: IdentityAccessRepository,
-  bucketKey: string,
+  policy: IdentityAttemptThrottlePolicy,
   now: Date
 ): Promise<void> {
-  const state = await identityAccessRepository.recordFailedLoginAttempt({
-    bucketKey,
+  const state = await identityAccessRepository.recordFailedIdentityAttempt({
+    bucketKey: policy.bucketKey,
     occurredAt: now.toISOString(),
-    windowCutoff: loginAttemptWindowCutoff(now),
-    failureThreshold: loginFailureThreshold,
-    blockedUntil: loginAttemptBlockedUntil(now)
+    windowCutoff: identityAttemptWindowCutoff(policy, now),
+    failureThreshold: policy.failureThreshold,
+    blockedUntil: identityAttemptBlockedUntil(policy, now)
   });
-  await pruneStaleLoginAttemptsBestEffort(identityAccessRepository, now);
+  await pruneStaleIdentityAttemptsBestEffort(identityAccessRepository, now);
 
-  if (state.blockedUntil && new Date(state.blockedUntil).getTime() > now.getTime()) {
-    throw new HttpException(loginLockoutMessage, HttpStatus.TOO_MANY_REQUESTS);
+  if (
+    policy.lockOnThresholdAttempt &&
+    state.blockedUntil &&
+    new Date(state.blockedUntil).getTime() > now.getTime()
+  ) {
+    throw new HttpException(policy.lockoutMessage, HttpStatus.TOO_MANY_REQUESTS);
   }
 }
 
-async function pruneStaleLoginAttemptsBestEffort(
+async function pruneStaleIdentityAttemptsBestEffort(
   identityAccessRepository: IdentityAccessRepository,
   now: Date
 ): Promise<void> {
   const nowMs = now.getTime();
-  if (nowMs < nextLoginAttemptPruneAtMs) {
+  if (nowMs < nextIdentityAttemptPruneAtMs) {
     return;
   }
 
-  nextLoginAttemptPruneAtMs = nowMs + loginAttemptPruneIntervalMs;
+  nextIdentityAttemptPruneAtMs = nowMs + identityAttemptPruneIntervalMs;
   try {
-    await identityAccessRepository.pruneStaleLoginAttemptStates(loginAttemptPruneCutoff(now));
+    await identityAccessRepository.pruneStaleIdentityAttemptStates(identityAttemptPruneCutoff(now));
   } catch (error) {
     logger.warn(
-      `Login attempt cleanup failed: ${error instanceof Error ? error.message : 'unknown error'}`
+      `Identity attempt cleanup failed: ${error instanceof Error ? error.message : 'unknown error'}`
     );
   }
 }

@@ -87,14 +87,16 @@ Gate day is validation debt, not build debt — it never blocks build lanes.
       mode with seed bootstrap disabled.
 - [ ] a real security review before the first pilot
 - [ ] the managed-remote-access prerequisites in
-      [remote-access-plan.md](./remote-access-plan.md) — login throttling,
-      office password posture, session hardening, field-mobile base-URL
-      handling. Managed access is a day-1 sale item, so these are launch
-      blockers, not later polish. Login throttling was closed on 2026-06-19
-      with 5 failed attempts inside 15 minutes creating a 5-minute lockout, and
-      the new-password minimum and session expiry fit were closed the same day.
-      Setup-throttle persistence, tunnel-level policy, and field-mobile remote
-      URL handling remain open.
+      [remote-access-plan.md](./remote-access-plan.md) — login/setup
+      throttling, office password posture, session hardening, and field-mobile
+      base-URL handling. Managed access is a day-1 sale item, so required
+      prerequisites are launch blockers, not later polish. Login throttling was
+      closed on 2026-06-19 with 5 failed attempts inside 15 minutes creating a
+      5-minute lockout; the new-password minimum and session expiry fit were
+      closed the same day; first-owner setup throttling is now DB-backed under
+      a fixed setup bucket. Field-mobile remote URL handling remains open.
+      Tunnel-level access policy remains optional hardening to evaluate, not a
+      promised blocker.
 
 ---
 
