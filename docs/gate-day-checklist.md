@@ -37,6 +37,10 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 
 ## Prep (dev machine, before gate day)
 
+- [ ] Run [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
+      while assembling the USB. Do not start the scratch-machine gate until the
+      active artifacts, source commit, SHA list, docs, evidence templates, and
+      secret scan are all current.
 - [ ] **Build artifact A — v(N):**
 
   ```powershell

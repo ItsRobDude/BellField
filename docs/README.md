@@ -286,6 +286,22 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
 (`relay-token-design.md`).
 
+### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
+
+Audience: contributors assembling a gate-day USB or reviewing release artifact
+readiness before a clean-machine install smoke.
+
+Purpose: operator checklist for reproducible source provenance, full PostgreSQL
+runtime packaging, app-local VC++ runtime DLLs, signed artifact contents, USB
+layout, SHA refresh, secret hygiene, and smoke cleanup before the USB leaves the
+dev machine.
+
+Read when: building or refreshing a gate-day USB, replacing failed artifacts, or
+reviewing whether a release package is ready for clean Windows validation.
+
+Does not own: the gate execution sequence (`gate-day-checklist.md`), the install
+recipe (`install-runbook.md`), or the failed-run evidence docs.
+
 ### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
 
 Audience: contributors working on licensing, distribution, updates, or commercial protection posture.
