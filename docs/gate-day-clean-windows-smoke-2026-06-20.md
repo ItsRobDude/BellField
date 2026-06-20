@@ -110,6 +110,11 @@ packaged PostgreSQL runtime on the build machine; it does not replace the
 clean-machine install, service, ACL, reboot, restore, update, second-device, or
 relay gates.
 
+Rerun note: the second clean Windows attempt is recorded in
+[gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md).
+It confirmed the PostgreSQL runtime fix and then failed during migrations
+because the extracted ZIP could not resolve API Node dependencies such as `pg`.
+
 ## Blocked Gates
 
 - Gate 1 clean install: failed during PostgreSQL provisioning

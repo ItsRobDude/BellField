@@ -64,3 +64,15 @@ jobs:
 
       - name: Validate packaged release
         run: pnpm smoke:release-build
+
+      - name: Package release ZIP
+        shell: pwsh
+        run: |
+          $zipPath = Join-Path $env:RUNNER_TEMP 'bellfield-release-ci.zip'
+          pnpm package:release-zip -- --release-root=release --output="$zipPath"
+
+      - name: Validate extracted release ZIP
+        shell: pwsh
+        run: |
+          $zipPath = Join-Path $env:RUNNER_TEMP 'bellfield-release-ci.zip'
+          pnpm smoke:release-zip -- --zip="$zipPath"

@@ -152,8 +152,13 @@ files (`lib`/`share`) required by the bundled PostgreSQL tools; see
 [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md).
 The release packaging gap is fixed repo-side, including app-local VC++ runtime
 DLLs for the bundled Windows PostgreSQL tools, and the release-build smoke now
-functionally runs packaged PostgreSQL. The clean-machine gate remains open
-until the refreshed artifact passes the runbook end to end.
+functionally runs packaged PostgreSQL. The second clean Windows attempt ran on
+2026-06-20 and proved PostgreSQL provisioning, then failed during migrations
+because the extracted ZIP could not resolve API Node dependencies such as `pg`;
+see
+[gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md).
+The clean-machine gate remains open until the refreshed artifact passes the
+runbook end to end.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

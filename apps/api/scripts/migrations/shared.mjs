@@ -2,12 +2,10 @@ import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import pg from 'pg';
-
-const { Client } = pg;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+let pgModulePromise;
 
 function resolveMigrationsDir() {
   const candidates = [
@@ -63,6 +61,7 @@ function readSqlFile(filePath) {
 }
 
 async function withClient(databaseUrl, run) {
+  const { Client } = await loadPg();
   const client = new Client({ connectionString: requireDatabaseUrl(databaseUrl) });
   await client.connect();
 
@@ -241,9 +240,10 @@ export function runPsql(
   args,
   { databaseUrl = process.env.DATABASE_URL, allowFailure = false } = {}
 ) {
-  const result = spawnSync('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', ...args], {
+  const psql = resolvePsqlExecutable();
+  const result = spawnSync(psql, [databaseUrl, '-v', 'ON_ERROR_STOP=1', ...args], {
     stdio: 'inherit',
-    shell: process.platform === 'win32'
+    shell: process.platform === 'win32' && psql === 'psql'
   });
 
   if (result.error) {
@@ -262,10 +262,11 @@ export function queryPsql(
   sql,
   { databaseUrl = process.env.DATABASE_URL, allowFailure = false } = {}
 ) {
-  const result = spawnSync('psql', [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-tA', '-c', sql], {
+  const psql = resolvePsqlExecutable();
+  const result = spawnSync(psql, [databaseUrl, '-v', 'ON_ERROR_STOP=1', '-tA', '-c', sql], {
     stdio: ['ignore', 'pipe', 'pipe'],
     encoding: 'utf8',
-    shell: process.platform === 'win32'
+    shell: process.platform === 'win32' && psql === 'psql'
   });
 
   if (result.error) {
@@ -281,4 +282,35 @@ export function queryPsql(
   }
 
   return (result.stdout ?? '').trim();
+}
+
+async function loadPg() {
+  pgModulePromise ??= import('pg');
+  const pg = await pgModulePromise;
+  const Client = pg.default?.Client ?? pg.Client;
+  if (!Client) {
+    throw new Error('The pg package did not expose a Client constructor.');
+  }
+  return { Client };
+}
+
+function resolvePsqlExecutable() {
+  const explicit = getArgValue('--psql-path') ?? process.env.BELLFIELD_PSQL_PATH;
+  if (explicit) {
+    return path.resolve(explicit);
+  }
+
+  const binaryName = process.platform === 'win32' ? 'psql.exe' : 'psql';
+  const candidates = [
+    path.resolve(__dirname, '../../../../postgres/bin', binaryName),
+    path.resolve(process.cwd(), 'release/postgres/bin', binaryName),
+    path.resolve(process.cwd(), 'postgres/bin', binaryName)
+  ];
+  return candidates.find((candidate) => existsSync(candidate)) ?? 'psql';
+}
+
+function getArgValue(name) {
+  const prefix = `${name}=`;
+  const match = process.argv.find((argument) => argument.startsWith(prefix));
+  return match ? match.slice(prefix.length) : undefined;
 }
