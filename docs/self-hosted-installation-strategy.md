@@ -162,10 +162,17 @@ dependency fix, packaged PostgreSQL provisioning, packaged migrations, and
 service registration. It then failed when the PostgreSQL service ran as
 `LocalSystem`; PostgreSQL refuses administrative service users on Windows. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
-The current release/install slice moves that service to
-`NT SERVICE\bellfield-postgres` with dedicated log paths and ACLs, but the
-clean-machine gate remains open until the refreshed artifact passes the runbook
-end to end.
+The fourth clean Windows attempt ran on 2026-06-20 with the
+`NT SERVICE\bellfield-postgres` XML/logpath/ACL slice. It proved the repaired
+USB docs, artifact hashes, extraction, server config, packaged PostgreSQL
+provisioning, packaged migrations, license placement, service manifest
+rendering, and most ACL readbacks. It still failed at service startup because
+the installed SCM service account was `LocalSystem` despite the rendered XML
+containing the intended service account block. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
+The clean-machine gate remains open until the installer enforces and readbacks
+the actual Windows service account and the artifact passes the runbook end to
+end.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

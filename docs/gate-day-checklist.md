@@ -119,6 +119,10 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   still show `LocalSystem` until the follow-up whole-stack least-privilege
   slice lands.
 
+  This is an installed-service readback, not a manifest check. Rerun #4 proved
+  that `bellfield-postgres.xml` can contain `<serviceaccount>` while the actual
+  Windows service still reports `LocalSystem`.
+
 - [ ] **ACL readback** (evidence, not vibes):
 
   ```powershell
