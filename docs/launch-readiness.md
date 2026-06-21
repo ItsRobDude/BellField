@@ -86,16 +86,23 @@ contained the intended `NT SERVICE\bellfield-postgres` block; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
 The fifth clean-machine attempt ran on 2026-06-20/21 with rebuilt artifacts
 after the SCM service-account fix. It stopped at the required pre-service
-diagnostic before server config or service installation. The diagnostic showed
-Windows SCM accepted `NT SERVICE\bellfield-postgres`, `StartName` read back
-correctly, the service started as that virtual account, and SID-only ACL write
-succeeded; it still failed because the diagnostic only checked
-`whoami /groups` for the service SID and then crashed in the empty-password
-compatibility branch. See
+diagnostic before server config or service installation; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md).
-The service-account path remains unclaimed until the diagnostic is corrected,
-rebuilt artifacts carry that correction, and the clean-machine Gate 1 run
-starts services successfully.
+The sixth clean-machine attempt ran on 2026-06-21 with corrected diagnostic and
+installer artifacts. It got through clean extraction, server config,
+PostgreSQL provisioning, packaged migrations, license placement, service
+manifest rendering, and elevated service installation. `bellfield-postgres`
+read back as `NT SERVICE\bellfield-postgres`, stayed running, and the
+PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 still failed
+at the required post-install service readback because API/worker refused the
+partial relay env triplet created by a generated
+`BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty relay base URL/token. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md).
+The repo-side follow-up chooses the cleaner contract: relay base URL plus token
+activate relay, while a generated server instance ID by itself remains a
+disabled-relay clean-install state. Gate 1 still needs rebuilt artifacts, green
+install-config/release-runtime smokes, and a fresh clean-machine rerun before it
+can close.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

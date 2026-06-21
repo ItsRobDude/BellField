@@ -215,23 +215,31 @@ export function getApiRuntimeConfig(): ApiRuntimeConfig {
 }
 
 /**
- * The relay client is configured by three values that only make sense
- * together. All absent means relay features are simply not set up (valid);
- * a partial set is a misconfiguration and fails fast in production.
+ * Relay base URL + token are the activation switch. The server instance id is
+ * generated during install and can exist while relay is still disabled.
  */
 function resolveRelayConfig(isProduction: boolean, problems: string[]): ApiRelayConfig | undefined {
   const baseUrl = process.env.BELLFIELD_RELAY_BASE_URL?.trim().replace(/\/+$/, '');
   const token = process.env.BELLFIELD_RELAY_TOKEN?.trim();
   const serverInstanceId = process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID?.trim();
 
-  if (!baseUrl && !token && !serverInstanceId) {
+  if (!baseUrl && !token) {
     return undefined;
   }
 
-  if (!baseUrl || !token || !serverInstanceId) {
+  if (!baseUrl || !token) {
     if (isProduction) {
       problems.push(
-        'BELLFIELD_RELAY_BASE_URL, BELLFIELD_RELAY_TOKEN, and BELLFIELD_RELAY_SERVER_INSTANCE_ID must all be set together (or all left empty).'
+        'BELLFIELD_RELAY_BASE_URL and BELLFIELD_RELAY_TOKEN must be set together to enable the delivery relay.'
+      );
+    }
+    return undefined;
+  }
+
+  if (!serverInstanceId) {
+    if (isProduction) {
+      problems.push(
+        'BELLFIELD_RELAY_SERVER_INSTANCE_ID must be set when the delivery relay is enabled.'
       );
     }
     return undefined;

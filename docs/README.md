@@ -364,6 +364,28 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
 (`relay-token-design.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md)
+
+Audience: contributors checking what the sixth clean Windows gate-day attempt
+proved and where it failed.
+
+Purpose: dated evidence for the sixth fresh Windows install smoke: rebuilt
+artifacts `.11`/`.12` hashed and extracted, clean config/provisioning/migrations
+completed, the installer configured `bellfield-postgres` through SCM as
+`NT SERVICE\bellfield-postgres`, PostgreSQL stayed running under that identity,
+and the PostgreSQL ACL readbacks matched the intended narrow model. The run
+still failed at required post-install service readback because API/worker
+refused the partial relay env triplet created by a generated
+`BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty relay base URL/token.
+
+Read when: checking the rerun-6 evidence behind the clean-install relay-disabled
+contract, installer post-start stabilization checks, or the next Gate 1 artifact
+proof now that the PostgreSQL service-account path passed.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the relay token design
+(`relay-token-design.md`).
+
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
 Audience: contributors assembling a gate-day USB or reviewing release artifact

@@ -192,8 +192,8 @@ export function getWorkerRuntimeConfig(): WorkerRuntimeConfig {
 }
 
 /**
- * Mirrors the API's relay client config rules: all three values or none;
- * a partial set is a misconfiguration reported in production.
+ * Mirrors the API's relay client config rules: base URL + token activate the
+ * relay, while the generated server instance id can exist before activation.
  */
 function resolveRelayConfig(
   isProduction: boolean,
@@ -203,13 +203,21 @@ function resolveRelayConfig(
   const token = process.env.BELLFIELD_RELAY_TOKEN?.trim();
   const serverInstanceId = process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID?.trim();
 
-  if (!baseUrl && !token && !serverInstanceId) {
+  if (!baseUrl && !token) {
     return undefined;
   }
-  if (!baseUrl || !token || !serverInstanceId) {
+  if (!baseUrl || !token) {
     if (isProduction) {
       problems.push(
-        'BELLFIELD_RELAY_BASE_URL, BELLFIELD_RELAY_TOKEN, and BELLFIELD_RELAY_SERVER_INSTANCE_ID must all be set together (or all left empty).'
+        'BELLFIELD_RELAY_BASE_URL and BELLFIELD_RELAY_TOKEN must be set together to enable the delivery relay.'
+      );
+    }
+    return undefined;
+  }
+  if (!serverInstanceId) {
+    if (isProduction) {
+      problems.push(
+        'BELLFIELD_RELAY_SERVER_INSTANCE_ID must be set when the delivery relay is enabled.'
       );
     }
     return undefined;

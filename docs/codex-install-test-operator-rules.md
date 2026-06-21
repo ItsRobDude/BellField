@@ -139,6 +139,12 @@ For the relay gate, copy only these keys from the USB private relay config into
 Preserve the locally generated `BELLFIELD_RELAY_SERVER_INSTANCE_ID` created by
 `write-server-config.mjs`.
 
+Do not copy relay base URL/token early just to make Gate 1 services start. A
+generated `BELLFIELD_RELAY_SERVER_INSTANCE_ID` with blank relay base URL/token
+is the accepted clean-install shape: relay remains disabled until both
+activation credentials are present. If a rebuilt artifact rejects that shape,
+record it as a product/config regression, not an operator workaround point.
+
 Do not copy relay host/provider secrets to the scratch machine. Do not paste
 relay token values into evidence, screenshots, chat, or commit messages.
 

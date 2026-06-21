@@ -16,6 +16,8 @@ $postgresServiceIdentity = "NT SERVICE\$postgresServiceId"
 $postgresServiceStartName = $postgresServiceIdentity
 $postgresDataRoot = Join-Path $InstallRoot "data\postgres"
 $postgresReleaseRoot = Join-Path $ReleaseRoot "postgres"
+$nodeExe = Join-Path $ReleaseRoot "runtime\node\node.exe"
+$runtimeConfigValidator = Join-Path $ReleaseRoot "tools\install\validate-server-runtime-config.mjs"
 
 if (-not (Test-Path -LiteralPath $WinSwExe)) {
   throw "WinSW executable not found at $WinSwExe. Place the approved WinSW x64 binary there before installing services."
@@ -169,6 +171,190 @@ function Set-ServiceStartAccount {
   Write-Host "$ServiceId SCM StartName confirmed as $actualStartName."
 }
 
+function Get-BellFieldServiceSnapshot {
+  param([Parameter(Mandatory = $true)][string[]]$ServiceIds)
+
+  $snapshots = @()
+  foreach ($serviceId in $ServiceIds) {
+    $service = Get-CimInstance Win32_Service -Filter "Name = '$serviceId'" -ErrorAction SilentlyContinue
+    if ($service) {
+      $snapshots += [PSCustomObject]@{
+        Name = $service.Name
+        State = $service.State
+        StartMode = $service.StartMode
+        StartName = $service.StartName
+        ExitCode = $service.ExitCode
+        ProcessId = $service.ProcessId
+        PathName = $service.PathName
+      }
+    } else {
+      $snapshots += [PSCustomObject]@{
+        Name = $serviceId
+        State = "Missing"
+        StartMode = $null
+        StartName = $null
+        ExitCode = $null
+        ProcessId = $null
+        PathName = $null
+      }
+    }
+  }
+
+  return $snapshots
+}
+
+function Format-ServiceSnapshot {
+  param([Parameter(Mandatory = $true)]$Snapshots)
+
+  return ($Snapshots | Format-Table -AutoSize | Out-String).Trim()
+}
+
+function Get-ServiceLogTail {
+  param(
+    [Parameter(Mandatory = $true)][string]$ServiceId,
+    [int]$TailLines = 80
+  )
+
+  $serviceLogDirectory = Join-Path $ServiceLogRoot $ServiceId
+  if (-not (Test-Path -LiteralPath $serviceLogDirectory)) {
+    return "[$ServiceId] log directory not found: $serviceLogDirectory"
+  }
+
+  try {
+    $files = Get-ChildItem -LiteralPath $serviceLogDirectory -File -Filter "*.log" -ErrorAction Stop |
+      Sort-Object LastWriteTime -Descending |
+      Select-Object -First 4
+    if (-not $files) {
+      return "[$ServiceId] no .log files found under $serviceLogDirectory"
+    }
+
+    $sections = @()
+    foreach ($file in $files) {
+      $sections += "----- $($file.FullName) -----"
+      $sections += (Get-Content -LiteralPath $file.FullName -Tail $TailLines -ErrorAction Stop | Out-String).Trim()
+    }
+    return ($sections -join [Environment]::NewLine)
+  } catch {
+    return "[$ServiceId] failed to read log tail: $($_.Exception.Message)"
+  }
+}
+
+function Get-InstallFailureContext {
+  $snapshots = Get-BellFieldServiceSnapshot -ServiceIds $serviceOrder
+  $collector = Join-Path $ReleaseRoot "tools\install\collect-windows-service-evidence.ps1"
+  $collectorOutput = Join-Path $InstallRoot "bellfield-service-evidence.json"
+  $sections = @(
+    "BellField service state:",
+    (Format-ServiceSnapshot -Snapshots $snapshots),
+    "BellField service log tails:"
+  )
+
+  foreach ($serviceId in $serviceOrder) {
+    $sections += Get-ServiceLogTail -ServiceId $serviceId
+  }
+
+  $sections += @(
+    "For full packaged evidence, run from elevated PowerShell:",
+    "powershell -ExecutionPolicy Bypass -File `"$collector`" -InstallRoot `"$InstallRoot`" -OutputPath `"$collectorOutput`""
+  )
+
+  return ($sections -join ([Environment]::NewLine + [Environment]::NewLine))
+}
+
+function Invoke-RuntimeConfigValidation {
+  if (-not (Test-Path -LiteralPath $nodeExe)) {
+    throw "Bundled Node runtime not found at $nodeExe."
+  }
+  if (-not (Test-Path -LiteralPath $runtimeConfigValidator)) {
+    throw "Runtime config validator not found at $runtimeConfigValidator."
+  }
+
+  & $nodeExe $runtimeConfigValidator "--release-root=$ReleaseRoot" "--install-root=$InstallRoot" "--env=$EnvPath"
+  if ($LASTEXITCODE -ne 0) {
+    throw "BellField runtime configuration validation failed. Fix the reported configuration or license problem before starting services."
+  }
+}
+
+function Start-BellFieldServiceAndConfirm {
+  param(
+    [Parameter(Mandatory = $true)][string]$ServiceId,
+    [int]$TimeoutSeconds = 30
+  )
+
+  Start-Service -Name $ServiceId -ErrorAction Stop
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $snapshot = $null
+
+  do {
+    Start-Sleep -Seconds 1
+    $snapshot = Get-CimInstance Win32_Service -Filter "Name = '$ServiceId'" -ErrorAction Stop
+    if ($snapshot.State -eq "Running") {
+      Write-Host "$ServiceId state confirmed as Running."
+      return
+    }
+  } while ((Get-Date) -lt $deadline)
+
+  if ($snapshot.State -ne "Running") {
+    throw "$ServiceId did not reach Running after Start-Service within $TimeoutSeconds seconds. State=$($snapshot.State), ExitCode=$($snapshot.ExitCode)."
+  }
+}
+
+function Assert-BellFieldServicesStable {
+  param([int]$SettleSeconds = 30)
+
+  Start-Sleep -Seconds $SettleSeconds
+  $snapshots = Get-BellFieldServiceSnapshot -ServiceIds $serviceOrder
+  $notRunning = @($snapshots | Where-Object { $_.State -ne "Running" })
+  if ($notRunning.Count -gt 0) {
+    throw "BellField services did not remain Running after $SettleSeconds seconds."
+  }
+}
+
+function Read-ServerEnvValue {
+  param([Parameter(Mandatory = $true)][string]$Name)
+
+  if (-not (Test-Path -LiteralPath $EnvPath)) {
+    return $null
+  }
+
+  foreach ($line in Get-Content -LiteralPath $EnvPath) {
+    if ($line -match "^\s*$([regex]::Escape($Name))\s*=(.*)$") {
+      return $matches[1].Trim()
+    }
+  }
+
+  return $null
+}
+
+function Wait-BellFieldApiHealth {
+  param([int]$TimeoutSeconds = 60)
+
+  $apiPort = Read-ServerEnvValue -Name "BELLFIELD_API_PORT"
+  if (-not $apiPort) {
+    $apiPort = "3001"
+  }
+  $url = "http://127.0.0.1:$apiPort/health"
+  $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+  $lastError = $null
+
+  while ((Get-Date) -lt $deadline) {
+    try {
+      $response = Invoke-RestMethod -Uri $url -TimeoutSec 5 -ErrorAction Stop
+      if ($response.status -eq "ok") {
+        Write-Host "BellField API health reached ok at $url."
+        return
+      }
+      $lastError = "API status '$($response.status)'"
+    } catch {
+      $lastError = $_.Exception.Message
+    }
+
+    Start-Sleep -Seconds 1
+  }
+
+  throw "BellField API health did not reach ok at $url within $TimeoutSeconds seconds. Last error: $lastError"
+}
+
 $serviceOrder = @(
   "bellfield-postgres",
   "bellfield-api",
@@ -228,8 +414,18 @@ Protect-BellFieldPath -Path (Join-Path $ServiceLogRoot $postgresServiceId) -Cont
 Protect-BellFieldPath -Path (Join-Path $ServiceManifestRoot "$postgresServiceId.exe") -ExtraGrants @("${postgresServiceIdentity}:RX")
 Protect-BellFieldPath -Path (Join-Path $ServiceManifestRoot "$postgresServiceId.xml") -ExtraGrants @("${postgresServiceIdentity}:R")
 
-foreach ($serviceId in $serviceOrder) {
-  Start-Service -Name $serviceId
+Invoke-RuntimeConfigValidation
+
+try {
+  foreach ($serviceId in $serviceOrder) {
+    Start-BellFieldServiceAndConfirm -ServiceId $serviceId
+  }
+
+  Assert-BellFieldServicesStable -SettleSeconds 30
+  Wait-BellFieldApiHealth -TimeoutSeconds 60
+} catch {
+  Write-Host (Get-InstallFailureContext)
+  throw
 }
 
-Write-Host "BellField services installed and started."
+Write-Host "BellField services installed, started, stable, and healthy."
