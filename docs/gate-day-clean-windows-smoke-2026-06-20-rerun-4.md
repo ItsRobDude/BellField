@@ -88,7 +88,8 @@ and reconfirmed the release-packaging fixes on another clean Windows machine:
 - The packaged service installer registered all four Windows services:
   `bellfield-postgres`, `bellfield-api`, `bellfield-worker`, and
   `bellfield-office-web`.
-- ACL readback showed the intended hardened shape for the checked paths:
+- Elevated ACL readback showed the intended hardened shape for the checked
+  paths:
   `bellfield-server.env` restricted to `SYSTEM` and `Administrators`, and
   PostgreSQL runtime/data/log paths granting the intended
   `NT SERVICE\bellfield-postgres` access.
@@ -158,48 +159,52 @@ The evidence shows:
 
 - BellField rendered `<serviceaccount>` correctly in
   `bellfield-postgres.xml`.
-- WinSW v2.12.0 installed the service successfully.
+- The packaged WinSW executable registered the service successfully.
 - The installed SCM service account remained `LocalSystem`.
 - PostgreSQL refused to run under that administrative account.
 
-WinSW's XML docs describe `<serviceaccount>` support for built-in and named
-accounts, but there is also an open WinSW issue reporting that configured
-`<username>` can be ignored and the service installed as `LocalSystem`
-([winsw/winsw#971](https://github.com/winsw/winsw/issues/971)). BellField
-should not rely on XML shape alone for this gate.
+WinSW's XML docs describe `<serviceaccount><username>...</username>` support
+for built-in and named accounts, and there is also an open WinSW issue
+reporting similar `LocalSystem` behavior
+([winsw/winsw#971](https://github.com/winsw/winsw/issues/971)). Treat those as
+background only. Run #4 did not prove whether the root cause is a WinSW bug, a
+virtual-service-account support boundary, a version/command behavior, or
+BellField installer logic. It proved the product needs an actual Windows SCM
+account enforcement/readback step before service startup.
 
 ## Operator Hiccups And Complaints
 
 These were not the primary product blocker, but they made the run rougher than
 it should be:
 
-| Category           | Severity | Step                        | What happened                                                                                                                                      | Follow-up                                                                                                                                        |
-| ------------------ | -------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| runbook-gap        | minor    | Extraction                  | `install-runbook.md` said to extract the ZIP but did not prescribe a command. The first `Expand-Archive` attempt exceeded Codex's command timeout. | Add a copyable Windows built-in extraction command. Prefer `tar.exe -xf ... -C C:\BellField` for the Codex-run gate path.                        |
-| automation-hiccup  | minor    | Temporary PostgreSQL start  | Capturing `pg_ctl start` through a PowerShell pipeline left the background `postgres` process holding the stream open, causing a Codex timeout.    | Use `pg_ctl -l <logfile>` and avoid pipe-based capture around background PostgreSQL starts.                                                      |
-| evidence-hiccup    | minor    | Elevated install transcript | The elevated readback command used malformed `Get-CimInstance -Filter Name like 'bellfield-%'`, so that specific readback failed.                  | Keep the working pattern: `Get-CimInstance Win32_Service \| Where-Object { $_.Name -like 'bellfield-*' }`.                                       |
-| hardening-friction | expected | Post-install inspection     | Non-elevated Codex could not read service XML/log paths after ACL hardening.                                                                       | This is expected hardening, but the runbook should make clear that service XML/log inspection after install requires an elevated read-only pass. |
-| evidence-hygiene   | minor    | Evidence template           | The top `Status: not started` line and checkboxes were not updated in place; the real status appeared only in appended notes.                      | Future operators should update the status/checklists as they go, not only append a closeout.                                                     |
-| log-noise          | minor    | Failed service startup      | WinSW restart-on-failure retried PostgreSQL repeatedly, producing repeated administrative-account errors.                                          | During install, fail fast after the first service identity mismatch or failed start; do not let retry noise obscure the first cause.             |
+| Category           | Severity | Step                        | What happened                                                                                                                                      | Follow-up                                                                                                                                                   |
+| ------------------ | -------- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| runbook-gap        | minor    | Extraction                  | `install-runbook.md` said to extract the ZIP but did not prescribe a command. The first `Expand-Archive` attempt exceeded Codex's command timeout. | Add a copyable Windows built-in extraction command. `tar.exe -xf ... -C C:\BellField` worked for run #4 and keeps the gate path reproducible.               |
+| automation-hiccup  | minor    | Temporary PostgreSQL start  | Capturing `pg_ctl start` through a PowerShell pipeline left the background `postgres` process holding the stream open, causing a Codex timeout.    | Use `pg_ctl -l <logfile>` and read the log separately; do not pipe-capture the background PostgreSQL start.                                                 |
+| evidence-hiccup    | minor    | Elevated install transcript | The elevated readback command used malformed `Get-CimInstance -Filter Name like 'bellfield-%'`, so that specific readback failed.                  | Quote the full `-Filter` string or use the working `Where-Object` pattern: `Get-CimInstance Win32_Service \| Where-Object { $_.Name -like 'bellfield-*' }`. |
+| hardening-friction | expected | Post-install inspection     | Non-elevated Codex could not read service XML/log paths after ACL hardening.                                                                       | This is expected hardening, but the runbook should make clear that service XML/log inspection after install requires an elevated read-only pass.            |
+| evidence-hygiene   | minor    | Evidence template           | The top `Status: not started` line and checkboxes were not updated in place; the real status appeared only in appended notes.                      | Future operators should update the status/checklists as they go, not only append a closeout.                                                                |
+| log-noise          | minor    | Failed service startup      | WinSW restart-on-failure retried PostgreSQL repeatedly, producing repeated administrative-account errors.                                          | During install, assert the service identity before `Start-Service`; do not let retry noise obscure the first cause.                                         |
 
 ## Recommended Fix
 
 The next focused fix should be service-account enforcement, not another XML
 shape tweak:
 
-1. Keep rendering the intended PostgreSQL account/log/ACL shape, but after
-   WinSW install explicitly configure or verify the Windows service account
-   through SCM (`sc.exe config`, `ChangeServiceConfig`, or equivalent).
-2. Immediately read back `Win32_Service.StartName` / `sc.exe qc` before
+1. Prove the chosen account path in a tiny elevated Windows diagnostic before
+   rebuilding artifacts: `NT SERVICE\bellfield-postgres` if Windows SCM accepts
+   it reliably for this service wrapper path; otherwise choose a known-supported
+   low-privilege account such as `LocalService` or an installer-created local
+   account, with ACLs adjusted deliberately.
+2. Keep WinSW XML responsible for wrapper/runtime/logging shape only. Do not
+   rely on `<serviceaccount>` for PostgreSQL; set the service account through
+   SCM and make that the single source of truth.
+3. Immediately read back `Win32_Service.StartName` / `sc.exe qc` before
    `Start-Service`; fail with a clear error if `bellfield-postgres` is not
    installed as the intended low-privilege identity.
-3. Prove the chosen account path on Windows before rebuilding artifacts:
-   `NT SERVICE\bellfield-postgres` if SCM accepts it reliably; otherwise use a
-   known-supported low-privilege service account such as `LocalService` or an
-   installer-created local account, with ACLs adjusted deliberately.
-4. Add a Windows service-install smoke that installs a tiny or real
-   `bellfield-postgres` service and asserts the actual SCM `StartName`, not
-   just the rendered XML.
+4. Add/run a Windows service-account diagnostic that installs a temporary
+   `bellfield-postgres` service, asserts the actual SCM `StartName`, captures
+   `whoami /groups`, and proves service-SID ACL access.
 5. Update `install-windows-services.ps1` so a failed service start leaves a
    clearer final state and diagnostic message.
 6. Rebuild/resign/package new artifacts, regenerate the USB hash list, and

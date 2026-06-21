@@ -13,21 +13,6 @@ function envXml(env) {
     .join('\n');
 }
 
-function serviceAccountXml(serviceAccount) {
-  if (!serviceAccount) {
-    return [];
-  }
-
-  return [
-    '  <serviceaccount>',
-    `    <username>${escapeXml(serviceAccount.username)}</username>`,
-    ...(serviceAccount.allowServiceLogon
-      ? ['    <allowservicelogon>true</allowservicelogon>']
-      : []),
-    '  </serviceaccount>'
-  ];
-}
-
 function serviceXml(service) {
   return [
     '<service>',
@@ -38,7 +23,6 @@ function serviceXml(service) {
     `  <executable>${escapeXml(service.executable)}</executable>`,
     `  <arguments>${escapeXml(service.arguments)}</arguments>`,
     `  <workingdirectory>${escapeXml(service.workingDirectory)}</workingdirectory>`,
-    ...serviceAccountXml(service.serviceAccount),
     envXml(service.env),
     '  <startmode>Automatic</startmode>',
     '  <onfailure action="restart" delay="10 sec" />',
@@ -156,10 +140,6 @@ const services = [
     executable: join(postgresBin, 'postgres.exe'),
     arguments: `-D "${postgresData}"`,
     workingDirectory: postgresBin,
-    serviceAccount: {
-      username: 'NT SERVICE\\bellfield-postgres',
-      allowServiceLogon: true
-    },
     logPath: join(serviceLogRoot, 'bellfield-postgres'),
     depends: [],
     env: {

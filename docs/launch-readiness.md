@@ -79,13 +79,14 @@ to run with administrative permissions; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
 The fourth clean-machine attempt ran on 2026-06-20 after the XML/logpath/ACL
 fix. USB preflight, extraction, server config, PostgreSQL provisioning,
-migrations, license placement, service manifest rendering, and most ACL
-readbacks passed. Service startup still failed because the installed Windows
-service account was `LocalSystem` even though the WinSW XML contained the
-intended `NT SERVICE\bellfield-postgres` block; see
+migrations, license placement, service manifest rendering, and the checked
+env/PostgreSQL ACL readbacks passed. Service startup still failed because the
+installed Windows service account was `LocalSystem` even though the WinSW XML
+contained the intended `NT SERVICE\bellfield-postgres` block; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
-The next install slice must enforce and assert the SCM service account, not
-only render XML.
+The repo-side install script now enforces and asserts the SCM service account
+before startup, but this remains unclaimed until rebuilt artifacts pass the
+clean-machine Gate 1 run.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

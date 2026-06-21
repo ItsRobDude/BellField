@@ -166,6 +166,10 @@ try {
     existsSync(join(releaseRoot, 'tools', 'install', 'render-windows-services.mjs'))
   );
   check(
+    'Windows service-account diagnostic is packaged',
+    existsSync(join(releaseRoot, 'tools', 'install', 'diagnose-windows-service-account.ps1'))
+  );
+  check(
     'updater entrypoint is packaged',
     existsSync(join(releaseRoot, 'tools', 'install', 'update-bellfield.mjs'))
   );

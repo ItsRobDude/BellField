@@ -50,6 +50,7 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
     --postgres-root=<path-to-PG16-x64-root> `
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
+  pnpm smoke:service-manifests
   pnpm smoke:release-build -- --require-gate-day-deps=true
   pnpm package:release-zip -- --release-root=release --output=<bellfield-vN.zip>
   pnpm smoke:release-zip -- --zip=<bellfield-vN.zip> --require-gate-day-deps=true
@@ -64,6 +65,14 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
       against a temporary data directory, not only presence-check files. These
       files must be copied by `build:release` before the signed update manifest
       is written; do not add or replace release files after signing.
+- [ ] Confirm `pnpm smoke:service-manifests` passed and shows the Postgres XML
+      has no `<serviceaccount>` block while `install-windows-services.ps1`
+      configures and reads back the SCM `StartName` before startup.
+- [ ] If this artifact is meant to close the service-identity blocker, save a
+      passing elevated diagnostic JSON from
+      `tools\install\diagnose-windows-service-account.ps1` using the same WinSW
+      binary. This is diagnostic evidence only; Gate 1 still requires a cleaned
+      machine install.
 - [ ] **Use the ZIP produced by `pnpm package:release-zip`** as
       `bellfield-vN.zip`; do not manually repackage the signed release tree.
 - [ ] **Build artifact B — v(N+1):** same steps (PG16 + WinSW included), with
@@ -114,14 +123,19 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
     Select-Object Name, State, StartMode, StartName, PathName
   ```
 
+  If embedding the command in an elevated transcript, quote the whole `-Filter`
+  argument exactly as shown. The equivalent pipeline form is also acceptable:
+  `Get-CimInstance Win32_Service | Where-Object { $_.Name -like 'bellfield-*' }`.
+
   Expect `bellfield-postgres` to run as
   `NT SERVICE\bellfield-postgres`. The API, worker, and office-web services may
   still show `LocalSystem` until the follow-up whole-stack least-privilege
   slice lands.
 
   This is an installed-service readback, not a manifest check. Rerun #4 proved
-  that `bellfield-postgres.xml` can contain `<serviceaccount>` while the actual
-  Windows service still reports `LocalSystem`.
+  that `bellfield-postgres.xml` can describe an intended account while the
+  actual Windows service still reports `LocalSystem`; the fixed artifact should
+  rely on SCM configuration/readback, not XML account ownership.
 
 - [ ] **ACL readback** (evidence, not vibes):
 

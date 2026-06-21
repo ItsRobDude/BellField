@@ -166,13 +166,14 @@ The fourth clean Windows attempt ran on 2026-06-20 with the
 `NT SERVICE\bellfield-postgres` XML/logpath/ACL slice. It proved the repaired
 USB docs, artifact hashes, extraction, server config, packaged PostgreSQL
 provisioning, packaged migrations, license placement, service manifest
-rendering, and most ACL readbacks. It still failed at service startup because
-the installed SCM service account was `LocalSystem` despite the rendered XML
-containing the intended service account block. See
+rendering, and the checked env/PostgreSQL ACL readbacks. It still failed at
+service startup because the installed SCM service account was `LocalSystem`
+despite the rendered XML containing the intended service account block. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
-The clean-machine gate remains open until the installer enforces and readbacks
-the actual Windows service account and the artifact passes the runbook end to
-end.
+The repo-side installer now enforces and reads back the actual Windows service
+account before service startup, but the clean-machine gate remains open until a
+rebuilt artifact carries that fix and passes the runbook end to end on a cleaned
+machine.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

@@ -330,14 +330,14 @@ proved and where it failed.
 
 Purpose: dated evidence for the fourth fresh Windows install smoke: USB
 operator docs and artifact hashes passed, extraction/config/PostgreSQL
-provisioning/migrations/license placement/service rendering completed, then
-service startup failed because the installed `bellfield-postgres` SCM account
-was still `LocalSystem` even though the WinSW XML contained the intended
-`NT SERVICE\bellfield-postgres` block.
+provisioning/migrations/license placement/service rendering and the checked
+env/PostgreSQL ACL readbacks completed, then service startup failed because the
+installed `bellfield-postgres` SCM account was still `LocalSystem` even though
+the WinSW XML contained the intended `NT SERVICE\bellfield-postgres` block.
 
-Read when: fixing Windows service account enforcement/readback, updating the
-install runbook extraction/migration logging commands, or deciding what the
-next Gate 1 rerun must prove.
+Read when: checking why SCM `StartName` readback and the service-account
+diagnostic are required before rebuilding artifacts, or deciding what the next
+Gate 1 rerun must prove.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
