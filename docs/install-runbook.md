@@ -96,21 +96,43 @@ Validated on the development machine:
   because the diagnostic required the service SID to appear in `whoami /groups`
   and then crashed in the empty-password compatibility branch. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md)
+- sixth clean Windows gate-day attempt ran on 2026-06-21 with rebuilt artifacts
+  carrying the corrected diagnostic and installer path. Clean extraction,
+  server config, PostgreSQL provisioning, packaged migrations, license
+  placement, service manifest rendering, and elevated service installation
+  completed. `bellfield-postgres` read back as
+  `NT SERVICE\bellfield-postgres`, PostgreSQL stayed running, and the
+  PostgreSQL service-account ACL readbacks matched the intended narrow model.
+  Gate 1 still failed because API/worker refused to start with the generated
+  `BELLFIELD_RELAY_SERVER_INSTANCE_ID` present while relay base URL/token were
+  empty. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
   VC++ runtime DLLs required by the Windows PostgreSQL bundle
+- repo-side runtime-config tests and `pnpm smoke:install-config` now prove the
+  generated clean-install relay-disabled env shape is accepted by API and
+  worker: base URL/token blank means relay disabled even though
+  `BELLFIELD_RELAY_SERVER_INSTANCE_ID` is generated
+- the Windows service installer now validates packaged API/worker runtime
+  config and license readability before service startup, then requires service
+  state stability and API `/health` before reporting success
+- a packaged elevated read-only service evidence collector exists at
+  `tools\install\collect-windows-service-evidence.ps1`
 
 Not yet validated in this repo:
 
 - successful clean Windows machine install with no developer tooling
 - a green run of the packaged service-account diagnostic (supporting preflight
   evidence only, not the gate; now uses corrected virtual-account proof criteria)
-- successful Windows-service startup of bundled PostgreSQL under a
-  non-administrative service identity
+- clean Windows proof that API/worker service startup succeeds from the
+  documented relay-disabled server config
+- clean Windows proof that the installer-owned stabilization/readback and API
+  health gate pass on the scratch machine
 - reboot/service recovery proof
-- real Windows ACL readback for the final service-identity/data-directory
-  model
+- full app-service log/evidence capture after ACL hardening, preferably through
+  an elevated read-only wrapper or packaged collector
 - second office desktop and Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
@@ -192,6 +214,14 @@ On the server, choose a fixed install root such as `C:\BellField`.
 ```
 
 This writes `C:\BellField\bellfield-server.env`, creates local data directories, and generates secrets. Do not commit or share that file.
+
+The config helper generates a non-empty
+`BELLFIELD_RELAY_SERVER_INSTANCE_ID` while `BELLFIELD_RELAY_BASE_URL` and
+`BELLFIELD_RELAY_TOKEN` remain empty. That is the supported clean-install
+relay-disabled state: base URL + token enable the relay, while the instance id
+is server identity kept ready for later activation. Do not paste relay
+credentials merely to make Gate 1 services start; Gate 1 must pass before relay
+activation.
 
 License defaults written by the config helper:
 
@@ -298,15 +328,48 @@ The install script copies the WinSW executable beside each XML manifest,
 stops/uninstalls any existing BellField services so the step is repairable,
 registers the services, configures `bellfield-postgres` through Windows SCM as
 `NT SERVICE\bellfield-postgres`, reads back `Win32_Service.StartName`, enables
-the unrestricted service SID, then applies ACLs before startup. If SCM does not
-read back the expected PostgreSQL service identity, the install fails before
-`Start-Service`.
+the unrestricted service SID, then applies ACLs before startup. It then runs the
+packaged runtime-config validator, starts services in order, confirms each one
+is still `Running`, waits through a 30-second settle window, and polls API
+`/health` for `status: "ok"`. If SCM does not read back the expected PostgreSQL
+service identity, runtime config/license validation fails, a service exits, or
+health does not pass, the install fails instead of printing success.
 
 The PostgreSQL WinSW XML deliberately does not contain `<serviceaccount>`.
 Run #4 proved XML account shape is insufficient: the XML contained
 `NT SERVICE\bellfield-postgres`, but the installed Windows service still
 reported `LocalSystem`. Treat SCM `StartName` readback and service startup as
 the proof, not manifest inspection.
+
+After the installer returns, still capture the installed service state from
+Windows for evidence. Rerun #6 showed why this is mandatory: older artifacts
+could print success while API/worker then crashed with service `ExitCode 1067`.
+Current artifacts should fail inside the installer if that happens, with service
+state and log tails printed for diagnosis.
+
+```powershell
+Start-Sleep -Seconds 20
+Get-CimInstance Win32_Service |
+  Where-Object { $_.Name -like 'bellfield-*' } |
+  Select-Object Name, State, StartMode, StartName, ExitCode, ProcessId, PathName
+```
+
+Stop the gate if any auto-start BellField service is not `Running`, if
+`bellfield-postgres` does not read back as
+`NT SERVICE\bellfield-postgres`, or if API/worker logs show a configuration
+startup refusal. Continuing after editing env values by hand is diagnostic only,
+not a clean Gate 1 pass.
+
+For a packaged evidence snapshot after install, run from elevated PowerShell:
+
+```powershell
+.\release\tools\install\collect-windows-service-evidence.ps1 `
+  -InstallRoot C:\BellField `
+  -OutputPath D:\BellField-GateDay-2026-06-20\evidence\service-evidence-rerun-N.json
+```
+
+The collector summarizes env key presence/blank state without printing secret
+values such as the relay token, database URL, or media token secret.
 
 The packaged service-account diagnostic is a preflight/qualification tool, not a
 step in the clean install and not the gate itself. The authoritative proof of
@@ -388,6 +451,11 @@ BellField first-owner setup token: ...
 ```
 
 Open the office web app, paste that token into the setup form, and create the first owner account.
+
+After service ACL hardening, non-elevated shells may not be able to read service
+logs. If the setup token or startup errors are needed for evidence, capture them
+from an elevated read-only PowerShell session and redact secret values before
+copying to the evidence file.
 
 Rules:
 

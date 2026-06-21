@@ -184,8 +184,20 @@ failed because the diagnostic proof logic required the service SID to appear in
 `whoami /groups` and then crashed in its empty-password compatibility branch.
 See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md).
-The next run should not begin until the diagnostic/proof criteria are corrected,
-new artifacts are rebuilt, and the USB hashes are refreshed.
+The sixth clean Windows attempt ran on 2026-06-21 with corrected diagnostic and
+installer artifacts. It completed clean extraction, server config, PostgreSQL
+provisioning, packaged migrations, license placement, service rendering, and
+elevated service installation. `bellfield-postgres` read back as
+`NT SERVICE\bellfield-postgres`, stayed running, and the PostgreSQL ACL
+readbacks matched the intended narrow model. Gate 1 still failed because
+API/worker refused the generated `BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty
+relay base URL/token. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md).
+The repo-side correction now keeps `write-server-config.mjs` generating the
+server instance ID at install time, but treats relay as disabled until both
+`BELLFIELD_RELAY_BASE_URL` and `BELLFIELD_RELAY_TOKEN` are non-empty. The next
+artifact still has to prove that contract through the generated-config smoke,
+release runtime boot smoke, rebuilt USB hashes, and a clean Windows rerun.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

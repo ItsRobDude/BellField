@@ -51,6 +51,7 @@
     "smoke:jobs": "node tools/smoke/jobs-lifecycle-api-smoke.mjs",
     "smoke:release-office-web": "node tools/smoke/release-office-web-assets-smoke.mjs",
     "smoke:restore-staging": "node tools/smoke/restore-staging-smoke.mjs",
+    "smoke:install-config": "node tools/smoke/install-config-smoke.mjs",
     "smoke:service-manifests": "node tools/smoke/service-manifest-smoke.mjs",
     "smoke:license-key": "node tools/smoke/license-key-smoke.mjs",
     "smoke:release-artifact": "node tools/smoke/release-artifact-signature-smoke.mjs",

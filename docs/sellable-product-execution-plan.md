@@ -55,18 +55,21 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Latest clean-machine evidence: run #5 on 2026-06-20/21 used rebuilt artifacts
-after the repo-side SCM account enforcement change. It verified active hashes
-and extraction, then stopped at the required pre-service diagnostic before
-server config, PostgreSQL provisioning, service installation, or owner setup.
-The diagnostic showed Windows SCM accepted
-`NT SERVICE\bellfield-postgres` with no password, `StartName` read back
-correctly, the temporary service started as that virtual account, and SID-only
-ACL write succeeded. It still failed because the diagnostic proof logic looked
-only for the service SID in `whoami /groups` and then crashed in its
-empty-password compatibility branch. The next fix is the diagnostic/proof
-criteria, not a return to WinSW XML account ownership. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md).
+Latest clean-machine evidence: run #6 on 2026-06-21 used rebuilt artifacts
+after the diagnostic and installer fixes. It completed clean extraction, server
+config, PostgreSQL provisioning, packaged migrations, license placement,
+service rendering, and elevated service installation. `bellfield-postgres`
+read back as `NT SERVICE\bellfield-postgres`, stayed running, and the
+PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 still failed
+at required post-install service readback because API/worker refused the
+partial relay env triplet created by a generated
+`BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty relay base URL/token. The
+repo-side follow-up now treats base URL plus token as the relay activation
+switch, allows a generated instance ID while relay is disabled, and adds
+generated-config plus service-stability/health smokes before the next USB
+rebuild. This remains a clean-artifact proof problem, not a return to WinSW XML
+account ownership. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md).
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
@@ -80,12 +83,12 @@ criteria, not a return to WinSW XML account ownership. See
   blockers. Clean-machine run #4 proved XML account shape is insufficient:
   WinSW installed PostgreSQL as `LocalSystem`. The repo-side installer now
   configures and reads back the Postgres SCM account before startup.
-  Clean-machine run #5 showed that the preferred virtual account is accepted by
-  SCM on Windows 11 Home and can write through a SID-only ACL, but the packaged
-  diagnostic rejected that proof and crashed before fallback testing. The
-  clean-machine install gate stays open until the diagnostic is corrected,
-  rebuilt artifacts carry that correction, and services start on the scratch
-  machine.
+  Clean-machine run #6 showed the installer can configure PostgreSQL through
+  SCM as `NT SERVICE\bellfield-postgres`, start it under that account, and
+  preserve the intended PostgreSQL ACL model on Windows 11 Home. The
+  clean-machine install gate stays open until the relay-disabled clean config
+  starts API/worker, the service stack remains running after installer success,
+  and the scratch machine completes first-owner setup.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.

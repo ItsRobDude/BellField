@@ -58,13 +58,24 @@ does not replace the clean-machine run.
       passed for each active artifact. This smoke extracts with the Windows
       operator path, verifies API/worker dependency resolution, boots
       office-web from the extracted ZIP, fetches root HTML and referenced
-      Next static JavaScript assets, and runs packaged migrations against a
-      temporary packaged PostgreSQL database.
+      Next static JavaScript assets, runs packaged migrations against a
+      temporary packaged PostgreSQL database, issues a smoke license, runs the
+      packaged manual backup CLI, boots API through `/health`, and confirms the
+      worker stays alive after startup.
+- [ ] `pnpm smoke:install-config` passed and proves the real
+      `write-server-config.mjs` output is accepted by API and worker with relay
+      disabled.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
       `bellfield-postgres.xml` does not contain `<serviceaccount>`, the service
       log paths remain outside the manifest directory, and
       `install-windows-services.ps1` configures and reads back the SCM
-      `StartName` before service startup.
+      `StartName` before service startup, validates runtime config, waits for
+      service stability, and polls API health.
+- [ ] The artifact's relay-disabled clean-install config is internally
+      consistent. The accepted disabled-relay state is a generated
+      `BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty
+      `BELLFIELD_RELAY_BASE_URL` and `BELLFIELD_RELAY_TOKEN`; services must not
+      require relay credentials before first-owner setup.
 - [ ] Service-account changes are not considered proven by XML inspection
       alone. If this USB is meant to close a Windows service-identity blocker,
       the release/install code must assert the installed SCM `StartName` before
@@ -132,6 +143,12 @@ For each active release zip:
 - [ ] Gate-day relay private config supplies only `BELLFIELD_RELAY_BASE_URL`
       and `BELLFIELD_RELAY_TOKEN`; it must not overwrite the locally generated
       `BELLFIELD_RELAY_SERVER_INSTANCE_ID`.
+- [ ] The clean-install gate does not require copying relay base URL/token
+      before first-owner setup. If services only start after relay credentials
+      are pasted, the artifact has failed Gate 1.
+- [ ] The USB includes `tools\install\collect-windows-service-evidence.ps1` in
+      the release tree, and the evidence instructions use it for elevated
+      service/log/ACL readback.
 - [ ] Docs, `START-HERE.txt`, evidence templates, command logs, and build
       evidence do not contain live relay token values.
 - [ ] Evidence files instruct the operator to redact relay token values.

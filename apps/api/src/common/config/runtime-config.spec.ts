@@ -182,13 +182,43 @@ describe('getApiRuntimeConfig', () => {
     expect(config.relay).toBeUndefined();
   });
 
-  it('refuses partial relay config in production', () => {
+  it('treats generated instance id alone as relay disabled in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+    process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID = 'generated-instance-id';
+
+    const config = getApiRuntimeConfig();
+
+    expect(config.relay).toBeUndefined();
+  });
+
+  it('refuses relay base URL without token in production', () => {
     process.env.NODE_ENV = 'production';
     process.env.DATABASE_URL = validProductionDatabaseUrl;
     process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
     process.env.BELLFIELD_RELAY_BASE_URL = 'https://relay.bellfield.app';
 
     expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_RELAY_TOKEN/);
+  });
+
+  it('refuses relay token without base URL in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+    process.env.BELLFIELD_RELAY_TOKEN = 'bfrt1_token_value';
+
+    expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_RELAY_BASE_URL/);
+  });
+
+  it('refuses relay credentials without server instance id in production', () => {
+    process.env.NODE_ENV = 'production';
+    process.env.DATABASE_URL = validProductionDatabaseUrl;
+    process.env.BELLFIELD_OFFICE_ORIGINS = 'https://office.example.com';
+    process.env.BELLFIELD_RELAY_BASE_URL = 'https://relay.bellfield.app';
+    process.env.BELLFIELD_RELAY_TOKEN = 'bfrt1_token_value';
+
+    expect(() => getApiRuntimeConfig()).toThrow(/BELLFIELD_RELAY_SERVER_INSTANCE_ID/);
   });
 
   it('treats partial relay config as not configured outside production', () => {

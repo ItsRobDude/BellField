@@ -11,6 +11,11 @@ const envPath = path.join(installRoot, 'bellfield-server.env');
 const outputDir = path.join(releaseRoot, 'services');
 const renderScript = path.resolve('tools', 'install', 'render-windows-services.mjs');
 const installServicesScript = path.resolve('tools', 'install', 'install-windows-services.ps1');
+const runtimeConfigValidatorScript = path.resolve(
+  'tools',
+  'install',
+  'validate-server-runtime-config.mjs'
+);
 const serviceAccountDiagnosticScript = path.resolve(
   'tools',
   'install',
@@ -77,6 +82,7 @@ try {
   const workerXml = readManifest('bellfield-worker');
   const officeXml = readManifest('bellfield-office-web');
   const installScript = readFileSync(installServicesScript, 'utf8');
+  const runtimeValidatorScript = readFileSync(runtimeConfigValidatorScript, 'utf8');
   const diagnosticScript = readFileSync(serviceAccountDiagnosticScript, 'utf8');
 
   for (const [serviceId, xml] of Object.entries({
@@ -148,6 +154,42 @@ try {
     'installer is repairable by uninstalling existing services before install',
     installScript.includes('Uninstall-BellFieldServiceIfPresent')
   );
+  check(
+    'installer runs packaged runtime config validation before service startup',
+    installScript.includes('validate-server-runtime-config.mjs') &&
+      installScript.includes('Invoke-RuntimeConfigValidation')
+  );
+  check(
+    'runtime validator uses compiled API and worker runtime config modules',
+    runtimeValidatorScript.includes('getApiRuntimeConfig') &&
+      runtimeValidatorScript.includes('getWorkerRuntimeConfig') &&
+      runtimeValidatorScript.includes('assertRuntimeLicense')
+  );
+  check(
+    'installer re-reads service state immediately after each Start-Service',
+    installScript.includes('Start-BellFieldServiceAndConfirm') &&
+      installScript.includes('Start-Service -Name $ServiceId') &&
+      installScript.includes('State=$($snapshot.State), ExitCode=$($snapshot.ExitCode)')
+  );
+  check(
+    'installer waits through a post-start service settle window',
+    installScript.includes('Assert-BellFieldServicesStable -SettleSeconds 30')
+  );
+  check(
+    'installer polls API health before reporting success',
+    installScript.includes('Wait-BellFieldApiHealth -TimeoutSeconds 60') &&
+      installScript.includes('Invoke-RestMethod -Uri $url')
+  );
+  check(
+    'installer prints service state and log tails on startup failure',
+    installScript.includes('Get-InstallFailureContext') &&
+      installScript.includes('Get-ServiceLogTail') &&
+      installScript.includes('Write-Host (Get-InstallFailureContext)')
+  );
+  check(
+    'installer points operators at the packaged service evidence collector on failure',
+    installScript.includes('collect-windows-service-evidence.ps1')
+  );
   checkScriptOrder(
     installScript,
     'installer confirms Postgres SCM StartName before enabling SID type',
@@ -156,15 +198,21 @@ try {
   );
   checkScriptOrder(
     installScript,
-    'installer hardens Postgres ACLs before starting services',
+    'installer hardens Postgres ACLs before runtime validation',
     'Protect-BellFieldPath -Path $postgresDataRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")',
-    'Start-Service -Name $serviceId'
+    '\nInvoke-RuntimeConfigValidation\n\ntry {'
   );
   checkScriptOrder(
     installScript,
-    'installer confirms Postgres SCM StartName before starting services',
+    'installer validates runtime config before starting services',
+    '\nInvoke-RuntimeConfigValidation\n\ntry {',
+    'Start-BellFieldServiceAndConfirm -ServiceId $serviceId'
+  );
+  checkScriptOrder(
+    installScript,
+    'installer confirms Postgres SCM StartName before service startup validation',
     'Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName',
-    'Start-Service -Name $serviceId'
+    '\nInvoke-RuntimeConfigValidation\n\ntry {'
   );
   check(
     'service-account diagnostic configures SCM accounts with no password argument',
