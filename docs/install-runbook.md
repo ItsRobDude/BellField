@@ -76,11 +76,15 @@ Validated on the development machine:
   `bellfield-postgres` started as `LocalSystem`; PostgreSQL refused to run
   under an administrative account. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md)
-- release service manifests now render `bellfield-postgres` under the
-  passwordless virtual service account `NT SERVICE\bellfield-postgres`, put
-  WinSW logs under `C:\BellField\data\logs\services\<service-id>`, and the
-  installer applies PostgreSQL-specific ACLs after service registration. This
-  is still pending clean-machine rerun proof.
+- fourth clean Windows gate-day attempt ran on 2026-06-20 and proved the
+  repaired USB docs, artifact hashes, extraction, server config, packaged
+  PostgreSQL provisioning, migrations, license placement, service manifest
+  rendering, and most ACL readbacks. It still failed at service startup because
+  WinSW installed `bellfield-postgres` under `LocalSystem` even though the XML
+  contained `<serviceaccount><username>NT SERVICE\bellfield-postgres</username>`.
+  The next fix must enforce and assert the SCM service account, not only render
+  XML. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -150,6 +154,21 @@ The script creates `release/` with:
 
 `release/` is a generated local artifact and is intentionally not committed.
 
+## Extract Release
+
+For the current assisted Windows gate path, extract the active release ZIP into
+the install root with a Windows built-in command. For example, from an ordinary
+PowerShell session:
+
+```powershell
+New-Item -ItemType Directory -Path C:\BellField -Force | Out-Null
+& "$env:SystemRoot\System32\tar.exe" -xf "<path-to-active-bellfield-zip>" -C "C:\BellField"
+```
+
+The expected result is `C:\BellField\release`. Do not copy files into the
+extracted release after extraction; the signed manifest covers the release file
+list and hashes.
+
 ## Write Server Config
 
 On the server, choose a fixed install root such as `C:\BellField`.
@@ -201,11 +220,17 @@ For the current assisted path, start PostgreSQL temporarily, run migrations, the
 
 ```powershell
 $postgresData = "C:\BellField\data\postgres"
-.\release\postgres\bin\pg_ctl.exe -D $postgresData -o "-h 127.0.0.1 -p 5432" -w start
+New-Item -ItemType Directory -Path "C:\BellField\data\logs" -Force | Out-Null
+.\release\postgres\bin\pg_ctl.exe -D $postgresData -l "C:\BellField\data\logs\manual-postgres-start.log" -o "-h 127.0.0.1 -p 5432" -w start
 $env:DATABASE_URL = "<value from C:\BellField\bellfield-server.env>"
 .\release\runtime\node\node.exe .\release\apps\api\scripts\migrations\up.mjs
 .\release\postgres\bin\pg_ctl.exe -D $postgresData -m fast -w stop
 ```
+
+When Codex is capturing command output, avoid wrapping `pg_ctl start` in a
+PowerShell pipeline. Rerun #4 showed that background PostgreSQL can inherit the
+captured stream and keep the command open until Codex times out. Use `pg_ctl`
+`-l <logfile>` and read the log separately if needed.
 
 ## Install License File
 
@@ -257,7 +282,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass
 
 The install script copies the WinSW executable beside each XML manifest,
 stops/uninstalls any existing BellField services so the step is repairable,
-registers the services, then applies ACLs before startup:
+registers the services, then applies ACLs before startup.
+
+Known blocker after the 2026-06-20 rerun #4: the rendered PostgreSQL XML
+contained `<serviceaccount>` for `NT SERVICE\bellfield-postgres`, but WinSW
+installed the service under `LocalSystem`. The next release must explicitly
+enforce and read back the SCM service account before `Start-Service`; do not
+claim the clean-machine gate closed from XML inspection alone.
+
+Intended service/ACL model for the next fixed artifact:
 
 - `bellfield-postgres` runs as `NT SERVICE\bellfield-postgres`.
 - `C:\BellField\bellfield-server.env` remains restricted to Administrators and

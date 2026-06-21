@@ -63,6 +63,11 @@ does not replace the clean-machine run.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
       `bellfield-postgres` renders with the `NT SERVICE\bellfield-postgres`
       virtual account plus dedicated service log paths.
+- [ ] Service-account changes are not considered proven by XML inspection
+      alone. If this USB is meant to close a Windows service-identity blocker,
+      the release/install code must also assert the installed SCM `StartName`
+      before service startup, or the PR/release notes must explicitly call out
+      that the proof is still pending.
 - [ ] `pnpm format:check` passed after any doc/checklist updates.
 
 ## Artifact Contents
@@ -99,6 +104,8 @@ For each active release zip:
 - [ ] Build evidence for failed or superseded artifacts is archived separately.
 - [ ] Rerun evidence files are fresh and do not overwrite earlier failure
       evidence.
+- [ ] Active rerun evidence templates have their top-level status/checklist
+      updated during the run, not only appended closeout notes at the bottom.
 - [ ] Offline docs on the USB were refreshed from the repo after the final doc
       edits.
 - [ ] Every `docs\*.md` path referenced by `START-HERE.txt` or active evidence

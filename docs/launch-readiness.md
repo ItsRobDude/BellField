@@ -77,9 +77,15 @@ migrations applied, and services registered, then `bellfield-postgres` failed
 because WinSW registered PostgreSQL under `LocalSystem` and PostgreSQL refuses
 to run with administrative permissions; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
-The current release slice renders PostgreSQL under
-`NT SERVICE\bellfield-postgres` with dedicated log paths and ACLs; that fix is
-still pending clean-machine rerun proof.
+The fourth clean-machine attempt ran on 2026-06-20 after the XML/logpath/ACL
+fix. USB preflight, extraction, server config, PostgreSQL provisioning,
+migrations, license placement, service manifest rendering, and most ACL
+readbacks passed. Service startup still failed because the installed Windows
+service account was `LocalSystem` even though the WinSW XML contained the
+intended `NT SERVICE\bellfield-postgres` block; see
+[gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
+The next install slice must enforce and assert the SCM service account, not
+only render XML.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

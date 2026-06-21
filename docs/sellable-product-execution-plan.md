@@ -55,15 +55,16 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Latest clean-machine evidence: run #3 on 2026-06-20 proved the portable ZIP
-packaging fix, packaged PostgreSQL provisioning, packaged migrations, and
-WinSW service registration on a clean Windows 11 machine. It failed before
-owner setup because the PostgreSQL service was registered as `LocalSystem`;
-PostgreSQL refuses to run under an administrative account. The current install
-slice moves bundled PostgreSQL to the passwordless
-`NT SERVICE\bellfield-postgres` virtual account with dedicated log paths and
-ACLs; it still needs clean-machine rerun proof. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
+Latest clean-machine evidence: run #4 on 2026-06-20 proved the repaired USB
+docs, artifact hashes, extraction, packaged PostgreSQL provisioning, packaged
+migrations, license placement, service manifest rendering, and most ACL
+readbacks on a clean Windows 11 Home machine. It failed before owner setup
+because the installed `bellfield-postgres` service account was still
+`LocalSystem` even though the rendered WinSW XML contained
+`NT SERVICE\bellfield-postgres`; PostgreSQL refuses to run under an
+administrative account. The next install slice must enforce and assert the SCM
+service account, not only render XML. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
@@ -74,9 +75,11 @@ ACLs; it still needs clean-machine rerun proof. See
   `release/`. The office static asset copy now targets the actual standalone
   server root and has a same-machine asset/browser smoke. Clean-machine
   artifact packaging is now past the PostgreSQL runtime and ZIP-portability
-  blockers. The PostgreSQL service-identity fix is in the release/install
-  tooling, but the clean-machine install gate stays open until the refreshed
-  artifact starts services on the scratch machine.
+  blockers. The PostgreSQL service-identity XML/logpath/ACL shape exists in
+  the release/install tooling, but clean-machine run #4 proved XML shape is
+  insufficient: WinSW installed PostgreSQL as `LocalSystem`. The clean-machine
+  install gate stays open until the installer enforces/readbacks the actual SCM
+  account and starts services on the scratch machine.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.
