@@ -71,8 +71,17 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 - [ ] If this artifact is meant to close the service-identity blocker, save a
       passing elevated diagnostic JSON from
       `tools\install\diagnose-windows-service-account.ps1` using the same WinSW
-      binary. This is diagnostic evidence only; Gate 1 still requires a cleaned
-      machine install.
+      binary. The ordinary gate diagnostic should clean up after itself; reserve
+      `-KeepArtifacts` for an explicit diagnostic/forensics run. This is
+      supporting preflight evidence only, not a Gate 1 pass and not a
+      clean-install step: the authoritative service-identity proof is the
+      installer's own SCM `StartName` readback plus real service startup. A
+      diagnostic that fails for tool reasons must not block a gate whose
+      installer readback and service start pass; a genuine failure must still be
+      investigated. Rerun #5 showed that virtual-account proof must account for
+      the service identity appearing as the process user even when
+      `whoami /groups` does not list the service-specific SID, which the
+      diagnostic predicate now reflects.
 - [ ] **Use the ZIP produced by `pnpm package:release-zip`** as
       `bellfield-vN.zip`; do not manually repackage the signed release tree.
 - [ ] **Build artifact B — v(N+1):** same steps (PG16 + WinSW included), with

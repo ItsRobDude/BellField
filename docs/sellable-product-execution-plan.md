@@ -55,17 +55,18 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Latest clean-machine evidence: run #4 on 2026-06-20 proved the repaired USB
-docs, artifact hashes, extraction, packaged PostgreSQL provisioning, packaged
-migrations, license placement, service manifest rendering, and the checked
-env/PostgreSQL ACL readbacks on a clean Windows 11 Home machine. It failed
-before owner setup because the installed `bellfield-postgres` service account
-was still `LocalSystem` even though the rendered WinSW XML contained
-`NT SERVICE\bellfield-postgres`; PostgreSQL refuses to run under an
-administrative account. The repo-side installer now enforces and asserts the
-SCM service account, but rebuilt artifacts and a clean-machine Gate 1 rerun
-still have to prove it. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
+Latest clean-machine evidence: run #5 on 2026-06-20/21 used rebuilt artifacts
+after the repo-side SCM account enforcement change. It verified active hashes
+and extraction, then stopped at the required pre-service diagnostic before
+server config, PostgreSQL provisioning, service installation, or owner setup.
+The diagnostic showed Windows SCM accepted
+`NT SERVICE\bellfield-postgres` with no password, `StartName` read back
+correctly, the temporary service started as that virtual account, and SID-only
+ACL write succeeded. It still failed because the diagnostic proof logic looked
+only for the service SID in `whoami /groups` and then crashed in its
+empty-password compatibility branch. The next fix is the diagnostic/proof
+criteria, not a return to WinSW XML account ownership. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md).
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
@@ -78,9 +79,13 @@ still have to prove it. See
   artifact packaging is now past the PostgreSQL runtime and ZIP-portability
   blockers. Clean-machine run #4 proved XML account shape is insufficient:
   WinSW installed PostgreSQL as `LocalSystem`. The repo-side installer now
-  configures and reads back the Postgres SCM account before startup, but the
-  clean-machine install gate stays open until rebuilt artifacts carry that fix
-  and start services on the scratch machine.
+  configures and reads back the Postgres SCM account before startup.
+  Clean-machine run #5 showed that the preferred virtual account is accepted by
+  SCM on Windows 11 Home and can write through a SID-only ACL, but the packaged
+  diagnostic rejected that proof and crashed before fallback testing. The
+  clean-machine install gate stays open until the diagnostic is corrected,
+  rebuilt artifacts carry that correction, and services start on the scratch
+  machine.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.

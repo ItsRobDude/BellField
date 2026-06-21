@@ -11,6 +11,11 @@ const envPath = path.join(installRoot, 'bellfield-server.env');
 const outputDir = path.join(releaseRoot, 'services');
 const renderScript = path.resolve('tools', 'install', 'render-windows-services.mjs');
 const installServicesScript = path.resolve('tools', 'install', 'install-windows-services.ps1');
+const serviceAccountDiagnosticScript = path.resolve(
+  'tools',
+  'install',
+  'diagnose-windows-service-account.ps1'
+);
 const serviceLogRoot = path.join(installRoot, 'data', 'logs', 'services');
 const evidence = {
   name: 'Windows service manifest smoke',
@@ -72,6 +77,7 @@ try {
   const workerXml = readManifest('bellfield-worker');
   const officeXml = readManifest('bellfield-office-web');
   const installScript = readFileSync(installServicesScript, 'utf8');
+  const diagnosticScript = readFileSync(serviceAccountDiagnosticScript, 'utf8');
 
   for (const [serviceId, xml] of Object.entries({
     postgresXml,
@@ -159,6 +165,36 @@ try {
     'installer confirms Postgres SCM StartName before starting services',
     'Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName',
     'Start-Service -Name $serviceId'
+  );
+  check(
+    'service-account diagnostic configures SCM accounts with no password argument',
+    diagnosticScript.includes('"obj=", $Candidate.account') &&
+      !diagnosticScript.includes('$arguments += "password="') &&
+      !diagnosticScript.includes('passwordMode = "emptyString"')
+  );
+  check(
+    'service-account diagnostic pass predicate includes SCM StartName readback',
+    diagnosticScript.includes('$test["startNameMatches"]')
+  );
+  check(
+    'service-account diagnostic pass predicate includes real service startup',
+    diagnosticScript.includes('$test["startSucceeded"]')
+  );
+  check(
+    'service-account diagnostic pass predicate includes SID-only ACL write',
+    diagnosticScript.includes('$test["probe"].aclWriteSucceeded')
+  );
+  check(
+    'service-account diagnostic records serviceSidPresent without making it the pass gate',
+    diagnosticScript.includes('serviceSidPresent = ($groupsText -match') &&
+      !diagnosticScript.includes('$test["probe"].serviceSidPresent -and')
+  );
+  check(
+    'service-account diagnostic failure text matches the actual pass predicate',
+    diagnosticScript.includes(
+      'No service account candidate passed StartName readback, real service startup, and SID-only ACL write checks.'
+    ) &&
+      !diagnosticScript.includes('No service account candidate passed StartName, token service SID')
   );
 
   check('api keeps database URL', apiXml.includes('DATABASE_URL'));
