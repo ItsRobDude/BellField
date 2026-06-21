@@ -101,6 +101,8 @@ For each active release zip:
       evidence.
 - [ ] Offline docs on the USB were refreshed from the repo after the final doc
       edits.
+- [ ] Every `docs\*.md` path referenced by `START-HERE.txt` or active evidence
+      templates exists on the USB.
 - [ ] `SHA256SUMS.txt` was regenerated after the final USB change.
 
 ## Secret Hygiene
