@@ -203,9 +203,14 @@ browser first-owner setup: `POST /identity/setup/first-owner` returned 500
 while recording a failed setup attempt because `blocked_until` is a timestamp
 column and the SQL path supplied text. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md).
-The next artifact has to fix first-owner setup failed-attempt persistence and
-then prove owner setup, job booking, reboot recovery, and second-device access
-from a cleaned Windows state.
+The next artifact pair fixed first-owner setup failed-attempt persistence and
+proved invalid-token handling plus valid owner creation in the packaged release
+smoke. The eighth clean Windows attempt did not reach install; it stopped before
+extraction because the USB hash manifest included mutable `evidence/**` files.
+See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
+Gate 1 still needs a cleaned Windows run that proves owner setup, job booking,
+reboot recovery, and second-device access.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

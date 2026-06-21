@@ -70,14 +70,19 @@ Not allowed unless the run is explicitly reclassified as diagnostic:
 
 - Use the clean-install artifact named by `START-HERE.txt` for Gate 1.
 - Use the update artifact named by `START-HERE.txt` only for the update gate.
-- Verify active artifact hashes against `SHA256SUMS.txt` before extraction.
+- Verify active package hashes against `SHA256SUMS.txt` before extraction.
+- Current-run evidence files under `evidence/` are mutable operator logs. They
+  should be readable on the USB, but they should not be included in
+  `SHA256SUMS.txt`.
 - When verifying hashes from PowerShell, normalize artifact relative paths to
   forward slashes before matching `SHA256SUMS.txt`. The SHA file uses
   forward-slash paths even when Windows command output naturally shows
   backslashes.
 - Prefer the packaged helper when present:
-  `release\tools\install\verify-usb-hashes.ps1 -Root <usb-root>`.
-- Treat hash mismatch as a stop condition.
+  `tools\install\verify-usb-hashes.ps1 -Root <usb-root>`.
+- Treat immutable package hash mismatches as a stop condition.
+- If the only mismatches are under `evidence/`, stop and record a USB-prep
+  manifest defect instead of treating the active product artifact as corrupt.
 - Treat a blank expected hash as a parser/path-matching problem first, not as
   proof that the artifact content is wrong. Re-run the comparison with
   normalized paths and then stop if the normalized expected/actual hash still
@@ -184,7 +189,9 @@ Capture what happened.
 Stop before continuing product validation when:
 
 - a referenced USB file is missing;
-- an active artifact hash does not match `SHA256SUMS.txt`;
+- an immutable active package hash does not match `SHA256SUMS.txt`;
+- `SHA256SUMS.txt` includes mutable current-run evidence paths and blocks the
+  run before extraction;
 - a packaged executable, DLL, service manifest, migration, runtime dependency,
   license, or runbook file is missing;
 - Windows requires installing developer tooling to continue;
