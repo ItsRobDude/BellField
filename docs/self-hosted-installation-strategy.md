@@ -157,8 +157,15 @@ functionally runs packaged PostgreSQL. The second clean Windows attempt ran on
 because the extracted ZIP could not resolve API Node dependencies such as `pg`;
 see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md).
-The clean-machine gate remains open until the refreshed artifact passes the
-runbook end to end.
+The third clean Windows attempt ran on 2026-06-20 and proved the portable ZIP
+dependency fix, packaged PostgreSQL provisioning, packaged migrations, and
+service registration. It then failed when the PostgreSQL service ran as
+`LocalSystem`; PostgreSQL refuses administrative service users on Windows. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
+The current release/install slice moves that service to
+`NT SERVICE\bellfield-postgres` with dedicated log paths and ACLs, but the
+clean-machine gate remains open until the refreshed artifact passes the runbook
+end to end.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

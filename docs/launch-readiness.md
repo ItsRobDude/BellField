@@ -71,6 +71,15 @@ PostgreSQL. The second clean-machine attempt ran on 2026-06-20, got through
 PostgreSQL provisioning, and then failed during migrations because the extracted
 ZIP could not resolve API Node dependencies such as `pg`; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md).
+The third clean-machine attempt ran on 2026-06-20 with the portable ZIP fix:
+the artifact extracted, packaged PostgreSQL provisioning completed, packaged
+migrations applied, and services registered, then `bellfield-postgres` failed
+because WinSW registered PostgreSQL under `LocalSystem` and PostgreSQL refuses
+to run with administrative permissions; see
+[gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
+The current release slice renders PostgreSQL under
+`NT SERVICE\bellfield-postgres` with dedicated log paths and ACLs; that fix is
+still pending clean-machine rerun proof.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

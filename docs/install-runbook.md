@@ -69,6 +69,18 @@ Validated on the development machine:
   failed during migrations because the extracted ZIP could not resolve the API
   package dependency `pg`; see
   [gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md)
+- third clean Windows gate-day attempt ran on 2026-06-20 and proved the
+  post-extraction dependency packaging fix on the scratch machine: the active
+  ZIP extracted, packaged PostgreSQL provisioning completed, packaged
+  migrations applied, and WinSW services registered. It then failed when
+  `bellfield-postgres` started as `LocalSystem`; PostgreSQL refused to run
+  under an administrative account. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md)
+- release service manifests now render `bellfield-postgres` under the
+  passwordless virtual service account `NT SERVICE\bellfield-postgres`, put
+  WinSW logs under `C:\BellField\data\logs\services\<service-id>`, and the
+  installer applies PostgreSQL-specific ACLs after service registration. This
+  is still pending clean-machine rerun proof.
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -77,11 +89,11 @@ Validated on the development machine:
 Not yet validated in this repo:
 
 - successful clean Windows machine install with no developer tooling
-- successful clean-machine execution of the bundled PostgreSQL and WinSW
-  binaries after the post-ZIP dependency packaging fix is rerun on the scratch
-  machine
+- successful Windows-service startup of bundled PostgreSQL under a
+  non-administrative service identity
 - reboot/service recovery proof
-- real Windows ACL readback after service install
+- real Windows ACL readback for the final service-identity/data-directory
+  model
 - second office desktop and Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
@@ -233,13 +245,34 @@ Place the approved WinSW x64 binary at:
 release\tools\winsw\WinSW-x64.exe
 ```
 
-Install services from an elevated PowerShell session:
+Install services from an elevated PowerShell session. On a clean Windows
+machine, PowerShell may refuse unsigned `.ps1` files by default. For the
+current assisted runbook, use a process-scoped execution-policy bypass rather
+than changing machine policy:
 
 ```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass
 .\release\tools\install\install-windows-services.ps1 -ReleaseRoot .\release
 ```
 
-The install script copies the WinSW executable beside each XML manifest, then restricts the service manifest directory and `C:\BellField\bellfield-server.env` to Administrators and LocalSystem before registering services.
+The install script copies the WinSW executable beside each XML manifest,
+stops/uninstalls any existing BellField services so the step is repairable,
+registers the services, then applies ACLs before startup:
+
+- `bellfield-postgres` runs as `NT SERVICE\bellfield-postgres`.
+- `C:\BellField\bellfield-server.env` remains restricted to Administrators and
+  LocalSystem while app services still run as LocalSystem.
+- `C:\BellField\release\services` is restricted to Administrators and
+  LocalSystem, with only narrow read/traverse access for
+  `NT SERVICE\bellfield-postgres`.
+- `C:\BellField\release\services\bellfield-postgres.xml` and
+  `bellfield-postgres.exe` grant only the PostgreSQL virtual account the access
+  it needs to start.
+- `C:\BellField\release\postgres`, `C:\BellField\data\postgres`, and
+  `C:\BellField\data\logs\services\bellfield-postgres` grant the PostgreSQL
+  virtual account read/execute or write access as appropriate.
+- WinSW service logs are written under
+  `C:\BellField\data\logs\services\<service-id>`, not beside the XML files.
 
 Service order:
 

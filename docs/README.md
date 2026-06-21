@@ -304,6 +304,25 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
 (`relay-token-design.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md)
+
+Audience: contributors checking what the third clean Windows gate-day attempt
+proved and where it failed.
+
+Purpose: dated evidence for the third fresh Windows install smoke: the
+post-extraction packaging fix passed on the clean machine, packaged PostgreSQL
+provisioning and migrations completed, service registration ran, then
+`bellfield-postgres` failed because WinSW registered it under `LocalSystem` and
+PostgreSQL refused to run with administrative permissions.
+
+Read when: fixing Windows service identity/ACL handling, rerunning Gate 1,
+reviewing the service-account support boundary, or sequencing relay
+activation-code work after the install can actually start services.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the relay token design
+(`relay-token-design.md`).
+
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
 Audience: contributors assembling a gate-day USB or reviewing release artifact
