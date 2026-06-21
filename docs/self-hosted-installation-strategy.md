@@ -193,11 +193,19 @@ readbacks matched the intended narrow model. Gate 1 still failed because
 API/worker refused the generated `BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty
 relay base URL/token. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md).
-The repo-side correction now keeps `write-server-config.mjs` generating the
-server instance ID at install time, but treats relay as disabled until both
-`BELLFIELD_RELAY_BASE_URL` and `BELLFIELD_RELAY_TOKEN` are non-empty. The next
-artifact still has to prove that contract through the generated-config smoke,
-release runtime boot smoke, rebuilt USB hashes, and a clean Windows rerun.
+The seventh clean Windows attempt ran on 2026-06-21 with the relay-disabled
+runtime config correction and installer stability gates. It proved that the
+generated server instance ID with blank relay base URL/token starts API/worker
+as relay disabled, that all four services stay running through the installer
+settle window, that API `/health` reaches `ok`, and that the packaged elevated
+service evidence collector works after ACL hardening. Gate 1 still failed at
+browser first-owner setup: `POST /identity/setup/first-owner` returned 500
+while recording a failed setup attempt because `blocked_until` is a timestamp
+column and the SQL path supplied text. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md).
+The next artifact has to fix first-owner setup failed-attempt persistence and
+then prove owner setup, job booking, reboot recovery, and second-device access
+from a cleaned Windows state.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

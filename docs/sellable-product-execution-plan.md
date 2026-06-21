@@ -42,8 +42,10 @@ Primary references:
 Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
-- Phase 1: clean-machine stranger install (browser-based owner setup and job
-  booking included), service registration, reboot survival
+- Phase 1: clean-machine stranger install through browser-based owner setup,
+  job booking, reboot survival, and second-device access. Rerun #7 has
+  clean-machine service registration/stability, ACL, and API-health evidence,
+  but the full Gate 1 transcript is still open.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
   backup set
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
@@ -55,21 +57,19 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Latest clean-machine evidence: run #6 on 2026-06-21 used rebuilt artifacts
-after the diagnostic and installer fixes. It completed clean extraction, server
-config, PostgreSQL provisioning, packaged migrations, license placement,
-service rendering, and elevated service installation. `bellfield-postgres`
-read back as `NT SERVICE\bellfield-postgres`, stayed running, and the
-PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 still failed
-at required post-install service readback because API/worker refused the
-partial relay env triplet created by a generated
-`BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty relay base URL/token. The
-repo-side follow-up now treats base URL plus token as the relay activation
-switch, allows a generated instance ID while relay is disabled, and adds
-generated-config plus service-stability/health smokes before the next USB
-rebuild. This remains a clean-artifact proof problem, not a return to WinSW XML
-account ownership. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md).
+Latest clean-machine evidence: run #7 on 2026-06-21 used rebuilt artifacts
+after the relay-disabled runtime config and installer stability fixes. It
+completed clean extraction, server config, PostgreSQL provisioning, packaged
+migrations, license placement, service rendering, elevated service
+installation, packaged service evidence collection, and API `/health`.
+`bellfield-postgres` read back as `NT SERVICE\bellfield-postgres`, all four
+services stayed running, and the PostgreSQL ACL readbacks matched the intended
+narrow model. Gate 1 now fails later at browser first-owner setup:
+`POST /identity/setup/first-owner` returns 500 while recording a failed setup
+attempt because `blocked_until` is a timestamp column and the SQL path supplies
+text. This remains a clean-artifact proof problem at the identity setup seam,
+not a return to relay config or WinSW XML account ownership. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md).
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
@@ -85,10 +85,12 @@ account ownership. See
   configures and reads back the Postgres SCM account before startup.
   Clean-machine run #6 showed the installer can configure PostgreSQL through
   SCM as `NT SERVICE\bellfield-postgres`, start it under that account, and
-  preserve the intended PostgreSQL ACL model on Windows 11 Home. The
-  clean-machine install gate stays open until the relay-disabled clean config
-  starts API/worker, the service stack remains running after installer success,
-  and the scratch machine completes first-owner setup.
+  preserve the intended PostgreSQL ACL model on Windows 11 Home. Clean-machine
+  run #7 showed the relay-disabled generated-config shape starts API/worker,
+  all four services remain running after installer success, and API health
+  reaches `ok`. The clean-machine install gate stays open until the first-owner
+  setup failed-attempt persistence bug is fixed and the scratch machine
+  completes first-owner setup and browser job booking.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.

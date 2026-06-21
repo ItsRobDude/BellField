@@ -176,6 +176,12 @@ try {
     installScript.includes('Assert-BellFieldServicesStable -SettleSeconds 30')
   );
   check(
+    'installer requires stable service process ids during settle window',
+    installScript.includes('BeforePid=$beforePid AfterPid=$afterPid') &&
+      installScript.includes('has no running process id after settle') &&
+      installScript.includes('did not keep stable process ids')
+  );
+  check(
     'installer polls API health before reporting success',
     installScript.includes('Wait-BellFieldApiHealth -TimeoutSeconds 60') &&
       installScript.includes('Invoke-RestMethod -Uri $url')

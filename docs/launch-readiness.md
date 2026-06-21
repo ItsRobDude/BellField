@@ -98,17 +98,30 @@ at the required post-install service readback because API/worker refused the
 partial relay env triplet created by a generated
 `BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty relay base URL/token. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md).
-The repo-side follow-up chooses the cleaner contract: relay base URL plus token
-activate relay, while a generated server instance ID by itself remains a
-disabled-relay clean-install state. Gate 1 still needs rebuilt artifacts, green
-install-config/release-runtime smokes, and a fresh clean-machine rerun before it
-can close.
+The seventh clean-machine attempt ran on 2026-06-21 with the relay-disabled
+runtime config correction and installer stabilization gates. It proved the
+generated instance ID plus blank relay base URL/token starts as relay disabled,
+all four services stay running, `bellfield-postgres` reads back as
+`NT SERVICE\bellfield-postgres`, the packaged service collector works after ACL
+hardening, and API `/health` reaches `ok`. Gate 1 now fails later at browser
+first-owner setup: `POST /identity/setup/first-owner` returns 500 while
+recording a failed setup attempt because `blocked_until` is a timestamp column
+and the SQL path supplies text. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md).
+The repo-side fix now casts that failed-attempt SQL, adds a PostgreSQL-backed
+regression for the throttle query, and requires the release ZIP smoke to prove
+invalid-token handling plus valid first-owner creation before USB prep. Gate 1
+still needs a rebuilt artifact and fresh clean-machine rerun through owner
+setup, job booking, reboot recovery, and second-device access before it can
+close.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
-- [ ] clean-machine stranger install from the runbook (service/reboot/ACL
-      proof, real `pg_dump`/`pg_restore` on the Windows host). This gate is
-      also the definition of done for the QuickBooks-Desktop-grade install
+- [ ] clean-machine stranger install from the runbook through first-owner
+      setup, job booking, reboot recovery, and second-device access. Rerun #7
+      already captured service registration, service stability, ACL, and API
+      health evidence, but the full Gate 1 transcript remains open. This gate
+      is also the definition of done for the QuickBooks-Desktop-grade install
       bar ([positioning-and-pricing.md](./positioning-and-pricing.md) §The
       install bar) — the owner does not perform installs.
 - [ ] scratch-machine restore from a real backup set
