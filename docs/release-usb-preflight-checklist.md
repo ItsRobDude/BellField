@@ -135,11 +135,16 @@ For each active release zip:
       evidence.
 - [ ] Active rerun evidence templates have their top-level status/checklist
       updated during the run, not only appended closeout notes at the bottom.
+- [ ] Current-run evidence files under `evidence/` are treated as mutable
+      operator logs and are intentionally excluded from `SHA256SUMS.txt`.
+      Rerun #8 showed that hashing the active evidence files can falsely block
+      the install before extraction after the operator writes the run notes.
 - [ ] Offline docs on the USB were refreshed from the repo after the final doc
       edits.
 - [ ] Every `docs\*.md` path referenced by `START-HERE.txt` or active evidence
       templates exists on the USB.
-- [ ] `SHA256SUMS.txt` was regenerated after the final USB change.
+- [ ] `SHA256SUMS.txt` was regenerated after the final immutable USB change,
+      excluding `evidence/**` and `private-relay-config/**`.
 - [ ] Windows-side hash verification normalizes artifact relative paths to
       forward slashes before matching `SHA256SUMS.txt`. Rerun #7 showed that a
       literal backslash-vs-forward-slash comparison can falsely report blank
@@ -147,7 +152,7 @@ For each active release zip:
       Prefer the packaged helper:
 
   ```powershell
-  .\release\tools\install\verify-usb-hashes.ps1 -Root <usb-root>
+  .\tools\install\verify-usb-hashes.ps1 -Root <usb-root>
   ```
 
 ## Secret Hygiene

@@ -111,9 +111,11 @@ and the SQL path supplies text. See
 The repo-side fix now casts that failed-attempt SQL, adds a PostgreSQL-backed
 regression for the throttle query, and requires the release ZIP smoke to prove
 invalid-token handling plus valid first-owner creation before USB prep. Gate 1
-still needs a rebuilt artifact and fresh clean-machine rerun through owner
-setup, job booking, reboot recovery, and second-device access before it can
-close.
+still needs a fresh clean-machine rerun through owner setup, job booking, reboot
+recovery, and second-device access before it can close. The eighth attempt used
+the rebuilt artifact pair but stopped before extraction because the USB hash
+manifest included mutable current-run evidence files. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

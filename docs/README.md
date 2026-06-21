@@ -406,6 +406,24 @@ service stability, and API health passed on the clean Windows machine.
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the identity-access implementation.
 
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md)
+
+Audience: contributors checking why the eighth clean Windows gate-day attempt
+stopped before extraction and what the corrected USB manifest policy is.
+
+Purpose: dated evidence for the eighth fresh Windows install smoke: rebuilt
+artifacts `.15`/`.16` had correct product ZIP hashes, but the run stopped before
+extraction because `SHA256SUMS.txt` included mutable current-run evidence files
+that `START-HERE.txt` told the operator to edit. The USB was corrected by
+excluding `evidence/**` from package hashes, documenting that rule in
+`START-HERE.txt`, and rerunning the packaged verifier to `status: ok`.
+
+Read when: preparing or reviewing a gate-day USB hash manifest, or checking why
+rerun 8 did not produce install/service evidence.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or application runtime behavior.
+
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
 Audience: contributors assembling a gate-day USB or reviewing release artifact
