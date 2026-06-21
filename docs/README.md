@@ -386,6 +386,26 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
 (`relay-token-design.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md)
+
+Audience: contributors checking what the seventh clean Windows gate-day attempt
+proved and where it failed.
+
+Purpose: dated evidence for the seventh fresh Windows install smoke: rebuilt
+artifacts `.13`/`.14` hashed and extracted, clean config/provisioning/migrations
+completed, relay-disabled runtime config was accepted, services installed and
+stayed running, `bellfield-postgres` read back as
+`NT SERVICE\bellfield-postgres`, packaged service evidence collection and API
+`/health` passed, then browser first-owner setup failed because the
+failed-attempt persistence path wrote `blocked_until` with the wrong SQL type.
+
+Read when: checking the rerun-7 evidence behind the first-owner setup blocker,
+or deciding what the next Gate 1 artifact must fix now that service identity,
+service stability, and API health passed on the clean Windows machine.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the identity-access implementation.
+
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
 Audience: contributors assembling a gate-day USB or reviewing release artifact

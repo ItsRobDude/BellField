@@ -112,7 +112,7 @@ try {
 } catch (error) {
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'failed';
-  evidence.error = error instanceof Error ? error.message : String(error);
+  evidence.error = redactSensitiveText(error instanceof Error ? error.message : String(error));
   console.error(JSON.stringify(evidence, null, 2));
   console.error(`Evidence: ${writeSmokeEvidence(evidence, 'release-zip-smoke.json')}`);
   process.exitCode = 1;
@@ -403,6 +403,11 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
       logPaths: [apiLog, apiErr]
     });
 
+    details.firstOwnerSetup = await runFirstOwnerSetupSmoke({
+      baseUrl: `http://127.0.0.1:${apiPort}`,
+      apiLogPaths: [apiLog, apiErr]
+    });
+
     const worker = startLoggedProcess({
       command: nodeExe,
       args: [join(releaseRoot, 'apps', 'worker', 'dist', 'index.js')],
@@ -419,7 +424,7 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
     evidence.runtimeBootSmoke = details;
     return details;
   } catch (error) {
-    details.error = error instanceof Error ? error.message : String(error);
+    details.error = redactSensitiveText(error instanceof Error ? error.message : String(error));
     details.logTails = {
       postgres: tailFile(pgLog),
       api: [tailFile(apiLog), tailFile(apiErr)].filter(Boolean).join('\n'),
@@ -493,6 +498,142 @@ function parseBackupCliResult(stdout) {
     throw new Error(`Manual backup CLI reported ${parsed.status ?? 'unknown'} status.`);
   }
   return parsed;
+}
+
+async function runFirstOwnerSetupSmoke(input) {
+  const setupStatusBefore = await fetchJson(`${input.baseUrl}/identity/setup/status`);
+  if (setupStatusBefore.status !== 200 || setupStatusBefore.body?.setupRequired !== true) {
+    throw new Error(
+      `First-owner setup status before creation was unexpected: ${safeJson(setupStatusBefore)}`
+    );
+  }
+
+  const invalidTokenResponse = await fetchJson(`${input.baseUrl}/identity/setup/first-owner`, {
+    method: 'POST',
+    body: {
+      setupToken: 'invalid-setup-token-000000',
+      email: 'invalid-release-smoke-owner@example.com',
+      displayName: 'Invalid Release Smoke Owner',
+      password: 'first-owner-pass'
+    }
+  });
+  if (![401, 429].includes(invalidTokenResponse.status)) {
+    throw new Error(
+      `Invalid first-owner setup token returned HTTP ${invalidTokenResponse.status}, expected 401 or 429: ${safeJson(
+        invalidTokenResponse
+      )}`
+    );
+  }
+
+  const setupToken = extractLatestSetupToken(input.apiLogPaths);
+  const createResponse = await fetchJson(`${input.baseUrl}/identity/setup/first-owner`, {
+    method: 'POST',
+    body: {
+      setupToken: setupToken.token,
+      email: 'owner.release-smoke@example.com',
+      displayName: 'Release Smoke Owner',
+      password: 'first-owner-pass'
+    }
+  });
+  if (createResponse.status !== 201 && createResponse.status !== 200) {
+    throw new Error(
+      `Valid first-owner setup returned HTTP ${createResponse.status}: ${safeJson(createResponse)}`
+    );
+  }
+  if (createResponse.body?.employee?.roleId !== 'owner' || !createResponse.body?.sessionToken) {
+    throw new Error(
+      `First-owner setup response was missing owner session: ${safeJson(createResponse)}`
+    );
+  }
+
+  const authMeResponse = await fetchJson(`${input.baseUrl}/identity/auth/me`, {
+    headers: {
+      Authorization: `Bearer ${createResponse.body.sessionToken}`
+    }
+  });
+  if (authMeResponse.status !== 200 || authMeResponse.body?.employee?.roleId !== 'owner') {
+    throw new Error(
+      `Created owner session could not read /identity/auth/me: ${safeJson(authMeResponse)}`
+    );
+  }
+
+  const setupStatusAfter = await fetchJson(`${input.baseUrl}/identity/setup/status`);
+  if (setupStatusAfter.status !== 200 || setupStatusAfter.body?.setupRequired !== false) {
+    throw new Error(
+      `First-owner setup status after creation was unexpected: ${safeJson(setupStatusAfter)}`
+    );
+  }
+
+  return {
+    setupRequiredBefore: true,
+    invalidTokenStatus: invalidTokenResponse.status,
+    tokenLineCount: setupToken.tokenLineCount,
+    ownerCreated: true,
+    createdRole: createResponse.body.employee.roleId,
+    authMeStatus: authMeResponse.status,
+    setupRequiredAfter: false
+  };
+}
+
+async function fetchJson(url, options = {}) {
+  const headers = {
+    Accept: 'application/json',
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+    ...(options.headers ?? {})
+  };
+  const response = await fetch(url, {
+    method: options.method ?? 'GET',
+    headers,
+    body: options.body ? JSON.stringify(options.body) : undefined
+  });
+  const text = await response.text();
+  let body = null;
+  if (text.trim()) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = null;
+    }
+  }
+
+  return {
+    status: response.status,
+    body,
+    text: redactSensitiveText(text)
+  };
+}
+
+function extractLatestSetupToken(logPaths) {
+  const matches = [];
+  const pattern = /BellField first-owner setup token: ([A-Za-z0-9_-]+)\./g;
+  for (const logPath of logPaths) {
+    let text = '';
+    try {
+      text = readFileSync(logPath, 'utf8');
+    } catch {
+      continue;
+    }
+
+    for (const match of text.matchAll(pattern)) {
+      matches.push({
+        token: match[1],
+        logPath
+      });
+    }
+  }
+
+  if (matches.length === 0) {
+    throw new Error('No first-owner setup token line was found in the packaged API smoke logs.');
+  }
+
+  return {
+    token: matches[matches.length - 1].token,
+    tokenLineCount: matches.length
+  };
+}
+
+function safeJson(value) {
+  return redactSensitiveText(JSON.stringify(value));
 }
 
 function startLoggedProcess(input) {
@@ -594,10 +735,23 @@ function tailFile(path, maxLines = 80) {
     if (!existsSync(path)) {
       return '';
     }
-    return readFileSync(path, 'utf8').split(/\r?\n/).slice(-maxLines).join('\n').trim();
+    return redactSensitiveText(
+      readFileSync(path, 'utf8').split(/\r?\n/).slice(-maxLines).join('\n').trim()
+    );
   } catch (error) {
     return `Could not read ${path}: ${error instanceof Error ? error.message : String(error)}`;
   }
+}
+
+function redactSensitiveText(value) {
+  return String(value)
+    .replace(
+      /BellField first-owner setup token: [A-Za-z0-9_-]+\./g,
+      'BellField first-owner setup token: [REDACTED].'
+    )
+    .replace(/("setupToken"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2')
+    .replace(/("sessionToken"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2')
+    .replace(/("password"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2');
 }
 
 function sleep(ms) {

@@ -35,7 +35,11 @@ describe('IdentityAccessRepository identity attempts', () => {
     const [sql, params] = databaseService.query.mock.calls[0];
     expect(sql).toMatch(/on conflict \(bucket_key\) do update/i);
     expect(sql).toMatch(/failed_count = case/i);
-    expect(sql).toMatch(/identity_login_attempts\.failed_count \+ 1 >= \$4/i);
+    expect(sql).toMatch(/identity_login_attempts\.failed_count \+ 1 >= \$4::int/i);
+    expect(sql).toMatch(/\$2::timestamptz/i);
+    expect(sql).toMatch(/\$3::timestamptz/i);
+    expect(sql).toMatch(/\$5::timestamptz/i);
+    expect(sql).toMatch(/null::timestamptz/i);
     expect(params).toEqual([
       'setup:first-owner',
       '2026-06-19T12:04:00.000Z',

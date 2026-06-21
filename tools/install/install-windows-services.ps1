@@ -302,11 +302,41 @@ function Start-BellFieldServiceAndConfirm {
 function Assert-BellFieldServicesStable {
   param([int]$SettleSeconds = 30)
 
+  $before = Get-BellFieldServiceSnapshot -ServiceIds $serviceOrder
   Start-Sleep -Seconds $SettleSeconds
-  $snapshots = Get-BellFieldServiceSnapshot -ServiceIds $serviceOrder
-  $notRunning = @($snapshots | Where-Object { $_.State -ne "Running" })
+  $after = Get-BellFieldServiceSnapshot -ServiceIds $serviceOrder
+  $beforeByName = @{}
+  foreach ($snapshot in $before) {
+    $beforeByName[$snapshot.Name] = $snapshot
+  }
+
+  $notRunning = @($after | Where-Object { $_.State -ne "Running" })
+  $unstable = @()
+  foreach ($snapshot in $after) {
+    $previous = $beforeByName[$snapshot.Name]
+    $beforePid = if ($previous) { [int]$previous.ProcessId } else { 0 }
+    $afterPid = [int]$snapshot.ProcessId
+    if ($snapshot.State -ne "Running") {
+      continue
+    }
+    if ($afterPid -le 0) {
+      $unstable += "$($snapshot.Name) has no running process id after settle."
+      continue
+    }
+    if (-not $previous -or $previous.State -ne "Running" -or $beforePid -le 0) {
+      $unstable += "$($snapshot.Name) was not Running with a process id before settle."
+      continue
+    }
+    if ($beforePid -ne $afterPid) {
+      $unstable += "$($snapshot.Name) restarted during settle window. BeforePid=$beforePid AfterPid=$afterPid."
+    }
+  }
+
   if ($notRunning.Count -gt 0) {
-    throw "BellField services did not remain Running after $SettleSeconds seconds."
+    throw "BellField services did not remain Running after $SettleSeconds seconds.`nBefore:`n$(Format-ServiceSnapshot -Snapshots $before)`nAfter:`n$(Format-ServiceSnapshot -Snapshots $after)"
+  }
+  if ($unstable.Count -gt 0) {
+    throw "BellField services did not keep stable process ids after $SettleSeconds seconds: $($unstable -join ' ')`nBefore:`n$(Format-ServiceSnapshot -Snapshots $before)`nAfter:`n$(Format-ServiceSnapshot -Snapshots $after)"
   }
 }
 

@@ -60,8 +60,12 @@ does not replace the clean-machine run.
       office-web from the extracted ZIP, fetches root HTML and referenced
       Next static JavaScript assets, runs packaged migrations against a
       temporary packaged PostgreSQL database, issues a smoke license, runs the
-      packaged manual backup CLI, boots API through `/health`, and confirms the
-      worker stays alive after startup.
+      packaged manual backup CLI, boots API through `/health`, proves
+      invalid-token first-owner handling, creates the first owner, verifies the
+      owner session, and confirms the worker stays alive after startup.
+- [ ] CI ran the API identity-attempt PostgreSQL regression against a real
+      Postgres service. Do not rely only on mocked repository tests for the
+      failed-attempt throttle SQL.
 - [ ] `pnpm smoke:install-config` passed and proves the real
       `write-server-config.mjs` output is accepted by API and worker with relay
       disabled.
@@ -70,7 +74,7 @@ does not replace the clean-machine run.
       log paths remain outside the manifest directory, and
       `install-windows-services.ps1` configures and reads back the SCM
       `StartName` before service startup, validates runtime config, waits for
-      service stability, and polls API health.
+      service/process-id stability, and polls API health.
 - [ ] The artifact's relay-disabled clean-install config is internally
       consistent. The accepted disabled-relay state is a generated
       `BELLFIELD_RELAY_SERVER_INSTANCE_ID` with empty
@@ -136,6 +140,15 @@ For each active release zip:
 - [ ] Every `docs\*.md` path referenced by `START-HERE.txt` or active evidence
       templates exists on the USB.
 - [ ] `SHA256SUMS.txt` was regenerated after the final USB change.
+- [ ] Windows-side hash verification normalizes artifact relative paths to
+      forward slashes before matching `SHA256SUMS.txt`. Rerun #7 showed that a
+      literal backslash-vs-forward-slash comparison can falsely report blank
+      expected hashes for valid artifacts.
+      Prefer the packaged helper:
+
+  ```powershell
+  .\release\tools\install\verify-usb-hashes.ps1 -Root <usb-root>
+  ```
 
 ## Secret Hygiene
 

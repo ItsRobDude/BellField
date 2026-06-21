@@ -71,7 +71,17 @@ Not allowed unless the run is explicitly reclassified as diagnostic:
 - Use the clean-install artifact named by `START-HERE.txt` for Gate 1.
 - Use the update artifact named by `START-HERE.txt` only for the update gate.
 - Verify active artifact hashes against `SHA256SUMS.txt` before extraction.
+- When verifying hashes from PowerShell, normalize artifact relative paths to
+  forward slashes before matching `SHA256SUMS.txt`. The SHA file uses
+  forward-slash paths even when Windows command output naturally shows
+  backslashes.
+- Prefer the packaged helper when present:
+  `release\tools\install\verify-usb-hashes.ps1 -Root <usb-root>`.
 - Treat hash mismatch as a stop condition.
+- Treat a blank expected hash as a parser/path-matching problem first, not as
+  proof that the artifact content is wrong. Re-run the comparison with
+  normalized paths and then stop if the normalized expected/actual hash still
+  does not match.
 - Extract artifacts exactly as the runbook says. Do not recompress, rename
   internals, unzip-edit, copy in missing dependencies, or replace signed files.
 - Failed or archived artifacts are evidence only. Do not use them unless the
@@ -182,6 +192,8 @@ Stop before continuing product validation when:
   process-scoped allowance;
 - service install/start, service identity, ACL, migration, health, reboot
   recovery, backup, restore, update, or relay acceptance checks fail;
+- first-owner setup cannot be completed with the latest token copied by
+  `release\tools\install\copy-first-owner-setup-token.ps1`;
 - the runbook path is unclear enough that a real customer/operator would be
   stuck;
 - a step would require recording a secret in evidence;

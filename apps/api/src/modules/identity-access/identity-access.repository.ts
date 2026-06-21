@@ -169,23 +169,23 @@ export class IdentityAccessRepository {
           blocked_until,
           updated_at
         )
-        values ($1, 1, $2, $2, null, $2)
+        values ($1::text, 1, $2::timestamptz, $2::timestamptz, null::timestamptz, $2::timestamptz)
         on conflict (bucket_key) do update set
           failed_count = case
-            when identity_login_attempts.window_started_at < $3 then 1
+            when identity_login_attempts.window_started_at < $3::timestamptz then 1
             else identity_login_attempts.failed_count + 1
           end,
           window_started_at = case
-            when identity_login_attempts.window_started_at < $3 then $2
+            when identity_login_attempts.window_started_at < $3::timestamptz then $2::timestamptz
             else identity_login_attempts.window_started_at
           end,
-          last_failed_at = $2,
+          last_failed_at = $2::timestamptz,
           blocked_until = case
-            when identity_login_attempts.window_started_at < $3 then null
-            when identity_login_attempts.failed_count + 1 >= $4 then $5
-            else null
+            when identity_login_attempts.window_started_at < $3::timestamptz then null::timestamptz
+            when identity_login_attempts.failed_count + 1 >= $4::int then $5::timestamptz
+            else null::timestamptz
           end,
-          updated_at = $2
+          updated_at = $2::timestamptz
         returning
           failed_count as "failedCount",
           window_started_at as "windowStartedAt",

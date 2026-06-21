@@ -107,6 +107,17 @@ Validated on the development machine:
   `BELLFIELD_RELAY_SERVER_INSTANCE_ID` present while relay base URL/token were
   empty. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md)
+- seventh clean Windows gate-day attempt ran on 2026-06-21 with rebuilt
+  artifacts carrying the relay-disabled runtime config and installer
+  stabilization gates. Clean extraction, server config, PostgreSQL
+  provisioning, packaged migrations, license placement, service rendering,
+  elevated service installation, PostgreSQL SCM `StartName`, ACL readback,
+  packaged service evidence collection, installer service stability, and API
+  `/health` all passed on the scratch machine. Gate 1 still failed at
+  browser first-owner setup: `POST /identity/setup/first-owner` returned 500
+  while recording a failed setup attempt because `blocked_until` is a
+  `timestamptz` column and the SQL path supplied text. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -115,9 +126,13 @@ Validated on the development machine:
   generated clean-install relay-disabled env shape is accepted by API and
   worker: base URL/token blank means relay disabled even though
   `BELLFIELD_RELAY_SERVER_INSTANCE_ID` is generated
+- repo-side identity-attempt SQL now has a PostgreSQL-backed regression test,
+  and the gate-day release ZIP smoke must prove both controlled invalid
+  first-owner token handling and successful first-owner creation before USB
+  prep
 - the Windows service installer now validates packaged API/worker runtime
   config and license readability before service startup, then requires service
-  state stability and API `/health` before reporting success
+  state/process-id stability and API `/health` before reporting success
 - a packaged elevated read-only service evidence collector exists at
   `tools\install\collect-windows-service-evidence.ps1`
 
@@ -126,13 +141,11 @@ Not yet validated in this repo:
 - successful clean Windows machine install with no developer tooling
 - a green run of the packaged service-account diagnostic (supporting preflight
   evidence only, not the gate; now uses corrected virtual-account proof criteria)
-- clean Windows proof that API/worker service startup succeeds from the
-  documented relay-disabled server config
-- clean Windows proof that the installer-owned stabilization/readback and API
-  health gate pass on the scratch machine
+- clean Windows proof that first-owner setup completes from the browser after
+  the service stack is healthy; the release ZIP smoke must prove the packaged
+  API path before the next USB leaves the dev machine
+- browser job booking after first-owner setup
 - reboot/service recovery proof
-- full app-service log/evidence capture after ACL hardening, preferably through
-  an elevated read-only wrapper or packaged collector
 - second office desktop and Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
@@ -213,7 +226,11 @@ On the server, choose a fixed install root such as `C:\BellField`.
 .\release\runtime\node\node.exe .\release\tools\install\write-server-config.mjs --install-root=C:\BellField
 ```
 
-This writes `C:\BellField\bellfield-server.env`, creates local data directories, and generates secrets. Do not commit or share that file.
+This writes `C:\BellField\bellfield-server.env`, creates the configured local
+data-root folders, and generates secrets. It does not initialize the
+PostgreSQL data directory; `C:\BellField\data\postgres\PG_VERSION` appears only
+after `provision-postgres.mjs` initializes PostgreSQL. Do not commit or share
+the env file.
 
 The config helper generates a non-empty
 `BELLFIELD_RELAY_SERVER_INSTANCE_ID` while `BELLFIELD_RELAY_BASE_URL` and
@@ -330,10 +347,11 @@ registers the services, configures `bellfield-postgres` through Windows SCM as
 `NT SERVICE\bellfield-postgres`, reads back `Win32_Service.StartName`, enables
 the unrestricted service SID, then applies ACLs before startup. It then runs the
 packaged runtime-config validator, starts services in order, confirms each one
-is still `Running`, waits through a 30-second settle window, and polls API
-`/health` for `status: "ok"`. If SCM does not read back the expected PostgreSQL
-service identity, runtime config/license validation fails, a service exits, or
-health does not pass, the install fails instead of printing success.
+is `Running`, waits through a 30-second settle window, requires stable nonzero
+process IDs across that window, and polls API `/health` for `status: "ok"`. If
+SCM does not read back the expected PostgreSQL service identity, runtime
+config/license validation fails, a service exits or restarts, or health does not
+pass, the install fails instead of printing success.
 
 The PostgreSQL WinSW XML deliberately does not contain `<serviceaccount>`.
 Run #4 proved XML account shape is insufficient: the XML contained
@@ -444,18 +462,33 @@ Service order:
 
 ## First Owner Setup
 
-With a fresh migrated database and no active employees, the API logs a one-time setup token:
+With a fresh migrated database and no active employees, the API logs a one-time
+setup token:
 
 ```text
 BellField first-owner setup token: ...
 ```
 
-Open the office web app, paste that token into the setup form, and create the first owner account.
+Use the packaged helper from an elevated PowerShell session to copy the latest
+token line without printing the token into evidence:
+
+```powershell
+.\release\tools\install\copy-first-owner-setup-token.ps1 -InstallRoot C:\BellField
+```
+
+Open the office web app, paste that token into the setup form, and create the
+first owner account.
 
 After service ACL hardening, non-elevated shells may not be able to read service
 logs. If the setup token or startup errors are needed for evidence, capture them
 from an elevated read-only PowerShell session and redact secret values before
 copying to the evidence file.
+
+If multiple token lines exist, use the latest one; the token is in-memory and
+can change after an API restart. If the token is copied to the Windows clipboard
+for handoff into the browser, overwrite the clipboard with a harmless
+placeholder after use. Rerun #7 showed that `Set-Clipboard` may reject an empty
+string on the scratch-machine PowerShell environment.
 
 Rules:
 

@@ -68,16 +68,21 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 - [ ] Confirm `pnpm smoke:service-manifests` passed and shows the Postgres XML
       has no `<serviceaccount>` block while `install-windows-services.ps1`
       configures and reads back the SCM `StartName` before startup, validates
-      packaged runtime config, waits for service stability, and polls API
-      health before reporting success.
+      packaged runtime config, waits for service/process-id stability, and
+      polls API health before reporting success.
 - [ ] Confirm `pnpm smoke:install-config` passed. It must run the real
       `write-server-config.mjs` helper and prove API/worker accept the generated
       clean-install relay-disabled env.
+- [ ] Confirm the API identity-attempt PostgreSQL regression ran in CI. The
+      failed-attempt throttle SQL must be exercised against real Postgres, not
+      only by mocked repository tests.
 - [ ] Confirm `pnpm smoke:release-zip -- --zip=<artifact.zip>
 --require-gate-day-deps=true` passed for each active artifact. With
       gate-day deps required, this smoke must issue a smoke license, run
       packaged migrations, run the packaged manual backup CLI, boot API until
-      `/health` is `ok`, and hold worker alive after startup.
+      `/health` is `ok`, prove invalid-token first-owner handling, create the
+      first owner, verify the owner session, and hold worker alive after
+      startup.
 - [ ] If this artifact is meant to close the service-identity blocker, save a
       passing elevated diagnostic JSON from
       `tools\install\diagnose-windows-service-account.ps1` using the same WinSW
@@ -116,6 +121,16 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 - [ ] **USB stick:** both zips, both license files, this checklist, and
       offline copies of install-runbook.md and restore-runbook.md (the
       scratch machine may have no network or no browser bookmarks).
+- [ ] Hash verification helpers compare `SHA256SUMS.txt` using normalized
+      forward-slash relative paths. Rerun #7 showed a Windows backslash path
+      comparison can produce a false missing-hash result even when the artifact
+      hash itself is correct.
+      Prefer the packaged helper:
+
+  ```powershell
+  .\release\tools\install\verify-usb-hashes.ps1 -Root <usb-root>
+  ```
+
 - [ ] **Second device ready:** any other laptop/phone on the same LAN for the
       second-office-desktop proof; know the scratch machine's LAN IP plan.
 
@@ -127,20 +142,26 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 
 - [ ] Extract artifact A; **no tooling installed on the machine itself** —
       everything runs via `release\runtime\node\node.exe`.
-- [ ] `write-server-config.mjs --install-root=C:\BellField` writes env +
-      directories + secrets.
+- [ ] `write-server-config.mjs --install-root=C:\BellField` writes the env
+      file, generated secrets, and configured data-root folders. Do not expect
+      `C:\BellField\data\postgres\PG_VERSION` yet; PostgreSQL initialization
+      belongs to the next provisioning step.
 - [ ] `provision-postgres.mjs` initializes the data dir, applies the
       generated password, flips auth to `scram-sha-256`.
 - [ ] Temporary `pg_ctl` start → migrations → stop (runbook §Provision
-      PostgreSQL).
+      PostgreSQL). Use `pg_ctl -l <logfile>` and read the log separately; if a
+      wrapper is used, give it a generous timeout and write incremental command
+      output so a Codex/tool timeout does not obscure whether the product
+      command completed.
 - [ ] Place the **valid** license at
       `C:\BellField\data\license\bellfield-license.json`.
 - [ ] Render manifests, install services from elevated PowerShell, confirm
       all four register and start in order (`bellfield-postgres`, `-api`,
       `-worker`, `-office-web`).
 - [ ] Confirm the installer reports service stability and API health, not only
-      service registration. Stop the gate if the installer prints service state
-      or log-tail failure context.
+      service registration. It must require stable nonzero service process IDs
+      across the settle window. Stop the gate if the installer prints service
+      state or log-tail failure context.
 - [ ] Save packaged service evidence from elevated PowerShell:
 
   ```powershell
@@ -194,8 +215,18 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       (WinSW captures stdout under
       `C:\BellField\data\logs\services\bellfield-api\bellfield-api.out.log`),
       not the UI. After ACL hardening, log capture may require an elevated
-      read-only shell or packaged log collector. Complete owner setup in the
-      browser.
+      read-only shell or packaged log collector. Prefer the packaged helper:
+
+  ```powershell
+  .\release\tools\install\copy-first-owner-setup-token.ps1 -InstallRoot C:\BellField
+  ```
+
+  Complete owner setup in the browser. If more than one token line exists, use
+  the latest one; the token can change after an API restart. If the token is
+  placed on the clipboard, overwrite it afterward with a harmless placeholder
+  rather than an empty string; rerun #7 showed `Set-Clipboard` can reject empty
+  text.
+
 - [ ] `Invoke-RestMethod http://localhost:3001/health` → `status: "ok"`.
 - [ ] **Real office work in the browser:** create a customer, book a job,
       open it. This is the "stranger install includes job booking" clause.
