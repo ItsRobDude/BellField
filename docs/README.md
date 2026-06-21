@@ -479,6 +479,16 @@ Read when: building a sold-shaped release, publishing a release artifact, or sep
 
 Does not own: the test relay host posture (`testing-relay-ops.md`) or the Windows install recipe (`install-runbook.md`).
 
+### [codex-install-test-operator-rules.md](./codex-install-test-operator-rules.md)
+
+Audience: Codex instances and human operators running clean Windows install, restore, update, or relay smokes from a prepared USB package.
+
+Purpose: scratch-machine operating rules: no developer tooling, no artifact surgery, evidence redaction, relay-config handling, and when to stop instead of contaminating the run.
+
+Read when: using Codex to execute a gate-day USB package on a clean Windows PC.
+
+Does not own: the install recipe (`install-runbook.md`), restore recipe (`restore-runbook.md`), or gate checklist (`gate-day-checklist.md`).
+
 ### [validation-playbook.md](./validation-playbook.md)
 
 Audience: contributors validating risky local DB, office UI, field-device, or release-readiness lanes.
