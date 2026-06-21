@@ -107,17 +107,37 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 - [ ] Render manifests, install services from elevated PowerShell, confirm
       all four register and start in order (`bellfield-postgres`, `-api`,
       `-worker`, `-office-web`).
+- [ ] Confirm service identities:
+
+  ```powershell
+  Get-CimInstance Win32_Service -Filter "Name like 'bellfield-%'" |
+    Select-Object Name, State, StartMode, StartName, PathName
+  ```
+
+  Expect `bellfield-postgres` to run as
+  `NT SERVICE\bellfield-postgres`. The API, worker, and office-web services may
+  still show `LocalSystem` until the follow-up whole-stack least-privilege
+  slice lands.
+
 - [ ] **ACL readback** (evidence, not vibes):
 
   ```powershell
   icacls C:\BellField\bellfield-server.env
   icacls <release>\services
+  icacls <release>\services\bellfield-postgres.xml
+  icacls <release>\postgres
+  icacls C:\BellField\data\postgres
+  icacls C:\BellField\data\logs\services\bellfield-postgres
   ```
 
-  Expect Administrators + SYSTEM only; paste output into the evidence doc.
+  Expect the env file to remain Administrators + SYSTEM only. Expect the
+  PostgreSQL release/data/log paths to include only the narrow
+  `NT SERVICE\bellfield-postgres` access needed by PostgreSQL, plus
+  Administrators + SYSTEM. Paste output into the evidence doc.
 
 - [ ] **First-owner setup:** the one-time token is in the API service log
-      (WinSW captures stdout — `<release>\services\bellfield-api.out.log`),
+      (WinSW captures stdout under
+      `C:\BellField\data\logs\services\bellfield-api\bellfield-api.out.log`),
       not the UI. Complete owner setup in the browser.
 - [ ] `Invoke-RestMethod http://localhost:3001/health` → `status: "ok"`.
 - [ ] **Real office work in the browser:** create a customer, book a job,

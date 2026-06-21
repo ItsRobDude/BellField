@@ -10,6 +10,8 @@ const installRoot = path.join(root, 'install');
 const envPath = path.join(installRoot, 'bellfield-server.env');
 const outputDir = path.join(releaseRoot, 'services');
 const renderScript = path.resolve('tools', 'install', 'render-windows-services.mjs');
+const installServicesScript = path.resolve('tools', 'install', 'install-windows-services.ps1');
+const serviceLogRoot = path.join(installRoot, 'data', 'logs', 'services');
 const evidence = {
   name: 'Windows service manifest smoke',
   startedAt: timestamp,
@@ -69,6 +71,7 @@ try {
   const apiXml = readManifest('bellfield-api');
   const workerXml = readManifest('bellfield-worker');
   const officeXml = readManifest('bellfield-office-web');
+  const installScript = readFileSync(installServicesScript, 'utf8');
 
   for (const [serviceId, xml] of Object.entries({
     postgresXml,
@@ -81,6 +84,50 @@ try {
       xml.includes('<sizeThreshold>10240</sizeThreshold>')
     );
   }
+
+  check(
+    'postgres uses the passwordless virtual service account',
+    postgresXml.includes('<serviceaccount>') &&
+      postgresXml.includes('<username>NT SERVICE\\bellfield-postgres</username>')
+  );
+  check(
+    'postgres service account asks WinSW to allow service logon',
+    postgresXml.includes('<allowservicelogon>true</allowservicelogon>')
+  );
+  check('api remains on current service account model', !apiXml.includes('<serviceaccount>'));
+  check('worker remains on current service account model', !workerXml.includes('<serviceaccount>'));
+  check('office remains on current service account model', !officeXml.includes('<serviceaccount>'));
+
+  for (const [serviceId, xml] of Object.entries({
+    'bellfield-postgres': postgresXml,
+    'bellfield-api': apiXml,
+    'bellfield-worker': workerXml,
+    'bellfield-office-web': officeXml
+  })) {
+    check(
+      `${serviceId} writes WinSW logs outside the secret-bearing service manifest directory`,
+      xml.includes(`<logpath>${path.join(serviceLogRoot, serviceId)}</logpath>`)
+    );
+  }
+
+  check(
+    'installer models the Postgres virtual service identity',
+    installScript.includes('$postgresServiceIdentity = "NT SERVICE\\$postgresServiceId"')
+  );
+  check(
+    'installer enables the Postgres service SID before ACL grants',
+    installScript.includes('Set-ServiceSidType -ServiceId $postgresServiceId')
+  );
+  check(
+    'installer grants Postgres data directory access to only the virtual service account',
+    installScript.includes(
+      'Protect-BellFieldPath -Path $postgresDataRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")'
+    )
+  );
+  check(
+    'installer is repairable by uninstalling existing services before install',
+    installScript.includes('Uninstall-BellFieldServiceIfPresent')
+  );
 
   check('api keeps database URL', apiXml.includes('DATABASE_URL'));
   check(

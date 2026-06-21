@@ -55,6 +55,16 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
+Latest clean-machine evidence: run #3 on 2026-06-20 proved the portable ZIP
+packaging fix, packaged PostgreSQL provisioning, packaged migrations, and
+WinSW service registration on a clean Windows 11 machine. It failed before
+owner setup because the PostgreSQL service was registered as `LocalSystem`;
+PostgreSQL refuses to run under an administrative account. The current install
+slice moves bundled PostgreSQL to the passwordless
+`NT SERVICE\bellfield-postgres` virtual account with dedicated log paths and
+ACLs; it still needs clean-machine rerun proof. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md).
+
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
 - Release artifact scaffolding now exists: `tools/build-release.mjs` assembles
@@ -62,8 +72,11 @@ These must all be performed and dated before the first sold install or pilot.
   install helpers, deployed contracts, a release build manifest, signed update
   artifact manifest, updater helper, and a bundled Node runtime into
   `release/`. The office static asset copy now targets the actual standalone
-  server root and has a same-machine asset/browser smoke. The clean-machine
-  install gate has not yet been run.
+  server root and has a same-machine asset/browser smoke. Clean-machine
+  artifact packaging is now past the PostgreSQL runtime and ZIP-portability
+  blockers. The PostgreSQL service-identity fix is in the release/install
+  tooling, but the clean-machine install gate stays open until the refreshed
+  artifact starts services on the scratch machine.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.

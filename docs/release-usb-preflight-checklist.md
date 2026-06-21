@@ -44,6 +44,7 @@ does not replace the clean-machine run.
     --postgres-root=<path-to-PG16-x64-root> `
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
+  pnpm smoke:service-manifests
   pnpm smoke:release-build -- --require-gate-day-deps=true
   pnpm package:release-zip -- --release-root=release --output=<artifact-A.zip>
   pnpm smoke:release-zip -- --zip=<artifact-A.zip> --require-gate-day-deps=true
@@ -59,6 +60,9 @@ does not replace the clean-machine run.
       office-web from the extracted ZIP, fetches root HTML and referenced
       Next static JavaScript assets, and runs packaged migrations against a
       temporary packaged PostgreSQL database.
+- [ ] `pnpm smoke:service-manifests` passed and confirms
+      `bellfield-postgres` renders with the `NT SERVICE\bellfield-postgres`
+      virtual account plus dedicated service log paths.
 - [ ] `pnpm format:check` passed after any doc/checklist updates.
 
 ## Artifact Contents

@@ -13,6 +13,21 @@ function envXml(env) {
     .join('\n');
 }
 
+function serviceAccountXml(serviceAccount) {
+  if (!serviceAccount) {
+    return [];
+  }
+
+  return [
+    '  <serviceaccount>',
+    `    <username>${escapeXml(serviceAccount.username)}</username>`,
+    ...(serviceAccount.allowServiceLogon
+      ? ['    <allowservicelogon>true</allowservicelogon>']
+      : []),
+    '  </serviceaccount>'
+  ];
+}
+
 function serviceXml(service) {
   return [
     '<service>',
@@ -23,9 +38,11 @@ function serviceXml(service) {
     `  <executable>${escapeXml(service.executable)}</executable>`,
     `  <arguments>${escapeXml(service.arguments)}</arguments>`,
     `  <workingdirectory>${escapeXml(service.workingDirectory)}</workingdirectory>`,
+    ...serviceAccountXml(service.serviceAccount),
     envXml(service.env),
     '  <startmode>Automatic</startmode>',
     '  <onfailure action="restart" delay="10 sec" />',
+    `  <logpath>${escapeXml(service.logPath)}</logpath>`,
     '  <log mode="roll-by-size">',
     '    <sizeThreshold>10240</sizeThreshold>',
     '    <keepFiles>10</keepFiles>',
@@ -67,6 +84,13 @@ assertProductionServiceEnv(env);
 const nodeExe = join(releaseRoot, 'runtime', 'node', 'node.exe');
 const postgresBin = env.BELLFIELD_POSTGRES_BIN ?? join(releaseRoot, 'postgres', 'bin');
 const postgresData = env.BELLFIELD_POSTGRES_DATA ?? join(installRoot, 'data', 'postgres');
+const serviceLogRoot = resolve(
+  String(
+    args['service-log-root'] ??
+      env.BELLFIELD_SERVICE_LOG_ROOT ??
+      join(installRoot, 'data', 'logs', 'services')
+  )
+);
 const officeServer = firstExisting([
   join(releaseRoot, 'apps', 'office-web', 'server.js'),
   join(releaseRoot, 'apps', 'office-web', 'apps', 'office-web', 'server.js')
@@ -132,6 +156,11 @@ const services = [
     executable: join(postgresBin, 'postgres.exe'),
     arguments: `-D "${postgresData}"`,
     workingDirectory: postgresBin,
+    serviceAccount: {
+      username: 'NT SERVICE\\bellfield-postgres',
+      allowServiceLogon: true
+    },
+    logPath: join(serviceLogRoot, 'bellfield-postgres'),
     depends: [],
     env: {
       PGDATA: postgresData
@@ -144,6 +173,7 @@ const services = [
     executable: nodeExe,
     arguments: 'dist\\apps\\api\\src\\main.js',
     workingDirectory: join(releaseRoot, 'apps', 'api'),
+    logPath: join(serviceLogRoot, 'bellfield-api'),
     depends: ['bellfield-postgres'],
     env: apiEnv
   },
@@ -154,6 +184,7 @@ const services = [
     executable: nodeExe,
     arguments: 'dist\\index.js',
     workingDirectory: join(releaseRoot, 'apps', 'worker'),
+    logPath: join(serviceLogRoot, 'bellfield-worker'),
     depends: ['bellfield-api'],
     env: workerEnv
   },
@@ -164,6 +195,7 @@ const services = [
     executable: nodeExe,
     arguments: 'server.js',
     workingDirectory: dirname(officeServer),
+    logPath: join(serviceLogRoot, 'bellfield-office-web'),
     depends: ['bellfield-api'],
     env: officeEnv
   }
