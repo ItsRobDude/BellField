@@ -79,11 +79,12 @@ Validated on the development machine:
 - fourth clean Windows gate-day attempt ran on 2026-06-20 and proved the
   repaired USB docs, artifact hashes, extraction, server config, packaged
   PostgreSQL provisioning, migrations, license placement, service manifest
-  rendering, and most ACL readbacks. It still failed at service startup because
-  WinSW installed `bellfield-postgres` under `LocalSystem` even though the XML
-  contained `<serviceaccount><username>NT SERVICE\bellfield-postgres</username>`.
-  The next fix must enforce and assert the SCM service account, not only render
-  XML. See
+  rendering, and the checked env/PostgreSQL ACL readbacks. It still failed at
+  service startup because Windows SCM reported `bellfield-postgres` as
+  `LocalSystem` even though the XML contained
+  `<serviceaccount><username>NT SERVICE\bellfield-postgres</username>`.
+  The repo-side follow-up now enforces and asserts the actual SCM service
+  account, but clean-machine proof is still pending. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
@@ -121,6 +122,7 @@ pnpm build:release `
   --postgres-root=<path-to-PG16-x64-root> `
   --vc-redist-root=<path-to-VC-redist-x64-root> `
   --winsw-exe=<path-to-approved-WinSW-x64.exe>
+pnpm smoke:service-manifests
 pnpm smoke:release-build -- --require-gate-day-deps=true
 pnpm package:release-zip -- --release-root=release --output=<artifact.zip>
 pnpm smoke:release-zip -- --zip=<artifact.zip> --require-gate-day-deps=true
@@ -227,10 +229,10 @@ $env:DATABASE_URL = "<value from C:\BellField\bellfield-server.env>"
 .\release\postgres\bin\pg_ctl.exe -D $postgresData -m fast -w stop
 ```
 
-When Codex is capturing command output, avoid wrapping `pg_ctl start` in a
-PowerShell pipeline. Rerun #4 showed that background PostgreSQL can inherit the
-captured stream and keep the command open until Codex times out. Use `pg_ctl`
-`-l <logfile>` and read the log separately if needed.
+For evidence capture, avoid wrapping `pg_ctl start` in a PowerShell pipeline.
+Rerun #4 showed that background PostgreSQL can inherit the captured stream and
+keep the command open until the wrapper times out. Use `pg_ctl -l <logfile>`
+and read the log separately if needed.
 
 ## Install License File
 
@@ -282,13 +284,29 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass
 
 The install script copies the WinSW executable beside each XML manifest,
 stops/uninstalls any existing BellField services so the step is repairable,
-registers the services, then applies ACLs before startup.
+registers the services, configures `bellfield-postgres` through Windows SCM as
+`NT SERVICE\bellfield-postgres`, reads back `Win32_Service.StartName`, enables
+the unrestricted service SID, then applies ACLs before startup. If SCM does not
+read back the expected PostgreSQL service identity, the install fails before
+`Start-Service`.
 
-Known blocker after the 2026-06-20 rerun #4: the rendered PostgreSQL XML
-contained `<serviceaccount>` for `NT SERVICE\bellfield-postgres`, but WinSW
-installed the service under `LocalSystem`. The next release must explicitly
-enforce and read back the SCM service account before `Start-Service`; do not
-claim the clean-machine gate closed from XML inspection alone.
+The PostgreSQL WinSW XML deliberately does not contain `<serviceaccount>`.
+Run #4 proved XML account shape is insufficient: the XML contained
+`NT SERVICE\bellfield-postgres`, but the installed Windows service still
+reported `LocalSystem`. Treat SCM `StartName` readback and service startup as
+the proof, not manifest inspection.
+
+Before rebuilding gate-day artifacts to close the service-identity blocker, run
+the elevated diagnostic with the same WinSW binary and save the JSON result:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\release\tools\install\diagnose-windows-service-account.ps1 -WinSwExe .\release\tools\winsw\WinSW-x64.exe -KeepArtifacts
+```
+
+On a cleaned scratch machine the default diagnostic service id is
+`bellfield-postgres`, so it proves the exact virtual account name the installer
+uses. If a machine already has a BellField service, clean it first or pass a
+temporary `-ServiceId`; the script refuses to modify an existing service.
 
 Intended service/ACL model for the next fixed artifact:
 

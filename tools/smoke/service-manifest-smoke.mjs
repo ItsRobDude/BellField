@@ -86,13 +86,8 @@ try {
   }
 
   check(
-    'postgres uses the passwordless virtual service account',
-    postgresXml.includes('<serviceaccount>') &&
-      postgresXml.includes('<username>NT SERVICE\\bellfield-postgres</username>')
-  );
-  check(
-    'postgres service account asks WinSW to allow service logon',
-    postgresXml.includes('<allowservicelogon>true</allowservicelogon>')
+    'postgres XML does not rely on WinSW serviceaccount for SCM identity',
+    !postgresXml.includes('<serviceaccount>')
   );
   check('api remains on current service account model', !apiXml.includes('<serviceaccount>'));
   check('worker remains on current service account model', !workerXml.includes('<serviceaccount>'));
@@ -115,6 +110,25 @@ try {
     installScript.includes('$postgresServiceIdentity = "NT SERVICE\\$postgresServiceId"')
   );
   check(
+    'installer uses Postgres virtual service identity as the SCM StartName',
+    installScript.includes('$postgresServiceStartName = $postgresServiceIdentity')
+  );
+  check(
+    'installer configures the Postgres SCM service account',
+    installScript.includes(
+      'Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName'
+    )
+  );
+  check(
+    'installer configures SCM account with no password argument',
+    installScript.includes('"obj=", $AccountName') && !installScript.includes('password=')
+  );
+  check(
+    'installer reads back Win32_Service StartName after SCM account config',
+    installScript.includes('Get-CimInstance Win32_Service') &&
+      installScript.includes('Test-ServiceStartNameMatches')
+  );
+  check(
     'installer enables the Postgres service SID before ACL grants',
     installScript.includes('Set-ServiceSidType -ServiceId $postgresServiceId')
   );
@@ -127,6 +141,24 @@ try {
   check(
     'installer is repairable by uninstalling existing services before install',
     installScript.includes('Uninstall-BellFieldServiceIfPresent')
+  );
+  checkScriptOrder(
+    installScript,
+    'installer confirms Postgres SCM StartName before enabling SID type',
+    'Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName',
+    'Set-ServiceSidType -ServiceId $postgresServiceId'
+  );
+  checkScriptOrder(
+    installScript,
+    'installer hardens Postgres ACLs before starting services',
+    'Protect-BellFieldPath -Path $postgresDataRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")',
+    'Start-Service -Name $serviceId'
+  );
+  checkScriptOrder(
+    installScript,
+    'installer confirms Postgres SCM StartName before starting services',
+    'Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName',
+    'Start-Service -Name $serviceId'
   );
 
   check('api keeps database URL', apiXml.includes('DATABASE_URL'));
@@ -232,4 +264,10 @@ function check(name, passed) {
   if (!passed) {
     throw new Error(name);
   }
+}
+
+function checkScriptOrder(contents, name, before, after) {
+  const beforeIndex = contents.indexOf(before);
+  const afterIndex = contents.indexOf(after);
+  check(name, beforeIndex !== -1 && afterIndex !== -1 && beforeIndex < afterIndex);
 }

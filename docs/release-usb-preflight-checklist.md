@@ -61,13 +61,22 @@ does not replace the clean-machine run.
       Next static JavaScript assets, and runs packaged migrations against a
       temporary packaged PostgreSQL database.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
-      `bellfield-postgres` renders with the `NT SERVICE\bellfield-postgres`
-      virtual account plus dedicated service log paths.
+      `bellfield-postgres.xml` does not contain `<serviceaccount>`, the service
+      log paths remain outside the manifest directory, and
+      `install-windows-services.ps1` configures and reads back the SCM
+      `StartName` before service startup.
 - [ ] Service-account changes are not considered proven by XML inspection
       alone. If this USB is meant to close a Windows service-identity blocker,
-      the release/install code must also assert the installed SCM `StartName`
-      before service startup, or the PR/release notes must explicitly call out
-      that the proof is still pending.
+      the release/install code must assert the installed SCM `StartName` before
+      service startup, and the clean-machine run must capture that readback.
+      If no Windows SCM readback has passed yet, the PR/release notes must call
+      out that the proof is still pending.
+- [ ] If this USB is meant to close the service-identity blocker, a passing
+      elevated diagnostic JSON from
+      `tools\install\diagnose-windows-service-account.ps1` exists for the same
+      WinSW binary that was packaged. This diagnostic is not a Gate 1 pass; it
+      only proves the chosen account path before rebuilding and hashing USB
+      artifacts.
 - [ ] `pnpm format:check` passed after any doc/checklist updates.
 
 ## Artifact Contents

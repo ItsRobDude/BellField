@@ -13,6 +13,7 @@ $adminSid = "*S-1-5-32-544"
 $systemSid = "*S-1-5-18"
 $postgresServiceId = "bellfield-postgres"
 $postgresServiceIdentity = "NT SERVICE\$postgresServiceId"
+$postgresServiceStartName = $postgresServiceIdentity
 $postgresDataRoot = Join-Path $InstallRoot "data\postgres"
 $postgresReleaseRoot = Join-Path $ReleaseRoot "postgres"
 
@@ -127,6 +128,47 @@ function Set-ServiceSidType {
   }
 }
 
+function Get-ServiceStartName {
+  param([Parameter(Mandatory = $true)][string]$ServiceId)
+
+  $service = Get-CimInstance Win32_Service -Filter "Name = '$ServiceId'" -ErrorAction Stop
+  if (-not $service) {
+    throw "Windows service was not found after install: $ServiceId."
+  }
+
+  return [string]$service.StartName
+}
+
+function Test-ServiceStartNameMatches {
+  param(
+    [Parameter(Mandatory = $true)][string]$Actual,
+    [Parameter(Mandatory = $true)][string]$Expected
+  )
+
+  return [string]::Equals($Actual, $Expected, [System.StringComparison]::OrdinalIgnoreCase)
+}
+
+function Set-ServiceStartAccount {
+  param(
+    [Parameter(Mandatory = $true)][string]$ServiceId,
+    [Parameter(Mandatory = $true)][string]$AccountName
+  )
+
+  $arguments = @("config", $ServiceId, "obj=", $AccountName)
+  & sc.exe @arguments | Out-Null
+  if ($LASTEXITCODE -ne 0) {
+    throw "Failed to configure $ServiceId to run as $AccountName."
+  }
+
+  $actualStartName = Get-ServiceStartName -ServiceId $ServiceId
+  if (-not (Test-ServiceStartNameMatches -Actual $actualStartName -Expected $AccountName)) {
+    $serviceConfig = (& sc.exe qc $ServiceId 2>&1 | Out-String).Trim()
+    throw "Configured $ServiceId to run as $AccountName, but SCM read back StartName '$actualStartName'. sc.exe qc output: $serviceConfig"
+  }
+
+  Write-Host "$ServiceId SCM StartName confirmed as $actualStartName."
+}
+
 $serviceOrder = @(
   "bellfield-postgres",
   "bellfield-api",
@@ -175,6 +217,7 @@ foreach ($serviceId in $serviceOrder) {
   }
 }
 
+Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName
 Set-ServiceSidType -ServiceId $postgresServiceId
 
 Protect-BellFieldPath -Path $ServiceManifestRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(RX)")

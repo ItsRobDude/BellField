@@ -57,13 +57,14 @@ These must all be performed and dated before the first sold install or pilot.
 
 Latest clean-machine evidence: run #4 on 2026-06-20 proved the repaired USB
 docs, artifact hashes, extraction, packaged PostgreSQL provisioning, packaged
-migrations, license placement, service manifest rendering, and most ACL
-readbacks on a clean Windows 11 Home machine. It failed before owner setup
-because the installed `bellfield-postgres` service account was still
-`LocalSystem` even though the rendered WinSW XML contained
+migrations, license placement, service manifest rendering, and the checked
+env/PostgreSQL ACL readbacks on a clean Windows 11 Home machine. It failed
+before owner setup because the installed `bellfield-postgres` service account
+was still `LocalSystem` even though the rendered WinSW XML contained
 `NT SERVICE\bellfield-postgres`; PostgreSQL refuses to run under an
-administrative account. The next install slice must enforce and assert the SCM
-service account, not only render XML. See
+administrative account. The repo-side installer now enforces and asserts the
+SCM service account, but rebuilt artifacts and a clean-machine Gate 1 rerun
+still have to prove it. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
@@ -75,11 +76,11 @@ service account, not only render XML. See
   `release/`. The office static asset copy now targets the actual standalone
   server root and has a same-machine asset/browser smoke. Clean-machine
   artifact packaging is now past the PostgreSQL runtime and ZIP-portability
-  blockers. The PostgreSQL service-identity XML/logpath/ACL shape exists in
-  the release/install tooling, but clean-machine run #4 proved XML shape is
-  insufficient: WinSW installed PostgreSQL as `LocalSystem`. The clean-machine
-  install gate stays open until the installer enforces/readbacks the actual SCM
-  account and starts services on the scratch machine.
+  blockers. Clean-machine run #4 proved XML account shape is insufficient:
+  WinSW installed PostgreSQL as `LocalSystem`. The repo-side installer now
+  configures and reads back the Postgres SCM account before startup, but the
+  clean-machine install gate stays open until rebuilt artifacts carry that fix
+  and start services on the scratch machine.
 - First-user paradox is closed in code: when a fresh database has zero active
   employees, the API logs a one-time first-owner setup token and office-web
   switches to owner-account setup.
