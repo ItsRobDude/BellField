@@ -86,6 +86,16 @@ Validated on the development machine:
   The repo-side follow-up now enforces and asserts the actual SCM service
   account, but clean-machine proof is still pending. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md)
+- fifth clean Windows gate-day attempt ran on 2026-06-20/21 with rebuilt
+  artifacts carrying the SCM account enforcement path. It stopped at the
+  required pre-service diagnostic before server config, PostgreSQL
+  provisioning, or service installation. The diagnostic proved the preferred
+  virtual account was accepted by SCM with no password, `StartName` read back
+  as `NT SERVICE\bellfield-postgres`, the probe process ran as that service
+  virtual account, and SID-only ACL write succeeded. It still returned failure
+  because the diagnostic required the service SID to appear in `whoami /groups`
+  and then crashed in the empty-password compatibility branch. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -94,6 +104,8 @@ Validated on the development machine:
 Not yet validated in this repo:
 
 - successful clean Windows machine install with no developer tooling
+- a green run of the packaged service-account diagnostic (supporting preflight
+  evidence only, not the gate; now uses corrected virtual-account proof criteria)
 - successful Windows-service startup of bundled PostgreSQL under a
   non-administrative service identity
 - reboot/service recovery proof
@@ -296,17 +308,52 @@ Run #4 proved XML account shape is insufficient: the XML contained
 reported `LocalSystem`. Treat SCM `StartName` readback and service startup as
 the proof, not manifest inspection.
 
+The packaged service-account diagnostic is a preflight/qualification tool, not a
+step in the clean install and not the gate itself. The authoritative proof of
+the PostgreSQL service identity is the installer's own SCM `StartName` readback
+plus real PostgreSQL/service startup. A diagnostic run that fails for tool
+reasons must not block a Gate 1 install whose installer readback and service
+start both pass; equally, a genuine diagnostic failure must be investigated, not
+waved off. The install's pass/fail authority is the installer, not this script.
+
 Before rebuilding gate-day artifacts to close the service-identity blocker, run
-the elevated diagnostic with the same WinSW binary and save the JSON result:
+the elevated diagnostic with the same WinSW binary and save the JSON result.
+The default gate command should clean up its temporary service/artifacts:
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\release\tools\install\diagnose-windows-service-account.ps1 -WinSwExe .\release\tools\winsw\WinSW-x64.exe -KeepArtifacts
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\release\tools\install\diagnose-windows-service-account.ps1 -WinSwExe .\release\tools\winsw\WinSW-x64.exe
 ```
 
 On a cleaned scratch machine the default diagnostic service id is
 `bellfield-postgres`, so it proves the exact virtual account name the installer
 uses. If a machine already has a BellField service, clean it first or pass a
 temporary `-ServiceId`; the script refuses to modify an existing service.
+
+Use `-KeepArtifacts` only for an explicitly diagnostic residue-preserving run.
+Rerun #5 showed that presenting `-KeepArtifacts` in the ordinary gate command
+conflicts with the USB expectation that the temporary diagnostic service cleans
+up after itself.
+
+If Codex is running from a non-elevated PowerShell session, the human operator
+still owns the UAC prompt. Use a wrapper like this to launch the diagnostic
+elevated while capturing stdout/stderr to the active USB evidence file:
+
+```powershell
+$diagnosticOutput = "D:\BellField-GateDay-2026-06-20\evidence\service-account-diagnostic-rerun-N.json"
+$diagnosticScript = @"
+& 'C:\BellField\release\tools\install\diagnose-windows-service-account.ps1' -WinSwExe 'C:\BellField\release\tools\winsw\WinSW-x64.exe' *> '$diagnosticOutput'
+exit `$LASTEXITCODE
+"@
+$encodedDiagnostic = [Convert]::ToBase64String([System.Text.Encoding]::Unicode.GetBytes($diagnosticScript))
+$diagnosticProcess = Start-Process powershell.exe -Verb RunAs -Wait -PassThru -ArgumentList @(
+  "-NoProfile",
+  "-ExecutionPolicy",
+  "Bypass",
+  "-EncodedCommand",
+  $encodedDiagnostic
+)
+$diagnosticProcess.ExitCode
+```
 
 Intended service/ACL model for the next fixed artifact:
 

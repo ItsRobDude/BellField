@@ -174,6 +174,18 @@ The repo-side installer now enforces and reads back the actual Windows service
 account before service startup, but the clean-machine gate remains open until a
 rebuilt artifact carries that fix and passes the runbook end to end on a cleaned
 machine.
+The fifth clean Windows attempt ran on 2026-06-20/21 with those rebuilt
+artifacts. It verified active artifact hashes and extraction, then stopped at
+the required pre-service diagnostic before server config or service
+installation. The diagnostic showed Windows SCM accepted
+`NT SERVICE\bellfield-postgres`, `StartName` read back correctly, the service
+started as that virtual account, and SID-only ACL write succeeded. It still
+failed because the diagnostic proof logic required the service SID to appear in
+`whoami /groups` and then crashed in its empty-password compatibility branch.
+See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md).
+The next run should not begin until the diagnostic/proof criteria are corrected,
+new artifacts are rebuilt, and the USB hashes are refreshed.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

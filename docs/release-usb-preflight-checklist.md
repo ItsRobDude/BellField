@@ -76,7 +76,12 @@ does not replace the clean-machine run.
       `tools\install\diagnose-windows-service-account.ps1` exists for the same
       WinSW binary that was packaged. This diagnostic is not a Gate 1 pass; it
       only proves the chosen account path before rebuilding and hashing USB
-      artifacts.
+      artifacts. The default diagnostic run should clean up after itself; use
+      `-KeepArtifacts` only for an explicitly diagnostic residue-preserving
+      run. Rerun #5 showed that a useful diagnostic must not reject the
+      preferred virtual-account path solely because `whoami /groups` omits the
+      service-specific SID when `whoami /user` is already the service virtual
+      account and the SID-only ACL write succeeds.
 - [ ] `pnpm format:check` passed after any doc/checklist updates.
 
 ## Artifact Contents

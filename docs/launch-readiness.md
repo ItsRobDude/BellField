@@ -84,9 +84,18 @@ env/PostgreSQL ACL readbacks passed. Service startup still failed because the
 installed Windows service account was `LocalSystem` even though the WinSW XML
 contained the intended `NT SERVICE\bellfield-postgres` block; see
 [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md).
-The repo-side install script now enforces and asserts the SCM service account
-before startup, but this remains unclaimed until rebuilt artifacts pass the
-clean-machine Gate 1 run.
+The fifth clean-machine attempt ran on 2026-06-20/21 with rebuilt artifacts
+after the SCM service-account fix. It stopped at the required pre-service
+diagnostic before server config or service installation. The diagnostic showed
+Windows SCM accepted `NT SERVICE\bellfield-postgres`, `StartName` read back
+correctly, the service started as that virtual account, and SID-only ACL write
+succeeded; it still failed because the diagnostic only checked
+`whoami /groups` for the service SID and then crashed in the empty-password
+compatibility branch. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md).
+The service-account path remains unclaimed until the diagnostic is corrected,
+rebuilt artifacts carry that correction, and the clean-machine Gate 1 run
+starts services successfully.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

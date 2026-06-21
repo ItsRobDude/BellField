@@ -279,11 +279,12 @@ function Invoke-AccountCandidate {
 
     Reset-ProbeAcl -Path $AclProbeRoot -Identity $ServiceSidIdentity
 
+    # Virtual service accounts and the built-in LocalService account take no
+    # password through sc.exe; passing an explicit empty `password=` argument is
+    # both unnecessary and crashes PowerShell argument binding. The shipping
+    # installer also configures the account with no password, so keep this path
+    # identical: obj= only, never password=.
     $arguments = @("config", $Name, "obj=", $Candidate.account)
-    if ($Candidate.passwordMode -eq "emptyString") {
-      $arguments += "password="
-      $arguments += ""
-    }
 
     $test["scConfig"] = Invoke-ScCommand -Arguments $arguments
     if ($test["scConfig"]["exitCode"] -ne 0) {
@@ -312,8 +313,16 @@ function Invoke-AccountCandidate {
 
     if ($test["probeOutputFound"]) {
       $test["probe"] = Get-Content -LiteralPath $ProbeOutput -Raw | ConvertFrom-Json
+      # Pass on the signals that actually prove the account works: the SCM
+      # StartName is the intended low-privilege account, the service started,
+      # and a process running as that (non-admin) account wrote into a directory
+      # granting only Admin/System/serviceSID -- which can only succeed via the
+      # service SID grant. probe.serviceSidPresent is kept as recorded evidence
+      # but is NOT a gate: a service running AS its own virtual account shows that
+      # SID as the process user, not a group, so `whoami /groups` never lists it.
       $test["passed"] = [bool](
-        $test["probe"].serviceSidPresent -and
+        $test["startNameMatches"] -and
+        $test["startSucceeded"] -and
         $test["probe"].aclWriteSucceeded
       )
     }
@@ -396,14 +405,9 @@ try {
       passwordMode = "omit"
     },
     [ordered]@{
-      name = "virtualAccountEmptyPasswordCompatibility"
-      account = $serviceIdentity
-      passwordMode = "emptyString"
-    },
-    [ordered]@{
       name = "localServiceFallback"
       account = "NT AUTHORITY\LocalService"
-      passwordMode = "emptyString"
+      passwordMode = "omit"
     }
   )
 
@@ -425,7 +429,7 @@ try {
   }
 
   if (-not $result["recommendedAccount"]) {
-    throw "No service account candidate passed StartName, token service SID, and SID-only ACL checks."
+    throw "No service account candidate passed StartName readback, real service startup, and SID-only ACL write checks."
   }
 
   $result["result"] = "passed"

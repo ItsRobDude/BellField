@@ -343,6 +343,27 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or the relay token design
 (`relay-token-design.md`).
 
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md)
+
+Audience: contributors checking what the fifth clean Windows gate-day attempt
+proved and where it failed.
+
+Purpose: dated evidence for the fifth fresh Windows install smoke: rebuilt
+artifacts `.9`/`.10` hashed and extracted, the required elevated service-account
+diagnostic ran, Windows SCM accepted `NT SERVICE\bellfield-postgres`, StartName
+read back correctly, the probe process ran as that service virtual account, and
+SID-only ACL write succeeded; the run still failed because the diagnostic
+required the service SID to appear in `whoami /groups` and then crashed in its
+empty-password compatibility branch.
+
+Read when: fixing the Windows service-account diagnostic, deciding what the
+next Gate 1 artifact must prove, or reviewing why the preferred virtual account
+path looks viable but is not yet accepted by the packaged proof tool.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or the relay token design
+(`relay-token-design.md`).
+
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
 Audience: contributors assembling a gate-day USB or reviewing release artifact
