@@ -4,6 +4,11 @@ Use this on the dev machine before a gate-day USB leaves the desk. The goal is
 to prove the release artifacts are reproducible, signed, self-contained enough
 for a clean Windows machine, and not mixed with stale evidence.
 
+Audience: this is for the Codex/operator preparing the USB, not for the Codex
+running the clean-machine gate. The clean-machine Codex should treat the
+completed checkoff as read-only provenance, then follow `START-HERE.txt`,
+`gate-day-checklist.md`, and the runbooks for the actual scratch-machine work.
+
 This checklist complements [gate-day-checklist.md](./gate-day-checklist.md). It
 does not replace the clean-machine run.
 
@@ -35,7 +40,21 @@ does not replace the clean-machine run.
 
 ## Build Commands
 
-- [ ] Artifact A was built from a clean tree:
+- [ ] Source-level gates passed once for the final source commit that will be
+      used for both active artifacts. These do not need to be repeated after
+      artifact B when the source commit has not changed:
+
+  ```powershell
+  pnpm smoke:install-helpers
+  pnpm smoke:install-config
+  pnpm smoke:service-manifests
+  pnpm format:check
+  git diff --check
+  pnpm security:secrets
+  ```
+
+- [ ] Artifact A was built from a clean tree, packaged with the release ZIP
+      helper, and smoke-tested as an extracted ZIP:
 
   ```powershell
   pnpm build:release `
@@ -44,15 +63,15 @@ does not replace the clean-machine run.
     --postgres-root=<path-to-PG16-x64-root> `
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
-  pnpm smoke:install-helpers
-  pnpm smoke:service-manifests
   pnpm smoke:release-build -- --require-gate-day-deps=true
   pnpm package:release-zip -- --release-root=release --output=<artifact-A.zip>
   pnpm smoke:release-zip -- --zip=<artifact-A.zip> --require-gate-day-deps=true
   ```
 
 - [ ] Artifact B was built after A, from the same clean source commit unless the
-      update scenario intentionally tests a later commit.
+      update scenario intentionally tests a later commit. Repeat the artifact
+      commands above with version B and `<artifact-B.zip>`; do not rerun the
+      source-level gates unless source files changed after artifact A.
 - [ ] Each active artifact ZIP was created with `pnpm package:release-zip`;
       do not use an ad hoc manual ZIP command for gate-day artifacts.
 - [ ] `pnpm smoke:release-zip -- --zip=<artifact.zip> --require-gate-day-deps=true`
@@ -101,7 +120,8 @@ does not replace the clean-machine run.
       preferred virtual-account path solely because `whoami /groups` omits the
       service-specific SID when `whoami /user` is already the service virtual
       account and the SID-only ACL write succeeds.
-- [ ] `pnpm format:check` passed after any doc/checklist updates.
+- [ ] Any doc/checklist edits made during prep were included before the final
+      source-level `pnpm format:check` and `git diff --check` runs.
 
 ## Artifact Contents
 
@@ -131,10 +151,17 @@ For each active release zip:
 - [ ] `START-HERE.txt` names the active clean-install artifact.
 - [ ] `START-HERE.txt` names the active update artifact.
 - [ ] The main `artifacts/` folder contains only active artifacts.
-- [ ] Failed or superseded artifacts are under a clearly named archive folder,
-      for example `artifacts/failed-run-YYYYMMDD/`.
+- [ ] Failed or superseded artifacts are either under a clearly named USB
+      archive folder, for example `artifacts/failed-run-YYYYMMDD/`, or removed
+      from the USB after durable repo/dev-machine evidence exists. If they are
+      removed to save space, record that choice in the preflight checkoff.
 - [ ] Build evidence for active artifacts is in `build-evidence/`.
-- [ ] Build evidence for failed or superseded artifacts is archived separately.
+- [ ] Build evidence for failed or superseded artifacts is archived separately
+      when kept on the USB; otherwise the durable repo/dev-machine evidence path
+      is recorded in the preflight checkoff.
+- [ ] A completed preflight checkoff exists at
+      `build-evidence/preflight-checkoff-rerun-<N>-<YYYY-MM-DD>.md`, based on
+      [release-usb-preflight-checkoff-template.md](./release-usb-preflight-checkoff-template.md).
 - [ ] Rerun evidence files are fresh and do not overwrite earlier failure
       evidence.
 - [ ] Active rerun evidence templates have their top-level status/checklist
@@ -210,7 +237,10 @@ rg -n "bfrt1_[A-Za-z0-9]|BELLFIELD_RELAY_TOKEN=[^C\r\n]|BellField first-owner se
 
 ## Closeout
 
-- [ ] Record the active artifact versions, source commit, smoke evidence files,
-      and SHA256 entries in the PR or release notes.
+- [ ] Record the active artifact versions, source commit, PR/merge commit,
+      smoke evidence files, SHA256 entries, USB hash verification summary,
+      secret-scan result, cleanup/temp-process checks, and any deliberately
+      skipped or changed checklist item in the preflight checkoff.
 - [ ] Do not start the clean-machine gate until every unchecked item is either
-      completed or deliberately marked as a known risk.
+      completed or deliberately marked as a known risk in the preflight
+      checkoff, with a final ready/not-ready verdict.
