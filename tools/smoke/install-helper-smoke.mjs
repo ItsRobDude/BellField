@@ -20,9 +20,12 @@ try {
     installer: readRequired('tools/install/install-windows-services.ps1'),
     baselineCollector: readRequired('tools/install/collect-windows-install-baseline.ps1'),
     lanCollector: readRequired('tools/install/collect-windows-lan-evidence.ps1'),
+    lanConfigurator: readRequired('tools/install/configure-windows-lan-access.ps1'),
+    lanCleanup: readRequired('tools/install/remove-windows-lan-access.ps1'),
     migrationHelper: readRequired('tools/install/run-packaged-migrations.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
+    releaseBuilder: readRequired('tools/build-release.mjs'),
     releaseZipSmoke: readRequired('tools/smoke/release-zip-smoke.mjs')
   };
 
@@ -64,7 +67,9 @@ try {
     serviceCollector: files.serviceCollector,
     installer: files.installer,
     baselineCollector: files.baselineCollector,
-    lanCollector: files.lanCollector
+    lanCollector: files.lanCollector,
+    lanConfigurator: files.lanConfigurator,
+    lanCleanup: files.lanCleanup
   })) {
     check(
       `${name} dot-sources evidence redaction helper`,
@@ -147,6 +152,93 @@ try {
       declaresTopLevelParameter(files.lanCollector, 'TimeoutSeconds')
   );
   check(
+    'LAN access configurator exposes expected parameters',
+    declaresTopLevelParameter(files.lanConfigurator, 'InstallRoot') &&
+      declaresTopLevelParameter(files.lanConfigurator, 'EnvPath') &&
+      declaresTopLevelParameter(files.lanConfigurator, 'LanHost') &&
+      declaresTopLevelParameter(files.lanConfigurator, 'LanIp') &&
+      declaresTopLevelParameter(files.lanConfigurator, 'SetCurrentNetworkPrivate')
+  );
+  check(
+    'LAN access helpers are packaged with install tooling',
+    files.releaseBuilder.includes("copyRequired(join(repoRoot, 'tools', 'install')")
+  );
+  check(
+    'LAN access configurator reads office and API ports from server env',
+    includesAll(files.lanConfigurator, ['BELLFIELD_OFFICE_WEB_PORT', 'BELLFIELD_API_PORT'])
+  );
+  check(
+    'LAN access configurator writes LAN-safe office/API URLs only',
+    includesAll(files.lanConfigurator, [
+      'NEXT_PUBLIC_API_BASE_URL',
+      'BELLFIELD_OFFICE_ORIGINS',
+      'http://localhost:$officePort',
+      'http://127.0.0.1:$officePort',
+      'http://${effectiveLanHost}:$officePort',
+      'http://${effectiveLanHost}:$apiPort'
+    ])
+  );
+  check(
+    'LAN access helpers do not open PostgreSQL',
+    !files.lanConfigurator.includes('5432') && !files.lanCleanup.includes('5432')
+  );
+  check(
+    'LAN access configurator uses stable managed firewall names and group',
+    includesAll(files.lanConfigurator, [
+      '$bellFieldFirewallGroup = "BellField"',
+      'BellField-Office-Web-TCP-Inbound',
+      'BellField-API-TCP-Inbound',
+      'BellField Office Web TCP Inbound',
+      'BellField API TCP Inbound',
+      '-Name $officeFirewallRuleName',
+      '-Name $apiFirewallRuleName',
+      'RemoteAddress LocalSubnet',
+      'Profile Private,Domain',
+      'Protocol TCP'
+    ])
+  );
+  check(
+    'LAN access configurator recreates managed firewall rules before proving effectiveness',
+    files.lanConfigurator.includes(
+      [
+        'Remove-BellFieldManagedFirewallRules',
+        'New-BellFieldManagedFirewallRules -OfficePort $officePort -ApiPort $apiPort',
+        'Assert-BellFieldLanAccessEffective -Profile $selectedProfile -OfficePort $officePort -ApiPort $apiPort'
+      ].join('\n')
+    )
+  );
+  check(
+    'LAN access configurator fails Public profiles unless explicit private-profile consent is passed',
+    includesAll(files.lanConfigurator, [
+      'NetworkCategory Private',
+      'SetCurrentNetworkPrivate',
+      'Public',
+      'Copyable command'
+    ]) && !files.lanConfigurator.includes('AllowPublicLanAccess')
+  );
+  check(
+    'LAN access configurator proves rule effectiveness for the active profile',
+    includesAll(files.lanConfigurator, [
+      'Assert-BellFieldLanAccessEffective',
+      'Test-RuleProfileApplies',
+      'Test-ManagedRuleEffective',
+      'DomainAuthenticated',
+      'RemoteAddress',
+      'LocalSubnet'
+    ])
+  );
+  check(
+    'LAN access cleanup removes only exact BellField managed firewall rule names',
+    includesAll(files.lanCleanup, [
+      'BellField-Office-Web-TCP-Inbound',
+      'BellField-API-TCP-Inbound',
+      'BellField Office Web TCP Inbound',
+      'BellField API TCP Inbound',
+      'Get-NetFirewallRule -Name $managedRule.Name',
+      'Remove-NetFirewallRule -InputObject $rule'
+    ]) && !files.lanCleanup.includes('Remove-NetFirewallRule -Group')
+  );
+  check(
     'LAN collector writes JSON evidence',
     files.lanCollector.includes('ConvertTo-Json') && files.lanCollector.includes('Set-Content')
   );
@@ -167,6 +259,20 @@ try {
     ])
   );
   check(
+    'LAN collector reports effective managed firewall access separately from rule existence',
+    includesAll(files.lanCollector, [
+      'effectiveLanAccess',
+      'effectiveLanAccessReasons',
+      'activeNetworkProfile',
+      'BellField-Office-Web-TCP-Inbound',
+      'BellField-API-TCP-Inbound',
+      'BellField Office Web TCP Inbound',
+      'BellField API TCP Inbound',
+      'Test-RuleProfileApplies',
+      'LocalSubnet'
+    ])
+  );
+  check(
     'LAN collector labels URL probes as local-origin only',
     files.lanCollector.includes('localOriginUrlChecks') &&
       files.lanCollector.includes('origin = "installed-pc"') &&
@@ -180,7 +286,9 @@ try {
       'candidateIpv4Addresses = @($candidates)',
       'listeners = @(Get-Listeners -Ports $ports)',
       'localOriginUrlChecks = @($localOriginChecks)',
-      'inboundFirewallRules = @(Get-FirewallReadback -Ports $ports)'
+      '$firewallRules = @(Get-FirewallReadback -Ports $ports)',
+      'inboundFirewallRules = @($firewallRules)',
+      'effectiveLanAccessReasons = @($effectiveLanAccess.effectiveLanAccessReasons)'
     ])
   );
 

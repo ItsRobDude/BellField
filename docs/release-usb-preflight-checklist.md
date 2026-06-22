@@ -171,6 +171,8 @@ For each active release zip:
 - [ ] The USB includes the packaged install helpers under `tools\install`,
       including `collect-windows-install-baseline.ps1`,
       `collect-windows-service-evidence.ps1`,
+      `configure-windows-lan-access.ps1`,
+      `remove-windows-lan-access.ps1`,
       `collect-windows-lan-evidence.ps1`, `run-packaged-migrations.mjs`, and
       `evidence-redaction.ps1` / `sensitive-redaction.mjs`.
 - [ ] Docs, `START-HERE.txt`, evidence templates, command logs, and build

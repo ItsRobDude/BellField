@@ -215,8 +215,11 @@ the installed PC could reach office web and API health through that LAN IP
 locally, and no explicit BellField/Node/3000/3001 inbound firewall rule was
 found. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
-Gate 1 still needs a documented or automated Windows LAN ingress path for
-second-device access.
+The repo now includes that Windows LAN ingress path as a packaged helper that
+sets LAN-safe office/API URLs, manages exact BellField-owned Private/Domain
+LocalSubnet firewall rules for office/API ports only, and fails closed on
+Public profiles unless explicitly consented. Gate 1 still needs a clean-machine
+rerun proving real second-device access through that path.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

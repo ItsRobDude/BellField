@@ -120,6 +120,11 @@ access: two same-Wi-Fi devices timed out against the installed PC's LAN IP even
 though local LAN-IP office/API checks passed and no explicit
 BellField/Node/3000/3001 inbound firewall rule was found. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
+The repo now includes a packaged LAN access helper for the next artifact: it
+writes LAN-safe office/API URLs, creates exact BellField-managed Private/Domain
+LocalSubnet firewall rules for office/API ports only, and fails closed on
+Public profiles unless explicitly consented. The helper still needs clean
+Windows proof with a real second-device login.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -127,8 +132,8 @@ The remaining clean-machine proofs are still owned by
       setup, job booking, reboot recovery, and second-device access. Rerun #8
       already captured service registration, service stability, ACL, API
       health, browser owner setup, browser job booking, reboot recovery, and
-      post-reboot login evidence. The remaining Gate 1 gap is LAN/firewall
-      reachability from another device. This gate is also the definition of
+      post-reboot login evidence. The remaining Gate 1 gap is proving the new
+      packaged LAN/firewall path from another device. This gate is also the definition of
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.

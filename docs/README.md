@@ -426,6 +426,9 @@ Read when: preparing or reviewing a gate-day USB hash manifest, patching Windows
 LAN/firewall reachability for the office app/API, or checking which Gate 1 proof
 remains open after rerun 8.
 
+Current follow-up: the repo includes a packaged LAN access helper for the next
+artifact, but a clean-machine rerun still has to prove real second-device login.
+
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or application runtime behavior.
 
