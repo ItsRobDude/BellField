@@ -15,6 +15,11 @@ if (-not (Test-Path -LiteralPath $redactionHelper)) {
 }
 . $redactionHelper
 
+$officeFirewallRuleName = "BellField-Office-Web-TCP-Inbound"
+$apiFirewallRuleName = "BellField-API-TCP-Inbound"
+$officeFirewallRuleDisplayName = "BellField Office Web TCP Inbound"
+$apiFirewallRuleDisplayName = "BellField API TCP Inbound"
+
 function Test-IsElevated {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
   $principal = New-Object Security.Principal.WindowsPrincipal($identity)
@@ -64,9 +69,20 @@ function Select-LanIp {
   param($Candidates)
 
   if ($LanIp) {
+    $matching = @($Candidates | Where-Object { $_.IPAddress -eq $LanIp })
+    if ($matching.Count -eq 1) {
+      return @{
+        ipAddress = $LanIp
+        reason = "provided"
+        interfaceAlias = $matching[0].InterfaceAlias
+        interfaceIndex = $matching[0].InterfaceIndex
+        probeAllowed = $true
+      }
+    }
+
     return @{
       ipAddress = $LanIp
-      reason = "provided"
+      reason = "provided but not matched to a local non-loopback IPv4 candidate"
       probeAllowed = $true
     }
   }
@@ -221,6 +237,7 @@ function Get-FirewallReadback {
           direction = $rule.Direction
           protocol = $portFilter.Protocol
           localPort = @($portFilter.LocalPort)
+          remoteAddress = @($portFilter.RemoteAddress)
           program = $programs
         }
       }
@@ -235,9 +252,125 @@ function Get-FirewallReadback {
   }
 }
 
+function Get-SelectedNetworkProfile {
+  param($SelectedLanIp)
+
+  try {
+    if ($SelectedLanIp -and $SelectedLanIp.interfaceIndex) {
+      return Get-NetConnectionProfile -InterfaceIndex ([int]$SelectedLanIp.interfaceIndex) -ErrorAction Stop |
+        Select-Object Name, InterfaceAlias, InterfaceIndex, NetworkCategory, IPv4Connectivity, IPv6Connectivity
+    }
+  } catch {
+    return @{
+      ok = $false
+      error = ConvertTo-BellFieldRedactedText $_.Exception.Message
+    }
+  }
+
+  return $null
+}
+
+function Test-RuleProfileApplies {
+  param(
+    [object]$RuleProfile,
+    [string]$NetworkCategory
+  )
+
+  $neededProfile = if ($NetworkCategory -eq "DomainAuthenticated") { "Domain" } else { $NetworkCategory }
+  $text = [string]$RuleProfile
+  return $text -eq "Any" -or ($text -split "[, ]+" | Where-Object { $_ }) -contains $neededProfile
+}
+
+function Test-RemoteAddressAllowsLocalSubnet {
+  param([object]$RemoteAddress)
+
+  foreach ($value in @($RemoteAddress)) {
+    $text = [string]$value
+    if ($text -eq "LocalSubnet" -or $text -match "(^|[, ])LocalSubnet([, ]|$)") {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Test-ManagedRuleEffective {
+  param(
+    [object[]]$FirewallRules,
+    [string]$Name,
+    [string]$DisplayName,
+    [int]$ExpectedPort,
+    [string]$NetworkCategory
+  )
+
+  foreach ($rule in @($FirewallRules)) {
+    if ($rule.name -ne $Name -or $rule.displayName -ne $DisplayName) {
+      continue
+    }
+    if (
+      [string]$rule.enabled -eq "True" -and
+      [string]$rule.action -eq "Allow" -and
+      [string]$rule.direction -eq "Inbound" -and
+      (Test-RuleProfileApplies -RuleProfile $rule.profile -NetworkCategory $NetworkCategory) -and
+      [string]$rule.protocol -eq "TCP" -and
+      (Test-PortFilterMatches -LocalPort $rule.localPort -TargetPorts @($ExpectedPort)) -and
+      (Test-RemoteAddressAllowsLocalSubnet -RemoteAddress $rule.remoteAddress)
+    ) {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Get-EffectiveLanAccess {
+  param(
+    $ActiveProfile,
+    [object[]]$FirewallRules,
+    [int]$OfficePort,
+    [int]$ApiPort
+  )
+
+  $reasons = @()
+  if (-not $ActiveProfile) {
+    return @{
+      effectiveLanAccess = $false
+      effectiveLanAccessReasons = @("selected LAN profile could not be determined")
+    }
+  }
+  if ($ActiveProfile.ok -eq $false) {
+    return @{
+      effectiveLanAccess = $false
+      effectiveLanAccessReasons = @("selected LAN profile readback failed: $($ActiveProfile.error)")
+    }
+  }
+
+  $category = [string]$ActiveProfile.NetworkCategory
+  if ($category -notin @("Private", "DomainAuthenticated")) {
+    $reasons += "selected network profile is $category; BellField managed rules apply to Private/Domain only"
+  }
+
+  $officeOk = Test-ManagedRuleEffective -FirewallRules $FirewallRules -Name $officeFirewallRuleName -DisplayName $officeFirewallRuleDisplayName -ExpectedPort $OfficePort -NetworkCategory $category
+  $apiOk = Test-ManagedRuleEffective -FirewallRules $FirewallRules -Name $apiFirewallRuleName -DisplayName $apiFirewallRuleDisplayName -ExpectedPort $ApiPort -NetworkCategory $category
+  if (-not $officeOk) {
+    $reasons += "managed office firewall rule is missing or not effective for port $OfficePort and profile $category"
+  }
+  if (-not $apiOk) {
+    $reasons += "managed API firewall rule is missing or not effective for port $ApiPort and profile $category"
+  }
+
+  return @{
+    effectiveLanAccess = ($reasons.Count -eq 0)
+    effectiveLanAccessReasons = @($reasons)
+  }
+}
+
 $ports = @($OfficePort, $ApiPort)
 $candidates = @(Get-CandidateIpv4Addresses)
 $selectedLanIp = Select-LanIp -Candidates $candidates
+$activeNetworkProfile = Get-SelectedNetworkProfile -SelectedLanIp $selectedLanIp
+$firewallRules = @(Get-FirewallReadback -Ports $ports)
+$effectiveLanAccess = Get-EffectiveLanAccess -ActiveProfile $activeNetworkProfile -FirewallRules $firewallRules -OfficePort $OfficePort -ApiPort $ApiPort
 $localOriginChecks = @()
 if ($selectedLanIp.probeAllowed -and $selectedLanIp.ipAddress) {
   $localOriginChecks += Invoke-LocalUrlCheck -Url "http://$($selectedLanIp.ipAddress):$OfficePort/" -Timeout $TimeoutSeconds
@@ -265,9 +398,12 @@ $evidence = [ordered]@{
   networkProfiles = @(Get-NetworkProfiles)
   candidateIpv4Addresses = @($candidates)
   selectedLanIp = $selectedLanIp
+  activeNetworkProfile = $activeNetworkProfile
   listeners = @(Get-Listeners -Ports $ports)
   localOriginUrlChecks = @($localOriginChecks)
-  inboundFirewallRules = @(Get-FirewallReadback -Ports $ports)
+  inboundFirewallRules = @($firewallRules)
+  effectiveLanAccess = $effectiveLanAccess.effectiveLanAccess
+  effectiveLanAccessReasons = @($effectiveLanAccess.effectiveLanAccessReasons)
 }
 
 $outputDirectory = Split-Path -Parent $OutputPath

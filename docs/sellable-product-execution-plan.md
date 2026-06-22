@@ -75,6 +75,10 @@ for office web and API health, and no explicit BellField/Node/3000/3001 inbound
 firewall rule was found.
 See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
+The next artifact includes a packaged LAN access helper that configures LAN-safe
+office/API URLs and exact BellField-managed Private/Domain LocalSubnet firewall
+rules for office/API ports only. This is not a passed Gate 1 claim until a
+clean-machine rerun proves real second-device login.
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 

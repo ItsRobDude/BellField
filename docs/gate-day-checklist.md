@@ -163,6 +163,19 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       file, generated secrets, and configured data-root folders. Do not expect
       `C:\BellField\data\postgres\PG_VERSION` yet; PostgreSQL initialization
       belongs to the next provisioning step.
+- [ ] Configure supported LAN ingress before rendering services:
+
+  ```powershell
+  .\release\tools\install\configure-windows-lan-access.ps1 -InstallRoot C:\BellField
+  ```
+
+      If the selected LAN profile is `Public`, the helper must fail closed
+      unless the operator explicitly reruns it with `-SetCurrentNetworkPrivate`
+      after confirming this is the trusted shop LAN. It must configure
+      LAN-safe `NEXT_PUBLIC_API_BASE_URL` / `BELLFIELD_OFFICE_ORIGINS`, create
+      exact BellField-managed firewall rules for the office/API ports only, and
+      never open PostgreSQL/5432.
+
 - [ ] `provision-postgres.mjs` initializes the data dir, applies the
       generated password, flips auth to `scram-sha-256`.
 - [ ] Run packaged migrations through the helper (runbook §Provision
@@ -177,9 +190,9 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 
 - [ ] Place the **valid** license at
       `C:\BellField\data\license\bellfield-license.json`.
-- [ ] Render manifests, install services from elevated PowerShell, confirm
-      all four register and start in order (`bellfield-postgres`, `-api`,
-      `-worker`, `-office-web`).
+- [ ] Render manifests after LAN config, then install services from elevated
+      PowerShell and confirm all four register/start in order
+      (`bellfield-postgres`, `-api`, `-worker`, `-office-web`).
 - [ ] Confirm the installer reports service stability and API health, not only
       service registration. It must require stable nonzero service process IDs
       across the settle window. Stop the gate if the installer prints service
@@ -266,15 +279,14 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       It records the scratch machine LAN IP decision, Windows network category,
       listening ports for `3000` and `3001`, local-origin installed-PC requests
       to `http://<scratch-lan-ip>:3000` and
-      `http://<scratch-lan-ip>:3001/health`, and inbound firewall rule readback
-      for BellField/Node/3000/3001. The helper's URL checks do not prove remote
+      `http://<scratch-lan-ip>:3001/health`, inbound firewall rule readback,
+      and `effectiveLanAccess`. The helper's URL checks do not prove remote
       reachability; then open the office app from another machine on the LAN and
-      log in. If local LAN-IP checks pass but the external device times out,
-      stop the strict gate and record the firewall/profile evidence; do not add
-      a firewall rule or change the network profile mid-gate unless the
-      artifact/runbook under test documents that as the supported path. (Android
-      field-device proof is a stretch goal - record it if attempted, it is
-      tracked debt either way.)
+      log in. If `effectiveLanAccess` is false, or local LAN-IP checks pass but
+      the external device times out, stop the strict gate and record the
+      firewall/profile evidence. Actual second-device login is the only
+      authoritative pass. (Android field-device proof is a stretch goal -
+      record it if attempted, it is tracked debt either way.)
 
 ---
 

@@ -288,6 +288,47 @@ Backup defaults written by the config helper:
 
 Use a local/server-owned backup directory first. A network path is allowed only after a dated backup and restore drill from that exact path.
 
+## Configure LAN Access
+
+Before rendering service manifests, configure the trusted shop LAN URL and
+managed Windows Firewall rules from an elevated PowerShell session:
+
+```powershell
+.\release\tools\install\configure-windows-lan-access.ps1 -InstallRoot C:\BellField
+```
+
+The helper selects the default-route non-loopback IPv4 address unless `-LanIp`
+or `-LanHost` is passed. It updates only:
+
+- `NEXT_PUBLIC_API_BASE_URL=http://<lan-host>:<api-port>`
+- `BELLFIELD_OFFICE_ORIGINS=http://localhost:<office-port>,http://127.0.0.1:<office-port>,http://<lan-host>:<office-port>`
+
+It does not touch `DATABASE_URL`, does not change PostgreSQL configuration, and
+does not open port `5432`. PostgreSQL remains local-only.
+
+The helper manages only two Windows Firewall rules in the `BellField` group:
+internal names `BellField-Office-Web-TCP-Inbound` and
+`BellField-API-TCP-Inbound`, with display names
+`BellField Office Web TCP Inbound` and `BellField API TCP Inbound`. They are
+TCP-only, use the configured office/API ports, apply to `Private,Domain`
+profiles, and are scoped to `LocalSubnet`. The helper removes and recreates
+only those exact managed internal names so reruns do not accumulate duplicate
+rules.
+
+If the selected LAN profile is `Public`, the helper fails closed by default and
+prints the interface alias/index plus a copyable
+`Set-NetConnectionProfile -InterfaceAlias '<alias>' -NetworkCategory Private`
+command. On an assisted install where the operator confirms this is the trusted
+shop LAN, rerun the helper with `-SetCurrentNetworkPrivate`; the helper logs
+the change and reads the profile back before continuing. Do not open Public
+profile inbound rules for Gate 1.
+
+For uninstall/cleanup, remove only the BellField-managed rules:
+
+```powershell
+.\release\tools\install\remove-windows-lan-access.ps1
+```
+
 ## Provision PostgreSQL
 
 Phase 1 expects user-space PostgreSQL 16 binaries to exist at one of:
@@ -345,7 +386,7 @@ Do not copy private signing keys into the release folder or a customer machine.
 
 ## Register Windows Services
 
-Render WinSW manifests:
+After LAN access has configured the env file, render WinSW manifests:
 
 ```powershell
 .\release\runtime\node\node.exe .\release\tools\install\render-windows-services.mjs --install-root=C:\BellField --release-root=.\release
@@ -555,9 +596,8 @@ healthy locally, and the installed PC could reach its own LAN IP, but two
 same-Wi-Fi devices timed out because the runbook/installer had not created or
 verified a Windows Firewall/network-profile path for inbound LAN traffic.
 
-Until the installer owns that firewall rule explicitly, treat this as an
-evidence checkpoint, not a place to improvise a pass. Capture the packaged
-read-only LAN evidence before trying the second device:
+The LAN config helper now owns the supported firewall/profile path. Capture the
+packaged read-only LAN evidence before trying the second device:
 
 ```powershell
 .\release\tools\install\collect-windows-lan-evidence.ps1 `
@@ -566,17 +606,16 @@ read-only LAN evidence before trying the second device:
 ```
 
 The collector records network profiles, candidate/chosen LAN IP, listeners for
-the office/API ports, local-origin installed-PC LAN URL checks, and inbound
-firewall rule/port-filter readback. Its URL checks are labeled
-`origin = "installed-pc"` and `provesRemoteReachability = false`; they prove
-local binding behavior only. The collector does not create firewall rules,
+the office/API ports, local-origin installed-PC LAN URL checks, inbound firewall
+rule/port-filter readback, and `effectiveLanAccess` reasons. Its URL checks are
+labeled `origin = "installed-pc"` and `provesRemoteReachability = false`; they
+prove local binding behavior only. The collector does not create firewall rules,
 change the network profile, or replace the actual second-device login proof.
 
-Then open `http://<scratch-lan-ip>:3000` from the second device and log in. If
-the local LAN-IP checks pass but the second device times out, stop the strict
-gate and record the firewall/profile evidence. Do not add a firewall rule or
-change the network profile mid-gate unless the artifact/runbook being tested
-documents that exact operation as part of the supported install path.
+Then open `http://<scratch-lan-ip>:3000` from the second device and log in.
+Only a real second-device login closes the Gate 1 LAN proof. If
+`effectiveLanAccess` is false, or local LAN-IP checks pass but the second device
+times out, stop the strict gate and record the firewall/profile evidence.
 
 ## Backup And Restore
 
