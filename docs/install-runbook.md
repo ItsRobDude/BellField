@@ -132,6 +132,21 @@ Validated on the development machine:
   LAN-IP office/API checks passed and no explicit BellField/Node/3000/3001
   inbound firewall rule was found. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md)
+- PR #68 added the packaged Windows LAN ingress helper. The 2026-06-21 rerun-9
+  USB prep rebuilt active `.17`/`.18` artifacts from source commit `991d773`
+  with that helper, refreshed USB hashes, and kept `evidence/**` excluded from
+  the immutable hash manifest. This is prep evidence only; Gate 1 still requires
+  a cleaned-machine rerun proving effective firewall/profile readback and real
+  second-device login.
+- ninth clean Windows gate-day attempt ran on 2026-06-22 with active `.17`/`.18`
+  artifacts. USB hash verification, `.17` extraction, packaged baseline
+  collection, and `write-server-config.mjs` passed. The required elevated LAN
+  helper then failed before PostgreSQL provisioning with a `Read-ServerEnvValue`
+  binding error because generated env files contain blank separator lines. The
+  helper had not reached the documented Public-profile refusal/consent branch,
+  no firewall rules were created, and no services were rendered or installed.
+  See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-9.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-9.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -158,7 +173,11 @@ Not yet validated in this repo:
   evidence only, not the gate; now uses corrected virtual-account proof criteria)
 - Windows LAN/firewall reachability for a second office desktop; rerun #8
   proved local install, owner setup, job booking, reboot recovery, and
-  post-reboot login, but second-device same-Wi-Fi access timed out
+  post-reboot login, but second-device same-Wi-Fi access timed out; rerun #9
+  stopped earlier because the packaged LAN helper could not read generated env
+  files containing blank separator lines. The next artifact must prove the
+  helper reaches the intended Public-profile handling, then firewall/profile
+  readback and real second-device login
 - Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
@@ -258,7 +277,8 @@ This writes `C:\BellField\bellfield-server.env`, creates the configured local
 data-root folders, and generates secrets. It does not initialize the
 PostgreSQL data directory; `C:\BellField\data\postgres\PG_VERSION` appears only
 after `provision-postgres.mjs` initializes PostgreSQL. Do not commit or share
-the env file.
+the env file, and do not record the generated database password separately in
+gate evidence or customer notes; the restricted env file is the source of truth.
 
 The config helper generates a non-empty
 `BELLFIELD_RELAY_SERVER_INSTANCE_ID` while `BELLFIELD_RELAY_BASE_URL` and
