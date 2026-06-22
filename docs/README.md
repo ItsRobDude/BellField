@@ -475,6 +475,21 @@ reviewing whether a release package is ready for clean Windows validation.
 Does not own: the gate execution sequence (`gate-day-checklist.md`), the install
 recipe (`install-runbook.md`), or the failed-run evidence docs.
 
+### [release-usb-preflight-checkoff-template.md](./release-usb-preflight-checkoff-template.md)
+
+Audience: the Codex/operator preparing a gate-day USB on the dev machine.
+
+Purpose: fillable provenance/checkoff template copied into USB
+`build-evidence/` during prep so active artifacts, source commit, smoke
+evidence, hash verification, secret scan, cleanup, and any deviations are
+recorded before the clean-machine Codex starts.
+
+Read when: refreshing a USB, replacing active artifacts, or reviewing whether a
+USB was prepared deliberately rather than reconstructed from chat history.
+
+Does not own: clean-machine execution steps, install commands, or scratch-run
+evidence capture.
+
 ### [asset-protection-and-licensing.md](./asset-protection-and-licensing.md)
 
 Audience: contributors working on licensing, distribution, updates, or commercial protection posture.

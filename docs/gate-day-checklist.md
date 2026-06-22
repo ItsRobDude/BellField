@@ -37,10 +37,29 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 
 ## Prep (dev machine, before gate day)
 
+This section is for the Codex/operator preparing the USB. It is not clean-machine
+gate work. The clean-machine Codex starts at `START-HERE.txt` and uses the
+completed `build-evidence/preflight-checkoff-rerun-<N>-<YYYY-MM-DD>.md` only as
+proof that prep already happened.
+
 - [ ] Run [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
       while assembling the USB. Do not start the scratch-machine gate until the
       active artifacts, source commit, SHA list, docs, evidence templates, and
-      secret scan are all current.
+      secret scan are all current. Prep is not complete until
+      `build-evidence/preflight-checkoff-rerun-<N>-<YYYY-MM-DD>.md` exists on
+      the USB and records a ready verdict or clearly labeled known risks.
+- [ ] **Run source-level gates once for the final source commit** that both
+      active artifacts will use:
+
+  ```powershell
+  pnpm smoke:install-helpers
+  pnpm smoke:install-config
+  pnpm smoke:service-manifests
+  pnpm format:check
+  git diff --check
+  pnpm security:secrets
+  ```
+
 - [ ] **Build artifact A — v(N):**
 
   ```powershell
@@ -50,8 +69,6 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
     --postgres-root=<path-to-PG16-x64-root> `
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
-  pnpm smoke:install-helpers
-  pnpm smoke:service-manifests
   pnpm smoke:release-build -- --require-gate-day-deps=true
   pnpm package:release-zip -- --release-root=release --output=<bellfield-vN.zip>
   pnpm smoke:release-zip -- --zip=<bellfield-vN.zip> --require-gate-day-deps=true
@@ -108,7 +125,8 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 - [ ] **Build artifact B — v(N+1):** same steps (PG16 + WinSW included), with
       a bumped `--version` and a `--release-date` the same day or later than
       artifact A's. Zip as `bellfield-vN+1.zip`. Build B **after** A so the
-      signed manifests are distinct.
+      signed manifests are distinct. Rerun the source-level gates only if source
+      files changed after artifact A.
 - [ ] **Issue two license files** (BellField-side, from
       [license-design.md](./license-design.md) key ceremony):
   - `bellfield-license.json` — valid, `--update-window-end` comfortably in
@@ -134,7 +152,7 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
       Prefer the packaged helper:
 
   ```powershell
-  .\release\tools\install\verify-usb-hashes.ps1 -Root <usb-root>
+  .\tools\install\verify-usb-hashes.ps1 -Root <usb-root>
   ```
 
 - [ ] **Second device ready:** any other laptop/phone on the same LAN for the
