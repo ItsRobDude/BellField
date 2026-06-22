@@ -43,9 +43,10 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #7 has
-  clean-machine service registration/stability, ACL, and API-health evidence,
-  but the full Gate 1 transcript is still open.
+  job booking, reboot survival, and second-device access. Rerun #8 has
+  clean-machine install, service registration/stability, ACL, API-health,
+  first-owner setup, job booking, reboot recovery, and post-reboot login
+  evidence, but second-device LAN access still failed.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
   backup set
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
@@ -57,19 +58,21 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Latest clean-machine install evidence: run #7 on 2026-06-21 used rebuilt
-artifacts after the relay-disabled runtime config and installer stability fixes.
-It completed clean extraction, server config, PostgreSQL provisioning, packaged
-migrations, license placement, service rendering, elevated service
-installation, packaged service evidence collection, and API `/health`.
-`bellfield-postgres` read back as `NT SERVICE\bellfield-postgres`, all four
-services stayed running, and the PostgreSQL ACL readbacks matched the intended
-narrow model. That run failed later at browser first-owner setup because the
-failed-attempt SQL path wrote `blocked_until` with the wrong type. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md).
-The repo-side fix and packaged release smoke now cover invalid-token handling
-and valid first-owner creation. Run #8 did not reach install; it stopped before
-extraction because the USB hash manifest included mutable `evidence/**` files.
+Latest clean-machine install evidence: run #8 on 2026-06-21 used rebuilt
+artifacts with the first-owner SQL fix and packaged first-owner release-smoke
+proof. Its first strict preflight exposed that the USB hash manifest still
+included mutable current-run `evidence/**` files; after the USB manifest was
+corrected without changing the product ZIPs, the run continued and completed
+clean extraction, server config, PostgreSQL provisioning, packaged migrations,
+license placement, service rendering, elevated service installation, packaged
+service evidence collection, API `/health`, browser first-owner setup, browser
+job booking, reboot recovery, and post-reboot login. `bellfield-postgres` read
+back as `NT SERVICE\bellfield-postgres`, all four services stayed running, and
+the PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 then
+failed at second-device LAN proof: two same-Wi-Fi devices timed out against
+`http://192.168.50.131:3000`, while the installed PC could reach its own LAN IP
+for office web and API health, and no explicit BellField/Node/3000/3001 inbound
+firewall rule was found.
 See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
 

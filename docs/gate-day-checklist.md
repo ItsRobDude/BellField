@@ -50,6 +50,7 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
     --postgres-root=<path-to-PG16-x64-root> `
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
+  pnpm smoke:install-helpers
   pnpm smoke:service-manifests
   pnpm smoke:release-build -- --require-gate-day-deps=true
   pnpm package:release-zip -- --release-root=release --output=<bellfield-vN.zip>
@@ -70,6 +71,9 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
       configures and reads back the SCM `StartName` before startup, validates
       packaged runtime config, waits for service/process-id stability, and
       polls API health before reporting success.
+- [ ] Confirm `pnpm smoke:install-helpers` passed and proves the packaged
+      baseline, service, LAN, migration, and evidence-redaction helpers are
+      present and wired into the installer failure path.
 - [ ] Confirm `pnpm smoke:install-config` passed. It must run the real
       `write-server-config.mjs` helper and prove API/worker accept the generated
       clean-install relay-disabled env.
@@ -132,7 +136,11 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
   ```
 
 - [ ] **Second device ready:** any other laptop/phone on the same LAN for the
-      second-office-desktop proof; know the scratch machine's LAN IP plan.
+      second-office-desktop proof; know the scratch machine's LAN IP plan and
+      be ready to record the Windows network category, listener readback, local
+      LAN-IP health checks, and firewall rule readback before trying the second
+      device. Rerun #8 failed here with the scratch PC on a Public network and
+      no obvious BellField/Node/3000/3001 inbound allow rule.
 
 ---
 
@@ -142,17 +150,31 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 
 - [ ] Extract artifact A; **no tooling installed on the machine itself** —
       everything runs via `release\runtime\node\node.exe`.
+- [ ] Capture the read-only install baseline before making changes:
+
+  ```powershell
+  .\release\tools\install\collect-windows-install-baseline.ps1 `
+    -InstallRoot C:\BellField `
+    -UsbRoot <usb-root> `
+    -OutputPath <usb-evidence-path>\install-baseline-rerun-N.json
+  ```
+
 - [ ] `write-server-config.mjs --install-root=C:\BellField` writes the env
       file, generated secrets, and configured data-root folders. Do not expect
       `C:\BellField\data\postgres\PG_VERSION` yet; PostgreSQL initialization
       belongs to the next provisioning step.
 - [ ] `provision-postgres.mjs` initializes the data dir, applies the
       generated password, flips auth to `scram-sha-256`.
-- [ ] Temporary `pg_ctl` start → migrations → stop (runbook §Provision
-      PostgreSQL). Use `pg_ctl -l <logfile>` and read the log separately; if a
-      wrapper is used, give it a generous timeout and write incremental command
-      output so a Codex/tool timeout does not obscure whether the product
-      command completed.
+- [ ] Run packaged migrations through the helper (runbook §Provision
+      PostgreSQL), not a hand-rolled `pg_ctl` pipeline:
+
+  ```powershell
+  .\release\runtime\node\node.exe .\release\tools\install\run-packaged-migrations.mjs --install-root=C:\BellField
+  ```
+
+      The helper uses `pg_ctl -l <logfile>`, refuses an already-running
+      PostgreSQL data directory, and tails redacted logs on failure.
+
 - [ ] Place the **valid** license at
       `C:\BellField\data\license\bellfield-license.json`.
 - [ ] Render manifests, install services from elevated PowerShell, confirm
@@ -232,9 +254,27 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       open it. This is the "stranger install includes job booking" clause.
 - [ ] **Reboot the machine.** All four services come back automatically,
       health is `ok`, login still works.
-- [ ] **Second device:** open the office app from another machine on the LAN
-      and log in. (Android field-device proof is a stretch goal — record it
-      if attempted, it is tracked debt either way.)
+- [ ] **Second device:** before using the other device, capture read-only LAN
+      evidence with the packaged helper:
+
+  ```powershell
+  .\release\tools\install\collect-windows-lan-evidence.ps1 `
+    -InstallRoot C:\BellField `
+    -OutputPath <usb-evidence-path>\lan-evidence-rerun-N.json
+  ```
+
+      It records the scratch machine LAN IP decision, Windows network category,
+      listening ports for `3000` and `3001`, local-origin installed-PC requests
+      to `http://<scratch-lan-ip>:3000` and
+      `http://<scratch-lan-ip>:3001/health`, and inbound firewall rule readback
+      for BellField/Node/3000/3001. The helper's URL checks do not prove remote
+      reachability; then open the office app from another machine on the LAN and
+      log in. If local LAN-IP checks pass but the external device times out,
+      stop the strict gate and record the firewall/profile evidence; do not add
+      a firewall rule or change the network profile mid-gate unless the
+      artifact/runbook under test documents that as the supported path. (Android
+      field-device proof is a stretch goal - record it if attempted, it is
+      tracked debt either way.)
 
 ---
 

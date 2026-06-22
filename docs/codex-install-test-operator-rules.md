@@ -141,7 +141,10 @@ Never record:
 - license signing keys or relay provider secrets.
 
 If a command prints a secret, redact the value and write that redaction
-occurred.
+occurred. Rerun #8 showed that the packaged service evidence collector can pull
+API log tails containing a first-owner setup-token line; redact those log-tail
+lines before saving or sharing evidence until the collector handles setup-token
+redaction itself.
 
 ## Relay Config Rules
 

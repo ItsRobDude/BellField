@@ -6,6 +6,12 @@ param(
 
 $ErrorActionPreference = "Continue"
 
+$redactionHelper = Join-Path $PSScriptRoot "evidence-redaction.ps1"
+if (-not (Test-Path -LiteralPath $redactionHelper)) {
+  throw "BellField evidence redaction helper not found at $redactionHelper."
+}
+. $redactionHelper
+
 $serviceIds = @(
   "bellfield-postgres",
   "bellfield-api",
@@ -29,12 +35,12 @@ function Invoke-CaptureText {
   try {
     return @{
       ok = $true
-      text = (& $ScriptBlock 2>&1 | Out-String).Trim()
+      text = ConvertTo-BellFieldRedactedText ((& $ScriptBlock 2>&1 | Out-String).Trim())
     }
   } catch {
     return @{
       ok = $false
-      error = $_.Exception.Message
+      error = ConvertTo-BellFieldRedactedText $_.Exception.Message
     }
   }
 }
@@ -82,7 +88,7 @@ function Get-LogTails {
     if (-not (Test-Path -LiteralPath $directory)) {
       $items[$serviceId] = @{
         ok = $false
-        error = "log directory not found: $directory"
+        error = ConvertTo-BellFieldRedactedText "log directory not found: $directory"
       }
       continue
     }
@@ -96,7 +102,7 @@ function Get-LogTails {
         $logs += @{
           path = $file.FullName
           lastWriteTime = $file.LastWriteTime.ToString("o")
-          tail = (Get-Content -LiteralPath $file.FullName -Tail $TailLines -ErrorAction Stop | Out-String).Trim()
+          tail = ConvertTo-BellFieldRedactedText ((Get-Content -LiteralPath $file.FullName -Tail $TailLines -ErrorAction Stop | Out-String).Trim())
         }
       }
       $items[$serviceId] = @{
@@ -106,7 +112,7 @@ function Get-LogTails {
     } catch {
       $items[$serviceId] = @{
         ok = $false
-        error = $_.Exception.Message
+        error = ConvertTo-BellFieldRedactedText $_.Exception.Message
       }
     }
   }
@@ -217,13 +223,13 @@ function Get-ServiceControlManagerEvents {
         timeCreated = $_.TimeCreated.ToString("o")
         id = $_.Id
         levelDisplayName = $_.LevelDisplayName
-        message = $_.Message
+        message = ConvertTo-BellFieldRedactedText $_.Message
       }
     })
   } catch {
     return @{
       ok = $false
-      error = $_.Exception.Message
+      error = ConvertTo-BellFieldRedactedText $_.Exception.Message
     }
   }
 }
@@ -231,6 +237,7 @@ function Get-ServiceControlManagerEvents {
 $evidence = @{
   name = "BellField Windows service evidence"
   capturedAt = (Get-Date).ToUniversalTime().ToString("o")
+  redactionApplied = $true
   installRoot = $InstallRoot
   releaseRoot = $releaseRoot
   elevated = Test-IsElevated
@@ -247,7 +254,7 @@ if ($outputDirectory -and -not (Test-Path -LiteralPath $outputDirectory)) {
   New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 }
 
-$json = $evidence | ConvertTo-Json -Depth 8
+$json = ConvertTo-BellFieldRedactedText ($evidence | ConvertTo-Json -Depth 8)
 Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
 Write-Host $json
 Write-Host "BellField service evidence written to $OutputPath"

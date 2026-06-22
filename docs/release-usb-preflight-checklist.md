@@ -44,6 +44,7 @@ does not replace the clean-machine run.
     --postgres-root=<path-to-PG16-x64-root> `
     --vc-redist-root=<path-to-VC-redist-x64-root> `
     --winsw-exe=<path-to-approved-WinSW-x64.exe>
+  pnpm smoke:install-helpers
   pnpm smoke:service-manifests
   pnpm smoke:release-build -- --require-gate-day-deps=true
   pnpm package:release-zip -- --release-root=release --output=<artifact-A.zip>
@@ -69,6 +70,9 @@ does not replace the clean-machine run.
 - [ ] `pnpm smoke:install-config` passed and proves the real
       `write-server-config.mjs` output is accepted by API and worker with relay
       disabled.
+- [ ] `pnpm smoke:install-helpers` passed and proves the packaged baseline,
+      service, LAN, migration, and evidence-redaction helpers are present and
+      wired into the installer failure path.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
       `bellfield-postgres.xml` does not contain `<serviceaccount>`, the service
       log paths remain outside the manifest directory, and
@@ -164,17 +168,27 @@ For each active release zip:
 - [ ] The clean-install gate does not require copying relay base URL/token
       before first-owner setup. If services only start after relay credentials
       are pasted, the artifact has failed Gate 1.
-- [ ] The USB includes `tools\install\collect-windows-service-evidence.ps1` in
-      the release tree, and the evidence instructions use it for elevated
-      service/log/ACL readback.
+- [ ] The USB includes the packaged install helpers under `tools\install`,
+      including `collect-windows-install-baseline.ps1`,
+      `collect-windows-service-evidence.ps1`,
+      `collect-windows-lan-evidence.ps1`, `run-packaged-migrations.mjs`, and
+      `evidence-redaction.ps1` / `sensitive-redaction.mjs`.
 - [ ] Docs, `START-HERE.txt`, evidence templates, command logs, and build
-      evidence do not contain live relay token values.
-- [ ] Evidence files instruct the operator to redact relay token values.
+      evidence do not contain live relay token values or first-owner setup token
+      values.
+- [ ] Evidence files use the packaged collectors for baseline/service/LAN
+      capture. The collectors redact relay token values, `DATABASE_URL`, media
+      token secrets, `PGPASSWORD`, libpq keyword-form `password=...`,
+      first-owner setup token values, session/setup/password JSON fields,
+      bearer-looking relay/token values, and private-key-looking blocks before
+      writing JSON/stdout. Broad `token=...` and `password=...` redaction is
+      intentional for shareable evidence, even when a particular string is
+      benign.
 
 Useful scan:
 
 ```powershell
-rg -n "bfrt1_[A-Za-z0-9]|BELLFIELD_RELAY_TOKEN=[^C\r\n]|BEGIN (RSA|OPENSSH|PRIVATE)" `
+rg -n "bfrt1_[A-Za-z0-9]|BELLFIELD_RELAY_TOKEN=[^C\r\n]|BellField first-owner setup token: [A-Za-z0-9_-]+\.|BEGIN (RSA|OPENSSH|PRIVATE)" `
   docs tools <usb-root>\START-HERE.txt <usb-root>\docs <usb-root>\evidence `
   -g "!private-relay-config/**"
 ```

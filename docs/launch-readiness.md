@@ -110,22 +110,28 @@ and the SQL path supplies text. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md).
 The repo-side fix now casts that failed-attempt SQL, adds a PostgreSQL-backed
 regression for the throttle query, and requires the release ZIP smoke to prove
-invalid-token handling plus valid first-owner creation before USB prep. Gate 1
-still needs a fresh clean-machine rerun through owner setup, job booking, reboot
-recovery, and second-device access before it can close. The eighth attempt used
-the rebuilt artifact pair but stopped before extraction because the USB hash
-manifest included mutable current-run evidence files. See
+invalid-token handling plus valid first-owner creation before USB prep. The
+eighth clean-machine attempt used that rebuilt artifact pair. Its first
+preflight exposed a USB hash manifest mistake around mutable current-run
+evidence files; after the manifest was corrected, the run continued through
+clean install, service health, browser first-owner setup, job booking, reboot
+recovery, and post-reboot login. Gate 1 still failed at second-device LAN
+access: two same-Wi-Fi devices timed out against the installed PC's LAN IP even
+though local LAN-IP office/API checks passed and no explicit
+BellField/Node/3000/3001 inbound firewall rule was found. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
 - [ ] clean-machine stranger install from the runbook through first-owner
-      setup, job booking, reboot recovery, and second-device access. Rerun #7
-      already captured service registration, service stability, ACL, and API
-      health evidence, but the full Gate 1 transcript remains open. This gate
-      is also the definition of done for the QuickBooks-Desktop-grade install
-      bar ([positioning-and-pricing.md](./positioning-and-pricing.md) §The
-      install bar) — the owner does not perform installs.
+      setup, job booking, reboot recovery, and second-device access. Rerun #8
+      already captured service registration, service stability, ACL, API
+      health, browser owner setup, browser job booking, reboot recovery, and
+      post-reboot login evidence. The remaining Gate 1 gap is LAN/firewall
+      reachability from another device. This gate is also the definition of
+      done for the QuickBooks-Desktop-grade install bar
+      ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
+      bar) — the owner does not perform installs.
 - [ ] scratch-machine restore from a real backup set
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
 - [ ] sold-shaped install sends and accepts through the production relay end

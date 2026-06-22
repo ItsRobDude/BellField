@@ -47,7 +47,7 @@ workflow rules, API endpoint docs, or architecture guardrails.
 - `pnpm check:architecture`
 - `pnpm check:ui-copy`
 - `pnpm build:release` (production-style release assembly into `release/`)
-- `pnpm smoke:m9`, `pnpm smoke:jobs`, and the release/restore/license/updater smokes (`smoke:release-office-web`, `smoke:restore-staging`, `smoke:service-manifests`, `smoke:license-key`, `smoke:release-artifact`, `smoke:updater`)
+- `pnpm smoke:m9`, `pnpm smoke:jobs`, and the release/restore/license/updater smokes (`smoke:release-office-web`, `smoke:restore-staging`, `smoke:install-helpers`, `smoke:service-manifests`, `smoke:license-key`, `smoke:release-artifact`, `smoke:updater`)
 
 ## Source Of Truth Docs
 

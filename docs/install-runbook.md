@@ -118,6 +118,20 @@ Validated on the development machine:
   while recording a failed setup attempt because `blocked_until` is a
   `timestamptz` column and the SQL path supplied text. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md)
+- eighth clean Windows gate-day attempt ran on 2026-06-21 with rebuilt
+  artifacts carrying the first-owner SQL fix and packaged first-owner release
+  smoke proof. Its first preflight exposed a USB manifest mistake around
+  mutable current-run `evidence/**` files; after the manifest was corrected, the
+  same artifact set completed clean extraction, server config, PostgreSQL
+  provisioning, packaged migrations, license placement, service rendering,
+  elevated service installation, PostgreSQL SCM `StartName`, ACL readback,
+  packaged service evidence collection, installer service stability, API
+  `/health`, browser first-owner setup, browser job booking, reboot recovery,
+  and post-reboot login. Gate 1 still failed at second-device LAN proof: two
+  same-Wi-Fi devices timed out against the installed PC's LAN IP while local
+  LAN-IP office/API checks passed and no explicit BellField/Node/3000/3001
+  inbound firewall rule was found. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -138,15 +152,14 @@ Validated on the development machine:
 
 Not yet validated in this repo:
 
-- successful clean Windows machine install with no developer tooling
+- successful clean Windows machine install with no developer tooling through
+  second-device LAN access
 - a green run of the packaged service-account diagnostic (supporting preflight
   evidence only, not the gate; now uses corrected virtual-account proof criteria)
-- clean Windows proof that first-owner setup completes from the browser after
-  the service stack is healthy; the release ZIP smoke must prove the packaged
-  API path before the next USB leaves the dev machine
-- browser job booking after first-owner setup
-- reboot/service recovery proof
-- second office desktop and Android field-device proof
+- Windows LAN/firewall reachability for a second office desktop; rerun #8
+  proved local install, owner setup, job booking, reboot recovery, and
+  post-reboot login, but second-device same-Wi-Fi access timed out
+- Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
   `pg_dump`, health check, and reboot/service recovery proof
@@ -169,6 +182,7 @@ pnpm build:release `
   --postgres-root=<path-to-PG16-x64-root> `
   --vc-redist-root=<path-to-VC-redist-x64-root> `
   --winsw-exe=<path-to-approved-WinSW-x64.exe>
+pnpm smoke:install-helpers
 pnpm smoke:service-manifests
 pnpm smoke:release-build -- --require-gate-day-deps=true
 pnpm package:release-zip -- --release-root=release --output=<artifact.zip>
@@ -217,6 +231,20 @@ New-Item -ItemType Directory -Path C:\BellField -Force | Out-Null
 The expected result is `C:\BellField\release`. Do not copy files into the
 extracted release after extraction; the signed manifest covers the release file
 list and hashes.
+
+Before mutating the machine, capture a read-only baseline snapshot:
+
+```powershell
+.\release\tools\install\collect-windows-install-baseline.ps1 `
+  -InstallRoot C:\BellField `
+  -UsbRoot <usb-root> `
+  -OutputPath <usb-evidence-path>\install-baseline-rerun-N.json
+```
+
+The baseline collector records OS/build, machine name, elevation, PowerShell
+version, USB/root evidence, network profile/IP basics, existing BellField
+services, install-root path existence, and free disk. It does not read service
+logs or env files.
 
 ## Write Server Config
 
@@ -277,21 +305,19 @@ Initialize the data directory and create the app role/database from `DATABASE_UR
 If the data directory is already initialized, the helper exits without wiping it.
 On a fresh data directory, the helper starts a temporary local PostgreSQL server, creates or updates the app login role with the generated password from `DATABASE_URL`, creates the configured database when missing, changes host authentication from `trust` to `scram-sha-256`, then stops the temporary server.
 
-For the current assisted path, start PostgreSQL temporarily, run migrations, then stop it before registering services:
+For the current assisted path, run the packaged migration helper before
+registering services. It starts the packaged PostgreSQL server with
+`pg_ctl -l <logfile>`, runs API migrations with the bundled Node runtime, then
+stops PostgreSQL only if the helper started it:
 
 ```powershell
-$postgresData = "C:\BellField\data\postgres"
-New-Item -ItemType Directory -Path "C:\BellField\data\logs" -Force | Out-Null
-.\release\postgres\bin\pg_ctl.exe -D $postgresData -l "C:\BellField\data\logs\manual-postgres-start.log" -o "-h 127.0.0.1 -p 5432" -w start
-$env:DATABASE_URL = "<value from C:\BellField\bellfield-server.env>"
-.\release\runtime\node\node.exe .\release\apps\api\scripts\migrations\up.mjs
-.\release\postgres\bin\pg_ctl.exe -D $postgresData -m fast -w stop
+.\release\runtime\node\node.exe .\release\tools\install\run-packaged-migrations.mjs --install-root=C:\BellField
 ```
 
-For evidence capture, avoid wrapping `pg_ctl start` in a PowerShell pipeline.
-Rerun #4 showed that background PostgreSQL can inherit the captured stream and
-keep the command open until the wrapper times out. Use `pg_ctl -l <logfile>`
-and read the log separately if needed.
+For evidence capture, avoid wrapping a raw `pg_ctl start` in a PowerShell
+pipeline. Rerun #4 showed that background PostgreSQL can inherit the captured
+stream and keep the command open until the wrapper times out. The packaged
+helper uses `pg_ctl -l <logfile>` and tails redacted logs on failure.
 
 ## Install License File
 
@@ -387,7 +413,15 @@ For a packaged evidence snapshot after install, run from elevated PowerShell:
 ```
 
 The collector summarizes env key presence/blank state without printing secret
-values such as the relay token, database URL, or media token secret.
+values and redacts service log tails, `sc.exe` output, `icacls` output, and
+Service Control Manager event messages before writing JSON/stdout. It redacts
+first-owner setup tokens, relay tokens, `DATABASE_URL`, media token secrets,
+`PGPASSWORD`, libpq keyword-form `password=...`, session/setup/password JSON
+fields, bearer-looking relay/token values, and private-key-looking blocks.
+Because this evidence may be shared, the collectors intentionally redact broad
+`token=...` and `password=...` forms; benign strings with those names can be
+redacted too. Preserve raw logs locally only when deeper debugging requires
+them.
 
 The packaged service-account diagnostic is a preflight/qualification tool, not a
 step in the clean install and not the gate itself. The authoritative proof of
@@ -512,6 +546,37 @@ Expected shape:
 ```
 
 `degraded` means the API could not confirm database reachability, bundled migration readability, or zero pending migrations. Detailed diagnostics remain behind the authenticated System surface.
+
+## LAN / Second-Device Reachability
+
+Gate 1 is not closed until another device on the same LAN can open the office
+app and log in. Rerun #8 proved why this is a separate check: services were
+healthy locally, and the installed PC could reach its own LAN IP, but two
+same-Wi-Fi devices timed out because the runbook/installer had not created or
+verified a Windows Firewall/network-profile path for inbound LAN traffic.
+
+Until the installer owns that firewall rule explicitly, treat this as an
+evidence checkpoint, not a place to improvise a pass. Capture the packaged
+read-only LAN evidence before trying the second device:
+
+```powershell
+.\release\tools\install\collect-windows-lan-evidence.ps1 `
+  -InstallRoot C:\BellField `
+  -OutputPath <usb-evidence-path>\lan-evidence-rerun-N.json
+```
+
+The collector records network profiles, candidate/chosen LAN IP, listeners for
+the office/API ports, local-origin installed-PC LAN URL checks, and inbound
+firewall rule/port-filter readback. Its URL checks are labeled
+`origin = "installed-pc"` and `provesRemoteReachability = false`; they prove
+local binding behavior only. The collector does not create firewall rules,
+change the network profile, or replace the actual second-device login proof.
+
+Then open `http://<scratch-lan-ip>:3000` from the second device and log in. If
+the local LAN-IP checks pass but the second device times out, stop the strict
+gate and record the firewall/profile evidence. Do not add a firewall rule or
+change the network profile mid-gate unless the artifact/runbook being tested
+documents that exact operation as part of the supported install path.
 
 ## Backup And Restore
 
