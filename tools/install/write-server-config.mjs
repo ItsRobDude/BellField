@@ -47,4 +47,4 @@ mkdirSync(dirname(licensePath), { recursive: true });
 writeFileSync(outputPath, config);
 
 console.log(`Wrote ${outputPath}`);
-console.log('Record the generated database password in the customer install notes.');
+console.log('Generated database credentials were written only to the restricted server env file.');

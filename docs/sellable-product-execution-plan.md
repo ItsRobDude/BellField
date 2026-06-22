@@ -75,10 +75,15 @@ for office web and API health, and no explicit BellField/Node/3000/3001 inbound
 firewall rule was found.
 See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
-The next artifact includes a packaged LAN access helper that configures LAN-safe
-office/API URLs and exact BellField-managed Private/Domain LocalSubnet firewall
-rules for office/API ports only. This is not a passed Gate 1 claim until a
-clean-machine rerun proves real second-device login.
+PR #68 added a packaged LAN access helper that configures LAN-safe office/API
+URLs and exact BellField-managed Private/Domain LocalSubnet firewall rules for
+office/API ports only. The 2026-06-21 rerun-9 USB prep rebuilt active `.17`/`.18`
+artifacts from source commit `991d773` with that helper. Rerun #9 proved hash
+verification, extraction, baseline collection, and server config, then failed at
+the required LAN helper because its PowerShell env reader rejected blank
+separator lines in the generated env. This is not a passed Gate 1 claim until a
+rebuilt artifact completes a clean-machine rerun and proves real second-device
+login.
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 

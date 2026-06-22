@@ -40,7 +40,7 @@ function Read-ServerEnv {
 
 function Read-ServerEnvValue {
   param(
-    [Parameter(Mandatory = $true)][string[]]$Lines,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines,
     [Parameter(Mandatory = $true)][string]$Name,
     [string]$Default = ""
   )
@@ -56,7 +56,7 @@ function Read-ServerEnvValue {
 
 function Set-ServerEnvValue {
   param(
-    [Parameter(Mandatory = $true)][string[]]$Lines,
+    [Parameter(Mandatory = $true)][AllowEmptyString()][string[]]$Lines,
     [Parameter(Mandatory = $true)][string]$Name,
     [Parameter(Mandatory = $true)][string]$Value
   )

@@ -426,11 +426,38 @@ Read when: preparing or reviewing a gate-day USB hash manifest, patching Windows
 LAN/firewall reachability for the office app/API, or checking which Gate 1 proof
 remains open after rerun 8.
 
-Current follow-up: the repo includes a packaged LAN access helper for the next
-artifact, but a clean-machine rerun still has to prove real second-device login.
+Current follow-up: PR #68 added the packaged LAN access helper, and the
+2026-06-21 rerun-9 USB prep points active `.17`/`.18` artifacts at source
+commit `991d773` with that helper. This is still not a Gate 1 pass: the next
+clean-machine rerun must prove real second-device login.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or application runtime behavior.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-9.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-9.md)
+
+Audience: contributors checking why the ninth clean Windows gate-day attempt
+failed before PostgreSQL provisioning after the LAN helper was added to the
+supported install path.
+
+Purpose: dated evidence for the ninth fresh Windows install smoke: active
+artifacts `.17`/`.18` passed USB hash verification and `.17` extracted with
+`tar.exe`; baseline collection and `write-server-config.mjs` completed; then the
+required elevated `configure-windows-lan-access.ps1` step crashed while reading
+the generated env because its mandatory `[string[]]$Lines` parameter rejected
+blank separator lines. The run stopped before PostgreSQL provisioning, service
+rendering, firewall rule creation, or Public-profile handling.
+
+Read when: patching or reviewing the Windows LAN helper env-reader path,
+checking why the `.17` artifact cannot close Gate 1, or preparing the next
+rebuilt USB.
+
+Current follow-up: rebuild the artifact pair with the LAN helper blank-line fix
+and the safer `write-server-config.mjs` database-credential wording, then rerun
+Gate 1 from a cleaned Windows state.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or long-term network-profile UX.
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 

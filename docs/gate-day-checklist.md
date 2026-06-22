@@ -73,7 +73,9 @@ minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
       polls API health before reporting success.
 - [ ] Confirm `pnpm smoke:install-helpers` passed and proves the packaged
       baseline, service, LAN, migration, and evidence-redaction helpers are
-      present and wired into the installer failure path.
+      present and wired into the installer failure path. After rerun #9, this
+      smoke must also exercise the LAN helper env reader/writer against
+      generated-env-shaped lines containing blank separators.
 - [ ] Confirm `pnpm smoke:install-config` passed. It must run the real
       `write-server-config.mjs` helper and prove API/worker accept the generated
       clean-install relay-disabled env.

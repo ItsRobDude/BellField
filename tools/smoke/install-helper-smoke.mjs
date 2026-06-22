@@ -167,6 +167,12 @@ try {
     'LAN access configurator reads office and API ports from server env',
     includesAll(files.lanConfigurator, ['BELLFIELD_OFFICE_WEB_PORT', 'BELLFIELD_API_PORT'])
   );
+  const powershellLanEnvLineResult = runPowerShellLanEnvLineCorpus();
+  check(
+    'LAN access configurator env helpers tolerate blank env separator lines',
+    true,
+    powershellLanEnvLineResult
+  );
   check(
     'LAN access configurator writes LAN-safe office/API URLs only',
     includesAll(files.lanConfigurator, [
@@ -406,6 +412,83 @@ Write-Host "PowerShell redaction corpus passed"
   }
 
   return { command, fixtureCount: REDACTION_SECRET_FIXTURES.length };
+}
+
+function runPowerShellLanEnvLineCorpus() {
+  const command = findPowerShellCommand();
+  if (!command) {
+    if (process.platform === 'win32') {
+      throw new Error('PowerShell was not available for the required Windows LAN env-line corpus');
+    }
+    return { skipped: true, reason: 'PowerShell not available on this platform' };
+  }
+
+  const configuratorPath = quotePowerShellString(
+    resolve('tools/install/configure-windows-lan-access.ps1')
+  );
+  const script = `
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(${configuratorPath}, [ref]$tokens, [ref]$errors)
+if ($errors -and $errors.Count -gt 0) {
+  throw "Failed to parse configure-windows-lan-access.ps1"
+}
+$wanted = @("Read-ServerEnvValue", "Set-ServerEnvValue")
+$functions = @($ast.FindAll({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
+}, $true))
+foreach ($name in $wanted) {
+  if (-not ($functions | Where-Object { $_.Name -eq $name })) {
+    throw "Missing function $name"
+  }
+}
+foreach ($function in $functions) {
+  Invoke-Expression $function.Extent.Text
+}
+$lines = @(
+  "NODE_ENV=production",
+  "",
+  "BELLFIELD_API_PORT=3001",
+  "DATABASE_URL=redacted-database-url",
+  "",
+  "BELLFIELD_OFFICE_WEB_PORT=3000",
+  "NEXT_PUBLIC_API_BASE_URL=http://localhost:3001"
+)
+$databaseUrl = Read-ServerEnvValue -Lines $lines -Name "DATABASE_URL"
+if ($databaseUrl -ne "redacted-database-url") {
+  throw "Read-ServerEnvValue did not return DATABASE_URL"
+}
+$updated = @(Set-ServerEnvValue -Lines $lines -Name "NEXT_PUBLIC_API_BASE_URL" -Value "http://192.168.50.10:3001")
+if (-not ($updated -contains "")) {
+  throw "Set-ServerEnvValue did not preserve blank separator lines"
+}
+if (-not ($updated -contains "NEXT_PUBLIC_API_BASE_URL=http://192.168.50.10:3001")) {
+  throw "Set-ServerEnvValue did not update NEXT_PUBLIC_API_BASE_URL"
+}
+Write-Host "PowerShell LAN env-line corpus passed"
+`;
+  const result = spawnSync(
+    command,
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000
+    }
+  );
+  if (result.error) {
+    throw new Error(`Failed to run PowerShell LAN env-line corpus: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `PowerShell LAN env-line corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+
+  return { command };
 }
 
 function findPowerShellCommand() {
