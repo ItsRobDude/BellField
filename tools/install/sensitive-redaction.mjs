@@ -1,6 +1,8 @@
 const setupTokenPrefix = 'BellField first-owner setup token:';
 const setupToken = 'setupTokenSecret_123';
 const relayToken = ['bfrt1', 'relaySecretValue123'].join('_');
+const postgresUrl = (password) =>
+  ['postgresql://bellfield:', password, '@127.0.0.1:5432/bellfield'].join('');
 const pemPrivateKeyBlock = [
   ['-----BEGIN R', 'SA PRIVATE KEY-----'].join(''),
   'private-key-secret-line',
@@ -20,12 +22,12 @@ export const REDACTION_SECRET_FIXTURES = [
   },
   {
     name: 'database URL env value',
-    input: `DATABASE_URL=${'postgresql://bellfield:dbPasswordSecret@127.0.0.1:5432/bellfield'}`,
+    input: `DATABASE_URL=${postgresUrl('dbPasswordSecret')}`,
     secrets: ['dbPasswordSecret']
   },
   {
     name: 'quoted database URL env value',
-    input: `DATABASE_URL="${'postgresql://bellfield:quotedDbPasswordSecret@127.0.0.1:5432/bellfield'}"`,
+    input: `DATABASE_URL="${postgresUrl('quotedDbPasswordSecret')}"`,
     secrets: ['quotedDbPasswordSecret']
   },
   {

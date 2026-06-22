@@ -82,7 +82,12 @@ export function verifyReleaseArtifact(input) {
   const currentPaths = currentFiles.map((file) => file.path);
   const manifestPaths = manifest.files.map((file) => file.path);
   if (JSON.stringify(currentPaths) !== JSON.stringify(manifestPaths)) {
-    throw new Error('Update artifact file list does not match its signed manifest.');
+    throw new Error(
+      [
+        'Update artifact file list does not match its signed manifest.',
+        summarizePathDelta(manifestPaths, currentPaths)
+      ].join(' ')
+    );
   }
 
   for (let index = 0; index < currentFiles.length; index += 1) {
@@ -184,6 +189,32 @@ function collectReleaseFiles(releaseRoot) {
 
   walk(root);
   return files.sort((left, right) => left.path.localeCompare(right.path));
+}
+
+function summarizePathDelta(expectedPaths, actualPaths) {
+  const expected = new Set(expectedPaths);
+  const actual = new Set(actualPaths);
+  const missing = expectedPaths.filter((path) => !actual.has(path)).slice(0, 10);
+  const extra = actualPaths.filter((path) => !expected.has(path)).slice(0, 10);
+  const firstDifferentIndex = findFirstDifferentIndex(expectedPaths, actualPaths);
+
+  return [
+    `manifestFiles=${expectedPaths.length}`,
+    `actualFiles=${actualPaths.length}`,
+    `firstDifferentIndex=${firstDifferentIndex}`,
+    `missing=${JSON.stringify(missing)}`,
+    `extra=${JSON.stringify(extra)}`
+  ].join(' ');
+}
+
+function findFirstDifferentIndex(expectedPaths, actualPaths) {
+  const length = Math.max(expectedPaths.length, actualPaths.length);
+  for (let index = 0; index < length; index += 1) {
+    if (expectedPaths[index] !== actualPaths[index]) {
+      return index;
+    }
+  }
+  return -1;
 }
 
 function parseUpdateManifest(value, path) {
