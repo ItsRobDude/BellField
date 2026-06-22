@@ -601,7 +601,7 @@ writeFileSync(
     '',
     '1. Copy bellfield-server.env.example to bellfield-server.env and edit the values.',
     '2. Run tools\\install\\write-server-config.mjs to create install-local paths when needed.',
-    '3. Run apps\\api\\scripts\\migrations\\up.mjs after PostgreSQL is provisioned.',
+    '3. Run tools\\install\\run-packaged-migrations.mjs after PostgreSQL is provisioned.',
     '4. Register services with tools\\install\\install-windows-services.ps1.',
     '5. Restore, when needed, with tools\\install\\restore-backup.mjs and docs/restore-runbook.md.',
     '6. Update artifacts are signed with bellfield-update-manifest.json + bellfield-update-signature.json.',

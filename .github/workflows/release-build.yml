@@ -51,6 +51,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install helper smoke
+        run: pnpm smoke:install-helpers
+
       - name: Assemble release with an ephemeral signing key
         shell: pwsh
         run: |

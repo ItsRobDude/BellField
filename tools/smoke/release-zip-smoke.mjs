@@ -15,6 +15,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { writeSmokeEvidence } from './smoke-evidence.mjs';
 import { parseEnvFile } from '../install/install-utils.mjs';
+import { redactSensitiveText } from '../install/sensitive-redaction.mjs';
 import {
   assertDependencyPackageJsons,
   assertNoReparsePoints,
@@ -605,7 +606,7 @@ async function fetchJson(url, options = {}) {
 
 function extractLatestSetupToken(logPaths) {
   const matches = [];
-  const pattern = /BellField first-owner setup token: ([A-Za-z0-9_-]+)\./g;
+  const pattern = /BellField first-owner setup token:\s*([A-Za-z0-9_-]+)/g;
   for (const logPath of logPaths) {
     let text = '';
     try {
@@ -741,17 +742,6 @@ function tailFile(path, maxLines = 80) {
   } catch (error) {
     return `Could not read ${path}: ${error instanceof Error ? error.message : String(error)}`;
   }
-}
-
-function redactSensitiveText(value) {
-  return String(value)
-    .replace(
-      /BellField first-owner setup token: [A-Za-z0-9_-]+\./g,
-      'BellField first-owner setup token: [REDACTED].'
-    )
-    .replace(/("setupToken"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2')
-    .replace(/("sessionToken"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2')
-    .replace(/("password"\s*:\s*")[^"]+(")/gi, '$1[REDACTED]$2');
 }
 
 function sleep(ms) {

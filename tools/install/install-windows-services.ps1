@@ -9,6 +9,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$redactionHelper = Join-Path $PSScriptRoot "evidence-redaction.ps1"
+if (-not (Test-Path -LiteralPath $redactionHelper)) {
+  throw "BellField evidence redaction helper not found at $redactionHelper."
+}
+. $redactionHelper
+
 $adminSid = "*S-1-5-32-544"
 $systemSid = "*S-1-5-18"
 $postgresServiceId = "bellfield-postgres"
@@ -164,7 +170,7 @@ function Set-ServiceStartAccount {
 
   $actualStartName = Get-ServiceStartName -ServiceId $ServiceId
   if (-not (Test-ServiceStartNameMatches -Actual $actualStartName -Expected $AccountName)) {
-    $serviceConfig = (& sc.exe qc $ServiceId 2>&1 | Out-String).Trim()
+    $serviceConfig = ConvertTo-BellFieldRedactedText ((& sc.exe qc $ServiceId 2>&1 | Out-String).Trim())
     throw "Configured $ServiceId to run as $AccountName, but SCM read back StartName '$actualStartName'. sc.exe qc output: $serviceConfig"
   }
 
@@ -231,11 +237,11 @@ function Get-ServiceLogTail {
     $sections = @()
     foreach ($file in $files) {
       $sections += "----- $($file.FullName) -----"
-      $sections += (Get-Content -LiteralPath $file.FullName -Tail $TailLines -ErrorAction Stop | Out-String).Trim()
+      $sections += ConvertTo-BellFieldRedactedText ((Get-Content -LiteralPath $file.FullName -Tail $TailLines -ErrorAction Stop | Out-String).Trim())
     }
-    return ($sections -join [Environment]::NewLine)
+    return ConvertTo-BellFieldRedactedText ($sections -join [Environment]::NewLine)
   } catch {
-    return "[$ServiceId] failed to read log tail: $($_.Exception.Message)"
+    return ConvertTo-BellFieldRedactedText "[$ServiceId] failed to read log tail: $($_.Exception.Message)"
   }
 }
 
@@ -258,7 +264,7 @@ function Get-InstallFailureContext {
     "powershell -ExecutionPolicy Bypass -File `"$collector`" -InstallRoot `"$InstallRoot`" -OutputPath `"$collectorOutput`""
   )
 
-  return ($sections -join ([Environment]::NewLine + [Environment]::NewLine))
+  return ConvertTo-BellFieldRedactedText ($sections -join ([Environment]::NewLine + [Environment]::NewLine))
 }
 
 function Invoke-RuntimeConfigValidation {

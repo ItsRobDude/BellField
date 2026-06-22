@@ -129,6 +129,9 @@ const postgresData = resolve(
     args['postgres-data'] ?? env.BELLFIELD_POSTGRES_DATA ?? join(installRoot, 'data', 'postgres')
   )
 );
+const postgresLog = resolve(
+  String(args.log ?? join(installRoot, 'data', 'logs', 'postgres-provision.log'))
+);
 const initdb = join(postgresBin, process.platform === 'win32' ? 'initdb.exe' : 'initdb');
 const pgCtl = pgTool('pg_ctl', postgresBin);
 
@@ -154,6 +157,7 @@ if (existsSync(join(postgresData, 'PG_VERSION'))) {
 const database = databaseConfigFromUrl(env.DATABASE_URL);
 
 mkdirSync(postgresData, { recursive: true });
+mkdirSync(dirname(postgresLog), { recursive: true });
 run(initdb, [
   '-D',
   postgresData,
@@ -165,7 +169,16 @@ run(initdb, [
 ]);
 
 try {
-  run(pgCtl, ['-D', postgresData, '-o', `-h ${database.host} -p ${database.port}`, '-w', 'start']);
+  run(pgCtl, [
+    '-D',
+    postgresData,
+    '-l',
+    postgresLog,
+    '-o',
+    `-h ${database.host} -p ${database.port}`,
+    '-w',
+    'start'
+  ]);
   ensureAppRoleAndDatabase({ postgresBin, database });
   hardenHostAuthentication(postgresData);
   run(pgCtl, ['-D', postgresData, '-m', 'fast', '-w', 'stop']);

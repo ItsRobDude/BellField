@@ -409,17 +409,22 @@ Does not own: the install recipe (`install-runbook.md`), the gate sequence
 ### [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md)
 
 Audience: contributors checking why the eighth clean Windows gate-day attempt
-stopped before extraction and what the corrected USB manifest policy is.
+failed at second-device LAN access after the corrected USB continued through
+install, first-owner setup, job booking, and reboot recovery.
 
 Purpose: dated evidence for the eighth fresh Windows install smoke: rebuilt
-artifacts `.15`/`.16` had correct product ZIP hashes, but the run stopped before
-extraction because `SHA256SUMS.txt` included mutable current-run evidence files
-that `START-HERE.txt` told the operator to edit. The USB was corrected by
-excluding `evidence/**` from package hashes, documenting that rule in
-`START-HERE.txt`, and rerunning the packaged verifier to `status: ok`.
+artifacts `.15`/`.16` first exposed a USB manifest mistake when
+`SHA256SUMS.txt` included mutable current-run evidence files, then the corrected
+USB passed hash verification and the install reached service health, browser
+first-owner setup, job booking, reboot recovery, and post-reboot login. Gate 1
+then failed at second-device proof because two same-Wi-Fi devices timed out
+against the scratch machine's LAN IP while local LAN-IP checks on the installed
+PC succeeded and no explicit BellField/Node/3000/3001 inbound firewall rule was
+found.
 
-Read when: preparing or reviewing a gate-day USB hash manifest, or checking why
-rerun 8 did not produce install/service evidence.
+Read when: preparing or reviewing a gate-day USB hash manifest, patching Windows
+LAN/firewall reachability for the office app/API, or checking which Gate 1 proof
+remains open after rerun 8.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or application runtime behavior.

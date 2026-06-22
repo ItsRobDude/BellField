@@ -1,0 +1,375 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
+import { resolve } from 'node:path';
+import {
+  REDACTION_SECRET_FIXTURES,
+  assertNoSensitiveRedactionLeaks
+} from '../install/sensitive-redaction.mjs';
+import { writeSmokeEvidence } from './smoke-evidence.mjs';
+
+const evidence = {
+  name: 'Install helper smoke',
+  startedAt: new Date().toISOString(),
+  checks: []
+};
+
+try {
+  const files = {
+    redaction: readRequired('tools/install/evidence-redaction.ps1'),
+    serviceCollector: readRequired('tools/install/collect-windows-service-evidence.ps1'),
+    installer: readRequired('tools/install/install-windows-services.ps1'),
+    baselineCollector: readRequired('tools/install/collect-windows-install-baseline.ps1'),
+    lanCollector: readRequired('tools/install/collect-windows-lan-evidence.ps1'),
+    migrationHelper: readRequired('tools/install/run-packaged-migrations.mjs'),
+    provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
+    sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
+    releaseZipSmoke: readRequired('tools/smoke/release-zip-smoke.mjs')
+  };
+
+  assertNoSensitiveRedactionLeaks();
+  check('shared JS redactor removes every redaction fixture secret', true, {
+    fixtureCount: REDACTION_SECRET_FIXTURES.length
+  });
+  const powershellRedactionResult = runPowerShellRedactionCorpus();
+  check(
+    'PowerShell redactor removes every redaction fixture secret',
+    true,
+    powershellRedactionResult
+  );
+
+  check(
+    'redaction helper defines ConvertTo-BellFieldRedactedText',
+    files.redaction.includes('function ConvertTo-BellFieldRedactedText')
+  );
+  for (const pattern of [
+    'BellField first-owner setup token',
+    'DATABASE_URL',
+    'BELLFIELD_RELAY_TOKEN',
+    'BELLFIELD_MEDIA_TOKEN_SECRET',
+    'setupToken',
+    'sessionToken',
+    'PRIVATE KEY',
+    'bfrt1_',
+    'Bearer'
+  ]) {
+    check(`redaction helper covers ${pattern}`, files.redaction.includes(pattern));
+  }
+  check(
+    'shared JS redaction helper is used by install/runtime smokes',
+    files.migrationHelper.includes("from './sensitive-redaction.mjs'") &&
+      files.releaseZipSmoke.includes("from '../install/sensitive-redaction.mjs'")
+  );
+
+  for (const [name, contents] of Object.entries({
+    serviceCollector: files.serviceCollector,
+    installer: files.installer,
+    baselineCollector: files.baselineCollector,
+    lanCollector: files.lanCollector
+  })) {
+    check(
+      `${name} dot-sources evidence redaction helper`,
+      contents.includes('evidence-redaction.ps1')
+    );
+    check(
+      `${name} calls ConvertTo-BellFieldRedactedText`,
+      contents.includes('ConvertTo-BellFieldRedactedText')
+    );
+  }
+
+  check(
+    'service collector marks redaction as applied',
+    files.serviceCollector.includes('redactionApplied = $true')
+  );
+  check(
+    'service collector redacts command captures',
+    files.serviceCollector.includes('Invoke-CaptureText') &&
+      files.serviceCollector.includes('text = ConvertTo-BellFieldRedactedText')
+  );
+  check(
+    'service collector redacts service log tails',
+    files.serviceCollector.includes('tail = ConvertTo-BellFieldRedactedText')
+  );
+  check(
+    'service collector redacts SCM event messages',
+    files.serviceCollector.includes('message = ConvertTo-BellFieldRedactedText')
+  );
+  check(
+    'installer redacts service failure log tails',
+    files.installer.includes('Get-ServiceLogTail') &&
+      files.installer.includes('ConvertTo-BellFieldRedactedText ($sections -join')
+  );
+
+  check(
+    'baseline collector exposes expected parameters',
+    declaresTopLevelParameter(files.baselineCollector, 'InstallRoot') &&
+      declaresTopLevelParameter(files.baselineCollector, 'UsbRoot') &&
+      declaresTopLevelParameter(files.baselineCollector, 'OutputPath')
+  );
+  check(
+    'baseline collector writes JSON evidence',
+    files.baselineCollector.includes('ConvertTo-Json') &&
+      files.baselineCollector.includes('Set-Content')
+  );
+  check(
+    'baseline collector captures OS, network, services, paths, and disks',
+    includesAll(files.baselineCollector, [
+      'Get-OsSummary',
+      'Get-NetConnectionProfile',
+      'Get-NetIPAddress',
+      'Get-BellFieldServices',
+      'Get-DriveSummary',
+      'installPaths'
+    ])
+  );
+  check(
+    'baseline collector assignment-wraps repeated JSON fields as arrays',
+    includesAll(files.baselineCollector, [
+      'networkProfiles = @(Get-NetworkProfiles)',
+      'ipv4Addresses = @(Get-Ipv4Addresses)',
+      'bellfieldServices = @(Get-BellFieldServices)',
+      'installPaths = @(Get-PathSummary -Paths $paths)'
+    ])
+  );
+  check(
+    'baseline collector handles UNC and drive-root failures as structured evidence',
+    files.baselineCollector.includes('pathType = "unc"') &&
+      files.baselineCollector.includes('Split-Path -Qualifier $Path -ErrorAction Stop') &&
+      files.baselineCollector.includes('pathType = "relative-or-provider"')
+  );
+
+  check(
+    'LAN collector exposes expected parameters',
+    declaresTopLevelParameter(files.lanCollector, 'InstallRoot') &&
+      declaresTopLevelParameter(files.lanCollector, 'OfficePort') &&
+      declaresTopLevelParameter(files.lanCollector, 'ApiPort') &&
+      declaresTopLevelParameter(files.lanCollector, 'LanIp') &&
+      declaresTopLevelParameter(files.lanCollector, 'OutputPath') &&
+      declaresTopLevelParameter(files.lanCollector, 'TimeoutSeconds')
+  );
+  check(
+    'LAN collector writes JSON evidence',
+    files.lanCollector.includes('ConvertTo-Json') && files.lanCollector.includes('Set-Content')
+  );
+  check(
+    'LAN collector is evidence-only for firewall/profile state',
+    !files.lanCollector.includes('New-NetFirewallRule') &&
+      !files.lanCollector.includes('Set-NetFirewallRule') &&
+      !files.lanCollector.includes('Set-NetConnectionProfile')
+  );
+  check(
+    'LAN collector captures listeners, local URL checks, and firewall readback',
+    includesAll(files.lanCollector, [
+      'Get-NetTCPConnection',
+      'Invoke-WebRequest',
+      'Get-NetFirewallRule',
+      'Get-NetFirewallPortFilter',
+      'Get-NetFirewallApplicationFilter'
+    ])
+  );
+  check(
+    'LAN collector labels URL probes as local-origin only',
+    files.lanCollector.includes('localOriginUrlChecks') &&
+      files.lanCollector.includes('origin = "installed-pc"') &&
+      files.lanCollector.includes('provesRemoteReachability = $false') &&
+      !files.lanCollector.includes('localUrlChecks =')
+  );
+  check(
+    'LAN collector assignment-wraps repeated JSON fields as arrays',
+    includesAll(files.lanCollector, [
+      'networkProfiles = @(Get-NetworkProfiles)',
+      'candidateIpv4Addresses = @($candidates)',
+      'listeners = @(Get-Listeners -Ports $ports)',
+      'localOriginUrlChecks = @($localOriginChecks)',
+      'inboundFirewallRules = @(Get-FirewallReadback -Ports $ports)'
+    ])
+  );
+
+  check(
+    'migration helper uses pg_ctl with -l logfile',
+    files.migrationHelper.includes("'pg_ctl'") &&
+      files.migrationHelper.includes("'-l'") &&
+      files.migrationHelper.includes('manual-postgres-migrations.log')
+  );
+  check(
+    'migration helper checks existing pg_ctl status before start',
+    files.migrationHelper.includes("'status'") &&
+      files.migrationHelper.includes('PostgreSQL already appears to be running')
+  );
+  assertOrdered(
+    files.migrationHelper,
+    'migration helper runs packaged API migrations between start and stop',
+    ['postgresLog,', 'runCommand(process.execPath, [migrationScript]', 'stopPostgres();']
+  );
+  check(
+    'migration helper uses current Node runtime for migrations',
+    files.migrationHelper.includes('runCommand(process.execPath, [migrationScript]')
+  );
+  check(
+    'migration helper redacts failure output',
+    files.migrationHelper.includes("from './sensitive-redaction.mjs'") &&
+      files.migrationHelper.includes('redactSensitiveText') &&
+      files.migrationHelper.includes('redacted PostgreSQL log tail')
+  );
+  check(
+    'migration helper only stops PostgreSQL it started',
+    files.migrationHelper.includes('let startedPostgres = false') &&
+      files.migrationHelper.includes('if (startedPostgres)')
+  );
+  check(
+    'migration helper uses explicit pg_ctl stop timeout and status evidence on stop failure',
+    files.migrationHelper.includes("args['stop-timeout-ms']") &&
+      files.migrationHelper.includes("'-t', String(stopTimeoutSeconds)") &&
+      files.migrationHelper.includes('printStopFailureEvidence') &&
+      files.migrationHelper.includes('redacted PostgreSQL status after failed stop')
+  );
+
+  check(
+    'provision-postgres uses pg_ctl -l for temporary start',
+    files.provisionPostgres.includes('postgres-provision.log') &&
+      files.provisionPostgres.includes("'-l'") &&
+      files.provisionPostgres.includes('postgresLog')
+  );
+
+  evidence.completedAt = new Date().toISOString();
+  evidence.result = 'passed';
+  console.log(JSON.stringify(evidence, null, 2));
+  console.log(`Evidence: ${writeSmokeEvidence(evidence, 'install-helper-smoke.json')}`);
+} catch (error) {
+  evidence.completedAt = new Date().toISOString();
+  evidence.result = 'failed';
+  evidence.error = error instanceof Error ? error.message : String(error);
+  console.error(JSON.stringify(evidence, null, 2));
+  console.error(`Evidence: ${writeSmokeEvidence(evidence, 'install-helper-smoke.json')}`);
+  process.exitCode = 1;
+}
+
+function readRequired(relativePath) {
+  const path = resolve(relativePath);
+  check(`${relativePath} exists`, existsSync(path), { path });
+  return readFileSync(path, 'utf8');
+}
+
+function runPowerShellRedactionCorpus() {
+  const command = findPowerShellCommand();
+  if (!command) {
+    if (process.platform === 'win32') {
+      throw new Error('PowerShell was not available for the required Windows redaction corpus');
+    }
+    return { skipped: true, reason: 'PowerShell not available on this platform' };
+  }
+
+  const encodedFixtures = Buffer.from(JSON.stringify(REDACTION_SECRET_FIXTURES), 'utf8').toString(
+    'base64'
+  );
+  const redactionPath = quotePowerShellString(resolve('tools/install/evidence-redaction.ps1'));
+  const script = `
+$ErrorActionPreference = "Stop"
+. ${redactionPath}
+$json = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("${encodedFixtures}"))
+$fixtures = $json | ConvertFrom-Json
+foreach ($fixture in $fixtures) {
+  $redacted = ConvertTo-BellFieldRedactedText $fixture.input
+  foreach ($secret in @($fixture.secrets)) {
+    $secretText = [string]$secret
+    if ($redacted.Contains($secretText)) {
+      throw "PowerShell redaction leaked fixture '$($fixture.name)'"
+    }
+  }
+}
+Write-Host "PowerShell redaction corpus passed"
+`;
+  const result = spawnSync(
+    command,
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000
+    }
+  );
+  if (result.error) {
+    throw new Error(`Failed to run PowerShell redaction corpus: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `PowerShell redaction corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+
+  return { command, fixtureCount: REDACTION_SECRET_FIXTURES.length };
+}
+
+function findPowerShellCommand() {
+  const candidates = process.platform === 'win32' ? ['powershell.exe', 'pwsh.exe'] : ['pwsh'];
+  for (const candidate of candidates) {
+    const result = spawnSync(candidate, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion'], {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 15_000
+    });
+    if (!result.error && result.status === 0) {
+      return candidate;
+    }
+  }
+  return null;
+}
+
+function quotePowerShellString(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
+}
+
+function declaresTopLevelParameter(contents, name) {
+  return new RegExp(`\\$${name}\\b`).test(extractTopLevelParamBlock(contents));
+}
+
+function extractTopLevelParamBlock(contents) {
+  const paramMatch = /^\s*param\s*\(/m.exec(contents);
+  if (!paramMatch) {
+    return '';
+  }
+
+  const openIndex = contents.indexOf('(', paramMatch.index);
+  let depth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  for (let index = openIndex; index < contents.length; index += 1) {
+    const char = contents[index];
+    const previous = contents[index - 1];
+    if (!inDoubleQuote && char === "'" && previous !== '`') {
+      inSingleQuote = !inSingleQuote;
+    } else if (!inSingleQuote && char === '"' && previous !== '`') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote && char === '(') {
+      depth += 1;
+    } else if (!inSingleQuote && !inDoubleQuote && char === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        return contents.slice(openIndex + 1, index);
+      }
+    }
+  }
+
+  return '';
+}
+
+function includesAll(contents, needles) {
+  return needles.every((needle) => contents.includes(needle));
+}
+
+function assertOrdered(contents, name, anchors) {
+  const indices = anchors.map((anchor) => contents.indexOf(anchor));
+  const missing = anchors.filter((_, index) => indices[index] === -1);
+  const ordered = indices.every(
+    (index, position) => position === 0 || indices[position - 1] < index
+  );
+  check(name, missing.length === 0 && ordered, { anchors, indices, missing });
+}
+
+function check(name, passed, details = {}) {
+  evidence.checks.push({ name, passed, details });
+  if (!passed) {
+    throw new Error(name);
+  }
+}
