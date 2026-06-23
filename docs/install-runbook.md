@@ -158,6 +158,19 @@ Validated on the development machine:
   because the helper validated `RemoteAddress` from the port filter instead of
   the address filter. No services were rendered or installed. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-10.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-10.md)
+- eleventh clean Windows gate-day attempt ran on 2026-06-22 with active
+  `.21`/`.22` artifacts from source commit `8154dc8`. USB hash verification,
+  `.21` extraction, packaged baseline collection, LAN helper Public-profile
+  refusal, explicit trusted-LAN consent, Private profile readback, BellField
+  firewall rule creation, LAN env URL updates, PostgreSQL provisioning,
+  packaged migrations, license placement, service rendering, elevated service
+  installation, PostgreSQL SCM `StartName`, ACL readback, packaged service
+  evidence collection, installer service stability, API `/health`, browser
+  first-owner setup, browser job/appointment proof, reboot recovery, and
+  post-reboot login all passed. Gate 1 still failed before real second-device
+  browser proof because the packaged LAN evidence collector hung while reading
+  firewall evidence and wrote no stdout or JSON. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -188,10 +201,11 @@ Not yet validated in this repo:
   stopped earlier because the packaged LAN helper could not read generated env
   files containing blank separator lines; rerun #10 proved that fix reached the
   Public-profile consent branch but stopped because firewall effective-rule
-  validation checked remote address on the wrong filter object. The source now
-  patches the configurator/collector readback and helper-smoke guard; the next
-  artifact must prove firewall/profile readback, LAN env URL updates, and real
-  second-device login from a clean Windows run
+  validation checked remote address on the wrong filter object; rerun #11 proved
+  the address-filter fix through service install, first-owner setup, browser
+  job/appointment proof, reboot recovery, and post-reboot login. Gate 1 now
+  needs a collector hardening patch, rebuilt artifacts, and a cleaned-machine
+  run that writes packaged LAN evidence and proves real second-device login
 - Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
@@ -585,13 +599,20 @@ token line without printing the token into evidence:
 .\release\tools\install\copy-first-owner-setup-token.ps1 -InstallRoot C:\BellField
 ```
 
-Open the office web app, paste that token into the setup form, and create the
-first owner account.
+Open the office web app. On a clean install the office auth shell shows the
+setup form after it can reach the API and confirm setup is required. If the
+setup form is not visible, enter the installed server URL in the auth shell's
+server/API URL field first: use `http://localhost:3001` on the installed PC, or
+the configured LAN API URL such as `http://<scratch-lan-ip>:3001` from another
+device. Do not navigate the office browser directly to
+`http://localhost:3000/identity/setup/first-owner`; `/identity/setup/first-owner`
+is the API endpoint, not an office-web route. Paste the token into the setup
+form and create the first owner account.
 
 After service ACL hardening, non-elevated shells may not be able to read service
-logs. If the setup token or startup errors are needed for evidence, capture them
-from an elevated read-only PowerShell session and redact secret values before
-copying to the evidence file.
+logs or PostgreSQL paths. If setup-token metadata, startup errors, or ACL
+readbacks are needed for evidence, capture them from an elevated read-only
+PowerShell session and redact secret values before copying to the evidence file.
 
 If multiple token lines exist, use the latest one; the token is in-memory and
 can change after an API restart. If the token is copied to the Windows clipboard
@@ -645,6 +666,10 @@ rule/port-filter readback, and `effectiveLanAccess` reasons. Its URL checks are
 labeled `origin = "installed-pc"` and `provesRemoteReachability = false`; they
 prove local binding behavior only. The collector does not create firewall rules,
 change the network profile, or replace the actual second-device login proof.
+Rerun #11 showed the packaged collector can hang while enumerating firewall
+evidence before writing JSON; until that collector is hardened, a hang here is a
+known gate blocker. Stop the strict gate and record the timeout rather than
+skipping evidence and claiming second-device readiness.
 
 Then open `http://<scratch-lan-ip>:3000` from the second device and log in.
 Only a real second-device login closes the Gate 1 LAN proof. If

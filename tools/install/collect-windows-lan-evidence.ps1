@@ -15,10 +15,11 @@ if (-not (Test-Path -LiteralPath $redactionHelper)) {
 }
 . $redactionHelper
 
-$officeFirewallRuleName = "BellField-Office-Web-TCP-Inbound"
-$apiFirewallRuleName = "BellField-API-TCP-Inbound"
-$officeFirewallRuleDisplayName = "BellField Office Web TCP Inbound"
-$apiFirewallRuleDisplayName = "BellField API TCP Inbound"
+$lanPredicatesHelper = Join-Path $PSScriptRoot "lan-firewall-predicates.ps1"
+if (-not (Test-Path -LiteralPath $lanPredicatesHelper)) {
+  throw "BellField LAN firewall predicate helper not found at $lanPredicatesHelper."
+}
+. $lanPredicatesHelper
 
 function Test-IsElevated {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
@@ -173,89 +174,6 @@ function Invoke-LocalUrlCheck {
   }
 }
 
-function Test-PortFilterMatches {
-  param(
-    [object]$LocalPort,
-    [int[]]$TargetPorts
-  )
-
-  foreach ($value in @($LocalPort)) {
-    $text = [string]$value
-    if ($text -eq "Any") {
-      continue
-    }
-
-    foreach ($target in $TargetPorts) {
-      if ($text -eq [string]$target) {
-        return $true
-      }
-      if ($text -match "(^|[, ])$target([, ]|$)") {
-        return $true
-      }
-      if ($text -match "^(\d+)-(\d+)$") {
-        $start = [int]$matches[1]
-        $end = [int]$matches[2]
-        if ($target -ge $start -and $target -le $end) {
-          return $true
-        }
-      }
-    }
-  }
-
-  return $false
-}
-
-function Get-FirewallReadback {
-  param([int[]]$Ports)
-
-  try {
-    $items = @()
-    $rules = Get-NetFirewallRule -Direction Inbound -ErrorAction Stop
-    foreach ($rule in $rules) {
-      $portFilters = @(Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
-      $addressFilters = @(Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
-      $appFilters = @(Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
-      $localAddresses = @($addressFilters | ForEach-Object { $_.LocalAddress })
-      $remoteAddresses = @($addressFilters | ForEach-Object { $_.RemoteAddress })
-      $programs = @($appFilters | ForEach-Object { $_.Program })
-
-      foreach ($portFilter in $portFilters) {
-        $matchesPort = Test-PortFilterMatches -LocalPort $portFilter.LocalPort -TargetPorts $Ports
-        $looksRelevant = (
-          $matchesPort -or
-          $rule.DisplayName -match "BellField|node" -or
-          $rule.Name -match "BellField|node" -or
-          (($programs -join " ") -match "BellField|node")
-        )
-        if (-not $looksRelevant) {
-          continue
-        }
-
-        $items += @{
-          name = $rule.Name
-          displayName = $rule.DisplayName
-          enabled = $rule.Enabled
-          action = $rule.Action
-          profile = $rule.Profile
-          direction = $rule.Direction
-          protocol = $portFilter.Protocol
-          localPort = @($portFilter.LocalPort)
-          localAddress = @($localAddresses)
-          remoteAddress = @($remoteAddresses)
-          program = $programs
-        }
-      }
-    }
-
-    return $items
-  } catch {
-    return @{
-      ok = $false
-      error = ConvertTo-BellFieldRedactedText $_.Exception.Message
-    }
-  }
-}
-
 function Get-SelectedNetworkProfile {
   param($SelectedLanIp)
 
@@ -274,88 +192,37 @@ function Get-SelectedNetworkProfile {
   return $null
 }
 
-function Test-RuleProfileApplies {
-  param(
-    [object]$RuleProfile,
-    [string]$NetworkCategory
-  )
-
-  $neededProfile = if ($NetworkCategory -eq "DomainAuthenticated") { "Domain" } else { $NetworkCategory }
-  $text = [string]$RuleProfile
-  return $text -eq "Any" -or ($text -split "[, ]+" | Where-Object { $_ }) -contains $neededProfile
-}
-
-function Test-RemoteAddressAllowsLocalSubnet {
-  param([object]$RemoteAddress)
-
-  foreach ($value in @($RemoteAddress)) {
-    $text = [string]$value
-    if ($text -eq "LocalSubnet") {
-      return $true
-    }
-  }
-
-  return $false
-}
-
-function Test-ManagedRuleEffective {
-  param(
-    [object[]]$FirewallRules,
-    [string]$Name,
-    [string]$DisplayName,
-    [int]$ExpectedPort,
-    [string]$NetworkCategory
-  )
-
-  foreach ($rule in @($FirewallRules)) {
-    if ($rule.name -ne $Name -or $rule.displayName -ne $DisplayName) {
-      continue
-    }
-    if (
-      [string]$rule.enabled -eq "True" -and
-      [string]$rule.action -eq "Allow" -and
-      [string]$rule.direction -eq "Inbound" -and
-      (Test-RuleProfileApplies -RuleProfile $rule.profile -NetworkCategory $NetworkCategory) -and
-      [string]$rule.protocol -eq "TCP" -and
-      (Test-PortFilterMatches -LocalPort $rule.localPort -TargetPorts @($ExpectedPort)) -and
-      (Test-RemoteAddressAllowsLocalSubnet -RemoteAddress $rule.remoteAddress)
-    ) {
-      return $true
-    }
-  }
-
-  return $false
-}
-
 function Get-EffectiveLanAccess {
   param(
     $ActiveProfile,
-    [object[]]$FirewallRules,
     [int]$OfficePort,
     [int]$ApiPort
   )
 
   $reasons = @()
+  $category = "Unknown"
   if (-not $ActiveProfile) {
-    return @{
-      effectiveLanAccess = $false
-      effectiveLanAccessReasons = @("selected LAN profile could not be determined")
-    }
-  }
-  if ($ActiveProfile.ok -eq $false) {
-    return @{
-      effectiveLanAccess = $false
-      effectiveLanAccessReasons = @("selected LAN profile readback failed: $($ActiveProfile.error)")
+    $reasons += "selected LAN profile could not be determined"
+  } elseif ($ActiveProfile.ok -eq $false) {
+    $reasons += "selected LAN profile readback failed: $($ActiveProfile.error)"
+  } else {
+    $category = [string]$ActiveProfile.NetworkCategory
+    if (-not $category) {
+      $category = "Unknown"
     }
   }
 
-  $category = [string]$ActiveProfile.NetworkCategory
+  # Exact managed-rule readback only. Get-ManagedRulePredicateReadback reads by
+  # -Name, so this never enumerates all inbound rules and cannot hang on a
+  # machine with a large default firewall rule set.
+  $officeReadbacks = @(Get-ManagedRulePredicateReadback -Name $officeFirewallRuleName -DisplayName $officeFirewallRuleDisplayName -ExpectedPort $OfficePort -NetworkCategory $category)
+  $apiReadbacks = @(Get-ManagedRulePredicateReadback -Name $apiFirewallRuleName -DisplayName $apiFirewallRuleDisplayName -ExpectedPort $ApiPort -NetworkCategory $category)
+  $officeOk = Test-RuleReadbackEffective -Readbacks $officeReadbacks
+  $apiOk = Test-RuleReadbackEffective -Readbacks $apiReadbacks
+
   if ($category -notin @("Private", "DomainAuthenticated")) {
     $reasons += "selected network profile is $category; BellField managed rules apply to Private/Domain only"
   }
-
-  $officeOk = Test-ManagedRuleEffective -FirewallRules $FirewallRules -Name $officeFirewallRuleName -DisplayName $officeFirewallRuleDisplayName -ExpectedPort $OfficePort -NetworkCategory $category
-  $apiOk = Test-ManagedRuleEffective -FirewallRules $FirewallRules -Name $apiFirewallRuleName -DisplayName $apiFirewallRuleDisplayName -ExpectedPort $ApiPort -NetworkCategory $category
   if (-not $officeOk) {
     $reasons += "managed office firewall rule is missing or not effective for port $OfficePort and profile $category"
   }
@@ -366,30 +233,44 @@ function Get-EffectiveLanAccess {
   return @{
     effectiveLanAccess = ($reasons.Count -eq 0)
     effectiveLanAccessReasons = @($reasons)
+    managedRuleReadback = @($officeReadbacks + $apiReadbacks)
   }
+}
+
+$script:LanEvidenceSteps = New-Object System.Collections.Generic.List[object]
+$script:LanEvidence = $null
+
+function Add-LanEvidenceStep {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [string]$State = "completed"
+  )
+
+  $script:LanEvidenceSteps.Add([ordered]@{
+    step = $Name
+    state = $State
+    at = (Get-Date).ToUniversalTime().ToString("o")
+  })
+  Write-Host ("[lan-evidence] " + $State + ": " + $Name)
+}
+
+function Save-LanEvidence {
+  param([Parameter(Mandatory = $true)][string]$Status)
+
+  $script:LanEvidence.status = $Status
+  $script:LanEvidence.steps = $script:LanEvidenceSteps.ToArray()
+  $json = ConvertTo-BellFieldRedactedText ($script:LanEvidence | ConvertTo-Json -Depth 8)
+  Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
 }
 
 $ports = @($OfficePort, $ApiPort)
-$candidates = @(Get-CandidateIpv4Addresses)
-$selectedLanIp = Select-LanIp -Candidates $candidates
-$activeNetworkProfile = Get-SelectedNetworkProfile -SelectedLanIp $selectedLanIp
-$firewallRules = @(Get-FirewallReadback -Ports $ports)
-$effectiveLanAccess = Get-EffectiveLanAccess -ActiveProfile $activeNetworkProfile -FirewallRules $firewallRules -OfficePort $OfficePort -ApiPort $ApiPort
-$localOriginChecks = @()
-if ($selectedLanIp.probeAllowed -and $selectedLanIp.ipAddress) {
-  $localOriginChecks += Invoke-LocalUrlCheck -Url "http://$($selectedLanIp.ipAddress):$OfficePort/" -Timeout $TimeoutSeconds
-  $localOriginChecks += Invoke-LocalUrlCheck -Url "http://$($selectedLanIp.ipAddress):$ApiPort/health" -Timeout $TimeoutSeconds
-} else {
-  $localOriginChecks += @{
-    ok = $false
-    skipped = $true
-    origin = "installed-pc"
-    provesRemoteReachability = $false
-    reason = $selectedLanIp.reason
-  }
+
+$outputDirectory = Split-Path -Parent $OutputPath
+if ($outputDirectory -and -not (Test-Path -LiteralPath $outputDirectory)) {
+  New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
 }
 
-$evidence = [ordered]@{
+$script:LanEvidence = [ordered]@{
   name = "BellField Windows LAN evidence"
   capturedAt = (Get-Date).ToUniversalTime().ToString("o")
   redactionApplied = $true
@@ -399,23 +280,64 @@ $evidence = [ordered]@{
     office = $OfficePort
     api = $ApiPort
   }
-  networkProfiles = @(Get-NetworkProfiles)
-  candidateIpv4Addresses = @($candidates)
-  selectedLanIp = $selectedLanIp
-  activeNetworkProfile = $activeNetworkProfile
-  listeners = @(Get-Listeners -Ports $ports)
-  localOriginUrlChecks = @($localOriginChecks)
-  inboundFirewallRules = @($firewallRules)
-  effectiveLanAccess = $effectiveLanAccess.effectiveLanAccess
-  effectiveLanAccessReasons = @($effectiveLanAccess.effectiveLanAccessReasons)
+  firewallReadbackScope = "bellfield-managed-rules"
+  status = "started"
+  steps = @()
 }
+Save-LanEvidence -Status "started"
 
-$outputDirectory = Split-Path -Parent $OutputPath
-if ($outputDirectory -and -not (Test-Path -LiteralPath $outputDirectory)) {
-  New-Item -ItemType Directory -Path $outputDirectory -Force | Out-Null
+try {
+  $script:LanEvidence.networkProfiles = @(Get-NetworkProfiles)
+  Add-LanEvidenceStep -Name "network-profiles"
+  Save-LanEvidence -Status "in-progress"
+
+  $candidates = @(Get-CandidateIpv4Addresses)
+  $selectedLanIp = Select-LanIp -Candidates $candidates
+  $activeNetworkProfile = Get-SelectedNetworkProfile -SelectedLanIp $selectedLanIp
+  $script:LanEvidence.candidateIpv4Addresses = @($candidates)
+  $script:LanEvidence.selectedLanIp = $selectedLanIp
+  $script:LanEvidence.activeNetworkProfile = $activeNetworkProfile
+  Add-LanEvidenceStep -Name "candidate-ip-and-active-profile"
+  Save-LanEvidence -Status "in-progress"
+
+  $effective = Get-EffectiveLanAccess -ActiveProfile $activeNetworkProfile -OfficePort $OfficePort -ApiPort $ApiPort
+  $script:LanEvidence.inboundFirewallRules = @($effective.managedRuleReadback)
+  $script:LanEvidence.effectiveLanAccess = $effective.effectiveLanAccess
+  $script:LanEvidence.effectiveLanAccessReasons = @($effective.effectiveLanAccessReasons)
+  Add-LanEvidenceStep -Name "managed-firewall-readback"
+  Save-LanEvidence -Status "in-progress"
+
+  $script:LanEvidence.listeners = @(Get-Listeners -Ports $ports)
+  Add-LanEvidenceStep -Name "listeners"
+  Save-LanEvidence -Status "in-progress"
+
+  $localOriginChecks = @()
+  if ($selectedLanIp.probeAllowed -and $selectedLanIp.ipAddress) {
+    $localOriginChecks += Invoke-LocalUrlCheck -Url "http://$($selectedLanIp.ipAddress):$OfficePort/" -Timeout $TimeoutSeconds
+    $localOriginChecks += Invoke-LocalUrlCheck -Url "http://$($selectedLanIp.ipAddress):$ApiPort/health" -Timeout $TimeoutSeconds
+  } else {
+    $localOriginChecks += @{
+      ok = $false
+      skipped = $true
+      origin = "installed-pc"
+      provesRemoteReachability = $false
+      reason = $selectedLanIp.reason
+    }
+  }
+  $script:LanEvidence.localOriginUrlChecks = @($localOriginChecks)
+  Add-LanEvidenceStep -Name "local-origin-url-checks"
+  Save-LanEvidence -Status "in-progress"
+
+  Add-LanEvidenceStep -Name "complete"
+  Save-LanEvidence -Status "completed"
+
+  $finalJson = ConvertTo-BellFieldRedactedText ($script:LanEvidence | ConvertTo-Json -Depth 8)
+  Write-Host $finalJson
+  Write-Host "BellField LAN evidence written to $OutputPath"
+} catch {
+  Add-LanEvidenceStep -Name "unexpected-error" -State "failed"
+  $script:LanEvidence.error = ConvertTo-BellFieldRedactedText $_.Exception.Message
+  Save-LanEvidence -Status "failed"
+  Write-Host "BellField LAN evidence collection failed; partial evidence written to $OutputPath"
+  exit 1
 }
-
-$json = ConvertTo-BellFieldRedactedText ($evidence | ConvertTo-Json -Depth 8)
-Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
-Write-Host $json
-Write-Host "BellField LAN evidence written to $OutputPath"

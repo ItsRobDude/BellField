@@ -99,7 +99,9 @@ proof that prep already happened.
       generated-env-shaped lines containing blank separators. After rerun #10,
       it must also prove LAN configurator/collector firewall effectiveness
       checks use `Get-NetFirewallAddressFilter` for `RemoteAddress`, not
-      `Get-NetFirewallPortFilter`.
+      `Get-NetFirewallPortFilter`. After rerun #11, it must also prove the LAN
+      evidence collector has a fast exact-managed-rule readback path and cannot
+      let broad firewall enumeration block JSON evidence output.
 - [ ] Confirm `pnpm smoke:install-config` passed. It must run the real
       `write-server-config.mjs` helper and prove API/worker accept the generated
       clean-install relay-disabled env.
@@ -271,7 +273,10 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   Expect the env file to remain Administrators + SYSTEM only. Expect the
   PostgreSQL release/data/log paths to include only the narrow
   `NT SERVICE\bellfield-postgres` access needed by PostgreSQL, plus
-  Administrators + SYSTEM. Paste output into the evidence doc.
+  Administrators + SYSTEM. Paste output into the evidence doc. If a
+  non-elevated readback gets `Access is denied` on hardened service paths, rerun
+  the readback from an elevated read-only PowerShell session before treating it
+  as a product failure.
 
 - [ ] **First-owner setup:** the one-time token is in the API service log
       (WinSW captures stdout under
@@ -287,7 +292,10 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   the latest one; the token can change after an API restart. If the token is
   placed on the clipboard, overwrite it afterward with a harmless placeholder
   rather than an empty string; rerun #7 showed `Set-Clipboard` can reject empty
-  text.
+  text. The office setup form is part of the office auth shell after the server
+  URL/API URL is accepted; do not navigate directly to
+  `http://localhost:3000/identity/setup/first-owner`, because
+  `/identity/setup/first-owner` is the API endpoint, not an office-web route.
 
 - [ ] `Invoke-RestMethod http://localhost:3001/health` → `status: "ok"`.
 - [ ] **Real office work in the browser:** create a customer, book a job,
@@ -311,9 +319,12 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       reachability; then open the office app from another machine on the LAN and
       log in. If `effectiveLanAccess` is false, or local LAN-IP checks pass but
       the external device times out, stop the strict gate and record the
-      firewall/profile evidence. Actual second-device login is the only
-      authoritative pass. (Android field-device proof is a stretch goal -
-      record it if attempted, it is tracked debt either way.)
+      firewall/profile evidence. If the collector hangs before producing JSON,
+      stop the strict gate and record that timeout; rerun #11 showed this is a
+      source/package blocker, not a valid substitute for second-device proof.
+      Actual second-device login is the only authoritative pass. (Android
+      field-device proof is a stretch goal - record it if attempted, it is
+      tracked debt either way.)
 
 ---
 
