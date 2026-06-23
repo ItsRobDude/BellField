@@ -53,6 +53,11 @@ does not replace the clean-machine run.
   pnpm security:secrets
   ```
 
+- [ ] Required GitHub checks are green for that same source commit:
+      `quality` and `install-helper-smoke`. The helper-smoke check must run on
+      `windows-latest` with `BELLFIELD_REQUIRE_POWERSHELL_CORPUS=1`, so the
+      PowerShell redaction/env-line/firewall corpora cannot silently skip.
+
 - [ ] Artifact A was built from a clean tree, packaged with the release ZIP
       helper, and smoke-tested as an extracted ZIP:
 
@@ -91,7 +96,10 @@ does not replace the clean-machine run.
       disabled.
 - [ ] `pnpm smoke:install-helpers` passed and proves the packaged baseline,
       service, LAN, migration, and evidence-redaction helpers are present and
-      wired into the installer failure path.
+      wired into the installer failure path. After rerun #10, this smoke must
+      also prove LAN configurator/collector firewall effectiveness checks use
+      `Get-NetFirewallAddressFilter` for `RemoteAddress`, not
+      `Get-NetFirewallPortFilter`.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
       `bellfield-postgres.xml` does not contain `<serviceaccount>`, the service
       log paths remain outside the manifest directory, and

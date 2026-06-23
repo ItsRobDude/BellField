@@ -426,10 +426,10 @@ Read when: preparing or reviewing a gate-day USB hash manifest, patching Windows
 LAN/firewall reachability for the office app/API, or checking which Gate 1 proof
 remains open after rerun 8.
 
-Current follow-up: PR #68 added the packaged LAN access helper, and the
-2026-06-21 rerun-9 USB prep points active `.17`/`.18` artifacts at source
-commit `991d773` with that helper. This is still not a Gate 1 pass: the next
-clean-machine rerun must prove real second-device login.
+Current follow-up: superseded by reruns 9 and 10. Rerun 9 proved the first
+packaged LAN helper bug, and rerun 10 proved that fix reached the Public-profile
+consent branch before exposing the current firewall effectiveness validation
+bug.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or application runtime behavior.
@@ -452,9 +452,40 @@ Read when: patching or reviewing the Windows LAN helper env-reader path,
 checking why the `.17` artifact cannot close Gate 1, or preparing the next
 rebuilt USB.
 
-Current follow-up: rebuild the artifact pair with the LAN helper blank-line fix
-and the safer `write-server-config.mjs` database-credential wording, then rerun
-Gate 1 from a cleaned Windows state.
+Current follow-up: superseded by rerun 10. Active `.19`/`.20` artifacts carried
+the blank-line fix and reached the intended Public-profile refusal/consent
+branch, then failed on firewall effective-rule validation.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or long-term network-profile UX.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-10.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-10.md)
+
+Audience: contributors checking why the tenth clean Windows gate-day attempt
+failed after the LAN helper blank-line fix and before PostgreSQL provisioning.
+
+Purpose: dated evidence for the tenth fresh Windows install smoke: active
+artifacts `.19`/`.20` passed USB hash verification and `.19` extracted with
+`tar.exe`; baseline collection, developer-tool PATH check, and
+`write-server-config.mjs` completed; the elevated LAN helper reached the
+intended Public-profile refusal, then changed Wi-Fi to Private after explicit
+operator consent and created the BellField-managed TCP `3000`/`3001`
+Private/Domain LocalSubnet firewall rules. The helper then failed its own
+effective-rule validation before writing LAN env URLs, apparently because it
+validated `RemoteAddress` from the port filter instead of the address filter.
+The run stopped before PostgreSQL provisioning, service rendering, owner setup,
+job booking, reboot, or product second-device testing.
+
+Read when: patching or reviewing Windows LAN helper firewall effectiveness
+validation, the LAN evidence collector's firewall readback, or the next rebuilt
+USB after `.19`/`.20`.
+
+Current follow-up: the source fix now uses `Get-NetFirewallAddressFilter` for
+remote-address readback in both the configurator and collector, and
+`pnpm smoke:install-helpers` now behaviorally guards that NetSecurity object
+model. Rebuild artifacts, refresh USB hashes, and rerun Gate 1 from a cleaned
+Windows state; this is still not a passed Gate 1 claim until the fixed artifact
+proves real second-device login.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or long-term network-profile UX.

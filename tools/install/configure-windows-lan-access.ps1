@@ -249,7 +249,119 @@ function Test-RemoteAddressAllowsLocalSubnet {
 
   foreach ($value in @($RemoteAddress)) {
     $text = [string]$value
-    if ($text -eq "LocalSubnet" -or $text -match "(^|[, ])LocalSubnet([, ]|$)") {
+    if ($text -eq "LocalSubnet") {
+      return $true
+    }
+  }
+
+  return $false
+}
+
+function Get-ManagedRulePredicateReadback {
+  param(
+    [Parameter(Mandatory = $true)][string]$Name,
+    [Parameter(Mandatory = $true)][string]$DisplayName,
+    [Parameter(Mandatory = $true)][int]$ExpectedPort,
+    [Parameter(Mandatory = $true)][string]$NetworkCategory
+  )
+
+  $readbacks = @()
+  $rules = @(Get-NetFirewallRule -Name $Name -ErrorAction SilentlyContinue)
+  foreach ($rule in $rules) {
+    $portFilters = @(Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
+    $addressFilters = @(Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
+    $remoteAddresses = @($addressFilters | ForEach-Object { $_.RemoteAddress })
+    $localAddresses = @($addressFilters | ForEach-Object { $_.LocalAddress })
+
+    if ($portFilters.Count -eq 0) {
+      $displayNameMatches = [string]$rule.DisplayName -eq $DisplayName
+      $enabledMatches = [string]$rule.Enabled -eq "True"
+      $actionMatches = [string]$rule.Action -eq "Allow"
+      $directionMatches = [string]$rule.Direction -eq "Inbound"
+      $profileMatches = Test-RuleProfileApplies -RuleProfile $rule.Profile -NetworkCategory $NetworkCategory
+      $remoteAddressMatches = Test-RemoteAddressAllowsLocalSubnet -RemoteAddress $remoteAddresses
+      $readbacks += [ordered]@{
+        name = [string]$rule.Name
+        displayName = [string]$rule.DisplayName
+        expectedDisplayName = $DisplayName
+        enabled = [string]$rule.Enabled
+        action = [string]$rule.Action
+        direction = [string]$rule.Direction
+        profile = [string]$rule.Profile
+        networkCategory = $NetworkCategory
+        protocol = $null
+        localPort = @()
+        expectedPort = $ExpectedPort
+        localAddress = @($localAddresses)
+        remoteAddress = @($remoteAddresses)
+        displayNameMatches = $displayNameMatches
+        enabledMatches = $enabledMatches
+        actionMatches = $actionMatches
+        directionMatches = $directionMatches
+        profileApplies = $profileMatches
+        protocolMatches = $false
+        localPortMatches = $false
+        remoteAddressMatches = $remoteAddressMatches
+        effective = $false
+      }
+      continue
+    }
+
+    foreach ($portFilter in $portFilters) {
+      $displayNameMatches = [string]$rule.DisplayName -eq $DisplayName
+      $enabledMatches = [string]$rule.Enabled -eq "True"
+      $actionMatches = [string]$rule.Action -eq "Allow"
+      $directionMatches = [string]$rule.Direction -eq "Inbound"
+      $profileMatches = Test-RuleProfileApplies -RuleProfile $rule.Profile -NetworkCategory $NetworkCategory
+      $protocolMatches = [string]$portFilter.Protocol -eq "TCP"
+      $localPortMatches = Test-PortFilterMatches -LocalPort $portFilter.LocalPort -ExpectedPort $ExpectedPort
+      $remoteAddressMatches = Test-RemoteAddressAllowsLocalSubnet -RemoteAddress $remoteAddresses
+      $effective = (
+        $displayNameMatches -and
+        $enabledMatches -and
+        $actionMatches -and
+        $directionMatches -and
+        $profileMatches -and
+        $protocolMatches -and
+        $localPortMatches -and
+        $remoteAddressMatches
+      )
+
+      $readbacks += [ordered]@{
+        name = [string]$rule.Name
+        displayName = [string]$rule.DisplayName
+        expectedDisplayName = $DisplayName
+        enabled = [string]$rule.Enabled
+        action = [string]$rule.Action
+        direction = [string]$rule.Direction
+        profile = [string]$rule.Profile
+        networkCategory = $NetworkCategory
+        protocol = [string]$portFilter.Protocol
+        localPort = @($portFilter.LocalPort)
+        expectedPort = $ExpectedPort
+        localAddress = @($localAddresses)
+        remoteAddress = @($remoteAddresses)
+        displayNameMatches = $displayNameMatches
+        enabledMatches = $enabledMatches
+        actionMatches = $actionMatches
+        directionMatches = $directionMatches
+        profileApplies = $profileMatches
+        protocolMatches = $protocolMatches
+        localPortMatches = $localPortMatches
+        remoteAddressMatches = $remoteAddressMatches
+        effective = $effective
+      }
+    }
+  }
+
+  return $readbacks
+}
+
+function Test-RuleReadbackEffective {
+  param([object[]]$Readbacks)
+
+  foreach ($readback in @($Readbacks)) {
+    if ($readback.effective -eq $true) {
       return $true
     }
   }
@@ -265,28 +377,8 @@ function Test-ManagedRuleEffective {
     [Parameter(Mandatory = $true)][string]$NetworkCategory
   )
 
-  $rules = @(Get-NetFirewallRule -Name $Name -ErrorAction SilentlyContinue)
-  foreach ($rule in $rules) {
-    if ($rule.DisplayName -ne $DisplayName) {
-      continue
-    }
-    $portFilters = @(Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
-    foreach ($portFilter in $portFilters) {
-      if (
-        [string]$rule.Enabled -eq "True" -and
-        [string]$rule.Action -eq "Allow" -and
-        [string]$rule.Direction -eq "Inbound" -and
-        (Test-RuleProfileApplies -RuleProfile $rule.Profile -NetworkCategory $NetworkCategory) -and
-        [string]$portFilter.Protocol -eq "TCP" -and
-        (Test-PortFilterMatches -LocalPort $portFilter.LocalPort -ExpectedPort $ExpectedPort) -and
-        (Test-RemoteAddressAllowsLocalSubnet -RemoteAddress $portFilter.RemoteAddress)
-      ) {
-        return $true
-      }
-    }
-  }
-
-  return $false
+  $readbacks = @(Get-ManagedRulePredicateReadback -Name $Name -DisplayName $DisplayName -ExpectedPort $ExpectedPort -NetworkCategory $NetworkCategory)
+  return Test-RuleReadbackEffective -Readbacks $readbacks
 }
 
 function Assert-BellFieldLanAccessEffective {
@@ -301,10 +393,30 @@ function Assert-BellFieldLanAccessEffective {
     throw "BellField LAN access is not effective because the selected network profile is '$category'."
   }
 
-  $officeOk = Test-ManagedRuleEffective -Name $officeFirewallRuleName -DisplayName $officeFirewallRuleDisplayName -ExpectedPort $OfficePort -NetworkCategory $category
-  $apiOk = Test-ManagedRuleEffective -Name $apiFirewallRuleName -DisplayName $apiFirewallRuleDisplayName -ExpectedPort $ApiPort -NetworkCategory $category
+  $officeReadbacks = @(Get-ManagedRulePredicateReadback -Name $officeFirewallRuleName -DisplayName $officeFirewallRuleDisplayName -ExpectedPort $OfficePort -NetworkCategory $category)
+  $apiReadbacks = @(Get-ManagedRulePredicateReadback -Name $apiFirewallRuleName -DisplayName $apiFirewallRuleDisplayName -ExpectedPort $ApiPort -NetworkCategory $category)
+  $officeOk = Test-RuleReadbackEffective -Readbacks $officeReadbacks
+  $apiOk = Test-RuleReadbackEffective -Readbacks $apiReadbacks
   if (-not $officeOk -or -not $apiOk) {
-    throw "BellField LAN firewall rules were created but are not effective for the active '$category' profile and configured office/API ports."
+    $diagnostic = [ordered]@{
+      category = $category
+      office = @{
+        expectedName = $officeFirewallRuleName
+        expectedDisplayName = $officeFirewallRuleDisplayName
+        expectedPort = $OfficePort
+        effective = $officeOk
+        readback = @($officeReadbacks)
+      }
+      api = @{
+        expectedName = $apiFirewallRuleName
+        expectedDisplayName = $apiFirewallRuleDisplayName
+        expectedPort = $ApiPort
+        effective = $apiOk
+        readback = @($apiReadbacks)
+      }
+    }
+    $diagnosticJson = ConvertTo-BellFieldRedactedText ($diagnostic | ConvertTo-Json -Depth 8)
+    throw "BellField LAN firewall rules were created but are not effective for the active '$category' profile and configured office/API ports. Predicate readback: $diagnosticJson"
   }
 }
 

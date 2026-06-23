@@ -213,7 +213,10 @@ function Get-FirewallReadback {
     $rules = Get-NetFirewallRule -Direction Inbound -ErrorAction Stop
     foreach ($rule in $rules) {
       $portFilters = @(Get-NetFirewallPortFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
+      $addressFilters = @(Get-NetFirewallAddressFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
       $appFilters = @(Get-NetFirewallApplicationFilter -AssociatedNetFirewallRule $rule -ErrorAction SilentlyContinue)
+      $localAddresses = @($addressFilters | ForEach-Object { $_.LocalAddress })
+      $remoteAddresses = @($addressFilters | ForEach-Object { $_.RemoteAddress })
       $programs = @($appFilters | ForEach-Object { $_.Program })
 
       foreach ($portFilter in $portFilters) {
@@ -237,7 +240,8 @@ function Get-FirewallReadback {
           direction = $rule.Direction
           protocol = $portFilter.Protocol
           localPort = @($portFilter.LocalPort)
-          remoteAddress = @($portFilter.RemoteAddress)
+          localAddress = @($localAddresses)
+          remoteAddress = @($remoteAddresses)
           program = $programs
         }
       }
@@ -286,7 +290,7 @@ function Test-RemoteAddressAllowsLocalSubnet {
 
   foreach ($value in @($RemoteAddress)) {
     $text = [string]$value
-    if ($text -eq "LocalSubnet" -or $text -match "(^|[, ])LocalSubnet([, ]|$)") {
+    if ($text -eq "LocalSubnet") {
       return $true
     }
   }

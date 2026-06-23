@@ -44,7 +44,10 @@ keys, or raw env files.
 Record the evidence path or command result for each gate. These run once for the
 final source commit when both artifacts use that same commit.
 
-- `pnpm smoke:install-helpers`:
+- Required GitHub checks green for the source commit (`quality` and
+  `install-helper-smoke`):
+- `pnpm smoke:install-helpers` (including LAN address-filter effectiveness
+  guard):
 - `pnpm smoke:install-config`:
 - `pnpm smoke:service-manifests`:
 - CI API identity-attempt PostgreSQL regression:
