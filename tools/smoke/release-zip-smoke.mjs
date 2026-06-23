@@ -146,33 +146,21 @@ function check(name, passed, details = {}) {
 
 function extractZip(zip, destination) {
   if (process.platform === 'win32') {
-    const shell = findWindowsPowerShell();
-    runCommand(
-      shell,
-      [
-        '-NoProfile',
-        '-ExecutionPolicy',
-        'Bypass',
-        '-Command',
-        "$ErrorActionPreference = 'Stop'; Expand-Archive -LiteralPath $env:BELLFIELD_ZIP_PATH -DestinationPath $env:BELLFIELD_ZIP_DESTINATION -Force"
-      ],
-      {
-        env: {
-          ...process.env,
-          BELLFIELD_ZIP_PATH: zip,
-          BELLFIELD_ZIP_DESTINATION: destination
-        },
-        timeoutMs: zipExtractionTimeoutMs
-      }
-    );
+    const tar = findWindowsTar();
+    if (!tar) {
+      throw new Error('tar.exe was not available to extract the Windows release ZIP.');
+    }
+    runCommand(tar, ['-xf', zip, '-C', destination], {
+      timeoutMs: zipExtractionTimeoutMs
+    });
     return;
   }
   runCommand('unzip', ['-q', zip, '-d', destination], { timeoutMs: zipExtractionTimeoutMs });
 }
 
-function findWindowsPowerShell() {
-  for (const candidate of ['pwsh.exe', 'powershell.exe']) {
-    const result = spawnSync(candidate, ['-NoProfile', '-Command', '$PSVersionTable.PSVersion'], {
+function findWindowsTar() {
+  for (const candidate of ['tar.exe']) {
+    const result = spawnSync(candidate, ['--version'], {
       encoding: 'utf8',
       shell: false,
       stdio: ['ignore', 'ignore', 'ignore'],
@@ -182,7 +170,7 @@ function findWindowsPowerShell() {
       return candidate;
     }
   }
-  return 'powershell.exe';
+  return null;
 }
 
 function runReleaseBuildSmoke(releaseRoot, expectedSourceCommit) {

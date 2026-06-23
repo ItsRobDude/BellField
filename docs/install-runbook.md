@@ -147,6 +147,17 @@ Validated on the development machine:
   no firewall rules were created, and no services were rendered or installed.
   See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-9.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-9.md)
+- tenth clean Windows gate-day attempt ran on 2026-06-22 with active `.19`/`.20`
+  artifacts from source commit `31cd16c`. USB hash verification, `.19`
+  extraction, packaged baseline collection, developer-tool PATH check, and
+  `write-server-config.mjs` passed. The blank-line fix worked: the LAN helper
+  reached the intended Public-profile refusal and, after explicit operator
+  consent, changed Wi-Fi to Private and created BellField-managed TCP
+  `3000`/`3001` Private/Domain LocalSubnet firewall rules. It then failed its
+  own effective-rule validation before PostgreSQL provisioning, apparently
+  because the helper validated `RemoteAddress` from the port filter instead of
+  the address filter. No services were rendered or installed. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-10.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-10.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -175,9 +186,12 @@ Not yet validated in this repo:
   proved local install, owner setup, job booking, reboot recovery, and
   post-reboot login, but second-device same-Wi-Fi access timed out; rerun #9
   stopped earlier because the packaged LAN helper could not read generated env
-  files containing blank separator lines. The next artifact must prove the
-  helper reaches the intended Public-profile handling, then firewall/profile
-  readback and real second-device login
+  files containing blank separator lines; rerun #10 proved that fix reached the
+  Public-profile consent branch but stopped because firewall effective-rule
+  validation checked remote address on the wrong filter object. The source now
+  patches the configurator/collector readback and helper-smoke guard; the next
+  artifact must prove firewall/profile readback, LAN env URL updates, and real
+  second-device login from a clean Windows run
 - Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update

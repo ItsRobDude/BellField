@@ -58,18 +58,16 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Latest clean-machine install evidence: run #8 on 2026-06-21 used rebuilt
+Deepest clean-machine install evidence remains run #8 on 2026-06-21: rebuilt
 artifacts with the first-owner SQL fix and packaged first-owner release-smoke
-proof. Its first strict preflight exposed that the USB hash manifest still
-included mutable current-run `evidence/**` files; after the USB manifest was
-corrected without changing the product ZIPs, the run continued and completed
-clean extraction, server config, PostgreSQL provisioning, packaged migrations,
-license placement, service rendering, elevated service installation, packaged
-service evidence collection, API `/health`, browser first-owner setup, browser
-job booking, reboot recovery, and post-reboot login. `bellfield-postgres` read
-back as `NT SERVICE\bellfield-postgres`, all four services stayed running, and
-the PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 then
-failed at second-device LAN proof: two same-Wi-Fi devices timed out against
+proof completed clean extraction, server config, PostgreSQL provisioning,
+packaged migrations, license placement, service rendering, elevated service
+installation, packaged service evidence collection, API `/health`, browser
+first-owner setup, browser job booking, reboot recovery, and post-reboot login
+after a USB hash-manifest correction. `bellfield-postgres` read back as
+`NT SERVICE\bellfield-postgres`, all four services stayed running, and the
+PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 then failed
+at second-device LAN proof: two same-Wi-Fi devices timed out against
 `http://192.168.50.131:3000`, while the installed PC could reach its own LAN IP
 for office web and API health, and no explicit BellField/Node/3000/3001 inbound
 firewall rule was found.
@@ -77,13 +75,18 @@ See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
 PR #68 added a packaged LAN access helper that configures LAN-safe office/API
 URLs and exact BellField-managed Private/Domain LocalSubnet firewall rules for
-office/API ports only. The 2026-06-21 rerun-9 USB prep rebuilt active `.17`/`.18`
-artifacts from source commit `991d773` with that helper. Rerun #9 proved hash
-verification, extraction, baseline collection, and server config, then failed at
-the required LAN helper because its PowerShell env reader rejected blank
-separator lines in the generated env. This is not a passed Gate 1 claim until a
-rebuilt artifact completes a clean-machine rerun and proves real second-device
-login.
+office/API ports only. Rerun #9 proved hash verification, extraction, baseline
+collection, and server config, then failed at the required LAN helper because
+its PowerShell env reader rejected blank separator lines in the generated env.
+Rerun #10 used rebuilt `.19`/`.20` artifacts from source commit `31cd16c` and
+proved that blank-line fix reached the intended Public-profile refusal/consent
+branch. After explicit operator consent it changed Wi-Fi to Private and created
+the expected TCP `3000`/`3001` LocalSubnet rules, but failed before PostgreSQL
+provisioning because the helper appears to validate `RemoteAddress` from the
+port filter instead of the address filter. The source now patches that
+configurator/collector readback and adds a helper-smoke guard for the
+NetSecurity object model, but this is not a passed Gate 1 claim until a rebuilt
+artifact completes a clean-machine rerun and proves real second-device login.
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 

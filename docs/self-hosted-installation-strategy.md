@@ -218,13 +218,19 @@ found. See
 PR #68 added that Windows LAN ingress path as a packaged helper that sets
 LAN-safe office/API URLs, manages exact BellField-owned Private/Domain
 LocalSubnet firewall rules for office/API ports only, and fails closed on Public
-profiles unless explicitly consented. The 2026-06-21 rerun-9 USB prep rebuilt
-active `.17`/`.18` artifacts from source commit `991d773` with that helper. The
-ninth clean Windows attempt passed hash verification, extraction, baseline
-collection, and server config, then failed before PostgreSQL provisioning
-because the LAN helper's PowerShell env reader rejected blank separator lines in
-the generated env. Gate 1 still needs a rebuilt artifact and clean-machine rerun
-proving real second-device access through the fixed path.
+profiles unless explicitly consented. The ninth clean Windows attempt passed
+hash verification, extraction, baseline collection, and server config, then
+failed before PostgreSQL provisioning because the LAN helper's PowerShell env
+reader rejected blank separator lines in the generated env. The tenth attempt
+used rebuilt `.19`/`.20` artifacts from source commit `31cd16c` and proved that
+fix reached the Public-profile refusal/consent branch. After explicit operator
+consent it changed Wi-Fi to Private and created the expected TCP `3000`/`3001`
+LocalSubnet rules, but stopped before PostgreSQL provisioning because the helper
+appears to validate `RemoteAddress` from the port filter instead of the address
+filter. The source now patches the configurator/collector readback and adds a
+helper-smoke guard for the NetSecurity object model. Gate 1 still needs a
+rebuilt artifact and clean-machine rerun proving firewall/profile readback, LAN
+env URL updates, and real second-device access through the fixed path.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

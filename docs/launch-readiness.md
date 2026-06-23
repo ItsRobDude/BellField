@@ -123,13 +123,17 @@ BellField/Node/3000/3001 inbound firewall rule was found. See
 PR #68 added the packaged LAN access helper: it writes LAN-safe office/API URLs,
 creates exact BellField-managed Private/Domain LocalSubnet firewall rules for
 office/API ports only, and fails closed on Public profiles unless explicitly
-consented. The 2026-06-21 rerun-9 USB prep rebuilt active `.17`/`.18` artifacts
-from source commit `991d773` with that helper. The ninth clean-machine attempt
-proved hash verification, extraction, baseline collection, and server config,
-but the required LAN helper crashed before PostgreSQL provisioning because its
-PowerShell env reader rejected blank separator lines in the generated env. The
-helper still needs a rebuilt artifact and clean Windows proof with a real
-second-device login.
+consented. Rerun #9 proved the first packaged helper bug: the helper crashed on
+generated env blank separator lines before reaching Public-profile handling.
+Rerun #10 used rebuilt `.19`/`.20` artifacts from source commit `31cd16c` and
+proved that blank-line fix reached the intended Public-profile refusal/consent
+branch. After explicit operator consent it changed Wi-Fi to Private and created
+the expected TCP `3000`/`3001` LocalSubnet rules, but failed its own
+effective-rule validation before PostgreSQL provisioning because the helper
+appears to read remote address from the port filter instead of the address
+filter. The source now patches configurator/collector address-filter readback
+and adds a behavioral helper-smoke guard; the path still needs a rebuilt
+artifact and clean Windows proof with a real second-device login.
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -138,9 +142,13 @@ The remaining clean-machine proofs are still owned by
       already captured service registration, service stability, ACL, API
       health, browser owner setup, browser job booking, reboot recovery, and
       post-reboot login evidence. Rerun #9 stopped earlier because the new LAN
-      helper could not read generated env files with blank separator lines. The
-      remaining Gate 1 gap is proving the fixed packaged LAN/firewall path from
-      another device. This gate is also the definition of
+      helper could not read generated env files with blank separator lines.
+      Rerun #10 reached the Public-profile consent branch and created the
+      expected firewall rules, then stopped because firewall effectiveness
+      validation checked the wrong filter object. The source has the
+      address-filter fix and helper-smoke guard, but the remaining Gate 1 gap is
+      proving the fixed packaged LAN/firewall path from another device. This
+      gate is also the definition of
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.

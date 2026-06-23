@@ -60,6 +60,10 @@ proof that prep already happened.
   pnpm security:secrets
   ```
 
+- [ ] Confirm the USB-prep record shows required GitHub checks green for the same
+      source commit: `quality` and `install-helper-smoke`. This is prep
+      provenance, not a clean-machine task.
+
 - [ ] **Build artifact A — v(N):**
 
   ```powershell
@@ -92,7 +96,10 @@ proof that prep already happened.
       baseline, service, LAN, migration, and evidence-redaction helpers are
       present and wired into the installer failure path. After rerun #9, this
       smoke must also exercise the LAN helper env reader/writer against
-      generated-env-shaped lines containing blank separators.
+      generated-env-shaped lines containing blank separators. After rerun #10,
+      it must also prove LAN configurator/collector firewall effectiveness
+      checks use `Get-NetFirewallAddressFilter` for `RemoteAddress`, not
+      `Get-NetFirewallPortFilter`.
 - [ ] Confirm `pnpm smoke:install-config` passed. It must run the real
       `write-server-config.mjs` helper and prove API/worker accept the generated
       clean-install relay-disabled env.

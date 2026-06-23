@@ -167,11 +167,27 @@ try {
     'LAN access configurator reads office and API ports from server env',
     includesAll(files.lanConfigurator, ['BELLFIELD_OFFICE_WEB_PORT', 'BELLFIELD_API_PORT'])
   );
+  check(
+    'LAN helpers read remote firewall scope from address filters',
+    files.lanConfigurator.includes('Get-NetFirewallAddressFilter') &&
+      files.lanCollector.includes('Get-NetFirewallAddressFilter')
+  );
+  check(
+    'LAN helpers do not read remote firewall scope from port filters',
+    !files.lanConfigurator.includes('$portFilter.RemoteAddress') &&
+      !files.lanCollector.includes('$portFilter.RemoteAddress')
+  );
   const powershellLanEnvLineResult = runPowerShellLanEnvLineCorpus();
   check(
     'LAN access configurator env helpers tolerate blank env separator lines',
     true,
     powershellLanEnvLineResult
+  );
+  const powershellLanFirewallResult = runPowerShellLanFirewallCorpus();
+  check(
+    'LAN access configurator firewall predicate helpers use address-filter readback',
+    true,
+    powershellLanFirewallResult
   );
   check(
     'LAN access configurator writes LAN-safe office/API URLs only',
@@ -366,7 +382,7 @@ function readRequired(relativePath) {
 function runPowerShellRedactionCorpus() {
   const command = findPowerShellCommand();
   if (!command) {
-    if (process.platform === 'win32') {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
       throw new Error('PowerShell was not available for the required Windows redaction corpus');
     }
     return { skipped: true, reason: 'PowerShell not available on this platform' };
@@ -417,7 +433,7 @@ Write-Host "PowerShell redaction corpus passed"
 function runPowerShellLanEnvLineCorpus() {
   const command = findPowerShellCommand();
   if (!command) {
-    if (process.platform === 'win32') {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
       throw new Error('PowerShell was not available for the required Windows LAN env-line corpus');
     }
     return { skipped: true, reason: 'PowerShell not available on this platform' };
@@ -491,6 +507,176 @@ Write-Host "PowerShell LAN env-line corpus passed"
   return { command };
 }
 
+function runPowerShellLanFirewallCorpus() {
+  const command = findPowerShellCommand();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error('PowerShell was not available for the required Windows LAN firewall corpus');
+    }
+    return { skipped: true, reason: 'PowerShell not available on this platform' };
+  }
+
+  const configuratorPath = quotePowerShellString(
+    resolve('tools/install/configure-windows-lan-access.ps1')
+  );
+  const script = `
+$ErrorActionPreference = "Stop"
+$tokens = $null
+$errors = $null
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(${configuratorPath}, [ref]$tokens, [ref]$errors)
+if ($errors -and $errors.Count -gt 0) {
+  throw "Failed to parse configure-windows-lan-access.ps1"
+}
+$wanted = @(
+  "Test-RuleProfileApplies",
+  "Test-PortFilterMatches",
+  "Test-RemoteAddressAllowsLocalSubnet",
+  "Get-ManagedRulePredicateReadback",
+  "Test-RuleReadbackEffective",
+  "Test-ManagedRuleEffective"
+)
+$functions = @($ast.FindAll({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $wanted -contains $node.Name
+}, $true))
+foreach ($name in $wanted) {
+  if (-not ($functions | Where-Object { $_.Name -eq $name })) {
+    throw "Missing function $name"
+  }
+}
+foreach ($function in $functions) {
+  Invoke-Expression $function.Extent.Text
+}
+
+$script:RuleName = "BellField-Office-Web-TCP-Inbound"
+$script:RuleDisplayName = "BellField Office Web TCP Inbound"
+$script:FirewallRules = @()
+$script:PortFilters = @{}
+$script:AddressFilters = @{}
+
+function Get-NetFirewallRule {
+  param([string]$Name, [object]$ErrorAction)
+  return @($script:FirewallRules | Where-Object { $_.Name -eq $Name })
+}
+
+function Get-NetFirewallPortFilter {
+  param($AssociatedNetFirewallRule, [object]$ErrorAction)
+  if ($script:PortFilters.ContainsKey($AssociatedNetFirewallRule.Name)) {
+    return @($script:PortFilters[$AssociatedNetFirewallRule.Name])
+  }
+  return @()
+}
+
+function Get-NetFirewallAddressFilter {
+  param($AssociatedNetFirewallRule, [object]$ErrorAction)
+  if ($script:AddressFilters.ContainsKey($AssociatedNetFirewallRule.Name)) {
+    return @($script:AddressFilters[$AssociatedNetFirewallRule.Name])
+  }
+  return @()
+}
+
+function Set-FirewallCase {
+  param(
+    [string]$Enabled = "True",
+    [string]$Action = "Allow",
+    [string]$Direction = "Inbound",
+    [string]$Profile = "Private, Domain",
+    [string]$Protocol = "TCP",
+    [object]$LocalPort = "3000",
+    [object]$RemoteAddress = "LocalSubnet",
+    [string]$DisplayName = $script:RuleDisplayName
+  )
+
+  $script:FirewallRules = @([pscustomobject]@{
+    Name = $script:RuleName
+    DisplayName = $DisplayName
+    Enabled = $Enabled
+    Action = $Action
+    Direction = $Direction
+    Profile = $Profile
+  })
+  $script:PortFilters = @{
+    $script:RuleName = @([pscustomobject]@{
+      Protocol = $Protocol
+      LocalPort = $LocalPort
+    })
+  }
+  $script:AddressFilters = @{
+    $script:RuleName = @([pscustomobject]@{
+      LocalAddress = "Any"
+      RemoteAddress = $RemoteAddress
+    })
+  }
+}
+
+function Assert-Effective {
+  param(
+    [string]$CaseName,
+    [bool]$Expected,
+    [string]$NetworkCategory = "Private"
+  )
+
+  $actual = Test-ManagedRuleEffective -Name $script:RuleName -DisplayName $script:RuleDisplayName -ExpectedPort 3000 -NetworkCategory $NetworkCategory
+  if ($actual -ne $Expected) {
+    $readback = @(Get-ManagedRulePredicateReadback -Name $script:RuleName -DisplayName $script:RuleDisplayName -ExpectedPort 3000 -NetworkCategory $NetworkCategory)
+    throw "$CaseName expected $Expected but got $actual. Readback: $($readback | ConvertTo-Json -Depth 8)"
+  }
+}
+
+Set-FirewallCase
+Assert-Effective -CaseName "happy path" -Expected $true
+
+Set-FirewallCase -Profile "Domain"
+Assert-Effective -CaseName "domain profile" -Expected $true -NetworkCategory "DomainAuthenticated"
+
+Set-FirewallCase -LocalPort "3002"
+Assert-Effective -CaseName "wrong port" -Expected $false
+
+Set-FirewallCase -Enabled "False"
+Assert-Effective -CaseName "disabled rule" -Expected $false
+
+Set-FirewallCase -Profile "Public"
+Assert-Effective -CaseName "wrong profile" -Expected $false
+
+Set-FirewallCase -Protocol "UDP"
+Assert-Effective -CaseName "wrong protocol" -Expected $false
+
+Set-FirewallCase -Direction "Outbound"
+Assert-Effective -CaseName "wrong direction" -Expected $false
+
+Set-FirewallCase -RemoteAddress "Any"
+Assert-Effective -CaseName "overbroad remote address" -Expected $false
+
+Set-FirewallCase -RemoteAddress "Any, LocalSubnet"
+Assert-Effective -CaseName "combined remote address" -Expected $false
+
+Set-FirewallCase -DisplayName "Unexpected BellField Rule"
+Assert-Effective -CaseName "wrong display name" -Expected $false
+
+Write-Host "PowerShell LAN firewall corpus passed"
+`;
+  const result = spawnSync(
+    command,
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000
+    }
+  );
+  if (result.error) {
+    throw new Error(`Failed to run PowerShell LAN firewall corpus: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `PowerShell LAN firewall corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+
+  return { command, cases: 10 };
+}
+
 function findPowerShellCommand() {
   const candidates = process.platform === 'win32' ? ['powershell.exe', 'pwsh.exe'] : ['pwsh'];
   for (const candidate of candidates) {
@@ -505,6 +691,11 @@ function findPowerShellCommand() {
     }
   }
   return null;
+}
+
+function isPowerShellCorpusRequired() {
+  const value = String(process.env.BELLFIELD_REQUIRE_POWERSHELL_CORPUS ?? '').toLowerCase();
+  return value === '1' || value === 'true' || value === 'yes';
 }
 
 function quotePowerShellString(value) {
