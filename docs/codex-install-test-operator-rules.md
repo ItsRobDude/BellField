@@ -140,6 +140,14 @@ Never record:
 - full customer acceptance URLs;
 - license signing keys or relay provider secrets.
 
+Exception for disposable Gate Day scratch-machine runs: the documented dummy
+owner credential (`gate.owner@example.com` / `BellFieldGateDay!2026`) is a
+public, test-only value and may appear in runbooks/checklists. Prefer recording
+`used documented Gate Day dummy credential: yes` in evidence instead of echoing
+the password itself. This exception does not apply to real owner passwords,
+setup tokens, database URLs, relay tokens, generated server secrets, license
+files, private keys, or customer data.
+
 If a command prints a secret, redact the value and write that redaction
 occurred. Rerun #8 showed that the packaged service evidence collector can pull
 API log tails containing a first-owner setup-token line; redact those log-tail

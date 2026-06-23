@@ -143,6 +143,16 @@ post-reboot browser login. Gate 1 still failed before real second-device proof
 because the packaged LAN evidence collector hung in its firewall
 enumeration/readback path before writing stdout or JSON. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md).
+Rerun #12 used rebuilt `.23`/`.24` artifacts from merge commit `0a6d4ed` with
+the exact managed-rule LAN collector hardening. It passed USB hash
+verification, extraction, LAN helper Public-profile refusal/consent, LAN env URL
+updates, managed firewall rules, PostgreSQL provisioning/migrations, service
+installation, PostgreSQL SCM `StartName`, ACL readback, API health,
+first-owner setup, browser customer/location/job proof, reboot recovery, and
+post-reboot service/API health. Gate 1 stopped at post-reboot browser login
+because the newly created owner password existed only in transient
+Codex/browser automation state and was unavailable after reboot. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -157,9 +167,13 @@ The remaining clean-machine proofs are still owned by
       validation checked the wrong filter object. Rerun #11 proved the
       address-filter fix through service install, browser work, and reboot
       recovery, then stopped because the packaged LAN evidence collector hung
-      before real second-device login. The remaining Gate 1 gap is packaged LAN
-      evidence plus actual second-device browser login. This gate is also the
-      definition of
+      before real second-device login. Rerun #12 proved the hardened artifact
+      through service install, browser work, reboot recovery, and post-reboot
+      service/API health, then stopped because the first-owner password was not
+      available after reboot. The remaining Gate 1 gap is use of the fixed
+      documented Gate Day dummy credential, post-reboot browser login, packaged
+      LAN evidence, and actual second-device browser login in one strict run. This
+      gate is also the definition of
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.
