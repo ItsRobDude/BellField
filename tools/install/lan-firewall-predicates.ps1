@@ -29,7 +29,18 @@ function Test-RuleProfileApplies {
 
   $neededProfile = if ($NetworkCategory -eq "DomainAuthenticated") { "Domain" } else { $NetworkCategory }
   $text = [string]$RuleProfile
-  return $text -eq "Any" -or ($text -split "[, ]+" | Where-Object { $_ }) -contains $neededProfile
+  $tokens = @($text -split "[, ]+" | Where-Object { $_ })
+  if ($tokens.Count -eq 0) {
+    return $false
+  }
+
+  foreach ($token in $tokens) {
+    if ($token -notin @("Private", "Domain")) {
+      return $false
+    }
+  }
+
+  return $tokens -contains $neededProfile
 }
 
 function Test-PortFilterMatches {
@@ -61,14 +72,12 @@ function Test-PortFilterMatches {
 function Test-RemoteAddressAllowsLocalSubnet {
   param([object]$RemoteAddress)
 
-  foreach ($value in @($RemoteAddress)) {
-    $text = [string]$value
-    if ($text -eq "LocalSubnet") {
-      return $true
-    }
+  $values = @($RemoteAddress | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+  if ($values.Count -ne 1) {
+    return $false
   }
 
-  return $false
+  return $values[0] -eq "LocalSubnet"
 }
 
 function Get-ManagedRulePredicateReadback {

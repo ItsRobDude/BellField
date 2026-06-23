@@ -426,10 +426,10 @@ Read when: preparing or reviewing a gate-day USB hash manifest, patching Windows
 LAN/firewall reachability for the office app/API, or checking which Gate 1 proof
 remains open after rerun 8.
 
-Current follow-up: superseded by reruns 9 and 10. Rerun 9 proved the first
-packaged LAN helper bug, and rerun 10 proved that fix reached the Public-profile
-consent branch before exposing the current firewall effectiveness validation
-bug.
+Current follow-up: superseded by reruns 9, 10, and 11. Rerun 11 proved the LAN
+helper address-filter fix through service install, browser work, and reboot
+recovery, then stopped because packaged LAN evidence collection hung before
+real second-device proof.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or application runtime behavior.
@@ -452,9 +452,10 @@ Read when: patching or reviewing the Windows LAN helper env-reader path,
 checking why the `.17` artifact cannot close Gate 1, or preparing the next
 rebuilt USB.
 
-Current follow-up: superseded by rerun 10. Active `.19`/`.20` artifacts carried
-the blank-line fix and reached the intended Public-profile refusal/consent
-branch, then failed on firewall effective-rule validation.
+Current follow-up: superseded by reruns 10 and 11. Rerun 11 proved the later
+address-filter fix through service install, browser work, and reboot recovery,
+then failed because packaged LAN evidence collection hung before real
+second-device proof.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or long-term network-profile UX.
@@ -480,12 +481,40 @@ Read when: patching or reviewing Windows LAN helper firewall effectiveness
 validation, the LAN evidence collector's firewall readback, or the next rebuilt
 USB after `.19`/`.20`.
 
-Current follow-up: the source fix now uses `Get-NetFirewallAddressFilter` for
-remote-address readback in both the configurator and collector, and
-`pnpm smoke:install-helpers` now behaviorally guards that NetSecurity object
-model. Rebuild artifacts, refresh USB hashes, and rerun Gate 1 from a cleaned
-Windows state; this is still not a passed Gate 1 claim until the fixed artifact
-proves real second-device login.
+Current follow-up: superseded by rerun 11. The `.21` artifact carried the
+address-filter fix and completed the LAN helper consent path, service install,
+first-owner setup, job booking, reboot recovery, and post-reboot login. It then
+failed at packaged LAN evidence collection before real second-device proof.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or long-term network-profile UX.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md)
+
+Audience: contributors checking why the eleventh clean Windows gate-day attempt
+failed after service install, first-owner setup, job booking, and reboot
+recovery had all passed.
+
+Purpose: dated evidence for the eleventh fresh Windows install smoke: active
+artifacts `.21`/`.22` passed USB hash verification and `.21` extracted with
+`tar.exe`; baseline collection, `write-server-config.mjs`, the LAN helper
+Public-profile refusal/consent path, PostgreSQL provisioning, packaged
+migrations, license copy, service rendering/installation, SCM
+`NT SERVICE\bellfield-postgres` readback, ACL readback, API health,
+first-owner setup, browser customer/location/job/appointment proof, reboot
+recovery, and post-reboot browser login all passed. The run then failed because
+`collect-windows-lan-evidence.ps1` hung before writing stdout or JSON, so the
+run stopped before real second-device browser login.
+
+Read when: patching or reviewing the packaged LAN evidence collector,
+NetSecurity firewall enumeration behavior, Gate 1 current proof status, or the
+next rebuilt USB after `.21`/`.22`.
+
+Current follow-up: patch the LAN collector to use exact managed BellField rule
+readback for the required `effectiveLanAccess` evidence, bound or skip broad
+firewall enumeration, emit progress markers, and write partial JSON on failure.
+Gate 1 is still not passed until packaged LAN evidence and real second-device
+login complete on a cleaned Windows state.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or long-term network-profile UX.

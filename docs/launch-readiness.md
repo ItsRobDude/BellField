@@ -131,9 +131,18 @@ branch. After explicit operator consent it changed Wi-Fi to Private and created
 the expected TCP `3000`/`3001` LocalSubnet rules, but failed its own
 effective-rule validation before PostgreSQL provisioning because the helper
 appears to read remote address from the port filter instead of the address
-filter. The source now patches configurator/collector address-filter readback
-and adds a behavioral helper-smoke guard; the path still needs a rebuilt
-artifact and clean Windows proof with a real second-device login.
+filter. Rerun #11 used rebuilt `.21`/`.22` artifacts from merge commit
+`8154dc8` with the address-filter fix. It passed USB hash verification,
+extraction, LAN helper Public-profile refusal/consent, LAN env URL updates,
+managed firewall rule creation/effectiveness validation, PostgreSQL
+provisioning, packaged migrations, license copy, service rendering and
+installation, PostgreSQL SCM `StartName` readback as
+`NT SERVICE\bellfield-postgres`, ACL readback, API health, first-owner setup,
+browser customer/location/job/appointment proof, reboot recovery, and
+post-reboot browser login. Gate 1 still failed before real second-device proof
+because the packaged LAN evidence collector hung in its firewall
+enumeration/readback path before writing stdout or JSON. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -145,10 +154,12 @@ The remaining clean-machine proofs are still owned by
       helper could not read generated env files with blank separator lines.
       Rerun #10 reached the Public-profile consent branch and created the
       expected firewall rules, then stopped because firewall effectiveness
-      validation checked the wrong filter object. The source has the
-      address-filter fix and helper-smoke guard, but the remaining Gate 1 gap is
-      proving the fixed packaged LAN/firewall path from another device. This
-      gate is also the definition of
+      validation checked the wrong filter object. Rerun #11 proved the
+      address-filter fix through service install, browser work, and reboot
+      recovery, then stopped because the packaged LAN evidence collector hung
+      before real second-device login. The remaining Gate 1 gap is packaged LAN
+      evidence plus actual second-device browser login. This gate is also the
+      definition of
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.

@@ -199,24 +199,17 @@ function Get-EffectiveLanAccess {
     [int]$ApiPort
   )
 
+  $reasons = @()
+  $category = "Unknown"
   if (-not $ActiveProfile) {
-    return @{
-      effectiveLanAccess = $false
-      effectiveLanAccessReasons = @("selected LAN profile could not be determined")
-      managedRuleReadback = @()
+    $reasons += "selected LAN profile could not be determined"
+  } elseif ($ActiveProfile.ok -eq $false) {
+    $reasons += "selected LAN profile readback failed: $($ActiveProfile.error)"
+  } else {
+    $category = [string]$ActiveProfile.NetworkCategory
+    if (-not $category) {
+      $category = "Unknown"
     }
-  }
-  if ($ActiveProfile.ok -eq $false) {
-    return @{
-      effectiveLanAccess = $false
-      effectiveLanAccessReasons = @("selected LAN profile readback failed: $($ActiveProfile.error)")
-      managedRuleReadback = @()
-    }
-  }
-
-  $category = [string]$ActiveProfile.NetworkCategory
-  if (-not $category) {
-    $category = "Unknown"
   }
 
   # Exact managed-rule readback only. Get-ManagedRulePredicateReadback reads by
@@ -227,7 +220,6 @@ function Get-EffectiveLanAccess {
   $officeOk = Test-RuleReadbackEffective -Readbacks $officeReadbacks
   $apiOk = Test-RuleReadbackEffective -Readbacks $apiReadbacks
 
-  $reasons = @()
   if ($category -notin @("Private", "DomainAuthenticated")) {
     $reasons += "selected network profile is $category; BellField managed rules apply to Private/Domain only"
   }

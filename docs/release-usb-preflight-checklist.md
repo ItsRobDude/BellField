@@ -99,7 +99,10 @@ does not replace the clean-machine run.
       wired into the installer failure path. After rerun #10, this smoke must
       also prove LAN configurator/collector firewall effectiveness checks use
       `Get-NetFirewallAddressFilter` for `RemoteAddress`, not
-      `Get-NetFirewallPortFilter`.
+      `Get-NetFirewallPortFilter`. After rerun #11, it must also prove the LAN
+      evidence collector reads the exact BellField-managed rules first, bounds
+      or degrades broad firewall enumeration, and writes useful JSON evidence
+      instead of hanging without output.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
       `bellfield-postgres.xml` does not contain `<serviceaccount>`, the service
       log paths remain outside the manifest directory, and

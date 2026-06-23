@@ -547,6 +547,9 @@ function runPowerShellLanFirewallCorpus() {
   const predicatesPath = quotePowerShellString(
     resolve('tools/install/lan-firewall-predicates.ps1')
   );
+  const collectorPath = quotePowerShellString(
+    resolve('tools/install/collect-windows-lan-evidence.ps1')
+  );
   const script = `
 $ErrorActionPreference = "Stop"
 $tokens = $null
@@ -576,8 +579,27 @@ foreach ($function in $functions) {
   Invoke-Expression $function.Extent.Text
 }
 
+$collectorTokens = $null
+$collectorErrors = $null
+$collectorAst = [System.Management.Automation.Language.Parser]::ParseFile(${collectorPath}, [ref]$collectorTokens, [ref]$collectorErrors)
+if ($collectorErrors -and $collectorErrors.Count -gt 0) {
+  throw "Failed to parse collect-windows-lan-evidence.ps1"
+}
+$collectorFunction = $collectorAst.Find({
+  param($node)
+  $node -is [System.Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq "Get-EffectiveLanAccess"
+}, $true)
+if (-not $collectorFunction) {
+  throw "Missing collector function Get-EffectiveLanAccess"
+}
+Invoke-Expression $collectorFunction.Extent.Text
+
 $script:RuleName = "BellField-Office-Web-TCP-Inbound"
 $script:RuleDisplayName = "BellField Office Web TCP Inbound"
+$officeFirewallRuleName = "BellField-Office-Web-TCP-Inbound"
+$apiFirewallRuleName = "BellField-API-TCP-Inbound"
+$officeFirewallRuleDisplayName = "BellField Office Web TCP Inbound"
+$apiFirewallRuleDisplayName = "BellField API TCP Inbound"
 $script:FirewallRules = @()
 $script:PortFilters = @{}
 $script:AddressFilters = @{}
@@ -640,6 +662,47 @@ function Set-FirewallCase {
   }
 }
 
+function Set-OfficeApiFirewallCase {
+  $script:FirewallRules = @(
+    [pscustomobject]@{
+      Name = $officeFirewallRuleName
+      DisplayName = $officeFirewallRuleDisplayName
+      Enabled = "True"
+      Action = "Allow"
+      Direction = "Inbound"
+      Profile = "Private, Domain"
+    },
+    [pscustomobject]@{
+      Name = $apiFirewallRuleName
+      DisplayName = $apiFirewallRuleDisplayName
+      Enabled = "True"
+      Action = "Allow"
+      Direction = "Inbound"
+      Profile = "Private, Domain"
+    }
+  )
+  $script:PortFilters = @{
+    $officeFirewallRuleName = @([pscustomobject]@{
+      Protocol = "TCP"
+      LocalPort = "3000"
+    })
+    $apiFirewallRuleName = @([pscustomobject]@{
+      Protocol = "TCP"
+      LocalPort = "3001"
+    })
+  }
+  $script:AddressFilters = @{
+    $officeFirewallRuleName = @([pscustomobject]@{
+      LocalAddress = "Any"
+      RemoteAddress = "LocalSubnet"
+    })
+    $apiFirewallRuleName = @([pscustomobject]@{
+      LocalAddress = "Any"
+      RemoteAddress = "LocalSubnet"
+    })
+  }
+}
+
 function Assert-Effective {
   param(
     [string]$CaseName,
@@ -659,6 +722,12 @@ Assert-Effective -CaseName "happy path" -Expected $true
 
 Set-FirewallCase -Profile "Domain"
 Assert-Effective -CaseName "domain profile" -Expected $true -NetworkCategory "DomainAuthenticated"
+
+Set-FirewallCase -Profile "Any"
+Assert-Effective -CaseName "any profile" -Expected $false
+
+Set-FirewallCase -Profile "Public,Private"
+Assert-Effective -CaseName "public plus private profile" -Expected $false
 
 Set-FirewallCase -LocalPort "3002"
 Assert-Effective -CaseName "wrong port" -Expected $false
@@ -681,12 +750,26 @@ Assert-Effective -CaseName "overbroad remote address" -Expected $false
 Set-FirewallCase -RemoteAddress "Any, LocalSubnet"
 Assert-Effective -CaseName "combined remote address" -Expected $false
 
+Set-FirewallCase -RemoteAddress @("Any", "LocalSubnet")
+Assert-Effective -CaseName "combined remote address array" -Expected $false
+
 Set-FirewallCase -DisplayName "Unexpected BellField Rule"
 Assert-Effective -CaseName "wrong display name" -Expected $false
 
 Set-FirewallCase
 $script:FirewallRules = @()
 Assert-Effective -CaseName "missing rule" -Expected $false
+
+Set-OfficeApiFirewallCase
+$missingProfileResult = Get-EffectiveLanAccess -ActiveProfile $null -OfficePort 3000 -ApiPort 3001
+if ($missingProfileResult.effectiveLanAccess -ne $false -or @($missingProfileResult.managedRuleReadback).Count -lt 2) {
+  throw "Missing active profile did not preserve exact managed rule readback: $($missingProfileResult | ConvertTo-Json -Depth 8)"
+}
+
+$failedProfileResult = Get-EffectiveLanAccess -ActiveProfile @{ ok = $false; error = "profile unavailable" } -OfficePort 3000 -ApiPort 3001
+if ($failedProfileResult.effectiveLanAccess -ne $false -or @($failedProfileResult.managedRuleReadback).Count -lt 2) {
+  throw "Failed active profile did not preserve exact managed rule readback: $($failedProfileResult | ConvertTo-Json -Depth 8)"
+}
 
 Write-Host "PowerShell LAN firewall corpus passed"
 `;
@@ -709,7 +792,7 @@ Write-Host "PowerShell LAN firewall corpus passed"
     );
   }
 
-  return { command, cases: 11 };
+  return { command, cases: 16 };
 }
 
 function findPowerShellCommand() {

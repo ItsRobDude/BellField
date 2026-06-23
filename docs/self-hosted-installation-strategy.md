@@ -228,9 +228,15 @@ consent it changed Wi-Fi to Private and created the expected TCP `3000`/`3001`
 LocalSubnet rules, but stopped before PostgreSQL provisioning because the helper
 appears to validate `RemoteAddress` from the port filter instead of the address
 filter. The source now patches the configurator/collector readback and adds a
-helper-smoke guard for the NetSecurity object model. Gate 1 still needs a
-rebuilt artifact and clean-machine rerun proving firewall/profile readback, LAN
-env URL updates, and real second-device access through the fixed path.
+helper-smoke guard for the NetSecurity object model. The eleventh attempt used
+rebuilt `.21`/`.22` artifacts from merge commit `8154dc8` and proved the
+address-filter fix through LAN env URL updates, managed firewall rule
+validation, PostgreSQL provisioning/migrations, service installation, API
+health, first-owner setup, browser job/appointment proof, reboot recovery, and
+post-reboot login. Gate 1 still failed before real second-device proof because
+the packaged LAN evidence collector hung while reading firewall evidence and
+wrote no JSON. Gate 1 now needs a collector hardening patch plus a cleaned
+rerun proving packaged LAN evidence and real second-device access.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

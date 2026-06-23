@@ -43,10 +43,11 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #8 has
+  job booking, reboot survival, and second-device access. Rerun #11 has
   clean-machine install, service registration/stability, ACL, API-health,
   first-owner setup, job booking, reboot recovery, and post-reboot login
-  evidence, but second-device LAN access still failed.
+  evidence, but packaged LAN evidence collection hung before second-device LAN
+  access could be attempted.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
   backup set
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
@@ -58,21 +59,19 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Deepest clean-machine install evidence remains run #8 on 2026-06-21: rebuilt
-artifacts with the first-owner SQL fix and packaged first-owner release-smoke
-proof completed clean extraction, server config, PostgreSQL provisioning,
-packaged migrations, license placement, service rendering, elevated service
-installation, packaged service evidence collection, API `/health`, browser
-first-owner setup, browser job booking, reboot recovery, and post-reboot login
-after a USB hash-manifest correction. `bellfield-postgres` read back as
-`NT SERVICE\bellfield-postgres`, all four services stayed running, and the
-PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 then failed
-at second-device LAN proof: two same-Wi-Fi devices timed out against
-`http://192.168.50.131:3000`, while the installed PC could reach its own LAN IP
-for office web and API health, and no explicit BellField/Node/3000/3001 inbound
-firewall rule was found.
-See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md).
+Deepest clean-machine install evidence is now run #11 on 2026-06-22/23:
+rebuilt artifacts with the LAN address-filter fix completed clean extraction,
+server config, LAN helper Public-profile refusal/consent, LAN env URL updates,
+managed firewall rule creation/effectiveness validation, PostgreSQL
+provisioning, packaged migrations, license placement, service rendering,
+elevated service installation, packaged service evidence collection, API
+`/health`, browser first-owner setup, browser customer/location/job/appointment
+proof, reboot recovery, and post-reboot login. `bellfield-postgres` read back
+as `NT SERVICE\bellfield-postgres`, all four services stayed running, and
+elevated PostgreSQL ACL readbacks matched the intended narrow model. Gate 1
+then failed before second-device proof because the packaged LAN evidence
+collector hung while reading firewall evidence and wrote no JSON. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md).
 PR #68 added a packaged LAN access helper that configures LAN-safe office/API
 URLs and exact BellField-managed Private/Domain LocalSubnet firewall rules for
 office/API ports only. Rerun #9 proved hash verification, extraction, baseline
@@ -85,8 +84,11 @@ the expected TCP `3000`/`3001` LocalSubnet rules, but failed before PostgreSQL
 provisioning because the helper appears to validate `RemoteAddress` from the
 port filter instead of the address filter. The source now patches that
 configurator/collector readback and adds a helper-smoke guard for the
-NetSecurity object model, but this is not a passed Gate 1 claim until a rebuilt
-artifact completes a clean-machine rerun and proves real second-device login.
+NetSecurity object model. Rerun #11 proved that fix in the packaged artifact
+and advanced through service install, browser work, and reboot recovery, but
+the packaged LAN evidence collector hung before real second-device login. This
+is still not a passed Gate 1 claim until the collector writes evidence and a
+real second-device login succeeds.
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 
