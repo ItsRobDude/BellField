@@ -21,6 +21,7 @@ try {
     baselineCollector: readRequired('tools/install/collect-windows-install-baseline.ps1'),
     lanCollector: readRequired('tools/install/collect-windows-lan-evidence.ps1'),
     lanConfigurator: readRequired('tools/install/configure-windows-lan-access.ps1'),
+    lanPredicates: readRequired('tools/install/lan-firewall-predicates.ps1'),
     lanCleanup: readRequired('tools/install/remove-windows-lan-access.ps1'),
     migrationHelper: readRequired('tools/install/run-packaged-migrations.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
@@ -168,14 +169,41 @@ try {
     includesAll(files.lanConfigurator, ['BELLFIELD_OFFICE_WEB_PORT', 'BELLFIELD_API_PORT'])
   );
   check(
-    'LAN helpers read remote firewall scope from address filters',
-    files.lanConfigurator.includes('Get-NetFirewallAddressFilter') &&
-      files.lanCollector.includes('Get-NetFirewallAddressFilter')
+    'LAN configurator and collector dot-source the shared firewall predicate helper',
+    files.lanConfigurator.includes('lan-firewall-predicates.ps1') &&
+      files.lanConfigurator.includes('. $lanPredicatesHelper') &&
+      files.lanCollector.includes('lan-firewall-predicates.ps1') &&
+      files.lanCollector.includes('. $lanPredicatesHelper')
+  );
+  check(
+    'shared firewall predicate helper centralizes managed rule constants and readback',
+    includesAll(files.lanPredicates, [
+      '$bellFieldFirewallGroup = "BellField"',
+      'BellField-Office-Web-TCP-Inbound',
+      'BellField-API-TCP-Inbound',
+      'BellField Office Web TCP Inbound',
+      'BellField API TCP Inbound',
+      'function Test-RuleProfileApplies',
+      'function Test-PortFilterMatches',
+      'function Test-RemoteAddressAllowsLocalSubnet',
+      'function Get-ManagedRulePredicateReadback',
+      'function Test-RuleReadbackEffective',
+      'function Test-ManagedRuleEffective'
+    ])
+  );
+  check(
+    'shared firewall predicate helper reads remote scope from address filters',
+    files.lanPredicates.includes('Get-NetFirewallAddressFilter')
   );
   check(
     'LAN helpers do not read remote firewall scope from port filters',
     !files.lanConfigurator.includes('$portFilter.RemoteAddress') &&
-      !files.lanCollector.includes('$portFilter.RemoteAddress')
+      !files.lanCollector.includes('$portFilter.RemoteAddress') &&
+      !files.lanPredicates.includes('$portFilter.RemoteAddress')
+  );
+  check(
+    'shared firewall predicate helper never enumerates all inbound rules',
+    !files.lanPredicates.includes('-Direction Inbound')
   );
   const powershellLanEnvLineResult = runPowerShellLanEnvLineCorpus();
   check(
@@ -205,13 +233,8 @@ try {
     !files.lanConfigurator.includes('5432') && !files.lanCleanup.includes('5432')
   );
   check(
-    'LAN access configurator uses stable managed firewall names and group',
+    'LAN access configurator creates managed rules with LAN-safe firewall flags',
     includesAll(files.lanConfigurator, [
-      '$bellFieldFirewallGroup = "BellField"',
-      'BellField-Office-Web-TCP-Inbound',
-      'BellField-API-TCP-Inbound',
-      'BellField Office Web TCP Inbound',
-      'BellField API TCP Inbound',
       '-Name $officeFirewallRuleName',
       '-Name $apiFirewallRuleName',
       'RemoteAddress LocalSubnet',
@@ -242,11 +265,9 @@ try {
     'LAN access configurator proves rule effectiveness for the active profile',
     includesAll(files.lanConfigurator, [
       'Assert-BellFieldLanAccessEffective',
-      'Test-RuleProfileApplies',
-      'Test-ManagedRuleEffective',
-      'DomainAuthenticated',
-      'RemoteAddress',
-      'LocalSubnet'
+      'Get-ManagedRulePredicateReadback',
+      'Test-RuleReadbackEffective',
+      'DomainAuthenticated'
     ])
   );
   check(
@@ -271,27 +292,24 @@ try {
       !files.lanCollector.includes('Set-NetConnectionProfile')
   );
   check(
-    'LAN collector captures listeners, local URL checks, and firewall readback',
-    includesAll(files.lanCollector, [
-      'Get-NetTCPConnection',
-      'Invoke-WebRequest',
-      'Get-NetFirewallRule',
-      'Get-NetFirewallPortFilter',
-      'Get-NetFirewallApplicationFilter'
-    ])
+    'LAN collector captures listeners and local-origin URL checks',
+    includesAll(files.lanCollector, ['Get-NetTCPConnection', 'Invoke-WebRequest'])
   );
   check(
-    'LAN collector reports effective managed firewall access separately from rule existence',
+    'LAN collector reads firewall state only through the shared exact-name readback',
+    files.lanCollector.includes('Get-ManagedRulePredicateReadback') &&
+      files.lanCollector.includes('Test-RuleReadbackEffective') &&
+      !files.lanCollector.includes('-Direction Inbound')
+  );
+  check(
+    'LAN collector reports effective managed firewall access with honest scope',
     includesAll(files.lanCollector, [
       'effectiveLanAccess',
       'effectiveLanAccessReasons',
       'activeNetworkProfile',
-      'BellField-Office-Web-TCP-Inbound',
-      'BellField-API-TCP-Inbound',
-      'BellField Office Web TCP Inbound',
-      'BellField API TCP Inbound',
-      'Test-RuleProfileApplies',
-      'LocalSubnet'
+      'firewallReadbackScope = "bellfield-managed-rules"',
+      '$officeFirewallRuleName',
+      '$apiFirewallRuleName'
     ])
   );
   check(
@@ -308,9 +326,19 @@ try {
       'candidateIpv4Addresses = @($candidates)',
       'listeners = @(Get-Listeners -Ports $ports)',
       'localOriginUrlChecks = @($localOriginChecks)',
-      '$firewallRules = @(Get-FirewallReadback -Ports $ports)',
-      'inboundFirewallRules = @($firewallRules)',
-      'effectiveLanAccessReasons = @($effectiveLanAccess.effectiveLanAccessReasons)'
+      'inboundFirewallRules = @($effective.managedRuleReadback)',
+      'effectiveLanAccessReasons = @($effective.effectiveLanAccessReasons)'
+    ])
+  );
+  check(
+    'LAN collector writes progress markers and partial JSON with a terminal status',
+    includesAll(files.lanCollector, [
+      'function Add-LanEvidenceStep',
+      'function Save-LanEvidence',
+      'Save-LanEvidence -Status "started"',
+      'Save-LanEvidence -Status "completed"',
+      'Save-LanEvidence -Status "failed"',
+      'exit 1'
     ])
   );
 
@@ -516,16 +544,16 @@ function runPowerShellLanFirewallCorpus() {
     return { skipped: true, reason: 'PowerShell not available on this platform' };
   }
 
-  const configuratorPath = quotePowerShellString(
-    resolve('tools/install/configure-windows-lan-access.ps1')
+  const predicatesPath = quotePowerShellString(
+    resolve('tools/install/lan-firewall-predicates.ps1')
   );
   const script = `
 $ErrorActionPreference = "Stop"
 $tokens = $null
 $errors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile(${configuratorPath}, [ref]$tokens, [ref]$errors)
+$ast = [System.Management.Automation.Language.Parser]::ParseFile(${predicatesPath}, [ref]$tokens, [ref]$errors)
 if ($errors -and $errors.Count -gt 0) {
-  throw "Failed to parse configure-windows-lan-access.ps1"
+  throw "Failed to parse lan-firewall-predicates.ps1"
 }
 $wanted = @(
   "Test-RuleProfileApplies",
@@ -555,7 +583,10 @@ $script:PortFilters = @{}
 $script:AddressFilters = @{}
 
 function Get-NetFirewallRule {
-  param([string]$Name, [object]$ErrorAction)
+  param([string]$Name, [string]$Direction, [object]$ErrorAction)
+  if ($Direction) {
+    throw "Broad Get-NetFirewallRule -Direction enumeration is not allowed in the managed readback path"
+  }
   return @($script:FirewallRules | Where-Object { $_.Name -eq $Name })
 }
 
@@ -653,6 +684,10 @@ Assert-Effective -CaseName "combined remote address" -Expected $false
 Set-FirewallCase -DisplayName "Unexpected BellField Rule"
 Assert-Effective -CaseName "wrong display name" -Expected $false
 
+Set-FirewallCase
+$script:FirewallRules = @()
+Assert-Effective -CaseName "missing rule" -Expected $false
+
 Write-Host "PowerShell LAN firewall corpus passed"
 `;
   const result = spawnSync(
@@ -674,7 +709,7 @@ Write-Host "PowerShell LAN firewall corpus passed"
     );
   }
 
-  return { command, cases: 10 };
+  return { command, cases: 11 };
 }
 
 function findPowerShellCommand() {
