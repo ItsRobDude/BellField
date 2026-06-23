@@ -171,6 +171,20 @@ Validated on the development machine:
   browser proof because the packaged LAN evidence collector hung while reading
   firewall evidence and wrote no stdout or JSON. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md)
+- twelfth clean Windows gate-day attempt ran on 2026-06-23 with active
+  `.23`/`.24` artifacts from source commit `0a6d4ed`. USB hash verification,
+  `.23` extraction, packaged baseline collection, LAN helper Public-profile
+  refusal, explicit trusted-LAN consent, Private profile readback, BellField
+  firewall rule creation, LAN env URL updates, PostgreSQL provisioning,
+  packaged migrations, license placement, service rendering, elevated service
+  installation, PostgreSQL SCM `StartName`, ACL readback, packaged service
+  evidence collection, installer service stability, API `/health`, browser
+  first-owner setup, browser customer/location/job proof, reboot recovery, and
+  post-reboot service/API health all passed. Gate 1 stopped at post-reboot
+  browser login because the newly created owner password existed only in
+  transient Codex/browser automation state and was unavailable after reboot. The
+  run did not reach packaged LAN evidence or real second-device login. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -192,7 +206,7 @@ Validated on the development machine:
 Not yet validated in this repo:
 
 - successful clean Windows machine install with no developer tooling through
-  second-device LAN access
+  post-reboot login and second-device LAN access in one strict run
 - a green run of the packaged service-account diagnostic (supporting preflight
   evidence only, not the gate; now uses corrected virtual-account proof criteria)
 - Windows LAN/firewall reachability for a second office desktop; rerun #8
@@ -203,9 +217,14 @@ Not yet validated in this repo:
   Public-profile consent branch but stopped because firewall effective-rule
   validation checked remote address on the wrong filter object; rerun #11 proved
   the address-filter fix through service install, first-owner setup, browser
-  job/appointment proof, reboot recovery, and post-reboot login. Gate 1 now
-  needs a collector hardening patch, rebuilt artifacts, and a cleaned-machine
-  run that writes packaged LAN evidence and proves real second-device login
+  job/appointment proof, reboot recovery, and post-reboot login but stopped
+  when the packaged LAN evidence collector hung; rerun #12 used the hardened
+  exact-rule collector artifact and proved service install, browser owner setup,
+  job booking, reboot recovery, and post-reboot service/API health, but stopped
+  before post-reboot browser login because the test owner password was only in
+  transient automation state. Gate 1 now needs the fixed documented Gate Day
+  dummy credential plus a cleaned-machine run that reaches post-reboot login,
+  writes packaged LAN evidence, and proves real second-device login
 - Android field-device proof
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
@@ -609,6 +628,27 @@ device. Do not navigate the office browser directly to
 is the API endpoint, not an office-web route. Paste the token into the setup
 form and create the first owner account.
 
+For a disposable Gate Day scratch-machine run that includes reboot and
+post-reboot login proof, create the owner through the real browser setup flow
+with this fixed test-only credential:
+
+```text
+Display name: Gate Day Owner
+Email: gate.owner@example.com
+Password: BellFieldGateDay!2026
+```
+
+This credential is intentionally public and non-production. It gives Codex a
+durable login source before and after reboot without bypassing the first-owner
+setup UI. Do not use this credential for customer installs, generated database
+passwords, relay credentials, license files, or any production secret. Prefer
+recording `used documented Gate Day dummy credential: yes` instead of echoing
+the password into evidence logs. If the exact dummy password appears in
+evidence, treat it as an allowlisted test value; any non-dummy owner password,
+setup token, database URL, relay token, or generated secret remains a hygiene
+failure. Rerun #12 stopped at post-reboot login because the owner password only
+existed in transient Codex/browser automation state.
+
 After service ACL hardening, non-elevated shells may not be able to read service
 logs or PostgreSQL paths. If setup-token metadata, startup errors, or ACL
 readbacks are needed for evidence, capture them from an elevated read-only
@@ -661,15 +701,17 @@ packaged read-only LAN evidence before trying the second device:
 ```
 
 The collector records network profiles, candidate/chosen LAN IP, listeners for
-the office/API ports, local-origin installed-PC LAN URL checks, inbound firewall
-rule/port-filter readback, and `effectiveLanAccess` reasons. Its URL checks are
-labeled `origin = "installed-pc"` and `provesRemoteReachability = false`; they
-prove local binding behavior only. The collector does not create firewall rules,
-change the network profile, or replace the actual second-device login proof.
-Rerun #11 showed the packaged collector can hang while enumerating firewall
-evidence before writing JSON; until that collector is hardened, a hang here is a
-known gate blocker. Stop the strict gate and record the timeout rather than
-skipping evidence and claiming second-device readiness.
+the office/API ports, local-origin installed-PC LAN URL checks, exact
+BellField-managed firewall rule readback, and `effectiveLanAccess` reasons. Its
+URL checks are labeled `origin = "installed-pc"` and
+`provesRemoteReachability = false`; they prove local binding behavior only. The
+collector does not create firewall rules, change the network profile, or replace
+the actual second-device login proof. Rerun #11 showed the older packaged
+collector could hang while enumerating broad firewall evidence; rerun #12 used
+the exact-rule collector artifact but stopped before this checkpoint because the
+post-reboot owner credential only existed in transient automation state. The
+next strict run must use the fixed documented Gate Day dummy credential and
+still capture this collector output before attempting second-device login.
 
 Then open `http://<scratch-lan-ip>:3000` from the second device and log in.
 Only a real second-device login closes the Gate 1 LAN proof. If

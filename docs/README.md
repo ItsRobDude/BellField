@@ -426,10 +426,11 @@ Read when: preparing or reviewing a gate-day USB hash manifest, patching Windows
 LAN/firewall reachability for the office app/API, or checking which Gate 1 proof
 remains open after rerun 8.
 
-Current follow-up: superseded by reruns 9, 10, and 11. Rerun 11 proved the LAN
-helper address-filter fix through service install, browser work, and reboot
-recovery, then stopped because packaged LAN evidence collection hung before
-real second-device proof.
+Current follow-up: superseded by reruns 9, 10, 11, and 12. Rerun 12 proved the
+hardened installer artifact through service install, browser work, reboot
+recovery, and post-reboot service/API health, then stopped because the
+first-owner password existed only in transient Codex/browser automation state
+and was unavailable after reboot.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or application runtime behavior.
@@ -452,10 +453,11 @@ Read when: patching or reviewing the Windows LAN helper env-reader path,
 checking why the `.17` artifact cannot close Gate 1, or preparing the next
 rebuilt USB.
 
-Current follow-up: superseded by reruns 10 and 11. Rerun 11 proved the later
-address-filter fix through service install, browser work, and reboot recovery,
-then failed because packaged LAN evidence collection hung before real
-second-device proof.
+Current follow-up: superseded by reruns 10, 11, and 12. Rerun 12 proved the
+hardened installer artifact through service install, browser work, reboot
+recovery, and post-reboot service/API health, then stopped because the
+first-owner password existed only in transient Codex/browser automation state
+and was unavailable after reboot.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or long-term network-profile UX.
@@ -481,10 +483,12 @@ Read when: patching or reviewing Windows LAN helper firewall effectiveness
 validation, the LAN evidence collector's firewall readback, or the next rebuilt
 USB after `.19`/`.20`.
 
-Current follow-up: superseded by rerun 11. The `.21` artifact carried the
-address-filter fix and completed the LAN helper consent path, service install,
-first-owner setup, job booking, reboot recovery, and post-reboot login. It then
-failed at packaged LAN evidence collection before real second-device proof.
+Current follow-up: superseded by reruns 11 and 12. Rerun 12 used the rebuilt
+`.23` artifact with the exact-rule LAN collector hardening and completed the
+install, first-owner setup, job booking, reboot, and post-reboot service/API
+health proof. It stopped before packaged LAN evidence and real second-device
+proof because the test owner password existed only in transient Codex/browser
+automation state and was unavailable after reboot.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or long-term network-profile UX.
@@ -510,14 +514,40 @@ Read when: patching or reviewing the packaged LAN evidence collector,
 NetSecurity firewall enumeration behavior, Gate 1 current proof status, or the
 next rebuilt USB after `.21`/`.22`.
 
-Current follow-up: patch the LAN collector to use exact managed BellField rule
-readback for the required `effectiveLanAccess` evidence, bound or skip broad
-firewall enumeration, emit progress markers, and write partial JSON on failure.
-Gate 1 is still not passed until packaged LAN evidence and real second-device
-login complete on a cleaned Windows state.
+Current follow-up: superseded by rerun 12. The LAN collector was patched to use
+exact managed BellField rule readback and the `.23` artifact installed cleanly,
+but rerun 12 stopped before packaged LAN evidence because the post-reboot login
+credential existed only in transient Codex/browser automation state.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or long-term network-profile UX.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md)
+
+Audience: contributors checking why the twelfth clean Windows gate-day attempt
+stopped after the install and reboot recovery had all passed.
+
+Purpose: dated evidence for the twelfth fresh Windows install smoke: active
+artifacts `.23`/`.24` passed USB hash verification and `.23` extracted with
+`tar.exe`; baseline collection, `write-server-config.mjs`, the LAN helper
+Public-profile refusal/consent path, PostgreSQL provisioning, packaged
+migrations, license copy, service rendering/installation, SCM
+`NT SERVICE\bellfield-postgres` readback, ACL readback, API health,
+first-owner setup, browser customer/location/job proof, reboot recovery, and
+post-reboot service/API health all passed. The run stopped at post-reboot
+browser login because the newly created owner password existed only in
+transient Codex/browser automation state, which did not survive reboot.
+
+Read when: updating Gate 1 operator protocol, reviewing the deepest current
+clean-machine install proof, or preparing the next rerun after `.23`/`.24`.
+
+Current follow-up: use the documented fixed dummy Gate Day owner credential in
+the real first-owner setup UI, then rerun from a cleaned Windows state. Gate 1
+is still not passed until post-reboot login, packaged LAN evidence, and real
+second-device login complete in one strict run.
+
+Does not own: the install recipe (`install-runbook.md`), the gate sequence
+(`gate-day-checklist.md`), or product account-recovery design.
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 

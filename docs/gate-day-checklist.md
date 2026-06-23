@@ -296,6 +296,23 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   URL/API URL is accepted; do not navigate directly to
   `http://localhost:3000/identity/setup/first-owner`, because
   `/identity/setup/first-owner` is the API endpoint, not an office-web route.
+  For disposable Gate Day scratch-machine runs, create the owner through the
+  real browser setup flow with this fixed test-only credential:
+
+  ```text
+  Display name: Gate Day Owner
+  Email: gate.owner@example.com
+  Password: BellFieldGateDay!2026
+  ```
+
+  This credential is intentionally public and non-production so Codex can reuse
+  it after reboot. Do not use it for customer installs, database credentials,
+  relay credentials, licenses, or any other secret. Prefer recording `used
+documented Gate Day dummy credential: yes` instead of echoing the password
+  into evidence logs; if the exact dummy password appears in evidence, treat it
+  as an allowlisted test value, not a hygiene blocker. Rerun #12 proved that
+  relying on Codex/browser automation memory as the only copy loses the
+  post-reboot login proof.
 
 - [ ] `Invoke-RestMethod http://localhost:3001/health` → `status: "ok"`.
 - [ ] **Real office work in the browser:** create a customer, book a job,
@@ -317,14 +334,15 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       `http://<scratch-lan-ip>:3001/health`, inbound firewall rule readback,
       and `effectiveLanAccess`. The helper's URL checks do not prove remote
       reachability; then open the office app from another machine on the LAN and
-      log in. If `effectiveLanAccess` is false, or local LAN-IP checks pass but
-      the external device times out, stop the strict gate and record the
-      firewall/profile evidence. If the collector hangs before producing JSON,
-      stop the strict gate and record that timeout; rerun #11 showed this is a
-      source/package blocker, not a valid substitute for second-device proof.
-      Actual second-device login is the only authoritative pass. (Android
-      field-device proof is a stretch goal - record it if attempted, it is
-      tracked debt either way.)
+      log in. If `effectiveLanAccess` is false, the collector hangs before
+      producing JSON, or local LAN-IP checks pass but the external device times
+      out, stop the strict gate and record the firewall/profile evidence. Rerun
+      #11 showed why skipping collector output creates false confidence; rerun
+      #12 stopped before this checkpoint because the post-reboot owner credential
+      only existed in transient automation state. Actual second-device login is
+      the only authoritative pass.
+      (Android field-device proof is a stretch goal - record it if attempted,
+      it is tracked debt either way.)
 
 ---
 

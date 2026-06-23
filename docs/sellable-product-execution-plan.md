@@ -43,11 +43,13 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #11 has
+  job booking, reboot survival, and second-device access. Rerun #12 has
   clean-machine install, service registration/stability, ACL, API-health,
-  first-owner setup, job booking, reboot recovery, and post-reboot login
-  evidence, but packaged LAN evidence collection hung before second-device LAN
-  access could be attempted.
+  first-owner setup, job booking, reboot recovery, and post-reboot service/API
+  health evidence, but the first-owner password existed only in transient
+  Codex/browser automation state and was unavailable after reboot. Post-reboot
+  browser login, packaged LAN evidence, and second-device LAN access were not
+  attempted.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
   backup set
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
@@ -59,19 +61,20 @@ session:
 
 These must all be performed and dated before the first sold install or pilot.
 
-Deepest clean-machine install evidence is now run #11 on 2026-06-22/23:
-rebuilt artifacts with the LAN address-filter fix completed clean extraction,
-server config, LAN helper Public-profile refusal/consent, LAN env URL updates,
-managed firewall rule creation/effectiveness validation, PostgreSQL
-provisioning, packaged migrations, license placement, service rendering,
-elevated service installation, packaged service evidence collection, API
-`/health`, browser first-owner setup, browser customer/location/job/appointment
-proof, reboot recovery, and post-reboot login. `bellfield-postgres` read back
-as `NT SERVICE\bellfield-postgres`, all four services stayed running, and
-elevated PostgreSQL ACL readbacks matched the intended narrow model. Gate 1
-then failed before second-device proof because the packaged LAN evidence
-collector hung while reading firewall evidence and wrote no JSON. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md).
+Deepest clean-machine install evidence is now run #12 on 2026-06-23: rebuilt
+artifacts with exact managed-rule LAN collector hardening completed clean
+extraction, server config, LAN helper Public-profile refusal/consent, LAN env
+URL updates, managed firewall rule creation, PostgreSQL provisioning, packaged
+migrations, license placement, service rendering, elevated service
+installation, packaged service evidence collection, API `/health`, browser
+first-owner setup, browser customer/location/job proof, reboot recovery, and
+post-reboot service/API health. `bellfield-postgres` read back as
+`NT SERVICE\bellfield-postgres`, all four services stayed running, and elevated
+PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 stopped at
+post-reboot browser login because the test owner password existed only in
+transient Codex/browser automation state and was unavailable after reboot.
+Packaged LAN evidence and real second-device proof were not reached. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md).
 PR #68 added a packaged LAN access helper that configures LAN-safe office/API
 URLs and exact BellField-managed Private/Domain LocalSubnet firewall rules for
 office/API ports only. Rerun #9 proved hash verification, extraction, baseline
@@ -86,9 +89,13 @@ port filter instead of the address filter. The source now patches that
 configurator/collector readback and adds a helper-smoke guard for the
 NetSecurity object model. Rerun #11 proved that fix in the packaged artifact
 and advanced through service install, browser work, and reboot recovery, but
-the packaged LAN evidence collector hung before real second-device login. This
-is still not a passed Gate 1 claim until the collector writes evidence and a
-real second-device login succeeds.
+the packaged LAN evidence collector hung before real second-device login. Rerun
+#12 proved the hardened `.23` artifact through service install, browser work,
+reboot recovery, and post-reboot service/API health, but stopped before
+post-reboot login because the first-owner credential existed only in transient
+automation state. This is still not a passed Gate 1 claim until the fixed
+documented Gate Day dummy credential is used and one strict run proves
+post-reboot login, packaged LAN evidence, and real second-device login.
 
 ## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
 

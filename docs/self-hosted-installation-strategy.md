@@ -235,8 +235,18 @@ validation, PostgreSQL provisioning/migrations, service installation, API
 health, first-owner setup, browser job/appointment proof, reboot recovery, and
 post-reboot login. Gate 1 still failed before real second-device proof because
 the packaged LAN evidence collector hung while reading firewall evidence and
-wrote no JSON. Gate 1 now needs a collector hardening patch plus a cleaned
-rerun proving packaged LAN evidence and real second-device access.
+wrote no JSON. The twelfth attempt used rebuilt `.23`/`.24` artifacts from
+merge commit `0a6d4ed` and proved the collector-hardening artifact through USB
+hash verification, extraction, LAN helper Public-profile refusal/consent, LAN
+env URL updates, managed firewall rule creation, PostgreSQL
+provisioning/migrations, service installation, PostgreSQL SCM `StartName`, ACL
+readback, API health, first-owner setup, browser job proof, reboot recovery,
+and post-reboot service/API health. Gate 1 stopped before post-reboot browser
+login because the first-owner password existed only in transient Codex/browser
+automation state and was unavailable after reboot. The run did not reach
+packaged LAN evidence or real second-device proof. Gate 1 now needs the fixed
+documented Gate Day dummy credential plus a cleaned rerun proving post-reboot
+login, packaged LAN evidence, and real second-device access.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 
