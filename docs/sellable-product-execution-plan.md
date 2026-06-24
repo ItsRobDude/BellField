@@ -43,15 +43,17 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #13 passed this
-  gate on Windows 11 Home with active `.23`/`.24` artifacts: service
+  job booking, reboot survival, and second-device access. Rerun #14 passed this
+  gate on Windows 11 Home with active `.25`/`.26` artifacts: service
   registration/stability, PostgreSQL SCM/ACL checks, API health, first-owner
   setup, job proof, reboot recovery, packaged LAN evidence, and real
   second-device same-Wi-Fi browser login all completed in one strict run.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
-  backup set. Rerun #13 stopped here because the documented packaged manual
-  backup CLI could not discover packaged `pg_dump.exe` from the elevated shell
-  used by the runbook.
+  backup set. Rerun #14 proved fresh packaged backup creation on the clean
+  install, then failed because the old restore helper tried to recreate the
+  database with the runtime app role and hit `permission denied to create
+database`. The next artifact must prove restore through the owned
+  database/schema path.
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
   pre-update `pg_dump` backup, plus a real refusal against an expired-window
   license
@@ -374,7 +376,10 @@ replacement, and `docs/restore-runbook.md`. A nondestructive same-machine
 validation pass is recorded in
 [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md).
 The Phase 2 gate remains a separate scratch-machine restore drill from a real
-backup set, performed and dated.
+backup set, performed and dated. Rerun #14 proved the clean-machine packaged
+backup helper path but failed during restore database recreation; the current
+repo-side restore helper avoids permanent `CREATEDB` grants by restoring through
+the owned schema path, and still needs rebuilt-artifact proof.
 
 ### 2.1 Worker job-runner substrate
 

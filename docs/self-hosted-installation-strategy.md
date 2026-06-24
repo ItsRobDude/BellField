@@ -247,13 +247,19 @@ automation state and was unavailable after reboot. The run did not reach
 packaged LAN evidence or real second-device proof. At that point, Gate 1 still
 needed the fixed documented Gate Day dummy credential plus a cleaned rerun
 proving post-reboot login, packaged LAN evidence, and real second-device
-access. The thirteenth
-attempt used that fixed dummy credential with the same `.23`/`.24` artifacts
-and passed the full Gate 1 clean Windows install/LAN proof, including
-post-reboot login, packaged LAN evidence, and a real same-Wi-Fi iPhone browser
-login. The strict run then stopped at Gate 2 because the documented packaged
-manual backup CLI could not find `pg_dump.exe` from the elevated shell used by
-the runbook; backup/restore remains the next install-readiness blocker.
+access. The thirteenth attempt used that fixed dummy credential with the same
+`.23`/`.24` artifacts and passed the full Gate 1 clean Windows install/LAN
+proof, including post-reboot login, packaged LAN evidence, and a real same-Wi-Fi
+iPhone browser login. The strict run then stopped at Gate 2 because the
+documented packaged manual backup CLI could not find `pg_dump.exe` from the
+elevated shell used by the runbook. The fourteenth attempt used rebuilt
+`.25`/`.26` artifacts from merge commit `a730639`, passed Gate 1 again, and
+proved fresh packaged backup creation on the clean install. Restore then failed
+because the old helper tried to recreate the database with the runtime app role
+and PostgreSQL returned `permission denied to create database`. The repo-side
+restore helper now uses the owned database/schema path instead of granting the
+runtime app role permanent `CREATEDB`, but backup/restore remains the next
+install-readiness blocker until a rebuilt artifact proves the restore drill.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 

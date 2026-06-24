@@ -57,12 +57,14 @@ final source commit when both artifacts use that same commit.
 
 ## Per-Artifact Gates
 
-Record evidence for each active ZIP.
+Record the pass/fail result and evidence path for each active ZIP. The
+release ZIP smoke must pass; a command invocation without a passing result is
+not a USB-ready artifact gate.
 
-| Artifact      | `smoke:release-build -- --require-gate-day-deps=true` | `smoke:release-zip -- --require-gate-day-deps=true` |
-| ------------- | ----------------------------------------------------- | --------------------------------------------------- |
-| Clean install |                                                       |                                                     |
-| Update        |                                                       |                                                     |
+| Artifact      | `smoke:release-build -- --require-gate-day-deps=true` result/evidence | `smoke:release-zip -- --require-gate-day-deps=true` PASS/evidence |
+| ------------- | --------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| Clean install |                                                                       |                                                                   |
+| Update        |                                                                       |                                                                   |
 
 ## USB Layout
 

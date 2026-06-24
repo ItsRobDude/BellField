@@ -109,12 +109,16 @@ proof that prep already happened.
       failed-attempt throttle SQL must be exercised against real Postgres, not
       only by mocked repository tests.
 - [ ] Confirm `pnpm smoke:release-zip -- --zip=<artifact.zip>
---require-gate-day-deps=true` passed for each active artifact. With
-      gate-day deps required, this smoke must issue a smoke license, run
-      packaged migrations, run the packaged manual backup CLI, boot API until
-      `/health` is `ok`, prove invalid-token first-owner handling, create the
-      first owner, verify the owner session, and hold worker alive after
-      startup.
+--require-gate-day-deps=true` passed for each active artifact, and record the
+      evidence path for each ZIP. A run that does not pass is not USB-ready.
+      With gate-day deps required, this smoke must issue a smoke license, run
+      packaged migrations, run the packaged manual backup CLI, restore that
+      backup through a non-`CREATEDB` app role while proving post-backup
+      database marker data is erased, media files return to backup-set bytes,
+      post-backup media is removed, the license file returns to backup-set
+      bytes, API boots until `/health` is `ok`, invalid-token first-owner
+      handling works, first owner creation works, the owner session verifies,
+      and worker stays alive after startup.
 - [ ] If this artifact is meant to close the service-identity blocker, save a
       passing elevated diagnostic JSON from
       `tools\install\diagnose-windows-service-account.ps1` using the same WinSW
@@ -357,13 +361,19 @@ documented Gate Day dummy credential: yes` instead of echoing the password
   .\release\runtime\node\node.exe .\release\tools\install\run-packaged-backup.mjs --install-root=C:\BellField
   ```
 
-  Known rerun #13 blocker: the bare packaged CLI command below is not yet a
-  complete strict-gate recipe on a hardened install. It failed with
-  `pg_dump.exe failed: spawn pg_dump.exe ENOENT` when launched from an elevated
-  shell whose current working directory did not make `release\postgres\bin`
-  discoverable. Do not patch around this during a strict run by manually editing
-  PATH or env values. The next artifact must make worker backup tool discovery
-  cwd-independent and keep this helper as the copyable Gate 2 command.
+  Rerun #13 blocker, fixed by PR #75: the bare packaged CLI command below failed
+  with `pg_dump.exe failed: spawn pg_dump.exe ENOENT` when launched from an
+  elevated shell whose current working directory did not make
+  `release\postgres\bin` discoverable. Rerun #14 proved the packaged backup
+  helper creates a fresh backup set on the clean install. Keep this helper as the
+  copyable Gate 2 command; do not patch around backup tooling during a strict
+  run by manually editing PATH or env values.
+
+  Current rerun #14 blocker: restore failed because the old helper tried to
+  recreate the database with the runtime app role, which intentionally lacks
+  `CREATEDB`. The next artifact must restore through the owned database/schema
+  path and prove marker erasure, media/license restore, service restart, login,
+  and pre-backup data readback.
 
   Historical command shape:
 

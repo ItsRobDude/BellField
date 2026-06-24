@@ -80,14 +80,17 @@ does not replace the clean-machine run.
 - [ ] Each active artifact ZIP was created with `pnpm package:release-zip`;
       do not use an ad hoc manual ZIP command for gate-day artifacts.
 - [ ] `pnpm smoke:release-zip -- --zip=<artifact.zip> --require-gate-day-deps=true`
-      passed for each active artifact. This smoke extracts with the Windows
-      operator path, verifies API/worker dependency resolution, boots
-      office-web from the extracted ZIP, fetches root HTML and referenced
-      Next static JavaScript assets, runs packaged migrations against a
-      temporary packaged PostgreSQL database, issues a smoke license, runs the
-      packaged manual backup CLI, boots API through `/health`, proves
-      invalid-token first-owner handling, creates the first owner, verifies the
-      owner session, and confirms the worker stays alive after startup.
+      passed for each active artifact, with the evidence path recorded for that
+      ZIP. A ZIP is not USB-ready until this gate passes. This smoke extracts
+      with the Windows operator path, verifies API/worker dependency
+      resolution, boots office-web from the extracted ZIP, fetches root HTML and
+      referenced Next static JavaScript assets, runs packaged migrations against
+      a temporary packaged PostgreSQL database, issues a smoke license, runs
+      the packaged manual backup CLI, proves restore through a non-`CREATEDB`
+      app role returns database, media, and license state to the backup set,
+      boots API through `/health`, proves invalid-token first-owner handling,
+      creates the first owner, verifies the owner session, and confirms the
+      worker stays alive after startup.
 - [ ] CI ran the API identity-attempt PostgreSQL regression against a real
       Postgres service. Do not rely only on mocked repository tests for the
       failed-attempt throttle SQL.

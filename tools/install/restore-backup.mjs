@@ -1,8 +1,13 @@
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { dirname, join, parse, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { databaseConfigFromUrl, getBoolean, parseEnvFile, readArgs } from './install-utils.mjs';
+import {
+  createRestoreRecoveryTracker,
+  decideRestoreRecovery,
+  restorePhases
+} from './restore-recovery.mjs';
 import {
   stageDirectoryRestore,
   stageFileRestore,
@@ -27,13 +32,26 @@ function databaseEnv(databaseUrl) {
       PGUSER: database.username,
       PGPASSWORD: database.password
     },
-    databaseName: database.databaseName
+    databaseName: database.databaseName,
+    username: database.username
   };
 }
 
 function pgTool(name, postgresBin) {
   const executable = process.platform === 'win32' ? `${name}.exe` : name;
   return postgresBin ? join(postgresBin, executable) : executable;
+}
+
+function requirePgTool(name, postgresBin) {
+  const toolPath = pgTool(name, postgresBin);
+  if (!existsSync(toolPath)) {
+    throw new Error(`PostgreSQL ${name} not found at ${toolPath}.`);
+  }
+  return toolPath;
+}
+
+function quoteSqlIdentifier(value) {
+  return `"${String(value).replaceAll('"', '""')}"`;
 }
 
 function run(command, args, options = {}) {
@@ -61,7 +79,7 @@ function runPowerShell(command) {
 function stopAppServices(skipServices) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service stop.');
-    return;
+    return false;
   }
 
   for (const serviceName of appServicesStopOrder) {
@@ -69,12 +87,13 @@ function stopAppServices(skipServices) {
       `if (Get-Service -Name '${serviceName}' -ErrorAction SilentlyContinue) { Stop-Service -Name '${serviceName}' -Force }`
     );
   }
+  return true;
 }
 
 function startAppServices(skipServices) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service start.');
-    return;
+    return false;
   }
 
   runPowerShell(
@@ -85,6 +104,7 @@ function startAppServices(skipServices) {
       `if (Get-Service -Name '${serviceName}' -ErrorAction SilentlyContinue) { Start-Service -Name '${serviceName}' }`
     );
   }
+  return true;
 }
 
 function assertSafeReplaceDirectory(path, label) {
@@ -103,6 +123,74 @@ function assertSafeFilePath(path, label) {
     throw new Error(`${label} is too broad to replace safely: ${absolute}`);
   }
   return absolute;
+}
+
+function runRestorePreflight(input) {
+  const ownerCheck = run(
+    input.psql,
+    [
+      '--dbname',
+      input.databaseName,
+      '--tuples-only',
+      '--no-align',
+      '--set=ON_ERROR_STOP=1',
+      '--command',
+      [
+        'select case',
+        "  when current_user = pg_get_userbyid(datdba) then 'ok'",
+        "  else 'not_owner:' || current_user || ':' || pg_get_userbyid(datdba)",
+        'end',
+        'from pg_database',
+        'where datname = current_database();'
+      ].join('\n')
+    ],
+    { env: input.pgEnv, capture: true }
+  )
+    .stdout.trim()
+    .split(/\r?\n/)
+    .at(-1);
+
+  if (ownerCheck !== 'ok') {
+    throw new Error(
+      `Restore requires DATABASE_URL role '${input.username}' to own database '${input.databaseName}' before services are stopped; readback was '${ownerCheck ?? ''}'.`
+    );
+  }
+
+  const schemaName = `bellfield_restore_preflight_${process.pid}`;
+  run(
+    input.psql,
+    [
+      '--dbname',
+      input.databaseName,
+      '--set=ON_ERROR_STOP=1',
+      '--command',
+      [
+        'begin;',
+        `create schema ${quoteSqlIdentifier(schemaName)};`,
+        `drop schema ${quoteSqlIdentifier(schemaName)} cascade;`,
+        'rollback;'
+      ].join('\n')
+    ],
+    { env: input.pgEnv }
+  );
+}
+
+function resetDatabaseSchema(input) {
+  const appRole = quoteSqlIdentifier(input.username);
+  run(
+    input.psql,
+    [
+      '--dbname',
+      input.databaseName,
+      '--set=ON_ERROR_STOP=1',
+      '--command',
+      [
+        'drop schema if exists public cascade;',
+        `create schema public authorization ${appRole};`
+      ].join('\n')
+    ],
+    { env: input.pgEnv }
+  );
 }
 
 const args = readArgs();
@@ -160,61 +248,124 @@ if (licenseRequired && !existsSync(backupLicensePath)) {
   );
 }
 
-const { env: pgEnv, databaseName } = databaseEnv(databaseUrl);
+const { env: pgEnv, databaseName, username } = databaseEnv(databaseUrl);
+const psql = requirePgTool('psql', postgresBin);
+const pgRestore = requirePgTool('pg_restore', postgresBin);
 const restoreEnv = { ...process.env, ...env, DATABASE_URL: databaseUrl };
-const stagedMediaPath = stageDirectoryRestore({
-  sourcePath: backupMediaPath,
-  targetPath: mediaRoot,
-  stamp: restoreStamp,
-  sourceLabel: 'backup media directory'
+const recoveryTracker = createRestoreRecoveryTracker({
+  skipServices: skipServices || process.platform !== 'win32'
 });
-const stagedLicensePath =
-  licensePath && existsSync(backupLicensePath)
-    ? stageFileRestore({
-        sourcePath: backupLicensePath,
-        targetPath: licensePath,
-        stamp: restoreStamp,
-        sourceLabel: 'backup license file'
-      })
-    : null;
+let stagedMediaPath = null;
+let stagedLicensePath = null;
 
-console.log(`Restoring BellField backup from ${backupSetPath}`);
-console.log(`Staged media restore at ${stagedMediaPath}`);
-if (stagedLicensePath) {
-  console.log(`Staged license restore at ${stagedLicensePath}`);
+try {
+  recoveryTracker.enter(restorePhases.preflight);
+  runRestorePreflight({ psql, pgEnv, databaseName, username });
+
+  recoveryTracker.enter(restorePhases.staging);
+  stagedMediaPath = stageDirectoryRestore({
+    sourcePath: backupMediaPath,
+    targetPath: mediaRoot,
+    stamp: restoreStamp,
+    sourceLabel: 'backup media directory'
+  });
+  stagedLicensePath =
+    licensePath && existsSync(backupLicensePath)
+      ? stageFileRestore({
+          sourcePath: backupLicensePath,
+          targetPath: licensePath,
+          stamp: restoreStamp,
+          sourceLabel: 'backup license file'
+        })
+      : null;
+
+  console.log(`Restoring BellField backup from ${backupSetPath}`);
+  console.log(`Staged media restore at ${stagedMediaPath}`);
+  if (stagedLicensePath) {
+    console.log(`Staged license restore at ${stagedLicensePath}`);
+  }
+  recoveryTracker.enter(restorePhases.stoppingServices);
+  recoveryTracker.markServiceStopAttempted();
+  stopAppServices(skipServices);
+  recoveryTracker.enter(restorePhases.servicesStopped);
+
+  recoveryTracker.enter(restorePhases.resettingSchema);
+  resetDatabaseSchema({ psql, pgEnv, databaseName, username });
+  recoveryTracker.enter(restorePhases.schemaResetComplete);
+  run(
+    pgRestore,
+    ['--dbname', databaseName, '--no-owner', '--exit-on-error', '--single-transaction', dumpPath],
+    { env: pgEnv }
+  );
+  recoveryTracker.enter(restorePhases.databaseRestored);
+
+  const mediaRollbackPath = swapStagedDirectory({
+    stagePath: stagedMediaPath,
+    targetPath: mediaRoot,
+    stamp: restoreStamp
+  });
+
+  const licenseRollbackPath =
+    licensePath && stagedLicensePath
+      ? swapStagedFile({
+          stagePath: stagedLicensePath,
+          targetPath: licensePath,
+          stamp: restoreStamp
+        })
+      : null;
+  recoveryTracker.enter(restorePhases.filesSwapped);
+
+  run(nodeExe, [migrationsScript], { env: restoreEnv, cwd: releaseRoot });
+  recoveryTracker.enter(restorePhases.migrationsRun);
+  recoveryTracker.enter(restorePhases.startingServices);
+  startAppServices(skipServices);
+  recoveryTracker.markServicesStarted();
+  recoveryTracker.enter(restorePhases.completed);
+
+  console.log('BellField restore completed.');
+  if (mediaRollbackPath) {
+    console.log(`Previous media root preserved for rollback cleanup: ${mediaRollbackPath}`);
+  }
+  if (licenseRollbackPath) {
+    console.log(`Previous license file preserved for rollback cleanup: ${licenseRollbackPath}`);
+  }
+} catch (error) {
+  cleanupStagedRestorePaths([
+    { path: stagedMediaPath, label: 'staged media restore' },
+    { path: stagedLicensePath, label: 'staged license restore' }
+  ]);
+  const recovery = decideRestoreRecovery(recoveryTracker.snapshot());
+  if (recovery.message) {
+    console.error(recovery.message);
+  }
+  if (recovery.restartServices) {
+    try {
+      startAppServices(skipServices);
+    } catch (restartError) {
+      console.error(
+        `Failed to restart app services after restore failure: ${
+          restartError instanceof Error ? restartError.message : String(restartError)
+        }`
+      );
+    }
+  }
+  throw error;
 }
-stopAppServices(skipServices);
 
-run(pgTool('dropdb', postgresBin), ['--if-exists', '--force', databaseName], {
-  env: { ...pgEnv, PGDATABASE: 'postgres' }
-});
-run(pgTool('createdb', postgresBin), [databaseName], { env: { ...pgEnv, PGDATABASE: 'postgres' } });
-run(pgTool('pg_restore', postgresBin), ['--dbname', databaseName, '--no-owner', dumpPath], {
-  env: pgEnv
-});
-
-const mediaRollbackPath = swapStagedDirectory({
-  stagePath: stagedMediaPath,
-  targetPath: mediaRoot,
-  stamp: restoreStamp
-});
-
-const licenseRollbackPath =
-  licensePath && stagedLicensePath
-    ? swapStagedFile({
-        stagePath: stagedLicensePath,
-        targetPath: licensePath,
-        stamp: restoreStamp
-      })
-    : null;
-
-run(nodeExe, [migrationsScript], { env: restoreEnv, cwd: releaseRoot });
-startAppServices(skipServices);
-
-console.log('BellField restore completed.');
-if (mediaRollbackPath) {
-  console.log(`Previous media root preserved for rollback cleanup: ${mediaRollbackPath}`);
-}
-if (licenseRollbackPath) {
-  console.log(`Previous license file preserved for rollback cleanup: ${licenseRollbackPath}`);
+function cleanupStagedRestorePaths(entries) {
+  for (const entry of entries) {
+    if (!entry.path || !existsSync(entry.path)) {
+      continue;
+    }
+    try {
+      rmSync(entry.path, { force: true, recursive: true });
+      console.error(`Removed abandoned ${entry.label}: ${entry.path}`);
+    } catch (cleanupError) {
+      console.error(
+        `Failed to remove abandoned ${entry.label} at ${entry.path}: ${
+          cleanupError instanceof Error ? cleanupError.message : String(cleanupError)
+        }`
+      );
+    }
+  }
 }

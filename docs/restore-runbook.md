@@ -22,13 +22,15 @@ Still not claimed:
 
 Rerun #13 reached this gate after a full clean Windows Gate 1 pass, then failed
 before restore because the documented packaged manual backup CLI could not find
-`pg_dump.exe` from the elevated shell used by the runbook. The worker service
-had produced an earlier scheduled backup, but it predated browser-created test
-data and was not a valid restore marker. Before the scratch-machine restore gate
-can pass, the manual backup path must make packaged PostgreSQL tools explicit
-instead of depending on current working directory or PATH. Restore already
-defaults to `release\postgres\bin` from the packaged helper's release root; the
-manual backup path should follow the same cwd-independent pattern.
+`pg_dump.exe` from the elevated shell used by the runbook. PR #75 fixed that
+manual backup path. Rerun #14 proved the fix on the clean Windows PC: the
+packaged backup helper produced a fresh backup set with the required shape. The
+restore drill then failed because the old restore helper tried to recreate the
+database with the runtime `DATABASE_URL` role, which intentionally does not have
+cluster-level `CREATEDB`. The repo-side helper now restores through the owned
+database/schema path instead, but the scratch-machine restore gate remains open
+until a rebuilt artifact proves it end to end. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md).
 
 ## Backup Set Shape
 
@@ -94,16 +96,23 @@ Run:
 
 What the helper does:
 
-1. Copies the backup set's `media` directory to a same-parent staging path.
-2. Copies `license\bellfield-license.json` to a same-parent staging path when present.
-3. Stops the BellField app services: office-web, worker, API.
-4. Leaves PostgreSQL running so the restore tools can connect.
-5. Drops and recreates the configured BellField database.
-6. Restores `database.dump` with `pg_restore`.
-7. Renames the existing `BELLFIELD_MEDIA_ROOT` to a timestamped rollback directory, then renames the staged media directory into place.
-8. Replaces `BELLFIELD_LICENSE_PATH` from the staged license file when present, preserving the previous license file as a timestamped rollback file.
-9. Runs packaged migrations.
-10. Starts API, worker, and office-web.
+1. Verifies PostgreSQL tools are present and the `DATABASE_URL` role owns the configured database before stopping app services.
+2. Copies the backup set's `media` directory to a same-parent staging path.
+3. Copies `license\bellfield-license.json` to a same-parent staging path when present.
+4. Stops the BellField app services: office-web, worker, API.
+5. Leaves PostgreSQL running so the restore tools can connect.
+6. Resets the owned `public` schema in the configured BellField database.
+7. Restores `database.dump` with `pg_restore --single-transaction`.
+8. Renames the existing `BELLFIELD_MEDIA_ROOT` to a timestamped rollback directory, then renames the staged media directory into place.
+9. Replaces `BELLFIELD_LICENSE_PATH` from the staged license file when present, preserving the previous license file as a timestamped rollback file.
+10. Runs packaged migrations.
+11. Starts API, worker, and office-web.
+
+Current v1 restore assumes BellField application data lives in the `public`
+schema, with media under `BELLFIELD_MEDIA_ROOT` and the optional license at
+`BELLFIELD_LICENSE_PATH`. Large objects and non-public application schemas are
+not part of the current backup/restore contract; if BellField adds either, the
+restore helper and gate-day smoke must be updated before release.
 
 For a scratch drill without Windows services, pass `--skip-services=true`.
 
@@ -138,7 +147,12 @@ Do not promise support for a network backup destination until backup creation an
 
 The helper stages media and license files before stopping services or touching the database. If staging fails, the live database, media root, and license file have not been replaced.
 
-If the database restore fails before the media swap, the app services may be stopped and the database may be dropped or partially restored, but the live media root is still in its original path. Fix the PostgreSQL/tooling problem and rerun the same restore, or restore the database manually from the same `database.dump`.
+If the preflight fails before the database reset begins, the helper attempts to
+restart app services. If the database restore fails after the schema reset
+begins, app services remain stopped because the database may be partially
+restored, but the live media root is still in its original path. Fix the
+PostgreSQL/tooling problem and rerun the same restore, or restore the database
+manually from the same `database.dump`.
 
 If the media swap fails, the helper attempts to rename the previous media root back into place before it exits. Check the console output for paths ending in:
 

@@ -197,6 +197,20 @@ Validated on the development machine:
   Gate 2 because the documented packaged manual backup CLI could not find
   `pg_dump.exe`. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-13.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-13.md)
+- fourteenth clean Windows gate-day attempt ran on 2026-06-23 with rebuilt
+  `.25`/`.26` artifacts from source commit `a730639`. Gate 1 passed again:
+  clean install, LAN Public-profile refusal/consent, service installation,
+  PostgreSQL SCM `StartName`, ACL readback, first-owner setup, job proof,
+  reboot recovery, packaged LAN evidence, and real iPhone same-Wi-Fi login all
+  passed. Gate 2 advanced past the rerun #13 backup blocker: the packaged manual
+  backup helper produced a fresh backup set with `database.dump`, `media\`,
+  `license\bellfield-license.json`, and `manifest.json`. Restore then failed
+  because the old restore helper tried to recreate the database with the runtime
+  app role and PostgreSQL returned `permission denied to create database`. The
+  repo-side follow-up now restores through the owned schema path without granting
+  the runtime app role permanent `CREATEDB`; clean-machine proof of that fix is
+  still pending. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -217,7 +231,7 @@ Validated on the development machine:
 
 Current clean-machine validation status:
 
-- clean Windows Gate 1 passed in rerun #13 for the entry-tier install
+- clean Windows Gate 1 passed in rerun #14 for the entry-tier install
   path: no developer tooling, real services, first-owner setup, job proof,
   reboot recovery, packaged LAN evidence, and real second-device browser login
   in one strict run
@@ -241,7 +255,9 @@ Current clean-machine validation status:
   second-device browser login from an iPhone on the same Wi-Fi
 - second office desktop and Android field-device proof remain separate optional
   environmental checks
-- scratch-machine backup/restore drill
+- scratch-machine backup/restore drill. Rerun #14 proved packaged manual backup
+  creation on the clean install, but restore failed at database recreation
+  privilege and still needs a rebuilt-artifact rerun.
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
   `pg_dump`, health check, and reboot/service recovery proof
 
@@ -277,7 +293,10 @@ post-sign edits make the artifact fail update verification.
 Do not package gate-day artifacts with an ad hoc ZIP command. Use
 `pnpm package:release-zip` and then `pnpm smoke:release-zip` so the artifact is
 validated after ordinary Windows extraction, including API/worker dependency
-resolution and office-web startup from the extracted tree.
+resolution and office-web startup from the extracted tree. The release ZIP
+smoke must pass with its evidence path recorded before the ZIP is USB-ready;
+with gate-day deps required, it also proves packaged backup and restore return
+database marker data, media bytes, and license bytes to the backup-set state.
 
 The script creates `release/` with:
 
@@ -747,11 +766,10 @@ The System surface shows the latest successful backup and warns when it is stale
 
 Rerun #13 proved the worker can create a scheduled backup set on the installed
 machine, but the documented manual Gate 2 command failed from an elevated shell
-with `pg_dump.exe failed: spawn pg_dump.exe ENOENT`. Until this is patched, do
-not treat the bare manual CLI command as a complete strict-gate recipe; it is
-cwd/tool-path dependent unless the worker resolves packaged PostgreSQL tools
-relative to its own module path. Use the packaged backup helper as the Gate 2
-operator command once rebuilt:
+with `pg_dump.exe failed: spawn pg_dump.exe ENOENT`. Rerun #14 proved the
+packaged backup helper fix: it produced a fresh worker backup set with the
+required shape on the clean install. Use the packaged backup helper as the Gate
+2 operator command:
 
 ```powershell
 .\release\runtime\node\node.exe .\release\tools\install\run-packaged-backup.mjs --install-root=C:\BellField
@@ -762,6 +780,13 @@ Restore is assisted and destructive. Use:
 ```powershell
 .\release\runtime\node\node.exe .\release\tools\install\restore-backup.mjs --release-root=.\release --install-root=C:\BellField --backup-set=<backup-set-path> --confirm=RESTORE
 ```
+
+Rerun #14 proved the old restore helper must not drop/recreate the database with
+the runtime app role; that role intentionally does not have `CREATEDB`. The
+current helper restores through the owned database/schema path instead. Gate 2
+is still open until a rebuilt artifact proves restore, marker erasure,
+media/license restore, service restart, login, and pre-backup data readback on
+the scratch machine.
 
 See [restore-runbook.md](./restore-runbook.md) before running a restore.
 
