@@ -397,7 +397,11 @@ function timestampForPath(date: Date): string {
     .replace('T', '-');
 }
 
-function resolvePgToolPath(name: 'pg_dump', config: BackupJobConfig): string {
+export function resolvePgToolPath(
+  name: 'pg_dump',
+  config: BackupJobConfig,
+  moduleDirectory = __dirname
+): string {
   const executable = process.platform === 'win32' ? `${name}.exe` : name;
   if (config.pgDumpPath) {
     return config.pgDumpPath;
@@ -405,7 +409,7 @@ function resolvePgToolPath(name: 'pg_dump', config: BackupJobConfig): string {
 
   const candidates = [
     config.postgresBin ? join(config.postgresBin, executable) : undefined,
-    join(process.cwd(), '..', '..', 'postgres', 'bin', executable)
+    join(moduleDirectory, '..', '..', '..', '..', '..', 'postgres', 'bin', executable)
   ].filter((candidate): candidate is string => Boolean(candidate));
 
   return candidates.find((candidate) => existsSync(candidate)) ?? executable;

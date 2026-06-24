@@ -312,7 +312,8 @@ documented Gate Day dummy credential: yes` instead of echoing the password
   into evidence logs; if the exact dummy password appears in evidence, treat it
   as an allowlisted test value, not a hygiene blocker. Rerun #12 proved that
   relying on Codex/browser automation memory as the only copy loses the
-  post-reboot login proof.
+  post-reboot login proof; rerun #13 proved the fixed dummy credential path
+  through reboot and real second-device login.
 
 - [ ] `Invoke-RestMethod http://localhost:3001/health` → `status: "ok"`.
 - [ ] **Real office work in the browser:** create a customer, book a job,
@@ -340,7 +341,8 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       #11 showed why skipping collector output creates false confidence; rerun
       #12 stopped before this checkpoint because the post-reboot owner credential
       only existed in transient automation state. Actual second-device login is
-      the only authoritative pass.
+      the only authoritative pass. Rerun #13 passed this checkpoint with
+      packaged LAN evidence and a real iPhone same-Wi-Fi login.
       (Android field-device proof is a stretch goal - record it if attempted,
       it is tracked debt either way.)
 
@@ -349,7 +351,21 @@ documented Gate Day dummy credential: yes` instead of echoing the password
 ## Gate 2 — Backup and restore drill (Phase 2)
 
 - [ ] Produce a **real worker backup set**: either wait out the schedule or
-      run the packaged manual backup CLI with the server env applied:
+      run the packaged backup helper from an elevated PowerShell session:
+
+  ```powershell
+  .\release\runtime\node\node.exe .\release\tools\install\run-packaged-backup.mjs --install-root=C:\BellField
+  ```
+
+  Known rerun #13 blocker: the bare packaged CLI command below is not yet a
+  complete strict-gate recipe on a hardened install. It failed with
+  `pg_dump.exe failed: spawn pg_dump.exe ENOENT` when launched from an elevated
+  shell whose current working directory did not make `release\postgres\bin`
+  discoverable. Do not patch around this during a strict run by manually editing
+  PATH or env values. The next artifact must make worker backup tool discovery
+  cwd-independent and keep this helper as the copyable Gate 2 command.
+
+  Historical command shape:
 
   ```powershell
   <release>\runtime\node\node.exe <release>\apps\worker\dist\jobs\backup\run-backup-cli.js

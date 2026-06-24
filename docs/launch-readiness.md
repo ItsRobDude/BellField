@@ -153,10 +153,18 @@ post-reboot service/API health. Gate 1 stopped at post-reboot browser login
 because the newly created owner password existed only in transient
 Codex/browser automation state and was unavailable after reboot. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md).
+Rerun #13 used the same `.23`/`.24` artifacts and the documented fixed dummy
+Gate Day owner credential. Gate 1 passed end to end: post-reboot login,
+packaged LAN evidence, and real second-device same-Wi-Fi browser login all
+completed after the clean install, service, job-booking, and reboot checks. The
+strict run then stopped at Gate 2 because the documented packaged manual backup
+CLI could not find `pg_dump.exe` from the elevated shell used by the runbook.
+See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-13.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-13.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
-- [ ] clean-machine stranger install from the runbook through first-owner
+- [x] clean-machine stranger install from the runbook through first-owner
       setup, job booking, reboot recovery, and second-device access. Rerun #8
       already captured service registration, service stability, ACL, API
       health, browser owner setup, browser job booking, reboot recovery, and
@@ -170,14 +178,17 @@ The remaining clean-machine proofs are still owned by
       before real second-device login. Rerun #12 proved the hardened artifact
       through service install, browser work, reboot recovery, and post-reboot
       service/API health, then stopped because the first-owner password was not
-      available after reboot. The remaining Gate 1 gap is use of the fixed
-      documented Gate Day dummy credential, post-reboot browser login, packaged
-      LAN evidence, and actual second-device browser login in one strict run. This
+      available after reboot. Rerun #13 used the fixed documented Gate Day
+      dummy credential and passed post-reboot browser login, packaged LAN
+      evidence, and actual second-device browser login in one strict run. This
       gate is also the definition of
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.
-- [ ] scratch-machine restore from a real backup set
+- [ ] scratch-machine restore from a real backup set. Rerun #13 stopped here
+      because the documented packaged manual backup CLI could not discover
+      packaged `pg_dump.exe`; the next artifact must make the manual backup
+      path explicit and cwd-independent before the restore drill can pass.
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)

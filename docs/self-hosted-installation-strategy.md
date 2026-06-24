@@ -244,9 +244,16 @@ readback, API health, first-owner setup, browser job proof, reboot recovery,
 and post-reboot service/API health. Gate 1 stopped before post-reboot browser
 login because the first-owner password existed only in transient Codex/browser
 automation state and was unavailable after reboot. The run did not reach
-packaged LAN evidence or real second-device proof. Gate 1 now needs the fixed
-documented Gate Day dummy credential plus a cleaned rerun proving post-reboot
-login, packaged LAN evidence, and real second-device access.
+packaged LAN evidence or real second-device proof. At that point, Gate 1 still
+needed the fixed documented Gate Day dummy credential plus a cleaned rerun
+proving post-reboot login, packaged LAN evidence, and real second-device
+access. The thirteenth
+attempt used that fixed dummy credential with the same `.23`/`.24` artifacts
+and passed the full Gate 1 clean Windows install/LAN proof, including
+post-reboot login, packaged LAN evidence, and a real same-Wi-Fi iPhone browser
+login. The strict run then stopped at Gate 2 because the documented packaged
+manual backup CLI could not find `pg_dump.exe` from the elevated shell used by
+the runbook; backup/restore remains the next install-readiness blocker.
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 
