@@ -72,6 +72,18 @@ test('pg_restore failure after schema reset leaves app services stopped', () => 
   assert.match(recovery.message, /database restore did not complete/i);
 });
 
+test('failure after database restore leaves app services stopped for file consistency', () => {
+  const recovery = decideRestoreRecovery(restoreSnapshot(restorePhases.databaseRestored));
+
+  assert.equal(recovery.restartServices, false);
+  assert.match(
+    recovery.message,
+    /database completed but media\/license swap or migrations did not complete/i
+  );
+  assert.match(recovery.message, /database and file state may be inconsistent/i);
+  assert.doesNotMatch(recovery.message, /database restore did not complete/i);
+});
+
 test('migration failure after media and license swap leaves app services stopped', () => {
   const recovery = decideRestoreRecovery(restoreSnapshot(restorePhases.filesSwapped));
 
