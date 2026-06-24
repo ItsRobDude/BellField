@@ -161,6 +161,16 @@ strict run then stopped at Gate 2 because the documented packaged manual backup
 CLI could not find `pg_dump.exe` from the elevated shell used by the runbook.
 See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-13.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-13.md).
+Rerun #14 used rebuilt `.25`/`.26` artifacts from merge commit `a730639`. Gate 1
+passed again, including post-reboot login, packaged LAN evidence, and real
+second-device same-Wi-Fi browser login. Gate 2 advanced past the rerun #13
+backup blocker: the packaged backup helper produced a fresh backup set with the
+required shape. Restore then failed because the old restore helper tried to
+recreate the database with the runtime app role and PostgreSQL returned
+`permission denied to create database`. The repo-side helper now restores
+through the owned schema path without granting permanent `CREATEDB`, but
+scratch-machine proof of that fix is still pending. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -185,10 +195,11 @@ The remaining clean-machine proofs are still owned by
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.
-- [ ] scratch-machine restore from a real backup set. Rerun #13 stopped here
-      because the documented packaged manual backup CLI could not discover
-      packaged `pg_dump.exe`; the next artifact must make the manual backup
-      path explicit and cwd-independent before the restore drill can pass.
+- [ ] scratch-machine restore from a real backup set. Rerun #14 proved fresh
+      packaged backup creation on the clean install, then failed because restore
+      tried to recreate the database with the runtime app role. The next artifact
+      must prove the owned-schema restore path, marker erasure, service restart,
+      login, and pre-backup data readback.
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)

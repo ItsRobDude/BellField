@@ -75,7 +75,8 @@
     "format:check": "prettier --check .",
     "typecheck": "pnpm -r --if-present typecheck",
     "lint": "pnpm -r --if-present lint && pnpm check:file-size",
-    "test": "pnpm -r --if-present test",
+    "test:tools": "node --test tools/install/restore-recovery.test.mjs",
+    "test": "pnpm test:tools && pnpm -r --if-present test",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {

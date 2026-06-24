@@ -541,11 +541,11 @@ transient Codex/browser automation state, which did not survive reboot.
 Read when: updating Gate 1 operator protocol, reviewing the deepest current
 clean-machine install proof, or preparing the next rerun after `.23`/`.24`.
 
-Current follow-up: superseded by rerun 13. The documented dummy Gate Day owner
-credential let the run pass post-reboot login, packaged LAN evidence, and real
-second-device login; Gate 1 is now passed. Rerun 13 then stopped at Gate 2
-because the documented packaged manual backup CLI could not discover
-`pg_dump.exe`.
+Current follow-up: superseded by rerun 13 and rerun 14. The documented dummy
+Gate Day owner credential let rerun 13 pass post-reboot login, packaged LAN
+evidence, and real second-device login; Gate 1 is now passed. Rerun 14 proved
+fresh packaged backup creation, then stopped at restore because the old helper
+tried to recreate the database with the runtime app role.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or product account-recovery design.
@@ -571,11 +571,34 @@ Read when: reviewing the clean Windows Gate 1 closure, fixing the packaged
 manual backup path, updating Gate 2 instructions, or deciding what the next USB
 artifact must prove.
 
-Current follow-up: fix packaged manual backup discovery so a hardened install
-can produce a fresh post-browser-proof backup set without relying on cwd/PATH or
-manual env edits. The worker backup path should resolve packaged PostgreSQL
-tools relative to the compiled worker module, and Gate 2 should use the
-packaged backup helper before the restore proof.
+Historical follow-up: packaged manual backup discovery was fixed by PR #75 and
+proved by rerun 14. The current Gate 2 blocker is restore behavior; see the
+rerun 14 evidence below.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or long-term backup UI design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md)
+
+Audience: contributors checking the latest clean Windows Gate 1 pass and the
+current Gate 2 restore blocker.
+
+Purpose: dated evidence for the fourteenth fresh Windows install smoke: active
+artifacts `.25`/`.26` passed USB hash verification and `.25` completed the full
+Gate 1 install/LAN path, including service readback, ACL readback, first-owner
+setup, browser customer/location/job proof, reboot recovery, packaged LAN
+evidence, and real iPhone same-Wi-Fi login. Gate 2 advanced past the rerun #13
+backup blocker because the packaged backup helper produced a fresh backup set
+with the required shape. Restore then failed because the old helper attempted
+database recreation with the runtime app role and hit `permission denied to
+create database`.
+
+Read when: reviewing the latest USB evidence, fixing restore behavior, updating
+Gate 2 instructions, or deciding what the next USB artifact must prove.
+
+Current follow-up: restore must use the owned database/schema path without
+granting the runtime app role permanent `CREATEDB`; the next rebuilt artifact
+must prove marker erasure, service restart, login, and pre-backup data readback.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term backup UI design.

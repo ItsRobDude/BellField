@@ -25,6 +25,8 @@ try {
     lanCleanup: readRequired('tools/install/remove-windows-lan-access.ps1'),
     migrationHelper: readRequired('tools/install/run-packaged-migrations.mjs'),
     backupHelper: readRequired('tools/install/run-packaged-backup.mjs'),
+    restoreHelper: readRequired('tools/install/restore-backup.mjs'),
+    restoreRecovery: readRequired('tools/install/restore-recovery.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
     backupService: readRequired('apps/worker/src/jobs/backup/backup-service.ts'),
@@ -413,6 +415,80 @@ try {
       files.releaseZipSmoke.includes('manual-backup-foreign-cwd') &&
       files.releaseZipSmoke.includes('postgresToolEnvInjected: false') &&
       !files.releaseZipSmoke.includes('BELLFIELD_POSTGRES_BIN: postgresBin')
+  );
+  check(
+    'restore helper resets the owned database schema without CREATEDB privileges',
+    includesAll(files.restoreHelper, [
+      'function runRestorePreflight',
+      'function resetDatabaseSchema',
+      'drop schema if exists public cascade',
+      'create schema public authorization',
+      "'pg_restore'",
+      "'--single-transaction'",
+      "'--exit-on-error'"
+    ]) &&
+      !files.restoreHelper.includes("pgTool('dropdb'") &&
+      !files.restoreHelper.includes("pgTool('createdb'") &&
+      !files.restoreHelper.includes('grant usage, create on schema public') &&
+      !files.restoreHelper.includes('databaseRestoreStarted') &&
+      !files.restoreHelper.includes('appServicesStopped')
+  );
+  check(
+    'restore recovery helper owns phase-based restart decisions',
+    includesAll(files.restoreRecovery, [
+      'export const restorePhases',
+      'createRestoreRecoveryTracker',
+      'decideRestoreRecovery',
+      'serviceStopAttempted',
+      'schemaResetComplete',
+      'startingServices'
+    ]) &&
+      files.restoreHelper.includes("from './restore-recovery.mjs'") &&
+      files.restoreHelper.includes('recoveryTracker.markServiceStopAttempted();') &&
+      files.restoreHelper.includes('decideRestoreRecovery(recoveryTracker.snapshot())')
+  );
+  assertOrdered(files.restoreHelper, 'restore helper preflights before stopping app services', [
+    'runRestorePreflight({ psql, pgEnv, databaseName, username });',
+    'stageDirectoryRestore({',
+    'stopAppServices(skipServices);',
+    'resetDatabaseSchema({ psql, pgEnv, databaseName, username });'
+  ]);
+  assertOrdered(
+    files.restoreHelper,
+    'restore helper marks service stop attempt before stopping app services',
+    [
+      'recoveryTracker.enter(restorePhases.stoppingServices);',
+      'recoveryTracker.markServiceStopAttempted();',
+      'stopAppServices(skipServices);'
+    ]
+  );
+  assertOrdered(files.restoreHelper, 'restore helper marks schema reset complete after reset', [
+    'recoveryTracker.enter(restorePhases.resettingSchema);',
+    'resetDatabaseSchema({ psql, pgEnv, databaseName, username });',
+    'recoveryTracker.enter(restorePhases.schemaResetComplete);'
+  ]);
+  check(
+    'release ZIP smoke proves restore with a non-CREATEDB app role and marker rollback',
+    includesAll(files.releaseZipSmoke, [
+      'appRoleCreatedb: false',
+      'bellfield_restore_smoke_marker',
+      'restore-foreign-cwd',
+      'restore-backup.mjs',
+      'markerRowsAfterRestore'
+    ])
+  );
+  check(
+    'release ZIP smoke proves media and license restore rollback with byte comparisons',
+    includesAll(files.releaseZipSmoke, [
+      'mkdirSync(mediaRoot, { recursive: true })',
+      'restore-smoke-media-sentinel.bin',
+      'restore-smoke-post-backup-only.bin',
+      'backupMediaSentinelBytes',
+      'restoredMediaSentinelBytes.equals(backupMediaSentinelBytes)',
+      'postBackupMediaRemoved: true',
+      'restoredLicenseBytes.equals(backupLicenseBytes)',
+      'licenseBytesMatchBackup: true'
+    ])
   );
 
   check(

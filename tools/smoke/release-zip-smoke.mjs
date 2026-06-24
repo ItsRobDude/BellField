@@ -288,7 +288,10 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
   const port = await getAvailablePort();
   const apiPort = await getAvailablePort();
   const officePort = await getAvailablePort();
-  const databaseUrl = `postgresql://postgres@127.0.0.1:${port}/postgres`;
+  const appDbName = 'bellfield_release_runtime_smoke';
+  const appDbUser = 'bellfield_release_runtime_smoke';
+  const appDbPassword = 'release-runtime-smoke-pass';
+  const databaseUrl = `postgresql://${appDbUser}:${appDbPassword}@127.0.0.1:${port}/${appDbName}`;
   const details = {
     port,
     apiPort,
@@ -325,6 +328,19 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
     ]);
     started = true;
 
+    createAppRoleAndDatabase({
+      postgresBin,
+      port,
+      databaseName: appDbName,
+      username: appDbUser,
+      password: appDbPassword
+    });
+    details.database = {
+      databaseName: appDbName,
+      username: appDbUser,
+      appRoleCreatedb: false
+    };
+
     runCommand(nodeExe, [join(releaseRoot, 'apps', 'api', 'scripts', 'migrations', 'up.mjs')], {
       cwd: join(releaseRoot, 'apps', 'api'),
       env: { ...process.env, DATABASE_URL: databaseUrl, PGCONNECT_TIMEOUT: '5' },
@@ -350,6 +366,26 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
       BELLFIELD_LICENSE_PATH: licensePath
     });
     issueSmokeLicense(licensePath, root);
+    mkdirSync(mediaRoot, { recursive: true });
+    const mediaSentinelPath = join(mediaRoot, 'restore-smoke-media-sentinel.bin');
+    const postBackupMediaPath = join(mediaRoot, 'restore-smoke-post-backup-only.bin');
+    const mediaSentinelBeforeBytes = Buffer.from(
+      'bellfield release restore smoke media before backup\n',
+      'utf8'
+    );
+    const mediaSentinelAfterBytes = Buffer.from(
+      'bellfield release restore smoke media after backup\n',
+      'utf8'
+    );
+    const postBackupMediaBytes = Buffer.from(
+      'bellfield release restore smoke post-backup-only media\n',
+      'utf8'
+    );
+    const postBackupLicenseBytes = Buffer.from(
+      'bellfield release restore smoke mutated license after backup\n',
+      'utf8'
+    );
+    writeFileSync(mediaSentinelPath, mediaSentinelBeforeBytes);
 
     const serverEnv = {
       ...process.env,
@@ -361,6 +397,15 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
     };
     delete serverEnv.BELLFIELD_POSTGRES_BIN;
     delete serverEnv.BELLFIELD_PG_DUMP_PATH;
+
+    runSql(
+      postgresBin,
+      databaseUrl,
+      [
+        'create table bellfield_restore_smoke_marker (id text primary key, label text);',
+        "insert into bellfield_restore_smoke_marker (id, label) values ('before', 'present in backup');"
+      ].join('\n')
+    );
     const backupCwd = join(root, 'manual-backup-foreign-cwd');
     mkdirSync(backupCwd, { recursive: true });
     const backupResult = runCommand(
@@ -379,6 +424,76 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
       backupSetPath: backup.backupSetPath,
       cwd: backupCwd,
       postgresToolEnvInjected: false
+    };
+    const backupMediaSentinelPath = join(
+      backup.backupSetPath,
+      'media',
+      'restore-smoke-media-sentinel.bin'
+    );
+    const backupLicensePath = join(backup.backupSetPath, 'license', 'bellfield-license.json');
+    const backupMediaSentinelBytes = readFileSync(backupMediaSentinelPath);
+    if (!backupMediaSentinelBytes.equals(mediaSentinelBeforeBytes)) {
+      throw new Error('Backup set did not capture the pre-backup media sentinel bytes.');
+    }
+    const backupLicenseBytes = readFileSync(backupLicensePath);
+
+    runSql(
+      postgresBin,
+      databaseUrl,
+      "insert into bellfield_restore_smoke_marker (id, label) values ('after', 'created after backup');"
+    );
+    writeFileSync(mediaSentinelPath, mediaSentinelAfterBytes);
+    writeFileSync(postBackupMediaPath, postBackupMediaBytes);
+    writeFileSync(licensePath, postBackupLicenseBytes);
+    const restoreCwd = join(root, 'restore-foreign-cwd');
+    mkdirSync(restoreCwd, { recursive: true });
+    runCommand(
+      nodeExe,
+      [
+        join(releaseRoot, 'tools', 'install', 'restore-backup.mjs'),
+        `--release-root=${releaseRoot}`,
+        `--install-root=${installRoot}`,
+        `--backup-set=${backup.backupSetPath}`,
+        '--confirm=RESTORE',
+        '--skip-services=true'
+      ],
+      {
+        cwd: restoreCwd,
+        env: serverEnv,
+        capture: true,
+        timeoutMs: 180_000
+      }
+    );
+    const markerRowsAfterRestore = querySqlRows(
+      postgresBin,
+      databaseUrl,
+      'select id from bellfield_restore_smoke_marker order by id;'
+    );
+    if (markerRowsAfterRestore.join(',') !== 'before') {
+      throw new Error(
+        `Restore did not return marker table to backup state; rows=${markerRowsAfterRestore.join(',')}`
+      );
+    }
+    const restoredMediaSentinelBytes = readFileSync(mediaSentinelPath);
+    if (!restoredMediaSentinelBytes.equals(backupMediaSentinelBytes)) {
+      throw new Error('Restore did not return media sentinel bytes to backup state.');
+    }
+    if (existsSync(postBackupMediaPath)) {
+      throw new Error('Restore did not remove media created after the backup.');
+    }
+    const restoredLicenseBytes = readFileSync(licensePath);
+    if (!restoredLicenseBytes.equals(backupLicenseBytes)) {
+      throw new Error('Restore did not return license bytes to backup-set state.');
+    }
+    details.restore = {
+      backupSetPath: backup.backupSetPath,
+      cwd: restoreCwd,
+      markerRowsAfterRestore,
+      databaseMarkerRollback: true,
+      mediaSentinelRestored: true,
+      postBackupMediaRemoved: true,
+      licenseBytesMatchBackup: true,
+      appRoleCreatedb: false
     };
 
     const api = startLoggedProcess({
@@ -477,6 +592,95 @@ function issueSmokeLicense(licensePath, root) {
     `--ledger=${join(root, 'issued-licenses.jsonl')}`,
     '--force=true'
   ]);
+}
+
+function createAppRoleAndDatabase(input) {
+  const adminEnv = {
+    ...process.env,
+    PGHOST: '127.0.0.1',
+    PGPORT: String(input.port),
+    PGUSER: 'postgres',
+    PGDATABASE: 'postgres'
+  };
+  const roleSql = [
+    'do $$',
+    'begin',
+    `  if exists (select 1 from pg_roles where rolname = ${quoteSqlLiteral(input.username)}) then`,
+    `    execute format('alter role %I with login password %L nocreatedb', ${quoteSqlLiteral(
+      input.username
+    )}, ${quoteSqlLiteral(input.password)});`,
+    '  else',
+    `    execute format('create role %I with login password %L nocreatedb', ${quoteSqlLiteral(
+      input.username
+    )}, ${quoteSqlLiteral(input.password)});`,
+    '  end if;',
+    'end',
+    '$$;'
+  ].join('\n');
+
+  runCommand(
+    pgTool(input.postgresBin, 'psql'),
+    ['--dbname', 'postgres', '--set=ON_ERROR_STOP=1', '--command', roleSql],
+    { env: adminEnv, timeoutMs: 30_000 }
+  );
+  runCommand(
+    pgTool(input.postgresBin, 'createdb'),
+    ['--owner', input.username, input.databaseName],
+    { env: adminEnv, timeoutMs: 30_000 }
+  );
+}
+
+function runSql(postgresBin, databaseUrl, sql) {
+  const pgEnv = pgEnvFromDatabaseUrl(databaseUrl);
+  runCommand(
+    pgTool(postgresBin, 'psql'),
+    ['--dbname', pgEnv.PGDATABASE, '--set=ON_ERROR_STOP=1', '--command', sql],
+    {
+      env: { ...process.env, ...pgEnv },
+      timeoutMs: 30_000
+    }
+  );
+}
+
+function querySqlRows(postgresBin, databaseUrl, sql) {
+  const pgEnv = pgEnvFromDatabaseUrl(databaseUrl);
+  const result = runCommand(
+    pgTool(postgresBin, 'psql'),
+    [
+      '--dbname',
+      pgEnv.PGDATABASE,
+      '--tuples-only',
+      '--no-align',
+      '--set=ON_ERROR_STOP=1',
+      '--command',
+      sql
+    ],
+    {
+      env: { ...process.env, ...pgEnv },
+      capture: true,
+      timeoutMs: 30_000
+    }
+  );
+
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+}
+
+function pgEnvFromDatabaseUrl(databaseUrl) {
+  const parsed = new URL(databaseUrl);
+  return {
+    PGHOST: parsed.hostname,
+    PGPORT: parsed.port || '5432',
+    PGUSER: decodeURIComponent(parsed.username),
+    PGPASSWORD: decodeURIComponent(parsed.password),
+    PGDATABASE: decodeURIComponent(parsed.pathname.replace(/^\//, ''))
+  };
+}
+
+function quoteSqlLiteral(value) {
+  return `'${String(value).replaceAll("'", "''")}'`;
 }
 
 function parseBackupCliResult(stdout) {
