@@ -11,7 +11,12 @@ import {
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
-import { BackupService, type ProcessRunner } from './backup-service';
+import {
+  BackupService,
+  resolvePgToolPath,
+  type BackupJobConfig,
+  type ProcessRunner
+} from './backup-service';
 import type {
   BackupRunFailedInput,
   BackupRunRetentionCandidate,
@@ -63,6 +68,65 @@ class InMemoryBackupRunsRepository implements BackupRunsStore {
 function createTempRoot(): string {
   return mkdtempSync(join(tmpdir(), 'bellfield-backup-spec-'));
 }
+
+function pgDumpExecutableName(): string {
+  return process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump';
+}
+
+function minimalBackupConfig(overrides: Partial<BackupJobConfig> = {}): BackupJobConfig {
+  return {
+    databaseUrl: 'postgresql://postgres:postgres@localhost:5432/bellfield',
+    mediaRoot: 'media',
+    backupRoot: 'backups',
+    retentionCount: 7,
+    ...overrides
+  };
+}
+
+test('resolvePgToolPath honors explicit pg_dump path override', () => {
+  const explicitPath = join('C:\\BellField', 'custom', pgDumpExecutableName());
+
+  assert.equal(
+    resolvePgToolPath('pg_dump', minimalBackupConfig({ pgDumpPath: explicitPath })),
+    explicitPath
+  );
+});
+
+test('resolvePgToolPath finds pg_dump under explicit PostgreSQL bin override', () => {
+  const root = createTempRoot();
+  try {
+    const postgresBin = join(root, 'postgres-bin');
+    const pgDump = join(postgresBin, pgDumpExecutableName());
+    mkdirSync(postgresBin, { recursive: true });
+    writeFileSync(pgDump, '');
+
+    assert.equal(resolvePgToolPath('pg_dump', minimalBackupConfig({ postgresBin })), pgDump);
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('resolvePgToolPath finds packaged pg_dump from worker module path regardless of cwd', () => {
+  const root = createTempRoot();
+  const originalCwd = process.cwd();
+  try {
+    const releaseRoot = join(root, 'release');
+    const moduleDirectory = join(releaseRoot, 'apps', 'worker', 'dist', 'jobs', 'backup');
+    const foreignCwd = join(root, 'foreign-cwd');
+    const pgDump = join(releaseRoot, 'postgres', 'bin', pgDumpExecutableName());
+    mkdirSync(moduleDirectory, { recursive: true });
+    mkdirSync(foreignCwd, { recursive: true });
+    mkdirSync(join(releaseRoot, 'postgres', 'bin'), { recursive: true });
+    writeFileSync(pgDump, '');
+
+    process.chdir(foreignCwd);
+
+    assert.equal(resolvePgToolPath('pg_dump', minimalBackupConfig(), moduleDirectory), pgDump);
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(root, { force: true, recursive: true });
+  }
+});
 
 test('BackupService writes a dump, copies media, records success, and writes a manifest', async () => {
   const root = createTempRoot();

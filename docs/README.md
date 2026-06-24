@@ -541,13 +541,44 @@ transient Codex/browser automation state, which did not survive reboot.
 Read when: updating Gate 1 operator protocol, reviewing the deepest current
 clean-machine install proof, or preparing the next rerun after `.23`/`.24`.
 
-Current follow-up: use the documented fixed dummy Gate Day owner credential in
-the real first-owner setup UI, then rerun from a cleaned Windows state. Gate 1
-is still not passed until post-reboot login, packaged LAN evidence, and real
-second-device login complete in one strict run.
+Current follow-up: superseded by rerun 13. The documented dummy Gate Day owner
+credential let the run pass post-reboot login, packaged LAN evidence, and real
+second-device login; Gate 1 is now passed. Rerun 13 then stopped at Gate 2
+because the documented packaged manual backup CLI could not discover
+`pg_dump.exe`.
 
 Does not own: the install recipe (`install-runbook.md`), the gate sequence
 (`gate-day-checklist.md`), or product account-recovery design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-13.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-13.md)
+
+Audience: contributors checking the first clean Windows Gate 1 pass and the
+new Gate 2 backup blocker.
+
+Purpose: dated evidence for the thirteenth fresh Windows install smoke: active
+artifacts `.23`/`.24` passed USB hash verification and `.23` extracted with
+`tar.exe`; baseline collection, `write-server-config.mjs`, the LAN helper
+Public-profile refusal/consent path, PostgreSQL provisioning, packaged
+migrations, license copy, service rendering/installation, SCM
+`NT SERVICE\bellfield-postgres` readback, ACL readback, API health,
+first-owner setup with the fixed dummy Gate Day credential, browser
+customer/location/job proof, reboot recovery, post-reboot login, packaged LAN
+evidence, and real second-device browser login all passed. The strict run then
+stopped at Gate 2 because the documented packaged manual backup CLI failed with
+`pg_dump.exe failed: spawn pg_dump.exe ENOENT`.
+
+Read when: reviewing the clean Windows Gate 1 closure, fixing the packaged
+manual backup path, updating Gate 2 instructions, or deciding what the next USB
+artifact must prove.
+
+Current follow-up: fix packaged manual backup discovery so a hardened install
+can produce a fresh post-browser-proof backup set without relying on cwd/PATH or
+manual env edits. The worker backup path should resolve packaged PostgreSQL
+tools relative to the compiled worker module, and Gate 2 should use the
+packaged backup helper before the restore proof.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or long-term backup UI design.
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 

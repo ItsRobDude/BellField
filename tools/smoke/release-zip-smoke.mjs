@@ -347,8 +347,7 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
       BELLFIELD_OFFICE_ORIGINS: `http://127.0.0.1:${officePort},http://localhost:${officePort}`,
       BELLFIELD_MEDIA_ROOT: mediaRoot,
       BELLFIELD_BACKUP_ROOT: backupRoot,
-      BELLFIELD_LICENSE_PATH: licensePath,
-      BELLFIELD_POSTGRES_BIN: postgresBin
+      BELLFIELD_LICENSE_PATH: licensePath
     });
     issueSmokeLicense(licensePath, root);
 
@@ -360,11 +359,15 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
       PGCONNECT_TIMEOUT: '5',
       BELLFIELD_BUILD_MANIFEST_PATH: join(releaseRoot, 'bellfield-build-manifest.json')
     };
+    delete serverEnv.BELLFIELD_POSTGRES_BIN;
+    delete serverEnv.BELLFIELD_PG_DUMP_PATH;
+    const backupCwd = join(root, 'manual-backup-foreign-cwd');
+    mkdirSync(backupCwd, { recursive: true });
     const backupResult = runCommand(
       nodeExe,
       [join(releaseRoot, 'apps', 'worker', 'dist', 'jobs', 'backup', 'run-backup-cli.js')],
       {
-        cwd: releaseRoot,
+        cwd: backupCwd,
         env: serverEnv,
         capture: true,
         timeoutMs: 180_000
@@ -373,7 +376,9 @@ async function runReleaseRuntimeBootSmoke(releaseRoot, nodeExe, postgresBin) {
     const backup = parseBackupCliResult(backupResult.stdout);
     details.manualBackup = {
       status: backup.status,
-      backupSetPath: backup.backupSetPath
+      backupSetPath: backup.backupSetPath,
+      cwd: backupCwd,
+      postgresToolEnvInjected: false
     };
 
     const api = startLoggedProcess({

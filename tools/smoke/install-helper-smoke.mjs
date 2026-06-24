@@ -24,8 +24,10 @@ try {
     lanPredicates: readRequired('tools/install/lan-firewall-predicates.ps1'),
     lanCleanup: readRequired('tools/install/remove-windows-lan-access.ps1'),
     migrationHelper: readRequired('tools/install/run-packaged-migrations.mjs'),
+    backupHelper: readRequired('tools/install/run-packaged-backup.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
+    backupService: readRequired('apps/worker/src/jobs/backup/backup-service.ts'),
     releaseBuilder: readRequired('tools/build-release.mjs'),
     releaseZipSmoke: readRequired('tools/smoke/release-zip-smoke.mjs')
   };
@@ -61,6 +63,7 @@ try {
   check(
     'shared JS redaction helper is used by install/runtime smokes',
     files.migrationHelper.includes("from './sensitive-redaction.mjs'") &&
+      files.backupHelper.includes("from './sensitive-redaction.mjs'") &&
       files.releaseZipSmoke.includes("from '../install/sensitive-redaction.mjs'")
   );
 
@@ -379,6 +382,37 @@ try {
       files.migrationHelper.includes("'-t', String(stopTimeoutSeconds)") &&
       files.migrationHelper.includes('printStopFailureEvidence') &&
       files.migrationHelper.includes('redacted PostgreSQL status after failed stop')
+  );
+  check(
+    'backup helper loads packaged env and points manual backup at packaged pg_dump',
+    includesAll(files.backupHelper, [
+      'parseEnvFile(envPath)',
+      'run-backup-cli.js',
+      'BELLFIELD_POSTGRES_BIN',
+      'BELLFIELD_PG_DUMP_PATH',
+      'pg_dump.exe',
+      'BELLFIELD_BACKUP_RESULT'
+    ])
+  );
+  check(
+    'backup helper redacts failure output',
+    files.backupHelper.includes("from './sensitive-redaction.mjs'") &&
+      files.backupHelper.includes('redactSensitiveText') &&
+      files.backupHelper.includes('redacted backup output tail')
+  );
+  check(
+    'worker backup pg_dump resolver uses module-relative packaged path, not process cwd',
+    files.backupService.includes('moduleDirectory = __dirname') &&
+      files.backupService.includes("'..', '..', '..', '..', '..', 'postgres', 'bin'") &&
+      !files.backupService.includes('process.cwd()')
+  );
+  check(
+    'release ZIP smoke proves manual backup without injected PostgreSQL tool env from foreign cwd',
+    files.releaseZipSmoke.includes('delete serverEnv.BELLFIELD_POSTGRES_BIN') &&
+      files.releaseZipSmoke.includes('delete serverEnv.BELLFIELD_PG_DUMP_PATH') &&
+      files.releaseZipSmoke.includes('manual-backup-foreign-cwd') &&
+      files.releaseZipSmoke.includes('postgresToolEnvInjected: false') &&
+      !files.releaseZipSmoke.includes('BELLFIELD_POSTGRES_BIN: postgresBin')
   );
 
   check(

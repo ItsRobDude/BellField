@@ -20,6 +20,16 @@ Still not claimed:
 - arbitrary NAS/cloud backup layouts
 - update rollback using automatic pre-update backups
 
+Rerun #13 reached this gate after a full clean Windows Gate 1 pass, then failed
+before restore because the documented packaged manual backup CLI could not find
+`pg_dump.exe` from the elevated shell used by the runbook. The worker service
+had produced an earlier scheduled backup, but it predated browser-created test
+data and was not a valid restore marker. Before the scratch-machine restore gate
+can pass, the manual backup path must make packaged PostgreSQL tools explicit
+instead of depending on current working directory or PATH. Restore already
+defaults to `release\postgres\bin` from the packaged helper's release root; the
+manual backup path should follow the same cwd-independent pattern.
+
 ## Backup Set Shape
 
 Each backup set is written under `BELLFIELD_BACKUP_ROOT` as:

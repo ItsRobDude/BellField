@@ -43,15 +43,15 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #12 has
-  clean-machine install, service registration/stability, ACL, API-health,
-  first-owner setup, job booking, reboot recovery, and post-reboot service/API
-  health evidence, but the first-owner password existed only in transient
-  Codex/browser automation state and was unavailable after reboot. Post-reboot
-  browser login, packaged LAN evidence, and second-device LAN access were not
-  attempted.
+  job booking, reboot survival, and second-device access. Rerun #13 passed this
+  gate on Windows 11 Home with active `.23`/`.24` artifacts: service
+  registration/stability, PostgreSQL SCM/ACL checks, API health, first-owner
+  setup, job proof, reboot recovery, packaged LAN evidence, and real
+  second-device same-Wi-Fi browser login all completed in one strict run.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
-  backup set
+  backup set. Rerun #13 stopped here because the documented packaged manual
+  backup CLI could not discover packaged `pg_dump.exe` from the elevated shell
+  used by the runbook.
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
   pre-update `pg_dump` backup, plus a real refusal against an expired-window
   license

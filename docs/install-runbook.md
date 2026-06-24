@@ -185,6 +185,18 @@ Validated on the development machine:
   transient Codex/browser automation state and was unavailable after reboot. The
   run did not reach packaged LAN evidence or real second-device login. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md)
+- thirteenth clean Windows gate-day attempt ran on 2026-06-23 with the same
+  active `.23`/`.24` artifacts and the fixed documented Gate Day owner
+  credential. Gate 1 passed: USB hashes, extraction, baseline collection, LAN
+  Public-profile refusal/consent, LAN env/firewall setup, PostgreSQL
+  provisioning, packaged migrations, license placement, service rendering,
+  elevated service installation, PostgreSQL SCM `StartName`, ACL readback,
+  service evidence, API `/health`, browser first-owner setup, customer/location
+  job proof, reboot recovery, post-reboot login, packaged LAN evidence, and
+  real second-device browser login all passed. The strict run then stopped at
+  Gate 2 because the documented packaged manual backup CLI could not find
+  `pg_dump.exe`. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-13.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-13.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -203,13 +215,15 @@ Validated on the development machine:
 - a packaged elevated read-only service evidence collector exists at
   `tools\install\collect-windows-service-evidence.ps1`
 
-Not yet validated in this repo:
+Current clean-machine validation status:
 
-- successful clean Windows machine install with no developer tooling through
-  post-reboot login and second-device LAN access in one strict run
+- clean Windows Gate 1 passed in rerun #13 for the entry-tier install
+  path: no developer tooling, real services, first-owner setup, job proof,
+  reboot recovery, packaged LAN evidence, and real second-device browser login
+  in one strict run
 - a green run of the packaged service-account diagnostic (supporting preflight
   evidence only, not the gate; now uses corrected virtual-account proof criteria)
-- Windows LAN/firewall reachability for a second office desktop; rerun #8
+- Windows LAN/firewall reachability for office web on a second device; rerun #8
   proved local install, owner setup, job booking, reboot recovery, and
   post-reboot login, but second-device same-Wi-Fi access timed out; rerun #9
   stopped earlier because the packaged LAN helper could not read generated env
@@ -222,10 +236,11 @@ Not yet validated in this repo:
   exact-rule collector artifact and proved service install, browser owner setup,
   job booking, reboot recovery, and post-reboot service/API health, but stopped
   before post-reboot browser login because the test owner password was only in
-  transient automation state. Gate 1 now needs the fixed documented Gate Day
-  dummy credential plus a cleaned-machine run that reaches post-reboot login,
-  writes packaged LAN evidence, and proves real second-device login
-- Android field-device proof
+  transient automation state. Rerun #13 used the documented Gate Day dummy
+  credential and passed post-reboot login, packaged LAN evidence, and real
+  second-device browser login from an iPhone on the same Wi-Fi
+- second office desktop and Android field-device proof remain separate optional
+  environmental checks
 - scratch-machine backup/restore drill
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
   `pg_dump`, health check, and reboot/service recovery proof
@@ -647,7 +662,9 @@ the password into evidence logs. If the exact dummy password appears in
 evidence, treat it as an allowlisted test value; any non-dummy owner password,
 setup token, database URL, relay token, or generated secret remains a hygiene
 failure. Rerun #12 stopped at post-reboot login because the owner password only
-existed in transient Codex/browser automation state.
+existed in transient Codex/browser automation state; rerun #13 used the fixed
+documented Gate Day dummy credential and passed post-reboot login plus real
+second-device browser login.
 
 After service ACL hardening, non-elevated shells may not be able to read service
 logs or PostgreSQL paths. If setup-token metadata, startup errors, or ACL
@@ -707,11 +724,9 @@ URL checks are labeled `origin = "installed-pc"` and
 `provesRemoteReachability = false`; they prove local binding behavior only. The
 collector does not create firewall rules, change the network profile, or replace
 the actual second-device login proof. Rerun #11 showed the older packaged
-collector could hang while enumerating broad firewall evidence; rerun #12 used
-the exact-rule collector artifact but stopped before this checkpoint because the
-post-reboot owner credential only existed in transient automation state. The
-next strict run must use the fixed documented Gate Day dummy credential and
-still capture this collector output before attempting second-device login.
+collector could hang while enumerating broad firewall evidence; rerun #13 proved
+the exact-rule collector artifact on the clean machine, then a real iPhone
+same-Wi-Fi browser login closed the Gate 1 LAN proof.
 
 Then open `http://<scratch-lan-ip>:3000` from the second device and log in.
 Only a real second-device login closes the Gate 1 LAN proof. If
@@ -729,6 +744,18 @@ Each set includes:
 - `manifest.json`
 
 The System surface shows the latest successful backup and warns when it is stale.
+
+Rerun #13 proved the worker can create a scheduled backup set on the installed
+machine, but the documented manual Gate 2 command failed from an elevated shell
+with `pg_dump.exe failed: spawn pg_dump.exe ENOENT`. Until this is patched, do
+not treat the bare manual CLI command as a complete strict-gate recipe; it is
+cwd/tool-path dependent unless the worker resolves packaged PostgreSQL tools
+relative to its own module path. Use the packaged backup helper as the Gate 2
+operator command once rebuilt:
+
+```powershell
+.\release\runtime\node\node.exe .\release\tools\install\run-packaged-backup.mjs --install-root=C:\BellField
+```
 
 Restore is assisted and destructive. Use:
 
