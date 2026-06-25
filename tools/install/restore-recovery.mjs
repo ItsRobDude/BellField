@@ -7,9 +7,7 @@ export const restorePhases = Object.freeze({
   schemaResetComplete: 'schemaResetComplete',
   databaseRestored: 'databaseRestored',
   filesSwapped: 'filesSwapped',
-  migrationsRun: 'migrationsRun',
-  startingServices: 'startingServices',
-  completed: 'completed'
+  migrationsRun: 'migrationsRun'
 });
 
 const restorePhaseOrder = Object.freeze(Object.values(restorePhases));
@@ -19,8 +17,7 @@ export function createRestoreRecoveryTracker(input = {}) {
   const state = {
     phase: restorePhases.preflight,
     skipServices: Boolean(input.skipServices),
-    serviceStopAttempted: false,
-    servicesStarted: false
+    serviceStopAttempted: false
   };
 
   return {
@@ -30,9 +27,6 @@ export function createRestoreRecoveryTracker(input = {}) {
     },
     markServiceStopAttempted() {
       state.serviceStopAttempted = true;
-    },
-    markServicesStarted() {
-      state.servicesStarted = true;
     },
     snapshot() {
       return { ...state };
@@ -44,16 +38,8 @@ export function decideRestoreRecovery(snapshot) {
   const phase = snapshot?.phase ?? restorePhases.preflight;
   assertRestorePhase(phase);
 
-  if (snapshot?.skipServices || !snapshot?.serviceStopAttempted || snapshot?.servicesStarted) {
+  if (snapshot?.skipServices || !snapshot?.serviceStopAttempted) {
     return { restartServices: false, message: null };
-  }
-
-  if (phaseAtLeast(phase, restorePhases.startingServices)) {
-    return {
-      restartServices: true,
-      message:
-        'Restore data steps completed, but app services did not finish starting; retrying service start.'
-    };
   }
 
   if (phaseAtLeast(phase, restorePhases.filesSwapped)) {

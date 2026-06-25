@@ -11,7 +11,7 @@ function ConvertTo-BellFieldRedactedText {
   # intentionally over-redacted even when a particular occurrence is benign.
   $text = [regex]::Replace(
     $text,
-    '(?i)(BellField first-owner setup token:\s*)[A-Za-z0-9_-]+',
+    '(?i)(BellField first-owner setup token:[^\S\r\n]*)[^\s\\''"`",;}]+',
     '$1[REDACTED]'
   )
   $text = [regex]::Replace(
@@ -51,7 +51,7 @@ function ConvertTo-BellFieldRedactedText {
   )
   $text = [regex]::Replace(
     $text,
-    '(?i)\b((?:token|relayToken|setupToken|sessionToken|accessToken|refreshToken)\s*[:=]\s*)("[^"]*"|''[^'']*''|[A-Za-z0-9._~+/=-]{16,})',
+    '(?i)\b((?:token|relayToken|setupToken|sessionToken|accessToken|refreshToken)[^\S\r\n]*[:=][^\S\r\n]*)("[^"]*"|''[^'']*''|[A-Za-z0-9._~+/=-]{16,})',
     '$1[REDACTED]'
   )
 

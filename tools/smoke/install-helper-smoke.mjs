@@ -5,6 +5,7 @@ import {
   REDACTION_SECRET_FIXTURES,
   assertNoSensitiveRedactionLeaks
 } from '../install/sensitive-redaction.mjs';
+import { collectUpdateProcessIds } from '../install/update-recovery.mjs';
 import { writeSmokeEvidence } from './smoke-evidence.mjs';
 
 const evidence = {
@@ -27,6 +28,11 @@ try {
     backupHelper: readRequired('tools/install/run-packaged-backup.mjs'),
     restoreHelper: readRequired('tools/install/restore-backup.mjs'),
     restoreRecovery: readRequired('tools/install/restore-recovery.mjs'),
+    restoreStaging: readRequired('tools/install/restore-staging.mjs'),
+    windowsServiceControl: readRequired('tools/install/windows-service-control.mjs'),
+    updateHelper: readRequired('tools/install/update-bellfield.mjs'),
+    updateRecovery: readRequired('tools/install/update-recovery.mjs'),
+    updateRecoveryTest: readRequired('tools/install/update-recovery.test.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
     backupService: readRequired('apps/worker/src/jobs/backup/backup-service.ts'),
@@ -43,6 +49,18 @@ try {
     'PowerShell redactor removes every redaction fixture secret',
     true,
     powershellRedactionResult
+  );
+  const powershellRedactionJsonResult = runPowerShellRedactionJsonParseCorpus();
+  check(
+    'PowerShell redactor preserves parseable serialized JSON with setup-token log tails',
+    true,
+    powershellRedactionJsonResult
+  );
+  const powershellProcessJsonResult = runPowerShellProcessTreeJsonCorpus();
+  check(
+    'PowerShell process-tree JSON corpus normalizes single-process arrays',
+    true,
+    powershellProcessJsonResult
   );
 
   check(
@@ -441,8 +459,10 @@ try {
       'decideRestoreRecovery',
       'serviceStopAttempted',
       'schemaResetComplete',
-      'startingServices'
+      'migrationsRun'
     ]) &&
+      !files.restoreRecovery.includes('startingServices') &&
+      !files.restoreRecovery.includes('markServicesStarted') &&
       files.restoreHelper.includes("from './restore-recovery.mjs'") &&
       files.restoreHelper.includes('recoveryTracker.markServiceStopAttempted();') &&
       files.restoreHelper.includes('decideRestoreRecovery(recoveryTracker.snapshot())')
@@ -450,7 +470,7 @@ try {
   assertOrdered(files.restoreHelper, 'restore helper preflights before stopping app services', [
     'runRestorePreflight({ psql, pgEnv, databaseName, username });',
     'stageDirectoryRestore({',
-    'stopAppServices(skipServices);',
+    'stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });',
     'resetDatabaseSchema({ psql, pgEnv, databaseName, username });'
   ]);
   assertOrdered(
@@ -459,7 +479,7 @@ try {
     [
       'recoveryTracker.enter(restorePhases.stoppingServices);',
       'recoveryTracker.markServiceStopAttempted();',
-      'stopAppServices(skipServices);'
+      'stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });'
     ]
   );
   assertOrdered(files.restoreHelper, 'restore helper marks schema reset complete after reset', [
@@ -467,6 +487,204 @@ try {
     'resetDatabaseSchema({ psql, pgEnv, databaseName, username });',
     'recoveryTracker.enter(restorePhases.schemaResetComplete);'
   ]);
+  assertOrdered(files.restoreHelper, 'restore helper checks readiness outside destructive catch', [
+    'recoveryTracker.enter(restorePhases.migrationsRun);',
+    'cleanupStagedRestorePaths([',
+    'throw error;',
+    "console.log('BellField restore data, media, license, and migrations completed.');",
+    'const restoreReady = await verifyRestoreReadiness({',
+    "console.log('BellField restore completed.');"
+  ]);
+  check(
+    'restore helper exposes conservative health and service timeout flags',
+    includesAll(files.restoreHelper, [
+      "args['skip-health']",
+      "args['health-timeout-ms']",
+      "args['health-url']",
+      "args['service-timeout-ms']",
+      'async function waitForHealth',
+      'async function verifyRestoreReadiness',
+      "from './windows-service-control.mjs'",
+      'startAppServices({ skipServices: input.skipServices'
+    ]) &&
+      includesAll(files.windowsServiceControl, [
+        "WaitForStatus('Stopped'",
+        "WaitForStatus('Running'"
+      ])
+  );
+  check(
+    'restore service start is handled by readiness, not destructive recovery',
+    extractFunctionBody(files.restoreHelper, 'verifyRestoreReadiness').includes(
+      'startAppServices({ skipServices: input.skipServices'
+    ) &&
+      !files.restoreHelper.includes('recoveryTracker.enter(restorePhases.startingServices)') &&
+      !files.restoreHelper.includes('recoveryTracker.markServicesStarted()')
+  );
+  check(
+    'updater recovery helper owns phase-based recovery decisions',
+    includesAll(files.updateRecovery, [
+      'export const updatePhases',
+      'createUpdateRecoveryTracker',
+      'decideUpdateRecovery',
+      'serviceStopAttempted',
+      'swappingRelease',
+      'releaseSwapped',
+      'startingServices',
+      'healthChecking'
+    ]) &&
+      files.updateHelper.includes("from './update-recovery.mjs'") &&
+      files.updateHelper.includes('createUpdateRecoveryTracker') &&
+      files.updateHelper.includes('decideUpdateRecovery(recoveryTracker.snapshot())')
+  );
+  check(
+    'updater recovery tests pin both sides of the release-swap boundary',
+    files.updateRecoveryTest.includes('swappingRelease is still pre-swap') &&
+      files.updateRecoveryTest.includes('releaseSwapped is post-swap') &&
+      files.updateRecoveryTest.includes('health failure retries service readiness')
+  );
+  check(
+    'updater emits structured phase, failure, and result lines',
+    includesAll(files.updateHelper, [
+      'BELLFIELD_UPDATE_PHASE',
+      'BELLFIELD_UPDATE_FAILURE',
+      'BELLFIELD_UPDATE_RESULT',
+      'buildFailureSummary'
+    ])
+  );
+  assertOrdered(files.updateHelper, 'updater waits for service process exit before swap', [
+    'enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);',
+    'recoveryTracker.markServiceStopAttempted();',
+    'stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });',
+    'enterUpdatePhase(recoveryTracker, updatePhases.waitingForProcessExit);',
+    'waitForCapturedProcessTreeExit(serviceProcessTree, serviceExitTimeoutMs);',
+    'enterUpdatePhase(recoveryTracker, updatePhases.swappingRelease,',
+    'swapStagedDirectoryWithRetry({'
+  ]);
+  check(
+    'updater captures service process trees before stop',
+    includesAll(files.updateHelper, [
+      'captureServiceProcessTree(appServicesStopOrder)',
+      'Get-CimInstance Win32_Process',
+      'Get-ProcessTree',
+      'collectUpdateProcessIds(serviceProcessTree)'
+    ])
+  );
+  check(
+    'restore staging helper owns bounded directory swap retry',
+    includesAll(files.restoreStaging, [
+      'export async function swapStagedDirectoryWithRetry',
+      'const swapOnce = input.swapOnce ?? swapStagedDirectory',
+      'restoreMissingTargetFromRollback',
+      'isRetryableSwapError',
+      'Directory swap attempt'
+    ]) &&
+      files.updateHelper.includes('swapStagedDirectoryWithRetry') &&
+      !files.updateHelper.includes('async function swapStagedReleaseWithRetry')
+  );
+  check(
+    'restore staging swap retry verifies helper rollback leaves a usable target or stage',
+    includesAll(files.restoreStaging, [
+      'if (!existsSync(input.targetPath))',
+      'target could not be restored',
+      'if (!existsSync(input.stagePath))',
+      'staged directory is no longer available',
+      'swapEvidence',
+      'rollbackCandidatePath'
+    ])
+  );
+  check(
+    'restore staging rollback repair chooses highest same-stamp numeric suffix',
+    includesAll(files.restoreStaging, [
+      'entry.name === prefix',
+      'suffix: 1',
+      '/^\\d+$/.test(suffix)',
+      'right.suffix - left.suffix'
+    ])
+  );
+  check(
+    'updater cleans abandoned staged releases without deleting rollback releases',
+    includesAll(files.updateHelper, [
+      'function cleanupStagedUpdatePath',
+      ".includes('.restore-stage-')",
+      'Removed abandoned staged update release',
+      'cleanupStagedUpdatePath(recoveryTracker.snapshot().stagedReleasePath)'
+    ]) && !files.updateHelper.includes('rmSync(rollbackReleasePath')
+  );
+  check(
+    'updater failure summary includes recovery evidence',
+    includesAll(files.updateHelper, [
+      'rollbackReleasePath',
+      'preUpdateBackupPath',
+      'serviceStates',
+      'releaseRootProcesses',
+      'currentReleaseRootExists',
+      'restartSkippedReason',
+      'originalError',
+      'recoveryError',
+      'swapEvidence',
+      'postSwapFailure',
+      'restartAttempted',
+      'restartSucceeded',
+      'Do not start app services blindly'
+    ])
+  );
+  check(
+    'updater catch gates pre-swap restart on installed release root existence',
+    includesAll(files.updateHelper, [
+      'const currentReleaseRootExists = existsSync(currentReleaseRoot);',
+      '!recovery.postSwapFailure && !currentReleaseRootExists',
+      'Installed release root is missing; original app services were not restarted.',
+      'restartSkippedReason'
+    ])
+  );
+  check(
+    'updater release-root diagnostics use path-boundary matching and unavailable command-line evidence',
+    includesAll(files.updateHelper, [
+      'function Test-CommandLineContainsReleaseRoot',
+      "$next -eq '\\\\'",
+      'unavailableCommandLineProcesses',
+      'CommandLine unavailable',
+      'matchingReleaseRootProcesses'
+    ]) &&
+      !files.updateHelper.includes(
+        '$_.CommandLine.IndexOf($releaseRoot, [StringComparison]::OrdinalIgnoreCase) -ge 0'
+      )
+  );
+  check(
+    'updater health failures produce post-swap rollback guidance after readiness retry',
+    includesAll(files.updateRecovery, [
+      'postSwapFailure: true',
+      'retrying service readiness once',
+      'rollback release directory',
+      'pre-update backup path'
+    ]) &&
+      files.updateHelper.includes('readinessRecovered: true') &&
+      files.updateHelper.includes('recovery.postSwapFailure')
+  );
+  check(
+    'updater normalizes PowerShell process JSON scalar and array shapes',
+    includesAll(files.updateRecovery, [
+      'export function collectUpdateProcessIds',
+      'export function normalizePowerShellArray',
+      'normalizePowerShellArray(entry?.processes)'
+    ]) && files.updateRecoveryTest.includes('collectUpdateProcessIds normalizes PowerShell scalar')
+  );
+  check(
+    'updater does not claim fake taskkill containment for spawnSync timeouts',
+    !extractFunctionBody(files.updateHelper, 'run').includes('taskkill') &&
+      !extractFunctionBody(files.restoreHelper, 'run').includes('taskkill')
+  );
+  check(
+    'updater exposes bounded timeout flags for destructive phases',
+    includesAll(files.updateHelper, [
+      "args['backup-timeout-ms']",
+      "args['service-timeout-ms']",
+      "args['service-exit-timeout-ms']",
+      "args['swap-timeout-ms']",
+      "args['migration-timeout-ms']",
+      "args['health-timeout-ms']"
+    ])
+  );
   check(
     'release ZIP smoke proves restore with a non-CREATEDB app role and marker rollback',
     includesAll(files.releaseZipSmoke, [
@@ -566,6 +784,138 @@ Write-Host "PowerShell redaction corpus passed"
   }
 
   return { command, fixtureCount: REDACTION_SECRET_FIXTURES.length };
+}
+
+function runPowerShellRedactionJsonParseCorpus() {
+  const command = findPowerShellCommand();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error(
+        'PowerShell was not available for the required Windows redaction JSON corpus'
+      );
+    }
+    return { skipped: true, reason: 'PowerShell not available on this platform' };
+  }
+
+  const redactionPath = quotePowerShellString(resolve('tools/install/evidence-redaction.ps1'));
+  const script = `
+$ErrorActionPreference = "Stop"
+. ${redactionPath}
+$secret = "setup-token-json-tail-ABC1234567890"
+$payload = [pscustomobject]@{
+  serviceLogTail = "before\`r\`nBellField first-owner setup token: $secret\`r\`nafter"
+  nested = [pscustomobject]@{
+    setupToken = $secret
+  }
+}
+$json = $payload | ConvertTo-Json -Depth 5
+$redacted = ConvertTo-BellFieldRedactedText $json
+if ($redacted.Contains($secret)) {
+  throw "PowerShell redaction leaked setup token inside serialized JSON"
+}
+$parsed = $redacted | ConvertFrom-Json
+if ($null -eq $parsed.serviceLogTail -or -not $parsed.serviceLogTail.Contains("[REDACTED]")) {
+  throw "Redacted setup-token log tail did not survive JSON round-trip"
+}
+if ($parsed.nested.setupToken -ne "[REDACTED]") {
+  throw "Nested setupToken JSON field was not redacted safely"
+}
+$emptyTokenLine = "BellField first-owner setup token: \`r\`nNEXT-LINE-SHOULD-REMAIN"
+$emptyRedacted = ConvertTo-BellFieldRedactedText $emptyTokenLine
+if (-not $emptyRedacted.Contains("NEXT-LINE-SHOULD-REMAIN")) {
+  throw "Empty setup-token line consumed the next evidence line"
+}
+Write-Host "PowerShell redaction JSON parse corpus passed"
+`;
+  const result = spawnSync(
+    command,
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000
+    }
+  );
+  if (result.error) {
+    throw new Error(`Failed to run PowerShell redaction JSON corpus: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `PowerShell redaction JSON corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+
+  return { command };
+}
+
+function runPowerShellProcessTreeJsonCorpus() {
+  const command = findPowerShellCommand();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error('PowerShell was not available for the required process-tree JSON corpus');
+    }
+    return { skipped: true, reason: 'PowerShell not available on this platform' };
+  }
+
+  const script = `
+$ErrorActionPreference = "Stop"
+function Get-ProcessTree {
+  param([int]$RootPid)
+  $items = @()
+  $items += [pscustomobject]@{
+    processId = $RootPid
+    parentProcessId = 100
+    name = "node.exe"
+    commandLine = "C:\\BellField\\release\\runtime\\node\\node.exe"
+  }
+  return @($items)
+}
+$index = 0
+$result = foreach ($name in @("bellfield-api", "bellfield-worker")) {
+  $index += 1
+  $processId = 200 + $index
+  [pscustomobject]@{
+    serviceName = $name
+    serviceProcessId = 100 + $index
+    processes = if ($processId -gt 0) { @(Get-ProcessTree -RootPid $processId) } else { @() }
+  }
+}
+$result | ConvertTo-Json -Depth 8
+`;
+  const result = spawnSync(
+    command,
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000
+    }
+  );
+  if (result.error) {
+    throw new Error(`Failed to run PowerShell process-tree JSON corpus: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `PowerShell process-tree JSON corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+
+  const parsed = JSON.parse(result.stdout.trim());
+  const entries = Array.isArray(parsed) ? parsed : [parsed];
+  const scalarProcessEntries = entries.filter(
+    (entry) => entry?.processes && !Array.isArray(entry.processes)
+  );
+  if (scalarProcessEntries.length === 0) {
+    throw new Error('PowerShell process-tree corpus did not produce scalar processes objects');
+  }
+  const ids = collectUpdateProcessIds(parsed);
+  if (!ids.includes(101) || !ids.includes(102) || !ids.includes(201) || !ids.includes(202)) {
+    throw new Error(`Process-tree JSON normalization missed expected IDs: ${ids.join(', ')}`);
+  }
+
+  return { command, processIds: ids, scalarProcessEntryCount: scalarProcessEntries.length };
 }
 
 function runPowerShellLanEnvLineCorpus() {
@@ -954,6 +1304,40 @@ function extractTopLevelParamBlock(contents) {
     } else if (!inSingleQuote && !inDoubleQuote && char === '(') {
       depth += 1;
     } else if (!inSingleQuote && !inDoubleQuote && char === ')') {
+      depth -= 1;
+      if (depth === 0) {
+        return contents.slice(openIndex + 1, index);
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractFunctionBody(contents, name) {
+  const pattern = new RegExp(`function\\s+${name}\\s*\\([^)]*\\)\\s*\\{`);
+  const match = pattern.exec(contents);
+  if (!match) {
+    return '';
+  }
+
+  const openIndex = contents.indexOf('{', match.index);
+  let depth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  let inTemplate = false;
+  for (let index = openIndex; index < contents.length; index += 1) {
+    const char = contents[index];
+    const previous = contents[index - 1];
+    if (!inDoubleQuote && !inTemplate && char === "'" && previous !== '\\') {
+      inSingleQuote = !inSingleQuote;
+    } else if (!inSingleQuote && !inTemplate && char === '"' && previous !== '\\') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote && char === '`' && previous !== '\\') {
+      inTemplate = !inTemplate;
+    } else if (!inSingleQuote && !inDoubleQuote && !inTemplate && char === '{') {
+      depth += 1;
+    } else if (!inSingleQuote && !inDoubleQuote && !inTemplate && char === '}') {
       depth -= 1;
       if (depth === 0) {
         return contents.slice(openIndex + 1, index);

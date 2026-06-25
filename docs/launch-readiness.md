@@ -168,9 +168,19 @@ backup blocker: the packaged backup helper produced a fresh backup set with the
 required shape. Restore then failed because the old restore helper tried to
 recreate the database with the runtime app role and PostgreSQL returned
 `permission denied to create database`. The repo-side helper now restores
-through the owned schema path without granting permanent `CREATEDB`, but
-scratch-machine proof of that fix is still pending. See
+through the owned schema path without granting permanent `CREATEDB`; rerun #15
+proved that fix. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md).
+Rerun #15 used rebuilt `.27`/`.28` artifacts from merge commit `d60afaf`. Gate 1
+passed again. Gate 2 passed from a real worker-produced backup set: restore used
+the owned-schema path, services restarted, login worked, pre-backup data
+survived, media/license checks were good, and the post-backup marker was erased.
+Gate 3 failed during the real `.27` to `.28` update. The updater continued after
+the outer wrapper timeout, eventually created a pre-update backup and staged
+`.28`, but left `.27` installed with API/worker/office-web stopped and
+PostgreSQL still running. The active clean-machine blocker is now updater
+observability/recovery, not backup/restore. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -195,12 +205,14 @@ The remaining clean-machine proofs are still owned by
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
       bar) — the owner does not perform installs.
-- [ ] scratch-machine restore from a real backup set. Rerun #14 proved fresh
-      packaged backup creation on the clean install, then failed because restore
-      tried to recreate the database with the runtime app role. The next artifact
-      must prove the owned-schema restore path, marker erasure, service restart,
-      login, and pre-backup data readback.
+- [x] scratch-machine restore from a real backup set. Rerun #15 proved packaged
+      backup creation, owned-schema restore, marker erasure, service restart,
+      login, and pre-backup data readback on the clean Windows machine. Rough
+      edges remain around post-restore health readiness messaging and System
+      backup-card wording, but the Phase 2 environmental proof is closed.
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
+      remains open. Rerun #15 created the pre-update backup and staged `.28`,
+      but failed before completing swap/restart and left app services stopped.
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)
 - [ ] second office desktop + real Android field device against that install

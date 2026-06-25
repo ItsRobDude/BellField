@@ -15,6 +15,7 @@ import {
   swapStagedFile,
   timestampForRestorePath
 } from './restore-staging.mjs';
+import { startWindowsService, stopWindowsService } from './windows-service-control.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultReleaseRoot = resolve(scriptDir, '..', '..');
@@ -60,11 +61,16 @@ function run(command, args, options = {}) {
     encoding: options.capture ? 'utf8' : undefined,
     shell: false,
     env: options.env ?? process.env,
-    cwd: options.cwd
+    cwd: options.cwd,
+    timeout: options.timeoutMs
   });
 
   if (result.error) {
-    throw new Error(`${command} failed: ${result.error.message}`);
+    const timeoutDetail =
+      result.error.code === 'ETIMEDOUT' && options.timeoutMs
+        ? ` timed out after ${options.timeoutMs}ms`
+        : '';
+    throw new Error(`${command}${timeoutDetail} failed: ${result.error.message}`);
   }
   if (result.status !== 0) {
     throw new Error(`${command} exited with ${result.status ?? 1}`);
@@ -72,39 +78,107 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function runPowerShell(command) {
-  run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command]);
-}
-
-function stopAppServices(skipServices) {
+function stopAppServices({ skipServices, timeoutMs }) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service stop.');
     return false;
   }
 
   for (const serviceName of appServicesStopOrder) {
-    runPowerShell(
-      `if (Get-Service -Name '${serviceName}' -ErrorAction SilentlyContinue) { Stop-Service -Name '${serviceName}' -Force }`
-    );
+    stopWindowsService(serviceName, timeoutMs);
   }
   return true;
 }
 
-function startAppServices(skipServices) {
+function startAppServices({ skipServices, timeoutMs }) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service start.');
     return false;
   }
 
-  runPowerShell(
-    "if (Get-Service -Name 'bellfield-postgres' -ErrorAction SilentlyContinue) { Start-Service -Name 'bellfield-postgres' }"
-  );
+  startWindowsService('bellfield-postgres', timeoutMs);
   for (const serviceName of appServicesStartOrder) {
-    runPowerShell(
-      `if (Get-Service -Name '${serviceName}' -ErrorAction SilentlyContinue) { Start-Service -Name '${serviceName}' }`
-    );
+    startWindowsService(serviceName, timeoutMs);
   }
   return true;
+}
+
+async function waitForHealth(input) {
+  if (input.skipHealth) {
+    console.log('Skipping health check.');
+    return;
+  }
+
+  const deadline = Date.now() + input.timeoutMs;
+  let lastError;
+  while (Date.now() < deadline) {
+    try {
+      const response = await fetch(input.url);
+      if (response.ok) {
+        const body = await response.json().catch(() => null);
+        if (body && body.status === 'ok') {
+          console.log(`Health check reached ${input.url}.`);
+          return;
+        }
+        lastError = new Error(`API status ${body?.status ?? 'unreadable'}`);
+      } else {
+        lastError = new Error(`HTTP ${response.status}`);
+      }
+    } catch (error) {
+      lastError = error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+
+  throw new Error(`Health check did not pass at ${input.url}: ${lastError?.message ?? 'timeout'}`);
+}
+
+async function verifyRestoreReadiness(input) {
+  try {
+    startAppServices({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
+    await waitForHealth({
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      skipHealth: input.skipHealth
+    });
+    return true;
+  } catch (error) {
+    console.error(
+      `BellField restore data completed, but service readiness did not pass: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    console.error('Retrying BellField service start once before marking readiness failed.');
+  }
+
+  try {
+    startAppServices({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
+    await waitForHealth({
+      url: input.url,
+      timeoutMs: input.timeoutMs,
+      skipHealth: input.skipHealth
+    });
+    console.log('BellField API readiness recovered after retrying service start.');
+    return true;
+  } catch (error) {
+    console.error(
+      `BellField restore service-readiness failed after data restore completed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+    console.error(
+      'The database, media, license, and migrations completed. Do not rerun the destructive restore just for this readiness failure; inspect service logs and /health first.'
+    );
+    return false;
+  }
+}
+
+function parsePositiveInteger(value, fallback, label) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive number of milliseconds.`);
+  }
+  return Math.floor(parsed);
 }
 
 function assertSafeReplaceDirectory(path, label) {
@@ -207,6 +281,13 @@ const backupSetPath = args['backup-set']
       throw new Error('Missing required --backup-set=<path>.');
     })();
 const skipServices = args['skip-services'] === 'true';
+const skipHealth = args['skip-health'] === 'true' || skipServices || process.platform !== 'win32';
+const healthTimeoutMs = parsePositiveInteger(args['health-timeout-ms'], 60_000, 'health timeout');
+const serviceTimeoutMs = parsePositiveInteger(
+  args['service-timeout-ms'],
+  60_000,
+  'service timeout'
+);
 const env = parseEnvFile(envPath);
 const databaseUrl = env.DATABASE_URL;
 if (!env.BELLFIELD_MEDIA_ROOT) {
@@ -257,6 +338,8 @@ const recoveryTracker = createRestoreRecoveryTracker({
 });
 let stagedMediaPath = null;
 let stagedLicensePath = null;
+let mediaRollbackPath = null;
+let licenseRollbackPath = null;
 
 try {
   recoveryTracker.enter(restorePhases.preflight);
@@ -286,7 +369,7 @@ try {
   }
   recoveryTracker.enter(restorePhases.stoppingServices);
   recoveryTracker.markServiceStopAttempted();
-  stopAppServices(skipServices);
+  stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
   recoveryTracker.enter(restorePhases.servicesStopped);
 
   recoveryTracker.enter(restorePhases.resettingSchema);
@@ -299,13 +382,13 @@ try {
   );
   recoveryTracker.enter(restorePhases.databaseRestored);
 
-  const mediaRollbackPath = swapStagedDirectory({
+  mediaRollbackPath = swapStagedDirectory({
     stagePath: stagedMediaPath,
     targetPath: mediaRoot,
     stamp: restoreStamp
   });
 
-  const licenseRollbackPath =
+  licenseRollbackPath =
     licensePath && stagedLicensePath
       ? swapStagedFile({
           stagePath: stagedLicensePath,
@@ -317,18 +400,6 @@ try {
 
   run(nodeExe, [migrationsScript], { env: restoreEnv, cwd: releaseRoot });
   recoveryTracker.enter(restorePhases.migrationsRun);
-  recoveryTracker.enter(restorePhases.startingServices);
-  startAppServices(skipServices);
-  recoveryTracker.markServicesStarted();
-  recoveryTracker.enter(restorePhases.completed);
-
-  console.log('BellField restore completed.');
-  if (mediaRollbackPath) {
-    console.log(`Previous media root preserved for rollback cleanup: ${mediaRollbackPath}`);
-  }
-  if (licenseRollbackPath) {
-    console.log(`Previous license file preserved for rollback cleanup: ${licenseRollbackPath}`);
-  }
 } catch (error) {
   cleanupStagedRestorePaths([
     { path: stagedMediaPath, label: 'staged media restore' },
@@ -340,7 +411,7 @@ try {
   }
   if (recovery.restartServices) {
     try {
-      startAppServices(skipServices);
+      startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
     } catch (restartError) {
       console.error(
         `Failed to restart app services after restore failure: ${
@@ -350,6 +421,29 @@ try {
     }
   }
   throw error;
+}
+
+console.log('BellField restore data, media, license, and migrations completed.');
+if (mediaRollbackPath) {
+  console.log(`Previous media root preserved for rollback cleanup: ${mediaRollbackPath}`);
+}
+if (licenseRollbackPath) {
+  console.log(`Previous license file preserved for rollback cleanup: ${licenseRollbackPath}`);
+}
+
+const apiPort = env.BELLFIELD_API_PORT ?? env.PORT ?? '3001';
+const restoreReady = await verifyRestoreReadiness({
+  url: String(args['health-url'] ?? `http://127.0.0.1:${apiPort}/health`),
+  timeoutMs: healthTimeoutMs,
+  serviceTimeoutMs,
+  skipHealth,
+  skipServices
+});
+
+if (restoreReady) {
+  console.log('BellField restore completed.');
+} else {
+  process.exitCode = 1;
 }
 
 function cleanupStagedRestorePaths(entries) {

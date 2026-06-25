@@ -11,34 +11,30 @@ function restoreSnapshot(phase, overrides = {}) {
     phase,
     skipServices: false,
     serviceStopAttempted: true,
-    servicesStarted: false,
     ...overrides
   };
 }
 
-test('restore recovery tracker records phase and service flags', () => {
+test('restore recovery tracker records phase and service stop flag', () => {
   const tracker = createRestoreRecoveryTracker({ skipServices: true });
   const initialSnapshot = tracker.snapshot();
 
   assert.deepEqual(initialSnapshot, {
     phase: restorePhases.preflight,
     skipServices: true,
-    serviceStopAttempted: false,
-    servicesStarted: false
+    serviceStopAttempted: false
   });
 
-  initialSnapshot.phase = restorePhases.completed;
+  initialSnapshot.phase = restorePhases.migrationsRun;
   assert.equal(tracker.snapshot().phase, restorePhases.preflight);
 
   tracker.enter(restorePhases.stoppingServices);
   tracker.markServiceStopAttempted();
-  tracker.markServicesStarted();
 
   assert.deepEqual(tracker.snapshot(), {
     phase: restorePhases.stoppingServices,
     skipServices: true,
-    serviceStopAttempted: true,
-    servicesStarted: true
+    serviceStopAttempted: true
   });
 });
 
@@ -92,11 +88,10 @@ test('migration failure after media and license swap leaves app services stopped
   assert.match(recovery.message, /migrations/i);
 });
 
-test('service start failure reports service recovery instead of database corruption', () => {
-  const recovery = decideRestoreRecovery(restoreSnapshot(restorePhases.startingServices));
+test('failure after migrations leaves app services stopped before readiness handling', () => {
+  const recovery = decideRestoreRecovery(restoreSnapshot(restorePhases.migrationsRun));
 
-  assert.equal(recovery.restartServices, true);
-  assert.match(recovery.message, /services did not finish starting/i);
-  assert.doesNotMatch(recovery.message, /database.*inconsistent/i);
-  assert.doesNotMatch(recovery.message, /database.*restore/i);
+  assert.equal(recovery.restartServices, false);
+  assert.match(recovery.message, /media\/license/i);
+  assert.match(recovery.message, /migrations/i);
 });
