@@ -1,13 +1,25 @@
-import { existsSync } from 'node:fs';
-import { dirname, isAbsolute, join, parse, relative, resolve } from 'node:path';
+import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { basename, dirname, isAbsolute, join, parse, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  collectUpdateProcessIds,
+  createUpdateRecoveryTracker,
+  decideUpdateRecovery,
+  normalizePowerShellArray,
+  updatePhases
+} from './update-recovery.mjs';
 import { parseEnvFile, readArgs } from './install-utils.mjs';
 import {
   stageDirectoryRestore,
-  swapStagedDirectory,
+  swapStagedDirectoryWithRetry,
   timestampForRestorePath
 } from './restore-staging.mjs';
+import {
+  quotePowerShellString,
+  startWindowsService,
+  stopWindowsService
+} from './windows-service-control.mjs';
 import {
   assertReleaseWithinUpdateWindow,
   verifyReleaseArtifact
@@ -25,11 +37,16 @@ function run(command, args, options = {}) {
     encoding: options.capture ? 'utf8' : undefined,
     shell: false,
     env: options.env ?? process.env,
-    cwd: options.cwd
+    cwd: options.cwd,
+    timeout: options.timeoutMs
   });
 
   if (result.error) {
-    throw new Error(`${command} failed: ${result.error.message}`);
+    const timeoutDetail =
+      result.error.code === 'ETIMEDOUT' && options.timeoutMs
+        ? ` timed out after ${options.timeoutMs}ms`
+        : '';
+    throw new Error(`${command}${timeoutDetail} failed: ${result.error.message}`);
   }
   if (result.status !== 0) {
     const detail = options.capture ? result.stderr || result.stdout : '';
@@ -38,37 +55,136 @@ function run(command, args, options = {}) {
   return result;
 }
 
-function runPowerShell(command) {
-  run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command]);
+function runPowerShell(command, options = {}) {
+  return run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', command], {
+    capture: options.capture,
+    timeoutMs: options.timeoutMs
+  });
 }
 
-function stopAppServices(skipServices) {
+function emitUpdateEvent(prefix, payload) {
+  console.log(
+    `${prefix} ${JSON.stringify({
+      timestamp: new Date().toISOString(),
+      ...payload
+    })}`
+  );
+}
+
+function enterUpdatePhase(recoveryTracker, phase, details = {}) {
+  recoveryTracker.enter(phase);
+  emitUpdateEvent('BELLFIELD_UPDATE_PHASE', { phase, ...details });
+}
+
+function stopAppServices({ skipServices, timeoutMs }) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service stop.');
-    return;
+    return [];
   }
 
+  const processTree = captureServiceProcessTree(appServicesStopOrder);
   for (const serviceName of appServicesStopOrder) {
-    runPowerShell(
-      `if (Get-Service -Name '${serviceName}' -ErrorAction SilentlyContinue) { Stop-Service -Name '${serviceName}' -Force }`
-    );
+    stopWindowsService(serviceName, timeoutMs);
   }
+  return processTree;
 }
 
-function startAppServices(skipServices) {
+function startAppServices({ skipServices, timeoutMs }) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service start.');
     return;
   }
 
-  runPowerShell(
-    "if (Get-Service -Name 'bellfield-postgres' -ErrorAction SilentlyContinue) { Start-Service -Name 'bellfield-postgres' }"
-  );
+  startWindowsService('bellfield-postgres', timeoutMs);
   for (const serviceName of appServicesStartOrder) {
-    runPowerShell(
-      `if (Get-Service -Name '${serviceName}' -ErrorAction SilentlyContinue) { Start-Service -Name '${serviceName}' }`
-    );
+    startWindowsService(serviceName, timeoutMs);
   }
+}
+
+function captureServiceProcessTree(serviceNames) {
+  const serviceArray = toPowerShellStringArray(serviceNames);
+  const result = runPowerShell(
+    `
+$ErrorActionPreference = 'Stop'
+$serviceNames = @(${serviceArray})
+$allProcesses = @(Get-CimInstance Win32_Process | Select-Object ProcessId, ParentProcessId, Name, CommandLine)
+function Get-ProcessTree {
+  param([int]$RootPid, [object[]]$AllProcesses)
+  $seen = @{}
+  $pending = New-Object System.Collections.Queue
+  $pending.Enqueue($RootPid)
+  $items = @()
+  while ($pending.Count -gt 0) {
+    $processId = [int]$pending.Dequeue()
+    if ($seen.ContainsKey($processId)) { continue }
+    $seen[$processId] = $true
+    $process = $AllProcesses | Where-Object { [int]$_.ProcessId -eq $processId } | Select-Object -First 1
+    if ($null -eq $process) { continue }
+    $items += [pscustomobject]@{
+      processId = [int]$process.ProcessId
+      parentProcessId = [int]$process.ParentProcessId
+      name = [string]$process.Name
+      commandLine = [string]$process.CommandLine
+    }
+    foreach ($child in @($AllProcesses | Where-Object { [int]$_.ParentProcessId -eq $processId })) {
+      $pending.Enqueue([int]$child.ProcessId)
+    }
+  }
+  return @($items)
+}
+
+$result = foreach ($name in $serviceNames) {
+  $service = Get-CimInstance Win32_Service -Filter "Name = '$name'" -ErrorAction SilentlyContinue
+  $processId = if ($service -and [int]$service.ProcessId -gt 0) { [int]$service.ProcessId } else { 0 }
+  [pscustomobject]@{
+    serviceName = $name
+    serviceProcessId = $processId
+    processes = if ($processId -gt 0) { @(Get-ProcessTree -RootPid $processId -AllProcesses $allProcesses) } else { @() }
+  }
+}
+$result | ConvertTo-Json -Depth 8
+`,
+    { capture: true, timeoutMs: 30_000 }
+  );
+
+  const stdout = result.stdout.trim();
+  if (!stdout) {
+    return [];
+  }
+  const parsed = JSON.parse(stdout);
+  return normalizePowerShellArray(parsed);
+}
+
+function waitForCapturedProcessTreeExit(processTree, timeoutMs) {
+  if (process.platform !== 'win32') {
+    return;
+  }
+
+  const processIds = collectUpdateProcessIds(processTree);
+  if (processIds.length === 0) {
+    console.log('No running BellField service process tree was captured before stop.');
+    return;
+  }
+
+  const idArray = processIds.join(', ');
+  runPowerShell(
+    `
+$ErrorActionPreference = 'Stop'
+$processIds = @(${idArray})
+$deadline = (Get-Date).AddMilliseconds(${timeoutMs})
+do {
+  $running = @($processIds | ForEach-Object { Get-Process -Id $_ -ErrorAction SilentlyContinue })
+  if ($running.Count -eq 0) {
+    Write-Host 'Captured BellField service process tree exited.'
+    return
+  }
+  Start-Sleep -Milliseconds 500
+} while ((Get-Date) -lt $deadline)
+$summary = @($running | Select-Object Id, ProcessName) | ConvertTo-Json -Compress
+throw "Timed out waiting for captured BellField service process tree to exit: $summary"
+`,
+    { timeoutMs: timeoutMs + 10_000 }
+  );
 }
 
 function assertSafeReplaceDirectory(path, label) {
@@ -111,7 +227,8 @@ function runManualBackup(input) {
   const result = run(input.nodeExe, [backupCli], {
     cwd: input.updateArtifactRoot,
     env: input.env,
-    capture: true
+    capture: true,
+    timeoutMs: input.timeoutMs
   });
   const stdout = result.stdout.trim();
   const resultLine = stdout
@@ -141,8 +258,7 @@ async function waitForHealth(input) {
       if (response.ok) {
         const body = await response.json().catch(() => null);
         // Post-update, "degraded" means the database or migration state is
-        // not ready — exactly what this check exists to catch. Keep polling
-        // until the API reports ok or the deadline passes.
+        // not ready yet. Keep polling until the API reports ok.
         if (body && body.status === 'ok') {
           console.log(`Health check reached ${input.url}.`);
           return;
@@ -154,10 +270,254 @@ async function waitForHealth(input) {
     } catch (error) {
       lastError = error;
     }
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    await delay(1_000);
   }
 
   throw new Error(`Health check did not pass at ${input.url}: ${lastError?.message ?? 'timeout'}`);
+}
+
+function cleanupStagedUpdatePath(stagedReleasePath) {
+  if (!stagedReleasePath || !existsSync(stagedReleasePath)) {
+    return { removed: false };
+  }
+  if (!basename(stagedReleasePath).includes('.restore-stage-')) {
+    console.error(`Refusing to remove unexpected staged update path: ${stagedReleasePath}`);
+    return { removed: false, skipped: true };
+  }
+
+  try {
+    rmSync(stagedReleasePath, { force: true, recursive: true });
+    console.error(`Removed abandoned staged update release: ${stagedReleasePath}`);
+    return { removed: true };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to remove abandoned staged update release: ${message}`);
+    return { removed: false, error: message };
+  }
+}
+
+function captureServiceStatesSafe() {
+  if (process.platform !== 'win32') {
+    return [];
+  }
+  try {
+    const serviceArray = toPowerShellStringArray(['bellfield-postgres', ...appServicesStartOrder]);
+    const result = runPowerShell(
+      `
+$serviceNames = @(${serviceArray})
+$states = foreach ($name in $serviceNames) {
+  $service = Get-CimInstance Win32_Service -Filter "Name = '$name'" -ErrorAction SilentlyContinue
+  if ($null -eq $service) {
+    [pscustomobject]@{ name = $name; found = $false }
+  } else {
+    [pscustomobject]@{
+      name = $name
+      found = $true
+      state = [string]$service.State
+      startName = [string]$service.StartName
+      processId = [int]$service.ProcessId
+      exitCode = [int]$service.ExitCode
+      pathName = [string]$service.PathName
+    }
+  }
+}
+$states | ConvertTo-Json -Depth 5
+`,
+      { capture: true, timeoutMs: 30_000 }
+    );
+    const stdout = result.stdout.trim();
+    if (!stdout) {
+      return [];
+    }
+    const parsed = JSON.parse(stdout);
+    return normalizePowerShellArray(parsed);
+  } catch (error) {
+    return [
+      {
+        error: error instanceof Error ? error.message : String(error)
+      }
+    ];
+  }
+}
+
+function captureReleaseRootProcessesSafe(releaseRoot) {
+  if (process.platform !== 'win32') {
+    return {
+      matchingReleaseRootProcesses: [],
+      unavailableCommandLineProcesses: []
+    };
+  }
+
+  try {
+    const releaseRootValue = quotePowerShellString(resolve(releaseRoot));
+    const result = runPowerShell(
+      `
+$releaseRoot = (${releaseRootValue}).TrimEnd('\\')
+$currentNodePid = ${process.pid}
+$currentPowerShellPid = $PID
+$processNamePattern = '^(node|node\\.exe|winsw|winsw\\.exe|BellField.*)$'
+function Test-CommandLineContainsReleaseRoot {
+  param([AllowNull()][string]$Value, [string]$Root)
+  if ([string]::IsNullOrWhiteSpace($Value)) { return $false }
+  $index = $Value.IndexOf($Root, [StringComparison]::OrdinalIgnoreCase)
+  while ($index -ge 0) {
+    $after = $index + $Root.Length
+    if ($after -ge $Value.Length) { return $true }
+    $next = $Value[$after]
+    if ($next -eq '\\' -or $next -eq '/' -or $next -eq '"' -or $next -eq "'" -or [char]::IsWhiteSpace($next)) {
+      return $true
+    }
+    $index = $Value.IndexOf($Root, $index + 1, [StringComparison]::OrdinalIgnoreCase)
+  }
+  return $false
+}
+$allProcesses = @(
+  Get-CimInstance Win32_Process |
+    Where-Object {
+      $_.ProcessId -ne $currentNodePid -and
+      $_.ProcessId -ne $currentPowerShellPid
+    }
+)
+$matching = @(
+  $allProcesses |
+    Where-Object { Test-CommandLineContainsReleaseRoot -Value $_.CommandLine -Root $releaseRoot } |
+    Select-Object ProcessId, ParentProcessId, Name, CommandLine
+)
+$unavailableCommandLine = @(
+  $allProcesses |
+    Where-Object {
+      [string]::IsNullOrWhiteSpace($_.CommandLine) -and
+      [string]$_.Name -match $processNamePattern
+    } |
+    Select-Object -First 10 ProcessId, ParentProcessId, Name, @{ Name = 'reason'; Expression = { 'CommandLine unavailable' } }
+)
+[pscustomobject]@{
+  matchingReleaseRootProcesses = @($matching)
+  unavailableCommandLineProcesses = @($unavailableCommandLine)
+} | ConvertTo-Json -Depth 5
+`,
+      { capture: true, timeoutMs: 30_000 }
+    );
+    const stdout = result.stdout.trim();
+    if (!stdout) {
+      return {
+        matchingReleaseRootProcesses: [],
+        unavailableCommandLineProcesses: []
+      };
+    }
+    const parsed = JSON.parse(stdout);
+    return {
+      matchingReleaseRootProcesses: normalizePowerShellArray(parsed?.matchingReleaseRootProcesses),
+      unavailableCommandLineProcesses: normalizePowerShellArray(
+        parsed?.unavailableCommandLineProcesses
+      )
+    };
+  } catch (error) {
+    return {
+      matchingReleaseRootProcesses: [],
+      unavailableCommandLineProcesses: [],
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function safeReadReleaseManifest(releaseRoot) {
+  const manifestPath = join(releaseRoot, 'bellfield-build-manifest.json');
+  try {
+    if (!existsSync(manifestPath)) {
+      return null;
+    }
+    const parsed = JSON.parse(readFileSync(manifestPath, 'utf8'));
+    return {
+      version: parsed.version ?? null,
+      releaseDate: parsed.releaseDate ?? null,
+      sourceCommit: parsed.sourceCommit ?? null
+    };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function buildFailureSummary(input) {
+  const originalError = input.originalError ?? input.error;
+  const recoveryError = input.recoveryError ?? null;
+  return {
+    status: 'failed',
+    phase: input.snapshot.phase,
+    recovery: {
+      restartServices: input.recovery.restartServices,
+      message: input.recovery.message,
+      restartAttempted: input.restartAttempted,
+      restartSucceeded: input.restartSucceeded,
+      restartSkippedReason: input.restartSkippedReason ?? null
+    },
+    error: input.error instanceof Error ? input.error.message : String(input.error),
+    originalError: originalError instanceof Error ? originalError.message : String(originalError),
+    recoveryError: recoveryError
+      ? recoveryError instanceof Error
+        ? recoveryError.message
+        : String(recoveryError)
+      : null,
+    versions: {
+      attempted: input.attemptedVersion,
+      installed: safeReadReleaseManifest(input.currentReleaseRoot)
+    },
+    paths: {
+      currentReleaseRoot: input.currentReleaseRoot,
+      currentReleaseRootExists: input.currentReleaseRootExists,
+      stagedReleasePath: input.snapshot.stagedReleasePath,
+      rollbackReleasePath: input.snapshot.rollbackReleasePath,
+      preUpdateBackupPath: input.snapshot.preUpdateBackupPath
+    },
+    cleanup: input.cleanup,
+    swapEvidence: readSwapEvidence(originalError) ?? readSwapEvidence(recoveryError),
+    serviceStates: captureServiceStatesSafe(),
+    releaseRootProcesses: captureReleaseRootProcessesSafe(input.currentReleaseRoot),
+    guidance: input.restartSkippedReason
+      ? 'The update failed before the release swap completed, but the installed release root is missing. Do not restart app services until the release directory is repaired from rollback/stage evidence.'
+      : input.recovery.postSwapFailure
+        ? 'The update release swap completed before readiness failed. Inspect the rollback release directory, pre-update backup, service states, and release-root process evidence before retrying.'
+        : input.recovery.restartServices
+          ? 'Original app services were safe to restart because the installed release swap had not completed.'
+          : 'Do not start app services blindly. Inspect the rollback release directory, pre-update backup, service states, and update phase before retrying.'
+  };
+}
+
+function readSwapEvidence(error) {
+  if (!error || typeof error !== 'object') {
+    return null;
+  }
+  if (error.swapEvidence) {
+    return error.swapEvidence;
+  }
+  return readSwapEvidence(error.cause);
+}
+
+async function retryUpdateReadiness(input) {
+  startAppServices({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
+  await waitForHealth({
+    url: input.healthUrl,
+    timeoutMs: input.healthTimeoutMs,
+    skipHealth: input.skipHealth
+  });
+}
+
+function parsePositiveInteger(value, fallback, label) {
+  const parsed = Number(value ?? fallback);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new Error(`${label} must be a positive number of milliseconds.`);
+  }
+  return Math.floor(parsed);
+}
+
+function toPowerShellStringArray(values) {
+  return values.map((value) => quotePowerShellString(value)).join(', ');
+}
+
+function delay(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 const args = readArgs();
@@ -174,10 +534,27 @@ const currentReleaseRoot = assertSafeReplaceDirectory(
   String(args['current-release-root'] ?? join(installRoot, 'release')),
   'current release root'
 );
-const skipServices = args['skip-services'] === 'true';
-const skipHealth = args['skip-health'] === 'true';
+const skipServices = args['skip-services'] === 'true' || process.platform !== 'win32';
+const skipHealth = args['skip-health'] === 'true' || skipServices;
 const skipBackup = args['skip-backup'] === 'true';
-const healthTimeoutMs = Number(args['health-timeout-ms'] ?? 60_000);
+const backupTimeoutMs = parsePositiveInteger(args['backup-timeout-ms'], 300_000, 'backup timeout');
+const serviceTimeoutMs = parsePositiveInteger(
+  args['service-timeout-ms'],
+  60_000,
+  'service timeout'
+);
+const serviceExitTimeoutMs = parsePositiveInteger(
+  args['service-exit-timeout-ms'],
+  60_000,
+  'service exit timeout'
+);
+const swapTimeoutMs = parsePositiveInteger(args['swap-timeout-ms'], 60_000, 'swap timeout');
+const migrationTimeoutMs = parsePositiveInteger(
+  args['migration-timeout-ms'],
+  180_000,
+  'migration timeout'
+);
+const healthTimeoutMs = parsePositiveInteger(args['health-timeout-ms'], 60_000, 'health timeout');
 
 if (samePath(updateArtifactRoot, currentReleaseRoot)) {
   throw new Error(
@@ -189,6 +566,8 @@ if (isPathInsideDirectory(updateArtifactRoot, currentReleaseRoot)) {
 }
 
 const env = parseEnvFile(envPath);
+const apiPort = env.BELLFIELD_API_PORT ?? env.PORT ?? '3001';
+const healthUrl = String(args['health-url'] ?? `http://127.0.0.1:${apiPort}/health`);
 const nodeExe = join(
   updateArtifactRoot,
   'runtime',
@@ -203,62 +582,186 @@ if (!existsSync(migrationsScript)) {
   throw new Error(`Packaged migration script is missing from update artifact: ${migrationsScript}`);
 }
 
-const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
-const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PATH });
-if (licenseStatus.status !== 'valid') {
-  throw new Error(`BellField update cannot be installed: ${licenseStatus.message}`);
-}
-if (licenseStatus.license.licenseKind === 'dataOnly') {
-  throw new Error(
-    'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
+const recoveryTracker = createUpdateRecoveryTracker({ skipServices });
+let attemptedVersion = null;
+
+try {
+  enterUpdatePhase(recoveryTracker, updatePhases.verifying);
+  const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
+  attemptedVersion = verifiedArtifact.build.version;
+  const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PATH });
+  if (licenseStatus.status !== 'valid') {
+    throw new Error(`BellField update cannot be installed: ${licenseStatus.message}`);
+  }
+  if (licenseStatus.license.licenseKind === 'dataOnly') {
+    throw new Error(
+      'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
+    );
+  }
+  assertReleaseWithinUpdateWindow({
+    releaseDate: verifiedArtifact.build.releaseDate,
+    updateWindowEnd: licenseStatus.license.updateWindowEnd
+  });
+
+  const restoreStamp = timestampForRestorePath();
+  enterUpdatePhase(recoveryTracker, updatePhases.staging, { restoreStamp });
+  const stagedReleasePath = stageDirectoryRestore({
+    sourcePath: updateArtifactRoot,
+    targetPath: currentReleaseRoot,
+    stamp: restoreStamp,
+    sourceLabel: 'update artifact root'
+  });
+  recoveryTracker.setStagedReleasePath(stagedReleasePath);
+  enterUpdatePhase(recoveryTracker, updatePhases.staged, { stagedReleasePath });
+  console.log(`Staged update artifact at ${stagedReleasePath}`);
+
+  const updateEnv = { ...process.env, ...env, DATABASE_URL: env.DATABASE_URL };
+  enterUpdatePhase(recoveryTracker, updatePhases.backingUp);
+  const backup = runManualBackup({
+    updateArtifactRoot,
+    nodeExe,
+    env: updateEnv,
+    skipBackup,
+    timeoutMs: backupTimeoutMs
+  });
+  recoveryTracker.setPreUpdateBackupPath(backup?.backupSetPath ?? null);
+  enterUpdatePhase(recoveryTracker, updatePhases.backupComplete, {
+    preUpdateBackupPath: backup?.backupSetPath ?? null
+  });
+
+  console.log(
+    `Installing BellField ${verifiedArtifact.build.version} (${verifiedArtifact.build.releaseDate}).`
   );
-}
-assertReleaseWithinUpdateWindow({
-  releaseDate: verifiedArtifact.build.releaseDate,
-  updateWindowEnd: licenseStatus.license.updateWindowEnd
-});
+  enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);
+  recoveryTracker.markServiceStopAttempted();
+  const serviceProcessTree = stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
+  enterUpdatePhase(recoveryTracker, updatePhases.servicesStopped, {
+    capturedProcessCount: collectUpdateProcessIds(serviceProcessTree).length
+  });
+  enterUpdatePhase(recoveryTracker, updatePhases.waitingForProcessExit);
+  waitForCapturedProcessTreeExit(serviceProcessTree, serviceExitTimeoutMs);
+  enterUpdatePhase(recoveryTracker, updatePhases.processesExited);
 
-const restoreStamp = timestampForRestorePath();
-const stagedReleasePath = stageDirectoryRestore({
-  sourcePath: updateArtifactRoot,
-  targetPath: currentReleaseRoot,
-  stamp: restoreStamp,
-  sourceLabel: 'update artifact root'
-});
-console.log(`Staged update artifact at ${stagedReleasePath}`);
+  enterUpdatePhase(recoveryTracker, updatePhases.swappingRelease, {
+    swapTimeoutMs
+  });
+  const rollbackReleasePath = await swapStagedDirectoryWithRetry({
+    stagePath: stagedReleasePath,
+    targetPath: currentReleaseRoot,
+    stamp: restoreStamp,
+    timeoutMs: swapTimeoutMs
+  });
+  recoveryTracker.setRollbackReleasePath(rollbackReleasePath);
+  recoveryTracker.markReleaseSwapped();
+  enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped, { rollbackReleasePath });
 
-const updateEnv = { ...process.env, ...env, DATABASE_URL: env.DATABASE_URL };
-const backup = runManualBackup({
-  updateArtifactRoot,
-  nodeExe,
-  env: updateEnv,
-  skipBackup
-});
+  enterUpdatePhase(recoveryTracker, updatePhases.migrating);
+  run(nodeExe, [migrationsScript], {
+    env: updateEnv,
+    cwd: currentReleaseRoot,
+    timeoutMs: migrationTimeoutMs
+  });
+  enterUpdatePhase(recoveryTracker, updatePhases.migrationsRun);
+  enterUpdatePhase(recoveryTracker, updatePhases.startingServices);
+  startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
 
-console.log(
-  `Installing BellField ${verifiedArtifact.build.version} (${verifiedArtifact.build.releaseDate}).`
-);
-stopAppServices(skipServices);
-const rollbackReleasePath = swapStagedDirectory({
-  stagePath: stagedReleasePath,
-  targetPath: currentReleaseRoot,
-  stamp: restoreStamp
-});
+  enterUpdatePhase(recoveryTracker, updatePhases.healthChecking);
+  await waitForHealth({
+    url: healthUrl,
+    timeoutMs: healthTimeoutMs,
+    skipHealth
+  });
+  recoveryTracker.markServicesStarted();
+  enterUpdatePhase(recoveryTracker, updatePhases.completed);
 
-run(nodeExe, [migrationsScript], { env: updateEnv, cwd: currentReleaseRoot });
-startAppServices(skipServices);
+  emitUpdateEvent('BELLFIELD_UPDATE_RESULT', {
+    status: 'succeeded',
+    version: verifiedArtifact.build.version,
+    releaseDate: verifiedArtifact.build.releaseDate,
+    preUpdateBackupPath: backup?.backupSetPath ?? null,
+    rollbackReleasePath
+  });
+  console.log('BellField update completed.');
+  if (backup) {
+    console.log(`Pre-update backup set: ${backup.backupSetPath}`);
+  }
+  if (rollbackReleasePath) {
+    console.log(`Previous release preserved for rollback reference: ${rollbackReleasePath}`);
+  }
+} catch (error) {
+  const recovery = decideUpdateRecovery(recoveryTracker.snapshot());
+  if (recovery.message) {
+    console.error(recovery.message);
+  }
 
-const apiPort = env.BELLFIELD_API_PORT ?? env.PORT ?? '3001';
-await waitForHealth({
-  url: String(args['health-url'] ?? `http://127.0.0.1:${apiPort}/health`),
-  timeoutMs: Number.isFinite(healthTimeoutMs) && healthTimeoutMs > 0 ? healthTimeoutMs : 60_000,
-  skipHealth
-});
+  let restartAttempted = false;
+  let restartSucceeded = false;
+  let readinessRecovered = false;
+  let recoveryError = null;
+  let restartSkippedReason = null;
+  const currentReleaseRootExists = existsSync(currentReleaseRoot);
+  if (recovery.restartServices) {
+    if (!recovery.postSwapFailure && !currentReleaseRootExists) {
+      restartSkippedReason =
+        'Installed release root is missing; original app services were not restarted.';
+      console.error(restartSkippedReason);
+    } else {
+      restartAttempted = true;
+      try {
+        if (recovery.postSwapFailure) {
+          await retryUpdateReadiness({
+            skipServices,
+            serviceTimeoutMs,
+            skipHealth,
+            healthUrl,
+            healthTimeoutMs
+          });
+          recoveryTracker.markServicesStarted();
+          recoveryTracker.enter(updatePhases.completed);
+          readinessRecovered = true;
+        } else {
+          startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
+        }
+        restartSucceeded = true;
+      } catch (restartError) {
+        recoveryError = restartError;
+        console.error(
+          `Failed to restart services after update failure: ${
+            restartError instanceof Error ? restartError.message : String(restartError)
+          }`
+        );
+      }
+    }
+  }
 
-console.log('BellField update completed.');
-if (backup) {
-  console.log(`Pre-update backup set: ${backup.backupSetPath}`);
-}
-if (rollbackReleasePath) {
-  console.log(`Previous release preserved for rollback reference: ${rollbackReleasePath}`);
+  if (readinessRecovered) {
+    emitUpdateEvent('BELLFIELD_UPDATE_RESULT', {
+      status: 'succeeded',
+      readinessRecovered: true,
+      version: attemptedVersion,
+      preUpdateBackupPath: recoveryTracker.snapshot().preUpdateBackupPath,
+      rollbackReleasePath: recoveryTracker.snapshot().rollbackReleasePath
+    });
+    console.log('BellField update completed after retrying service readiness.');
+  } else {
+    const cleanup = cleanupStagedUpdatePath(recoveryTracker.snapshot().stagedReleasePath);
+    emitUpdateEvent(
+      'BELLFIELD_UPDATE_FAILURE',
+      buildFailureSummary({
+        error: recoveryError ?? error,
+        originalError: error,
+        recoveryError,
+        snapshot: recoveryTracker.snapshot(),
+        recovery,
+        restartAttempted,
+        restartSucceeded,
+        restartSkippedReason,
+        cleanup,
+        attemptedVersion,
+        currentReleaseRoot,
+        currentReleaseRootExists
+      })
+    );
+    throw recoveryError ?? error;
+  }
 }

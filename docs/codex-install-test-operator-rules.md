@@ -154,6 +154,17 @@ API log tails containing a first-owner setup-token line; redact those log-tail
 lines before saving or sharing evidence until the collector handles setup-token
 redaction itself.
 
+If a redacted artifact is JSON, parse it after redaction before calling evidence
+hygiene complete:
+
+```powershell
+Get-Content -Raw <path-to-evidence.json> | ConvertFrom-Json | Out-Null
+```
+
+Rerun #15 showed that post-collection redaction can remove a setup-token value
+while accidentally breaking the surrounding JSON string. A secret-free but
+unparseable JSON file is not clean machine-readable evidence.
+
 ## Relay Config Rules
 
 For the relay gate, copy only these keys from the USB private relay config into

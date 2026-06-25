@@ -106,7 +106,9 @@ What the helper does:
 8. Renames the existing `BELLFIELD_MEDIA_ROOT` to a timestamped rollback directory, then renames the staged media directory into place.
 9. Replaces `BELLFIELD_LICENSE_PATH` from the staged license file when present, preserving the previous license file as a timestamped rollback file.
 10. Runs packaged migrations.
-11. Starts API, worker, and office-web.
+11. Prints that the database, media, license, and migrations completed.
+12. Starts API, worker, and office-web, then polls API `/health` until it
+    reports `status: ok`.
 
 Current v1 restore assumes BellField application data lives in the `public`
 schema, with media under `BELLFIELD_MEDIA_ROOT` and the optional license at
@@ -115,6 +117,10 @@ not part of the current backup/restore contract; if BellField adds either, the
 restore helper and gate-day smoke must be updated before release.
 
 For a scratch drill without Windows services, pass `--skip-services=true`.
+Health polling is skipped automatically with `--skip-services=true`; for
+operator diagnostics, the helper also accepts `--skip-health=true`,
+`--health-url=<url>`, `--health-timeout-ms=<milliseconds>`, and
+`--service-timeout-ms=<milliseconds>`.
 
 If `BELLFIELD_LICENSE_REQUIRED=true`, the helper checks for `license\bellfield-license.json` before stopping services or replacing data. Use a Phase 3 backup set or install a re-issued license before restoring a license-required server.
 
@@ -123,8 +129,24 @@ If `BELLFIELD_LICENSE_REQUIRED=true`, the helper checks for `license\bellfield-l
 Check:
 
 ```powershell
-Invoke-RestMethod http://localhost:3001/health
+for ($i=1; $i -le 12; $i++) {
+  try {
+    Invoke-RestMethod http://localhost:3001/health
+    break
+  } catch {
+    "attempt $i failed: $($_.Exception.Message)"
+    Start-Sleep -Seconds 5
+  }
+}
 ```
+
+Rerun #15 proved restore on the clean Windows machine, but the first immediate
+post-restore health probe failed before a bounded retry returned `status: ok`.
+The restore helper now performs that readiness wait before printing final
+completion. If data restore completed but readiness still fails, treat it as a
+service-readiness failure: inspect service logs and `/health` first, and do not
+rerun the destructive restore just for that readiness result. Keep the manual
+probe as recorded evidence, not as the first readiness gate.
 
 Then sign in and verify:
 

@@ -101,7 +101,9 @@ proof that prep already happened.
       checks use `Get-NetFirewallAddressFilter` for `RemoteAddress`, not
       `Get-NetFirewallPortFilter`. After rerun #11, it must also prove the LAN
       evidence collector has a fast exact-managed-rule readback path and cannot
-      let broad firewall enumeration block JSON evidence output.
+      let broad firewall enumeration block JSON evidence output. After rerun
+      #15, it must also prove evidence redaction preserves parseable JSON for
+      setup-token log-tail redaction.
 - [ ] Confirm `pnpm smoke:install-config` passed. It must run the real
       `write-server-config.mjs` helper and prove API/worker accept the generated
       clean-install relay-disabled env.
@@ -238,6 +240,16 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
     -OutputPath <usb-evidence-path>\service-evidence-rerun-N.json
   ```
 
+- [ ] Parse the service evidence JSON after any redaction or hygiene pass:
+
+  ```powershell
+  Get-Content -Raw <usb-evidence-path>\service-evidence-rerun-N.json | ConvertFrom-Json | Out-Null
+  ```
+
+  Stop the gate if this fails. Rerun #15 showed that post-collection redaction
+  can remove the secret but leave the JSON malformed, which weakens later
+  machine-readable evidence review.
+
 - [ ] Read back service `State`, `StartName`, `ExitCode`, and `ProcessId`. Stop
       the gate if any auto-start BellField service is stopped or crash-looping;
       installer success alone is not enough.
@@ -369,11 +381,11 @@ documented Gate Day dummy credential: yes` instead of echoing the password
   copyable Gate 2 command; do not patch around backup tooling during a strict
   run by manually editing PATH or env values.
 
-  Current rerun #14 blocker: restore failed because the old helper tried to
-  recreate the database with the runtime app role, which intentionally lacks
-  `CREATEDB`. The next artifact must restore through the owned database/schema
-  path and prove marker erasure, media/license restore, service restart, login,
-  and pre-backup data readback.
+  Rerun #15 proved the current restore path: the rebuilt `.27` artifact restored
+  a real worker-produced backup through the owned database/schema path, restarted
+  services, preserved pre-backup data, erased the post-backup marker, and kept
+  media/license state usable. Keep the marker and post-restore proof steps below
+  because they are the evidence that makes Gate 2 meaningful.
 
   Historical command shape:
 
@@ -387,8 +399,9 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       `AFTER-BACKUP-MARKER`) so the restore has something to provably erase.
 - [ ] Run the restore per restore-runbook.md
       (`restore-backup.mjs ... --confirm=RESTORE`).
-- [ ] After restore: services healthy, login works, the marker job is
-      **gone**, pre-backup data is present, license file is in place.
+- [ ] After restore: services healthy after a bounded `/health` retry window,
+      login works, the marker job is **gone**, pre-backup data is present,
+      license file is in place.
 
 ---
 
@@ -398,11 +411,21 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       from the installed release root).
 - [ ] Run the updater with **no skip flags** (runbook §Update Existing
       Install).
+- [ ] Record the updater's structured evidence lines:
+      `BELLFIELD_UPDATE_PHASE`, terminal `BELLFIELD_UPDATE_RESULT` on success
+      or `BELLFIELD_UPDATE_FAILURE` on failure.
 - [ ] Confirm, in order: signature verified → license verified → window
       check passed → staged copy → **pre-update backup actually ran** (a new
       backup set with a fresh `database.dump` exists) → services stopped →
-      swap with timestamped rollback dir preserved → migrations → services
-      restarted → health `ok`.
+      captured service process tree waited/cleared → bounded release swap with
+      timestamped rollback dir preserved → migrations → services restarted →
+      health `ok`.
+- [ ] If the updater is quiet or the wrapper times out, stop the strict gate and
+      capture elevated process state plus any `BELLFIELD_UPDATE_FAILURE`
+      summary, staged release path, pre-update backup path, installed version,
+      service states, and health. Rerun #15 showed that the elevated updater can
+      continue after an outer wrapper timeout and leave `.28` staged, `.27`
+      installed, and app services stopped.
 - [ ] System surface shows the v(N+1) version/release date.
 - [ ] **Reboot again** — services come back on v(N+1).
 

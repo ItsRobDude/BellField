@@ -572,16 +572,16 @@ manual backup path, updating Gate 2 instructions, or deciding what the next USB
 artifact must prove.
 
 Historical follow-up: packaged manual backup discovery was fixed by PR #75 and
-proved by rerun 14. The current Gate 2 blocker is restore behavior; see the
-rerun 14 evidence below.
+proved by rerun 14. Restore behavior was fixed and proved by rerun 15; see the
+newer evidence below.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term backup UI design.
 
 ### [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md)
 
-Audience: contributors checking the latest clean Windows Gate 1 pass and the
-current Gate 2 restore blocker.
+Audience: contributors checking the clean Windows Gate 1 pass and the historical
+Gate 2 restore blocker.
 
 Purpose: dated evidence for the fourteenth fresh Windows install smoke: active
 artifacts `.25`/`.26` passed USB hash verification and `.25` completed the full
@@ -593,15 +593,43 @@ with the required shape. Restore then failed because the old helper attempted
 database recreation with the runtime app role and hit `permission denied to
 create database`.
 
-Read when: reviewing the latest USB evidence, fixing restore behavior, updating
-Gate 2 instructions, or deciding what the next USB artifact must prove.
+Read when: reviewing the rerun 14 USB evidence, fixing restore behavior,
+updating Gate 2 instructions, or understanding why rerun 15 had to prove the
+owned-schema path.
 
-Current follow-up: restore must use the owned database/schema path without
-granting the runtime app role permanent `CREATEDB`; the next rebuilt artifact
-must prove marker erasure, service restart, login, and pre-backup data readback.
+Historical follow-up: restore now uses the owned database/schema path without
+granting the runtime app role permanent `CREATEDB`; rerun 15 proved the rebuilt
+artifact through backup creation, restore, service restart, marker erasure,
+login, and pre-backup data readback.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term backup UI design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md)
+
+Audience: contributors checking the latest clean Windows backup/restore pass and
+the current Gate 3 updater blocker.
+
+Purpose: dated evidence for the fifteenth fresh Windows install smoke: active
+artifacts `.27`/`.28` passed USB hash verification and `.27` completed Gate 1
+again, including service readback, ACL readback, first-owner setup, browser
+customer/location/job/appointment proof, reboot recovery, packaged LAN evidence,
+and real second-device login. Gate 2 passed from a real worker-produced backup
+set: restore completed through the owned-schema path, services restarted,
+pre-backup data survived, and the post-backup marker was erased. Gate 3 then
+failed during the real `.27` to `.28` update: the updater continued after the
+outer wrapper timeout, created a pre-update backup, staged `.28`, left `.27`
+installed, and left API/worker/office-web stopped.
+
+Read when: reviewing the latest USB evidence, hardening updater behavior,
+updating Gate 3 instructions, or deciding what the next USB artifact must prove.
+
+Current follow-up: update needs phase progress, bounded phase timeouts,
+pre-swap service recovery, and a clear failure-state summary before another
+strict Gate 3 attempt.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or long-term self-serve updater UI design.
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 

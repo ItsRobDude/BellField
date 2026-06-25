@@ -105,7 +105,8 @@ does not replace the clean-machine run.
       `Get-NetFirewallPortFilter`. After rerun #11, it must also prove the LAN
       evidence collector reads the exact BellField-managed rules first, bounds
       or degrades broad firewall enumeration, and writes useful JSON evidence
-      instead of hanging without output.
+      instead of hanging without output. After rerun #15, it must also prove
+      setup-token redaction preserves parseable JSON evidence.
 - [ ] `pnpm smoke:service-manifests` passed and confirms
       `bellfield-postgres.xml` does not contain `<serviceaccount>`, the service
       log paths remain outside the manifest directory, and
@@ -227,6 +228,8 @@ For each active release zip:
       writing JSON/stdout. Broad `token=...` and `password=...` redaction is
       intentional for shareable evidence, even when a particular string is
       benign.
+- [ ] Any JSON evidence touched by a redaction or polish pass is parsed after
+      redaction with `ConvertFrom-Json` before the USB is called ready.
 
 Useful scan:
 

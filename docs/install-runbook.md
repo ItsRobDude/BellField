@@ -83,8 +83,7 @@ Validated on the development machine:
   service startup because Windows SCM reported `bellfield-postgres` as
   `LocalSystem` even though the XML contained
   `<serviceaccount><username>NT SERVICE\bellfield-postgres</username>`.
-  The repo-side follow-up now enforces and asserts the actual SCM service
-  account, but clean-machine proof is still pending. See
+  Later reruns proved the repo-side SCM service-account enforcement path. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md)
 - fifth clean Windows gate-day attempt ran on 2026-06-20/21 with rebuilt
   artifacts carrying the SCM account enforcement path. It stopped at the
@@ -207,10 +206,18 @@ Validated on the development machine:
   `license\bellfield-license.json`, and `manifest.json`. Restore then failed
   because the old restore helper tried to recreate the database with the runtime
   app role and PostgreSQL returned `permission denied to create database`. The
-  repo-side follow-up now restores through the owned schema path without granting
-  the runtime app role permanent `CREATEDB`; clean-machine proof of that fix is
-  still pending. See
+  repo-side follow-up restores through the owned schema path without granting the
+  runtime app role permanent `CREATEDB`; rerun #15 proved that fix. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md)
+- fifteenth clean Windows gate-day attempt ran on 2026-06-24 with rebuilt
+  `.27`/`.28` artifacts from source commit `d60afaf`. Gate 1 passed again.
+  Gate 2 passed for the first time: packaged manual backup created a fresh
+  backup set, restore completed through the owned-schema path, services
+  restarted, login worked, pre-backup data survived, and the post-backup marker
+  was erased. Gate 3 failed during the real `.27` to `.28` update: the updater
+  continued after the outer wrapper timeout, created a pre-update backup, staged
+  `.28`, left `.27` installed, and left API/worker/office-web stopped. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -231,7 +238,7 @@ Validated on the development machine:
 
 Current clean-machine validation status:
 
-- clean Windows Gate 1 passed in rerun #14 for the entry-tier install
+- clean Windows Gate 1 passed in rerun #15 for the entry-tier install
   path: no developer tooling, real services, first-owner setup, job proof,
   reboot recovery, packaged LAN evidence, and real second-device browser login
   in one strict run
@@ -255,11 +262,15 @@ Current clean-machine validation status:
   second-device browser login from an iPhone on the same Wi-Fi
 - second office desktop and Android field-device proof remain separate optional
   environmental checks
-- scratch-machine backup/restore drill. Rerun #14 proved packaged manual backup
-  creation on the clean install, but restore failed at database recreation
-  privilege and still needs a rebuilt-artifact rerun.
+- scratch-machine backup/restore drill. Rerun #15 proved packaged manual backup
+  creation, restore through the owned-schema path, service restart, marker
+  erasure, login, pre-backup data readback, media read/write, and license
+  readback. The helper still has an operator-experience rough edge: immediate
+  `/health` failed once after restore before a bounded retry returned `ok`.
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
-  `pg_dump`, health check, and reboot/service recovery proof
+  `pg_dump`, health check, and reboot/service recovery proof. Rerun #15 created
+  a pre-update backup and staged `.28`, but did not complete the swap/restart
+  path and left app services stopped.
 
 ## Build The Release Folder
 
@@ -565,6 +576,17 @@ Because this evidence may be shared, the collectors intentionally redact broad
 redacted too. Preserve raw logs locally only when deeper debugging requires
 them.
 
+After any redaction or evidence polish pass, parse JSON evidence before calling
+the evidence clean:
+
+```powershell
+Get-Content -Raw D:\BellField-GateDay-2026-06-20\evidence\service-evidence-rerun-N.json | ConvertFrom-Json | Out-Null
+```
+
+Rerun #15 showed why this matters: the setup-token value was removed from
+`service-evidence-rerun-15.json`, but the post-collection redaction left the JSON
+malformed.
+
 The packaged service-account diagnostic is a preflight/qualification tool, not a
 step in the clean install and not the gate itself. The authoritative proof of
 the PostgreSQL service identity is the installer's own SCM `StartName` readback
@@ -783,10 +805,15 @@ Restore is assisted and destructive. Use:
 
 Rerun #14 proved the old restore helper must not drop/recreate the database with
 the runtime app role; that role intentionally does not have `CREATEDB`. The
-current helper restores through the owned database/schema path instead. Gate 2
-is still open until a rebuilt artifact proves restore, marker erasure,
-media/license restore, service restart, login, and pre-backup data readback on
-the scratch machine.
+current helper restores through the owned database/schema path instead. Rerun
+#15 proved Gate 2 with rebuilt `.27`: a real worker backup restored through the
+owned-schema path, app services restarted, login worked, pre-backup data
+survived, and the post-backup marker disappeared. The run still found a rough
+edge: the first immediate `/health` probe after restore failed before a bounded
+retry returned `ok`. The restore helper now reports data/media/license restore
+completion separately from final API readiness; a readiness failure is a
+service-readiness problem, not a reason to rerun the destructive restore. Keep
+an explicit manual `/health` probe afterward as recorded evidence.
 
 See [restore-runbook.md](./restore-runbook.md) before running a restore.
 
@@ -835,17 +862,44 @@ The updater:
 3. Refuses the update when the artifact `releaseDate` is after the license `updateWindowEnd`.
 4. Stage-copies the new release beside the current release root.
 5. Runs a hard-fail pre-update backup through the packaged worker manual backup CLI.
-6. Stops app services.
-7. Swaps the staged release into `--current-release-root`, preserving the prior release as a timestamped rollback directory.
-8. Runs packaged migrations.
-9. Restarts services and waits for `/health`.
+6. Stops app services with bounded per-service timeouts.
+7. Waits, best-effort, for the captured WinSW service process trees to exit.
+8. Swaps the staged release into `--current-release-root` with a bounded retry;
+   the successful rename is the proof that Windows file handles have cleared.
+9. Preserves the prior release as a timestamped rollback directory.
+10. Runs packaged migrations.
+11. Restarts services and waits for `/health`.
+
+The updater prints structured progress lines:
+
+- `BELLFIELD_UPDATE_PHASE` before/after each destructive phase
+- `BELLFIELD_UPDATE_RESULT` on success
+- `BELLFIELD_UPDATE_FAILURE` on failure, including phase, recovery action,
+  staged path, rollback path, pre-update backup path, installed/attempted
+  versions, and service-state readback
+
+Operator-visible timeout overrides are available for unusually slow customer
+hardware: `--backup-timeout-ms`, `--service-timeout-ms`,
+`--service-exit-timeout-ms`, `--swap-timeout-ms`,
+`--migration-timeout-ms`, and `--health-timeout-ms`. Treat an override as
+evidence to record, not a normal default.
 
 For scratch validation only, the updater supports `--skip-services=true`,
 `--skip-health=true`, and `--skip-backup=true`. Do not use those skips for a
 customer update.
 
-If an update fails after the release swap, preserve the printed rollback release
-directory and restore the pre-update backup using [restore-runbook.md](./restore-runbook.md).
+Rerun #15 exposed the update blocker: the real `.27` to `.28` updater run
+continued after the outer wrapper timed out, created a fresh pre-update backup,
+staged `.28`, left `.27` installed, and left API/worker/office-web stopped.
+Rerun #16 must record the updater phase/result/failure lines so a failed update
+is no longer silent.
+
+If an update fails before the release swap, the current release should still be
+intact; the updater removes the abandoned staged release path and attempts to
+restart the original app services. If an update fails after the release swap,
+preserve the printed rollback release directory and restore the pre-update
+backup using
+[restore-runbook.md](./restore-runbook.md).
 
 ## Uninstall / Repair Notes
 

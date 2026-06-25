@@ -80,6 +80,11 @@ try {
     'packaged migrations ran during update',
     updateResult.stdout.includes('scratch migrations applied')
   );
+  check(
+    'updater emitted structured phase and result evidence',
+    updateResult.stdout.includes('BELLFIELD_UPDATE_PHASE ') &&
+      updateResult.stdout.includes('BELLFIELD_UPDATE_RESULT ')
+  );
 
   const rollbackDirectory = readdirSync(installRoot).find((entry) =>
     entry.startsWith('release.restore-rollback-')
