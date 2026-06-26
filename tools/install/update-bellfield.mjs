@@ -28,7 +28,9 @@ import { verifyLicenseFile } from '../update/license-verification.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultUpdateArtifactRoot = resolve(scriptDir, '..', '..');
+const postgresServiceName = 'bellfield-postgres';
 const appServicesStopOrder = ['bellfield-office-web', 'bellfield-worker', 'bellfield-api'];
+const updateServicesStopOrder = [...appServicesStopOrder, postgresServiceName];
 const appServicesStartOrder = ['bellfield-api', 'bellfield-worker', 'bellfield-office-web'];
 
 function run(command, args, options = {}) {
@@ -76,17 +78,26 @@ function enterUpdatePhase(recoveryTracker, phase, details = {}) {
   emitUpdateEvent('BELLFIELD_UPDATE_PHASE', { phase, ...details });
 }
 
-function stopAppServices({ skipServices, timeoutMs }) {
+function stopUpdateServices({ skipServices, timeoutMs }) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service stop.');
     return [];
   }
 
-  const processTree = captureServiceProcessTree(appServicesStopOrder);
-  for (const serviceName of appServicesStopOrder) {
+  const processTree = captureServiceProcessTree(updateServicesStopOrder);
+  for (const serviceName of updateServicesStopOrder) {
     stopWindowsService(serviceName, timeoutMs);
   }
   return processTree;
+}
+
+function startPostgresService({ skipServices, timeoutMs }) {
+  if (skipServices || process.platform !== 'win32') {
+    console.log('Skipping PostgreSQL service start.');
+    return;
+  }
+
+  startWindowsService(postgresServiceName, timeoutMs);
 }
 
 function startAppServices({ skipServices, timeoutMs }) {
@@ -95,7 +106,6 @@ function startAppServices({ skipServices, timeoutMs }) {
     return;
   }
 
-  startWindowsService('bellfield-postgres', timeoutMs);
   for (const serviceName of appServicesStartOrder) {
     startWindowsService(serviceName, timeoutMs);
   }
@@ -301,7 +311,7 @@ function captureServiceStatesSafe() {
     return [];
   }
   try {
-    const serviceArray = toPowerShellStringArray(['bellfield-postgres', ...appServicesStartOrder]);
+    const serviceArray = toPowerShellStringArray([postgresServiceName, ...appServicesStartOrder]);
     const result = runPowerShell(
       `
 $serviceNames = @(${serviceArray})
@@ -443,6 +453,9 @@ function safeReadReleaseManifest(releaseRoot) {
 function buildFailureSummary(input) {
   const originalError = input.originalError ?? input.error;
   const recoveryError = input.recoveryError ?? null;
+  const postRecoveryReleaseRootProcesses = captureReleaseRootProcessesSafe(
+    input.currentReleaseRoot
+  );
   return {
     status: 'failed',
     phase: input.snapshot.phase,
@@ -474,7 +487,9 @@ function buildFailureSummary(input) {
     cleanup: input.cleanup,
     swapEvidence: readSwapEvidence(originalError) ?? readSwapEvidence(recoveryError),
     serviceStates: captureServiceStatesSafe(),
-    releaseRootProcesses: captureReleaseRootProcessesSafe(input.currentReleaseRoot),
+    preRecoveryReleaseRootProcesses: input.preRecoveryReleaseRootProcesses ?? null,
+    postRecoveryReleaseRootProcesses,
+    releaseRootProcesses: postRecoveryReleaseRootProcesses,
     guidance: input.restartSkippedReason
       ? 'The update failed before the release swap completed, but the installed release root is missing. Do not restart app services until the release directory is repaired from rollback/stage evidence.'
       : input.recovery.postSwapFailure
@@ -496,6 +511,7 @@ function readSwapEvidence(error) {
 }
 
 async function retryUpdateReadiness(input) {
+  startPostgresService({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
   startAppServices({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
   await waitForHealth({
     url: input.healthUrl,
@@ -634,7 +650,7 @@ try {
   );
   enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);
   recoveryTracker.markServiceStopAttempted();
-  const serviceProcessTree = stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
+  const serviceProcessTree = stopUpdateServices({ skipServices, timeoutMs: serviceTimeoutMs });
   enterUpdatePhase(recoveryTracker, updatePhases.servicesStopped, {
     capturedProcessCount: collectUpdateProcessIds(serviceProcessTree).length
   });
@@ -655,6 +671,9 @@ try {
   recoveryTracker.markReleaseSwapped();
   enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped, { rollbackReleasePath });
 
+  enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);
+  startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
+  enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);
   enterUpdatePhase(recoveryTracker, updatePhases.migrating);
   run(nodeExe, [migrationsScript], {
     env: updateEnv,
@@ -689,7 +708,12 @@ try {
     console.log(`Previous release preserved for rollback reference: ${rollbackReleasePath}`);
   }
 } catch (error) {
-  const recovery = decideUpdateRecovery(recoveryTracker.snapshot());
+  const snapshotAtFailure = recoveryTracker.snapshot();
+  const recovery = decideUpdateRecovery(snapshotAtFailure);
+  const preRecoveryReleaseRootProcesses =
+    snapshotAtFailure.phase === updatePhases.swappingRelease
+      ? captureReleaseRootProcessesSafe(currentReleaseRoot)
+      : null;
   if (recovery.message) {
     console.error(recovery.message);
   }
@@ -720,6 +744,7 @@ try {
           recoveryTracker.enter(updatePhases.completed);
           readinessRecovered = true;
         } else {
+          startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
           startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
         }
         restartSucceeded = true;
@@ -757,6 +782,7 @@ try {
         restartSucceeded,
         restartSkippedReason,
         cleanup,
+        preRecoveryReleaseRootProcesses,
         attemptedVersion,
         currentReleaseRoot,
         currentReleaseRootExists

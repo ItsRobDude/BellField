@@ -43,20 +43,23 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #15 passed this
-  gate on Windows 11 Home with active `.27`/`.28` artifacts: service
+  job booking, reboot survival, and second-device access. Rerun #16 re-proved
+  this gate on Windows 11 Home with active `.29`/`.30` artifacts: service
   registration/stability, PostgreSQL SCM/ACL checks, API health, first-owner
   setup, job proof, reboot recovery, packaged LAN evidence, and real
   second-device same-Wi-Fi browser login all completed in one strict run.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
-  backup set. Rerun #15 proved this gate: packaged backup creation,
-  owned-schema restore, service restart, marker erasure, login, pre-backup data
-  readback, media read/write, and license readback all passed on the clean
-  Windows machine.
+  backup set. Rerun #16 re-proved this gate: packaged backup creation,
+  owned-schema restore, service-readiness recovery, marker erasure, login,
+  pre-backup data readback, media read/write, and license readback all passed on
+  the clean Windows machine.
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
   pre-update `pg_dump` backup, plus a real refusal against an expired-window
-  license. Rerun #15 reached pre-update backup creation and staged `.28`, but
-  failed before swap/restart completed and left app services stopped.
+  license. Rerun #16 reached the `.29` to `.30` release swap with structured
+  phase output and recovery, but Windows still refused the live
+  `C:\BellField\release` rename with `EPERM`; the updater cleaned the staged
+  release and restarted `.29`. The next proof must stop PostgreSQL before the
+  release swap and restart it before migrations.
 - Phase 5/6: sold-shaped installed release sends an estimate through the
   production relay, opens the customer acceptance page, and applies the
   customer decision back through the worker poller
@@ -126,15 +129,18 @@ post-reboot login, packaged LAN evidence, and real second-device login.
   scheduled backup job, startup due-check from latest successful backup,
   orphaned-running cleanup, old manifest-less partial-set cleanup, backup run
   history, backup-set retention, and a packaged restore helper with staged
-  media/license replacement. Rerun #15 closed the scratch-machine restore gate
-  with a real worker backup set and owned-schema restore path.
+  media/license replacement. Rerun #16 re-proved the scratch-machine restore
+  gate with a real worker backup set, owned-schema restore path, media/license
+  checks, and recovered API health.
 - Update path: repo-side Phase 4 foundation now exists. Release builds are
   stamped with version/release date, System/support read the manifest, release
   artifacts are signed, the updater verifies artifact signature + license
   update window, runs a hard-fail pre-update backup by default, stages/swaps
   release folders, runs migrations, restarts services, and health-checks. A
-  scratch same-machine updater smoke passed; the real installed v(N) to v(N+1)
-  service update gate remains unclaimed.
+  scratch same-machine updater smoke passed. Rerun #16 proved the real installed
+  updater now fails safely at the release-swap boundary, but the installed
+  v(N) to v(N+1) service update gate remains unclaimed until the live Windows
+  release-directory swap is fixed or avoided.
 - Licensing: Phase 3 repo-side primitive now exists: signed offline license
   file design, API startup verification behind a license-required runtime flag
   or release build manifest, System/support visibility, private issuance
@@ -376,9 +382,10 @@ replacement, and `docs/restore-runbook.md`. A nondestructive same-machine
 validation pass is recorded in
 [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md).
 The Phase 2 gate is now backed by a separate scratch-machine restore drill from
-a real backup set, performed and dated. Rerun #15 proved the clean-machine
-packaged backup helper path plus owned-schema restore, marker erasure, service
-restart, login, pre-backup data readback, media read/write, and license readback.
+a real backup set, performed and dated. Rerun #16 re-proved the clean-machine
+packaged backup helper path plus owned-schema restore, marker erasure,
+service-readiness recovery, login, pre-backup data readback, media read/write,
+and license readback.
 
 ### 2.1 Worker job-runner substrate
 
@@ -478,10 +485,14 @@ CLI, and scratch updater swap are covered by local same-machine validation; see
 [phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md).
 The full Phase 4 gate remains open until an installed v(N) machine updates to
 v(N+1) through the updater with real Windows services, real pre-update backup,
-health check, and a refused out-of-window build. Rerun #15 proved the updater can
-create a real pre-update backup and stage the new release, but it failed before
-swap/restart completed and left the installed release on `.27` with app services
-stopped.
+health check, and a refused out-of-window build. Rerun #16 proved the updater now
+reports and recovers a pre-swap failure: it created a real pre-update backup,
+staged `.30`, stopped services, waited for the captured process tree, retried
+the release swap for 60 seconds, emitted `BELLFIELD_UPDATE_FAILURE` on `EPERM`,
+removed the staged release, restarted `.29`, and left API health `ok`. The
+remaining Phase 4 blocker is the live Windows release-directory swap while
+PostgreSQL still runs from inside the release tree; the next updater patch should
+stop PostgreSQL before the swap and start it again before packaged migrations.
 
 ### 4.1 Release stamping
 

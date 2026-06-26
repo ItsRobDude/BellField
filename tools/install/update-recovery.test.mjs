@@ -106,6 +106,33 @@ test('migration failure after release swap leaves services stopped', () => {
   assert.match(recovery.message, /App services are left stopped/);
 });
 
+test('postgres start failure after release swap leaves app services stopped', () => {
+  const tracker = createUpdateRecoveryTracker({ skipServices: false });
+  tracker.markServiceStopAttempted();
+  tracker.enter(updatePhases.releaseSwapped);
+  tracker.enter(updatePhases.startingPostgres);
+
+  const recovery = decideUpdateRecovery(tracker.snapshot());
+
+  assert.equal(recovery.restartServices, false);
+  assert.equal(recovery.postSwapFailure, true);
+  assert.match(recovery.message, /App services are left stopped/);
+  assert.match(recovery.message, /rollback release directory/);
+});
+
+test('postgres-started migration boundary stays post-swap', () => {
+  const tracker = createUpdateRecoveryTracker({ skipServices: false });
+  tracker.markServiceStopAttempted();
+  tracker.enter(updatePhases.releaseSwapped);
+  tracker.enter(updatePhases.postgresStarted);
+
+  const recovery = decideUpdateRecovery(tracker.snapshot());
+
+  assert.equal(recovery.restartServices, false);
+  assert.equal(recovery.postSwapFailure, true);
+  assert.match(recovery.message, /pre-update backup path/);
+});
+
 test('service start failure retries service readiness with rollback guidance', () => {
   const tracker = createUpdateRecoveryTracker({ skipServices: false });
   tracker.markServiceStopAttempted();

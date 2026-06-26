@@ -607,8 +607,8 @@ Does not own: the install recipe (`install-runbook.md`), the restore recipe
 
 ### [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md)
 
-Audience: contributors checking the latest clean Windows backup/restore pass and
-the current Gate 3 updater blocker.
+Audience: contributors checking the historical clean Windows backup/restore pass
+and the first real Gate 3 updater blocker.
 
 Purpose: dated evidence for the fifteenth fresh Windows install smoke: active
 artifacts `.27`/`.28` passed USB hash verification and `.27` completed Gate 1
@@ -621,12 +621,45 @@ failed during the real `.27` to `.28` update: the updater continued after the
 outer wrapper timeout, created a pre-update backup, staged `.28`, left `.27`
 installed, and left API/worker/office-web stopped.
 
-Read when: reviewing the latest USB evidence, hardening updater behavior,
-updating Gate 3 instructions, or deciding what the next USB artifact must prove.
+Read when: reviewing the rerun 15 USB evidence, understanding why updater
+hardening was needed, or comparing the silent/partial Gate 3 failure to the
+bounded rerun 16 failure.
 
-Current follow-up: update needs phase progress, bounded phase timeouts,
-pre-swap service recovery, and a clear failure-state summary before another
-strict Gate 3 attempt.
+Historical follow-up: rerun 16 proved the phase progress, bounded failure,
+pre-swap service recovery, and staged-release cleanup. The remaining Gate 3
+blocker is the live Windows release-directory swap while PostgreSQL was still
+running from inside the release tree.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or long-term self-serve updater UI design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-16.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-16.md)
+
+Audience: contributors checking the current clean Windows Gate 3 updater blocker
+after the rerun 15 hardening patch.
+
+Purpose: dated evidence for the sixteenth fresh Windows install smoke: active
+artifacts `.29`/`.30` passed USB hash verification and `.29` completed Gate 1
+again, including service identity, ACL readback, first-owner setup, browser
+customer/location/job proof, reboot recovery, packaged LAN evidence, and real
+second-device proof. Gate 2 passed again from a real worker-produced backup set:
+restore completed, service readiness recovered to health `ok`, pre-backup data
+survived, marker data was erased, media/license checks passed, and browser proof
+worked. Gate 3 failed during the real `.29` to `.30` update at
+`BELLFIELD_UPDATE_PHASE` `swappingRelease`: after services stopped and the
+captured service process tree exited, Windows still returned `EPERM` while
+renaming `C:\BellField\release`. The updater emitted
+`BELLFIELD_UPDATE_FAILURE`, cleaned the abandoned staged release, restarted the
+original `.29` services, and left API health `ok`.
+
+Read when: fixing the live Windows release-swap blocker, checking why
+PostgreSQL must be stopped before the swap, or considering an installed layout
+that avoids renaming the directory containing live service wrappers/runtime.
+
+Current follow-up: update should stop all four BellField services before the
+release swap, start PostgreSQL before migrations, preserve the rerun 16 recovery
+behavior, and capture pre-recovery release-root process evidence if the swap
+still fails.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term self-serve updater UI design.

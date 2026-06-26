@@ -381,11 +381,11 @@ documented Gate Day dummy credential: yes` instead of echoing the password
   copyable Gate 2 command; do not patch around backup tooling during a strict
   run by manually editing PATH or env values.
 
-  Rerun #15 proved the current restore path: the rebuilt `.27` artifact restored
-  a real worker-produced backup through the owned database/schema path, restarted
-  services, preserved pre-backup data, erased the post-backup marker, and kept
-  media/license state usable. Keep the marker and post-restore proof steps below
-  because they are the evidence that makes Gate 2 meaningful.
+  Rerun #16 re-proved the current restore path: the rebuilt `.29` artifact
+  restored a real worker-produced backup through the owned database/schema path,
+  recovered service readiness, preserved pre-backup data, erased the post-backup
+  marker, and kept media/license state usable. Keep the marker and post-restore
+  proof steps below because they are the evidence that makes Gate 2 meaningful.
 
   Historical command shape:
 
@@ -416,16 +416,21 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       or `BELLFIELD_UPDATE_FAILURE` on failure.
 - [ ] Confirm, in order: signature verified → license verified → window
       check passed → staged copy → **pre-update backup actually ran** (a new
-      backup set with a fresh `database.dump` exists) → services stopped →
-      captured service process tree waited/cleared → bounded release swap with
-      timestamped rollback dir preserved → migrations → services restarted →
-      health `ok`.
+      backup set with a fresh `database.dump` exists) → app services and
+      `bellfield-postgres` stopped → captured service process tree
+      waited/cleared → bounded release swap with timestamped rollback dir
+      preserved → `bellfield-postgres` restarted → migrations → app services
+      restarted → health `ok`.
 - [ ] If the updater is quiet or the wrapper times out, stop the strict gate and
       capture elevated process state plus any `BELLFIELD_UPDATE_FAILURE`
       summary, staged release path, pre-update backup path, installed version,
       service states, and health. Rerun #15 showed that the elevated updater can
       continue after an outer wrapper timeout and leave `.28` staged, `.27`
-      installed, and app services stopped.
+      installed, and app services stopped. Rerun #16 showed the next failure mode:
+      the updater can emit `BELLFIELD_UPDATE_FAILURE`, clean the staged release,
+      restart the original `.29` services, and still fail the gate because the
+      live `C:\BellField\release` rename returns `EPERM` while PostgreSQL was not
+      part of the update stop set.
 - [ ] System surface shows the v(N+1) version/release date.
 - [ ] **Reboot again** — services come back on v(N+1).
 

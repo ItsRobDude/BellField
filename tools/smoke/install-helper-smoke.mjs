@@ -529,12 +529,14 @@ try {
       'serviceStopAttempted',
       'swappingRelease',
       'releaseSwapped',
+      'startingPostgres',
+      'postgresStarted',
       'startingServices',
       'healthChecking'
     ]) &&
       files.updateHelper.includes("from './update-recovery.mjs'") &&
       files.updateHelper.includes('createUpdateRecoveryTracker') &&
-      files.updateHelper.includes('decideUpdateRecovery(recoveryTracker.snapshot())')
+      files.updateHelper.includes('decideUpdateRecovery(snapshotAtFailure)')
   );
   check(
     'updater recovery tests pin both sides of the release-swap boundary',
@@ -551,19 +553,50 @@ try {
       'buildFailureSummary'
     ])
   );
-  assertOrdered(files.updateHelper, 'updater waits for service process exit before swap', [
-    'enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);',
-    'recoveryTracker.markServiceStopAttempted();',
-    'stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });',
-    'enterUpdatePhase(recoveryTracker, updatePhases.waitingForProcessExit);',
-    'waitForCapturedProcessTreeExit(serviceProcessTree, serviceExitTimeoutMs);',
-    'enterUpdatePhase(recoveryTracker, updatePhases.swappingRelease,',
-    'swapStagedDirectoryWithRetry({'
-  ]);
+  assertOrdered(
+    files.updateHelper,
+    'updater stops postgres and waits for service process exit before swap',
+    [
+      'const postgresServiceName =',
+      'const updateServicesStopOrder = [...appServicesStopOrder, postgresServiceName];',
+      'enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);',
+      'recoveryTracker.markServiceStopAttempted();',
+      'stopUpdateServices({ skipServices, timeoutMs: serviceTimeoutMs });',
+      'enterUpdatePhase(recoveryTracker, updatePhases.waitingForProcessExit);',
+      'waitForCapturedProcessTreeExit(serviceProcessTree, serviceExitTimeoutMs);',
+      'enterUpdatePhase(recoveryTracker, updatePhases.swappingRelease,',
+      'swapStagedDirectoryWithRetry({'
+    ]
+  );
+  assertOrdered(
+    files.updateHelper,
+    'updater starts postgres before migrations and app services after migrations',
+    [
+      'enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped,',
+      'enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);',
+      'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });',
+      'enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);',
+      'enterUpdatePhase(recoveryTracker, updatePhases.migrating);',
+      'run(nodeExe, [migrationsScript],',
+      'enterUpdatePhase(recoveryTracker, updatePhases.migrationsRun);',
+      'enterUpdatePhase(recoveryTracker, updatePhases.startingServices);',
+      'startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });'
+    ]
+  );
+  assertOrdered(
+    files.updateHelper,
+    'updater pre-swap recovery restarts postgres before app services',
+    [
+      'if (recovery.postSwapFailure) {',
+      '} else {',
+      'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });',
+      'startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });'
+    ]
+  );
   check(
     'updater captures service process trees before stop',
     includesAll(files.updateHelper, [
-      'captureServiceProcessTree(appServicesStopOrder)',
+      'captureServiceProcessTree(updateServicesStopOrder)',
       'Get-CimInstance Win32_Process',
       'Get-ProcessTree',
       'collectUpdateProcessIds(serviceProcessTree)'
@@ -617,6 +650,8 @@ try {
       'preUpdateBackupPath',
       'serviceStates',
       'releaseRootProcesses',
+      'preRecoveryReleaseRootProcesses',
+      'postRecoveryReleaseRootProcesses',
       'currentReleaseRootExists',
       'restartSkippedReason',
       'originalError',
@@ -626,6 +661,16 @@ try {
       'restartAttempted',
       'restartSucceeded',
       'Do not start app services blindly'
+    ])
+  );
+  check(
+    'updater captures release-root processes before pre-swap recovery restart',
+    assertOrderedAfterValue(files.updateHelper, '} catch (error) {', [
+      'const snapshotAtFailure = recoveryTracker.snapshot();',
+      'const preRecoveryReleaseRootProcesses =',
+      'captureReleaseRootProcessesSafe(currentReleaseRoot)',
+      'if (recovery.restartServices) {',
+      'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });'
     ])
   );
   check(
@@ -1352,13 +1397,30 @@ function includesAll(contents, needles) {
   return needles.every((needle) => contents.includes(needle));
 }
 
+function assertOrderedValue(contents, anchors) {
+  return orderedIndices(contents, anchors).every((index) => index !== -1);
+}
+
+function assertOrderedAfterValue(contents, startAnchor, anchors) {
+  const startIndex = contents.indexOf(startAnchor);
+  return startIndex !== -1 && assertOrderedValue(contents.slice(startIndex), anchors);
+}
+
 function assertOrdered(contents, name, anchors) {
-  const indices = anchors.map((anchor) => contents.indexOf(anchor));
+  const indices = orderedIndices(contents, anchors);
   const missing = anchors.filter((_, index) => indices[index] === -1);
-  const ordered = indices.every(
-    (index, position) => position === 0 || indices[position - 1] < index
-  );
-  check(name, missing.length === 0 && ordered, { anchors, indices, missing });
+  check(name, missing.length === 0, { anchors, indices, missing });
+}
+
+function orderedIndices(contents, anchors) {
+  let searchFrom = 0;
+  return anchors.map((anchor) => {
+    const index = contents.indexOf(anchor, searchFrom);
+    if (index !== -1) {
+      searchFrom = index + anchor.length;
+    }
+    return index;
+  });
 }
 
 function check(name, passed, details = {}) {

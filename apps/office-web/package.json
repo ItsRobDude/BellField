@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
-    "test": "pnpm run typecheck && pnpm run test:ui",
+    "test": "corepack pnpm run typecheck && corepack pnpm run test:ui",
     "test:ui": "vitest run",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.json"
   },
