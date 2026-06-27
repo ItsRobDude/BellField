@@ -10,7 +10,7 @@
     "dev:ios": "expo start --ios",
     "dev:web": "expo start --web",
     "lint": "eslint .",
-    "test": "pnpm run typecheck && pnpm run test:unit",
+    "test": "corepack pnpm run typecheck && corepack pnpm run test:unit",
     "test:unit": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },

@@ -11,6 +11,8 @@ const orderedUpdatePhases = [
   'processesExited',
   'swappingRelease',
   'releaseSwapped',
+  'startingPostgres',
+  'postgresStarted',
   'migrating',
   'migrationsRun',
   'startingServices',

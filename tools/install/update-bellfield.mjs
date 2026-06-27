@@ -9,6 +9,11 @@ import {
   normalizePowerShellArray,
   updatePhases
 } from './update-recovery.mjs';
+import {
+  acquireUpdateLock,
+  defaultUpdateLockMaxAgeMs,
+  defaultUpdateLockOwnerlessGraceMs
+} from './update-lock.mjs';
 import { parseEnvFile, readArgs } from './install-utils.mjs';
 import {
   stageDirectoryRestore,
@@ -28,7 +33,9 @@ import { verifyLicenseFile } from '../update/license-verification.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultUpdateArtifactRoot = resolve(scriptDir, '..', '..');
+const postgresServiceName = 'bellfield-postgres';
 const appServicesStopOrder = ['bellfield-office-web', 'bellfield-worker', 'bellfield-api'];
+const updateServicesStopOrder = [...appServicesStopOrder, postgresServiceName];
 const appServicesStartOrder = ['bellfield-api', 'bellfield-worker', 'bellfield-office-web'];
 
 function run(command, args, options = {}) {
@@ -76,17 +83,40 @@ function enterUpdatePhase(recoveryTracker, phase, details = {}) {
   emitUpdateEvent('BELLFIELD_UPDATE_PHASE', { phase, ...details });
 }
 
-function stopAppServices({ skipServices, timeoutMs }) {
+function emitUpdateLockBlocked(error) {
+  emitUpdateEvent('BELLFIELD_UPDATE_LOCKED', {
+    status: 'blocked',
+    lockPath: error.lockPath ?? null,
+    lockOwner: error.lockOwner ?? null,
+    reason: error.reason ?? null,
+    lockAgeMs: error.lockAgeMs ?? null,
+    requiresOperatorInspection: Boolean(error.requiresOperatorInspection),
+    manualRemediation: error.manualRemediation ?? null,
+    processSnapshot: error.processSnapshot ?? null,
+    message: error instanceof Error ? error.message : String(error)
+  });
+}
+
+function stopUpdateServices({ skipServices, timeoutMs }) {
   if (skipServices || process.platform !== 'win32') {
     console.log('Skipping Windows service stop.');
     return [];
   }
 
-  const processTree = captureServiceProcessTree(appServicesStopOrder);
-  for (const serviceName of appServicesStopOrder) {
+  const processTree = captureServiceProcessTree(updateServicesStopOrder);
+  for (const serviceName of updateServicesStopOrder) {
     stopWindowsService(serviceName, timeoutMs);
   }
   return processTree;
+}
+
+function startPostgresService({ skipServices, timeoutMs }) {
+  if (skipServices || process.platform !== 'win32') {
+    console.log('Skipping PostgreSQL service start.');
+    return;
+  }
+
+  startWindowsService(postgresServiceName, timeoutMs);
 }
 
 function startAppServices({ skipServices, timeoutMs }) {
@@ -95,7 +125,6 @@ function startAppServices({ skipServices, timeoutMs }) {
     return;
   }
 
-  startWindowsService('bellfield-postgres', timeoutMs);
   for (const serviceName of appServicesStartOrder) {
     startWindowsService(serviceName, timeoutMs);
   }
@@ -286,7 +315,7 @@ function cleanupStagedUpdatePath(stagedReleasePath) {
   }
 
   try {
-    rmSync(stagedReleasePath, { force: true, recursive: true });
+    rmSync(stagedReleasePath, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     console.error(`Removed abandoned staged update release: ${stagedReleasePath}`);
     return { removed: true };
   } catch (error) {
@@ -301,7 +330,7 @@ function captureServiceStatesSafe() {
     return [];
   }
   try {
-    const serviceArray = toPowerShellStringArray(['bellfield-postgres', ...appServicesStartOrder]);
+    const serviceArray = toPowerShellStringArray([postgresServiceName, ...appServicesStartOrder]);
     const result = runPowerShell(
       `
 $serviceNames = @(${serviceArray})
@@ -421,6 +450,39 @@ $unavailableCommandLine = @(
   }
 }
 
+function getUpdateLockProcessSnapshot(processId) {
+  if (process.platform !== 'win32') {
+    return null;
+  }
+
+  try {
+    const result = runPowerShell(
+      `
+$process = Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction SilentlyContinue
+if ($null -eq $process) {
+  [pscustomobject]@{
+    alive = $false
+    processId = ${processId}
+  } | ConvertTo-Json -Depth 3
+} else {
+  [pscustomobject]@{
+    alive = $true
+    processId = [int]$process.ProcessId
+    name = [string]$process.Name
+    commandLine = [string]$process.CommandLine
+    creationDate = [string]$process.CreationDate
+  } | ConvertTo-Json -Depth 3
+}
+`,
+      { capture: true, timeoutMs: 30_000 }
+    );
+    const stdout = result.stdout.trim();
+    return stdout ? JSON.parse(stdout) : null;
+  } catch {
+    return null;
+  }
+}
+
 function safeReadReleaseManifest(releaseRoot) {
   const manifestPath = join(releaseRoot, 'bellfield-build-manifest.json');
   try {
@@ -443,6 +505,9 @@ function safeReadReleaseManifest(releaseRoot) {
 function buildFailureSummary(input) {
   const originalError = input.originalError ?? input.error;
   const recoveryError = input.recoveryError ?? null;
+  const postRecoveryReleaseRootProcesses = captureReleaseRootProcessesSafe(
+    input.currentReleaseRoot
+  );
   return {
     status: 'failed',
     phase: input.snapshot.phase,
@@ -474,7 +539,9 @@ function buildFailureSummary(input) {
     cleanup: input.cleanup,
     swapEvidence: readSwapEvidence(originalError) ?? readSwapEvidence(recoveryError),
     serviceStates: captureServiceStatesSafe(),
-    releaseRootProcesses: captureReleaseRootProcessesSafe(input.currentReleaseRoot),
+    preRecoveryReleaseRootProcesses: input.preRecoveryReleaseRootProcesses ?? null,
+    postRecoveryReleaseRootProcesses,
+    releaseRootProcesses: postRecoveryReleaseRootProcesses,
     guidance: input.restartSkippedReason
       ? 'The update failed before the release swap completed, but the installed release root is missing. Do not restart app services until the release directory is repaired from rollback/stage evidence.'
       : input.recovery.postSwapFailure
@@ -496,6 +563,7 @@ function readSwapEvidence(error) {
 }
 
 async function retryUpdateReadiness(input) {
+  startPostgresService({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
   startAppServices({ skipServices: input.skipServices, timeoutMs: input.serviceTimeoutMs });
   await waitForHealth({
     url: input.healthUrl,
@@ -555,6 +623,16 @@ const migrationTimeoutMs = parsePositiveInteger(
   'migration timeout'
 );
 const healthTimeoutMs = parsePositiveInteger(args['health-timeout-ms'], 60_000, 'health timeout');
+const updateLockMaxAgeMs = parsePositiveInteger(
+  args['update-lock-max-age-ms'],
+  defaultUpdateLockMaxAgeMs,
+  'update lock max age'
+);
+const updateLockOwnerlessGraceMs = parsePositiveInteger(
+  args['update-lock-ownerless-grace-ms'],
+  defaultUpdateLockOwnerlessGraceMs,
+  'update lock ownerless grace'
+);
 
 if (samePath(updateArtifactRoot, currentReleaseRoot)) {
   throw new Error(
@@ -584,6 +662,23 @@ if (!existsSync(migrationsScript)) {
 
 const recoveryTracker = createUpdateRecoveryTracker({ skipServices });
 let attemptedVersion = null;
+let updateLock = null;
+
+try {
+  updateLock = acquireUpdateLock({
+    installRoot,
+    commandLine: process.argv.join(' '),
+    maxAgeMs: updateLockMaxAgeMs,
+    ownerlessGraceMs: updateLockOwnerlessGraceMs,
+    getProcessSnapshot: getUpdateLockProcessSnapshot
+  });
+  console.log(`Acquired BellField update lock: ${updateLock.lockPath}`);
+} catch (error) {
+  if (error?.code === 'BELLFIELD_UPDATE_LOCKED') {
+    emitUpdateLockBlocked(error);
+  }
+  throw error;
+}
 
 try {
   enterUpdatePhase(recoveryTracker, updatePhases.verifying);
@@ -634,7 +729,7 @@ try {
   );
   enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);
   recoveryTracker.markServiceStopAttempted();
-  const serviceProcessTree = stopAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
+  const serviceProcessTree = stopUpdateServices({ skipServices, timeoutMs: serviceTimeoutMs });
   enterUpdatePhase(recoveryTracker, updatePhases.servicesStopped, {
     capturedProcessCount: collectUpdateProcessIds(serviceProcessTree).length
   });
@@ -655,6 +750,9 @@ try {
   recoveryTracker.markReleaseSwapped();
   enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped, { rollbackReleasePath });
 
+  enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);
+  startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
+  enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);
   enterUpdatePhase(recoveryTracker, updatePhases.migrating);
   run(nodeExe, [migrationsScript], {
     env: updateEnv,
@@ -689,7 +787,12 @@ try {
     console.log(`Previous release preserved for rollback reference: ${rollbackReleasePath}`);
   }
 } catch (error) {
-  const recovery = decideUpdateRecovery(recoveryTracker.snapshot());
+  const snapshotAtFailure = recoveryTracker.snapshot();
+  const recovery = decideUpdateRecovery(snapshotAtFailure);
+  const preRecoveryReleaseRootProcesses =
+    snapshotAtFailure.phase === updatePhases.swappingRelease
+      ? captureReleaseRootProcessesSafe(currentReleaseRoot)
+      : null;
   if (recovery.message) {
     console.error(recovery.message);
   }
@@ -720,6 +823,7 @@ try {
           recoveryTracker.enter(updatePhases.completed);
           readinessRecovered = true;
         } else {
+          startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
           startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
         }
         restartSucceeded = true;
@@ -757,6 +861,7 @@ try {
         restartSucceeded,
         restartSkippedReason,
         cleanup,
+        preRecoveryReleaseRootProcesses,
         attemptedVersion,
         currentReleaseRoot,
         currentReleaseRootExists
@@ -764,4 +869,6 @@ try {
     );
     throw recoveryError ?? error;
   }
+} finally {
+  updateLock?.release();
 }

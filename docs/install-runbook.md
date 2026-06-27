@@ -218,6 +218,14 @@ Validated on the development machine:
   continued after the outer wrapper timeout, created a pre-update backup, staged
   `.28`, left `.27` installed, and left API/worker/office-web stopped. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md)
+- seventeenth clean Windows gate-day attempt ran on 2026-06-27 with rebuilt
+  `.31`/`.32` artifacts from source commit `233e061`. Gate 1 and Gate 2 passed
+  again; restore readiness retried service start once and recovered to health
+  `ok`. Gate 3 failed because overlapping elevated updater attempts were
+  allowed after a capture timeout. Final closeout showed `.32` installed, `.31`
+  preserved as rollback, a fresh pre-update backup present, all BellField
+  services stopped, and health down. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -857,18 +865,24 @@ Example from the new release artifact directory:
 
 The updater:
 
-1. Verifies `bellfield-update-manifest.json` and `bellfield-update-signature.json`.
-2. Verifies the installed license file from `BELLFIELD_LICENSE_PATH`.
-3. Refuses the update when the artifact `releaseDate` is after the license `updateWindowEnd`.
-4. Stage-copies the new release beside the current release root.
-5. Runs a hard-fail pre-update backup through the packaged worker manual backup CLI.
-6. Stops app services with bounded per-service timeouts.
-7. Waits, best-effort, for the captured WinSW service process trees to exit.
-8. Swaps the staged release into `--current-release-root` with a bounded retry;
+1. Acquires a single active-update lock under the install root. If another
+   updater is already running, stop and inspect that process instead of
+   retrying.
+2. Verifies `bellfield-update-manifest.json` and `bellfield-update-signature.json`.
+3. Verifies the installed license file from `BELLFIELD_LICENSE_PATH`.
+4. Refuses the update when the artifact `releaseDate` is after the license
+   `updateWindowEnd`.
+5. Stage-copies the new release beside the current release root using a
+   race-safe staged directory.
+6. Runs a hard-fail pre-update backup through the packaged worker manual backup CLI.
+7. Stops office-web, worker, API, and PostgreSQL with bounded per-service timeouts.
+8. Waits, best-effort, for the captured WinSW service process trees to exit.
+9. Swaps the staged release into `--current-release-root` with a bounded retry;
    the successful rename is the proof that Windows file handles have cleared.
-9. Preserves the prior release as a timestamped rollback directory.
-10. Runs packaged migrations.
-11. Restarts services and waits for `/health`.
+10. Preserves the prior release as a timestamped rollback directory.
+11. Starts PostgreSQL from the new release.
+12. Runs packaged migrations.
+13. Restarts API, worker, and office-web and waits for `/health`.
 
 The updater prints structured progress lines:
 
@@ -891,8 +905,17 @@ customer update.
 Rerun #15 exposed the update blocker: the real `.27` to `.28` updater run
 continued after the outer wrapper timed out, created a fresh pre-update backup,
 staged `.28`, left `.27` installed, and left API/worker/office-web stopped.
-Rerun #16 must record the updater phase/result/failure lines so a failed update
-is no longer silent.
+Rerun #16 proved structured updater phase/result/failure lines and pre-swap
+recovery, but the release swap still failed while PostgreSQL was running from
+inside the live release tree. Rerun #17 stopped PostgreSQL as part of the update
+stop set, but the strict proof was invalidated by overlapping elevated updater
+attempts after a hidden capture timeout.
+
+After any UAC/capture timeout, do not immediately retry the updater. First
+search for an already-running `update-bellfield` or artifact `node.exe` process,
+record the result, and only retry if no updater is active. The updater lock is a
+product safety net; the operator runbook should still avoid overlapping attempts
+because a destructive update may already be past staging or backup.
 
 If an update fails before the release swap, the current release should still be
 intact; the updater removes the abandoned staged release path and attempts to

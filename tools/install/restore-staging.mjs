@@ -21,14 +21,13 @@ export function timestampForRestorePath(date = new Date()) {
 
 export function stageDirectoryRestore(input) {
   assertDirectory(input.sourcePath, input.sourceLabel ?? 'restore source directory');
-  const stagePath = uniqueSiblingPath(input.targetPath, 'restore-stage', input.stamp);
+  const stagePath = reserveUniqueSiblingDirectory(input.targetPath, 'restore-stage', input.stamp);
 
   try {
-    mkdirSync(dirname(stagePath), { recursive: true });
     cpSync(input.sourcePath, stagePath, { recursive: true });
     return stagePath;
   } catch (error) {
-    rmSync(stagePath, { force: true, recursive: true });
+    removePathBestEffort(stagePath, { recursive: true });
     throw error;
   }
 }
@@ -151,9 +150,42 @@ export function stageFileRestore(input) {
     copyFileSync(input.sourcePath, stagePath);
     return stagePath;
   } catch (error) {
-    rmSync(stagePath, { force: true });
+    removePathBestEffort(stagePath);
     throw error;
   }
+}
+
+function reserveUniqueSiblingDirectory(targetPath, kind, stamp = timestampForRestorePath()) {
+  const parent = dirname(targetPath);
+  const base = basename(targetPath);
+  mkdirSync(parent, { recursive: true });
+
+  let suffix = 1;
+  while (true) {
+    const candidate =
+      suffix === 1
+        ? join(parent, `${base}.${kind}-${stamp}`)
+        : join(parent, `${base}.${kind}-${stamp}-${suffix}`);
+    try {
+      mkdirSync(candidate);
+      return candidate;
+    } catch (error) {
+      if (error?.code === 'EEXIST') {
+        suffix += 1;
+        continue;
+      }
+      throw error;
+    }
+  }
+}
+
+function removePathBestEffort(path, options = {}) {
+  rmSync(path, {
+    force: true,
+    recursive: Boolean(options.recursive),
+    maxRetries: 10,
+    retryDelay: 100
+  });
 }
 
 export function swapStagedFile(input) {

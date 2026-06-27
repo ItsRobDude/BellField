@@ -607,8 +607,8 @@ Does not own: the install recipe (`install-runbook.md`), the restore recipe
 
 ### [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md)
 
-Audience: contributors checking the latest clean Windows backup/restore pass and
-the current Gate 3 updater blocker.
+Audience: contributors checking the historical clean Windows backup/restore pass
+and the first real Gate 3 updater blocker.
 
 Purpose: dated evidence for the fifteenth fresh Windows install smoke: active
 artifacts `.27`/`.28` passed USB hash verification and `.27` completed Gate 1
@@ -621,15 +621,74 @@ failed during the real `.27` to `.28` update: the updater continued after the
 outer wrapper timeout, created a pre-update backup, staged `.28`, left `.27`
 installed, and left API/worker/office-web stopped.
 
-Read when: reviewing the latest USB evidence, hardening updater behavior,
-updating Gate 3 instructions, or deciding what the next USB artifact must prove.
+Read when: reviewing the rerun 15 USB evidence, understanding why updater
+hardening was needed, or comparing the silent/partial Gate 3 failure to the
+bounded rerun 16 failure.
 
-Current follow-up: update needs phase progress, bounded phase timeouts,
-pre-swap service recovery, and a clear failure-state summary before another
-strict Gate 3 attempt.
+Historical follow-up: rerun 16 proved the phase progress, bounded failure,
+pre-swap service recovery, and staged-release cleanup. The remaining Gate 3
+blocker is the live Windows release-directory swap while PostgreSQL was still
+running from inside the release tree.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term self-serve updater UI design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-16.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-16.md)
+
+Audience: contributors checking the current clean Windows Gate 3 updater blocker
+after the rerun 15 hardening patch.
+
+Purpose: dated evidence for the sixteenth fresh Windows install smoke: active
+artifacts `.29`/`.30` passed USB hash verification and `.29` completed Gate 1
+again, including service identity, ACL readback, first-owner setup, browser
+customer/location/job proof, reboot recovery, packaged LAN evidence, and real
+second-device proof. Gate 2 passed again from a real worker-produced backup set:
+restore completed, service readiness recovered to health `ok`, pre-backup data
+survived, marker data was erased, media/license checks passed, and browser proof
+worked. Gate 3 failed during the real `.29` to `.30` update at
+`BELLFIELD_UPDATE_PHASE` `swappingRelease`: after services stopped and the
+captured service process tree exited, Windows still returned `EPERM` while
+renaming `C:\BellField\release`. The updater emitted
+`BELLFIELD_UPDATE_FAILURE`, cleaned the abandoned staged release, restarted the
+original `.29` services, and left API health `ok`.
+
+Read when: fixing the live Windows release-swap blocker, checking why
+PostgreSQL must be stopped before the swap, or considering an installed layout
+that avoids renaming the directory containing live service wrappers/runtime.
+
+Historical follow-up: rerun 17 used a patch that stops all four BellField
+services before the release swap and starts PostgreSQL before migrations. Rerun
+17 is the current Gate 3 evidence.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or long-term self-serve updater UI design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md)
+
+Audience: contributors checking the latest clean Windows Gate 3 updater blocker
+after the Postgres-stop update patch.
+
+Purpose: dated evidence for the seventeenth fresh Windows install smoke: active
+artifacts `.31`/`.32` passed USB hash verification and `.31` completed Gate 1
+again. Gate 2 passed again from a real worker-produced backup set; restore
+completed data/media/license/migrations, retried service readiness once, reached
+health `ok`, preserved pre-backup data, erased the post-backup marker, and kept
+the license bytes intact. Gate 3 failed because overlapping elevated updater
+attempts were allowed. One attempt failed during `staging` with `ENOTEMPTY` on a
+same-stamp `release.restore-stage-*` path; a later closeout showed `.32` swapped
+in, `.31` preserved as rollback, a fresh pre-update backup present, all four
+services stopped, and health down.
+
+Read when: fixing the updater active-run lock, making staged update paths
+race-safe, or updating Gate 3 runbook guidance after UAC/capture timeouts.
+
+Current follow-up: enforce one active update at a time, atomically reserve stage
+directories, and require a process check before retrying after an elevated
+timeout. Rerun 17 does not prove or disprove the Postgres-stop release-swap fix
+because the update attempts overlapped.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or the longer-term junction/versioned release layout.
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 

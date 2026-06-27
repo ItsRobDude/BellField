@@ -178,9 +178,17 @@ survived, media/license checks were good, and the post-backup marker was erased.
 Gate 3 failed during the real `.27` to `.28` update. The updater continued after
 the outer wrapper timeout, eventually created a pre-update backup and staged
 `.28`, but left `.27` installed with API/worker/office-web stopped and
-PostgreSQL still running. The active clean-machine blocker is now updater
-observability/recovery, not backup/restore. See
+PostgreSQL still running. At that point, the clean-machine blocker moved to
+updater observability/recovery rather than backup/restore. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md).
+Rerun #17 used rebuilt `.31`/`.32` artifacts from source commit `233e061`.
+Gate 1 and Gate 2 passed again, including restore-readiness recovery to health
+`ok`. Gate 3 is still open: overlapping elevated updater attempts after a
+capture timeout invalidated the strict update proof, collided in staging, and
+left `.32` installed with `.31` preserved as rollback, a fresh pre-update backup
+present, all services stopped, and health down. The active clean-machine blocker
+is now updater single-run enforcement plus race-safe stage creation. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
