@@ -546,18 +546,62 @@ try {
     includesAll(files.updateLock, [
       'export function acquireUpdateLock',
       'defaultUpdateLockPath',
+      'defaultUpdateLockMaxAgeMs',
+      'defaultUpdateLockOwnerlessGraceMs',
       'owner.json',
       'BELLFIELD_UPDATE_LOCKED',
-      'process.kill(processId, 0)'
+      'process.kill(processId, 0)',
+      'removeStaleLockIfUnchanged',
+      'ownersMatch',
+      'owner-process-still-appears-active',
+      'owner-process-identity-mismatch',
+      'ownerless-lock-in-progress',
+      'verifiedOwner?.ownerToken !== ownerToken'
     ]) &&
       includesAll(files.updateHelper, [
         "from './update-lock.mjs'",
         'let updateLock = null;',
-        'updateLock = acquireUpdateLock({ installRoot',
+        'updateLock = acquireUpdateLock({',
+        'installRoot,',
+        'update-lock-max-age-ms',
+        'update-lock-ownerless-grace-ms',
+        'getProcessSnapshot: getUpdateLockProcessSnapshot',
         'updateLock?.release();'
       ]) &&
-      files.updateLockTest.includes('update lock rejects another active updater process') &&
-      files.updateLockTest.includes('update lock removes a stale owner')
+      files.updateLockTest.includes('update lock rejects a young active updater owner') &&
+      files.updateLockTest.includes('update lock removes a dead owner') &&
+      files.updateLockTest.includes('PID-reused owner') &&
+      files.updateLockTest.includes('unreadable command line') &&
+      files.updateLockTest.includes('brand-new ownerless lock') &&
+      files.updateLockTest.includes('changed during stale removal') &&
+      files.updateLock.includes('manualRemediation') &&
+      files.updateLock.includes('After confirming no BellField update is running')
+  );
+  assertOrdered(files.updateHelper, 'updater acquires lock before destructive update recovery', [
+    'let updateLock = null;',
+    'updateLock = acquireUpdateLock({',
+    "if (error?.code === 'BELLFIELD_UPDATE_LOCKED')",
+    'emitUpdateLockBlocked(error);',
+    'throw error;',
+    'enterUpdatePhase(recoveryTracker, updatePhases.verifying);'
+  ]);
+  check(
+    'updater lock conflicts emit blocked output outside generic failure recovery',
+    includesAll(files.updateHelper, [
+      'function emitUpdateLockBlocked',
+      'BELLFIELD_UPDATE_LOCKED',
+      "status: 'blocked'",
+      'requiresOperatorInspection',
+      'manualRemediation: error.manualRemediation ?? null',
+      'processSnapshot: error.processSnapshot ?? null',
+      "if (error?.code === 'BELLFIELD_UPDATE_LOCKED')",
+      'emitUpdateLockBlocked(error);'
+    ]) &&
+      orderedIndices(files.updateHelper, [
+        "emitUpdateEvent('BELLFIELD_UPDATE_LOCKED'",
+        'const snapshotAtFailure = recoveryTracker.snapshot();',
+        'BELLFIELD_UPDATE_FAILURE'
+      ]).every((index) => index !== -1)
   );
   check(
     'updater recovery tests pin both sides of the release-swap boundary',
@@ -604,15 +648,16 @@ try {
       'startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });'
     ]
   );
-  assertOrdered(
-    files.updateHelper,
+  check(
     'updater pre-swap recovery restarts postgres before app services',
-    [
+    assertOrderedAfterValue(files.updateHelper, 'if (recovery.restartServices) {', [
       'if (recovery.postSwapFailure) {',
+      'await retryUpdateReadiness({',
+      'readinessRecovered = true;',
       '} else {',
       'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });',
       'startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });'
-    ]
+    ])
   );
   check(
     'updater captures service process trees before stop',
@@ -698,13 +743,17 @@ try {
   );
   check(
     'updater captures release-root processes before pre-swap recovery restart',
-    assertOrderedAfterValue(files.updateHelper, '} catch (error) {', [
+    assertOrderedAfterValue(
+      files.updateHelper,
       'const snapshotAtFailure = recoveryTracker.snapshot();',
-      'const preRecoveryReleaseRootProcesses =',
-      'captureReleaseRootProcessesSafe(currentReleaseRoot)',
-      'if (recovery.restartServices) {',
-      'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });'
-    ])
+      [
+        'const snapshotAtFailure = recoveryTracker.snapshot();',
+        'const preRecoveryReleaseRootProcesses =',
+        'captureReleaseRootProcessesSafe(currentReleaseRoot)',
+        'if (recovery.restartServices) {',
+        'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });'
+      ]
+    )
   );
   check(
     'updater catch gates pre-swap restart on installed release root existence',

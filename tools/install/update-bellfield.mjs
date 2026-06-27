@@ -9,7 +9,11 @@ import {
   normalizePowerShellArray,
   updatePhases
 } from './update-recovery.mjs';
-import { acquireUpdateLock } from './update-lock.mjs';
+import {
+  acquireUpdateLock,
+  defaultUpdateLockMaxAgeMs,
+  defaultUpdateLockOwnerlessGraceMs
+} from './update-lock.mjs';
 import { parseEnvFile, readArgs } from './install-utils.mjs';
 import {
   stageDirectoryRestore,
@@ -77,6 +81,20 @@ function emitUpdateEvent(prefix, payload) {
 function enterUpdatePhase(recoveryTracker, phase, details = {}) {
   recoveryTracker.enter(phase);
   emitUpdateEvent('BELLFIELD_UPDATE_PHASE', { phase, ...details });
+}
+
+function emitUpdateLockBlocked(error) {
+  emitUpdateEvent('BELLFIELD_UPDATE_LOCKED', {
+    status: 'blocked',
+    lockPath: error.lockPath ?? null,
+    lockOwner: error.lockOwner ?? null,
+    reason: error.reason ?? null,
+    lockAgeMs: error.lockAgeMs ?? null,
+    requiresOperatorInspection: Boolean(error.requiresOperatorInspection),
+    manualRemediation: error.manualRemediation ?? null,
+    processSnapshot: error.processSnapshot ?? null,
+    message: error instanceof Error ? error.message : String(error)
+  });
 }
 
 function stopUpdateServices({ skipServices, timeoutMs }) {
@@ -432,6 +450,39 @@ $unavailableCommandLine = @(
   }
 }
 
+function getUpdateLockProcessSnapshot(processId) {
+  if (process.platform !== 'win32') {
+    return null;
+  }
+
+  try {
+    const result = runPowerShell(
+      `
+$process = Get-CimInstance Win32_Process -Filter "ProcessId = ${processId}" -ErrorAction SilentlyContinue
+if ($null -eq $process) {
+  [pscustomobject]@{
+    alive = $false
+    processId = ${processId}
+  } | ConvertTo-Json -Depth 3
+} else {
+  [pscustomobject]@{
+    alive = $true
+    processId = [int]$process.ProcessId
+    name = [string]$process.Name
+    commandLine = [string]$process.CommandLine
+    creationDate = [string]$process.CreationDate
+  } | ConvertTo-Json -Depth 3
+}
+`,
+      { capture: true, timeoutMs: 30_000 }
+    );
+    const stdout = result.stdout.trim();
+    return stdout ? JSON.parse(stdout) : null;
+  } catch {
+    return null;
+  }
+}
+
 function safeReadReleaseManifest(releaseRoot) {
   const manifestPath = join(releaseRoot, 'bellfield-build-manifest.json');
   try {
@@ -572,6 +623,16 @@ const migrationTimeoutMs = parsePositiveInteger(
   'migration timeout'
 );
 const healthTimeoutMs = parsePositiveInteger(args['health-timeout-ms'], 60_000, 'health timeout');
+const updateLockMaxAgeMs = parsePositiveInteger(
+  args['update-lock-max-age-ms'],
+  defaultUpdateLockMaxAgeMs,
+  'update lock max age'
+);
+const updateLockOwnerlessGraceMs = parsePositiveInteger(
+  args['update-lock-ownerless-grace-ms'],
+  defaultUpdateLockOwnerlessGraceMs,
+  'update lock ownerless grace'
+);
 
 if (samePath(updateArtifactRoot, currentReleaseRoot)) {
   throw new Error(
@@ -604,9 +665,22 @@ let attemptedVersion = null;
 let updateLock = null;
 
 try {
-  updateLock = acquireUpdateLock({ installRoot, commandLine: process.argv.join(' ') });
+  updateLock = acquireUpdateLock({
+    installRoot,
+    commandLine: process.argv.join(' '),
+    maxAgeMs: updateLockMaxAgeMs,
+    ownerlessGraceMs: updateLockOwnerlessGraceMs,
+    getProcessSnapshot: getUpdateLockProcessSnapshot
+  });
   console.log(`Acquired BellField update lock: ${updateLock.lockPath}`);
+} catch (error) {
+  if (error?.code === 'BELLFIELD_UPDATE_LOCKED') {
+    emitUpdateLockBlocked(error);
+  }
+  throw error;
+}
 
+try {
   enterUpdatePhase(recoveryTracker, updatePhases.verifying);
   const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
   attemptedVersion = verifiedArtifact.build.version;
