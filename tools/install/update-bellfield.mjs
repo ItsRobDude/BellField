@@ -9,6 +9,7 @@ import {
   normalizePowerShellArray,
   updatePhases
 } from './update-recovery.mjs';
+import { acquireUpdateLock } from './update-lock.mjs';
 import { parseEnvFile, readArgs } from './install-utils.mjs';
 import {
   stageDirectoryRestore,
@@ -296,7 +297,7 @@ function cleanupStagedUpdatePath(stagedReleasePath) {
   }
 
   try {
-    rmSync(stagedReleasePath, { force: true, recursive: true });
+    rmSync(stagedReleasePath, { force: true, recursive: true, maxRetries: 10, retryDelay: 100 });
     console.error(`Removed abandoned staged update release: ${stagedReleasePath}`);
     return { removed: true };
   } catch (error) {
@@ -600,8 +601,12 @@ if (!existsSync(migrationsScript)) {
 
 const recoveryTracker = createUpdateRecoveryTracker({ skipServices });
 let attemptedVersion = null;
+let updateLock = null;
 
 try {
+  updateLock = acquireUpdateLock({ installRoot, commandLine: process.argv.join(' ') });
+  console.log(`Acquired BellField update lock: ${updateLock.lockPath}`);
+
   enterUpdatePhase(recoveryTracker, updatePhases.verifying);
   const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
   attemptedVersion = verifiedArtifact.build.version;
@@ -790,4 +795,6 @@ try {
     );
     throw recoveryError ?? error;
   }
+} finally {
+  updateLock?.release();
 }

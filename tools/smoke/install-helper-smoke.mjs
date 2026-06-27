@@ -29,8 +29,11 @@ try {
     restoreHelper: readRequired('tools/install/restore-backup.mjs'),
     restoreRecovery: readRequired('tools/install/restore-recovery.mjs'),
     restoreStaging: readRequired('tools/install/restore-staging.mjs'),
+    restoreStagingTest: readRequired('tools/install/restore-staging.test.mjs'),
     windowsServiceControl: readRequired('tools/install/windows-service-control.mjs'),
     updateHelper: readRequired('tools/install/update-bellfield.mjs'),
+    updateLock: readRequired('tools/install/update-lock.mjs'),
+    updateLockTest: readRequired('tools/install/update-lock.test.mjs'),
     updateRecovery: readRequired('tools/install/update-recovery.mjs'),
     updateRecoveryTest: readRequired('tools/install/update-recovery.test.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
@@ -539,6 +542,24 @@ try {
       files.updateHelper.includes('decideUpdateRecovery(snapshotAtFailure)')
   );
   check(
+    'updater owns a single active update lock for the full run',
+    includesAll(files.updateLock, [
+      'export function acquireUpdateLock',
+      'defaultUpdateLockPath',
+      'owner.json',
+      'BELLFIELD_UPDATE_LOCKED',
+      'process.kill(processId, 0)'
+    ]) &&
+      includesAll(files.updateHelper, [
+        "from './update-lock.mjs'",
+        'let updateLock = null;',
+        'updateLock = acquireUpdateLock({ installRoot',
+        'updateLock?.release();'
+      ]) &&
+      files.updateLockTest.includes('update lock rejects another active updater process') &&
+      files.updateLockTest.includes('update lock removes a stale owner')
+  );
+  check(
     'updater recovery tests pin both sides of the release-swap boundary',
     files.updateRecoveryTest.includes('swappingRelease is still pre-swap') &&
       files.updateRecoveryTest.includes('releaseSwapped is post-swap') &&
@@ -613,6 +634,18 @@ try {
     ]) &&
       files.updateHelper.includes('swapStagedDirectoryWithRetry') &&
       !files.updateHelper.includes('async function swapStagedReleaseWithRetry')
+  );
+  check(
+    'restore staging reserves stage directories atomically',
+    includesAll(files.restoreStaging, [
+      'reserveUniqueSiblingDirectory',
+      'mkdirSync(candidate)',
+      "error?.code === 'EEXIST'",
+      'removePathBestEffort(stagePath, { recursive: true })'
+    ]) &&
+      files.restoreStagingTest.includes(
+        'stageDirectoryRestore reserves unique same-stamp stage directories'
+      )
   );
   check(
     'restore staging swap retry verifies helper rollback leaves a usable target or stage',

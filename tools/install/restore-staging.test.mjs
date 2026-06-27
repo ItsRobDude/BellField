@@ -11,7 +11,40 @@ import {
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { test } from 'node:test';
-import { swapStagedDirectory, swapStagedDirectoryWithRetry } from './restore-staging.mjs';
+import {
+  stageDirectoryRestore,
+  swapStagedDirectory,
+  swapStagedDirectoryWithRetry
+} from './restore-staging.mjs';
+
+test('stageDirectoryRestore reserves unique same-stamp stage directories', () => {
+  const root = mkdtempSync(join(tmpdir(), 'bellfield-staging-stage-'));
+  try {
+    const sourcePath = join(root, 'source');
+    const targetPath = join(root, 'release');
+    mkdirSync(sourcePath);
+    writeFileSync(join(sourcePath, 'new.txt'), 'new');
+
+    const firstStagePath = stageDirectoryRestore({
+      sourcePath,
+      targetPath,
+      stamp: 'same-stamp'
+    });
+    const secondStagePath = stageDirectoryRestore({
+      sourcePath,
+      targetPath,
+      stamp: 'same-stamp'
+    });
+
+    assert.notEqual(firstStagePath, secondStagePath);
+    assert.equal(firstStagePath, join(root, 'release.restore-stage-same-stamp'));
+    assert.equal(secondStagePath, join(root, 'release.restore-stage-same-stamp-2'));
+    assert.equal(readFileSync(join(firstStagePath, 'new.txt'), 'utf8'), 'new');
+    assert.equal(readFileSync(join(secondStagePath, 'new.txt'), 'utf8'), 'new');
+  } finally {
+    rmSync(root, { force: true, recursive: true });
+  }
+});
 
 test('swapStagedDirectoryWithRetry retries a transient swap failure', async () => {
   const root = mkdtempSync(join(tmpdir(), 'bellfield-staging-retry-'));

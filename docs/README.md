@@ -656,13 +656,39 @@ Read when: fixing the live Windows release-swap blocker, checking why
 PostgreSQL must be stopped before the swap, or considering an installed layout
 that avoids renaming the directory containing live service wrappers/runtime.
 
-Current follow-up: update should stop all four BellField services before the
-release swap, start PostgreSQL before migrations, preserve the rerun 16 recovery
-behavior, and capture pre-recovery release-root process evidence if the swap
-still fails.
+Historical follow-up: rerun 17 used a patch that stops all four BellField
+services before the release swap and starts PostgreSQL before migrations. Rerun
+17 is the current Gate 3 evidence.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term self-serve updater UI design.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md)
+
+Audience: contributors checking the latest clean Windows Gate 3 updater blocker
+after the Postgres-stop update patch.
+
+Purpose: dated evidence for the seventeenth fresh Windows install smoke: active
+artifacts `.31`/`.32` passed USB hash verification and `.31` completed Gate 1
+again. Gate 2 passed again from a real worker-produced backup set; restore
+completed data/media/license/migrations, retried service readiness once, reached
+health `ok`, preserved pre-backup data, erased the post-backup marker, and kept
+the license bytes intact. Gate 3 failed because overlapping elevated updater
+attempts were allowed. One attempt failed during `staging` with `ENOTEMPTY` on a
+same-stamp `release.restore-stage-*` path; a later closeout showed `.32` swapped
+in, `.31` preserved as rollback, a fresh pre-update backup present, all four
+services stopped, and health down.
+
+Read when: fixing the updater active-run lock, making staged update paths
+race-safe, or updating Gate 3 runbook guidance after UAC/capture timeouts.
+
+Current follow-up: enforce one active update at a time, atomically reserve stage
+directories, and require a process check before retrying after an elevated
+timeout. Rerun 17 does not prove or disprove the Postgres-stop release-swap fix
+because the update attempts overlapped.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or the longer-term junction/versioned release layout.
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 
