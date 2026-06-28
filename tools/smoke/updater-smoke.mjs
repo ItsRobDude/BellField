@@ -80,6 +80,35 @@ try {
     'packaged migrations ran during update',
     updateResult.stdout.includes('scratch migrations applied')
   );
+  const serviceIds = [
+    'bellfield-postgres',
+    'bellfield-api',
+    'bellfield-worker',
+    'bellfield-office-web'
+  ];
+  const missingServiceAssets = serviceIds.flatMap((serviceId) =>
+    ['exe', 'xml']
+      .map((extension) => path.join(currentReleaseRoot, 'services', `${serviceId}.${extension}`))
+      .filter((assetPath) => !existsSync(assetPath))
+  );
+  check(
+    'updater prepares service wrappers and manifests in the staged release',
+    missingServiceAssets.length === 0,
+    { missingServiceAssets }
+  );
+  const postgresXmlPath = path.join(currentReleaseRoot, 'services', 'bellfield-postgres.xml');
+  const postgresXml = readFileSync(postgresXmlPath, 'utf8');
+  check(
+    'rendered service XML targets the stable installed release root',
+    postgresXml.includes(
+      escapeXmlForSmoke(path.join(currentReleaseRoot, 'postgres', 'bin', 'postgres.exe'))
+    ) && !postgresXml.includes(escapeXmlForSmoke(updateArtifactRoot)),
+    {
+      postgresXmlPath,
+      currentReleaseRoot,
+      updateArtifactRoot
+    }
+  );
   check(
     'updater emitted structured phase and result evidence',
     updateResult.stdout.includes('BELLFIELD_UPDATE_PHASE ') &&
@@ -163,9 +192,19 @@ try {
 
 function writeCurrentRelease() {
   mkdirSync(currentReleaseRoot, { recursive: true });
+  mkdirSync(path.join(currentReleaseRoot, 'apps', 'office-web'), { recursive: true });
+  mkdirSync(path.join(currentReleaseRoot, 'runtime', 'node'), { recursive: true });
+  mkdirSync(path.join(currentReleaseRoot, 'postgres', 'bin'), { recursive: true });
   writeFileSync(path.join(currentReleaseRoot, 'old-release-marker.txt'), 'old release', {
     flag: 'wx'
   });
+  writeFileSync(
+    path.join(currentReleaseRoot, 'apps', 'office-web', 'server.js'),
+    'old office server',
+    {
+      flag: 'wx'
+    }
+  );
 }
 
 function writeUpdateArtifact() {
@@ -173,6 +212,10 @@ function writeUpdateArtifact() {
   mkdirSync(path.join(updateArtifactRoot, 'apps', 'api', 'scripts', 'migrations'), {
     recursive: true
   });
+  mkdirSync(path.join(updateArtifactRoot, 'apps', 'office-web'), { recursive: true });
+  mkdirSync(path.join(updateArtifactRoot, 'tools', 'install'), { recursive: true });
+  mkdirSync(path.join(updateArtifactRoot, 'tools', 'winsw'), { recursive: true });
+  mkdirSync(path.join(updateArtifactRoot, 'postgres', 'bin'), { recursive: true });
   copyFileSync(
     process.execPath,
     path.join(
@@ -181,6 +224,29 @@ function writeUpdateArtifact() {
       'node',
       process.platform === 'win32' ? 'node.exe' : 'node'
     )
+  );
+  copyFileSync(
+    path.resolve('tools', 'install', 'render-windows-services.mjs'),
+    path.join(updateArtifactRoot, 'tools', 'install', 'render-windows-services.mjs')
+  );
+  copyFileSync(
+    path.resolve('tools', 'install', 'install-utils.mjs'),
+    path.join(updateArtifactRoot, 'tools', 'install', 'install-utils.mjs')
+  );
+  writeFileSync(
+    path.join(updateArtifactRoot, 'tools', 'winsw', 'WinSW-x64.exe'),
+    'scratch winsw binary',
+    { flag: 'wx' }
+  );
+  writeFileSync(
+    path.join(updateArtifactRoot, 'apps', 'office-web', 'server.js'),
+    'scratch office server',
+    { flag: 'wx' }
+  );
+  writeFileSync(
+    path.join(updateArtifactRoot, 'postgres', 'bin', 'postgres.exe'),
+    'scratch postgres binary',
+    { flag: 'wx' }
   );
   writeFileSync(
     path.join(updateArtifactRoot, 'bellfield-build-manifest.json'),
@@ -261,6 +327,15 @@ function check(name, passed, details = {}) {
   if (!passed) {
     throw new Error(name);
   }
+}
+
+function escapeXmlForSmoke(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
 }
 
 function readJsonLines(filePath) {

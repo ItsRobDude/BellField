@@ -20,8 +20,11 @@ $terminalUpdateEvents = @(
 )
 
 function ConvertTo-IsoUtcString {
-  param([datetime]$Value)
-  return $Value.ToUniversalTime().ToString("o")
+  param($Value)
+  if ($null -eq $Value) {
+    return $null
+  }
+  return ([datetime]$Value).ToUniversalTime().ToString("o")
 }
 
 function Read-JsonFile {
@@ -70,10 +73,11 @@ function Get-DirectorySummaries {
     Get-ChildItem -LiteralPath $Path -Directory -Filter $Filter -ErrorAction SilentlyContinue |
       Sort-Object Name |
       ForEach-Object {
+        $lastWriteTimeUtc = ConvertTo-IsoUtcString -Value ($_.LastWriteTimeUtc)
         [pscustomobject]@{
           name = $_.Name
           path = $_.FullName
-          lastWriteTimeUtc = ConvertTo-IsoUtcString $_.LastWriteTimeUtc
+          lastWriteTimeUtc = $lastWriteTimeUtc
         }
       }
   )
@@ -93,10 +97,11 @@ function Get-LatestDirectorySummary {
   if (-not $directory) {
     return $null
   }
+  $lastWriteTimeUtc = ConvertTo-IsoUtcString -Value ($directory.LastWriteTimeUtc)
   return [pscustomobject]@{
     name = $directory.Name
     path = $directory.FullName
-    lastWriteTimeUtc = ConvertTo-IsoUtcString $directory.LastWriteTimeUtc
+    lastWriteTimeUtc = $lastWriteTimeUtc
   }
 }
 
@@ -126,8 +131,8 @@ function Get-LatestUpdateLog {
     }
   }
 
-  $events = New-Object System.Collections.Generic.List[object]
-  $parseErrors = New-Object System.Collections.Generic.List[object]
+  $events = @()
+  $parseErrors = @()
   $lineNumber = 0
   foreach ($line in [System.IO.File]::ReadLines($latestLog.FullName)) {
     $lineNumber += 1
@@ -135,31 +140,110 @@ function Get-LatestUpdateLog {
       continue
     }
     try {
-      $events.Add(($line | ConvertFrom-Json))
+      $events += ($line | ConvertFrom-Json)
     } catch {
-      $parseErrors.Add([pscustomobject]@{
+      $parseErrors += [pscustomobject]@{
         lineNumber = $lineNumber
         error = $_.Exception.Message
-      })
+      }
     }
   }
 
   $terminalEvent = $null
-  for ($index = $events.Count - 1; $index -ge 0; $index -= 1) {
-    $candidate = $events[$index]
+  $eventArray = @($events)
+  for ($index = $eventArray.Count - 1; $index -ge 0; $index -= 1) {
+    $candidate = $eventArray[$index]
     if ($terminalUpdateEvents -contains [string]$candidate.event) {
       $terminalEvent = $candidate
       break
     }
   }
 
+  $lastWriteTimeUtc = ConvertTo-IsoUtcString -Value ($latestLog.LastWriteTimeUtc)
+  $parseErrorArray = @($parseErrors)
   return [pscustomobject]@{
     path = $latestLog.FullName
     exists = $true
-    lastWriteTimeUtc = ConvertTo-IsoUtcString $latestLog.LastWriteTimeUtc
-    eventCount = $events.Count
+    lastWriteTimeUtc = $lastWriteTimeUtc
+    eventCount = $eventArray.Count
     terminalEvent = $terminalEvent
-    parseErrors = @($parseErrors)
+    parseErrors = $parseErrorArray
+  }
+}
+
+function Invoke-CaptureText {
+  param([scriptblock]$Script)
+  try {
+    return ((& $Script 2>&1 | Out-String).Trim())
+  } catch {
+    return $_.Exception.Message
+  }
+}
+
+function Get-PathEvidence {
+  param(
+    [string]$Name,
+    [string]$Path
+  )
+  $exists = Test-Path -LiteralPath $Path
+  return [pscustomobject]@{
+    name = $Name
+    path = $Path
+    exists = $exists
+    acl = if ($exists) { Invoke-CaptureText { icacls $Path } } else { $null }
+  }
+}
+
+function Get-PostgresStartEvidence {
+  param(
+    [string]$InstallRoot,
+    [string]$ReleaseRoot
+  )
+
+  $serviceName = "bellfield-postgres"
+  $logRoot = Join-Path $InstallRoot "data\logs\services\bellfield-postgres"
+  $service = Get-CimInstance Win32_Service -Filter "Name='$serviceName'" -ErrorAction SilentlyContinue
+  $events = @(
+    Get-WinEvent -FilterHashtable @{
+      LogName = "System"
+      ProviderName = "Service Control Manager"
+      Id = @(7000, 7009, 7023, 7031, 7034)
+      StartTime = (Get-Date).AddHours(-2)
+    } -ErrorAction SilentlyContinue |
+      Where-Object { [string]$_.Message -match "BellField|bellfield" } |
+      Select-Object -First 20 TimeCreated, Id, LevelDisplayName, Message
+  )
+  $logs = foreach ($fileName in @("bellfield-postgres.wrapper.log", "bellfield-postgres.err.log", "bellfield-postgres.out.log")) {
+    $path = Join-Path $logRoot $fileName
+    [pscustomobject]@{
+      path = $path
+      exists = Test-Path -LiteralPath $path
+      tail = if (Test-Path -LiteralPath $path) { (Get-Content -LiteralPath $path -Tail 80 -ErrorAction SilentlyContinue) -join [Environment]::NewLine } else { $null }
+    }
+  }
+
+  return [pscustomobject]@{
+    service = if ($service) {
+      [pscustomobject]@{
+        name = $service.Name
+        state = $service.State
+        status = $service.Status
+        startName = $service.StartName
+        processId = $service.ProcessId
+        exitCode = $service.ExitCode
+        pathName = $service.PathName
+      }
+    } else { $null }
+    scQc = Invoke-CaptureText { sc.exe qc $serviceName }
+    paths = @(
+      Get-PathEvidence -Name "serviceExe" -Path (Join-Path (Join-Path $ReleaseRoot "services") "bellfield-postgres.exe")
+      Get-PathEvidence -Name "serviceXml" -Path (Join-Path (Join-Path $ReleaseRoot "services") "bellfield-postgres.xml")
+      Get-PathEvidence -Name "postgresExe" -Path (Join-Path (Join-Path (Join-Path $ReleaseRoot "postgres") "bin") "postgres.exe")
+      Get-PathEvidence -Name "postgresReleaseRoot" -Path (Join-Path $ReleaseRoot "postgres")
+      Get-PathEvidence -Name "postgresLogRoot" -Path $logRoot
+    )
+    scmEvents = @($events)
+    logs = @($logs)
   }
 }
 
@@ -234,11 +318,12 @@ if (-not $HealthUrl) {
 }
 
 $evidence = [pscustomobject]@{
-  collectedAt = ConvertTo-IsoUtcString (Get-Date)
+  collectedAt = ConvertTo-IsoUtcString -Value (Get-Date)
   installRoot = $InstallRoot
   readOnly = $true
   updateLog = Get-LatestUpdateLog -InstallRoot $InstallRoot
   currentReleaseManifest = Read-JsonFile -Path (Join-Path $releaseRoot "bellfield-build-manifest.json")
+  postgresStartEvidence = Get-PostgresStartEvidence -InstallRoot $InstallRoot -ReleaseRoot $releaseRoot
   releaseState = [pscustomobject]@{
     releaseRoot = $releaseRoot
     releaseRootExists = Test-Path -LiteralPath $releaseRoot

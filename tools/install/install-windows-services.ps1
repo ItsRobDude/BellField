@@ -15,60 +15,20 @@ if (-not (Test-Path -LiteralPath $redactionHelper)) {
 }
 . $redactionHelper
 
-$adminSid = "*S-1-5-32-544"
-$systemSid = "*S-1-5-18"
+$aclHelper = Join-Path $PSScriptRoot "windows-service-acl.ps1"
+if (-not (Test-Path -LiteralPath $aclHelper)) {
+  throw "BellField Windows service ACL helper not found at $aclHelper."
+}
+. $aclHelper
+
 $postgresServiceId = "bellfield-postgres"
 $postgresServiceIdentity = "NT SERVICE\$postgresServiceId"
 $postgresServiceStartName = $postgresServiceIdentity
-$postgresDataRoot = Join-Path $InstallRoot "data\postgres"
-$postgresReleaseRoot = Join-Path $ReleaseRoot "postgres"
 $nodeExe = Join-Path $ReleaseRoot "runtime\node\node.exe"
 $runtimeConfigValidator = Join-Path $ReleaseRoot "tools\install\validate-server-runtime-config.mjs"
 
 if (-not (Test-Path -LiteralPath $WinSwExe)) {
   throw "WinSW executable not found at $WinSwExe. Place the approved WinSW x64 binary there before installing services."
-}
-
-function Invoke-Icacls {
-  param(
-    [Parameter(Mandatory = $true)][string[]]$Arguments,
-    [Parameter(Mandatory = $true)][string]$FailureMessage
-  )
-
-  & icacls @Arguments | Out-Null
-  if ($LASTEXITCODE -ne 0) {
-    throw $FailureMessage
-  }
-}
-
-function Protect-BellFieldPath {
-  param(
-    [Parameter(Mandatory = $true)][string]$Path,
-    [switch]$Container,
-    [string[]]$ExtraGrants = @()
-  )
-
-  if (-not (Test-Path -LiteralPath $Path)) {
-    Write-Warning "Skipping ACL hardening for missing path: $Path"
-    return
-  }
-
-  $rights = if ($Container) { "(OI)(CI)F" } else { "F" }
-
-  $arguments = @(
-    $Path,
-    "/inheritance:r",
-    "/grant:r",
-    "${adminSid}:$rights",
-    "${systemSid}:$rights"
-  )
-
-  foreach ($grant in $ExtraGrants) {
-    $arguments += "/grant"
-    $arguments += $grant
-  }
-
-  Invoke-Icacls -Arguments $arguments -FailureMessage "Failed to harden ACLs for $Path."
 }
 
 function Ensure-Directory {
@@ -428,9 +388,6 @@ foreach ($serviceId in $serviceOrder) {
   Ensure-Directory -Path (Join-Path $ServiceLogRoot $serviceId)
 }
 
-Protect-BellFieldPath -Path $ServiceManifestRoot -Container
-Protect-BellFieldPath -Path $EnvPath
-
 foreach ($serviceId in $serviceOrder) {
   $serviceExe = Join-Path $ServiceManifestRoot "$serviceId.exe"
   & $serviceExe install
@@ -442,13 +399,13 @@ foreach ($serviceId in $serviceOrder) {
 Set-ServiceStartAccount -ServiceId $postgresServiceId -AccountName $postgresServiceStartName
 Set-ServiceSidType -ServiceId $postgresServiceId
 
-Protect-BellFieldPath -Path $ServiceManifestRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(RX)")
-Protect-BellFieldPath -Path $postgresReleaseRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)RX")
-Protect-BellFieldPath -Path $postgresDataRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")
-Protect-BellFieldPath -Path $ServiceLogRoot -Container
-Protect-BellFieldPath -Path (Join-Path $ServiceLogRoot $postgresServiceId) -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")
-Protect-BellFieldPath -Path (Join-Path $ServiceManifestRoot "$postgresServiceId.exe") -ExtraGrants @("${postgresServiceIdentity}:RX")
-Protect-BellFieldPath -Path (Join-Path $ServiceManifestRoot "$postgresServiceId.xml") -ExtraGrants @("${postgresServiceIdentity}:R")
+Set-BellFieldWindowsServiceAcls `
+  -ReleaseRoot $ReleaseRoot `
+  -InstallRoot $InstallRoot `
+  -ServiceManifestRoot $ServiceManifestRoot `
+  -EnvPath $EnvPath `
+  -ServiceLogRoot $ServiceLogRoot `
+  -PostgresServiceId $postgresServiceId
 
 Invoke-RuntimeConfigValidation
 

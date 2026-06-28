@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { copyFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, parse, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -38,6 +38,7 @@ const postgresServiceName = 'bellfield-postgres';
 const appServicesStopOrder = ['bellfield-office-web', 'bellfield-worker', 'bellfield-api'];
 const updateServicesStopOrder = [...appServicesStopOrder, postgresServiceName];
 const appServicesStartOrder = ['bellfield-api', 'bellfield-worker', 'bellfield-office-web'];
+const allServiceIds = [postgresServiceName, ...appServicesStartOrder];
 const terminalUpdateEvents = new Set([
   'BELLFIELD_UPDATE_RESULT',
   'BELLFIELD_UPDATE_FAILURE',
@@ -259,6 +260,77 @@ function startAppServices({ skipServices, timeoutMs }) {
   for (const serviceName of appServicesStartOrder) {
     startWindowsService(serviceName, timeoutMs);
   }
+}
+
+function prepareStagedWindowsServices({
+  stagedReleasePath,
+  finalReleaseRoot,
+  installRoot,
+  envPath,
+  skipServices,
+  timeoutMs
+}) {
+  const stagedNodeExe = join(
+    stagedReleasePath,
+    'runtime',
+    'node',
+    process.platform === 'win32' ? 'node.exe' : 'node'
+  );
+  const renderScript = join(stagedReleasePath, 'tools', 'install', 'render-windows-services.mjs');
+  const winSwExe = join(stagedReleasePath, 'tools', 'winsw', 'WinSW-x64.exe');
+  const servicesDir = join(stagedReleasePath, 'services');
+
+  for (const requiredPath of [stagedNodeExe, renderScript, winSwExe]) {
+    if (!existsSync(requiredPath)) {
+      throw new Error(`Staged update release is missing required service asset: ${requiredPath}`);
+    }
+  }
+
+  run(
+    stagedNodeExe,
+    [
+      renderScript,
+      `--install-root=${installRoot}`,
+      `--release-root=${finalReleaseRoot}`,
+      `--env=${envPath}`,
+      `--output=${servicesDir}`
+    ],
+    { timeoutMs }
+  );
+
+  for (const serviceId of allServiceIds) {
+    copyFileSync(winSwExe, join(servicesDir, `${serviceId}.exe`));
+  }
+
+  if (skipServices || process.platform !== 'win32') {
+    return;
+  }
+
+  const aclScript = join(stagedReleasePath, 'tools', 'install', 'windows-service-acl.ps1');
+  if (!existsSync(aclScript)) {
+    throw new Error(`Staged update release is missing Windows service ACL helper: ${aclScript}`);
+  }
+
+  run(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-ExecutionPolicy',
+      'Bypass',
+      '-File',
+      aclScript,
+      '-Apply',
+      '-ReleaseRoot',
+      stagedReleasePath,
+      '-InstallRoot',
+      installRoot,
+      '-ServiceManifestRoot',
+      servicesDir,
+      '-EnvPath',
+      envPath
+    ],
+    { capture: true, timeoutMs }
+  );
 }
 
 function captureServiceProcessTree(serviceNames) {
@@ -581,6 +653,104 @@ $unavailableCommandLine = @(
   }
 }
 
+function capturePostgresStartEvidenceSafe({ installRoot, releaseRoot }) {
+  if (process.platform !== 'win32') {
+    return null;
+  }
+
+  try {
+    const installRootValue = quotePowerShellString(resolve(installRoot));
+    const releaseRootValue = quotePowerShellString(resolve(releaseRoot));
+    const serviceNameValue = quotePowerShellString(postgresServiceName);
+    const result = runPowerShell(
+      `
+$installRoot = ${installRootValue}
+$releaseRoot = ${releaseRootValue}
+$serviceName = ${serviceNameValue}
+$logRoot = Join-Path $installRoot 'data\\logs\\services\\bellfield-postgres'
+
+function Invoke-CaptureText {
+  param([scriptblock]$Script)
+  try {
+    return ((& $Script 2>&1 | Out-String).Trim())
+  } catch {
+    return $_.Exception.Message
+  }
+}
+
+function Get-PathEvidence {
+  param([string]$Name, [string]$Path)
+  $exists = Test-Path -LiteralPath $Path
+  [pscustomobject]@{
+    name = $Name
+    path = $Path
+    exists = $exists
+    acl = if ($exists) { Invoke-CaptureText { icacls $Path } } else { $null }
+  }
+}
+
+$service = Get-CimInstance Win32_Service -Filter "Name = '$serviceName'" -ErrorAction SilentlyContinue
+$events = @(
+  Get-WinEvent -FilterHashtable @{
+    LogName = 'System'
+    ProviderName = 'Service Control Manager'
+    Id = @(7000, 7009, 7023, 7031, 7034)
+    StartTime = (Get-Date).AddHours(-2)
+  } -ErrorAction SilentlyContinue |
+    Where-Object { [string]$_.Message -match 'BellField|bellfield' } |
+    Select-Object -First 20 TimeCreated, Id, LevelDisplayName, Message
+)
+$logs = foreach ($fileName in @('bellfield-postgres.wrapper.log', 'bellfield-postgres.err.log', 'bellfield-postgres.out.log')) {
+  $path = Join-Path $logRoot $fileName
+  [pscustomobject]@{
+    path = $path
+    exists = Test-Path -LiteralPath $path
+    tail = if (Test-Path -LiteralPath $path) { (Get-Content -LiteralPath $path -Tail 80 -ErrorAction SilentlyContinue) -join [Environment]::NewLine } else { $null }
+  }
+}
+[pscustomobject]@{
+  service = if ($service) {
+    [pscustomobject]@{
+      name = $service.Name
+      state = $service.State
+      status = $service.Status
+      startName = $service.StartName
+      processId = $service.ProcessId
+      exitCode = $service.ExitCode
+      pathName = $service.PathName
+    }
+  } else { $null }
+  scQc = Invoke-CaptureText { sc.exe qc $serviceName }
+  paths = @(
+    Get-PathEvidence -Name 'serviceExe' -Path (Join-Path (Join-Path $releaseRoot 'services') 'bellfield-postgres.exe')
+    Get-PathEvidence -Name 'serviceXml' -Path (Join-Path (Join-Path $releaseRoot 'services') 'bellfield-postgres.xml')
+    Get-PathEvidence -Name 'postgresExe' -Path (Join-Path (Join-Path (Join-Path $releaseRoot 'postgres') 'bin') 'postgres.exe')
+    Get-PathEvidence -Name 'postgresReleaseRoot' -Path (Join-Path $releaseRoot 'postgres')
+    Get-PathEvidence -Name 'postgresLogRoot' -Path $logRoot
+  )
+  scmEvents = @($events)
+  logs = @($logs)
+} | ConvertTo-Json -Depth 8
+`,
+      { capture: true, timeoutMs: 30_000 }
+    );
+    const stdout = result.stdout.trim();
+    return stdout ? JSON.parse(stdout) : null;
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+function shouldCapturePostgresStartEvidence(snapshot, error) {
+  const message = error instanceof Error ? error.message : String(error ?? '');
+  return (
+    snapshot?.phase === updatePhases.startingPostgres ||
+    message.toLowerCase().includes(postgresServiceName)
+  );
+}
+
 function getUpdateLockProcessSnapshot(processId) {
   if (process.platform !== 'win32') {
     return null;
@@ -671,6 +841,12 @@ function buildFailureSummary(input) {
     cleanup: input.cleanup,
     swapEvidence: readSwapEvidence(originalError) ?? readSwapEvidence(recoveryError),
     serviceStates: captureServiceStatesSafe(),
+    postgresStartEvidence: shouldCapturePostgresStartEvidence(input.snapshot, originalError)
+      ? capturePostgresStartEvidenceSafe({
+          installRoot: input.installRoot,
+          releaseRoot: input.currentReleaseRoot
+        })
+      : null,
     preRecoveryReleaseRootProcesses: input.preRecoveryReleaseRootProcesses ?? null,
     postRecoveryReleaseRootProcesses,
     releaseRootProcesses: postRecoveryReleaseRootProcesses,
@@ -914,6 +1090,17 @@ async function main() {
     enterUpdatePhase(recoveryTracker, updatePhases.staged, { stagedReleasePath });
     console.log(`Staged update artifact at ${stagedReleasePath}`);
 
+    enterUpdatePhase(recoveryTracker, updatePhases.preparingStagedServices);
+    prepareStagedWindowsServices({
+      stagedReleasePath,
+      finalReleaseRoot: currentReleaseRoot,
+      installRoot,
+      envPath,
+      skipServices,
+      timeoutMs: serviceTimeoutMs
+    });
+    enterUpdatePhase(recoveryTracker, updatePhases.stagedServicesPrepared);
+
     const updateEnv = { ...process.env, ...env, DATABASE_URL: env.DATABASE_URL };
     enterUpdatePhase(recoveryTracker, updatePhases.backingUp);
     const backup = runManualBackup({
@@ -1069,6 +1256,7 @@ async function main() {
           cleanup,
           preRecoveryReleaseRootProcesses,
           attemptedVersion,
+          installRoot,
           currentReleaseRoot,
           currentReleaseRootExists,
           updateLogPath: updateEvidenceLog?.logPath ?? null,
