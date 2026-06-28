@@ -71,6 +71,9 @@ not a USB-ready artifact gate.
 - USB root:
 - `START-HERE.txt` names clean-install artifact: yes/no
 - `START-HERE.txt` names update artifact: yes/no
+- `START-HERE.txt` names `run-gate-day-admin.ps1` as the default Gate Day admin path: yes/no
+- Runner modes listed for Gate 1, Gate 2, and Gate 3: yes/no
+- Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only: yes/no
 - `artifacts/` contains only active artifacts: yes/no
 - Superseded artifacts archived on USB or removed:
 - Durable evidence path for removed artifacts:

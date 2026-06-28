@@ -191,8 +191,10 @@ rebuilt `.33`/`.34` artifacts from source commit `2582d79`. Gate 1 and Gate 2
 passed again. Gate 3 started a single corrected updater process, but the updater
 returned exit code `1`, installed `.34`, preserved rollback/pre-update-backup
 evidence, left all four services stopped, and captured no structured
-phase/result/failure line. The active clean-machine blocker is now durable
-updater failure evidence plus the post-swap service/recovery failure. See
+phase/result/failure line. Missing structured updater output is now treated as
+an evidence gap unless durable logs or machine state prove a product failure.
+The active clean-machine work is durable updater failure evidence plus the
+post-swap service/recovery failure. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):

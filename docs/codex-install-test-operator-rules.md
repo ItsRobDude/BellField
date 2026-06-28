@@ -33,8 +33,9 @@ USB package as blocked.
 ## Roles
 
 The human operator owns physical actions: inserting the USB, approving elevated
-PowerShell prompts, rebooting the machine, using a second device, and deciding
-whether to continue after a blocked or contaminated run.
+PowerShell/UAC prompts, rebooting the machine, using a second device, and
+deciding whether to continue after a blocked, failed, contaminated, or
+attention-missed run.
 
 Codex owns procedural discipline: reading the runbooks, running Windows
 built-in commands, using only packaged BellField tooling, capturing evidence,
@@ -42,6 +43,15 @@ and calling out ambiguity instead of inventing a path.
 
 Codex must not silently substitute a developer workflow for the customer-style
 workflow. The point is to learn whether the packaged path works.
+
+For Gate Day admin work, prefer the fixed-mode
+`tools\install\run-gate-day-admin.ps1` runner over repeated per-helper
+`Start-Process -Verb RunAs` wrappers. The runner is allowed because it runs only
+named BellField modes, writes USB/local JSONL evidence, and records UAC launch
+outcomes. It is not permission to hand an elevated shell arbitrary commands.
+Under the runner-first path, a missed UAC prompt should only happen at runner
+launch. Classify that as operator/process evidence, not a product failure; a
+failed runner step is classified by the product state and runner evidence.
 
 ## Allowed Tools
 
@@ -200,15 +210,28 @@ Use these words consistently in the evidence doc:
   instruction, artifact, license, credential, or physical condition is missing.
 - `failed`: the packaged product or documented install path was followed and
   produced an incorrect result.
+- `attention-missed`: the product step did not get a fair run because a required
+  human action was missed or delayed, such as an unattended UAC prompt timing out
+  or an elevated wrapper never being approved. This is evidence that the Gate Day
+  process is too babysitting-heavy, but it is not a product blocker by itself.
 - `contaminated`: the scratch-machine conditions no longer represent the gate,
   usually because extra tooling was installed, release files were patched, or a
   non-runbook workaround was used.
-- `diagnostic`: the operator intentionally continues after blocked, failed, or
-  contaminated status to gather more information. Diagnostic findings are
-  useful, but they do not count as a passed gate.
+- `diagnostic`: the operator intentionally continues after blocked, failed,
+  attention-missed, or contaminated status to gather more information.
+  Diagnostic findings are useful, but they do not count as a passed gate.
 
 Do not relabel a failure as blocked just because the likely fix is obvious.
 Capture what happened.
+
+Do not label a missed UAC prompt, hidden elevation dialog, or unattended wrapper
+timeout as `blocked` unless a required input is actually missing. With the Gate
+Day runner, this should usually mean the single runner-launch prompt was missed
+or cancelled. Record it as `attention-missed`, preserve any partial evidence,
+and retry the affected runner mode only after confirming no elevated child
+process is still running. If the same runner launch repeatedly requires
+babysitting, file it as installer/test-harness UX debt or a process reliability
+issue, not as proof that the packaged product failed.
 
 ## Stop Conditions
 
@@ -238,16 +261,19 @@ machine state as intact as practical for follow-up inspection.
 
 ## Closeout
 
-At the end of a gate or blocked run, write a short closeout in the evidence
-file:
+At the end of a gate, blocked run, attention-missed run, or diagnostic run,
+write a short closeout in the evidence file:
 
-- final status: passed, blocked, failed, contaminated, or diagnostic;
+- final status: passed, blocked, failed, attention-missed, contaminated, or
+  diagnostic;
 - the last completed gate;
 - the first blocking or failing command/step;
 - files changed on the scratch machine;
 - whether services are running or stopped;
 - whether the machine was rebooted;
 - whether secrets were redacted;
+- whether a missed UAC/elevation prompt or unattended wrapper timeout affected
+  the result;
 - recommended next action.
 
 If the USB itself was wrong, stop there. Do not proceed with the install until

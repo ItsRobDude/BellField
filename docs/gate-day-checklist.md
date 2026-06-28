@@ -33,6 +33,31 @@ closeout.
 Rough budget: prep 1–2 hours (before the day), Gate 1 ~2 hours, Gate 2 ~45
 minutes, Gates 3+4 ~1 hour, Gate 5 ~20 minutes, closeout ~30 minutes.
 
+## Elevated Runner Rule
+
+Use the fixed-mode Gate Day admin runner for clean-machine admin work instead
+of launching every helper through its own UAC prompt. The runner self-elevates
+once per mode, writes JSONL evidence to both the USB and
+`C:\BellField\data\logs\gate-day`, starts a transcript, and refuses arbitrary
+command passthrough.
+
+The expected runner modes are:
+
+```powershell
+.\release\tools\install\run-gate-day-admin.ps1 -Mode gate1-admin-install -InstallRoot C:\BellField -ReleaseRoot (Resolve-Path .\release).Path -EvidenceRoot <usb>\evidence -RunId rerun-N
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode gate1-post-reboot-check -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode gate2-backup-restore -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
+<artifact-B>\tools\install\run-gate-day-admin.ps1 -Mode gate3-update -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -UpdateArtifactRoot <artifact-B> -EvidenceRoot <usb>\evidence -RunId rerun-N
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode collect-only -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
+```
+
+The runner is the default Gate Day path. The detailed helper commands below are
+evidence requirements and diagnostic fallback references, not extra happy-path
+commands to run after the runner. A missed UAC prompt should now be rare and
+should occur only at runner launch; classify that as `attention-missed`, not a
+product blocker. A failed runner step is still classified by the underlying
+product state and evidence.
+
 ---
 
 ## Prep (dev machine, before gate day)
@@ -194,11 +219,35 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
     -OutputPath <usb-evidence-path>\install-baseline-rerun-N.json
   ```
 
-- [ ] `write-server-config.mjs --install-root=C:\BellField` writes the env
-      file, generated secrets, and configured data-root folders. Do not expect
+      This baseline step intentionally remains pre-runner, read-only, and
+      non-elevated. Do not fold it into `gate1-admin-install`.
+
+- [ ] Run the Gate Day admin runner for the privileged install/configure
+      sequence. This should be one UAC prompt for the whole sequence, not one
+      prompt per helper:
+
+  ```powershell
+  .\release\tools\install\run-gate-day-admin.ps1 `
+    -Mode gate1-admin-install `
+    -InstallRoot C:\BellField `
+    -ReleaseRoot (Resolve-Path .\release).Path `
+    -EvidenceRoot <usb-evidence-path> `
+    -RunId rerun-N
+  ```
+
+      The runner must write
+      `<usb-evidence-path>\gate-day-admin-runner-rerun-N.jsonl` and a local
+      copy under `C:\BellField\data\logs\gate-day`. It should stop with
+      `needs-human-action` for first-owner browser setup after collecting
+      service/LAN evidence and setup-token metadata without leaking the token.
+
+- [ ] Confirm the runner evidence shows `write-server-config.mjs
+--install-root=C:\BellField` wrote the env file, generated secrets, and
+      configured data-root folders. Do not expect
       `C:\BellField\data\postgres\PG_VERSION` yet; PostgreSQL initialization
-      belongs to the next provisioning step.
-- [ ] Configure supported LAN ingress before rendering services:
+      belongs to the provisioning step.
+- [ ] Confirm the runner configured supported LAN ingress before rendering
+      services. The direct helper command is fallback/diagnostic only:
 
   ```powershell
   .\release\tools\install\configure-windows-lan-access.ps1 -InstallRoot C:\BellField
@@ -211,10 +260,12 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
       exact BellField-managed firewall rules for the office/API ports only, and
       never open PostgreSQL/5432.
 
-- [ ] `provision-postgres.mjs` initializes the data dir, applies the
-      generated password, flips auth to `scram-sha-256`.
-- [ ] Run packaged migrations through the helper (runbook §Provision
-      PostgreSQL), not a hand-rolled `pg_ctl` pipeline:
+- [ ] Confirm the runner evidence shows `provision-postgres.mjs` initialized
+      the data dir, applied the generated password, and flipped auth to
+      `scram-sha-256`.
+- [ ] Confirm the runner ran packaged migrations through the helper (runbook
+      §Provision PostgreSQL), not a hand-rolled `pg_ctl` pipeline. The direct
+      helper command is fallback/diagnostic only:
 
   ```powershell
   .\release\runtime\node\node.exe .\release\tools\install\run-packaged-migrations.mjs --install-root=C:\BellField
@@ -225,14 +276,16 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 
 - [ ] Place the **valid** license at
       `C:\BellField\data\license\bellfield-license.json`.
-- [ ] Render manifests after LAN config, then install services from elevated
-      PowerShell and confirm all four register/start in order
+- [ ] Confirm the runner rendered manifests after LAN config, installed
+      services from its elevated context, and proved all four register/start in
+      order
       (`bellfield-postgres`, `-api`, `-worker`, `-office-web`).
 - [ ] Confirm the installer reports service stability and API health, not only
       service registration. It must require stable nonzero service process IDs
       across the settle window. Stop the gate if the installer prints service
       state or log-tail failure context.
-- [ ] Save packaged service evidence from elevated PowerShell:
+- [ ] Confirm the runner saved packaged service evidence. The direct collector
+      command is fallback/diagnostic only:
 
   ```powershell
   .\release\tools\install\collect-windows-service-evidence.ps1 `
@@ -294,11 +347,14 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   the readback from an elevated read-only PowerShell session before treating it
   as a product failure.
 
-- [ ] **First-owner setup:** the one-time token is in the API service log
+- [ ] **First-owner setup:** the runner should stop at `needs-human-action`
+      after copying first-owner setup-token metadata without logging the token.
+      The one-time token is in the API service log
       (WinSW captures stdout under
       `C:\BellField\data\logs\services\bellfield-api\bellfield-api.out.log`),
       not the UI. After ACL hardening, log capture may require an elevated
-      read-only shell or packaged log collector. Prefer the packaged helper:
+      read-only shell or packaged log collector. Prefer the packaged helper
+      only as fallback/diagnostic outside the runner:
 
   ```powershell
   .\release\tools\install\copy-first-owner-setup-token.ps1 -InstallRoot C:\BellField
@@ -336,8 +392,20 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       open it. This is the "stranger install includes job booking" clause.
 - [ ] **Reboot the machine.** All four services come back automatically,
       health is `ok`, login still works.
-- [ ] **Second device:** before using the other device, capture read-only LAN
-      evidence with the packaged helper:
+- [ ] Capture the post-reboot service/LAN/health readback with the runner:
+
+  ```powershell
+  C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
+    -Mode gate1-post-reboot-check `
+    -InstallRoot C:\BellField `
+    -ReleaseRoot C:\BellField\release `
+    -EvidenceRoot <usb-evidence-path> `
+    -RunId rerun-N
+  ```
+
+- [ ] **Second device:** before using the other device, confirm the runner or
+      post-reboot runner captured read-only LAN evidence. The direct collector
+      command is fallback/diagnostic only:
 
   ```powershell
   .\release\tools\install\collect-windows-lan-evidence.ps1 `
@@ -366,8 +434,22 @@ documented Gate Day dummy credential: yes` instead of echoing the password
 
 ## Gate 2 — Backup and restore drill (Phase 2)
 
-- [ ] Produce a **real worker backup set**: either wait out the schedule or
-      run the packaged backup helper from an elevated PowerShell session:
+- [ ] Run the Gate Day admin runner for the privileged backup/restore drill.
+      This is the default Gate 2 path. It runs the packaged backup helper,
+      records the backup set path, pauses for browser marker creation, runs
+      restore, then captures service/health evidence:
+
+  ```powershell
+  C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
+    -Mode gate2-backup-restore `
+    -InstallRoot C:\BellField `
+    -ReleaseRoot C:\BellField\release `
+    -EvidenceRoot <usb-evidence-path> `
+    -RunId rerun-N
+  ```
+
+- [ ] Confirm the runner produced a **real worker backup set**. The direct
+      packaged backup helper command is fallback/diagnostic only:
 
   ```powershell
   .\release\runtime\node\node.exe .\release\tools\install\run-packaged-backup.mjs --install-root=C:\BellField
@@ -397,7 +479,7 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       media copy, `license\bellfield-license.json`, `manifest.json`.
 - [ ] **Create marker data after the backup** (e.g. book a job titled
       `AFTER-BACKUP-MARKER`) so the restore has something to provably erase.
-- [ ] Run the restore per restore-runbook.md
+- [ ] Confirm the runner ran restore per restore-runbook.md
       (`restore-backup.mjs ... --confirm=RESTORE`).
 - [ ] After restore: services healthy after a bounded `/health` retry window,
       login works, the marker job is **gone**, pre-backup data is present,
@@ -409,8 +491,26 @@ documented Gate Day dummy credential: yes` instead of echoing the password
 
 - [ ] Extract artifact B to a **separate directory** (never run the updater
       from the installed release root).
-- [ ] Run the updater with **no skip flags** (runbook §Update Existing
-      Install).
+- [ ] Run the Gate Day admin runner for the real update. This should be one UAC
+      prompt for the update path, not a wrapper prompt plus follow-up collector
+      prompts:
+
+  ```powershell
+  <artifact-B>\tools\install\run-gate-day-admin.ps1 `
+    -Mode gate3-update `
+    -InstallRoot C:\BellField `
+    -ReleaseRoot C:\BellField\release `
+    -UpdateArtifactRoot <artifact-B> `
+    -EvidenceRoot <usb-evidence-path> `
+    -RunId rerun-N
+  ```
+
+      The runner must copy the latest durable update JSONL and run
+      `collect-windows-update-evidence.ps1` automatically on nonzero exit,
+      timeout, quiet wrapper output, or missing terminal update event.
+
+- [ ] Confirm the runner ran the updater with **no skip flags** (runbook
+      §Update Existing Install).
 - [ ] Record the updater's wrapper stdout/stderr **and** copy the durable update
       log from `C:\BellField\data\logs\update\*.jsonl`. The durable update log
       is the source of truth; Gate 3 cannot pass unless it contains phase
@@ -427,9 +527,11 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       waited/cleared → bounded release swap with timestamped rollback dir
       preserved → `bellfield-postgres` restarted → migrations → app services
       restarted → health `ok`.
-- [ ] If the updater has a nonzero exit, timeout, or quiet wrapper result, stop
-      the strict gate and run the packaged read-only collector from an elevated
-      shell:
+- [ ] If the updater has a nonzero exit, timeout, missed UAC prompt, or quiet
+      wrapper result, stop the strict gate. The runner should already run the
+      packaged read-only collector on update failure/quiet evidence; the direct
+      collector command is fallback/diagnostic only when that evidence is
+      missing:
 
       ```powershell
       C:\BellField\release\tools\install\collect-windows-update-evidence.ps1 `
@@ -443,7 +545,10 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       copy the raw durable update JSONL from
       `C:\BellField\data\logs\update\*.jsonl`. Before retrying any updater
       launch, search for an already-running `update-bellfield` or artifact
-      `node.exe` process and record the result.
+      `node.exe` process and record the result. If the only problem was a missed
+      UAC/elevation prompt or unattended wrapper timeout and no updater process
+      ran, classify the attempt as `attention-missed`, not `blocked` or
+      `failed`, then retry the step with that operator-process evidence.
       Rerun #15 showed that the elevated updater can continue after an outer
       wrapper timeout and leave `.28` staged, `.27` installed, and app services
       stopped. Rerun #16 showed a bounded pre-swap
@@ -453,9 +558,13 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       `.32` swapped in with all services stopped. Rerun #18 showed that a
       single corrected updater process can still return exit code `1`, install
       `.34`, preserve rollback/pre-update-backup evidence, leave all services
-      stopped, and produce no captured structured terminal line. Treat missing
-      structured updater evidence as a blocker even when filesystem state shows
-      the release was swapped; preserve the machine for forensics.
+      stopped, and produce no captured structured terminal line. Missing
+      structured updater evidence is an inconclusive evidence gap by itself, not
+      a product blocker; preserve the machine for forensics and classify the
+      run from durable logs, process state, filesystem state, and service state.
+      This evidence-gap leniency does not soften product-failure classification:
+      services left stopped or API health down after an update attempt is
+      `failed`, independent of whether structured evidence was captured.
 
 - [ ] System surface shows the v(N+1) version/release date.
 - [ ] **Reboot again** — services come back on v(N+1).

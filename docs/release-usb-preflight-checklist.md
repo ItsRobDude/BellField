@@ -165,6 +165,12 @@ For each active release zip:
 
 - [ ] `START-HERE.txt` names the active clean-install artifact.
 - [ ] `START-HERE.txt` names the active update artifact.
+- [ ] `START-HERE.txt` points the scratch-machine operator at
+      `run-gate-day-admin.ps1` as the default Gate Day admin path for Gate 1,
+      Gate 2, and Gate 3.
+- [ ] `START-HERE.txt` and offline docs do not present repeated per-helper
+      `Start-Process -Verb RunAs` launches as the default happy path; those
+      examples are diagnostic/fallback only.
 - [ ] The main `artifacts/` folder contains only active artifacts.
 - [ ] Failed or superseded artifacts are either under a clearly named USB
       archive folder, for example `artifacts/failed-run-YYYYMMDD/`, or removed
@@ -215,8 +221,9 @@ For each active release zip:
       `collect-windows-service-evidence.ps1`,
       `configure-windows-lan-access.ps1`,
       `remove-windows-lan-access.ps1`,
-      `collect-windows-lan-evidence.ps1`, `run-packaged-migrations.mjs`, and
-      `evidence-redaction.ps1` / `sensitive-redaction.mjs`.
+      `collect-windows-lan-evidence.ps1`, `run-gate-day-admin.ps1`,
+      `run-packaged-migrations.mjs`, and `evidence-redaction.ps1` /
+      `sensitive-redaction.mjs`.
 - [ ] Docs, `START-HERE.txt`, evidence templates, command logs, and build
       evidence do not contain live relay token values or first-owner setup token
       values.

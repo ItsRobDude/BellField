@@ -234,8 +234,10 @@ Validated on the development machine:
   updater process started and returned exit code `1`, `.34` was installed,
   rollback release and pre-update backup were preserved, all services were
   stopped, API health was down, and no structured updater phase/result/failure
-  line was captured. The active blocker is now durable updater failure evidence
-  plus the post-swap service/recovery failure. See
+  line was captured. Missing structured updater output is now an evidence gap
+  unless durable logs or machine state prove product failure. The active work is
+  durable updater failure evidence plus the post-swap service/recovery failure.
+  See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
@@ -375,7 +377,8 @@ Before mutating the machine, capture a read-only baseline snapshot:
 The baseline collector records OS/build, machine name, elevation, PowerShell
 version, USB/root evidence, network profile/IP basics, existing BellField
 services, install-root path existence, and free disk. It does not read service
-logs or env files.
+logs or env files. It intentionally remains a pre-runner, read-only,
+non-elevated step; do not fold it into the Gate Day admin runner.
 
 ## Write Server Config
 
@@ -420,6 +423,85 @@ Backup defaults written by the config helper:
 
 Use a local/server-owned backup directory first. A network path is allowed only after a dated backup and restore drill from that exact path.
 
+## Preferred Gate Day Elevated Runner
+
+For Gate Day smoke runs, prefer the packaged fixed-mode elevated runner instead
+of launching each admin helper with a separate `Start-Process -Verb RunAs`
+wrapper. The runner self-elevates once per mode, writes structured JSONL to both
+the USB evidence folder and `C:\BellField\data\logs\gate-day`, starts a
+transcript before privileged work, and only runs named BellField modes. It does
+not accept arbitrary commands.
+
+Gate 1 admin install/configure sequence:
+
+```powershell
+.\release\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate1-admin-install `
+  -InstallRoot C:\BellField `
+  -ReleaseRoot (Resolve-Path .\release).Path `
+  -EvidenceRoot <usb>\evidence `
+  -RunId rerun-N
+```
+
+The Gate 1 mode runs server config, LAN/firewall configuration, PostgreSQL
+provisioning, packaged migrations, service rendering/install, service/LAN
+evidence collection, and first-owner setup-token metadata capture without
+printing the token. It stops at `needs-human-action` for browser first-owner
+creation.
+
+Post-reboot readback:
+
+```powershell
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate1-post-reboot-check `
+  -InstallRoot C:\BellField `
+  -ReleaseRoot C:\BellField\release `
+  -EvidenceRoot <usb>\evidence `
+  -RunId rerun-N
+```
+
+Gate 2 backup/restore drill:
+
+```powershell
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate2-backup-restore `
+  -InstallRoot C:\BellField `
+  -ReleaseRoot C:\BellField\release `
+  -EvidenceRoot <usb>\evidence `
+  -RunId rerun-N
+```
+
+The Gate 2 mode runs a packaged backup, records the backup set path, pauses for
+operator/browser marker creation, runs restore with `--confirm=RESTORE`, then
+collects service evidence and `/health`.
+
+Gate 3 update from artifact B:
+
+```powershell
+<artifact-B>\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate3-update `
+  -InstallRoot C:\BellField `
+  -ReleaseRoot C:\BellField\release `
+  -UpdateArtifactRoot <artifact-B> `
+  -EvidenceRoot <usb>\evidence `
+  -RunId rerun-N
+```
+
+The Gate 3 mode runs the updater from artifact B with absolute packaged paths,
+copies the durable update JSONL from `C:\BellField\data\logs\update`, and runs
+the read-only update evidence collector on nonzero exit, timeout, quiet wrapper
+output, or missing terminal update event.
+
+Use `collect-only` after an inconclusive run when the machine state must be
+preserved. It collects service, LAN, update, health, and release-manifest
+evidence only; it must not restart services, delete locks, clean staged paths,
+run backup/restore, or run an update.
+
+The direct helper commands in the sections below remain the manual install
+recipe and diagnostic fallback reference. During Gate Day, do not run them one by
+one after a successful runner mode merely to satisfy the checklist; use the
+runner JSONL/transcript plus readback evidence instead.
+
 ## Configure LAN Access
 
 Before rendering service manifests, configure the trusted shop LAN URL and
@@ -428,6 +510,10 @@ managed Windows Firewall rules from an elevated PowerShell session:
 ```powershell
 .\release\tools\install\configure-windows-lan-access.ps1 -InstallRoot C:\BellField
 ```
+
+For Gate Day, this step is executed by `run-gate-day-admin.ps1 -Mode
+gate1-admin-install`; run the direct command only as a fallback/diagnostic step
+when the runner evidence shows this phase did not complete.
 
 The helper selects the default-route non-loopback IPv4 address unless `-LanIp`
 or `-LanHost` is passed. It updates only:
@@ -633,9 +719,12 @@ Rerun #5 showed that presenting `-KeepArtifacts` in the ordinary gate command
 conflicts with the USB expectation that the temporary diagnostic service cleans
 up after itself.
 
-If Codex is running from a non-elevated PowerShell session, the human operator
-still owns the UAC prompt. Use a wrapper like this to launch the diagnostic
-elevated while capturing stdout/stderr to the active USB evidence file:
+For Gate Day, use `run-gate-day-admin.ps1` instead of wrapping each admin helper
+with a fresh `Start-Process -Verb RunAs`; the runner records UAC outcomes and
+keeps the admin work inside one fixed-mode elevated process. For one-off
+diagnostics outside the runner, the human operator still owns the UAC prompt.
+Use a wrapper like this to launch the diagnostic elevated while capturing
+stdout/stderr to the active USB evidence file:
 
 ```powershell
 $diagnosticOutput = "D:\BellField-GateDay-2026-06-20\evidence\service-account-diagnostic-rerun-N.json"
@@ -810,14 +899,18 @@ Rerun #13 proved the worker can create a scheduled backup set on the installed
 machine, but the documented manual Gate 2 command failed from an elevated shell
 with `pg_dump.exe failed: spawn pg_dump.exe ENOENT`. Rerun #14 proved the
 packaged backup helper fix: it produced a fresh worker backup set with the
-required shape on the clean install. Use the packaged backup helper as the Gate
-2 operator command:
+required shape on the clean install. For Gate Day,
+`run-gate-day-admin.ps1 -Mode gate2-backup-restore` is the default Gate 2
+operator command and runs this helper. Use the packaged backup helper directly
+only as fallback/diagnostic evidence:
 
 ```powershell
 .\release\runtime\node\node.exe .\release\tools\install\run-packaged-backup.mjs --install-root=C:\BellField
 ```
 
-Restore is assisted and destructive. Use:
+Restore is assisted and destructive. During Gate Day, the backup/restore runner
+mode invokes it after the operator creates marker data. Direct use is
+fallback/diagnostic:
 
 ```powershell
 .\release\runtime\node\node.exe .\release\tools\install\restore-backup.mjs --release-root=.\release --install-root=C:\BellField --backup-set=<backup-set-path> --confirm=RESTORE
@@ -875,6 +968,12 @@ Example from the new release artifact directory:
   --confirm=UPDATE
 ```
 
+For Gate Day, prefer `run-gate-day-admin.ps1 -Mode gate3-update` from artifact B
+instead of this direct command. The runner launches the updater with absolute
+packaged paths, copies durable update JSONL, and runs the read-only update
+collector on failure or quiet evidence. Use the direct updater command only as a
+manual install recipe or diagnostic fallback.
+
 The updater:
 
 1. Acquires a single active-update lock under the install root. If another
@@ -916,8 +1015,10 @@ For Gate Day proof, capture wrapper stdout/stderr and copy the durable update
 JSONL. Treat the durable update JSONL as the source of truth when wrapper
 capture is incomplete.
 
-After any updater nonzero exit, timeout, or quiet wrapper result, run the
-packaged read-only update collector from an elevated shell before retrying:
+After any updater nonzero exit, timeout, missed UAC prompt, or quiet wrapper
+result, the Gate Day runner should already run the packaged read-only update
+collector before retrying. Run the collector directly only if the runner did not
+produce collector evidence:
 
 ```powershell
 C:\BellField\release\tools\install\collect-windows-update-evidence.ps1 `
@@ -956,9 +1057,14 @@ evidence.
 
 After any UAC/capture timeout, do not immediately retry the updater. First
 search for an already-running `update-bellfield` or artifact `node.exe` process,
-record the result, and only retry if no updater is active. The updater lock is a
-product safety net; the operator runbook should still avoid overlapping attempts
-because a destructive update may already be past staging or backup.
+record the result, and only retry if no updater is active. If the evidence shows
+the updater never ran because the UAC/elevation prompt was missed or expired,
+classify the attempt as `attention-missed`, not `blocked` or `failed`. That is
+installer/test-harness UX debt: the process required too much babysitting for a
+long smoke, but it is not proof that the packaged product failed. The updater
+lock is a product safety net; the operator runbook should still avoid
+overlapping attempts because a destructive update may already be past staging or
+backup.
 
 If an update fails before the release swap, the current release should still be
 intact; the updater removes the abandoned staged release path and attempts to
