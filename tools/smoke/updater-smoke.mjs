@@ -85,6 +85,52 @@ try {
     updateResult.stdout.includes('BELLFIELD_UPDATE_PHASE ') &&
       updateResult.stdout.includes('BELLFIELD_UPDATE_RESULT ')
   );
+  const updateLogRoot = path.join(installRoot, 'data', 'logs', 'update');
+  const updateLogPath = latestUpdateLogPath(updateLogRoot);
+  const updateLogRecords = updateLogPath ? readJsonLines(updateLogPath) : [];
+  evidence.updateLogPath = updateLogPath;
+  check('updater created durable update JSONL evidence', Boolean(updateLogPath), {
+    updateLogPath
+  });
+  check(
+    'durable update evidence contains phase and terminal result records',
+    updateLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_PHASE') &&
+      updateLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_RESULT'),
+    {
+      events: updateLogRecords.map((record) => record.event)
+    }
+  );
+
+  const rejectedResult = spawnSync(
+    process.execPath,
+    [
+      path.resolve('tools', 'install', 'update-bellfield.mjs'),
+      `--install-root=${installRoot}`,
+      `--current-release-root=${currentReleaseRoot}`,
+      `--update-artifact-root=${currentReleaseRoot}`,
+      '--confirm=UPDATE',
+      '--skip-services=true',
+      '--skip-health=true',
+      '--skip-backup=true'
+    ],
+    { encoding: 'utf8', shell: false }
+  );
+  check('invalid updater invocation exits nonzero', rejectedResult.status !== 0, {
+    status: rejectedResult.status
+  });
+  const rejectedLogPath = latestUpdateLogPath(updateLogRoot);
+  const rejectedLogRecords = rejectedLogPath ? readJsonLines(rejectedLogPath) : [];
+  evidence.rejectedUpdateLogPath = rejectedLogPath;
+  check(
+    'invalid updater invocation records rejected instead of fatal',
+    rejectedLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_REJECTED') &&
+      !rejectedLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_FATAL'),
+    {
+      events: rejectedLogRecords.map((record) => record.event),
+      stdout: rejectedResult.stdout,
+      stderr: rejectedResult.stderr
+    }
+  );
 
   const rollbackDirectory = readdirSync(installRoot).find((entry) =>
     entry.startsWith('release.restore-rollback-')
@@ -215,4 +261,19 @@ function check(name, passed, details = {}) {
   if (!passed) {
     throw new Error(name);
   }
+}
+
+function readJsonLines(filePath) {
+  return readFileSync(filePath, 'utf8')
+    .trim()
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => JSON.parse(line));
+}
+
+function latestUpdateLogPath(updateLogRoot) {
+  const updateLogFiles = existsSync(updateLogRoot)
+    ? readdirSync(updateLogRoot).filter((entry) => /^update-.*\.jsonl$/.test(entry))
+    : [];
+  return updateLogFiles.length ? path.join(updateLogRoot, updateLogFiles.sort().at(-1)) : null;
 }

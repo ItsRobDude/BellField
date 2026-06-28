@@ -32,6 +32,8 @@ try {
     restoreStagingTest: readRequired('tools/install/restore-staging.test.mjs'),
     windowsServiceControl: readRequired('tools/install/windows-service-control.mjs'),
     updateHelper: readRequired('tools/install/update-bellfield.mjs'),
+    updateEvidenceCollector: readRequired('tools/install/collect-windows-update-evidence.ps1'),
+    updateEvidenceLog: readRequired('tools/install/update-evidence-log.mjs'),
     updateLock: readRequired('tools/install/update-lock.mjs'),
     updateLockTest: readRequired('tools/install/update-lock.test.mjs'),
     updateRecovery: readRequired('tools/install/update-recovery.mjs'),
@@ -40,8 +42,15 @@ try {
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
     backupService: readRequired('apps/worker/src/jobs/backup/backup-service.ts'),
     releaseBuilder: readRequired('tools/build-release.mjs'),
-    releaseZipSmoke: readRequired('tools/smoke/release-zip-smoke.mjs')
+    releaseZipSmoke: readRequired('tools/smoke/release-zip-smoke.mjs'),
+    gateDayChecklist: readRequired('docs/gate-day-checklist.md'),
+    installRunbook: readRequired('docs/install-runbook.md')
   };
+  const fatalSummaryBody = extractFunctionBody(files.updateHelper, 'buildFatalSummary');
+  const fatalDetailsSummaryBody = extractFunctionBody(
+    files.updateHelper,
+    'buildFatalDetailsSummary'
+  );
 
   assertNoSensitiveRedactionLeaks();
   check('shared JS redactor removes every redaction fixture secret', true, {
@@ -508,7 +517,9 @@ try {
       'async function waitForHealth',
       'async function verifyRestoreReadiness',
       "from './windows-service-control.mjs'",
-      'startAppServices({ skipServices: input.skipServices'
+      'startAppServices({ skipServices: input.skipServices',
+      'API readiness is not confirmed yet',
+      'Retrying BellField service start and API readiness check once.'
     ]) &&
       includesAll(files.windowsServiceControl, [
         "WaitForStatus('Stopped'",
@@ -617,6 +628,90 @@ try {
       'BELLFIELD_UPDATE_RESULT',
       'buildFailureSummary'
     ])
+  );
+  check(
+    'updater tees structured evidence to synchronous durable JSONL',
+    includesAll(files.updateHelper, [
+      "from './update-evidence-log.mjs'",
+      'createUpdateEvidenceLog({ installRoot })',
+      'BellField update evidence log:',
+      "emitUpdateEvent('BELLFIELD_UPDATE_LOG'",
+      'updateEvidenceLog.writeEvent(prefix, eventPayload)',
+      'BELLFIELD_UPDATE_REJECTED',
+      'BELLFIELD_UPDATE_FATAL',
+      'BELLFIELD_UPDATE_FATAL_DETAILS',
+      'durableTerminalUpdateEventWritten',
+      'rejectUpdate(',
+      'updateLogPath'
+    ]) &&
+      !fatalSummaryBody.includes('captureServiceStatesSafe') &&
+      fatalDetailsSummaryBody.includes('captureServiceStatesSafe') &&
+      assertOrderedValue(files.updateHelper, [
+        "emitUpdateEvent('BELLFIELD_UPDATE_FATAL', buildFatalSummary(error));",
+        "emitUpdateEvent('BELLFIELD_UPDATE_FATAL_DETAILS', buildFatalDetailsSummary(error));"
+      ]) &&
+      includesAll(files.updateEvidenceLog, [
+        'export function createUpdateEvidenceLog',
+        "join(installRoot, 'data', 'logs', 'update')",
+        'openSync',
+        'writeSync',
+        'fsyncSync',
+        'closeSync',
+        'writeFatal(payload)',
+        "'BELLFIELD_UPDATE_FATAL'"
+      ]) &&
+      !files.updateEvidenceLog.includes('createWriteStream') &&
+      !files.updateHelper.includes('createWriteStream')
+  );
+  check(
+    'Gate 3 docs require durable updater JSONL collection',
+    includesAll(files.gateDayChecklist, [
+      'C:\\BellField\\data\\logs\\update\\*.jsonl',
+      'durable update log',
+      'terminal success, failure, locked, rejected, or fatal event'
+    ]) &&
+      includesAll(files.installRunbook, [
+        'C:\\BellField\\data\\logs\\update\\*.jsonl',
+        'BELLFIELD_UPDATE_REJECTED',
+        'BELLFIELD_UPDATE_FATAL',
+        'BELLFIELD_UPDATE_FATAL_DETAILS',
+        'durable update JSONL'
+      ])
+  );
+  check(
+    'Gate 3 update evidence collector is read-only and captures durable update state',
+    includesAll(files.updateEvidenceCollector, [
+      'data\\logs\\update',
+      'update-*.jsonl',
+      'BELLFIELD_UPDATE_RESULT',
+      'BELLFIELD_UPDATE_FAILURE',
+      'BELLFIELD_UPDATE_LOCKED',
+      'BELLFIELD_UPDATE_REJECTED',
+      'BELLFIELD_UPDATE_FATAL',
+      'bellfield-build-manifest.json',
+      'release.restore-stage-*',
+      'release.restore-rollback-*',
+      'bellfield-backup-*',
+      'Get-CimInstance Win32_Service',
+      'Invoke-RestMethod',
+      'ConvertTo-Json'
+    ]) &&
+      !files.updateEvidenceCollector.includes('Start-Service') &&
+      !files.updateEvidenceCollector.includes('Stop-Service') &&
+      !files.updateEvidenceCollector.includes('Remove-Item')
+  );
+  check(
+    'Gate 3 docs prefer the update evidence collector after failed or quiet updater exits',
+    includesAll(files.gateDayChecklist, [
+      'collect-windows-update-evidence.ps1',
+      'nonzero exit, timeout, or quiet wrapper result',
+      'terminal success, failure, locked, rejected, or fatal event'
+    ]) &&
+      includesAll(files.installRunbook, [
+        'collect-windows-update-evidence.ps1',
+        'nonzero exit, timeout, or quiet wrapper result',
+        'durable update JSONL'
+      ])
   );
   assertOrdered(
     files.updateHelper,

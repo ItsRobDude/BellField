@@ -144,11 +144,11 @@ async function verifyRestoreReadiness(input) {
     return true;
   } catch (error) {
     console.error(
-      `BellField restore data completed, but service readiness did not pass: ${
+      `BellField restore data work completed; API readiness is not confirmed yet: ${
         error instanceof Error ? error.message : String(error)
       }`
     );
-    console.error('Retrying BellField service start once before marking readiness failed.');
+    console.error('Retrying BellField service start and API readiness check once.');
   }
 
   try {

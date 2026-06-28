@@ -276,6 +276,78 @@ describe('SystemDiagnosticsService', () => {
     expect(result.checks.find((c) => c.key === 'backups')?.ok).toBe(true);
   });
 
+  it('keeps backups green when a worker restart interrupted a run after a current success', async () => {
+    const { service } = createService({
+      latestBackupRun: {
+        status: 'failed',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        backupSetPath: null,
+        errorMessage: 'Backup run did not complete before worker restart.'
+      },
+      latestSuccessfulBackup: {
+        completedAt: new Date(),
+        backupSetPath: 'C:\\BellField\\data\\backups\\bellfield-backup-current'
+      }
+    });
+
+    const result = await service.collectDiagnostics();
+    const backupsCheck = result.checks.find((c) => c.key === 'backups');
+
+    expect(result.backups.latestRun?.status).toBe('failed');
+    expect(result.backups.stale).toBe(false);
+    expect(backupsCheck).toEqual({
+      key: 'backups',
+      ok: true,
+      detail: 'Latest run interrupted after last successful backup.'
+    });
+  });
+
+  it('keeps backups red when the latest failed run has no successful backup', async () => {
+    const { service } = createService({
+      latestBackupRun: {
+        status: 'failed',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        backupSetPath: null,
+        errorMessage: 'Backup run did not complete before worker restart.'
+      }
+    });
+
+    const result = await service.collectDiagnostics();
+
+    expect(result.checks.find((c) => c.key === 'backups')).toEqual({
+      key: 'backups',
+      ok: false,
+      detail: 'No successful backup has been recorded.'
+    });
+  });
+
+  it('keeps backups red when the last successful backup is stale', async () => {
+    const { service } = createService({
+      latestBackupRun: {
+        status: 'failed',
+        startedAt: new Date(),
+        completedAt: new Date(),
+        backupSetPath: null,
+        errorMessage: 'Backup run did not complete before worker restart.'
+      },
+      latestSuccessfulBackup: {
+        completedAt: new Date(Date.now() - 48 * 60 * 60 * 1_000),
+        backupSetPath: 'C:\\BellField\\data\\backups\\bellfield-backup-old'
+      }
+    });
+
+    const result = await service.collectDiagnostics();
+
+    expect(result.backups.stale).toBe(true);
+    expect(result.checks.find((c) => c.key === 'backups')).toEqual({
+      key: 'backups',
+      ok: false,
+      detail: 'Last successful backup is older than 36 hours.'
+    });
+  });
+
   it('reports backup history failures without throwing diagnostics', async () => {
     const { service } = createService({ backupRunsUnavailable: true });
 

@@ -114,6 +114,54 @@ describe('OfficeSystemSurface', () => {
     expect(screen.getByText(/Release 2026-06-11/)).toBeInTheDocument();
   });
 
+  it('keeps backups current when the latest worker-restart failure followed a success', async () => {
+    mockedApi.getSystemDiagnostics.mockResolvedValue({
+      serverTime: '2026-06-06T00:00:00.000Z',
+      app: {
+        name: 'BellField API',
+        version: '0.0.1',
+        releaseDate: '2026-06-11',
+        buildKind: 'release',
+        generatedAt: '2026-06-11T00:00:00.000Z',
+        sourceCommit: 'abc1234',
+        nodeEnv: 'production'
+      },
+      database: { reachable: true, latencyMs: 3 },
+      migrations: {
+        appliedCount: 41,
+        latestFilename: '20260601_029_register_client_operation_id.up.sql',
+        latestAppliedAt: '2026-06-05T00:00:00.000Z'
+      },
+      mediaRoot: { path: '/var/bellfield/media', exists: true, writable: true, readable: true },
+      backups: {
+        ...currentBackups,
+        latestRun: {
+          status: 'failed',
+          startedAt: '2026-06-06T01:00:00.000Z',
+          completedAt: '2026-06-06T01:00:30.000Z',
+          backupSetPath: null,
+          errorMessage: 'Backup run did not complete before worker restart.'
+        }
+      },
+      license,
+      checks: [
+        {
+          key: 'backups',
+          ok: true,
+          detail: 'Latest run interrupted after last successful backup.'
+        }
+      ]
+    });
+
+    renderSurface();
+
+    expect(await screen.findByText('Current')).toBeInTheDocument();
+    expect(
+      screen.getByText('Latest run interrupted after last successful backup.')
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Last run failed')).not.toBeInTheDocument();
+  });
+
   it('shows the support-bundle download for an actor with export permission', async () => {
     renderSurface({ canExportSupport: true });
     await screen.findByText(/Reachable/);

@@ -658,14 +658,15 @@ that avoids renaming the directory containing live service wrappers/runtime.
 
 Historical follow-up: rerun 17 used a patch that stops all four BellField
 services before the release swap and starts PostgreSQL before migrations. Rerun
-17 is the current Gate 3 evidence.
+18 is the current Gate 3 evidence.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or long-term self-serve updater UI design.
 
 ### [gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md)
 
-Audience: contributors checking the latest clean Windows Gate 3 updater blocker
+Audience: contributors checking the historical clean Windows Gate 3 updater
+overlap blocker
 after the Postgres-stop update patch.
 
 Purpose: dated evidence for the seventeenth fresh Windows install smoke: active
@@ -686,6 +687,35 @@ Current follow-up: enforce one active update at a time, atomically reserve stage
 directories, and require a process check before retrying after an elevated
 timeout. Rerun 17 does not prove or disprove the Postgres-stop release-swap fix
 because the update attempts overlapped.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or the longer-term junction/versioned release layout.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md)
+
+Audience: contributors checking the latest clean Windows Gate 3 updater blocker
+after the active-update lock and race-safe staged-directory fixes.
+
+Purpose: dated evidence for the eighteenth fresh Windows install smoke: active
+artifacts `.33`/`.34` were intentionally reused after the earlier unauthorized
+refresh and were rebuilt from commit `2582d79`. Gate 1 passed again, including
+USB hashes, clean install, service identity, ACL/readiness proof, first-owner
+setup, browser job proof, reboot recovery, LAN evidence, and real second-device
+login. Gate 2 passed again from a real worker-produced backup set; restore
+completed data/media/license/migrations, retried service readiness once, reached
+health `ok`, preserved pre-backup data, erased the post-backup marker, and kept
+the license bytes intact. Gate 3 failed: the corrected updater launch started a
+single updater process, returned exit code `1`, installed `.34`, preserved a
+rollback release and pre-update backup, but left all four services stopped and
+captured no structured updater phase/result/failure line.
+
+Read when: adding durable updater logging, diagnosing post-swap update failures
+that leave services stopped, or tightening the Gate 3 elevated-capture recipe.
+
+Current follow-up: add durable updater phase/result/failure logging under the
+install root, ensure unexpected updater exits still write a failure record, and
+then investigate the post-swap service/recovery failure with evidence that
+survives wrapper capture loss.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or the longer-term junction/versioned release layout.

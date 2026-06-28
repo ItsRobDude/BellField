@@ -1,4 +1,4 @@
-import { ConflictException, ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ConflictException, ForbiddenException } from '@nestjs/common';
 import { JobsAppointmentsService } from './jobs-appointments.service';
 import type { JobRecord } from '../company-data/company-data.types';
 
@@ -222,6 +222,28 @@ describe('JobsAppointmentsService', () => {
     expect(referenceDataService.reassignLocationOwner).not.toHaveBeenCalled();
   });
 
+  it('rejects creating a scheduled appointment from job intake details without a date', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['jobs:create'],
+      sessionSurface: 'office-web'
+    });
+
+    await expect(
+      service.createJob('session-token', {
+        locationId: 'location-1',
+        jobType: 'Service',
+        category: 'General',
+        origin: 'Inbound phone call',
+        summary: 'No heat',
+        timeWindowLabel: 'Morning'
+      })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(jobsDataService.createJob).not.toHaveBeenCalled();
+  });
+
   it('keeps finished appointments in office review until they are acknowledged', async () => {
     const { service, jobsDataService, identityAccessService } = createService();
     identityAccessService.getAuthorizedEmployee.mockResolvedValue({
@@ -348,6 +370,58 @@ describe('JobsAppointmentsService', () => {
     await expect(service.addAppointment('session-token', 'job-1', {})).rejects.toBeInstanceOf(
       ConflictException
     );
+  });
+
+  it('rejects adding an appointment without a scheduled date', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['appointmentsDispatch:create'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById.mockResolvedValue(createJob('scheduled'));
+
+    await expect(
+      service.addAppointment('session-token', 'job-1', { timeWindowLabel: 'Morning' })
+    ).rejects.toBeInstanceOf(BadRequestException);
+    expect(jobsDataService.createAppointment).not.toHaveBeenCalled();
+  });
+
+  it('adds a dated appointment and clears the scheduling need in the response', async () => {
+    const { service, jobsDataService, identityAccessService } = createService();
+    identityAccessService.getAuthorizedEmployee.mockResolvedValue({
+      id: 'office-1',
+      displayName: 'Dispatcher',
+      effectivePermissions: ['appointmentsDispatch:create'],
+      sessionSurface: 'office-web'
+    });
+    jobsDataService.getJobById
+      .mockResolvedValueOnce(createJob('scheduled'))
+      .mockResolvedValueOnce({ ...createJob('scheduled'), appointmentIds: ['appointment-1'] });
+    jobsDataService.getAppointmentById.mockResolvedValue({
+      id: 'appointment-1',
+      jobId: 'job-1',
+      status: 'scheduled',
+      scheduledDate: '2026-04-15',
+      scheduledStartTime: undefined,
+      scheduledEndTime: undefined,
+      timeWindowLabel: undefined,
+      updatedAt: '2026-04-14T11:00:00.000Z',
+      createdAt: '2026-04-14T09:00:00.000Z'
+    });
+
+    const response = await service.addAppointment('session-token', 'job-1', {
+      scheduledDate: '2026-04-15'
+    });
+
+    expect(jobsDataService.createAppointment).toHaveBeenCalledWith(
+      'job-1',
+      { scheduledDate: '2026-04-15' },
+      'Dispatcher',
+      undefined
+    );
+    expect(response.needsScheduling).toBe(false);
   });
 
   it('requires configure permission before reopening completed jobs', async () => {

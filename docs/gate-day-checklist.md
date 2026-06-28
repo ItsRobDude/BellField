@@ -381,7 +381,7 @@ documented Gate Day dummy credential: yes` instead of echoing the password
   copyable Gate 2 command; do not patch around backup tooling during a strict
   run by manually editing PATH or env values.
 
-  Rerun #17 re-proved the current restore path: the rebuilt `.31` artifact
+  Rerun #18 re-proved the current restore path: the rebuilt `.33` artifact
   restored a real worker-produced backup through the owned database/schema path,
   recovered service readiness, preserved pre-backup data, erased the post-backup
   marker, and kept media/license state usable. Keep the marker and post-restore
@@ -411,9 +411,15 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       from the installed release root).
 - [ ] Run the updater with **no skip flags** (runbook §Update Existing
       Install).
-- [ ] Record the updater's structured evidence lines:
-      `BELLFIELD_UPDATE_PHASE`, terminal `BELLFIELD_UPDATE_RESULT` on success
-      or `BELLFIELD_UPDATE_FAILURE` on failure.
+- [ ] Record the updater's wrapper stdout/stderr **and** copy the durable update
+      log from `C:\BellField\data\logs\update\*.jsonl`. The durable update log
+      is the source of truth; Gate 3 cannot pass unless it contains phase
+      records plus a terminal success, failure, locked, rejected, or fatal event
+      (`BELLFIELD_UPDATE_RESULT`, `BELLFIELD_UPDATE_FAILURE`,
+      `BELLFIELD_UPDATE_LOCKED`, `BELLFIELD_UPDATE_REJECTED`, or
+      `BELLFIELD_UPDATE_FATAL`). `BELLFIELD_UPDATE_REJECTED` proves a bad
+      invocation/configuration was refused before destructive update work; it is
+      terminal evidence, but it is not a passing update.
 - [ ] Confirm, in order: signature verified → license verified → window
       check passed → staged copy → **pre-update backup actually ran** (a new
       backup set with a fresh `database.dump` exists) → app services and
@@ -421,18 +427,36 @@ documented Gate Day dummy credential: yes` instead of echoing the password
       waited/cleared → bounded release swap with timestamped rollback dir
       preserved → `bellfield-postgres` restarted → migrations → app services
       restarted → health `ok`.
-- [ ] If the updater is quiet or the wrapper times out, stop the strict gate and
-      capture elevated process state plus any `BELLFIELD_UPDATE_FAILURE`
-      summary, staged release path, pre-update backup path, installed version,
-      service states, and health. Before retrying any updater launch, search for
-      an already-running `update-bellfield` or artifact `node.exe` process and
-      record the result. Rerun #15 showed that the elevated updater can continue
-      after an outer wrapper timeout and leave `.28` staged, `.27` installed,
-      and app services stopped. Rerun #16 showed a bounded pre-swap
+- [ ] If the updater has a nonzero exit, timeout, or quiet wrapper result, stop
+      the strict gate and run the packaged read-only collector from an elevated
+      shell:
+
+      ```powershell
+      C:\BellField\release\tools\install\collect-windows-update-evidence.ps1 `
+        -InstallRoot C:\BellField `
+        -OutputPath <usb>\evidence\gate3-update-evidence-rerun-N.json
+      ```
+
+      This captures the latest durable update log terminal event, staged and
+      rollback release directories, latest backup directory, installed manifest,
+      service states, and `/health` result without changing update state. Also
+      copy the raw durable update JSONL from
+      `C:\BellField\data\logs\update\*.jsonl`. Before retrying any updater
+      launch, search for an already-running `update-bellfield` or artifact
+      `node.exe` process and record the result.
+      Rerun #15 showed that the elevated updater can continue after an outer
+      wrapper timeout and leave `.28` staged, `.27` installed, and app services
+      stopped. Rerun #16 showed a bounded pre-swap
       `swappingRelease` failure while PostgreSQL was still running from the live
       release tree. Rerun #17 showed that retrying after hidden/elevated capture
       uncertainty can overlap updater attempts, collide in staging, and leave
-      `.32` swapped in with all services stopped.
+      `.32` swapped in with all services stopped. Rerun #18 showed that a
+      single corrected updater process can still return exit code `1`, install
+      `.34`, preserve rollback/pre-update-backup evidence, leave all services
+      stopped, and produce no captured structured terminal line. Treat missing
+      structured updater evidence as a blocker even when filesystem state shows
+      the release was swapped; preserve the machine for forensics.
+
 - [ ] System surface shows the v(N+1) version/release date.
 - [ ] **Reboot again** — services come back on v(N+1).
 

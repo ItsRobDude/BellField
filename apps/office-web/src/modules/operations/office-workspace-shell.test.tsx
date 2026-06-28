@@ -1491,6 +1491,38 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(await screen.findByText('Appointment updated.')).toBeInTheDocument();
   });
 
+  it('shows appointment-specific copy after adding an appointment from job detail', async () => {
+    const scheduledDate = '2026-06-03';
+    const workspace = buildWorkspace([buildJob()]);
+    arrangeWorkspace(workspace);
+
+    renderShell();
+
+    fireEvent.click(await screen.findByLabelText(/Job 1001, Acme/i));
+    fireEvent.click(await screen.findByRole('button', { name: 'Appointments' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Add appointment' }));
+    const addAppointment = await screen.findByRole('region', { name: 'Add appointment' });
+    fireEvent.change(within(addAppointment).getByLabelText('New appointment date'), {
+      target: { value: scheduledDate }
+    });
+    fireEvent.click(within(addAppointment).getByRole('button', { name: 'Add appointment' }));
+
+    await waitFor(() => {
+      expect(mockedOperationsApi.addOfficeAppointment).toHaveBeenCalledWith({
+        jobId: 'job-1',
+        sessionToken: 'session-token',
+        apiBaseUrl: 'http://api.test',
+        scheduledDate,
+        scheduledStartTime: undefined,
+        scheduledEndTime: undefined,
+        timeWindowLabel: undefined,
+        technicianId: undefined
+      });
+    });
+    expect(await screen.findByText('Appointment added.')).toBeInTheDocument();
+    expect(screen.queryByText('Follow-up added.')).not.toBeInTheDocument();
+  });
+
   it('runs finished-visit review actions from job detail', async () => {
     arrangeWorkspace(
       buildWorkspace([

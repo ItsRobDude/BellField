@@ -50,9 +50,7 @@ export class JobsCommandDataRepository {
     const now = new Date().toISOString();
     const jobId = randomUUID();
     const scheduledDate = input.scheduledDate?.trim();
-    const hasInitialAppointment = Boolean(
-      scheduledDate || input.timeWindowLabel?.trim() || input.technicianId?.trim()
-    );
+    const hasInitialAppointment = Boolean(scheduledDate);
     const initialStatus: JobStatus = hasInitialAppointment ? 'scheduled' : 'new';
 
     await this.databaseService.transaction(async (queryable) => {

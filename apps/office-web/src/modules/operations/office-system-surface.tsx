@@ -53,6 +53,9 @@ function backupStatusText(backups: SystemDiagnosticsResponse['backups']): string
     return 'Running';
   }
   if (backups.latestRun?.status === 'failed') {
+    if (isInterruptedAfterSuccessfulBackup(backups)) {
+      return 'Current';
+    }
     return 'Last run failed';
   }
   if (backups.stale) {
@@ -63,7 +66,28 @@ function backupStatusText(backups: SystemDiagnosticsResponse['backups']): string
 
 function backupStatusOk(backups: SystemDiagnosticsResponse['backups']): boolean {
   return (
-    backups.enabled && !backups.error && !backups.stale && backups.latestRun?.status !== 'failed'
+    backups.enabled &&
+    !backups.error &&
+    !backups.stale &&
+    (backups.latestRun?.status !== 'failed' || isInterruptedAfterSuccessfulBackup(backups))
+  );
+}
+
+function backupSecondaryText(backups: SystemDiagnosticsResponse['backups']): string | null {
+  if (isInterruptedAfterSuccessfulBackup(backups)) {
+    return 'Latest run interrupted after last successful backup.';
+  }
+  return null;
+}
+
+function isInterruptedAfterSuccessfulBackup(
+  backups: SystemDiagnosticsResponse['backups']
+): boolean {
+  return (
+    backups.latestRun?.status === 'failed' &&
+    backups.latestRun.errorMessage === 'Backup run did not complete before worker restart.' &&
+    Boolean(backups.latestSuccessfulAt) &&
+    !backups.stale
   );
 }
 
@@ -276,6 +300,11 @@ export function OfficeSystemSurface({
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
                 Last successful: {formatDateTime(diagnostics.backups.latestSuccessfulAt)}
               </div>
+              {backupSecondaryText(diagnostics.backups) ? (
+                <div style={{ ...valueStyle, fontSize: 12, color: '#8a5a00' }}>
+                  {backupSecondaryText(diagnostics.backups)}
+                </div>
+              ) : null}
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
                 {diagnostics.backups.backupRootPath}
               </div>
