@@ -693,7 +693,7 @@ Does not own: the install recipe (`install-runbook.md`), the restore recipe
 
 ### [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md)
 
-Audience: contributors checking the latest clean Windows Gate 3 updater blocker
+Audience: contributors reviewing the historical clean Windows Gate 3 evidence gap
 after the active-update lock and race-safe staged-directory fixes.
 
 Purpose: dated evidence for the eighteenth fresh Windows install smoke: active
@@ -716,6 +716,35 @@ Current follow-up: add durable updater phase/result/failure logging under the
 install root, ensure unexpected updater exits still write a failure record, and
 then investigate the post-swap service/recovery failure with evidence that
 survives wrapper capture loss.
+
+Does not own: the install recipe (`install-runbook.md`), the restore recipe
+(`restore-runbook.md`), or the longer-term junction/versioned release layout.
+
+### [gate-day-clean-windows-smoke-2026-06-20-rerun-19.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-19.md)
+
+Audience: contributors checking the current clean Windows Gate 3 updater blocker
+after durable updater evidence landed.
+
+Purpose: dated evidence for the nineteenth fresh Windows install smoke: active
+artifacts `.35`/`.36` were built from source commit `d586b99`. Gate 1 passed
+again, including USB hashes, clean install, service identity, ACL/readiness
+proof, first-owner setup, browser job proof, reboot recovery, packaged LAN
+evidence, and second-device proof. Gate 2 passed again from a real
+worker-produced backup set. Gate 3 now has durable updater evidence: the `.35`
+to `.36` updater swapped in `.36`, preserved rollback/pre-update-backup
+evidence, and failed at `startingPostgres` because `bellfield-postgres` could
+not be started from the swapped release. The packaged read-only update evidence
+collector also failed separately on a `LastWriteTimeUtc` type-conversion bug, so
+the copied durable updater JSONL is the source of truth for this run.
+
+Read when: checking the historical rerun 19 failure, reviewing why rerun 19 is
+different from the earlier silent updater failures, or validating the follow-up
+Gate 3 service-asset/ACL and collector hardening.
+
+Current follow-up: PR #81 landed the staged service wrapper/XML prep, staged
+service ACL hardening, and failed-update collector hardening that came out of
+this run. Build fresh artifacts from current `main`, refresh the USB, and rerun
+Gate 3 with the runner-first flow before claiming the installed update gate.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or the longer-term junction/versioned release layout.

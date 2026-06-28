@@ -196,6 +196,19 @@ an evidence gap unless durable logs or machine state prove a product failure.
 The active clean-machine work is durable updater failure evidence plus the
 post-swap service/recovery failure. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md).
+Rerun #19 used rebuilt `.35`/`.36` artifacts from source commit `d586b99`.
+Gate 1 and Gate 2 passed again. Gate 3 now has durable updater evidence: the
+`.35` to `.36` updater swapped in `.36`, preserved rollback/pre-update-backup
+evidence, stopped all services, and failed while starting
+`bellfield-postgres` with terminal
+`BELLFIELD_UPDATE_FAILURE phase=startingPostgres`. The packaged read-only
+update evidence collector also failed before JSON output on a
+`LastWriteTimeUtc` type-conversion error, so the copied durable update JSONL is
+the source of truth for this run. PR #81 landed after this run with staged
+service wrapper/XML prep, staged service ACL hardening, and failed-update
+collector hardening; the environmental proof remains open until fresh artifacts
+rerun Gate 3 from the runner-first flow. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-19.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-19.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -226,10 +239,13 @@ The remaining clean-machine proofs are still owned by
       edges remain around post-restore health readiness messaging and System
       backup-card wording, but the Phase 2 environmental proof is closed.
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
-      remains open. Rerun #18 reached a single-updater `.33` to `.34` attempt,
-      installed `.34`, and preserved rollback/pre-update-backup evidence, but
-      exited nonzero, left all services stopped, and captured no structured
-      updater terminal line.
+      remains open. Rerun #19 reached a durable `.35` to `.36` updater attempt,
+      swapped in `.36`, preserved rollback/pre-update-backup evidence, and
+      emitted terminal `BELLFIELD_UPDATE_FAILURE phase=startingPostgres`; all
+      services were left stopped. The code follow-up for staged service
+      assets, staged service ACLs, and failed-update collector JSON safety
+      landed in PR #81, but this gate is not closed until a fresh artifact
+      rerun proves the installed update path.
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)
 - [ ] second office desktop + real Android field device against that install
