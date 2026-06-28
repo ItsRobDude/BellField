@@ -96,6 +96,12 @@ try {
     true,
     updateCollectorResult
   );
+  const serviceAclFailClosedResult = runWindowsServiceAclFailClosedCorpus();
+  check(
+    'Windows service ACL helper fails closed when a staged service asset is missing',
+    true,
+    serviceAclFailClosedResult
+  );
 
   check(
     'redaction helper defines ConvertTo-BellFieldRedactedText',
@@ -410,6 +416,21 @@ try {
       files.updateEvidenceCollector.includes('param($Value)') &&
       files.updateEvidenceCollector.includes('([datetime]$Value).ToUniversalTime()') &&
       !files.updateEvidenceCollector.includes('param([datetime]$Value)')
+  );
+  check(
+    'Windows service ACL helper asserts critical service assets before granting',
+    includesAll(files.windowsServiceAcl, [
+      '$missingCriticalPaths',
+      'required service assets are missing',
+      'postgres service wrapper'
+    ])
+  );
+  check(
+    'update evidence collector gathers Postgres start evidence fail-soft',
+    files.updateEvidenceCollector.includes('function Get-PostgresStartEvidenceSafe') &&
+      files.updateEvidenceCollector.includes(
+        'postgresStartEvidence = Get-PostgresStartEvidenceSafe'
+      )
   );
   check(
     'LAN access configurator reads office and API ports from server env',
@@ -1529,6 +1550,83 @@ function runWindowsPowerShellUpdateCollectorCorpus() {
       lastWriteTimeUtc: parsed.updateLog.lastWriteTimeUtc,
       postgresPathEvidenceCount: pathNames.length
     };
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+}
+
+function runWindowsServiceAclFailClosedCorpus() {
+  const command = findWindowsPowerShell51Command();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error(
+        'Windows PowerShell 5.1 was not available for the service ACL fail-closed corpus'
+      );
+    }
+    return { skipped: true, reason: 'Windows PowerShell 5.1 not available on this platform' };
+  }
+
+  const tempRoot = mkdtempSync(join(tmpdir(), 'bellfield-service-acl-'));
+  try {
+    const installRoot = join(tempRoot, 'BellField');
+    const releaseRoot = join(installRoot, 'release');
+    const servicesRoot = join(releaseRoot, 'services');
+    const postgresBinRoot = join(releaseRoot, 'postgres', 'bin');
+    const postgresDataRoot = join(installRoot, 'data', 'postgres');
+
+    // Stage an otherwise-complete tree but deliberately omit the postgres WinSW
+    // wrapper .exe -- the exact silent-skip that previously shipped an un-ACL'd
+    // release and broke startingPostgres. The helper must fail before granting.
+    mkdirSync(servicesRoot, { recursive: true });
+    mkdirSync(postgresBinRoot, { recursive: true });
+    mkdirSync(postgresDataRoot, { recursive: true });
+    writeFileSync(join(servicesRoot, 'bellfield-postgres.xml'), '<service />', 'utf8');
+    writeFileSync(join(postgresBinRoot, 'postgres.exe'), 'postgres-smoke', 'utf8');
+    writeFileSync(join(installRoot, 'bellfield-server.env'), 'BELLFIELD_API_PORT=3001\n', 'utf8');
+
+    const aclScriptPath = resolve('tools/install/windows-service-acl.ps1');
+    const result = spawnSync(
+      command,
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        aclScriptPath,
+        '-Apply',
+        '-ReleaseRoot',
+        releaseRoot,
+        '-InstallRoot',
+        installRoot
+      ],
+      {
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000
+      }
+    );
+    if (result.error) {
+      throw new Error(`Failed to run service ACL fail-closed corpus: ${result.error.message}`);
+    }
+    if (result.status === 0) {
+      throw new Error(
+        `Service ACL helper did not fail closed on a missing postgres wrapper.\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+      );
+    }
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+    if (!combinedOutput.includes('required service assets are missing')) {
+      throw new Error(
+        `Service ACL helper failed without the expected fail-closed message:\n${combinedOutput}`
+      );
+    }
+    if (!combinedOutput.includes('bellfield-postgres.exe')) {
+      throw new Error(
+        `Service ACL fail-closed message did not name the missing wrapper:\n${combinedOutput}`
+      );
+    }
+
+    return { command, failedClosed: true, status: result.status };
   } finally {
     rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }

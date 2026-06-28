@@ -247,6 +247,23 @@ function Get-PostgresStartEvidence {
   }
 }
 
+function Get-PostgresStartEvidenceSafe {
+  param(
+    [string]$InstallRoot,
+    [string]$ReleaseRoot
+  )
+
+  # A failure-path collector must be fail-soft: never let evidence gathering
+  # abort the whole collection. Degrade to a recorded error instead.
+  try {
+    return Get-PostgresStartEvidence -InstallRoot $InstallRoot -ReleaseRoot $ReleaseRoot
+  } catch {
+    return [pscustomobject]@{
+      error = $_.Exception.Message
+    }
+  }
+}
+
 function Get-ServiceStates {
   $states = @()
   foreach ($serviceName in $serviceNames) {
@@ -323,7 +340,7 @@ $evidence = [pscustomobject]@{
   readOnly = $true
   updateLog = Get-LatestUpdateLog -InstallRoot $InstallRoot
   currentReleaseManifest = Read-JsonFile -Path (Join-Path $releaseRoot "bellfield-build-manifest.json")
-  postgresStartEvidence = Get-PostgresStartEvidence -InstallRoot $InstallRoot -ReleaseRoot $releaseRoot
+  postgresStartEvidence = Get-PostgresStartEvidenceSafe -InstallRoot $InstallRoot -ReleaseRoot $releaseRoot
   releaseState = [pscustomobject]@{
     releaseRoot = $releaseRoot
     releaseRootExists = Test-Path -LiteralPath $releaseRoot

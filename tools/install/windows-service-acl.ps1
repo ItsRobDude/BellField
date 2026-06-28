@@ -68,6 +68,29 @@ function Set-BellFieldWindowsServiceAcls {
   $postgresReleaseRoot = Join-Path $ReleaseRoot "postgres"
   $postgresLogRoot = Join-Path $ServiceLogRoot $PostgresServiceId
 
+  # Fail closed: the postgres service runs as a restricted virtual account and
+  # cannot start unless these assets are present and granted before the update
+  # swap. Skipping a grant on a missing path (the default Protect-BellFieldPath
+  # behaviour) would silently reintroduce the Gate 3 startingPostgres failure,
+  # so assert them up front rather than warn-and-continue.
+  $criticalPaths = [ordered]@{
+    "service manifest directory" = $ServiceManifestRoot
+    "postgres service wrapper"   = (Join-Path $ServiceManifestRoot "$PostgresServiceId.exe")
+    "postgres service manifest"  = (Join-Path $ServiceManifestRoot "$PostgresServiceId.xml")
+    "postgres release directory" = $postgresReleaseRoot
+    "postgres executable"        = (Join-Path (Join-Path $postgresReleaseRoot "bin") "postgres.exe")
+    "postgres data directory"    = $postgresDataRoot
+  }
+  $missingCriticalPaths = @()
+  foreach ($criticalPath in $criticalPaths.GetEnumerator()) {
+    if (-not (Test-Path -LiteralPath $criticalPath.Value)) {
+      $missingCriticalPaths += "$($criticalPath.Key) ($($criticalPath.Value))"
+    }
+  }
+  if ($missingCriticalPaths.Count -gt 0) {
+    throw "Cannot harden BellField Windows service ACLs; required service assets are missing before grants: $($missingCriticalPaths -join '; ')."
+  }
+
   if (-not (Test-Path -LiteralPath $ServiceLogRoot)) {
     New-Item -ItemType Directory -Force -Path $ServiceLogRoot | Out-Null
   }
