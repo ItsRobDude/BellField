@@ -38,18 +38,32 @@ try {
     updateLockTest: readRequired('tools/install/update-lock.test.mjs'),
     updateRecovery: readRequired('tools/install/update-recovery.mjs'),
     updateRecoveryTest: readRequired('tools/install/update-recovery.test.mjs'),
+    gateDayAdminRunner: readRequired('tools/install/run-gate-day-admin.ps1'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
     backupService: readRequired('apps/worker/src/jobs/backup/backup-service.ts'),
     releaseBuilder: readRequired('tools/build-release.mjs'),
     releaseZipSmoke: readRequired('tools/smoke/release-zip-smoke.mjs'),
+    gateDayAdminSmoke: readRequired('tools/smoke/gate-day-admin-runner-smoke.mjs'),
+    packageJson: readRequired('package.json'),
     gateDayChecklist: readRequired('docs/gate-day-checklist.md'),
-    installRunbook: readRequired('docs/install-runbook.md')
+    installRunbook: readRequired('docs/install-runbook.md'),
+    operatorRules: readRequired('docs/codex-install-test-operator-rules.md'),
+    releaseUsbPreflight: readRequired('docs/release-usb-preflight-checklist.md'),
+    releaseUsbCheckoff: readRequired('docs/release-usb-preflight-checkoff-template.md')
   };
   const fatalSummaryBody = extractFunctionBody(files.updateHelper, 'buildFatalSummary');
   const fatalDetailsSummaryBody = extractFunctionBody(
     files.updateHelper,
     'buildFatalDetailsSummary'
+  );
+  const gateDaySelfElevationBody = extractPowerShellFunctionBody(
+    files.gateDayAdminRunner,
+    'Invoke-SelfElevation'
+  );
+  const gateDayQuoteBody = extractPowerShellFunctionBody(
+    files.gateDayAdminRunner,
+    'Quote-ProcessArgument'
   );
 
   assertNoSensitiveRedactionLeaks();
@@ -198,6 +212,111 @@ try {
   check(
     'LAN access helpers are packaged with install tooling',
     files.releaseBuilder.includes("copyRequired(join(repoRoot, 'tools', 'install')")
+  );
+  check(
+    'Gate Day admin runner is packaged with install tooling and has a smoke command',
+    files.releaseBuilder.includes("copyRequired(join(repoRoot, 'tools', 'install')") &&
+      files.gateDayAdminSmoke.includes('run-gate-day-admin.ps1') &&
+      files.packageJson.includes('"smoke:gate-day-admin"')
+  );
+  check(
+    'Gate Day admin runner exposes only fixed modes and no arbitrary command parameter',
+    includesAll(files.gateDayAdminRunner, [
+      'ValidateSet("gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-update", "collect-only")',
+      '[string]$UpdateArtifactRoot',
+      '[string]$BackupSet',
+      '[switch]$NoSelfElevate',
+      '[switch]$DryRun'
+    ]) &&
+      !declaresTopLevelParameter(files.gateDayAdminRunner, 'Command') &&
+      !declaresTopLevelParameter(files.gateDayAdminRunner, 'EncodedCommand')
+  );
+  check(
+    'Gate Day admin runner self-elevates once and records UAC outcomes',
+    includesAll(files.gateDayAdminRunner, [
+      'Start-Process -FilePath "powershell.exe" -Verb RunAs',
+      '-ElevatedChild',
+      'uac-requested',
+      'uac-approved',
+      'uac-cancelled',
+      'uac-timeout',
+      '$UacTimeoutSeconds'
+    ])
+  );
+  check(
+    'Gate Day admin runner UAC timeout only covers elevated child launch',
+    includesAll(gateDaySelfElevationBody, [
+      '$launchMarkerPath',
+      '$completionMarkerPath',
+      'Set-Content -LiteralPath $LaunchMarkerPath',
+      'childProcessId = $launch.processId',
+      'Wait-Job -Job $job | Out-Null',
+      'child-exit-evidence-missing'
+    ]) &&
+      !gateDaySelfElevationBody.includes('Wait-Job -Job $job -Timeout $UacTimeoutSeconds') &&
+      assertOrderedValue(gateDaySelfElevationBody, [
+        'Start-Process -FilePath "powershell.exe" -Verb RunAs',
+        'Set-Content -LiteralPath $LaunchMarkerPath',
+        '$process.WaitForExit()'
+      ])
+  );
+  check(
+    'Gate Day admin runner quotes Windows child-process arguments safely',
+    includesAll(gateDayQuoteBody, [
+      "if ($Value -notmatch '[\\s\"]')",
+      "$char -eq '\\'",
+      "$char -eq '\"'",
+      '$backslashes * 2',
+      "[void]$quoted.Append('\\\"')"
+    ]) &&
+      includesAll(files.gateDayAdminSmoke, [
+        'evidence root with spaces',
+        'evidenceRootBase + path.sep',
+        'dry-run accepts evidence root with spaces and a trailing separator'
+      ])
+  );
+  check(
+    'Gate Day admin runner writes structured JSONL evidence to USB and local logs',
+    includesAll(files.gateDayAdminRunner, [
+      'gate-day-admin-runner-$RunId.jsonl',
+      'data\\logs\\gate-day',
+      'BELLFIELD_GATE_ADMIN_LAUNCH',
+      'BELLFIELD_GATE_ADMIN_STEP',
+      'BELLFIELD_GATE_ADMIN_RESULT',
+      'BELLFIELD_GATE_ADMIN_FAILURE',
+      'AppendAllText'
+    ])
+  );
+  check(
+    'Gate Day admin runner starts a transcript and emits needs-human-action steps',
+    includesAll(files.gateDayAdminRunner, [
+      'Start-Transcript',
+      'Stop-Transcript',
+      'needs-human-action',
+      'create-first-owner-in-browser',
+      'create-post-backup-marker'
+    ])
+  );
+  check(
+    'Gate Day admin runner avoids first-owner setup token leakage',
+    files.gateDayAdminRunner.includes('copy-first-owner-setup-token.ps1') &&
+      files.gateDayAdminRunner.includes('copy-first-owner-setup-token-metadata') &&
+      files.gateDayAdminRunner.includes('tokenLineCount') &&
+      !files.gateDayAdminRunner.includes('-ShowToken') &&
+      !files.gateDayAdminRunner.includes('setupToken')
+  );
+  check(
+    'Gate Day admin runner uses packaged backup, restore, update, and evidence collectors',
+    includesAll(files.gateDayAdminRunner, [
+      'run-packaged-backup.mjs',
+      'restore-backup.mjs',
+      'update-bellfield.mjs',
+      'collect-windows-service-evidence.ps1',
+      'collect-windows-lan-evidence.ps1',
+      'collect-windows-update-evidence.ps1',
+      'Copy-LatestUpdateLog',
+      'Get-TerminalUpdateEvent'
+    ])
   );
   check(
     'LAN access configurator reads office and API ports from server env',
@@ -701,16 +820,90 @@ try {
       !files.updateEvidenceCollector.includes('Remove-Item')
   );
   check(
-    'Gate 3 docs prefer the update evidence collector after failed or quiet updater exits',
+    'Gate 3 docs classify missed UAC separately and prefer update evidence collection',
     includesAll(files.gateDayChecklist, [
       'collect-windows-update-evidence.ps1',
-      'nonzero exit, timeout, or quiet wrapper result',
-      'terminal success, failure, locked, rejected, or fatal event'
+      'missed UAC prompt',
+      'terminal success, failure, locked, rejected, or fatal event',
+      'attention-missed',
+      'product blocker'
     ]) &&
       includesAll(files.installRunbook, [
         'collect-windows-update-evidence.ps1',
-        'nonzero exit, timeout, or quiet wrapper result',
-        'durable update JSONL'
+        'nonzero exit, timeout, missed UAC prompt, or quiet wrapper',
+        'durable update JSONL',
+        'attention-missed',
+        'not proof that the packaged product failed'
+      ]) &&
+      includesAll(files.operatorRules, [
+        'attention-missed',
+        'missed UAC prompt',
+        'not a product blocker by itself'
+      ])
+  );
+  check(
+    'Gate Day docs prefer the fixed-mode elevated admin runner over per-helper UAC wrappers',
+    includesAll(files.gateDayChecklist, [
+      'run-gate-day-admin.ps1',
+      'Gate Day admin runner',
+      'one UAC prompt',
+      'default Gate Day path',
+      'fallback reference',
+      'attention-missed'
+    ]) &&
+      includesAll(files.installRunbook, [
+        'Preferred Gate Day Elevated Runner',
+        'run-gate-day-admin.ps1',
+        'arbitrary commands',
+        'C:\\BellField\\data\\logs\\gate-day',
+        'diagnostic fallback reference',
+        'successful runner mode',
+        'runner JSONL/transcript plus readback evidence'
+      ]) &&
+      includesAll(files.operatorRules, [
+        'run-gate-day-admin.ps1',
+        'named BellField modes',
+        'not permission to hand an elevated shell arbitrary commands',
+        'single runner-launch prompt',
+        'failed runner step is classified by the product state'
+      ])
+  );
+  check(
+    'Gate Day docs make runner modes the default for Gate 1, Gate 2, and Gate 3',
+    includesAll(files.gateDayChecklist, [
+      '-Mode gate1-admin-install',
+      '-Mode gate1-post-reboot-check',
+      '-Mode gate2-backup-restore',
+      '-Mode gate3-update',
+      'direct helper command is fallback/diagnostic only',
+      'direct collector',
+      'fallback/diagnostic only'
+    ]) &&
+      includesAll(files.installRunbook, [
+        '-Mode gate1-admin-install',
+        '-Mode gate2-backup-restore',
+        '-Mode gate3-update',
+        'direct updater command',
+        'manual install recipe or diagnostic fallback',
+        'collector directly only',
+        'runner did not',
+        'produce collector evidence'
+      ])
+  );
+  check(
+    'Release USB prep requires runner-first START-HERE instructions',
+    includesAll(files.releaseUsbPreflight, [
+      '`START-HERE.txt` points the scratch-machine operator at',
+      'run-gate-day-admin.ps1',
+      'Gate 1',
+      'Gate 2',
+      'Gate 3',
+      'diagnostic/fallback only'
+    ]) &&
+      includesAll(files.releaseUsbCheckoff, [
+        '`START-HERE.txt` names `run-gate-day-admin.ps1` as the default Gate Day admin path',
+        'Runner modes listed for Gate 1, Gate 2, and Gate 3',
+        'Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only'
       ])
   );
   assertOrdered(
@@ -1560,6 +1753,37 @@ function extractFunctionBody(contents, name) {
     } else if (!inSingleQuote && !inDoubleQuote && !inTemplate && char === '{') {
       depth += 1;
     } else if (!inSingleQuote && !inDoubleQuote && !inTemplate && char === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        return contents.slice(openIndex + 1, index);
+      }
+    }
+  }
+
+  return '';
+}
+
+function extractPowerShellFunctionBody(contents, name) {
+  const pattern = new RegExp(`function\\s+${name}\\s*\\{`);
+  const match = pattern.exec(contents);
+  if (!match) {
+    return '';
+  }
+
+  const openIndex = contents.indexOf('{', match.index);
+  let depth = 0;
+  let inSingleQuote = false;
+  let inDoubleQuote = false;
+  for (let index = openIndex; index < contents.length; index += 1) {
+    const char = contents[index];
+    const previous = contents[index - 1];
+    if (!inDoubleQuote && char === "'" && previous !== '`') {
+      inSingleQuote = !inSingleQuote;
+    } else if (!inSingleQuote && char === '"' && previous !== '`') {
+      inDoubleQuote = !inDoubleQuote;
+    } else if (!inSingleQuote && !inDoubleQuote && char === '{') {
+      depth += 1;
+    } else if (!inSingleQuote && !inDoubleQuote && char === '}') {
       depth -= 1;
       if (depth === 0) {
         return contents.slice(openIndex + 1, index);
