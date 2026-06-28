@@ -22,6 +22,8 @@ param(
   [int]$UacTimeoutSeconds = 300,
   [switch]$NoSelfElevate,
   [switch]$DryRun,
+  [ValidateSet("success", "nonzero", "timeout", "quiet", "missing-terminal")]
+  [string]$DryRunGate3Outcome = "success",
   [switch]$ElevatedChild
 )
 
@@ -247,6 +249,9 @@ function Invoke-SelfElevation {
   }
   if ($DryRun) {
     $arguments += "-DryRun"
+  }
+  if ($DryRunGate3Outcome -ne "success") {
+    $arguments += @("-DryRunGate3Outcome", $DryRunGate3Outcome)
   }
 
   $argumentLine = Join-ProcessArguments $arguments
@@ -899,12 +904,48 @@ function Invoke-Gate3Update {
   }
 
   if ($DryRun) {
+    $dryRunNeedsCollector = @("nonzero", "timeout", "quiet", "missing-terminal") -contains $DryRunGate3Outcome
+    $dryRunTerminalEvent = if ($DryRunGate3Outcome -eq "missing-terminal") {
+      $null
+    } elseif ($DryRunGate3Outcome -eq "success") {
+      @{
+        event = "BELLFIELD_UPDATE_RESULT"
+        status = "succeeded"
+      }
+    } else {
+      @{
+        event = "BELLFIELD_UPDATE_FAILURE"
+        status = "failed"
+      }
+    }
+    Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+      step = "dry-run-gate3-update-outcome"
+      status = "succeeded"
+      dryRunOutcome = $DryRunGate3Outcome
+      needsCollector = $dryRunNeedsCollector
+      simulatedUpdateResult = @{
+        timedOut = $DryRunGate3Outcome -eq "timeout"
+        exitCode = if ($DryRunGate3Outcome -eq "nonzero") { 1 } else { 0 }
+        stdoutQuiet = $DryRunGate3Outcome -eq "quiet"
+        stderrQuiet = $DryRunGate3Outcome -eq "quiet"
+        terminalEventPresent = $null -ne $dryRunTerminalEvent
+      }
+    }
     Invoke-GateStep -Name "copy-durable-update-jsonl" -Action { Copy-LatestUpdateLog }
-    Invoke-GateStep -Name "collect-update-evidence" -Action { Invoke-UpdateEvidence }
+    if ($dryRunNeedsCollector) {
+      Invoke-GateStep -Name "collect-update-evidence" -Action { Invoke-UpdateEvidence }
+    } else {
+      Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+        step = "collect-update-evidence"
+        status = "skipped"
+        reason = "dry-run-no-collector-needed"
+      }
+    }
     Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
       step = "record-terminal-update-event"
-      status = "skipped"
+      status = if ($dryRunTerminalEvent) { "succeeded" } else { "failed" }
       reason = "dry-run"
+      terminalUpdateEvent = $dryRunTerminalEvent
     }
     return "succeeded"
   }

@@ -226,7 +226,8 @@ try {
       '[string]$UpdateArtifactRoot',
       '[string]$BackupSet',
       '[switch]$NoSelfElevate',
-      '[switch]$DryRun'
+      '[switch]$DryRun',
+      'DryRunGate3Outcome'
     ]) &&
       !declaresTopLevelParameter(files.gateDayAdminRunner, 'Command') &&
       !declaresTopLevelParameter(files.gateDayAdminRunner, 'EncodedCommand')
@@ -317,6 +318,25 @@ try {
       'Copy-LatestUpdateLog',
       'Get-TerminalUpdateEvent'
     ])
+  );
+  check(
+    'Gate Day admin runner dry-run covers fixed mode sequencing and Gate 3 collector decisions',
+    includesAll(files.gateDayAdminRunner, [
+      '[ValidateSet("success", "nonzero", "timeout", "quiet", "missing-terminal")]',
+      'dry-run-gate3-update-outcome',
+      'needsCollector = $dryRunNeedsCollector',
+      'dry-run-no-collector-needed'
+    ]) &&
+      includesAll(files.gateDayAdminSmoke, [
+        "mode: 'gate1-admin-install'",
+        "mode: 'gate1-post-reboot-check'",
+        "mode: 'gate2-backup-restore'",
+        "mode: 'gate3-update'",
+        "mode: 'collect-only'",
+        "dryRunGate3Outcome: 'nonzero'",
+        'follows the fixed expected step sequence',
+        'dry-run Gate 3 nonzero plan runs the update collector handling path'
+      ])
   );
   check(
     'LAN access configurator reads office and API ports from server env',
