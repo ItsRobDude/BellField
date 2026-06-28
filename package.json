@@ -59,6 +59,7 @@
     "smoke:release-build": "node tools/smoke/release-build-smoke.mjs",
     "smoke:release-zip": "node tools/smoke/release-zip-smoke.mjs",
     "smoke:updater": "node tools/smoke/updater-smoke.mjs",
+    "smoke:gate-day-admin": "node tools/smoke/gate-day-admin-runner-smoke.mjs",
     "start:office-web": "pnpm --filter @bellfield/office-web start",
     "start:field-mobile": "pnpm --filter @bellfield/field-mobile start",
     "start:api": "pnpm --filter @bellfield/api start",
