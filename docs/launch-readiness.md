@@ -183,12 +183,17 @@ updater observability/recovery rather than backup/restore. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md).
 Rerun #17 used rebuilt `.31`/`.32` artifacts from source commit `233e061`.
 Gate 1 and Gate 2 passed again, including restore-readiness recovery to health
-`ok`. Gate 3 is still open: overlapping elevated updater attempts after a
+`ok`. Gate 3 stayed open because overlapping elevated updater attempts after a
 capture timeout invalidated the strict update proof, collided in staging, and
 left `.32` installed with `.31` preserved as rollback, a fresh pre-update backup
-present, all services stopped, and health down. The active clean-machine blocker
-is now updater single-run enforcement plus race-safe stage creation. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md).
+present, all services stopped, and health down. Rerun #18 used authorized
+rebuilt `.33`/`.34` artifacts from source commit `2582d79`. Gate 1 and Gate 2
+passed again. Gate 3 started a single corrected updater process, but the updater
+returned exit code `1`, installed `.34`, preserved rollback/pre-update-backup
+evidence, left all four services stopped, and captured no structured
+phase/result/failure line. The active clean-machine blocker is now durable
+updater failure evidence plus the post-swap service/recovery failure. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
@@ -219,8 +224,10 @@ The remaining clean-machine proofs are still owned by
       edges remain around post-restore health readiness messaging and System
       backup-card wording, but the Phase 2 environmental proof is closed.
 - [ ] real installed v(N) → v(N+1) update with services and pre-update backup
-      remains open. Rerun #15 created the pre-update backup and staged `.28`,
-      but failed before completing swap/restart and left app services stopped.
+      remains open. Rerun #18 reached a single-updater `.33` to `.34` attempt,
+      installed `.34`, and preserved rollback/pre-update-backup evidence, but
+      exited nonzero, left all services stopped, and captured no structured
+      updater terminal line.
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)
 - [ ] second office desktop + real Android field device against that install

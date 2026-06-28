@@ -184,6 +184,36 @@ describe('JobsDataRepository', () => {
     expect(job.workOrderNumber).toBeUndefined();
   });
 
+  it('does not create an initial appointment from time-window-only job intake details', async () => {
+    const { databaseService, queryable } = createDatabaseService();
+    const repository = createJobsDataRepository(databaseService);
+
+    await repository.createJob(
+      {
+        locationId: 'location-1',
+        billToCustomerId: 'customer-1',
+        jobType: 'service',
+        category: 'service',
+        origin: 'phone',
+        summary: 'No cooling',
+        timeWindowLabel: 'Morning'
+      },
+      'Dispatcher',
+      'customer-1',
+      'Main Shop'
+    );
+
+    const jobInsertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into jobs')
+    );
+    const appointmentInsertCall = queryable.query.mock.calls.find(([sql]) =>
+      String(sql).includes('insert into appointments')
+    );
+
+    expect(jobInsertCall?.[1]?.[8]).toBe('new');
+    expect(appointmentInsertCall).toBeUndefined();
+  });
+
   it('cancels every non-cancelled appointment when a job is cancelled', async () => {
     const { databaseService, queryable } = createDatabaseService({ status: 'cancelled' });
     const repository = createJobsDataRepository(databaseService);
@@ -770,6 +800,7 @@ describe('JobsDataRepository', () => {
     expect(unscheduledSql).toContain(
       "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = true"
     );
+    expect(unscheduledSql).toContain('scheduled_appointment.scheduled_date is not null');
     expect(openSql).toContain(
       "needs_office_review = false and status <> 'waitingOnParts' and needs_scheduling = false"
     );

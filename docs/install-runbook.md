@@ -226,6 +226,17 @@ Validated on the development machine:
   preserved as rollback, a fresh pre-update backup present, all BellField
   services stopped, and health down. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md)
+- eighteenth clean Windows gate-day attempt ran on 2026-06-27 with authorized
+  rebuilt `.33`/`.34` artifacts from source commit `2582d79` after the previous
+  unauthorized `.33`/`.34` USB refresh was discarded. Gate 1 and Gate 2 passed
+  again; restore readiness retried service start once and recovered to health
+  `ok`. Gate 3 failed during the real `.33` to `.34` update: one corrected
+  updater process started and returned exit code `1`, `.34` was installed,
+  rollback release and pre-update backup were preserved, all services were
+  stopped, API health was down, and no structured updater phase/result/failure
+  line was captured. The active blocker is now durable updater failure evidence
+  plus the post-swap service/recovery failure. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md)
 - release-build smoke now functionally validates bundled PostgreSQL by running
   packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
   directory when gate-day dependencies are included, and checks the app-local
@@ -246,7 +257,7 @@ Validated on the development machine:
 
 Current clean-machine validation status:
 
-- clean Windows Gate 1 passed in rerun #15 for the entry-tier install
+- clean Windows Gate 1 passed again in rerun #18 for the entry-tier install
   path: no developer tooling, real services, first-owner setup, job proof,
   reboot recovery, packaged LAN evidence, and real second-device browser login
   in one strict run
@@ -270,15 +281,16 @@ Current clean-machine validation status:
   second-device browser login from an iPhone on the same Wi-Fi
 - second office desktop and Android field-device proof remain separate optional
   environmental checks
-- scratch-machine backup/restore drill. Rerun #15 proved packaged manual backup
-  creation, restore through the owned-schema path, service restart, marker
-  erasure, login, pre-backup data readback, media read/write, and license
-  readback. The helper still has an operator-experience rough edge: immediate
-  `/health` failed once after restore before a bounded retry returned `ok`.
+- scratch-machine backup/restore drill. Rerun #18 re-proved packaged manual
+  backup creation, restore through the owned-schema path, service-readiness
+  retry to health `ok`, marker erasure, login, pre-backup data readback, and
+  license readback. The helper still has an operator-experience rough edge: the
+  first readiness message looks like a failure before the retry succeeds.
 - real installed v(N) to v(N+1) update with Windows services, real pre-update
-  `pg_dump`, health check, and reboot/service recovery proof. Rerun #15 created
-  a pre-update backup and staged `.28`, but did not complete the swap/restart
-  path and left app services stopped.
+  `pg_dump`, health check, and reboot/service recovery proof. Rerun #18
+  installed `.34` and preserved rollback/pre-update-backup evidence, but exited
+  nonzero, captured no structured updater terminal line, and left all services
+  stopped.
 
 ## Build The Release Folder
 
@@ -884,13 +896,41 @@ The updater:
 12. Runs packaged migrations.
 13. Restarts API, worker, and office-web and waits for `/health`.
 
-The updater prints structured progress lines:
+The updater prints structured progress lines to stdout and synchronously writes
+the same evidence to durable update JSONL under
+`C:\BellField\data\logs\update\*.jsonl`:
 
 - `BELLFIELD_UPDATE_PHASE` before/after each destructive phase
 - `BELLFIELD_UPDATE_RESULT` on success
 - `BELLFIELD_UPDATE_FAILURE` on failure, including phase, recovery action,
   staged path, rollback path, pre-update backup path, installed/attempted
   versions, and service-state readback
+- `BELLFIELD_UPDATE_LOCKED` when another updater owns the install lock
+- `BELLFIELD_UPDATE_REJECTED` when invocation/configuration is invalid before
+  destructive update work starts
+- `BELLFIELD_UPDATE_FATAL` for unexpected failures outside normal recovery
+- `BELLFIELD_UPDATE_FATAL_DETAILS` for best-effort enriched fatal evidence such
+  as service-state readback; the minimal fatal record is written first
+
+For Gate Day proof, capture wrapper stdout/stderr and copy the durable update
+JSONL. Treat the durable update JSONL as the source of truth when wrapper
+capture is incomplete.
+
+After any updater nonzero exit, timeout, or quiet wrapper result, run the
+packaged read-only update collector from an elevated shell before retrying:
+
+```powershell
+C:\BellField\release\tools\install\collect-windows-update-evidence.ps1 `
+  -InstallRoot C:\BellField `
+  -OutputPath <usb>\evidence\gate3-update-evidence-rerun-N.json
+```
+
+The collector records the latest durable update JSONL path and terminal event,
+installed release manifest, staged and rollback release directories, latest
+backup directory, BellField service states, and `/health` result. It must not
+restart services, delete locks, clean staged paths, or change update recovery
+state. Keep the customer-facing updater command readable, but use absolute
+packaged Node and script paths inside elevated capture wrappers.
 
 Operator-visible timeout overrides are available for unusually slow customer
 hardware: `--backup-timeout-ms`, `--service-timeout-ms`,
@@ -909,7 +949,10 @@ Rerun #16 proved structured updater phase/result/failure lines and pre-swap
 recovery, but the release swap still failed while PostgreSQL was running from
 inside the live release tree. Rerun #17 stopped PostgreSQL as part of the update
 stop set, but the strict proof was invalidated by overlapping elevated updater
-attempts after a hidden capture timeout.
+attempts after a hidden capture timeout. Rerun #18 reached a single corrected
+updater process, installed `.34`, preserved rollback/pre-update-backup evidence,
+and left all services stopped without captured structured updater terminal
+evidence.
 
 After any UAC/capture timeout, do not immediately retry the updater. First
 search for an already-running `update-bellfield` or artifact `node.exe` process,

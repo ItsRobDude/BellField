@@ -1,4 +1,9 @@
-import { ConflictException, ForbiddenException, Injectable } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable
+} from '@nestjs/common';
 import type { AppointmentFinishOutcome, AppointmentStatus, JobStatus } from '@bellfield/contracts';
 import { CatalogService } from '../catalog/catalog.service';
 import { isFinalJobStatus, isReopenTransition } from '../company-data/company-data.types';
@@ -124,6 +129,7 @@ export class JobsAppointmentsService {
       'jobs:create',
       ['office-web']
     );
+    ensureCreateJobScheduleHasDate(request);
     const location = await this.referenceDataService.getLocationById(request.locationId);
     const billToCustomerId = request.billToCustomerId ?? location.customerId;
     await this.referenceDataService.getCustomerById(billToCustomerId);
@@ -220,6 +226,7 @@ export class JobsAppointmentsService {
         'Appointments cannot be added to closed or cancelled jobs. Reopen the job first if work should continue.'
       );
     }
+    ensureNewAppointmentHasDate(request);
 
     await this.jobsDataService.createAppointment(
       jobId,
@@ -1120,4 +1127,36 @@ export class JobsAppointmentsService {
 
 function formatAppointmentCount(count: number): string {
   return `${count} ${count === 1 ? 'appointment' : 'appointments'}`;
+}
+
+function ensureCreateJobScheduleHasDate(request: CreateJobRequestDto): void {
+  if (request.scheduledDate?.trim()) {
+    return;
+  }
+  if (hasAppointmentScheduleDetail(request)) {
+    throw new BadRequestException(
+      'scheduledDate is required when creating a job with appointment schedule details.'
+    );
+  }
+}
+
+function ensureNewAppointmentHasDate(request: CreateAppointmentRequestDto): void {
+  if (request.scheduledDate?.trim()) {
+    return;
+  }
+  throw new BadRequestException('scheduledDate is required when adding an appointment.');
+}
+
+function hasAppointmentScheduleDetail(
+  request: Pick<
+    CreateJobRequestDto | CreateAppointmentRequestDto,
+    'scheduledStartTime' | 'scheduledEndTime' | 'timeWindowLabel' | 'technicianId'
+  >
+): boolean {
+  return Boolean(
+    request.scheduledStartTime?.trim() ||
+      request.scheduledEndTime?.trim() ||
+      request.timeWindowLabel?.trim() ||
+      request.technicianId?.trim()
+  );
 }

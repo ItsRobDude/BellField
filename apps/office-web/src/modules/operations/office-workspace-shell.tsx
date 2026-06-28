@@ -768,7 +768,7 @@ export function OfficeWorkspaceShell({
         ...current,
         [jobId]: createEmptyAppointmentDraft()
       }));
-      setNoticeMessage('Follow-up added.');
+      setNoticeMessage('Appointment added.');
       await refreshAllWorkspace();
       await refreshOpenJobDetail(jobId);
     } catch (error) {

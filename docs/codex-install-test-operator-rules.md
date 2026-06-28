@@ -91,6 +91,10 @@ Not allowed unless the run is explicitly reclassified as diagnostic:
   internals, unzip-edit, copy in missing dependencies, or replace signed files.
 - Failed or archived artifacts are evidence only. Do not use them unless the
   current `START-HERE.txt` explicitly says to.
+- Codex itself may expose bundled runtime paths in the assistant process PATH.
+  Treat persistent Windows User and Machine PATH as the contamination source of
+  truth, and do not use bare `node`, `pnpm`, `npm`, `git`, or PostgreSQL tools
+  for product work. Use explicit packaged BellField paths from the release ZIP.
 
 ## Execution Style
 

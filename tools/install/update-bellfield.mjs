@@ -14,6 +14,7 @@ import {
   defaultUpdateLockMaxAgeMs,
   defaultUpdateLockOwnerlessGraceMs
 } from './update-lock.mjs';
+import { createUpdateEvidenceLog } from './update-evidence-log.mjs';
 import { parseEnvFile, readArgs } from './install-utils.mjs';
 import {
   stageDirectoryRestore,
@@ -37,6 +38,24 @@ const postgresServiceName = 'bellfield-postgres';
 const appServicesStopOrder = ['bellfield-office-web', 'bellfield-worker', 'bellfield-api'];
 const updateServicesStopOrder = [...appServicesStopOrder, postgresServiceName];
 const appServicesStartOrder = ['bellfield-api', 'bellfield-worker', 'bellfield-office-web'];
+const terminalUpdateEvents = new Set([
+  'BELLFIELD_UPDATE_RESULT',
+  'BELLFIELD_UPDATE_FAILURE',
+  'BELLFIELD_UPDATE_LOCKED',
+  'BELLFIELD_UPDATE_REJECTED',
+  'BELLFIELD_UPDATE_FATAL'
+]);
+
+let updateEvidenceLog = null;
+let durableTerminalUpdateEventWritten = false;
+let updateEventWriteFailures = [];
+let writingFatalUpdateEvent = false;
+let updateContext = {
+  recoveryTracker: null,
+  attemptedVersion: null,
+  currentReleaseRoot: null,
+  updateLogPath: null
+};
 
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
@@ -70,12 +89,30 @@ function runPowerShell(command, options = {}) {
 }
 
 function emitUpdateEvent(prefix, payload) {
-  console.log(
-    `${prefix} ${JSON.stringify({
-      timestamp: new Date().toISOString(),
-      ...payload
-    })}`
-  );
+  const eventPayload = {
+    timestamp: new Date().toISOString(),
+    ...payload
+  };
+  let durableWriteSucceeded = false;
+
+  if (updateEvidenceLog) {
+    try {
+      updateEvidenceLog.writeEvent(prefix, eventPayload);
+      durableWriteSucceeded = true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      updateEventWriteFailures.push({
+        event: prefix,
+        message
+      });
+      console.error(`Failed to write durable BellField update evidence: ${message}`);
+    }
+  }
+
+  console.log(`${prefix} ${JSON.stringify(eventPayload)}`);
+  if (terminalUpdateEvents.has(prefix) && durableWriteSucceeded) {
+    durableTerminalUpdateEventWritten = true;
+  }
 }
 
 function enterUpdatePhase(recoveryTracker, phase, details = {}) {
@@ -86,6 +123,7 @@ function enterUpdatePhase(recoveryTracker, phase, details = {}) {
 function emitUpdateLockBlocked(error) {
   emitUpdateEvent('BELLFIELD_UPDATE_LOCKED', {
     status: 'blocked',
+    updateLogPath: updateContext.updateLogPath,
     lockPath: error.lockPath ?? null,
     lockOwner: error.lockOwner ?? null,
     reason: error.reason ?? null,
@@ -95,6 +133,99 @@ function emitUpdateLockBlocked(error) {
     processSnapshot: error.processSnapshot ?? null,
     message: error instanceof Error ? error.message : String(error)
   });
+}
+
+function rejectUpdate(error, details = {}) {
+  const updateError = error instanceof Error ? error : new Error(String(error));
+  emitUpdateEvent('BELLFIELD_UPDATE_REJECTED', {
+    status: 'rejected',
+    updateLogPath: updateContext.updateLogPath,
+    phase: updateContext.recoveryTracker?.snapshot?.().phase ?? null,
+    error: serializeError(updateError),
+    ...details
+  });
+  throw updateError;
+}
+
+function emitFatalUpdateEvent(error) {
+  if (writingFatalUpdateEvent) {
+    return;
+  }
+  writingFatalUpdateEvent = true;
+  try {
+    emitUpdateEvent('BELLFIELD_UPDATE_FATAL', buildFatalSummary(error));
+    try {
+      emitUpdateEvent('BELLFIELD_UPDATE_FATAL_DETAILS', buildFatalDetailsSummary(error));
+    } catch (detailsError) {
+      const message = detailsError instanceof Error ? detailsError.message : String(detailsError);
+      console.error(`Failed to write enriched BellField update fatal evidence: ${message}`);
+    }
+  } finally {
+    writingFatalUpdateEvent = false;
+  }
+}
+
+function buildFatalSummary(error) {
+  const snapshot = updateContext.recoveryTracker?.snapshot?.() ?? null;
+  return {
+    status: 'fatal',
+    phase: snapshot?.phase ?? null,
+    error: serializeError(error),
+    snapshot,
+    versions: {
+      attempted: updateContext.attemptedVersion
+    },
+    paths: {
+      currentReleaseRoot: updateContext.currentReleaseRoot,
+      stagedReleasePath: snapshot?.stagedReleasePath ?? null,
+      rollbackReleasePath: snapshot?.rollbackReleasePath ?? null,
+      preUpdateBackupPath: snapshot?.preUpdateBackupPath ?? null,
+      updateLogPath: updateContext.updateLogPath
+    },
+    updateEventWriteFailures
+  };
+}
+
+function buildFatalDetailsSummary(error) {
+  const summary = buildFatalSummary(error);
+  return {
+    ...summary,
+    status: 'fatal-details',
+    versions: {
+      ...summary.versions,
+      installed: updateContext.currentReleaseRoot
+        ? safeReadReleaseManifest(updateContext.currentReleaseRoot)
+        : null
+    },
+    serviceStates: captureServiceStatesSafe()
+  };
+}
+
+function serializeError(error) {
+  if (error instanceof Error) {
+    return {
+      name: error.name,
+      message: error.message,
+      stack: error.stack ?? null
+    };
+  }
+  return {
+    name: null,
+    message: String(error),
+    stack: null
+  };
+}
+
+function closeUpdateEvidenceLog() {
+  if (!updateEvidenceLog) {
+    return;
+  }
+  try {
+    updateEvidenceLog.close();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to close durable BellField update evidence: ${message}`);
+  }
 }
 
 function stopUpdateServices({ skipServices, timeoutMs }) {
@@ -534,7 +665,8 @@ function buildFailureSummary(input) {
       currentReleaseRootExists: input.currentReleaseRootExists,
       stagedReleasePath: input.snapshot.stagedReleasePath,
       rollbackReleasePath: input.snapshot.rollbackReleasePath,
-      preUpdateBackupPath: input.snapshot.preUpdateBackupPath
+      preUpdateBackupPath: input.snapshot.preUpdateBackupPath,
+      updateLogPath: input.updateLogPath
     },
     cleanup: input.cleanup,
     swapEvidence: readSwapEvidence(originalError) ?? readSwapEvidence(recoveryError),
@@ -542,6 +674,7 @@ function buildFailureSummary(input) {
     preRecoveryReleaseRootProcesses: input.preRecoveryReleaseRootProcesses ?? null,
     postRecoveryReleaseRootProcesses,
     releaseRootProcesses: postRecoveryReleaseRootProcesses,
+    updateEventWriteFailures: input.updateEventWriteFailures ?? [],
     guidance: input.restartSkippedReason
       ? 'The update failed before the release swap completed, but the installed release root is missing. Do not restart app services until the release directory is repaired from rollback/stage evidence.'
       : input.recovery.postSwapFailure
@@ -580,6 +713,17 @@ function parsePositiveInteger(value, fallback, label) {
   return Math.floor(parsed);
 }
 
+function parseUpdaterPositiveInteger(value, fallback, label) {
+  try {
+    return parsePositiveInteger(value, fallback, label);
+  } catch (error) {
+    rejectUpdate(error, {
+      reason: 'invalid-argument',
+      argument: label
+    });
+  }
+}
+
 function toPowerShellStringArray(values) {
   return values.map((value) => quotePowerShellString(value)).join(', ');
 }
@@ -588,287 +732,384 @@ function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const args = readArgs();
-if (args.confirm !== 'UPDATE') {
-  throw new Error('Refusing to update without --confirm=UPDATE.');
-}
+async function main() {
+  const args = readArgs();
+  if (args.confirm !== 'UPDATE') {
+    throw new Error('Refusing to update without --confirm=UPDATE.');
+  }
 
-const installRoot = resolve(String(args['install-root'] ?? 'C:\\BellField'));
-const envPath = resolve(String(args.env ?? join(installRoot, 'bellfield-server.env')));
-const updateArtifactRoot = resolve(
-  String(args['update-artifact-root'] ?? defaultUpdateArtifactRoot)
-);
-const currentReleaseRoot = assertSafeReplaceDirectory(
-  String(args['current-release-root'] ?? join(installRoot, 'release')),
-  'current release root'
-);
-const skipServices = args['skip-services'] === 'true' || process.platform !== 'win32';
-const skipHealth = args['skip-health'] === 'true' || skipServices;
-const skipBackup = args['skip-backup'] === 'true';
-const backupTimeoutMs = parsePositiveInteger(args['backup-timeout-ms'], 300_000, 'backup timeout');
-const serviceTimeoutMs = parsePositiveInteger(
-  args['service-timeout-ms'],
-  60_000,
-  'service timeout'
-);
-const serviceExitTimeoutMs = parsePositiveInteger(
-  args['service-exit-timeout-ms'],
-  60_000,
-  'service exit timeout'
-);
-const swapTimeoutMs = parsePositiveInteger(args['swap-timeout-ms'], 60_000, 'swap timeout');
-const migrationTimeoutMs = parsePositiveInteger(
-  args['migration-timeout-ms'],
-  180_000,
-  'migration timeout'
-);
-const healthTimeoutMs = parsePositiveInteger(args['health-timeout-ms'], 60_000, 'health timeout');
-const updateLockMaxAgeMs = parsePositiveInteger(
-  args['update-lock-max-age-ms'],
-  defaultUpdateLockMaxAgeMs,
-  'update lock max age'
-);
-const updateLockOwnerlessGraceMs = parsePositiveInteger(
-  args['update-lock-ownerless-grace-ms'],
-  defaultUpdateLockOwnerlessGraceMs,
-  'update lock ownerless grace'
-);
-
-if (samePath(updateArtifactRoot, currentReleaseRoot)) {
-  throw new Error(
-    'Run the updater from the extracted new release artifact, not the installed release root.'
+  const installRoot = resolve(String(args['install-root'] ?? 'C:\\BellField'));
+  const envPath = resolve(String(args.env ?? join(installRoot, 'bellfield-server.env')));
+  const updateArtifactRoot = resolve(
+    String(args['update-artifact-root'] ?? defaultUpdateArtifactRoot)
   );
-}
-if (isPathInsideDirectory(updateArtifactRoot, currentReleaseRoot)) {
-  throw new Error('Update artifact root must not be inside the installed release root.');
-}
+  const currentReleaseRoot = assertSafeReplaceDirectory(
+    String(args['current-release-root'] ?? join(installRoot, 'release')),
+    'current release root'
+  );
+  const skipServices = args['skip-services'] === 'true' || process.platform !== 'win32';
+  const skipHealth = args['skip-health'] === 'true' || skipServices;
+  const skipBackup = args['skip-backup'] === 'true';
 
-const env = parseEnvFile(envPath);
-const apiPort = env.BELLFIELD_API_PORT ?? env.PORT ?? '3001';
-const healthUrl = String(args['health-url'] ?? `http://127.0.0.1:${apiPort}/health`);
-const nodeExe = join(
-  updateArtifactRoot,
-  'runtime',
-  'node',
-  process.platform === 'win32' ? 'node.exe' : 'node'
-);
-const migrationsScript = join(updateArtifactRoot, 'apps', 'api', 'scripts', 'migrations', 'up.mjs');
-if (!existsSync(nodeExe)) {
-  throw new Error(`Bundled Node runtime is missing from update artifact: ${nodeExe}`);
-}
-if (!existsSync(migrationsScript)) {
-  throw new Error(`Packaged migration script is missing from update artifact: ${migrationsScript}`);
-}
-
-const recoveryTracker = createUpdateRecoveryTracker({ skipServices });
-let attemptedVersion = null;
-let updateLock = null;
-
-try {
-  updateLock = acquireUpdateLock({
-    installRoot,
-    commandLine: process.argv.join(' '),
-    maxAgeMs: updateLockMaxAgeMs,
-    ownerlessGraceMs: updateLockOwnerlessGraceMs,
-    getProcessSnapshot: getUpdateLockProcessSnapshot
+  updateEvidenceLog = createUpdateEvidenceLog({ installRoot });
+  updateContext.updateLogPath = updateEvidenceLog.logPath;
+  console.log(`BellField update evidence log: ${updateEvidenceLog.logPath}`);
+  emitUpdateEvent('BELLFIELD_UPDATE_LOG', {
+    status: 'opened',
+    updateLogPath: updateEvidenceLog.logPath
   });
-  console.log(`Acquired BellField update lock: ${updateLock.lockPath}`);
-} catch (error) {
-  if (error?.code === 'BELLFIELD_UPDATE_LOCKED') {
-    emitUpdateLockBlocked(error);
-  }
-  throw error;
-}
 
-try {
-  enterUpdatePhase(recoveryTracker, updatePhases.verifying);
-  const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
-  attemptedVersion = verifiedArtifact.build.version;
-  const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PATH });
-  if (licenseStatus.status !== 'valid') {
-    throw new Error(`BellField update cannot be installed: ${licenseStatus.message}`);
-  }
-  if (licenseStatus.license.licenseKind === 'dataOnly') {
-    throw new Error(
-      'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
+  const backupTimeoutMs = parseUpdaterPositiveInteger(
+    args['backup-timeout-ms'],
+    300_000,
+    'backup timeout'
+  );
+  const serviceTimeoutMs = parseUpdaterPositiveInteger(
+    args['service-timeout-ms'],
+    60_000,
+    'service timeout'
+  );
+  const serviceExitTimeoutMs = parseUpdaterPositiveInteger(
+    args['service-exit-timeout-ms'],
+    60_000,
+    'service exit timeout'
+  );
+  const swapTimeoutMs = parseUpdaterPositiveInteger(
+    args['swap-timeout-ms'],
+    60_000,
+    'swap timeout'
+  );
+  const migrationTimeoutMs = parseUpdaterPositiveInteger(
+    args['migration-timeout-ms'],
+    180_000,
+    'migration timeout'
+  );
+  const healthTimeoutMs = parseUpdaterPositiveInteger(
+    args['health-timeout-ms'],
+    60_000,
+    'health timeout'
+  );
+  const updateLockMaxAgeMs = parseUpdaterPositiveInteger(
+    args['update-lock-max-age-ms'],
+    defaultUpdateLockMaxAgeMs,
+    'update lock max age'
+  );
+  const updateLockOwnerlessGraceMs = parseUpdaterPositiveInteger(
+    args['update-lock-ownerless-grace-ms'],
+    defaultUpdateLockOwnerlessGraceMs,
+    'update lock ownerless grace'
+  );
+
+  if (samePath(updateArtifactRoot, currentReleaseRoot)) {
+    rejectUpdate(
+      new Error(
+        'Run the updater from the extracted new release artifact, not the installed release root.'
+      ),
+      {
+        reason: 'invalid-update-artifact-root',
+        updateArtifactRoot,
+        currentReleaseRoot
+      }
     );
   }
-  assertReleaseWithinUpdateWindow({
-    releaseDate: verifiedArtifact.build.releaseDate,
-    updateWindowEnd: licenseStatus.license.updateWindowEnd
-  });
+  if (isPathInsideDirectory(updateArtifactRoot, currentReleaseRoot)) {
+    rejectUpdate(new Error('Update artifact root must not be inside the installed release root.'), {
+      reason: 'invalid-update-artifact-root',
+      updateArtifactRoot,
+      currentReleaseRoot
+    });
+  }
 
-  const restoreStamp = timestampForRestorePath();
-  enterUpdatePhase(recoveryTracker, updatePhases.staging, { restoreStamp });
-  const stagedReleasePath = stageDirectoryRestore({
-    sourcePath: updateArtifactRoot,
-    targetPath: currentReleaseRoot,
-    stamp: restoreStamp,
-    sourceLabel: 'update artifact root'
-  });
-  recoveryTracker.setStagedReleasePath(stagedReleasePath);
-  enterUpdatePhase(recoveryTracker, updatePhases.staged, { stagedReleasePath });
-  console.log(`Staged update artifact at ${stagedReleasePath}`);
-
-  const updateEnv = { ...process.env, ...env, DATABASE_URL: env.DATABASE_URL };
-  enterUpdatePhase(recoveryTracker, updatePhases.backingUp);
-  const backup = runManualBackup({
+  let env;
+  try {
+    env = parseEnvFile(envPath);
+  } catch (error) {
+    rejectUpdate(error, {
+      reason: 'invalid-env-file',
+      envPath
+    });
+  }
+  const apiPort = env.BELLFIELD_API_PORT ?? env.PORT ?? '3001';
+  const healthUrl = String(args['health-url'] ?? `http://127.0.0.1:${apiPort}/health`);
+  const nodeExe = join(
     updateArtifactRoot,
-    nodeExe,
-    env: updateEnv,
-    skipBackup,
-    timeoutMs: backupTimeoutMs
-  });
-  recoveryTracker.setPreUpdateBackupPath(backup?.backupSetPath ?? null);
-  enterUpdatePhase(recoveryTracker, updatePhases.backupComplete, {
-    preUpdateBackupPath: backup?.backupSetPath ?? null
-  });
-
-  console.log(
-    `Installing BellField ${verifiedArtifact.build.version} (${verifiedArtifact.build.releaseDate}).`
+    'runtime',
+    'node',
+    process.platform === 'win32' ? 'node.exe' : 'node'
   );
-  enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);
-  recoveryTracker.markServiceStopAttempted();
-  const serviceProcessTree = stopUpdateServices({ skipServices, timeoutMs: serviceTimeoutMs });
-  enterUpdatePhase(recoveryTracker, updatePhases.servicesStopped, {
-    capturedProcessCount: collectUpdateProcessIds(serviceProcessTree).length
-  });
-  enterUpdatePhase(recoveryTracker, updatePhases.waitingForProcessExit);
-  waitForCapturedProcessTreeExit(serviceProcessTree, serviceExitTimeoutMs);
-  enterUpdatePhase(recoveryTracker, updatePhases.processesExited);
-
-  enterUpdatePhase(recoveryTracker, updatePhases.swappingRelease, {
-    swapTimeoutMs
-  });
-  const rollbackReleasePath = await swapStagedDirectoryWithRetry({
-    stagePath: stagedReleasePath,
-    targetPath: currentReleaseRoot,
-    stamp: restoreStamp,
-    timeoutMs: swapTimeoutMs
-  });
-  recoveryTracker.setRollbackReleasePath(rollbackReleasePath);
-  recoveryTracker.markReleaseSwapped();
-  enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped, { rollbackReleasePath });
-
-  enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);
-  startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
-  enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);
-  enterUpdatePhase(recoveryTracker, updatePhases.migrating);
-  run(nodeExe, [migrationsScript], {
-    env: updateEnv,
-    cwd: currentReleaseRoot,
-    timeoutMs: migrationTimeoutMs
-  });
-  enterUpdatePhase(recoveryTracker, updatePhases.migrationsRun);
-  enterUpdatePhase(recoveryTracker, updatePhases.startingServices);
-  startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
-
-  enterUpdatePhase(recoveryTracker, updatePhases.healthChecking);
-  await waitForHealth({
-    url: healthUrl,
-    timeoutMs: healthTimeoutMs,
-    skipHealth
-  });
-  recoveryTracker.markServicesStarted();
-  enterUpdatePhase(recoveryTracker, updatePhases.completed);
-
-  emitUpdateEvent('BELLFIELD_UPDATE_RESULT', {
-    status: 'succeeded',
-    version: verifiedArtifact.build.version,
-    releaseDate: verifiedArtifact.build.releaseDate,
-    preUpdateBackupPath: backup?.backupSetPath ?? null,
-    rollbackReleasePath
-  });
-  console.log('BellField update completed.');
-  if (backup) {
-    console.log(`Pre-update backup set: ${backup.backupSetPath}`);
+  const migrationsScript = join(
+    updateArtifactRoot,
+    'apps',
+    'api',
+    'scripts',
+    'migrations',
+    'up.mjs'
+  );
+  if (!existsSync(nodeExe)) {
+    rejectUpdate(new Error(`Bundled Node runtime is missing from update artifact: ${nodeExe}`), {
+      reason: 'missing-bundled-node-runtime',
+      nodeExe
+    });
   }
-  if (rollbackReleasePath) {
-    console.log(`Previous release preserved for rollback reference: ${rollbackReleasePath}`);
-  }
-} catch (error) {
-  const snapshotAtFailure = recoveryTracker.snapshot();
-  const recovery = decideUpdateRecovery(snapshotAtFailure);
-  const preRecoveryReleaseRootProcesses =
-    snapshotAtFailure.phase === updatePhases.swappingRelease
-      ? captureReleaseRootProcessesSafe(currentReleaseRoot)
-      : null;
-  if (recovery.message) {
-    console.error(recovery.message);
-  }
-
-  let restartAttempted = false;
-  let restartSucceeded = false;
-  let readinessRecovered = false;
-  let recoveryError = null;
-  let restartSkippedReason = null;
-  const currentReleaseRootExists = existsSync(currentReleaseRoot);
-  if (recovery.restartServices) {
-    if (!recovery.postSwapFailure && !currentReleaseRootExists) {
-      restartSkippedReason =
-        'Installed release root is missing; original app services were not restarted.';
-      console.error(restartSkippedReason);
-    } else {
-      restartAttempted = true;
-      try {
-        if (recovery.postSwapFailure) {
-          await retryUpdateReadiness({
-            skipServices,
-            serviceTimeoutMs,
-            skipHealth,
-            healthUrl,
-            healthTimeoutMs
-          });
-          recoveryTracker.markServicesStarted();
-          recoveryTracker.enter(updatePhases.completed);
-          readinessRecovered = true;
-        } else {
-          startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
-          startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
-        }
-        restartSucceeded = true;
-      } catch (restartError) {
-        recoveryError = restartError;
-        console.error(
-          `Failed to restart services after update failure: ${
-            restartError instanceof Error ? restartError.message : String(restartError)
-          }`
-        );
+  if (!existsSync(migrationsScript)) {
+    rejectUpdate(
+      new Error(`Packaged migration script is missing from update artifact: ${migrationsScript}`),
+      {
+        reason: 'missing-migration-script',
+        migrationsScript
       }
-    }
+    );
   }
 
-  if (readinessRecovered) {
+  const recoveryTracker = createUpdateRecoveryTracker({ skipServices });
+  updateContext.recoveryTracker = recoveryTracker;
+  updateContext.currentReleaseRoot = currentReleaseRoot;
+  let attemptedVersion = null;
+  let updateLock = null;
+
+  try {
+    updateLock = acquireUpdateLock({
+      installRoot,
+      commandLine: process.argv.join(' '),
+      maxAgeMs: updateLockMaxAgeMs,
+      ownerlessGraceMs: updateLockOwnerlessGraceMs,
+      getProcessSnapshot: getUpdateLockProcessSnapshot
+    });
+    console.log(`Acquired BellField update lock: ${updateLock.lockPath}`);
+  } catch (error) {
+    if (error?.code === 'BELLFIELD_UPDATE_LOCKED') {
+      emitUpdateLockBlocked(error);
+    }
+    throw error;
+  }
+
+  try {
+    enterUpdatePhase(recoveryTracker, updatePhases.verifying);
+    const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
+    attemptedVersion = verifiedArtifact.build.version;
+    updateContext.attemptedVersion = attemptedVersion;
+    const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PATH });
+    if (licenseStatus.status !== 'valid') {
+      throw new Error(`BellField update cannot be installed: ${licenseStatus.message}`);
+    }
+    if (licenseStatus.license.licenseKind === 'dataOnly') {
+      throw new Error(
+        'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
+      );
+    }
+    assertReleaseWithinUpdateWindow({
+      releaseDate: verifiedArtifact.build.releaseDate,
+      updateWindowEnd: licenseStatus.license.updateWindowEnd
+    });
+
+    const restoreStamp = timestampForRestorePath();
+    enterUpdatePhase(recoveryTracker, updatePhases.staging, { restoreStamp });
+    const stagedReleasePath = stageDirectoryRestore({
+      sourcePath: updateArtifactRoot,
+      targetPath: currentReleaseRoot,
+      stamp: restoreStamp,
+      sourceLabel: 'update artifact root'
+    });
+    recoveryTracker.setStagedReleasePath(stagedReleasePath);
+    enterUpdatePhase(recoveryTracker, updatePhases.staged, { stagedReleasePath });
+    console.log(`Staged update artifact at ${stagedReleasePath}`);
+
+    const updateEnv = { ...process.env, ...env, DATABASE_URL: env.DATABASE_URL };
+    enterUpdatePhase(recoveryTracker, updatePhases.backingUp);
+    const backup = runManualBackup({
+      updateArtifactRoot,
+      nodeExe,
+      env: updateEnv,
+      skipBackup,
+      timeoutMs: backupTimeoutMs
+    });
+    recoveryTracker.setPreUpdateBackupPath(backup?.backupSetPath ?? null);
+    enterUpdatePhase(recoveryTracker, updatePhases.backupComplete, {
+      preUpdateBackupPath: backup?.backupSetPath ?? null
+    });
+
+    console.log(
+      `Installing BellField ${verifiedArtifact.build.version} (${verifiedArtifact.build.releaseDate}).`
+    );
+    enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);
+    recoveryTracker.markServiceStopAttempted();
+    const serviceProcessTree = stopUpdateServices({ skipServices, timeoutMs: serviceTimeoutMs });
+    enterUpdatePhase(recoveryTracker, updatePhases.servicesStopped, {
+      capturedProcessCount: collectUpdateProcessIds(serviceProcessTree).length
+    });
+    enterUpdatePhase(recoveryTracker, updatePhases.waitingForProcessExit);
+    waitForCapturedProcessTreeExit(serviceProcessTree, serviceExitTimeoutMs);
+    enterUpdatePhase(recoveryTracker, updatePhases.processesExited);
+
+    enterUpdatePhase(recoveryTracker, updatePhases.swappingRelease, {
+      swapTimeoutMs
+    });
+    const rollbackReleasePath = await swapStagedDirectoryWithRetry({
+      stagePath: stagedReleasePath,
+      targetPath: currentReleaseRoot,
+      stamp: restoreStamp,
+      timeoutMs: swapTimeoutMs
+    });
+    recoveryTracker.setRollbackReleasePath(rollbackReleasePath);
+    recoveryTracker.markReleaseSwapped();
+    enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped, { rollbackReleasePath });
+
+    enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);
+    startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
+    enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);
+    enterUpdatePhase(recoveryTracker, updatePhases.migrating);
+    run(nodeExe, [migrationsScript], {
+      env: updateEnv,
+      cwd: currentReleaseRoot,
+      timeoutMs: migrationTimeoutMs
+    });
+    enterUpdatePhase(recoveryTracker, updatePhases.migrationsRun);
+    enterUpdatePhase(recoveryTracker, updatePhases.startingServices);
+    startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
+
+    enterUpdatePhase(recoveryTracker, updatePhases.healthChecking);
+    await waitForHealth({
+      url: healthUrl,
+      timeoutMs: healthTimeoutMs,
+      skipHealth
+    });
+    recoveryTracker.markServicesStarted();
+    enterUpdatePhase(recoveryTracker, updatePhases.completed);
+
     emitUpdateEvent('BELLFIELD_UPDATE_RESULT', {
       status: 'succeeded',
-      readinessRecovered: true,
-      version: attemptedVersion,
-      preUpdateBackupPath: recoveryTracker.snapshot().preUpdateBackupPath,
-      rollbackReleasePath: recoveryTracker.snapshot().rollbackReleasePath
+      version: verifiedArtifact.build.version,
+      releaseDate: verifiedArtifact.build.releaseDate,
+      preUpdateBackupPath: backup?.backupSetPath ?? null,
+      rollbackReleasePath,
+      updateLogPath: updateEvidenceLog?.logPath ?? null
     });
-    console.log('BellField update completed after retrying service readiness.');
-  } else {
-    const cleanup = cleanupStagedUpdatePath(recoveryTracker.snapshot().stagedReleasePath);
-    emitUpdateEvent(
-      'BELLFIELD_UPDATE_FAILURE',
-      buildFailureSummary({
-        error: recoveryError ?? error,
-        originalError: error,
-        recoveryError,
-        snapshot: recoveryTracker.snapshot(),
-        recovery,
-        restartAttempted,
-        restartSucceeded,
-        restartSkippedReason,
-        cleanup,
-        preRecoveryReleaseRootProcesses,
-        attemptedVersion,
-        currentReleaseRoot,
-        currentReleaseRootExists
-      })
-    );
-    throw recoveryError ?? error;
+    console.log('BellField update completed.');
+    if (backup) {
+      console.log(`Pre-update backup set: ${backup.backupSetPath}`);
+    }
+    if (rollbackReleasePath) {
+      console.log(`Previous release preserved for rollback reference: ${rollbackReleasePath}`);
+    }
+  } catch (error) {
+    const snapshotAtFailure = recoveryTracker.snapshot();
+    const recovery = decideUpdateRecovery(snapshotAtFailure);
+    const preRecoveryReleaseRootProcesses =
+      snapshotAtFailure.phase === updatePhases.swappingRelease
+        ? captureReleaseRootProcessesSafe(currentReleaseRoot)
+        : null;
+    if (recovery.message) {
+      console.error(recovery.message);
+    }
+
+    let restartAttempted = false;
+    let restartSucceeded = false;
+    let readinessRecovered = false;
+    let recoveryError = null;
+    let restartSkippedReason = null;
+    const currentReleaseRootExists = existsSync(currentReleaseRoot);
+    if (recovery.restartServices) {
+      if (!recovery.postSwapFailure && !currentReleaseRootExists) {
+        restartSkippedReason =
+          'Installed release root is missing; original app services were not restarted.';
+        console.error(restartSkippedReason);
+      } else {
+        restartAttempted = true;
+        try {
+          if (recovery.postSwapFailure) {
+            await retryUpdateReadiness({
+              skipServices,
+              serviceTimeoutMs,
+              skipHealth,
+              healthUrl,
+              healthTimeoutMs
+            });
+            recoveryTracker.markServicesStarted();
+            recoveryTracker.enter(updatePhases.completed);
+            readinessRecovered = true;
+          } else {
+            startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
+            startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
+          }
+          restartSucceeded = true;
+        } catch (restartError) {
+          recoveryError = restartError;
+          console.error(
+            `Failed to restart services after update failure: ${
+              restartError instanceof Error ? restartError.message : String(restartError)
+            }`
+          );
+        }
+      }
+    }
+
+    if (readinessRecovered) {
+      emitUpdateEvent('BELLFIELD_UPDATE_RESULT', {
+        status: 'succeeded',
+        readinessRecovered: true,
+        version: attemptedVersion,
+        preUpdateBackupPath: recoveryTracker.snapshot().preUpdateBackupPath,
+        rollbackReleasePath: recoveryTracker.snapshot().rollbackReleasePath,
+        updateLogPath: updateEvidenceLog?.logPath ?? null
+      });
+      console.log('BellField update completed after retrying service readiness.');
+    } else {
+      const cleanup = cleanupStagedUpdatePath(recoveryTracker.snapshot().stagedReleasePath);
+      emitUpdateEvent(
+        'BELLFIELD_UPDATE_FAILURE',
+        buildFailureSummary({
+          error: recoveryError ?? error,
+          originalError: error,
+          recoveryError,
+          snapshot: recoveryTracker.snapshot(),
+          recovery,
+          restartAttempted,
+          restartSucceeded,
+          restartSkippedReason,
+          cleanup,
+          preRecoveryReleaseRootProcesses,
+          attemptedVersion,
+          currentReleaseRoot,
+          currentReleaseRootExists,
+          updateLogPath: updateEvidenceLog?.logPath ?? null,
+          updateEventWriteFailures
+        })
+      );
+      throw recoveryError ?? error;
+    }
+  } finally {
+    updateLock?.release();
   }
-} finally {
-  updateLock?.release();
 }
+
+process.on('uncaughtException', (error) => {
+  if (!durableTerminalUpdateEventWritten) {
+    emitFatalUpdateEvent(error);
+  }
+  closeUpdateEvidenceLog();
+  console.error(error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  if (!durableTerminalUpdateEventWritten) {
+    emitFatalUpdateEvent(error);
+  }
+  closeUpdateEvidenceLog();
+  console.error(error);
+  process.exit(1);
+});
+
+main()
+  .then(() => {
+    closeUpdateEvidenceLog();
+  })
+  .catch((error) => {
+    if (!durableTerminalUpdateEventWritten) {
+      emitFatalUpdateEvent(error);
+    }
+    closeUpdateEvidenceLog();
+    console.error(error);
+    process.exitCode = 1;
+  });

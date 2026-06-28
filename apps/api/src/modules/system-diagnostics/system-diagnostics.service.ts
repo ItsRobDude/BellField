@@ -78,11 +78,7 @@ export class SystemDiagnosticsService {
         },
         {
           key: 'backups',
-          ok:
-            backups.enabled &&
-            !backups.stale &&
-            !backups.error &&
-            backups.latestRun?.status !== 'failed',
+          ok: backupCheckOk(backups),
           detail: backupCheckDetail(backups)
         },
         {
@@ -374,11 +370,34 @@ function backupCheckDetail(backups: SystemDiagnosticsResponse['backups']): strin
     return `Last successful backup is older than ${backups.staleAfterHours} hours.`;
   }
   if (backups.latestRun?.status === 'failed') {
+    if (isInterruptedAfterSuccessfulBackup(backups)) {
+      return 'Latest run interrupted after last successful backup.';
+    }
     return backups.latestRun.errorMessage
       ? `Latest backup failed: ${backups.latestRun.errorMessage}`
       : 'Latest backup failed.';
   }
   return undefined;
+}
+
+function backupCheckOk(backups: SystemDiagnosticsResponse['backups']): boolean {
+  return (
+    backups.enabled &&
+    !backups.stale &&
+    !backups.error &&
+    (backups.latestRun?.status !== 'failed' || isInterruptedAfterSuccessfulBackup(backups))
+  );
+}
+
+function isInterruptedAfterSuccessfulBackup(
+  backups: SystemDiagnosticsResponse['backups']
+): boolean {
+  return (
+    backups.latestRun?.status === 'failed' &&
+    backups.latestRun.errorMessage === 'Backup run did not complete before worker restart.' &&
+    Boolean(backups.latestSuccessfulAt) &&
+    !backups.stale
+  );
 }
 
 function licenseCheckOk(license: LicenseDiagnosticsSummary): boolean {

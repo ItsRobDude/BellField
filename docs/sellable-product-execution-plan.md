@@ -43,24 +43,24 @@ Environmental gates currently open, all satisfiable in one scratch-machine
 session:
 
 - Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #17 re-proved
-  this gate on Windows 11 Home with active `.31`/`.32` artifacts: service
+  job booking, reboot survival, and second-device access. Rerun #18 re-proved
+  this gate on Windows 11 Home with active `.33`/`.34` artifacts: service
   registration/stability, PostgreSQL SCM/ACL checks, API health, first-owner
   setup, job proof, reboot recovery, packaged LAN evidence, and real
   second-device same-Wi-Fi browser login all completed in one strict run.
 - Phase 2: restore drill onto a scratch machine from a real worker-produced
-  backup set. Rerun #17 re-proved this gate: packaged backup creation,
+  backup set. Rerun #18 re-proved this gate: packaged backup creation,
   owned-schema restore, service-readiness recovery, marker erasure, login,
   pre-backup data readback, and license readback all passed on
   the clean Windows machine.
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
   pre-update `pg_dump` backup, plus a real refusal against an expired-window
-  license. Rerun #17 proved Gate 1 and Gate 2 again but did not produce a valid
-  single-updater Gate 3 proof: overlapping elevated updater attempts collided in
-  staging and final closeout showed `.32` installed, `.31` preserved as
-  rollback, a fresh backup present, all services stopped, and health down. The
-  next proof must enforce one active updater, reserve staged paths race-safely,
-  and then rerun the `.31` to `.32` service update path cleanly.
+  license. Rerun #18 proved Gate 1 and Gate 2 again and reached a single
+  corrected updater process for Gate 3, but the `.33` to `.34` update returned
+  exit code `1`, installed `.34`, preserved rollback/pre-update-backup evidence,
+  left all services stopped, and captured no structured updater
+  phase/result/failure line. The next proof needs durable updater evidence under
+  the install root, then a fix for the actual post-swap service/recovery failure.
 - Phase 5/6: sold-shaped installed release sends an estimate through the
   production relay, opens the customer acceptance page, and applies the
   customer decision back through the worker poller
@@ -130,7 +130,7 @@ post-reboot login, packaged LAN evidence, and real second-device login.
   scheduled backup job, startup due-check from latest successful backup,
   orphaned-running cleanup, old manifest-less partial-set cleanup, backup run
   history, backup-set retention, and a packaged restore helper with staged
-  media/license replacement. Rerun #17 re-proved the scratch-machine restore
+  media/license replacement. Rerun #18 re-proved the scratch-machine restore
   gate with a real worker backup set, owned-schema restore path, service
   readiness recovery, pre-backup marker preservation/rollback, media root
   presence, license readback, and recovered API health.
@@ -139,9 +139,10 @@ post-reboot login, packaged LAN evidence, and real second-device login.
   artifacts are signed, the updater verifies artifact signature + license
   update window, runs a hard-fail pre-update backup by default, stages/swaps
   release folders, runs migrations, restarts services, and health-checks. A
-  scratch same-machine updater smoke passed. Rerun #17 showed the real installed
-  updater still needs single-run enforcement and race-safe stage creation before
-  the installed v(N) to v(N+1) service update gate can be claimed.
+  scratch same-machine updater smoke passed. Rerun #18 showed the real installed
+  updater still needs durable phase/failure evidence plus a post-swap
+  service/recovery fix before the installed v(N) to v(N+1) service update gate
+  can be claimed.
 - Licensing: Phase 3 repo-side primitive now exists: signed offline license
   file design, API startup verification behind a license-required runtime flag
   or release build manifest, System/support visibility, private issuance
@@ -383,7 +384,7 @@ replacement, and `docs/restore-runbook.md`. A nondestructive same-machine
 validation pass is recorded in
 [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md).
 The Phase 2 gate is now backed by a separate scratch-machine restore drill from
-a real backup set, performed and dated. Rerun #17 re-proved the clean-machine
+a real backup set, performed and dated. Rerun #18 re-proved the clean-machine
 packaged backup helper path plus owned-schema restore, marker erasure,
 service-readiness recovery, login, pre-backup data readback, media root
 presence, and license readback.
@@ -487,12 +488,12 @@ CLI, and scratch updater swap are covered by local same-machine validation; see
 The full Phase 4 gate remains open until an installed v(N) machine updates to
 v(N+1) through the updater with real Windows services, real pre-update backup,
 health check, and a refused out-of-window build. Rerun #16 proved the updater
-reports and recovers a pre-swap failure. Rerun #17 proved Gate 1 and Gate 2
-again, but the update proof was invalidated by overlapping elevated updater
-attempts that collided in staging and left `.32` installed with services
-stopped. The remaining Phase 4 blocker is a clean single-updater proof: enforce
-one active update operation, reserve staged directories race-safely, keep
-PostgreSQL in the pre-swap stop set, and rerun Gate 3.
+reports and recovers a pre-swap failure. Rerun #17 exposed overlapping elevated
+updater attempts. Rerun #18 reached a single corrected updater process, but the
+`.33` to `.34` update returned exit code `1`, installed `.34`, preserved
+rollback/pre-update-backup evidence, left all services stopped, and captured no
+structured updater terminal line. The remaining Phase 4 blocker is durable
+updater evidence plus the actual post-swap service/recovery failure.
 
 ### 4.1 Release stamping
 
