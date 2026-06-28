@@ -1,6 +1,7 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
 import {
   REDACTION_SECRET_FIXTURES,
   assertNoSensitiveRedactionLeaks
@@ -31,6 +32,7 @@ try {
     restoreStaging: readRequired('tools/install/restore-staging.mjs'),
     restoreStagingTest: readRequired('tools/install/restore-staging.test.mjs'),
     windowsServiceControl: readRequired('tools/install/windows-service-control.mjs'),
+    windowsServiceAcl: readRequired('tools/install/windows-service-acl.ps1'),
     updateHelper: readRequired('tools/install/update-bellfield.mjs'),
     updateEvidenceCollector: readRequired('tools/install/collect-windows-update-evidence.ps1'),
     updateEvidenceLog: readRequired('tools/install/update-evidence-log.mjs'),
@@ -87,6 +89,18 @@ try {
     'PowerShell process-tree JSON corpus normalizes single-process arrays',
     true,
     powershellProcessJsonResult
+  );
+  const updateCollectorResult = runWindowsPowerShellUpdateCollectorCorpus();
+  check(
+    'Windows PowerShell 5.1 update evidence collector parses failed-update JSONL',
+    true,
+    updateCollectorResult
+  );
+  const serviceAclFailClosedResult = runWindowsServiceAclFailClosedCorpus();
+  check(
+    'Windows service ACL helper fails closed when a staged service asset is missing',
+    true,
+    serviceAclFailClosedResult
   );
 
   check(
@@ -337,6 +351,86 @@ try {
         'follows the fixed expected step sequence',
         'dry-run Gate 3 nonzero plan runs the update collector handling path'
       ])
+  );
+  check(
+    'Windows service ACL helper centralizes install/update Postgres grants',
+    includesAll(files.windowsServiceAcl, [
+      'function Set-BellFieldWindowsServiceAcls',
+      '${postgresServiceIdentity}:(OI)(CI)RX',
+      '${postgresServiceIdentity}:RX',
+      '${postgresServiceIdentity}:R'
+    ]) &&
+      files.installer.includes('windows-service-acl.ps1') &&
+      files.installer.includes('Set-BellFieldWindowsServiceAcls')
+  );
+  assertOrdered(
+    files.updateHelper,
+    'updater prepares staged service assets before backup and service stop',
+    [
+      'enterUpdatePhase(recoveryTracker, updatePhases.staged,',
+      'enterUpdatePhase(recoveryTracker, updatePhases.preparingStagedServices);',
+      'prepareStagedWindowsServices({',
+      'enterUpdatePhase(recoveryTracker, updatePhases.stagedServicesPrepared);',
+      'enterUpdatePhase(recoveryTracker, updatePhases.backingUp);',
+      'enterUpdatePhase(recoveryTracker, updatePhases.stoppingServices);'
+    ]
+  );
+  check(
+    'updater renders staged service XML for stable release root and copies WinSW wrappers',
+    includesAll(files.updateHelper, [
+      'render-windows-services.mjs',
+      '`--release-root=${finalReleaseRoot}`',
+      '`--output=${servicesDir}`',
+      'copyFileSync(winSwExe, join(servicesDir, `${serviceId}.exe`))',
+      'windows-service-acl.ps1',
+      "'-Apply'"
+    ])
+  );
+  check(
+    'update recovery tracks staged service prep as pre-swap phases',
+    includesAll(files.updateRecovery, ['preparingStagedServices', 'stagedServicesPrepared'])
+  );
+  check(
+    'updater failure summary captures focused Postgres start evidence',
+    includesAll(files.updateHelper, [
+      'postgresStartEvidence',
+      'capturePostgresStartEvidenceSafe',
+      'serviceExe',
+      'serviceXml',
+      'postgresExe',
+      'sc.exe qc'
+    ])
+  );
+  check(
+    'update evidence collector captures focused Postgres start evidence',
+    includesAll(files.updateEvidenceCollector, [
+      'postgresStartEvidence',
+      'Get-PostgresStartEvidence',
+      'Get-PathEvidence',
+      'sc.exe qc'
+    ])
+  );
+  check(
+    'update evidence collector defensively casts timestamps at runtime',
+    files.updateEvidenceCollector.includes('function ConvertTo-IsoUtcString') &&
+      files.updateEvidenceCollector.includes('param($Value)') &&
+      files.updateEvidenceCollector.includes('([datetime]$Value).ToUniversalTime()') &&
+      !files.updateEvidenceCollector.includes('param([datetime]$Value)')
+  );
+  check(
+    'Windows service ACL helper asserts critical service assets before granting',
+    includesAll(files.windowsServiceAcl, [
+      '$missingCriticalPaths',
+      'required service assets are missing',
+      'postgres service wrapper'
+    ])
+  );
+  check(
+    'update evidence collector gathers Postgres start evidence fail-soft',
+    files.updateEvidenceCollector.includes('function Get-PostgresStartEvidenceSafe') &&
+      files.updateEvidenceCollector.includes(
+        'postgresStartEvidence = Get-PostgresStartEvidenceSafe'
+      )
   );
   check(
     'LAN access configurator reads office and API ports from server env',
@@ -1353,6 +1447,191 @@ $result | ConvertTo-Json -Depth 8
   return { command, processIds: ids, scalarProcessEntryCount: scalarProcessEntries.length };
 }
 
+function runWindowsPowerShellUpdateCollectorCorpus() {
+  const command = findWindowsPowerShell51Command();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error('Windows PowerShell 5.1 was not available for the update collector corpus');
+    }
+    return { skipped: true, reason: 'Windows PowerShell 5.1 not available on this platform' };
+  }
+
+  const tempRoot = mkdtempSync(join(tmpdir(), 'bellfield-update-evidence-'));
+  try {
+    const installRoot = join(tempRoot, 'BellField');
+    const releaseRoot = join(installRoot, 'release');
+    const updateLogRoot = join(installRoot, 'data', 'logs', 'update');
+    const postgresLogRoot = join(installRoot, 'data', 'logs', 'services', 'bellfield-postgres');
+    const servicesRoot = join(releaseRoot, 'services');
+    const postgresBinRoot = join(releaseRoot, 'postgres', 'bin');
+
+    mkdirSync(updateLogRoot, { recursive: true });
+    mkdirSync(postgresLogRoot, { recursive: true });
+    mkdirSync(servicesRoot, { recursive: true });
+    mkdirSync(postgresBinRoot, { recursive: true });
+
+    writeFileSync(
+      join(updateLogRoot, 'update-20260628-180410Z.jsonl'),
+      [
+        JSON.stringify({
+          timestamp: '2026-06-28T18:04:10.000Z',
+          event: 'BELLFIELD_UPDATE_PHASE',
+          phase: 'startingPostgres'
+        }),
+        JSON.stringify({
+          timestamp: '2026-06-28T18:04:11.000Z',
+          event: 'BELLFIELD_UPDATE_FAILURE',
+          status: 'failed',
+          phase: 'startingPostgres'
+        })
+      ].join('\n') + '\n',
+      'utf8'
+    );
+    writeFileSync(
+      join(releaseRoot, 'bellfield-build-manifest.json'),
+      JSON.stringify({ version: '0.0.36', sourceCommit: 'smoke' }),
+      'utf8'
+    );
+    writeFileSync(join(servicesRoot, 'bellfield-postgres.exe'), 'winsw-smoke', 'utf8');
+    writeFileSync(join(servicesRoot, 'bellfield-postgres.xml'), '<service />', 'utf8');
+    writeFileSync(join(postgresBinRoot, 'postgres.exe'), 'postgres-smoke', 'utf8');
+    writeFileSync(
+      join(postgresLogRoot, 'bellfield-postgres.wrapper.log'),
+      'wrapper smoke log tail',
+      'utf8'
+    );
+
+    const collectorPath = resolve('tools/install/collect-windows-update-evidence.ps1');
+    const result = spawnSync(
+      command,
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        collectorPath,
+        '-InstallRoot',
+        installRoot
+      ],
+      {
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000
+      }
+    );
+    if (result.error) {
+      throw new Error(`Failed to run update evidence collector corpus: ${result.error.message}`);
+    }
+    if (result.status !== 0) {
+      throw new Error(
+        `Update evidence collector corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+      );
+    }
+
+    const parsed = JSON.parse(result.stdout.trim());
+    const terminalEvent = parsed.updateLog?.terminalEvent;
+    if (terminalEvent?.event !== 'BELLFIELD_UPDATE_FAILURE') {
+      throw new Error(`Collector did not preserve terminal failure event: ${result.stdout}`);
+    }
+    if (!parsed.updateLog?.lastWriteTimeUtc) {
+      throw new Error('Collector did not emit update log lastWriteTimeUtc');
+    }
+    const pathNames = (parsed.postgresStartEvidence?.paths ?? []).map((entry) => entry.name);
+    for (const expected of ['serviceExe', 'serviceXml', 'postgresExe']) {
+      if (!pathNames.includes(expected)) {
+        throw new Error(`Collector did not include focused Postgres path evidence: ${expected}`);
+      }
+    }
+
+    return {
+      command,
+      terminalEvent: terminalEvent.event,
+      lastWriteTimeUtc: parsed.updateLog.lastWriteTimeUtc,
+      postgresPathEvidenceCount: pathNames.length
+    };
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+}
+
+function runWindowsServiceAclFailClosedCorpus() {
+  const command = findWindowsPowerShell51Command();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error(
+        'Windows PowerShell 5.1 was not available for the service ACL fail-closed corpus'
+      );
+    }
+    return { skipped: true, reason: 'Windows PowerShell 5.1 not available on this platform' };
+  }
+
+  const tempRoot = mkdtempSync(join(tmpdir(), 'bellfield-service-acl-'));
+  try {
+    const installRoot = join(tempRoot, 'BellField');
+    const releaseRoot = join(installRoot, 'release');
+    const servicesRoot = join(releaseRoot, 'services');
+    const postgresBinRoot = join(releaseRoot, 'postgres', 'bin');
+    const postgresDataRoot = join(installRoot, 'data', 'postgres');
+
+    // Stage an otherwise-complete tree but deliberately omit the postgres WinSW
+    // wrapper .exe -- the exact silent-skip that previously shipped an un-ACL'd
+    // release and broke startingPostgres. The helper must fail before granting.
+    mkdirSync(servicesRoot, { recursive: true });
+    mkdirSync(postgresBinRoot, { recursive: true });
+    mkdirSync(postgresDataRoot, { recursive: true });
+    writeFileSync(join(servicesRoot, 'bellfield-postgres.xml'), '<service />', 'utf8');
+    writeFileSync(join(postgresBinRoot, 'postgres.exe'), 'postgres-smoke', 'utf8');
+    writeFileSync(join(installRoot, 'bellfield-server.env'), 'BELLFIELD_API_PORT=3001\n', 'utf8');
+
+    const aclScriptPath = resolve('tools/install/windows-service-acl.ps1');
+    const result = spawnSync(
+      command,
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-File',
+        aclScriptPath,
+        '-Apply',
+        '-ReleaseRoot',
+        releaseRoot,
+        '-InstallRoot',
+        installRoot
+      ],
+      {
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000
+      }
+    );
+    if (result.error) {
+      throw new Error(`Failed to run service ACL fail-closed corpus: ${result.error.message}`);
+    }
+    if (result.status === 0) {
+      throw new Error(
+        `Service ACL helper did not fail closed on a missing postgres wrapper.\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+      );
+    }
+    const combinedOutput = `${result.stdout}\n${result.stderr}`;
+    if (!combinedOutput.includes('required service assets are missing')) {
+      throw new Error(
+        `Service ACL helper failed without the expected fail-closed message:\n${combinedOutput}`
+      );
+    }
+    if (!combinedOutput.includes('bellfield-postgres.exe')) {
+      throw new Error(
+        `Service ACL fail-closed message did not name the missing wrapper:\n${combinedOutput}`
+      );
+    }
+
+    return { command, failedClosed: true, status: result.status };
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
+}
+
 function runPowerShellLanEnvLineCorpus() {
   const command = findPowerShellCommand();
   if (!command) {
@@ -1688,6 +1967,38 @@ Write-Host "PowerShell LAN firewall corpus passed"
   }
 
   return { command, cases: 16 };
+}
+
+function findWindowsPowerShell51Command() {
+  const candidates =
+    process.platform === 'win32'
+      ? [
+          join(
+            process.env.WINDIR ?? 'C:\\Windows',
+            'System32',
+            'WindowsPowerShell',
+            'v1.0',
+            'powershell.exe'
+          ),
+          'powershell.exe'
+        ]
+      : [];
+  for (const candidate of candidates) {
+    const result = spawnSync(
+      candidate,
+      ['-NoProfile', '-Command', '$PSVersionTable.PSVersion.Major'],
+      {
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 15_000
+      }
+    );
+    if (!result.error && result.status === 0 && result.stdout.trim() === '5') {
+      return candidate;
+    }
+  }
+  return null;
 }
 
 function findPowerShellCommand() {

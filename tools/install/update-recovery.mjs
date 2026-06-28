@@ -3,6 +3,8 @@ const orderedUpdatePhases = [
   'verifying',
   'staging',
   'staged',
+  'preparingStagedServices',
+  'stagedServicesPrepared',
   'backingUp',
   'backupComplete',
   'stoppingServices',
