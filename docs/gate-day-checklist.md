@@ -44,10 +44,12 @@ command passthrough.
 The expected runner modes are:
 
 ```powershell
-.\release\tools\install\run-gate-day-admin.ps1 -Mode gate1-admin-install -InstallRoot C:\BellField -ReleaseRoot (Resolve-Path .\release).Path -EvidenceRoot <usb>\evidence -RunId rerun-N
+<usb>\tools\install\run-gate-day-admin.ps1 -Mode gate1-prepare-release -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -ArtifactZip <usb>\artifacts\<artifact-A>.zip -EvidenceRoot <usb>\evidence -RunId rerun-N
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode gate1-admin-install -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
 C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode gate1-post-reboot-check -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
 C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode gate2-backup-restore -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
-<artifact-B>\tools\install\run-gate-day-admin.ps1 -Mode gate3-update -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -UpdateArtifactRoot <artifact-B> -EvidenceRoot <usb>\evidence -RunId rerun-N
+<usb>\tools\install\run-gate-day-admin.ps1 -Mode gate3-prepare-update-artifact -InstallRoot C:\BellField -ReleaseRoot <prepared-artifact-B>\release -ArtifactZip <usb>\artifacts\<artifact-B>.zip -EvidenceRoot <usb>\evidence -RunId rerun-N
+<prepared-artifact-B>\release\tools\install\run-gate-day-admin.ps1 -Mode gate3-update -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -UpdateArtifactRoot <prepared-artifact-B>\release -EvidenceRoot <usb>\evidence -RunId rerun-N
 C:\BellField\release\tools\install\run-gate-day-admin.ps1 -Mode collect-only -InstallRoot C:\BellField -ReleaseRoot C:\BellField\release -EvidenceRoot <usb>\evidence -RunId rerun-N
 ```
 
@@ -208,8 +210,6 @@ proof that prep already happened.
 
 Follow install-runbook.md top to bottom using artifact A. Checkpoints:
 
-- [ ] Extract artifact A; **no tooling installed on the machine itself** —
-      everything runs via `release\runtime\node\node.exe`.
 - [ ] Capture the read-only install baseline before making changes:
 
   ```powershell
@@ -220,17 +220,41 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   ```
 
       This baseline step intentionally remains pre-runner, read-only, and
-      non-elevated. Do not fold it into `gate1-admin-install`.
+      non-elevated. Run it before creating `C:\BellField`; do not fold it into
+      `gate1-admin-install`.
+
+- [ ] Prepare artifact A with the Gate Day admin runner; this replaces raw
+      `Expand-Archive` in strict Gate Day runs:
+
+  ```powershell
+  <usb>\tools\install\run-gate-day-admin.ps1 `
+    -Mode gate1-prepare-release `
+    -InstallRoot C:\BellField `
+    -ReleaseRoot C:\BellField\release `
+    -ArtifactZip <usb>\artifacts\<artifact-A>.zip `
+    -EvidenceRoot <usb-evidence-path> `
+    -RunId rerun-N
+  ```
+
+      The prepare mode extracts into a sibling stage directory, verifies the
+      signed release manifest with the packaged Node runtime, then publishes
+      to `C:\BellField\release`. It must produce a prepare-mode terminal success before Gate 1 continues.
+      If `C:\BellField\release` already exists without that terminal success, reset or remove the partial release root before retrying strict Gate Day.
+
+      Raw `Expand-Archive` is diagnostic/fallback only. An interrupted raw
+      extraction is harness/process evidence, not a product blocker by itself,
+      and should be reclassified as diagnostic/contaminated unless signed
+      manifest verification proves the prepared release is complete.
 
 - [ ] Run the Gate Day admin runner for the privileged install/configure
       sequence. This should be one UAC prompt for the whole sequence, not one
       prompt per helper:
 
   ```powershell
-  .\release\tools\install\run-gate-day-admin.ps1 `
+  C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
     -Mode gate1-admin-install `
     -InstallRoot C:\BellField `
-    -ReleaseRoot (Resolve-Path .\release).Path `
+    -ReleaseRoot C:\BellField\release `
     -EvidenceRoot <usb-evidence-path> `
     -RunId rerun-N
   ```
@@ -489,18 +513,34 @@ documented Gate Day dummy credential: yes` instead of echoing the password
 
 ## Gate 3 — Real v(N) → v(N+1) update (Phase 4)
 
-- [ ] Extract artifact B to a **separate directory** (never run the updater
-      from the installed release root).
+- [ ] Prepare artifact B to a **separate directory** with the Gate Day admin
+      runner (never run the updater from the installed release root):
+
+  ```powershell
+  <usb>\tools\install\run-gate-day-admin.ps1 `
+    -Mode gate3-prepare-update-artifact `
+    -InstallRoot C:\BellField `
+    -ReleaseRoot <prepared-artifact-B>\release `
+    -ArtifactZip <usb>\artifacts\<artifact-B>.zip `
+    -EvidenceRoot <usb-evidence-path> `
+    -RunId rerun-N
+  ```
+
+      The prepare mode must complete signed manifest verification before Gate 3
+      update starts. Raw `Expand-Archive` is diagnostic/fallback only and must
+      be followed by explicit signed manifest verification before the result is
+      trusted.
+
 - [ ] Run the Gate Day admin runner for the real update. This should be one UAC
       prompt for the update path, not a wrapper prompt plus follow-up collector
       prompts:
 
   ```powershell
-  <artifact-B>\tools\install\run-gate-day-admin.ps1 `
+  <prepared-artifact-B>\release\tools\install\run-gate-day-admin.ps1 `
     -Mode gate3-update `
     -InstallRoot C:\BellField `
     -ReleaseRoot C:\BellField\release `
-    -UpdateArtifactRoot <artifact-B> `
+    -UpdateArtifactRoot <prepared-artifact-B>\release `
     -EvidenceRoot <usb-evidence-path> `
     -RunId rerun-N
   ```

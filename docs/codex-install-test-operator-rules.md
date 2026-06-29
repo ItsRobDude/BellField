@@ -97,7 +97,14 @@ Not allowed unless the run is explicitly reclassified as diagnostic:
   proof that the artifact content is wrong. Re-run the comparison with
   normalized paths and then stop if the normalized expected/actual hash still
   does not match.
-- Extract artifacts exactly as the runbook says. Do not recompress, rename
+- Prepare artifacts exactly as the runbook says. In strict Gate Day, use
+  `run-gate-day-admin.ps1 -Mode gate1-prepare-release` and
+  `run-gate-day-admin.ps1 -Mode gate3-prepare-update-artifact` so extraction is
+  staged, evidenced, and signed-manifest-verified before use.
+- A raw artifact extraction timeout is harness/process evidence, not a product blocker by itself.
+  If `C:\BellField\release` exists without a prepare-mode terminal success, reset/remove the partial release root before retrying or
+  explicitly reclassify the run as diagnostic/contaminated.
+- Raw `Expand-Archive` is diagnostic/fallback only. Do not recompress, rename
   internals, unzip-edit, copy in missing dependencies, or replace signed files.
 - Failed or archived artifacts are evidence only. Do not use them unless the
   current `START-HERE.txt` explicitly says to.

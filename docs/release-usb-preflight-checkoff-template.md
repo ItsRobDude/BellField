@@ -72,6 +72,8 @@ not a USB-ready artifact gate.
 - `START-HERE.txt` names clean-install artifact: yes/no
 - `START-HERE.txt` names update artifact: yes/no
 - `START-HERE.txt` names `run-gate-day-admin.ps1` as the default Gate Day admin path: yes/no
+- Runner prepare modes listed for artifact A and artifact B extraction: yes/no
+- Raw `Expand-Archive` is diagnostic/fallback only, not the strict Gate Day path: yes/no
 - Runner modes listed for Gate 1, Gate 2, and Gate 3: yes/no
 - Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only: yes/no
 - `artifacts/` contains only active artifacts: yes/no

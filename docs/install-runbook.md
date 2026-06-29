@@ -432,13 +432,32 @@ the USB evidence folder and `C:\BellField\data\logs\gate-day`, starts a
 transcript before privileged work, and only runs named BellField modes. It does
 not accept arbitrary commands.
 
+Gate 1 release preparation from artifact A:
+
+```powershell
+<usb>\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate1-prepare-release `
+  -InstallRoot C:\BellField `
+  -ReleaseRoot C:\BellField\release `
+  -ArtifactZip <usb>\artifacts\<artifact-A>.zip `
+  -EvidenceRoot <usb>\evidence `
+  -RunId rerun-N
+```
+
+The Gate 1 prepare mode replaces raw `Expand-Archive` in strict Gate Day runs.
+It extracts to a sibling stage directory, verifies the signed manifest with the
+packaged Node runtime, and publishes to `C:\BellField\release` only after
+verification. If `C:\BellField\release` exists without a prepare-mode terminal success, reset or intentionally remove the partial release root before retrying
+strict Gate Day. Raw `Expand-Archive` is diagnostic/fallback only and must be
+followed by signed manifest verification before the result is trusted.
+
 Gate 1 admin install/configure sequence:
 
 ```powershell
-.\release\tools\install\run-gate-day-admin.ps1 `
+C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
   -Mode gate1-admin-install `
   -InstallRoot C:\BellField `
-  -ReleaseRoot (Resolve-Path .\release).Path `
+  -ReleaseRoot C:\BellField\release `
   -EvidenceRoot <usb>\evidence `
   -RunId rerun-N
 ```
@@ -475,22 +494,36 @@ The Gate 2 mode runs a packaged backup, records the backup set path, pauses for
 operator/browser marker creation, runs restore with `--confirm=RESTORE`, then
 collects service evidence and `/health`.
 
-Gate 3 update from artifact B:
+Gate 3 update-artifact preparation:
 
 ```powershell
-<artifact-B>\tools\install\run-gate-day-admin.ps1 `
-  -Mode gate3-update `
+<usb>\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate3-prepare-update-artifact `
   -InstallRoot C:\BellField `
-  -ReleaseRoot C:\BellField\release `
-  -UpdateArtifactRoot <artifact-B> `
+  -ReleaseRoot <prepared-artifact-B>\release `
+  -ArtifactZip <usb>\artifacts\<artifact-B>.zip `
   -EvidenceRoot <usb>\evidence `
   -RunId rerun-N
 ```
 
-The Gate 3 mode runs the updater from artifact B with absolute packaged paths,
-copies the durable update JSONL from `C:\BellField\data\logs\update`, and runs
-the read-only update evidence collector on nonzero exit, timeout, quiet wrapper
-output, or missing terminal update event.
+Gate 3 update from prepared artifact B:
+
+```powershell
+<prepared-artifact-B>\release\tools\install\run-gate-day-admin.ps1 `
+  -Mode gate3-update `
+  -InstallRoot C:\BellField `
+  -ReleaseRoot C:\BellField\release `
+  -UpdateArtifactRoot <prepared-artifact-B>\release `
+  -EvidenceRoot <usb>\evidence `
+  -RunId rerun-N
+```
+
+The Gate 3 prepare mode verifies artifact B before the updater can use it. The
+Gate 3 update mode runs the updater from the prepared artifact B with absolute
+packaged paths, copies the durable update JSONL from
+`C:\BellField\data\logs\update`, and runs the read-only update evidence
+collector on nonzero exit, timeout, quiet wrapper output, or missing terminal
+update event.
 
 Use `collect-only` after an inconclusive run when the machine state must be
 preserved. It collects service, LAN, update, health, and release-manifest

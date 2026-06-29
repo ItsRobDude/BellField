@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-update", "collect-only")]
+  [ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only")]
   [string]$Mode,
 
   [string]$InstallRoot = "C:\BellField",
@@ -12,6 +12,9 @@ param(
   [string]$EvidenceRoot,
 
   [string]$RunId,
+  [string]$ArtifactZip,
+  [string]$ExpectedVersion,
+  [string]$ExpectedSourceCommit,
   [string]$UpdateArtifactRoot,
   [string]$BackupSet,
   [string]$HealthUrl = "http://127.0.0.1:3001/health",
@@ -38,6 +41,7 @@ $script:localTranscriptPath = $null
 $script:transcriptStarted = $false
 $script:processOutputRoot = $null
 $script:terminalEventWritten = $false
+$script:lastGateProcessResult = $null
 
 if (-not $RunId) {
   $RunId = "run-$((Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss'Z'"))"
@@ -51,6 +55,10 @@ function Test-IsAdministrator {
   $identity = [Security.Principal.WindowsIdentity]::GetCurrent()
   $principal = New-Object Security.Principal.WindowsPrincipal($identity)
   return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+}
+
+function Test-ModeAllowsNonElevatedNoSelfElevate {
+  return @("gate1-prepare-release", "gate3-prepare-update-artifact") -contains $Mode
 }
 
 function Get-FullPath {
@@ -235,6 +243,15 @@ function Invoke-SelfElevation {
   if ($UpdateArtifactRoot) {
     $arguments += @("-UpdateArtifactRoot", $UpdateArtifactRoot)
   }
+  if ($ArtifactZip) {
+    $arguments += @("-ArtifactZip", $ArtifactZip)
+  }
+  if ($ExpectedVersion) {
+    $arguments += @("-ExpectedVersion", $ExpectedVersion)
+  }
+  if ($ExpectedSourceCommit) {
+    $arguments += @("-ExpectedSourceCommit", $ExpectedSourceCommit)
+  }
   if ($BackupSet) {
     $arguments += @("-BackupSet", $BackupSet)
   }
@@ -408,7 +425,10 @@ function Invoke-GateProcess {
     [Parameter(Mandatory = $true)][string]$Step,
     [Parameter(Mandatory = $true)][string]$FilePath,
     [string[]]$Arguments = @(),
-    [switch]$AllowNonZero
+    [switch]$AllowNonZero,
+    [switch]$AllowUnknownExitCode,
+    [int]$HeartbeatSeconds = 0,
+    [hashtable]$HeartbeatFields = @{}
   )
 
   $safeStepName = ($Step -replace '[^A-Za-z0-9_.-]', '-')
@@ -422,12 +442,49 @@ function Invoke-GateProcess {
     -RedirectStandardError $stderrPath `
     -PassThru
 
-  $timedOut = -not $process.WaitForExit([Math]::Max(1, $StepTimeoutSeconds) * 1000)
+  $script:lastGateProcessResult = $null
+  $startedAt = Get-Date
+  $deadline = $startedAt.AddSeconds([Math]::Max(1, $StepTimeoutSeconds))
+  $heartbeatInterval = [Math]::Max(1, $HeartbeatSeconds)
+  $nextHeartbeatAt = $startedAt.AddSeconds($heartbeatInterval)
+  $timedOut = $false
+
+  while (-not $process.HasExited) {
+    $now = Get-Date
+    if ($now -ge $deadline) {
+      $timedOut = $true
+      break
+    }
+    if ($HeartbeatSeconds -gt 0 -and $now -ge $nextHeartbeatAt) {
+      Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields (@{
+          step = $Step
+          status = "progress"
+          processId = $process.Id
+          elapsedSeconds = [int][Math]::Floor(($now - $startedAt).TotalSeconds)
+        } + $HeartbeatFields)
+      $nextHeartbeatAt = $now.AddSeconds($heartbeatInterval)
+    }
+    Start-Sleep -Milliseconds 500
+  }
+
   if ($timedOut) {
     try {
       Stop-Process -Id $process.Id -Force -ErrorAction SilentlyContinue
     } catch {
       Write-Warning "Failed to stop timed-out process $($process.Id): $($_.Exception.Message)"
+    }
+  } else {
+    $process.WaitForExit()
+  }
+  $process.Refresh()
+  $exitCode = if ($timedOut) { $null } else { $process.ExitCode }
+  $exitCodeUnknown = ((-not $timedOut) -and ($null -eq $exitCode))
+  if ($exitCodeUnknown -and $AllowUnknownExitCode) {
+    Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+      step = $Step
+      status = "exit-code-unknown"
+      processId = $process.Id
+      message = "The child process exited but Windows PowerShell did not expose its exit code; subsequent verification must prove the step result before publish."
     }
   }
 
@@ -435,25 +492,243 @@ function Invoke-GateProcess {
     command = $FilePath
     arguments = $Arguments
     processId = $process.Id
-    exitCode = if ($timedOut) { $null } else { $process.ExitCode }
+    exitCode = $exitCode
+    exitCodeUnknown = $exitCodeUnknown
     timedOut = $timedOut
     stdoutPath = $stdoutPath
     stderrPath = $stderrPath
     stdoutTail = Get-OutputTail -Path $stdoutPath
     stderrTail = Get-OutputTail -Path $stderrPath
   }
+  $script:lastGateProcessResult = [pscustomobject]$result
 
   if ($timedOut) {
     $result.error = "Step timed out after $StepTimeoutSeconds seconds."
     throw ([pscustomobject]$result)
   }
 
-  if ($process.ExitCode -ne 0 -and -not $AllowNonZero) {
-    $result.error = "Step exited with code $($process.ExitCode)."
+  if ($exitCodeUnknown -and -not $AllowUnknownExitCode) {
+    $result.error = "Step exited but Windows PowerShell did not expose an exit code."
+    throw ([pscustomobject]$result)
+  }
+
+  if ($exitCode -ne 0 -and -not $AllowNonZero -and -not $exitCodeUnknown) {
+    $result.error = "Step exited with code $exitCode."
     throw ([pscustomobject]$result)
   }
 
   return [pscustomobject]$result
+}
+
+function Get-UniquePrepareStageRoot {
+  param([Parameter(Mandatory = $true)][string]$FinalReleaseRoot)
+
+  $fullFinal = Get-FullPath $FinalReleaseRoot
+  $parent = Split-Path -Parent $fullFinal
+  $leaf = Split-Path -Leaf $fullFinal
+  $stamp = (Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss'Z'")
+  for ($index = 1; $index -le 50; $index += 1) {
+    $suffix = if ($index -eq 1) { "" } else { "-$index" }
+    $candidate = Join-Path $parent "$leaf.prepare-stage-$stamp$suffix"
+    if (-not (Test-Path -LiteralPath $candidate)) {
+      return $candidate
+    }
+  }
+  throw "Could not reserve a unique release prepare stage directory beside $fullFinal."
+}
+
+function Get-FileCount {
+  param([Parameter(Mandatory = $true)][string]$Path)
+  if (-not (Test-Path -LiteralPath $Path)) {
+    return 0
+  }
+  return @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction Stop).Count
+}
+
+function New-ReleaseVerificationScript {
+  param([Parameter(Mandatory = $true)][string]$ReleaseRoot)
+
+  $scriptPath = Join-Path $script:processOutputRoot "verify-prepared-release.mjs"
+  $artifactModule = Join-Path $ReleaseRoot "tools\update\release-artifact.mjs"
+  $artifactModuleUri = ([System.Uri]$artifactModule).AbsoluteUri
+  $scriptText = @"
+import { verifyReleaseArtifact } from '$artifactModuleUri';
+
+const releaseRoot = process.argv[2];
+const verified = verifyReleaseArtifact({ releaseRoot });
+console.log(JSON.stringify({
+  version: verified.build.version,
+  releaseDate: verified.build.releaseDate,
+  sourceCommit: verified.build.sourceCommit,
+  fileCount: verified.files.length
+}));
+"@
+  Set-Content -LiteralPath $scriptPath -Value $scriptText -Encoding UTF8
+  return $scriptPath
+}
+
+function New-ReleaseExtractionScript {
+  $scriptPath = Join-Path $script:processOutputRoot "extract-prepared-release.ps1"
+  $scriptText = @'
+param(
+  [Parameter(Mandatory = $true)][string]$ArtifactZip,
+  [Parameter(Mandatory = $true)][string]$Destination
+)
+
+$ErrorActionPreference = "Stop"
+Expand-Archive -LiteralPath $ArtifactZip -DestinationPath $Destination -Force
+'@
+  Set-Content -LiteralPath $scriptPath -Value $scriptText -Encoding UTF8
+  return $scriptPath
+}
+
+function Invoke-PrepareRelease {
+  param([Parameter(Mandatory = $true)][string]$StepPrefix)
+
+  if (-not $ArtifactZip) {
+    throw "$Mode requires -ArtifactZip."
+  }
+  if (-not $ReleaseRoot) {
+    throw "$Mode requires -ReleaseRoot."
+  }
+
+  $artifactZipPath = Get-FullPath $ArtifactZip
+  $finalReleaseRoot = Get-FullPath $ReleaseRoot
+  $stageRoot = Get-UniquePrepareStageRoot -FinalReleaseRoot $finalReleaseRoot
+  $stagedReleaseRoot = Join-Path $stageRoot "release"
+  $published = $false
+  $preserveStage = $false
+  $startedAt = Get-Date
+
+  try {
+    Invoke-GateStep -Name "$StepPrefix-preflight" -Details @{
+      artifactZip = $artifactZipPath
+      releaseRoot = $finalReleaseRoot
+      stageRoot = $stageRoot
+    } -Action {
+      if (-not (Test-Path -LiteralPath $artifactZipPath -PathType Leaf)) {
+        throw "Artifact ZIP was not found: $artifactZipPath"
+      }
+      if (Test-Path -LiteralPath $finalReleaseRoot) {
+        throw "Refusing to prepare release because the final release root already exists: $finalReleaseRoot. Clean or reset this path before retrying strict Gate Day."
+      }
+      New-Item -ItemType Directory -Force -Path (Split-Path -Parent $finalReleaseRoot) | Out-Null
+      return @{
+        artifactZip = $artifactZipPath
+        releaseRoot = $finalReleaseRoot
+        stageRoot = $stageRoot
+      }
+    }
+
+    Invoke-GateStep -Name "$StepPrefix-extracting" -Details @{
+      artifactZip = $artifactZipPath
+      stageRoot = $stageRoot
+      timeoutSeconds = $StepTimeoutSeconds
+    } -Action {
+      New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
+      $extractScript = New-ReleaseExtractionScript
+      $result = Invoke-GateProcess -Step "$StepPrefix-extracting" -FilePath "powershell.exe" -Arguments @(
+        "-NoProfile",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-File",
+        $extractScript,
+        "-ArtifactZip",
+        $artifactZipPath,
+        "-Destination",
+        $stageRoot
+      ) -AllowUnknownExitCode -HeartbeatSeconds 15 -HeartbeatFields @{
+        artifactZip = $artifactZipPath
+        stageRoot = $stageRoot
+      }
+      if (-not (Test-Path -LiteralPath $stagedReleaseRoot -PathType Container)) {
+        throw "Artifact ZIP did not contain the required top-level release directory."
+      }
+      return @{
+        stageRoot = $stageRoot
+        stagedReleaseRoot = $stagedReleaseRoot
+        extractedFileCount = Get-FileCount -Path $stagedReleaseRoot
+        stdoutPath = $result.stdoutPath
+        stderrPath = $result.stderrPath
+      }
+    }
+
+    $verification = Invoke-GateStep -Name "$StepPrefix-verifying" -Details @{
+      stagedReleaseRoot = $stagedReleaseRoot
+      expectedVersion = $ExpectedVersion
+      expectedSourceCommit = $ExpectedSourceCommit
+    } -Action {
+      $nodeExe = Get-NodeExe -Root $stagedReleaseRoot
+      if (-not (Test-Path -LiteralPath $nodeExe -PathType Leaf)) {
+        throw "Extracted release is missing bundled Node runtime: $nodeExe"
+      }
+      $verifyScript = New-ReleaseVerificationScript -ReleaseRoot $stagedReleaseRoot
+      $result = Invoke-GateProcess -Step "$StepPrefix-verifying" -FilePath $nodeExe -Arguments @(
+        $verifyScript,
+        $stagedReleaseRoot
+      ) -AllowUnknownExitCode
+      $parsed = Get-Content -LiteralPath $result.stdoutPath -Raw | ConvertFrom-Json
+      if ($ExpectedVersion -and $parsed.version -ne $ExpectedVersion) {
+        throw "Prepared release version $($parsed.version) did not match expected version $ExpectedVersion."
+      }
+      if ($ExpectedSourceCommit -and $parsed.sourceCommit -ne $ExpectedSourceCommit) {
+        throw "Prepared release source commit $($parsed.sourceCommit) did not match expected source commit $ExpectedSourceCommit."
+      }
+      return @{
+        version = $parsed.version
+        releaseDate = $parsed.releaseDate
+        sourceCommit = $parsed.sourceCommit
+        fileCount = $parsed.fileCount
+      }
+    }
+
+    Invoke-GateStep -Name "$StepPrefix-published" -Details @{
+      stagedReleaseRoot = $stagedReleaseRoot
+      releaseRoot = $finalReleaseRoot
+    } -Action {
+      if (Test-Path -LiteralPath $finalReleaseRoot) {
+        throw "Refusing to publish prepared release because final release root appeared during preparation: $finalReleaseRoot."
+      }
+      Move-Item -LiteralPath $stagedReleaseRoot -Destination $finalReleaseRoot
+      $published = $true
+      return @{
+        releaseRoot = $finalReleaseRoot
+        version = $verification.version
+        sourceCommit = $verification.sourceCommit
+        fileCount = Get-FileCount -Path $finalReleaseRoot
+        elapsedSeconds = [int][Math]::Ceiling(((Get-Date) - $startedAt).TotalSeconds)
+      }
+    }
+
+    if (Test-Path -LiteralPath $stageRoot) {
+      Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    return "succeeded"
+  } catch {
+    if ($script:lastGateProcessResult -and $script:lastGateProcessResult.timedOut) {
+      $preserveStage = $true
+    }
+    Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+      step = "$StepPrefix-cleanup-guidance"
+      status = "failed"
+      artifactZip = $artifactZipPath
+      releaseRoot = $finalReleaseRoot
+      stageRoot = $stageRoot
+      stagePreserved = [bool]$preserveStage
+      published = [bool]$published
+      cleanupGuidance = if ($published) {
+        "Final release root may exist. Inspect before retrying; strict Gate Day should reset the machine or remove the release root intentionally."
+      } elseif ($preserveStage) {
+        "Extraction timed out. Preserve the stage for inspection or remove it intentionally before retrying."
+      } else {
+        "Preparation failed before publish. The runner will remove the stage if possible; remove any leftover stage before retrying."
+      }
+    }
+    if ((-not $published) -and (-not $preserveStage) -and (Test-Path -LiteralPath $stageRoot)) {
+      Remove-Item -LiteralPath $stageRoot -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    throw
+  }
 }
 
 function Invoke-GateStep {
@@ -777,6 +1052,10 @@ function Parse-BackupSetPath {
   throw "Packaged backup output did not include BELLFIELD_BACKUP_RESULT."
 }
 
+function Invoke-Gate1PrepareRelease {
+  return Invoke-PrepareRelease -StepPrefix "gate1-prepare-release"
+}
+
 function Invoke-Gate1AdminInstall {
   Invoke-GateStep -Name "write-server-config" -Action {
     Invoke-NodeInstallTool -Step "write-server-config" -Root $ReleaseRoot -ScriptName "write-server-config.mjs" -Arguments @("--install-root=$InstallRoot")
@@ -886,6 +1165,10 @@ function Invoke-Gate2BackupRestore {
   return "succeeded"
 }
 
+function Invoke-Gate3PrepareUpdateArtifact {
+  return Invoke-PrepareRelease -StepPrefix "gate3-prepare-update-artifact"
+}
+
 function Invoke-Gate3Update {
   if (-not $UpdateArtifactRoot) {
     throw "gate3-update requires -UpdateArtifactRoot."
@@ -993,9 +1276,11 @@ function Invoke-CollectOnly {
 
 function Invoke-SelectedMode {
   switch ($Mode) {
+    "gate1-prepare-release" { return Invoke-Gate1PrepareRelease }
     "gate1-admin-install" { return Invoke-Gate1AdminInstall }
     "gate1-post-reboot-check" { return Invoke-Gate1PostRebootCheck }
     "gate2-backup-restore" { return Invoke-Gate2BackupRestore }
+    "gate3-prepare-update-artifact" { return Invoke-Gate3PrepareUpdateArtifact }
     "gate3-update" { return Invoke-Gate3Update }
     "collect-only" { return Invoke-CollectOnly }
     default { throw "Unsupported Gate Day admin runner mode: $Mode" }
@@ -1008,8 +1293,8 @@ if ((-not (Test-IsAdministrator)) -and (-not $NoSelfElevate)) {
   Invoke-SelfElevation
 }
 
-if ((-not (Test-IsAdministrator)) -and (-not $DryRun)) {
-  Write-GateFailure -ErrorRecord "Gate Day admin runner must run elevated. Re-run without -NoSelfElevate or use -DryRun for smoke tests." -Fields @{
+if ((-not (Test-IsAdministrator)) -and (-not $DryRun) -and (-not ($NoSelfElevate -and (Test-ModeAllowsNonElevatedNoSelfElevate)))) {
+  Write-GateFailure -ErrorRecord "Gate Day admin runner must run elevated. Re-run without -NoSelfElevate, use -DryRun for smoke tests, or restrict -NoSelfElevate to a prepare mode with a writable temp release root." -Fields @{
     status = "rejected"
   }
   exit 1
@@ -1017,12 +1302,22 @@ if ((-not (Test-IsAdministrator)) -and (-not $DryRun)) {
 
 $exitCode = 0
 try {
-  Write-GateLaunch $(if ($ElevatedChild) { "elevated-child-started" } elseif ($DryRun) { "dry-run-started" } else { "already-elevated-started" }) @{
+  $launchStatus = if ($ElevatedChild) {
+    "elevated-child-started"
+  } elseif ($DryRun) {
+    "dry-run-started"
+  } elseif (-not (Test-IsAdministrator)) {
+    "non-elevated-prepare-started"
+  } else {
+    "already-elevated-started"
+  }
+  Write-GateLaunch $launchStatus @{
     dryRun = [bool]$DryRun
     isAdministrator = Test-IsAdministrator
   }
   Start-GateTranscript
-  $resultStatus = Invoke-SelectedMode
+  $modeOutput = @(Invoke-SelectedMode)
+  $resultStatus = [string]($modeOutput | Select-Object -Last 1)
   Write-GateResult $resultStatus
 } catch {
   $exitCode = 1

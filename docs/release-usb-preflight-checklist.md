@@ -168,6 +168,11 @@ For each active release zip:
 - [ ] `START-HERE.txt` points the scratch-machine operator at
       `run-gate-day-admin.ps1` as the default Gate Day admin path for Gate 1,
       Gate 2, and Gate 3.
+- [ ] `START-HERE.txt` points artifact A/B preparation at
+      `run-gate-day-admin.ps1 -Mode gate1-prepare-release` and
+      `run-gate-day-admin.ps1 -Mode gate3-prepare-update-artifact`; raw
+      `Expand-Archive` is diagnostic/fallback only, not the strict Gate Day
+      path.
 - [ ] `START-HERE.txt` and offline docs do not present repeated per-helper
       `Start-Process -Verb RunAs` launches as the default happy path; those
       examples are diagnostic/fallback only.

@@ -31,11 +31,26 @@ try {
   const installRoot = path.join(root, 'BellField');
   const releaseRoot = path.join(root, 'release');
   const updateArtifactRoot = path.join(root, 'update artifact');
+  const artifactZip = path.join(root, 'artifact with spaces.zip');
+  const preparedUpdateReleaseRoot = path.join(root, 'prepared update artifact', 'release');
   const evidenceRootBase = path.join(root, 'evidence root with spaces');
   const evidenceRoot = evidenceRootBase + path.sep;
   const runner = path.resolve('tools', 'install', 'run-gate-day-admin.ps1');
 
   const modePlans = [
+    {
+      mode: 'gate1-prepare-release',
+      runId: 'gate1-prepare-release',
+      artifactZip,
+      expectedVersion: '0.0.1-smoke',
+      expectedSourceCommit: 'smoke',
+      expectedSteps: [
+        'gate1-prepare-release-preflight',
+        'gate1-prepare-release-extracting',
+        'gate1-prepare-release-verifying',
+        'gate1-prepare-release-published'
+      ]
+    },
     {
       mode: 'gate1-admin-install',
       runId: 'gate1-admin-install',
@@ -72,6 +87,20 @@ try {
         'restore-backup',
         'collect-service-evidence',
         'health'
+      ]
+    },
+    {
+      mode: 'gate3-prepare-update-artifact',
+      runId: 'gate3-prepare-update-artifact',
+      artifactZip,
+      releaseRoot: preparedUpdateReleaseRoot,
+      expectedVersion: '0.0.2-smoke',
+      expectedSourceCommit: 'smoke',
+      expectedSteps: [
+        'gate3-prepare-update-artifact-preflight',
+        'gate3-prepare-update-artifact-extracting',
+        'gate3-prepare-update-artifact-verifying',
+        'gate3-prepare-update-artifact-published'
       ]
     },
     {
@@ -120,7 +149,7 @@ try {
       powershell,
       runner,
       installRoot,
-      releaseRoot,
+      releaseRoot: plan.releaseRoot ?? releaseRoot,
       updateArtifactRoot,
       evidenceRoot,
       ...plan
@@ -227,6 +256,9 @@ function runDryRunMode({
   installRoot,
   releaseRoot,
   updateArtifactRoot,
+  artifactZip,
+  expectedVersion,
+  expectedSourceCommit,
   evidenceRoot,
   dryRunGate3Outcome
 }) {
@@ -249,6 +281,15 @@ function runDryRunMode({
     '-NoSelfElevate',
     '-DryRun'
   ];
+  if (artifactZip) {
+    args.push('-ArtifactZip', artifactZip);
+  }
+  if (expectedVersion) {
+    args.push('-ExpectedVersion', expectedVersion);
+  }
+  if (expectedSourceCommit) {
+    args.push('-ExpectedSourceCommit', expectedSourceCommit);
+  }
   if (mode === 'gate3-update') {
     args.push('-UpdateArtifactRoot', updateArtifactRoot);
   }

@@ -236,7 +236,10 @@ try {
   check(
     'Gate Day admin runner exposes only fixed modes and no arbitrary command parameter',
     includesAll(files.gateDayAdminRunner, [
-      'ValidateSet("gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-update", "collect-only")',
+      'ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only")',
+      '[string]$ArtifactZip',
+      '[string]$ExpectedVersion',
+      '[string]$ExpectedSourceCommit',
       '[string]$UpdateArtifactRoot',
       '[string]$BackupSet',
       '[switch]$NoSelfElevate',
@@ -245,6 +248,29 @@ try {
     ]) &&
       !declaresTopLevelParameter(files.gateDayAdminRunner, 'Command') &&
       !declaresTopLevelParameter(files.gateDayAdminRunner, 'EncodedCommand')
+  );
+  check(
+    'Gate Day admin runner prepares release artifacts through staged verified publish',
+    includesAll(files.gateDayAdminRunner, [
+      'Invoke-PrepareRelease',
+      'Get-UniquePrepareStageRoot',
+      'Refusing to prepare release because the final release root already exists',
+      'Artifact ZIP did not contain the required top-level release directory',
+      'New-ReleaseVerificationScript',
+      'verifyReleaseArtifact',
+      'Move-Item -LiteralPath $stagedReleaseRoot -Destination $finalReleaseRoot',
+      'Extraction timed out. Preserve the stage for inspection'
+    ])
+  );
+  assertOrdered(
+    files.gateDayAdminRunner,
+    'Gate Day prepare release stages, verifies, then publishes',
+    [
+      'Invoke-GateStep -Name "$StepPrefix-preflight"',
+      'Invoke-GateStep -Name "$StepPrefix-extracting"',
+      'Invoke-GateStep -Name "$StepPrefix-verifying"',
+      'Invoke-GateStep -Name "$StepPrefix-published"'
+    ]
   );
   check(
     'Gate Day admin runner self-elevates once and records UAC outcomes',
@@ -256,6 +282,15 @@ try {
       'uac-cancelled',
       'uac-timeout',
       '$UacTimeoutSeconds'
+    ])
+  );
+  check(
+    'Gate Day admin runner smoke dry-runs prepare modes',
+    includesAll(files.gateDayAdminSmoke, [
+      "mode: 'gate1-prepare-release'",
+      "mode: 'gate3-prepare-update-artifact'",
+      "'gate1-prepare-release-extracting'",
+      "'gate3-prepare-update-artifact-verifying'"
     ])
   );
   check(
@@ -985,17 +1020,21 @@ try {
   check(
     'Gate Day docs make runner modes the default for Gate 1, Gate 2, and Gate 3',
     includesAll(files.gateDayChecklist, [
+      '-Mode gate1-prepare-release',
       '-Mode gate1-admin-install',
       '-Mode gate1-post-reboot-check',
       '-Mode gate2-backup-restore',
+      '-Mode gate3-prepare-update-artifact',
       '-Mode gate3-update',
       'direct helper command is fallback/diagnostic only',
       'direct collector',
       'fallback/diagnostic only'
     ]) &&
       includesAll(files.installRunbook, [
+        '-Mode gate1-prepare-release',
         '-Mode gate1-admin-install',
         '-Mode gate2-backup-restore',
+        '-Mode gate3-prepare-update-artifact',
         '-Mode gate3-update',
         'direct updater command',
         'manual install recipe or diagnostic fallback',
@@ -1005,10 +1044,35 @@ try {
       ])
   );
   check(
+    'Gate Day docs make raw Expand-Archive diagnostic-only and require prepare-mode terminal success',
+    includesAllNormalized(files.gateDayChecklist, [
+      'gate1-prepare-release',
+      'gate3-prepare-update-artifact',
+      'prepare-mode terminal success',
+      'Raw `Expand-Archive` is diagnostic/fallback only',
+      'reset or remove the partial release root before retrying'
+    ]) &&
+      includesAllNormalized(files.installRunbook, [
+        'gate1-prepare-release',
+        'gate3-prepare-update-artifact',
+        'signed manifest verification',
+        'Raw `Expand-Archive` is diagnostic/fallback only',
+        'without a prepare-mode terminal success'
+      ]) &&
+      includesAllNormalized(files.operatorRules, [
+        'raw artifact extraction timeout',
+        'harness/process evidence',
+        'not a product blocker by itself',
+        'prepare-mode terminal success'
+      ])
+  );
+  check(
     'Release USB prep requires runner-first START-HERE instructions',
     includesAll(files.releaseUsbPreflight, [
       '`START-HERE.txt` points the scratch-machine operator at',
       'run-gate-day-admin.ps1',
+      'gate1-prepare-release',
+      'gate3-prepare-update-artifact',
       'Gate 1',
       'Gate 2',
       'Gate 3',
@@ -1016,6 +1080,8 @@ try {
     ]) &&
       includesAll(files.releaseUsbCheckoff, [
         '`START-HERE.txt` names `run-gate-day-admin.ps1` as the default Gate Day admin path',
+        'Runner prepare modes listed for artifact A and artifact B extraction',
+        'Raw `Expand-Archive` is diagnostic/fallback only',
         'Runner modes listed for Gate 1, Gate 2, and Gate 3',
         'Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only'
       ])
@@ -2127,6 +2193,15 @@ function extractPowerShellFunctionBody(contents, name) {
 
 function includesAll(contents, needles) {
   return needles.every((needle) => contents.includes(needle));
+}
+
+function includesAllNormalized(contents, needles) {
+  const normalizedContents = normalizeWhitespace(contents);
+  return needles.every((needle) => normalizedContents.includes(normalizeWhitespace(needle)));
+}
+
+function normalizeWhitespace(value) {
+  return value.replace(/\s+/g, ' ').trim();
 }
 
 function assertOrderedValue(contents, anchors) {
