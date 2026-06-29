@@ -11,6 +11,7 @@ const envPath = path.join(installRoot, 'bellfield-server.env');
 const outputDir = path.join(releaseRoot, 'services');
 const renderScript = path.resolve('tools', 'install', 'render-windows-services.mjs');
 const installServicesScript = path.resolve('tools', 'install', 'install-windows-services.ps1');
+const serviceAclScript = path.resolve('tools', 'install', 'windows-service-acl.ps1');
 const runtimeConfigValidatorScript = path.resolve(
   'tools',
   'install',
@@ -82,6 +83,7 @@ try {
   const workerXml = readManifest('bellfield-worker');
   const officeXml = readManifest('bellfield-office-web');
   const installScript = readFileSync(installServicesScript, 'utf8');
+  const aclScript = readFileSync(serviceAclScript, 'utf8');
   const runtimeValidatorScript = readFileSync(runtimeConfigValidatorScript, 'utf8');
   const diagnosticScript = readFileSync(serviceAccountDiagnosticScript, 'utf8');
 
@@ -146,7 +148,7 @@ try {
   );
   check(
     'installer grants Postgres data directory access to only the virtual service account',
-    installScript.includes(
+    aclScript.includes(
       'Protect-BellFieldPath -Path $postgresDataRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")'
     )
   );
@@ -205,7 +207,7 @@ try {
   checkScriptOrder(
     installScript,
     'installer hardens Postgres ACLs before runtime validation',
-    'Protect-BellFieldPath -Path $postgresDataRoot -Container -ExtraGrants @("${postgresServiceIdentity}:(OI)(CI)F")',
+    'Set-BellFieldWindowsServiceAcls `',
     '\nInvoke-RuntimeConfigValidation\n\ntry {'
   );
   checkScriptOrder(
