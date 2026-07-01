@@ -60,6 +60,11 @@ should occur only at runner launch; classify that as `attention-missed`, not a
 product blocker. A failed runner step is still classified by the underlying
 product state and evidence.
 
+When writing `START-HERE.txt` for a USB, define artifact paths from the USB
+root and pass those variables to prepare modes. Do not use relative
+`-ArtifactZip .\artifacts\...` values in strict runner-first commands; UAC
+elevation can change the child process working directory.
+
 ---
 
 ## Prep (dev machine, before gate day)

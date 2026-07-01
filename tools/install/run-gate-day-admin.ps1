@@ -33,6 +33,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $script:runnerScriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Path }
+$script:invocationDirectory = (Get-Location).ProviderPath
 $script:evidencePaths = @()
 $script:usbLogPath = $null
 $script:localLogPath = $null
@@ -64,6 +65,33 @@ function Test-ModeAllowsNonElevatedNoSelfElevate {
 function Get-FullPath {
   param([Parameter(Mandatory = $true)][string]$Path)
   return [System.IO.Path]::GetFullPath($Path)
+}
+
+function Resolve-GatePathInput {
+  param([AllowNull()][string]$Path)
+  if ([string]::IsNullOrWhiteSpace($Path)) {
+    return $Path
+  }
+  if ([System.IO.Path]::IsPathRooted($Path)) {
+    return [System.IO.Path]::GetFullPath($Path)
+  }
+  return [System.IO.Path]::GetFullPath((Join-Path -Path $script:invocationDirectory -ChildPath $Path))
+}
+
+function Normalize-GateRunnerPathInputs {
+  $script:runnerScriptPath = Resolve-GatePathInput $script:runnerScriptPath
+  $script:InstallRoot = Resolve-GatePathInput $script:InstallRoot
+  $script:ReleaseRoot = Resolve-GatePathInput $script:ReleaseRoot
+  $script:EvidenceRoot = Resolve-GatePathInput $script:EvidenceRoot
+  if ($script:ArtifactZip) {
+    $script:ArtifactZip = Resolve-GatePathInput $script:ArtifactZip
+  }
+  if ($script:UpdateArtifactRoot) {
+    $script:UpdateArtifactRoot = Resolve-GatePathInput $script:UpdateArtifactRoot
+  }
+  if ($script:BackupSet) {
+    $script:BackupSet = Resolve-GatePathInput $script:BackupSet
+  }
 }
 
 function Initialize-GateEvidence {
@@ -155,10 +183,12 @@ function Write-GateResult {
 function Write-GateFailure {
   param([object]$ErrorRecord, [hashtable]$Fields = @{})
   $Fields["status"] = "failed"
+  $message = if ($ErrorRecord.Exception) { $ErrorRecord.Exception.Message } else { [string]$ErrorRecord }
   $Fields["error"] = @{
-    message = if ($ErrorRecord.Exception) { $ErrorRecord.Exception.Message } else { [string]$ErrorRecord }
+    message = $message
     type = if ($ErrorRecord.Exception) { $ErrorRecord.Exception.GetType().FullName } else { $null }
   }
+  [Console]::Error.WriteLine("BELLFIELD_GATE_ADMIN_FAILURE: $message")
   Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_FAILURE" -Fields $Fields
   $script:terminalEventWritten = $true
 }
@@ -279,29 +309,32 @@ function Invoke-SelfElevation {
     param([string]$ArgumentLine, [string]$LaunchMarkerPath, [string]$CompletionMarkerPath)
     try {
       $process = Start-Process -FilePath "powershell.exe" -Verb RunAs -PassThru -ArgumentList $ArgumentLine
-      [pscustomobject]@{
+      $launchJson = [pscustomobject]@{
         status = "started"
         processId = $process.Id
         startedAt = (Get-Date).ToUniversalTime().ToString("o")
-      } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $LaunchMarkerPath -Encoding UTF8
+      } | ConvertTo-Json -Depth 6
+      [System.IO.File]::WriteAllText($LaunchMarkerPath, $launchJson, (New-Object System.Text.UTF8Encoding($false)))
       $process.WaitForExit()
-      [pscustomobject]@{
+      $completionJson = [pscustomobject]@{
         status = "completed"
         processId = $process.Id
         exitCode = $process.ExitCode
         completedAt = (Get-Date).ToUniversalTime().ToString("o")
-      } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $CompletionMarkerPath -Encoding UTF8
+      } | ConvertTo-Json -Depth 6
+      [System.IO.File]::WriteAllText($CompletionMarkerPath, $completionJson, (New-Object System.Text.UTF8Encoding($false)))
       [pscustomobject]@{
         status = "completed"
         processId = $process.Id
         exitCode = $process.ExitCode
       }
     } catch {
-      [pscustomobject]@{
+      $failureJson = [pscustomobject]@{
         status = "failed"
         error = $_.Exception.Message
         failedAt = (Get-Date).ToUniversalTime().ToString("o")
-      } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $LaunchMarkerPath -Encoding UTF8
+      } | ConvertTo-Json -Depth 6
+      [System.IO.File]::WriteAllText($LaunchMarkerPath, $failureJson, (New-Object System.Text.UTF8Encoding($false)))
       [pscustomobject]@{
         status = "failed"
         error = $_.Exception.Message
@@ -1287,6 +1320,7 @@ function Invoke-SelectedMode {
   }
 }
 
+Normalize-GateRunnerPathInputs
 Initialize-GateEvidence -AllowPartial:((-not (Test-IsAdministrator)) -and (-not $ElevatedChild))
 
 if ((-not (Test-IsAdministrator)) -and (-not $NoSelfElevate)) {
@@ -1322,7 +1356,6 @@ try {
 } catch {
   $exitCode = 1
   Write-GateFailure -ErrorRecord $_
-  Write-Error $_
 } finally {
   if (-not $script:terminalEventWritten) {
     Write-GateResult "failed"

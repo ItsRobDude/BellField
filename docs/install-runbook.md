@@ -259,6 +259,17 @@ Validated on the development machine:
 
 Current clean-machine validation status:
 
+- rerun #21 used rebuilt `.39`/`.40` artifacts from source commit `b4135ba`.
+  USB hash verification and baseline collection passed, but Gate 1 stopped in
+  `gate1-prepare-release` before install logic. The USB `START-HERE.txt`
+  command passed a relative `.\artifacts\...` `-ArtifactZip`; after UAC, the
+  elevated runner child resolved that path under `C:\WINDOWS\system32` and
+  failed artifact preflight. `C:\BellField\release` was never published, no
+  services were installed, and Gate 2/Gate 3 were not attempted. The repo-side
+  follow-up now absolutizes runner path inputs before self-elevation and tightens
+  generated USB instruction checks; the next strict run requires a freshly
+  prepared USB that includes those changes. See
+  [gate-day-clean-windows-smoke-2026-06-20-rerun-21.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-21.md)
 - clean Windows Gate 1 passed again in rerun #18 for the entry-tier install
   path: no developer tooling, real services, first-owner setup, job proof,
   reboot recovery, packaged LAN evidence, and real second-device browser login
@@ -450,6 +461,17 @@ packaged Node runtime, and publishes to `C:\BellField\release` only after
 verification. If `C:\BellField\release` exists without a prepare-mode terminal success, reset or intentionally remove the partial release root before retrying
 strict Gate Day. Raw `Expand-Archive` is diagnostic/fallback only and must be
 followed by signed manifest verification before the result is trusted.
+
+For generated USB `START-HERE.txt` instructions, anchor artifact paths to the
+USB root before calling the runner:
+
+```powershell
+$ArtifactA = Join-Path $UsbRoot 'artifacts\<artifact-A>.zip'
+```
+
+Then pass `-ArtifactZip $ArtifactA`. Do not use a relative
+`-ArtifactZip .\artifacts\...` command in the strict runner-first path because
+the elevated child process may not keep the USB root as its working directory.
 
 Gate 1 admin install/configure sequence:
 

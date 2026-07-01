@@ -252,6 +252,6 @@ if ($outputDirectory -and -not (Test-Path -LiteralPath $outputDirectory)) {
 }
 
 $json = ConvertTo-BellFieldRedactedText ($baseline | ConvertTo-Json -Depth 8)
-Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
+[System.IO.File]::WriteAllText($OutputPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 Write-Host $json
 Write-Host "BellField install baseline written to $OutputPath"

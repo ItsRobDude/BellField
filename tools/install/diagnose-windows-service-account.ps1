@@ -210,7 +210,8 @@ $result = [ordered]@{
   aclWriteError = $aclWriteError
 }
 
-$result | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $OutputPath -Encoding UTF8
+$json = $result | ConvertTo-Json -Depth 6
+[System.IO.File]::WriteAllText($OutputPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 Start-Sleep -Seconds 30
 '@
   Set-Content -LiteralPath $probeScript -Value $probeScriptContent -Encoding UTF8
@@ -342,7 +343,7 @@ function Write-Result {
   $script:result["completedAt"] = (Get-Date).ToString("o")
   $json = $script:result | ConvertTo-Json -Depth 10
   if ($script:resultPath) {
-    Set-Content -LiteralPath $script:resultPath -Value $json -Encoding UTF8
+    [System.IO.File]::WriteAllText($script:resultPath, $json, (New-Object System.Text.UTF8Encoding($false)))
   }
   Write-Output $json
 }

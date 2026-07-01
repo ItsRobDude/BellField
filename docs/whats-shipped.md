@@ -120,6 +120,16 @@ bug, so the copied durable updater JSONL is the source of truth for this run.
 PR #81 landed the staged service wrapper/XML prep, staged service ACL hardening,
 and failed-update collector hardening that came out of rerun #19; the shipped
 status still remains "not closed" until a fresh artifact rerun proves Gate 3.
+Rerun #21 used rebuilt `.39`/`.40` artifacts from source commit `b4135ba` after
+managed release preparation was added to the Gate Day runner. USB hashes and
+baseline collection passed, but Gate 1 stopped before product install logic:
+the generated USB `START-HERE.txt` passed a relative `.\artifacts\...`
+`-ArtifactZip`, and the elevated runner child resolved it under
+`C:\WINDOWS\system32`. `C:\BellField\release` was not published, no services
+were installed, and Gates 2-5 were not attempted. The repo-side follow-up now
+resolves runner path inputs before self-elevation and tightens USB prep checks;
+the next strict run requires a refreshed USB. This does not supersede the rerun
+#19 product/update diagnosis.
 
 ## Not Started
 

@@ -173,6 +173,11 @@ For each active release zip:
       `run-gate-day-admin.ps1 -Mode gate3-prepare-update-artifact`; raw
       `Expand-Archive` is diagnostic/fallback only, not the strict Gate Day
       path.
+- [ ] `START-HERE.txt` defines artifact paths from `$UsbRoot`, for example
+      `$ArtifactA = Join-Path $UsbRoot 'artifacts\<artifact-A>.zip'` and
+      `$ArtifactB = Join-Path $UsbRoot 'artifacts\<artifact-B>.zip'`, then
+      passes `$ArtifactA` / `$ArtifactB` to `-ArtifactZip`. Do not use
+      `-ArtifactZip .\artifacts\...` in the strict runner-first commands.
 - [ ] `START-HERE.txt` and offline docs do not present repeated per-helper
       `Start-Process -Verb RunAs` launches as the default happy path; those
       examples are diagnostic/fallback only.
