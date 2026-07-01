@@ -33,6 +33,7 @@ try {
     restoreStagingTest: readRequired('tools/install/restore-staging.test.mjs'),
     windowsServiceControl: readRequired('tools/install/windows-service-control.mjs'),
     windowsServiceAcl: readRequired('tools/install/windows-service-acl.ps1'),
+    serviceAccountDiagnostic: readRequired('tools/install/diagnose-windows-service-account.ps1'),
     updateHelper: readRequired('tools/install/update-bellfield.mjs'),
     updateEvidenceCollector: readRequired('tools/install/collect-windows-update-evidence.ps1'),
     updateEvidenceLog: readRequired('tools/install/update-evidence-log.mjs'),
@@ -66,6 +67,9 @@ try {
   const gateDayQuoteBody = extractPowerShellFunctionBody(
     files.gateDayAdminRunner,
     'Quote-ProcessArgument'
+  );
+  const gateDayMainTail = files.gateDayAdminRunner.slice(
+    files.gateDayAdminRunner.lastIndexOf('Normalize-GateRunnerPathInputs')
   );
 
   assertNoSensitiveRedactionLeaks();
@@ -177,7 +181,17 @@ try {
   check(
     'baseline collector writes JSON evidence',
     files.baselineCollector.includes('ConvertTo-Json') &&
-      files.baselineCollector.includes('Set-Content')
+      files.baselineCollector.includes('[System.IO.File]::WriteAllText')
+  );
+  check(
+    'PowerShell JSON evidence writers use UTF-8 without BOM',
+    [
+      files.baselineCollector,
+      files.serviceCollector,
+      files.lanCollector,
+      files.updateEvidenceCollector,
+      files.serviceAccountDiagnostic
+    ].every(writesJsonEvidenceWithoutBom)
   );
   check(
     'baseline collector captures OS, network, services, paths, and disks',
@@ -262,6 +276,22 @@ try {
       'Extraction timed out. Preserve the stage for inspection'
     ])
   );
+  check(
+    'Gate Day admin runner normalizes path inputs before self-elevation',
+    includesAll(files.gateDayAdminRunner, [
+      'function Resolve-GatePathInput',
+      '$script:invocationDirectory',
+      '$script:ArtifactZip = Resolve-GatePathInput $script:ArtifactZip',
+      '$script:UpdateArtifactRoot = Resolve-GatePathInput $script:UpdateArtifactRoot',
+      '$script:BackupSet = Resolve-GatePathInput $script:BackupSet',
+      'Normalize-GateRunnerPathInputs'
+    ]) &&
+      assertOrderedValue(gateDayMainTail, [
+        'Normalize-GateRunnerPathInputs',
+        'Initialize-GateEvidence',
+        'Invoke-SelfElevation'
+      ])
+  );
   assertOrdered(
     files.gateDayAdminRunner,
     'Gate Day prepare release stages, verifies, then publishes',
@@ -290,7 +320,9 @@ try {
       "mode: 'gate1-prepare-release'",
       "mode: 'gate3-prepare-update-artifact'",
       "'gate1-prepare-release-extracting'",
-      "'gate3-prepare-update-artifact-verifying'"
+      "'gate3-prepare-update-artifact-verifying'",
+      'relativeArtifactZip',
+      'resolves relative ArtifactZip against caller cwd'
     ])
   );
   check(
@@ -298,7 +330,7 @@ try {
     includesAll(gateDaySelfElevationBody, [
       '$launchMarkerPath',
       '$completionMarkerPath',
-      'Set-Content -LiteralPath $LaunchMarkerPath',
+      'WriteAllText($LaunchMarkerPath',
       'childProcessId = $launch.processId',
       'Wait-Job -Job $job | Out-Null',
       'child-exit-evidence-missing'
@@ -306,7 +338,7 @@ try {
       !gateDaySelfElevationBody.includes('Wait-Job -Job $job -Timeout $UacTimeoutSeconds') &&
       assertOrderedValue(gateDaySelfElevationBody, [
         'Start-Process -FilePath "powershell.exe" -Verb RunAs',
-        'Set-Content -LiteralPath $LaunchMarkerPath',
+        'WriteAllText($LaunchMarkerPath',
         '$process.WaitForExit()'
       ])
   );
@@ -586,7 +618,8 @@ try {
   );
   check(
     'LAN collector writes JSON evidence',
-    files.lanCollector.includes('ConvertTo-Json') && files.lanCollector.includes('Set-Content')
+    files.lanCollector.includes('ConvertTo-Json') &&
+      files.lanCollector.includes('[System.IO.File]::WriteAllText')
   );
   check(
     'LAN collector is evidence-only for firewall/profile state',
@@ -1076,11 +1109,15 @@ try {
       'Gate 1',
       'Gate 2',
       'Gate 3',
-      'diagnostic/fallback only'
+      'diagnostic/fallback only',
+      '$ArtifactA = Join-Path $UsbRoot',
+      '$ArtifactB = Join-Path $UsbRoot',
+      '-ArtifactZip .\\artifacts\\...'
     ]) &&
       includesAll(files.releaseUsbCheckoff, [
         '`START-HERE.txt` names `run-gate-day-admin.ps1` as the default Gate Day admin path',
         'Runner prepare modes listed for artifact A and artifact B extraction',
+        '`START-HERE.txt` uses `$UsbRoot`-anchored `$ArtifactA`/`$ArtifactB` variables',
         'Raw `Expand-Archive` is diagnostic/fallback only',
         'Runner modes listed for Gate 1, Gate 2, and Gate 3',
         'Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only'
@@ -2193,6 +2230,14 @@ function extractPowerShellFunctionBody(contents, name) {
 
 function includesAll(contents, needles) {
   return needles.every((needle) => contents.includes(needle));
+}
+
+function writesJsonEvidenceWithoutBom(contents) {
+  return (
+    contents.includes('ConvertTo-Json') &&
+    contents.includes('[System.IO.File]::WriteAllText') &&
+    contents.includes('System.Text.UTF8Encoding($false)')
+  );
 }
 
 function includesAllNormalized(contents, needles) {

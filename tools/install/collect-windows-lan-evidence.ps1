@@ -260,7 +260,7 @@ function Save-LanEvidence {
   $script:LanEvidence.status = $Status
   $script:LanEvidence.steps = $script:LanEvidenceSteps.ToArray()
   $json = ConvertTo-BellFieldRedactedText ($script:LanEvidence | ConvertTo-Json -Depth 8)
-  Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
+  [System.IO.File]::WriteAllText($OutputPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 $ports = @($OfficePort, $ApiPort)

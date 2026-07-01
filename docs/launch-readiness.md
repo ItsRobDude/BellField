@@ -209,6 +209,16 @@ service wrapper/XML prep, staged service ACL hardening, and failed-update
 collector hardening; the environmental proof remains open until fresh artifacts
 rerun Gate 3 from the runner-first flow. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-19.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-19.md).
+Rerun #21 used rebuilt `.39`/`.40` artifacts from source commit `b4135ba` after
+the managed release-preparation runner landed. USB hashes and baseline
+collection passed, and the runner's self-elevation lifecycle produced
+`uac-requested`/`uac-approved` evidence. Gate 1 then stopped before BellField
+install logic because the USB `START-HERE.txt` prepare command passed
+`.\artifacts\...` as `-ArtifactZip`; after UAC the elevated child resolved that
+relative path under `C:\WINDOWS\system32`, so artifact preflight failed and
+`C:\BellField\release` was never published. This is a Gate Day runner/docs
+path-resolution failure, not a product install or update failure. See
+[gate-day-clean-windows-smoke-2026-06-20-rerun-21.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-21.md).
 The remaining clean-machine proofs are still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -32,16 +32,22 @@ try {
   const releaseRoot = path.join(root, 'release');
   const updateArtifactRoot = path.join(root, 'update artifact');
   const artifactZip = path.join(root, 'artifact with spaces.zip');
+  const callerRoot = path.join(root, 'usb caller root');
+  const relativeArtifactZip = path.join('artifacts', 'relative artifact with spaces.zip');
+  const expectedRelativeArtifactZip = path.join(callerRoot, relativeArtifactZip);
   const preparedUpdateReleaseRoot = path.join(root, 'prepared update artifact', 'release');
   const evidenceRootBase = path.join(root, 'evidence root with spaces');
   const evidenceRoot = evidenceRootBase + path.sep;
   const runner = path.resolve('tools', 'install', 'run-gate-day-admin.ps1');
+  mkdirSync(path.dirname(expectedRelativeArtifactZip), { recursive: true });
 
   const modePlans = [
     {
       mode: 'gate1-prepare-release',
       runId: 'gate1-prepare-release',
-      artifactZip,
+      artifactZip: relativeArtifactZip,
+      callerCwd: callerRoot,
+      expectedArtifactZip: expectedRelativeArtifactZip,
       expectedVersion: '0.0.1-smoke',
       expectedSourceCommit: 'smoke',
       expectedSteps: [
@@ -152,6 +158,7 @@ try {
       releaseRoot: plan.releaseRoot ?? releaseRoot,
       updateArtifactRoot,
       evidenceRoot,
+      cwd: plan.callerCwd,
       ...plan
     });
     evidence.modeRuns.push(run.summary);
@@ -190,6 +197,22 @@ try {
         stepOrder: run.summary.stepOrder
       }
     );
+    if (plan.expectedArtifactZip) {
+      const preflight = run.summary.steps.find(
+        (event) => event.step === `${plan.mode}-preflight` && event.status === 'started'
+      );
+      check(
+        `dry-run ${plan.runId} resolves relative ArtifactZip against caller cwd`,
+        Boolean(preflight) &&
+          path.isAbsolute(preflight.artifactZip) &&
+          samePath(preflight.artifactZip, plan.expectedArtifactZip),
+        {
+          expectedArtifactZip: plan.expectedArtifactZip,
+          recordedArtifactZip: preflight?.artifactZip,
+          callerCwd: plan.callerCwd
+        }
+      );
+    }
   }
 
   const collectOnly = evidence.modeRuns.find((run) => run.runId === 'collect-only');
@@ -260,6 +283,7 @@ function runDryRunMode({
   expectedVersion,
   expectedSourceCommit,
   evidenceRoot,
+  cwd,
   dryRunGate3Outcome
 }) {
   const args = [
@@ -298,6 +322,7 @@ function runDryRunMode({
   }
 
   const result = spawnSync(powershell, args, {
+    cwd,
     encoding: 'utf8',
     shell: false,
     timeout: 60_000
@@ -339,6 +364,17 @@ function runDryRunMode({
       outcomeEvent
     }
   };
+}
+
+function samePath(left, right) {
+  return normalizeComparePath(left) === normalizeComparePath(right);
+}
+
+function normalizeComparePath(value) {
+  return path
+    .normalize(value)
+    .replace(/[\\/]+$/, '')
+    .toLowerCase();
 }
 
 function uniqueStepOrder(steps) {

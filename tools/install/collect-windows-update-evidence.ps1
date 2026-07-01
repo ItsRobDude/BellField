@@ -361,7 +361,7 @@ if ($OutputPath) {
   if ($outputDirectory) {
     New-Item -ItemType Directory -Force -Path $outputDirectory | Out-Null
   }
-  Set-Content -LiteralPath $OutputPath -Value $json -Encoding UTF8
+  [System.IO.File]::WriteAllText($OutputPath, $json, (New-Object System.Text.UTF8Encoding($false)))
 }
 
 $json

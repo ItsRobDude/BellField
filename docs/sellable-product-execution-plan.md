@@ -55,12 +55,16 @@ session:
   the clean Windows machine.
 - Phase 4: installed v(N) → v(N+1) update with real services and a real
   pre-update `pg_dump` backup, plus a real refusal against an expired-window
-  license. Rerun #18 proved Gate 1 and Gate 2 again and reached a single
-  corrected updater process for Gate 3, but the `.33` to `.34` update returned
-  exit code `1`, installed `.34`, preserved rollback/pre-update-backup evidence,
-  left all services stopped, and captured no structured updater
-  phase/result/failure line. The next proof needs durable updater evidence under
-  the install root, then a fix for the actual post-swap service/recovery failure.
+  license. Rerun #19 produced durable Gate 3 updater evidence and narrowed the
+  product failure to `phase=startingPostgres`; follow-up code now prepares
+  staged service wrappers/XML, reapplies staged service ACLs, and hardens the
+  failed-update collector. Rerun #21 did not reach this proof because
+  `gate1-prepare-release` failed first on a relative artifact path that the
+  elevated runner resolved under `C:\WINDOWS\system32`. The repo-side follow-up
+  now absolutizes runner path inputs before self-elevation and requires
+  `$UsbRoot`-anchored artifact variables in USB prep; the next proof needs a
+  freshly prepared USB, then a fresh installed v(N) to v(N+1) update attempt
+  with terminal durable JSONL evidence.
 - Phase 5/6: sold-shaped installed release sends an estimate through the
   production relay, opens the customer acceptance page, and applies the
   customer decision back through the worker poller
