@@ -80,7 +80,7 @@ function adminSessionRepo(
         id: 'sess-1',
         surface: 'field-mobile',
         deviceLabel: 'Tablet',
-        issuedAt: '2026-06-01T00:00:00.000Z'
+        issuedAt: issuedNow()
       }
     ]),
     findEmployeeByEmail: jest.fn().mockResolvedValue(null),
