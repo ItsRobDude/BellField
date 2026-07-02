@@ -250,7 +250,7 @@ try {
   check(
     'Gate Day admin runner exposes only fixed modes and no arbitrary command parameter',
     includesAll(files.gateDayAdminRunner, [
-      'ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only")',
+      'ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only", "process-capture-smoke")',
       '[string]$ArtifactZip',
       '[string]$ExpectedVersion',
       '[string]$ExpectedSourceCommit',
