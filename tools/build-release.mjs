@@ -7,6 +7,7 @@ import {
   mkdirSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync
@@ -393,6 +394,28 @@ function copyNodeModules(source, target) {
   cpSync(source, target, { dereference: true, recursive: true });
 }
 
+function removeGeneratedTempDirectory(path, label) {
+  if (!existsSync(path)) {
+    return;
+  }
+
+  try {
+    rmSync(path, { force: true, maxRetries: 20, recursive: true, retryDelay: 500 });
+    return;
+  } catch (error) {
+    const pendingPath = `${path}.delete-pending-${process.pid}-${Date.now()}`;
+    try {
+      renameSync(path, pendingPath);
+      rmSync(pendingPath, { force: true, maxRetries: 20, recursive: true, retryDelay: 500 });
+      return;
+    } catch (fallbackError) {
+      console.warn(
+        `${label} cleanup was deferred; remove this generated temp directory manually: ${path}. ${error.message}; ${fallbackError.message}`
+      );
+    }
+  }
+}
+
 function removeNestedNodeModules(root) {
   if (!existsSync(root)) {
     return;
@@ -431,7 +454,7 @@ function packageOfficeWebRuntime(nodeExe) {
     deployWorkspacePackage('@bellfield/office-web', deployRoot);
     copyNodeModules(join(deployRoot, 'node_modules'), join(officeServerRoot, 'node_modules'));
   } finally {
-    rmSync(deployRoot, { force: true, recursive: true, maxRetries: 3, retryDelay: 250 });
+    removeGeneratedTempDirectory(deployRoot, 'office-web deploy temp directory');
   }
 
   assertReleasePackageDependencies({
