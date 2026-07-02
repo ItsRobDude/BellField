@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only")]
+  [ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only", "process-capture-smoke")]
   [string]$Mode,
 
   [string]$InstallRoot = "C:\BellField",
@@ -43,6 +43,7 @@ $script:transcriptStarted = $false
 $script:processOutputRoot = $null
 $script:terminalEventWritten = $false
 $script:lastGateProcessResult = $null
+$script:lastFailedStep = $null
 
 if (-not $RunId) {
   $RunId = "run-$((Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss'Z'"))"
@@ -59,7 +60,7 @@ function Test-IsAdministrator {
 }
 
 function Test-ModeAllowsNonElevatedNoSelfElevate {
-  return @("gate1-prepare-release", "gate3-prepare-update-artifact") -contains $Mode
+  return @("gate1-prepare-release", "gate3-prepare-update-artifact", "process-capture-smoke") -contains $Mode
 }
 
 function Get-FullPath {
@@ -177,12 +178,17 @@ function Write-GateResult {
   $Fields["evidencePath"] = $script:usbLogPath
   $Fields["localEvidencePath"] = $script:localLogPath
   Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_RESULT" -Fields $Fields
+  Write-GateOperatorSummary -Status $Status
   $script:terminalEventWritten = $true
 }
 
 function Write-GateFailure {
   param([object]$ErrorRecord, [hashtable]$Fields = @{})
   $Fields["status"] = "failed"
+  $failingStep = Get-GateFailureStep
+  if ($failingStep) {
+    $Fields["failingStep"] = $failingStep
+  }
   $message = if ($ErrorRecord.Exception) { $ErrorRecord.Exception.Message } else { [string]$ErrorRecord }
   $Fields["error"] = @{
     message = $message
@@ -190,7 +196,41 @@ function Write-GateFailure {
   }
   [Console]::Error.WriteLine("BELLFIELD_GATE_ADMIN_FAILURE: $message")
   Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_FAILURE" -Fields $Fields
+  Write-GateOperatorSummary -Status "failed" -FailingStep $failingStep
   $script:terminalEventWritten = $true
+}
+
+function Get-GateFailureStep {
+  if ($script:lastFailedStep) {
+    return $script:lastFailedStep
+  }
+  if ($script:lastGateProcessResult -and $script:lastGateProcessResult.step) {
+    return $script:lastGateProcessResult.step
+  }
+  return $null
+}
+
+function Write-GateOperatorSummary {
+  param(
+    [Parameter(Mandatory = $true)][string]$Status,
+    [string]$FailingStep,
+    [AllowNull()][object]$ChildExitCode = $null
+  )
+
+  $parts = @(
+    "BELLFIELD_GATE_ADMIN_SUMMARY:",
+    "mode=$Mode",
+    "status=$Status"
+  )
+  if ($FailingStep) {
+    $parts += "failingStep=$FailingStep"
+  }
+  if ($null -ne $ChildExitCode) {
+    $parts += "childExitCode=$ChildExitCode"
+  }
+  $parts += "evidencePath=$script:usbLogPath"
+  $parts += "localEvidencePath=$script:localLogPath"
+  Write-Host ($parts -join " ")
 }
 
 function Quote-ProcessArgument {
@@ -309,24 +349,50 @@ function Invoke-SelfElevation {
     param([string]$ArgumentLine, [string]$LaunchMarkerPath, [string]$CompletionMarkerPath)
     try {
       $process = Start-Process -FilePath "powershell.exe" -Verb RunAs -PassThru -ArgumentList $ArgumentLine
+      $handleCached = $false
+      $handleError = $null
+      try {
+        $null = $process.Handle
+        $handleCached = $true
+      } catch {
+        $handleError = $_.Exception.Message
+      }
       $launchJson = [pscustomobject]@{
         status = "started"
         processId = $process.Id
+        handleCached = $handleCached
+        handleError = $handleError
         startedAt = (Get-Date).ToUniversalTime().ToString("o")
       } | ConvertTo-Json -Depth 6
       [System.IO.File]::WriteAllText($LaunchMarkerPath, $launchJson, (New-Object System.Text.UTF8Encoding($false)))
       $process.WaitForExit()
+      $exitCode = $null
+      $exitCodeError = $null
+      try {
+        $exitCode = $process.ExitCode
+      } catch {
+        $exitCodeError = $_.Exception.Message
+      }
+      $exitCodeUnknown = $null -eq $exitCode
       $completionJson = [pscustomobject]@{
         status = "completed"
         processId = $process.Id
-        exitCode = $process.ExitCode
+        exitCode = $exitCode
+        exitCodeUnknown = $exitCodeUnknown
+        exitCodeError = $exitCodeError
+        handleCached = $handleCached
+        handleError = $handleError
         completedAt = (Get-Date).ToUniversalTime().ToString("o")
       } | ConvertTo-Json -Depth 6
       [System.IO.File]::WriteAllText($CompletionMarkerPath, $completionJson, (New-Object System.Text.UTF8Encoding($false)))
       [pscustomobject]@{
         status = "completed"
         processId = $process.Id
-        exitCode = $process.ExitCode
+        exitCode = $exitCode
+        exitCodeUnknown = $exitCodeUnknown
+        exitCodeError = $exitCodeError
+        handleCached = $handleCached
+        handleError = $handleError
       }
     } catch {
       $failureJson = [pscustomobject]@{
@@ -385,6 +451,17 @@ function Invoke-SelfElevation {
     exit 1
   }
 
+  if ($result.exitCodeUnknown -or ($null -eq $result.exitCode)) {
+    Write-GateLaunch "child-exit-code-unknown" @{
+      childProcessId = $result.processId
+      exitCodeError = $result.exitCodeError
+      handleCached = $result.handleCached
+      handleError = $result.handleError
+    }
+    Write-GateOperatorSummary -Status "failed" -FailingStep "elevated-child-exit-code"
+    exit 1
+  }
+
   if (-not (Test-Path -LiteralPath $completionMarkerPath)) {
     Write-GateLaunch "child-exit-evidence-missing" @{
       childProcessId = $launch.processId
@@ -397,6 +474,8 @@ function Invoke-SelfElevation {
     childProcessId = $result.processId
     childExitCode = $result.exitCode
   }
+  $childStatus = if ($result.exitCode -eq 0) { "succeeded" } else { "failed" }
+  Write-GateOperatorSummary -Status $childStatus -ChildExitCode $result.exitCode
   exit ([int]$result.exitCode)
 }
 
@@ -443,7 +522,7 @@ function Get-OutputTail {
   if (-not (Test-Path -LiteralPath $Path)) {
     return ""
   }
-  $text = Get-Content -LiteralPath $Path -Raw -ErrorAction SilentlyContinue
+  $text = [System.IO.File]::ReadAllText($Path)
   if (-not $text) {
     return ""
   }
@@ -469,11 +548,26 @@ function Invoke-GateProcess {
   $stderrPath = Join-Path $script:processOutputRoot "$safeStepName.stderr.txt"
 
   $argumentLine = Join-ProcessArguments $Arguments
-  $process = Start-Process -FilePath $FilePath `
-    -ArgumentList $argumentLine `
-    -RedirectStandardOutput $stdoutPath `
-    -RedirectStandardError $stderrPath `
-    -PassThru
+  $startInfo = New-Object System.Diagnostics.ProcessStartInfo
+  $startInfo.FileName = $FilePath
+  $startInfo.Arguments = $argumentLine
+  $startInfo.UseShellExecute = $false
+  $startInfo.RedirectStandardOutput = $true
+  $startInfo.RedirectStandardError = $true
+  $startInfo.CreateNoWindow = $true
+  $process = New-Object System.Diagnostics.Process
+  $process.StartInfo = $startInfo
+  $null = $process.Start()
+  $stdoutTask = $process.StandardOutput.ReadToEndAsync()
+  $stderrTask = $process.StandardError.ReadToEndAsync()
+  $handleCached = $false
+  $handleError = $null
+  try {
+    $null = $process.Handle
+    $handleCached = $true
+  } catch {
+    $handleError = $_.Exception.Message
+  }
 
   $script:lastGateProcessResult = $null
   $startedAt = Get-Date
@@ -482,12 +576,17 @@ function Invoke-GateProcess {
   $nextHeartbeatAt = $startedAt.AddSeconds($heartbeatInterval)
   $timedOut = $false
 
-  while (-not $process.HasExited) {
-    $now = Get-Date
-    if ($now -ge $deadline) {
+  while ($true) {
+    $remainingMilliseconds = [int][Math]::Ceiling(($deadline - (Get-Date)).TotalMilliseconds)
+    if ($remainingMilliseconds -le 0) {
       $timedOut = $true
       break
     }
+    $waitMilliseconds = [Math]::Min(500, $remainingMilliseconds)
+    if ($process.WaitForExit($waitMilliseconds)) {
+      break
+    }
+    $now = Get-Date
     if ($HeartbeatSeconds -gt 0 -and $now -ge $nextHeartbeatAt) {
       Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields (@{
           step = $Step
@@ -497,7 +596,6 @@ function Invoke-GateProcess {
         } + $HeartbeatFields)
       $nextHeartbeatAt = $now.AddSeconds($heartbeatInterval)
     }
-    Start-Sleep -Milliseconds 500
   }
 
   if ($timedOut) {
@@ -506,27 +604,70 @@ function Invoke-GateProcess {
     } catch {
       Write-Warning "Failed to stop timed-out process $($process.Id): $($_.Exception.Message)"
     }
-  } else {
-    $process.WaitForExit()
+    $null = $process.WaitForExit(5000)
   }
-  $process.Refresh()
-  $exitCode = if ($timedOut) { $null } else { $process.ExitCode }
+  $stdoutText = ""
+  $stderrText = ""
+  $outputReadError = $null
+  try {
+    if ($stdoutTask.Wait(5000)) {
+      $stdoutText = $stdoutTask.Result
+    } else {
+      $outputReadError = "Timed out while reading stdout."
+    }
+  } catch {
+    $outputReadError = $_.Exception.Message
+  }
+  try {
+    if ($stderrTask.Wait(5000)) {
+      $stderrText = $stderrTask.Result
+    } elseif ($outputReadError) {
+      $outputReadError = "$outputReadError Timed out while reading stderr."
+    } else {
+      $outputReadError = "Timed out while reading stderr."
+    }
+  } catch {
+    if ($outputReadError) {
+      $outputReadError = "$outputReadError $($_.Exception.Message)"
+    } else {
+      $outputReadError = $_.Exception.Message
+    }
+  }
+  [System.IO.File]::WriteAllText($stdoutPath, $stdoutText, (New-Object System.Text.UTF8Encoding($false)))
+  [System.IO.File]::WriteAllText($stderrPath, $stderrText, (New-Object System.Text.UTF8Encoding($false)))
+  $exitCode = $null
+  $exitCodeError = $null
+  if (-not $timedOut) {
+    try {
+      $exitCode = $process.ExitCode
+    } catch {
+      $exitCodeError = $_.Exception.Message
+    }
+  }
   $exitCodeUnknown = ((-not $timedOut) -and ($null -eq $exitCode))
   if ($exitCodeUnknown -and $AllowUnknownExitCode) {
     Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
       step = $Step
       status = "exit-code-unknown"
       processId = $process.Id
+      handleCached = $handleCached
+      handleError = $handleError
+      exitCodeError = $exitCodeError
       message = "The child process exited but Windows PowerShell did not expose its exit code; subsequent verification must prove the step result before publish."
     }
   }
 
   $result = [ordered]@{
+    step = $Step
     command = $FilePath
     arguments = $Arguments
     processId = $process.Id
     exitCode = $exitCode
     exitCodeUnknown = $exitCodeUnknown
+    exitCodeError = $exitCodeError
+    handleCached = $handleCached
+    handleError = $handleError
+    outputReadError = $outputReadError
     timedOut = $timedOut
     stdoutPath = $stdoutPath
     stderrPath = $stderrPath
@@ -797,6 +938,7 @@ function Invoke-GateStep {
       } + $Details)
     return $result
   } catch {
+    $script:lastFailedStep = $Name
     $errorDetail = if ($_.Exception.Message) { $_.Exception.Message } else { [string]$_ }
     $failureFields = @{
       step = $Name
@@ -1307,6 +1449,71 @@ function Invoke-CollectOnly {
   return "succeeded"
 }
 
+function Invoke-ProcessCaptureSmoke {
+  $powerShellCommand = Get-Command "powershell.exe" -ErrorAction SilentlyContinue
+  if (-not $powerShellCommand) {
+    throw "process-capture-smoke requires Windows PowerShell at powershell.exe."
+  }
+
+  for ($index = 1; $index -le 8; $index += 1) {
+    $stepName = "process-capture-zero-$index"
+    Invoke-GateStep -Name $stepName -Action {
+      $result = Invoke-GateProcess -Step $stepName -FilePath "powershell.exe" -Arguments @(
+        "-NoProfile",
+        "-Command",
+        "exit 0"
+      )
+      if ($result.exitCodeUnknown -or $result.exitCode -ne 0) {
+        throw "Process capture zero probe $index did not return exit code 0."
+      }
+      return $result
+    }
+  }
+
+  Invoke-GateStep -Name "process-capture-nonzero" -Action {
+    $result = Invoke-GateProcess -Step "process-capture-nonzero" -FilePath "powershell.exe" -Arguments @(
+      "-NoProfile",
+      "-Command",
+      "exit 7"
+    ) -AllowNonZero
+    if ($result.exitCodeUnknown -or $result.exitCode -ne 7) {
+      throw "Process capture nonzero probe did not preserve exit code 7."
+    }
+    return $result
+  }
+
+  $outputProbePath = Join-Path $script:processOutputRoot "process-capture-output-probe.ps1"
+  $outputProbeScript = @'
+$ErrorActionPreference = "Stop"
+Write-Output "bellfield stdout probe"
+[Console]::Error.WriteLine("bellfield stderr probe")
+exit 0
+'@
+  [System.IO.File]::WriteAllText($outputProbePath, $outputProbeScript, (New-Object System.Text.UTF8Encoding($false)))
+
+  Invoke-GateStep -Name "process-capture-output" -Action {
+    $result = Invoke-GateProcess -Step "process-capture-output" -FilePath "powershell.exe" -Arguments @(
+      "-NoProfile",
+      "-ExecutionPolicy",
+      "Bypass",
+      "-File",
+      $outputProbePath
+    )
+    if ($result.exitCodeUnknown -or $result.exitCode -ne 0) {
+      throw "Process capture output probe did not return exit code 0."
+    }
+    if ($result.stdoutTail -notmatch "bellfield stdout probe") {
+      throw "Process capture output probe did not capture stdout."
+    }
+    if ($result.stderrTail -notmatch "bellfield stderr probe") {
+      throw "Process capture output probe did not capture stderr."
+    }
+    return $result
+  }
+
+  return "succeeded"
+}
+
 function Invoke-SelectedMode {
   switch ($Mode) {
     "gate1-prepare-release" { return Invoke-Gate1PrepareRelease }
@@ -1316,6 +1523,7 @@ function Invoke-SelectedMode {
     "gate3-prepare-update-artifact" { return Invoke-Gate3PrepareUpdateArtifact }
     "gate3-update" { return Invoke-Gate3Update }
     "collect-only" { return Invoke-CollectOnly }
+    "process-capture-smoke" { return Invoke-ProcessCaptureSmoke }
     default { throw "Unsupported Gate Day admin runner mode: $Mode" }
   }
 }

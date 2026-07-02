@@ -27,6 +27,7 @@ try {
     console.log(`Evidence: ${writeSmokeEvidence(evidence, 'gate-day-admin-runner-smoke.json')}`);
     process.exit(0);
   }
+  const windowsPowerShell = findWindowsPowerShellCommand();
 
   const installRoot = path.join(root, 'BellField');
   const releaseRoot = path.join(root, 'release');
@@ -244,6 +245,97 @@ try {
     { outcomeEvent: gate3Failure.outcomeEvent, collectorEvents: gate3Failure.collectorEvents }
   );
 
+  if (process.platform === 'win32') {
+    if (!windowsPowerShell) {
+      throw new Error('process-capture-smoke requires powershell.exe on Windows');
+    }
+    const processCapture = runProcessCaptureSmoke({
+      powershell: windowsPowerShell,
+      runner,
+      installRoot,
+      releaseRoot,
+      evidenceRoot,
+      cwd: root
+    });
+    evidence.modeRuns.push(processCapture.summary);
+
+    check(
+      'process-capture smoke uses Windows PowerShell',
+      processCapture.summary.powershell === 'powershell.exe',
+      {
+        powershell: processCapture.summary.powershell
+      }
+    );
+    check('process-capture smoke exits successfully', processCapture.result.status === 0, {
+      status: processCapture.result.status,
+      stdout: processCapture.result.stdout,
+      stderr: processCapture.result.stderr
+    });
+    check(
+      'process-capture smoke prints a safe operator summary',
+      processCapture.result.stdout.includes(
+        'BELLFIELD_GATE_ADMIN_SUMMARY: mode=process-capture-smoke status=succeeded'
+      ),
+      { stdout: processCapture.result.stdout }
+    );
+    check(
+      'process-capture smoke writes USB JSONL evidence',
+      existsSync(processCapture.usbLogPath),
+      {
+        usbLogPath: processCapture.usbLogPath
+      }
+    );
+    check(
+      'process-capture smoke writes local JSONL evidence',
+      existsSync(processCapture.localLogPath),
+      {
+        localLogPath: processCapture.localLogPath
+      }
+    );
+
+    const zeroStepResults = processCapture.summary.steps
+      .filter(
+        (event) => /^process-capture-zero-\d+$/.test(event.step) && event.status === 'succeeded'
+      )
+      .map((event) => event.result);
+    check(
+      'process-capture zero probes preserve exit code 0',
+      zeroStepResults.length === 8 &&
+        zeroStepResults.every(
+          (result) => result.exitCode === 0 && result.exitCodeUnknown === false
+        ),
+      { zeroStepResults }
+    );
+
+    const nonzeroResult = processCapture.summary.steps.find(
+      (event) => event.step === 'process-capture-nonzero' && event.status === 'succeeded'
+    )?.result;
+    check(
+      'process-capture allowed nonzero probe preserves exit code 7',
+      nonzeroResult?.exitCode === 7 && nonzeroResult?.exitCodeUnknown === false,
+      { nonzeroResult }
+    );
+
+    const outputResult = processCapture.summary.steps.find(
+      (event) => event.step === 'process-capture-output' && event.status === 'succeeded'
+    )?.result;
+    check(
+      'process-capture output probe writes stdout and stderr sidecars',
+      Boolean(outputResult) &&
+        existsSync(outputResult.stdoutPath) &&
+        existsSync(outputResult.stderrPath) &&
+        readFileSync(outputResult.stdoutPath, 'utf8').includes('bellfield stdout probe') &&
+        readFileSync(outputResult.stderrPath, 'utf8').includes('bellfield stderr probe'),
+      { outputResult }
+    );
+  } else {
+    evidence.processCaptureSmoke = {
+      skipped: true,
+      reason: 'process-capture-smoke requires Windows powershell.exe'
+    };
+    console.warn('Skipping process-capture-smoke: requires Windows powershell.exe');
+  }
+
   const allLogsText = evidence.modeRuns
     .map((run) => readFileSync(run.usbLogPath, 'utf8') + readFileSync(run.localLogPath, 'utf8'))
     .join('\n');
@@ -366,6 +458,75 @@ function runDryRunMode({
   };
 }
 
+function runProcessCaptureSmoke({
+  powershell,
+  runner,
+  installRoot,
+  releaseRoot,
+  evidenceRoot,
+  cwd
+}) {
+  const runId = 'process-capture-smoke';
+  const args = [
+    '-NoProfile',
+    '-ExecutionPolicy',
+    'Bypass',
+    '-File',
+    runner,
+    '-Mode',
+    'process-capture-smoke',
+    '-InstallRoot',
+    installRoot,
+    '-ReleaseRoot',
+    releaseRoot,
+    '-EvidenceRoot',
+    evidenceRoot,
+    '-RunId',
+    runId,
+    '-NoSelfElevate'
+  ];
+
+  const result = spawnSync(powershell, args, {
+    cwd,
+    encoding: 'utf8',
+    shell: false,
+    timeout: 120_000
+  });
+
+  const usbLogPath = path.join(
+    evidenceRoot.replace(/[\\/]+$/, ''),
+    `gate-day-admin-runner-${runId}.jsonl`
+  );
+  const localLogPath = path.join(
+    installRoot,
+    'data',
+    'logs',
+    'gate-day',
+    `gate-day-admin-runner-${runId}.jsonl`
+  );
+  const usbEvents = existsSync(usbLogPath) ? readJsonLines(usbLogPath) : [];
+  const localEvents = existsSync(localLogPath) ? readJsonLines(localLogPath) : [];
+  const steps = usbEvents.filter((event) => event.event === 'BELLFIELD_GATE_ADMIN_STEP');
+
+  return {
+    result,
+    usbLogPath,
+    localLogPath,
+    usbEvents,
+    localEvents,
+    summary: {
+      mode: 'process-capture-smoke',
+      runId,
+      powershell,
+      usbLogPath,
+      localLogPath,
+      events: usbEvents.map((event) => event.event),
+      steps,
+      stepOrder: uniqueStepOrder(steps)
+    }
+  };
+}
+
 function samePath(left, right) {
   return normalizeComparePath(left) === normalizeComparePath(right);
 }
@@ -403,6 +564,20 @@ function findPowerShellCommand() {
     }
   }
   return null;
+}
+
+function findWindowsPowerShellCommand() {
+  const result = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-Command', '$PSVersionTable.PSVersion'],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 10_000
+    }
+  );
+  return !result.error && result.status === 0 ? 'powershell.exe' : null;
 }
 
 function readJsonLines(filePath) {
