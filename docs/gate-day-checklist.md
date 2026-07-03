@@ -60,6 +60,12 @@ should occur only at runner launch; classify that as `attention-missed`, not a
 product blocker. A failed runner step is still classified by the underlying
 product state and evidence.
 
+On a mutating-mode failure the elevated runner writes best-effort
+`failure-service-evidence` and `failure-lan-evidence` before exiting, so a
+missed or cancelled `collect-only` UAC prompt (rerun-24) no longer loses the
+core failure evidence. Still run `collect-only` afterwards when machine state
+allows; it remains the full-evidence path.
+
 When writing `START-HERE.txt` for a USB, define artifact paths from the USB
 root and pass those variables to prepare modes. Do not use relative
 `-ArtifactZip .\artifacts\...` values in strict runner-first commands; UAC

@@ -552,6 +552,13 @@ preserved. It collects service, LAN, update, health, and release-manifest
 evidence only; it must not restart services, delete locks, clean staged paths,
 run backup/restore, or run an update.
 
+When a mutating runner mode (`gate1-admin-install`, `gate2-backup-restore`,
+`gate3-update`) fails, the elevated runner now also writes best-effort service
+and LAN failure evidence (`failure-service-evidence` / `failure-lan-evidence`
+JSONL steps) in the same elevated session before exiting, so core evidence
+survives even if the follow-up `collect-only` UAC prompt is missed or
+cancelled. `collect-only` remains the documented full-evidence fallback.
+
 The direct helper commands in the sections below remain the manual install
 recipe and diagnostic fallback reference. During Gate Day, do not run them one by
 one after a successful runner mode merely to satisfy the checklist; use the
