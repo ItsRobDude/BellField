@@ -33,6 +33,7 @@ try {
     restoreStagingTest: readRequired('tools/install/restore-staging.test.mjs'),
     windowsServiceControl: readRequired('tools/install/windows-service-control.mjs'),
     windowsServiceAcl: readRequired('tools/install/windows-service-acl.ps1'),
+    windowsServiceAclFunctions: readRequired('tools/install/windows-service-acl-functions.ps1'),
     serviceAccountDiagnostic: readRequired('tools/install/diagnose-windows-service-account.ps1'),
     updateHelper: readRequired('tools/install/update-bellfield.mjs'),
     updateEvidenceCollector: readRequired('tools/install/collect-windows-update-evidence.ps1'),
@@ -421,14 +422,46 @@ try {
   );
   check(
     'Windows service ACL helper centralizes install/update Postgres grants',
-    includesAll(files.windowsServiceAcl, [
+    includesAll(files.windowsServiceAclFunctions, [
       'function Set-BellFieldWindowsServiceAcls',
       '${postgresServiceIdentity}:(OI)(CI)RX',
       '${postgresServiceIdentity}:RX',
       '${postgresServiceIdentity}:R'
     ]) &&
-      files.installer.includes('windows-service-acl.ps1') &&
+      files.installer.includes('windows-service-acl-functions.ps1') &&
       files.installer.includes('Set-BellFieldWindowsServiceAcls')
+  );
+  check(
+    'Windows service ACL CLI wrapper delegates to the shared function library',
+    includesAll(files.windowsServiceAcl, [
+      'windows-service-acl-functions.ps1',
+      'Set-BellFieldWindowsServiceAcls @arguments'
+    ]) && files.windowsServiceAcl.includes('[switch]$Apply')
+  );
+  // The rerun-24 Gate 1 failure class: a script dot-sourced for its functions
+  // must not carry a top-level param() block, because dot-sourcing rebinds the
+  // caller's variables of the same names (empty strings for unbound params).
+  // install-windows-services.ps1 lost $ReleaseRoot exactly this way.
+  check(
+    'installer dot-sources only the param-less ACL function library',
+    files.installer.includes('Join-Path $PSScriptRoot "windows-service-acl-functions.ps1"') &&
+      !files.installer.includes('Join-Path $PSScriptRoot "windows-service-acl.ps1"')
+  );
+  for (const [name, content] of Object.entries({
+    'evidence-redaction.ps1': files.redaction,
+    'lan-firewall-predicates.ps1': files.lanPredicates,
+    'windows-service-acl-functions.ps1': files.windowsServiceAclFunctions
+  })) {
+    check(
+      `dot-sourced library ${name} has no top-level param() block`,
+      !hasTopLevelParamBlock(content)
+    );
+  }
+  const dotSourceScopeResult = runDotSourceScopeSafetyCorpus();
+  check(
+    'dot-sourcing installer helper libraries does not clobber caller variables',
+    true,
+    dotSourceScopeResult
   );
   assertOrdered(
     files.updateHelper,
@@ -486,7 +519,7 @@ try {
   );
   check(
     'Windows service ACL helper asserts critical service assets before granting',
-    includesAll(files.windowsServiceAcl, [
+    includesAll(files.windowsServiceAclFunctions, [
       '$missingCriticalPaths',
       'required service assets are missing',
       'postgres service wrapper'
@@ -1656,6 +1689,91 @@ function runWindowsPowerShellUpdateCollectorCorpus() {
   } finally {
     rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   }
+}
+
+function hasTopLevelParamBlock(content) {
+  // A script-level param() must be the first statement in the file, so the
+  // first non-comment, non-blank line tells us whether dot-sourcing this file
+  // would rebind caller variables. param() blocks inside functions are fine.
+  for (const rawLine of content.split(/\r?\n/)) {
+    const line = rawLine.trim();
+    if (line === '' || line.startsWith('#')) {
+      continue;
+    }
+    return /^param\s*\(/i.test(line);
+  }
+  return false;
+}
+
+function runDotSourceScopeSafetyCorpus() {
+  const command = findPowerShellCommand();
+  if (!command) {
+    if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+      throw new Error('PowerShell was not available for the dot-source scope safety corpus');
+    }
+    return { skipped: true, reason: 'PowerShell not available on this platform' };
+  }
+
+  // Reproduce the rerun-24 install-windows-services prologue: pre-set the
+  // installer's path variables, dot-source every library the installer
+  // helpers dot-source, and require the variables to survive unchanged.
+  const libraries = [
+    'tools/install/evidence-redaction.ps1',
+    'tools/install/lan-firewall-predicates.ps1',
+    'tools/install/windows-service-acl-functions.ps1'
+  ];
+  const dotSourceLines = libraries
+    .map((library) => `. ${quotePowerShellString(resolve(library))}`)
+    .join('\n');
+  const script = `
+$ErrorActionPreference = "Stop"
+$ReleaseRoot = "SENTINEL-RELEASE"
+$InstallRoot = "SENTINEL-INSTALL"
+$ServiceManifestRoot = "SENTINEL-MANIFEST"
+$EnvPath = "SENTINEL-ENV"
+$ServiceLogRoot = "SENTINEL-LOG"
+${dotSourceLines}
+$expected = @{
+  ReleaseRoot = "SENTINEL-RELEASE"
+  InstallRoot = "SENTINEL-INSTALL"
+  ServiceManifestRoot = "SENTINEL-MANIFEST"
+  EnvPath = "SENTINEL-ENV"
+  ServiceLogRoot = "SENTINEL-LOG"
+}
+foreach ($name in $expected.Keys) {
+  $actual = Get-Variable -Name $name -ValueOnly
+  if ($actual -ne $expected[$name]) {
+    throw "Dot-sourcing clobbered $name (expected $($expected[$name]), got '$actual')"
+  }
+}
+if (-not (Get-Command Set-BellFieldWindowsServiceAcls -ErrorAction SilentlyContinue)) {
+  throw "Set-BellFieldWindowsServiceAcls was not defined after dot-sourcing"
+}
+if (-not (Get-Command ConvertTo-BellFieldRedactedText -ErrorAction SilentlyContinue)) {
+  throw "ConvertTo-BellFieldRedactedText was not defined after dot-sourcing"
+}
+Write-Host "Dot-source scope safety corpus passed"
+`;
+  const result = spawnSync(
+    command,
+    ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+    {
+      encoding: 'utf8',
+      shell: false,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: 60_000
+    }
+  );
+  if (result.error) {
+    throw new Error(`Failed to run dot-source scope safety corpus: ${result.error.message}`);
+  }
+  if (result.status !== 0) {
+    throw new Error(
+      `Dot-source scope safety corpus exited with ${result.status}\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`
+    );
+  }
+
+  return { command, libraries };
 }
 
 function runWindowsServiceAclFailClosedCorpus() {

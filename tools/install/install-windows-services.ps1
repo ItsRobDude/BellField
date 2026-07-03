@@ -15,7 +15,10 @@ if (-not (Test-Path -LiteralPath $redactionHelper)) {
 }
 . $redactionHelper
 
-$aclHelper = Join-Path $PSScriptRoot "windows-service-acl.ps1"
+# Dot-source the param-less function library, never windows-service-acl.ps1:
+# that wrapper's param() block would rebind $ReleaseRoot and friends to empty
+# strings in this scope (Gate Day rerun-24 failure).
+$aclHelper = Join-Path $PSScriptRoot "windows-service-acl-functions.ps1"
 if (-not (Test-Path -LiteralPath $aclHelper)) {
   throw "BellField Windows service ACL helper not found at $aclHelper."
 }

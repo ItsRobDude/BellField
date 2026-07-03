@@ -11,7 +11,7 @@ const envPath = path.join(installRoot, 'bellfield-server.env');
 const outputDir = path.join(releaseRoot, 'services');
 const renderScript = path.resolve('tools', 'install', 'render-windows-services.mjs');
 const installServicesScript = path.resolve('tools', 'install', 'install-windows-services.ps1');
-const serviceAclScript = path.resolve('tools', 'install', 'windows-service-acl.ps1');
+const serviceAclScript = path.resolve('tools', 'install', 'windows-service-acl-functions.ps1');
 const runtimeConfigValidatorScript = path.resolve(
   'tools',
   'install',

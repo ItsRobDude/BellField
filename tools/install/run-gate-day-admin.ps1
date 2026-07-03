@@ -44,6 +44,7 @@ $script:processOutputRoot = $null
 $script:terminalEventWritten = $false
 $script:lastGateProcessResult = $null
 $script:lastFailedStep = $null
+$script:failureEvidenceAttempted = $false
 
 if (-not $RunId) {
   $RunId = "run-$((Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss'Z'"))"
@@ -661,6 +662,10 @@ function Invoke-GateProcess {
     step = $Step
     command = $FilePath
     arguments = $Arguments
+    # Exact child command line for failure evidence. Step arguments must stay
+    # non-secret (paths/flags only); secrets are passed via files or generated
+    # inside helpers, never on command lines.
+    argumentLine = $argumentLine
     processId = $process.Id
     exitCode = $exitCode
     exitCodeUnknown = $exitCodeUnknown
@@ -1514,6 +1519,45 @@ exit 0
   return "succeeded"
 }
 
+function Invoke-FailureEvidenceCollection {
+  # Best-effort service/LAN evidence in the SAME elevated session after a
+  # mutating-mode failure, so evidence survives even when the separate
+  # collect-only runner (a second UAC prompt) is missed or cancelled, as in
+  # rerun-24. collect-only remains the documented fallback path.
+  if ($script:failureEvidenceAttempted) {
+    return
+  }
+  $script:failureEvidenceAttempted = $true
+  if ($DryRun -or -not (Test-IsAdministrator)) {
+    return
+  }
+  if (@("gate1-admin-install", "gate2-backup-restore", "gate3-update") -notcontains $Mode) {
+    return
+  }
+
+  $collectors = @(
+    @{ step = "failure-service-evidence"; action = { Invoke-ServiceEvidence -Step "failure-service-evidence" } },
+    @{ step = "failure-lan-evidence"; action = { Invoke-LanEvidence -Step "failure-lan-evidence" } }
+  )
+  foreach ($collector in $collectors) {
+    try {
+      $collected = & $collector.action
+      Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+        step = $collector.step
+        status = "succeeded"
+        outputPath = $collected.outputPath
+      }
+    } catch {
+      Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+        step = $collector.step
+        status = "failed"
+        error = $_.Exception.Message
+        message = "Best-effort failure evidence collection failed; run collect-only for full evidence."
+      }
+    }
+  }
+}
+
 function Invoke-SelectedMode {
   switch ($Mode) {
     "gate1-prepare-release" { return Invoke-Gate1PrepareRelease }
@@ -1564,6 +1608,7 @@ try {
 } catch {
   $exitCode = 1
   Write-GateFailure -ErrorRecord $_
+  Invoke-FailureEvidenceCollection
 } finally {
   if (-not $script:terminalEventWritten) {
     Write-GateResult "failed"
