@@ -15,7 +15,9 @@ import {
   defaultUpdateLockOwnerlessGraceMs
 } from './update-lock.mjs';
 import { createUpdateEvidenceLog } from './update-evidence-log.mjs';
-import { parseEnvFile, readArgs } from './install-utils.mjs';
+import { databaseConfigFromUrl, parseEnvFile, readArgs } from './install-utils.mjs';
+import { waitForPostgresReady } from './postgres-readiness.mjs';
+import { redactSensitiveText } from './sensitive-redaction.mjs';
 import {
   stageDirectoryRestore,
   swapStagedDirectoryWithRetry,
@@ -960,6 +962,11 @@ async function main() {
     180_000,
     'migration timeout'
   );
+  const postgresReadyTimeoutMs = parseUpdaterPositiveInteger(
+    args['postgres-ready-timeout-ms'],
+    60_000,
+    'postgres ready timeout'
+  );
   const healthTimeoutMs = parseUpdaterPositiveInteger(
     args['health-timeout-ms'],
     60_000,
@@ -1033,6 +1040,21 @@ async function main() {
       {
         reason: 'missing-migration-script',
         migrationsScript
+      }
+    );
+  }
+  const pgIsReadyExe = join(
+    updateArtifactRoot,
+    'postgres',
+    'bin',
+    process.platform === 'win32' ? 'pg_isready.exe' : 'pg_isready'
+  );
+  if (!skipServices && process.platform === 'win32' && !existsSync(pgIsReadyExe)) {
+    rejectUpdate(
+      new Error(`Packaged pg_isready is missing from update artifact: ${pgIsReadyExe}`),
+      {
+        reason: 'missing-pg-isready',
+        pgIsReadyExe
       }
     );
   }
@@ -1143,13 +1165,51 @@ async function main() {
 
     enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);
     startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });
-    enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);
-    enterUpdatePhase(recoveryTracker, updatePhases.migrating);
-    run(nodeExe, [migrationsScript], {
-      env: updateEnv,
-      cwd: currentReleaseRoot,
-      timeoutMs: migrationTimeoutMs
+    // SCM "Running" does not mean postgres accepts connections yet; rerun-27
+    // lost Gate 3 to ECONNREFUSED when migrations ran ~4s after service start.
+    // postgresStarted below therefore means "connectable", proven by
+    // pg_isready, not merely "service state is Running".
+    let postgresReadiness = null;
+    if (!skipServices && process.platform === 'win32') {
+      const database = databaseConfigFromUrl(env.DATABASE_URL);
+      postgresReadiness = await waitForPostgresReady({
+        pgIsReadyPath: pgIsReadyExe,
+        host: database.host,
+        port: database.port,
+        timeoutMs: postgresReadyTimeoutMs
+      });
+      console.log(
+        `PostgreSQL accepted connections after ${postgresReadiness.attempts} pg_isready attempt(s) in ${postgresReadiness.elapsedMs}ms.`
+      );
+    }
+    enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted, {
+      readiness: postgresReadiness
     });
+    enterUpdatePhase(recoveryTracker, updatePhases.migrating);
+    let migrationResult = null;
+    try {
+      migrationResult = run(nodeExe, [migrationsScript], {
+        env: updateEnv,
+        cwd: currentReleaseRoot,
+        timeoutMs: migrationTimeoutMs,
+        capture: true
+      });
+    } catch (error) {
+      // run() folds captured stderr/stdout into the message; redact it so the
+      // migration failure detail can travel through durable update events and
+      // gate evidence without leaking connection strings.
+      throw new Error(redactSensitiveText(error instanceof Error ? error.message : String(error)));
+    }
+    const migrationTail = redactSensitiveText(
+      [migrationResult.stdout, migrationResult.stderr].filter(Boolean).join('\n')
+    )
+      .trim()
+      .split(/\r?\n/)
+      .slice(-3)
+      .join('\n');
+    if (migrationTail) {
+      console.log(migrationTail);
+    }
     enterUpdatePhase(recoveryTracker, updatePhases.migrationsRun);
     enterUpdatePhase(recoveryTracker, updatePhases.startingServices);
     startAppServices({ skipServices, timeoutMs: serviceTimeoutMs });
