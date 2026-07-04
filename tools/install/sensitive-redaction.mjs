@@ -21,6 +21,16 @@ export const REDACTION_SECRET_FIXTURES = [
     secrets: [setupToken]
   },
   {
+    name: 'setup token in real NestJS service log line',
+    input: `[Nest] 5044  - 07/03/2026, 2:25:33 PM    WARN [IdentityAccessService] ${setupTokenPrefix} ${setupToken}. Use it once at /identity/setup/first-owner; it is not shown in the browser.`,
+    secrets: [setupToken]
+  },
+  {
+    name: 'setup token in ANSI-colored NestJS log line',
+    input: `\u001b[33m[Nest] 5044  - \u001b[39m07/03/2026, 2:25:33 PM \u001b[33m    WARN\u001b[39m \u001b[33m[IdentityAccessService]\u001b[39m \u001b[33m${setupTokenPrefix} ${setupToken}. Use it once.\u001b[39m`,
+    secrets: [setupToken]
+  },
+  {
     name: 'database URL env value',
     input: `DATABASE_URL=${postgresUrl('dbPasswordSecret')}`,
     secrets: ['dbPasswordSecret']

@@ -423,8 +423,12 @@ documented Gate Day dummy credential: yes` instead of echoing the password
   through reboot and real second-device login.
 
 - [ ] `Invoke-RestMethod http://localhost:3001/health` → `status: "ok"`.
-- [ ] **Real office work in the browser:** create a customer, book a job,
-      open it. This is the "stranger install includes job booking" clause.
+- [ ] **Real office work in the browser:** create a customer, create or select
+      an active service location for that customer, book a job, open it. This
+      is the "stranger install includes job booking" clause. Job creation
+      correctly refuses until the customer has an active service location
+      (rerun-25), so create the location first rather than treating the
+      refusal as a defect.
 - [ ] **Reboot the machine.** All four services come back automatically,
       health is `ok`, login still works.
 - [ ] Capture the post-reboot service/LAN/health readback with the runner:

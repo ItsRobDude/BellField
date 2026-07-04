@@ -1085,7 +1085,14 @@ function Invoke-LanEvidence {
 
 function Invoke-UpdateEvidence {
   param([string]$Step = "collect-update-evidence")
-  $outputPath = Join-Path $EvidenceRoot "gate3-update-evidence-$RunId.json"
+  # collect-only writes read-only state capture; give it a distinct filename so
+  # it cannot be misread as evidence of an actual Gate 3 update attempt.
+  $outputName = if ($Mode -eq "collect-only") {
+    "update-state-evidence-$RunId.json"
+  } else {
+    "gate3-update-evidence-$RunId.json"
+  }
+  $outputPath = Join-Path $EvidenceRoot $outputName
   $collectorRoot = Join-Path $InstallRoot "release"
   Invoke-PowerShellInstallTool -Step $Step -Root $collectorRoot -ScriptName "collect-windows-update-evidence.ps1" -Arguments @(
     "-InstallRoot",
