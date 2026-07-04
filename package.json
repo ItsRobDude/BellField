@@ -82,7 +82,7 @@
   },
   "simple-git-hooks": {
     "pre-commit": "pnpm exec lint-staged",
-    "pre-push": "pnpm test"
+    "pre-push": "corepack pnpm security:secrets && corepack pnpm test"
   },
   "lint-staged": {
     "*.{ts,tsx,js,jsx,mjs,cjs,json,md,yml,yaml}": "prettier --write"
