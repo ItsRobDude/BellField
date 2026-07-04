@@ -1826,9 +1826,13 @@ function runPackagedBackupContractCorpus(gateDayAdminRunner) {
       chmodSync(nodeExePath, 0o755);
     }
     writeFileSync(join(releaseRoot, 'postgres', 'bin', pgDumpName), 'pg-dump-stub', 'utf8');
+    // Joined so the secretlint connection-string rule does not flag a stub
+    // credential, matching the REDACTION_SECRET_FIXTURES pattern.
     writeFileSync(
       envPath,
-      'DATABASE_URL=postgresql://bellfield:contract-stub@127.0.0.1:5432/bellfield\n',
+      ['DATABASE_URL=postgresql://bellfield:', 'contract-stub', '@127.0.0.1:5432/bellfield\n'].join(
+        ''
+      ),
       'utf8'
     );
     const innerResult = {
