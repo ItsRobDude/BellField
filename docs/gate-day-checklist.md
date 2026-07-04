@@ -215,6 +215,16 @@ proof that prep already happened.
       device. Rerun #8 failed here with the scratch PC on a Public network and
       no obvious BellField/Node/3000/3001 inbound allow rule.
 
+- [ ] **Scratch machine stays awake:** plug the machine in and set Power &
+      sleep so it does not sleep while plugged in. The runner also holds a
+      keep-awake power request (`BELLFIELD_GATE_ADMIN_POWER` events in the
+      JSONL) while it runs, because rerun #26 lost Gate 1 to the machine
+      entering sleep/Modern Standby during the unattended prepare-release
+      verification wait: the frozen child then hit the wall-clock step timeout.
+      If the JSONL shows `keep-awake-unavailable` or any
+      `system-stall-detected` step events, fix the machine's power settings
+      before trusting timeout-shaped failures.
+
 ---
 
 ## Gate 1 — Clean-machine install (Phase 1)

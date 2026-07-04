@@ -289,8 +289,24 @@ try {
       'New-ReleaseVerificationScript',
       'verifyReleaseArtifact',
       'Move-Item -LiteralPath $stagedReleaseRoot -Destination $finalReleaseRoot',
-      'Extraction timed out. Preserve the stage for inspection'
+      "Step '$timedOutStep' timed out. Preserve the stage for inspection"
     ])
+  );
+  check(
+    'Gate Day admin runner holds a keep-awake power request and detects system stalls',
+    includesAll(files.gateDayAdminRunner, [
+      'SetThreadExecutionState',
+      'Enable-GateKeepAwake',
+      'Disable-GateKeepAwake',
+      'BELLFIELD_GATE_ADMIN_POWER',
+      'system-stall-detected'
+    ]) &&
+      assertOrderedValue(gateDayMainTail, [
+        'Start-GateTranscript',
+        'Enable-GateKeepAwake',
+        'Invoke-SelectedMode'
+      ]) &&
+      gateDayMainTail.includes('Disable-GateKeepAwake')
   );
   check(
     'Gate Day admin runner normalizes path inputs before self-elevation',

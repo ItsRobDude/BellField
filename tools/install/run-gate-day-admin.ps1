@@ -45,6 +45,7 @@ $script:terminalEventWritten = $false
 $script:lastGateProcessResult = $null
 $script:lastFailedStep = $null
 $script:failureEvidenceAttempted = $false
+$script:keepAwakeEnabled = $false
 
 if (-not $RunId) {
   $RunId = "run-$((Get-Date).ToUniversalTime().ToString("yyyyMMdd-HHmmss'Z'"))"
@@ -480,6 +481,56 @@ function Invoke-SelfElevation {
   exit ([int]$result.exitCode)
 }
 
+function Enable-GateKeepAwake {
+  # Gate steps can run unattended for many minutes. If the machine enters
+  # sleep/Modern Standby mid-step, child processes freeze and the wall-clock
+  # step timeout kills healthy work (rerun-26: prepare-release verification
+  # froze for ~38 minutes and the 1800s timeout itself fired 479s late).
+  # Hold a system-required power request for the life of the runner.
+  if ($env:OS -ne "Windows_NT") {
+    return
+  }
+  try {
+    if (-not ("BellField.GatePower" -as [type])) {
+      Add-Type -Namespace BellField -Name GatePower -MemberDefinition @'
+[DllImport("kernel32.dll", SetLastError = true)]
+public static extern uint SetThreadExecutionState(uint esFlags);
+'@
+    }
+    $esContinuous = [uint32]2147483648
+    $esSystemRequired = [uint32]1
+    $previous = [BellField.GatePower]::SetThreadExecutionState($esContinuous -bor $esSystemRequired)
+    if ($previous -eq 0) {
+      throw "SetThreadExecutionState returned 0."
+    }
+    $script:keepAwakeEnabled = $true
+    Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_POWER" -Fields @{
+      status = "keep-awake-enabled"
+    }
+  } catch {
+    Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_POWER" -Fields @{
+      status = "keep-awake-unavailable"
+      error = $_.Exception.Message
+      message = "The runner could not hold a keep-awake power request; disable sleep on this machine before long gate steps."
+    }
+  }
+}
+
+function Disable-GateKeepAwake {
+  if (-not $script:keepAwakeEnabled) {
+    return
+  }
+  try {
+    $esContinuous = [uint32]2147483648
+    $null = [BellField.GatePower]::SetThreadExecutionState($esContinuous)
+    Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_POWER" -Fields @{
+      status = "keep-awake-cleared"
+    }
+  } catch {
+    Write-Warning "Failed to clear Gate Day keep-awake power request: $($_.Exception.Message)"
+  }
+}
+
 function Start-GateTranscript {
   try {
     Start-Transcript -Path $script:usbTranscriptPath -Force | Out-Null
@@ -576,6 +627,7 @@ function Invoke-GateProcess {
   $heartbeatInterval = [Math]::Max(1, $HeartbeatSeconds)
   $nextHeartbeatAt = $startedAt.AddSeconds($heartbeatInterval)
   $timedOut = $false
+  $lastLoopAt = $startedAt
 
   while ($true) {
     $remainingMilliseconds = [int][Math]::Ceiling(($deadline - (Get-Date)).TotalMilliseconds)
@@ -588,6 +640,21 @@ function Invoke-GateProcess {
       break
     }
     $now = Get-Date
+    # This loop wakes at least every 500ms, so a much larger gap means the
+    # machine suspended (sleep/Modern Standby) or the runner was starved.
+    # Record it so a late-firing wall-clock timeout is explainable evidence
+    # (rerun-26's verify timeout fired 479s late during a system stall).
+    $loopGapSeconds = [int][Math]::Floor(($now - $lastLoopAt).TotalSeconds)
+    if ($loopGapSeconds -ge 10) {
+      Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+        step = $Step
+        status = "system-stall-detected"
+        processId = $process.Id
+        stallSeconds = $loopGapSeconds
+        elapsedSeconds = [int][Math]::Floor(($now - $startedAt).TotalSeconds)
+      }
+    }
+    $lastLoopAt = $now
     if ($HeartbeatSeconds -gt 0 -and $now -ge $nextHeartbeatAt) {
       Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields (@{
           step = $Step
@@ -845,7 +912,9 @@ function Invoke-PrepareRelease {
       $result = Invoke-GateProcess -Step "$StepPrefix-verifying" -FilePath $nodeExe -Arguments @(
         $verifyScript,
         $stagedReleaseRoot
-      ) -AllowUnknownExitCode
+      ) -AllowUnknownExitCode -HeartbeatSeconds 15 -HeartbeatFields @{
+        stagedReleaseRoot = $stagedReleaseRoot
+      }
       $parsed = Get-Content -LiteralPath $result.stdoutPath -Raw | ConvertFrom-Json
       if ($ExpectedVersion -and $parsed.version -ne $ExpectedVersion) {
         throw "Prepared release version $($parsed.version) did not match expected version $ExpectedVersion."
@@ -898,7 +967,12 @@ function Invoke-PrepareRelease {
       cleanupGuidance = if ($published) {
         "Final release root may exist. Inspect before retrying; strict Gate Day should reset the machine or remove the release root intentionally."
       } elseif ($preserveStage) {
-        "Extraction timed out. Preserve the stage for inspection or remove it intentionally before retrying."
+        $timedOutStep = if ($script:lastGateProcessResult -and $script:lastGateProcessResult.step) {
+          $script:lastGateProcessResult.step
+        } else {
+          "a prepare step"
+        }
+        "Step '$timedOutStep' timed out. Preserve the stage for inspection or remove it intentionally before retrying."
       } else {
         "Preparation failed before publish. The runner will remove the stage if possible; remove any leftover stage before retrying."
       }
@@ -1094,6 +1168,12 @@ function Invoke-UpdateEvidence {
   }
   $outputPath = Join-Path $EvidenceRoot $outputName
   $collectorRoot = Join-Path $InstallRoot "release"
+  # When prepare-release failed before publish there is no installed release,
+  # so fall back to the runner's own tools root (e.g. the USB root passed as
+  # -ReleaseRoot) so collect-only can still capture update-state evidence.
+  if (-not (Test-Path -LiteralPath (Get-InstallTool -Root $collectorRoot -Name "collect-windows-update-evidence.ps1"))) {
+    $collectorRoot = $ReleaseRoot
+  }
   Invoke-PowerShellInstallTool -Step $Step -Root $collectorRoot -ScriptName "collect-windows-update-evidence.ps1" -Arguments @(
     "-InstallRoot",
     $InstallRoot,
@@ -1453,11 +1533,28 @@ function Invoke-Gate3Update {
 }
 
 function Invoke-CollectOnly {
-  Invoke-GateStep -Name "collect-service-evidence" -Action { Invoke-ServiceEvidence }
-  Invoke-GateStep -Name "collect-lan-evidence" -Action { Invoke-LanEvidence }
-  Invoke-GateStep -Name "collect-update-evidence" -Action { Invoke-UpdateEvidence }
-  Invoke-GateStep -Name "health" -Action { Invoke-HealthProbe }
-  Invoke-GateStep -Name "release-manifest-snapshot" -Action { Copy-ReleaseManifestSnapshot }
+  # Evidence-collection mode: run every collector even when one fails, then
+  # fail at the end. A single missing collector (e.g. no API service yet, or a
+  # pre-publish prepare failure) must not abort the remaining read-only
+  # evidence the operator came here for.
+  $collectSteps = @(
+    @{ name = "collect-service-evidence"; action = { Invoke-ServiceEvidence } },
+    @{ name = "collect-lan-evidence"; action = { Invoke-LanEvidence } },
+    @{ name = "collect-update-evidence"; action = { Invoke-UpdateEvidence } },
+    @{ name = "health"; action = { Invoke-HealthProbe } },
+    @{ name = "release-manifest-snapshot"; action = { Copy-ReleaseManifestSnapshot } }
+  )
+  $failedSteps = @()
+  foreach ($collectStep in $collectSteps) {
+    try {
+      Invoke-GateStep -Name $collectStep.name -Action $collectStep.action | Out-Null
+    } catch {
+      $failedSteps += $collectStep.name
+    }
+  }
+  if ($failedSteps.Count -gt 0) {
+    throw "collect-only completed with failed steps: $($failedSteps -join ', '). Evidence from the remaining steps was still written."
+  }
   return "succeeded"
 }
 
@@ -1609,6 +1706,7 @@ try {
     isAdministrator = Test-IsAdministrator
   }
   Start-GateTranscript
+  Enable-GateKeepAwake
   $modeOutput = @(Invoke-SelectedMode)
   $resultStatus = [string]($modeOutput | Select-Object -Last 1)
   Write-GateResult $resultStatus
@@ -1617,6 +1715,7 @@ try {
   Write-GateFailure -ErrorRecord $_
   Invoke-FailureEvidenceCollection
 } finally {
+  Disable-GateKeepAwake
   if (-not $script:terminalEventWritten) {
     Write-GateResult "failed"
   }

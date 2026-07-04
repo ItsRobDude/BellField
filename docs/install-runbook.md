@@ -554,6 +554,21 @@ run backup/restore, or run an update. Its update-state capture is written as
 `update-state-evidence-<RunId>.json` (not `gate3-update-evidence-...`) so
 read-only state collection cannot be misread as a Gate 3 update attempt.
 
+`collect-only` runs every collector even when one fails and reports the failed
+step names at the end, so partial machine states still yield full evidence.
+When prepare-release failed **before publish**, `C:\BellField\release` does not
+exist; run `collect-only` from the USB copy of the runner with the USB root as
+the tools root instead:
+
+```powershell
+<usb>\tools\install\run-gate-day-admin.ps1 -Mode collect-only `
+  -InstallRoot C:\BellField -ReleaseRoot <usb> `
+  -EvidenceRoot <usb>\evidence -RunId rerun-N
+```
+
+Expect the health and service steps to report failures on a machine where
+services were never installed; those failures are themselves the evidence.
+
 When a mutating runner mode (`gate1-admin-install`, `gate2-backup-restore`,
 `gate3-update`) fails, the elevated runner now also writes best-effort service
 and LAN failure evidence (`failure-service-evidence` / `failure-lan-evidence`
