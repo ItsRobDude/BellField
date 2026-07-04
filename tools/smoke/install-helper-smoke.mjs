@@ -1,4 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -106,6 +115,12 @@ try {
     'Windows service ACL helper fails closed when a staged service asset is missing',
     true,
     serviceAclFailClosedResult
+  );
+  const backupContractResult = runPackagedBackupContractCorpus(files.gateDayAdminRunner);
+  check(
+    'packaged backup wrapper stdout satisfies the runner Parse-BackupSetPath contract',
+    true,
+    backupContractResult
   );
 
   check(
@@ -759,6 +774,12 @@ try {
       'pg_dump.exe',
       'BELLFIELD_BACKUP_RESULT'
     ])
+  );
+  check(
+    'backup helper re-emits the runner sentinel line, not just consumes it',
+    files.backupHelper.includes(
+      'console.log(`BELLFIELD_BACKUP_RESULT ${JSON.stringify(backupSummary)}`)'
+    )
   );
   check(
     'backup helper redacts failure output',
@@ -1774,6 +1795,143 @@ Write-Host "Dot-source scope safety corpus passed"
   }
 
   return { command, libraries };
+}
+
+function runPackagedBackupContractCorpus(gateDayAdminRunner) {
+  // Gate 2 rerun-25 stopped because run-packaged-backup.mjs consumed the inner
+  // CLI's BELLFIELD_BACKUP_RESULT sentinel without re-emitting it, while the
+  // runner's Parse-BackupSetPath required it. This corpus executes BOTH sides
+  // of that contract: the real wrapper against a stubbed release tree, and the
+  // real Parse-BackupSetPath (extracted from the runner) against the wrapper's
+  // actual stdout. String checks alone cannot distinguish "consumes the
+  // sentinel" from "emits the sentinel".
+  const tempRoot = mkdtempSync(join(tmpdir(), 'bellfield-backup-contract-'));
+  try {
+    const releaseRoot = join(tempRoot, 'release');
+    const installRoot = join(tempRoot, 'install');
+    const nodeName = process.platform === 'win32' ? 'node.exe' : 'node';
+    const pgDumpName = process.platform === 'win32' ? 'pg_dump.exe' : 'pg_dump';
+    const nodeExePath = join(releaseRoot, 'runtime', 'node', nodeName);
+    const backupCliDir = join(releaseRoot, 'apps', 'worker', 'dist', 'jobs', 'backup');
+    const envPath = join(installRoot, 'bellfield-server.env');
+    const expectedBackupSetPath = join(installRoot, 'data', 'backups', 'contract-backup-set');
+
+    mkdirSync(join(releaseRoot, 'runtime', 'node'), { recursive: true });
+    mkdirSync(backupCliDir, { recursive: true });
+    mkdirSync(join(releaseRoot, 'postgres', 'bin'), { recursive: true });
+    mkdirSync(installRoot, { recursive: true });
+
+    copyFileSync(process.execPath, nodeExePath);
+    if (process.platform !== 'win32') {
+      chmodSync(nodeExePath, 0o755);
+    }
+    writeFileSync(join(releaseRoot, 'postgres', 'bin', pgDumpName), 'pg-dump-stub', 'utf8');
+    writeFileSync(
+      envPath,
+      'DATABASE_URL=postgresql://bellfield:contract-stub@127.0.0.1:5432/bellfield\n',
+      'utf8'
+    );
+    const innerResult = {
+      status: 'succeeded',
+      backupSetPath: expectedBackupSetPath,
+      databaseDumpPath: join(expectedBackupSetPath, 'database.dump'),
+      mediaBackupPath: join(expectedBackupSetPath, 'media'),
+      manifestPath: join(expectedBackupSetPath, 'manifest.json')
+    };
+    writeFileSync(
+      join(backupCliDir, 'run-backup-cli.js'),
+      `console.log('BELLFIELD_BACKUP_RESULT ' + JSON.stringify(${JSON.stringify(innerResult)}));\n`,
+      'utf8'
+    );
+
+    const wrapper = spawnSync(
+      process.execPath,
+      [
+        resolve('tools/install/run-packaged-backup.mjs'),
+        `--release-root=${releaseRoot}`,
+        `--install-root=${installRoot}`,
+        `--env=${envPath}`
+      ],
+      {
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 120_000
+      }
+    );
+    if (wrapper.error) {
+      throw new Error(`Failed to run packaged backup wrapper: ${wrapper.error.message}`);
+    }
+    if (wrapper.status !== 0) {
+      throw new Error(
+        `Packaged backup wrapper exited with ${wrapper.status}\nstdout:\n${wrapper.stdout}\nstderr:\n${wrapper.stderr}`
+      );
+    }
+    const sentinelLine = wrapper.stdout
+      .split(/\r?\n/)
+      .find((line) => line.startsWith('BELLFIELD_BACKUP_RESULT '));
+    if (!sentinelLine) {
+      throw new Error(
+        `Packaged backup wrapper stdout did not include the BELLFIELD_BACKUP_RESULT sentinel:\n${wrapper.stdout}`
+      );
+    }
+    const emitted = JSON.parse(sentinelLine.replace(/^BELLFIELD_BACKUP_RESULT /, ''));
+    if (emitted.status !== 'succeeded' || emitted.backupSetPath !== expectedBackupSetPath) {
+      throw new Error(`Packaged backup sentinel JSON was wrong: ${sentinelLine}`);
+    }
+
+    const command = findPowerShellCommand();
+    if (!command) {
+      if (process.platform === 'win32' || isPowerShellCorpusRequired()) {
+        throw new Error('PowerShell was not available for the backup contract corpus');
+      }
+      return {
+        wrapperSentinel: true,
+        runnerParse: 'skipped',
+        reason: 'PowerShell not available on this platform'
+      };
+    }
+
+    const parseBody = extractPowerShellFunctionBody(gateDayAdminRunner, 'Parse-BackupSetPath');
+    if (!parseBody) {
+      throw new Error('Could not extract Parse-BackupSetPath from the Gate Day runner');
+    }
+    const stdoutFixturePath = join(tempRoot, 'wrapper-stdout.txt');
+    writeFileSync(stdoutFixturePath, wrapper.stdout, 'utf8');
+    const script = `
+$ErrorActionPreference = "Stop"
+function Parse-BackupSetPath {${parseBody}}
+$parsed = Parse-BackupSetPath -StdoutPath ${quotePowerShellString(stdoutFixturePath)}
+Write-Output "PARSED-BACKUP-SET:$parsed"
+`;
+    const parseResult = spawnSync(
+      command,
+      ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', script],
+      {
+        encoding: 'utf8',
+        shell: false,
+        stdio: ['ignore', 'pipe', 'pipe'],
+        timeout: 60_000
+      }
+    );
+    if (parseResult.error) {
+      throw new Error(`Failed to run Parse-BackupSetPath corpus: ${parseResult.error.message}`);
+    }
+    if (parseResult.status !== 0) {
+      throw new Error(
+        `Parse-BackupSetPath corpus exited with ${parseResult.status}\nstdout:\n${parseResult.stdout}\nstderr:\n${parseResult.stderr}`
+      );
+    }
+    if (!parseResult.stdout.includes(`PARSED-BACKUP-SET:${expectedBackupSetPath}`)) {
+      throw new Error(
+        `Parse-BackupSetPath did not return the expected backup set path.\nExpected: ${expectedBackupSetPath}\nOutput:\n${parseResult.stdout}`
+      );
+    }
+
+    return { command, wrapperSentinel: true, runnerParse: 'ok', expectedBackupSetPath };
+  } finally {
+    rmSync(tempRoot, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
+  }
 }
 
 function runWindowsServiceAclFailClosedCorpus() {

@@ -66,21 +66,21 @@ try {
     timeoutMs
   });
   const backup = parseBackupCliResult(result.stdout);
+  const backupSummary = {
+    status: backup.status,
+    backupSetPath: backup.backupSetPath,
+    databaseDumpPath: backup.databaseDumpPath,
+    mediaBackupPath: backup.mediaBackupPath,
+    manifestPath: backup.manifestPath
+  };
 
   console.log('Packaged manual backup completed.');
-  console.log(
-    JSON.stringify(
-      {
-        status: backup.status,
-        backupSetPath: backup.backupSetPath,
-        databaseDumpPath: backup.databaseDumpPath,
-        mediaBackupPath: backup.mediaBackupPath,
-        manifestPath: backup.manifestPath
-      },
-      null,
-      2
-    )
-  );
+  // Machine-readable sentinel line consumed by the Gate Day runner's
+  // Parse-BackupSetPath (Gate 2 rerun-25 stopped because this wrapper consumed
+  // the inner CLI's sentinel without re-emitting it). Keep the single-line
+  // sentinel in addition to the pretty JSON below, which is for operators.
+  console.log(`BELLFIELD_BACKUP_RESULT ${JSON.stringify(backupSummary)}`);
+  console.log(JSON.stringify(backupSummary, null, 2));
 } catch (error) {
   console.error(redactSensitiveText(error instanceof Error ? error.message : String(error)));
   if (error?.commandOutput) {

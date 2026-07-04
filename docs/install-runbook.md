@@ -548,9 +548,11 @@ collector on nonzero exit, timeout, quiet wrapper output, or missing terminal
 update event.
 
 Use `collect-only` after an inconclusive run when the machine state must be
-preserved. It collects service, LAN, update, health, and release-manifest
+preserved. It collects service, LAN, update-state, health, and release-manifest
 evidence only; it must not restart services, delete locks, clean staged paths,
-run backup/restore, or run an update.
+run backup/restore, or run an update. Its update-state capture is written as
+`update-state-evidence-<RunId>.json` (not `gate3-update-evidence-...`) so
+read-only state collection cannot be misread as a Gate 3 update attempt.
 
 When a mutating runner mode (`gate1-admin-install`, `gate2-backup-restore`,
 `gate3-update`) fails, the elevated runner now also writes best-effort service

@@ -9,6 +9,8 @@ function ConvertTo-BellFieldRedactedText {
 
   # Evidence bundles are shareable, so generic token/password forms are
   # intentionally over-redacted even when a particular occurrence is benign.
+  # Same-line only ([^\S\r\n]*, not \s*): a bare "setup token:" line must not
+  # consume the next evidence line (guarded by the redaction JSON corpus).
   $text = [regex]::Replace(
     $text,
     '(?i)(BellField first-owner setup token:[^\S\r\n]*)[^\s\\''"`",;}]+',
