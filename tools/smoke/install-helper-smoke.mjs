@@ -521,6 +521,28 @@ try {
     'update recovery tracks staged service prep as pre-swap phases',
     includesAll(files.updateRecovery, ['preparingStagedServices', 'stagedServicesPrepared'])
   );
+  // Rerun-27 Gate 3 failure class: the postgres service reached SCM Running
+  // but was not accepting connections when migrations ran (ECONNREFUSED).
+  // postgresStarted must mean connectable, proven by pg_isready.
+  assertOrdered(
+    files.updateHelper,
+    'updater proves postgres connectability before running migrations',
+    [
+      'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });',
+      'waitForPostgresReady({',
+      'updatePhases.postgresStarted',
+      'updatePhases.migrating'
+    ]
+  );
+  check(
+    'updater preflights pg_isready, captures migration output, and redacts failures',
+    includesAll(files.updateHelper, [
+      "from './postgres-readiness.mjs'",
+      'missing-pg-isready',
+      'postgres-ready-timeout-ms',
+      'redactSensitiveText'
+    ]) && /migrationTimeoutMs,\s*capture: true/.test(files.updateHelper)
+  );
   check(
     'updater failure summary captures focused Postgres start evidence',
     includesAll(files.updateHelper, [
@@ -1215,7 +1237,7 @@ try {
       'enterUpdatePhase(recoveryTracker, updatePhases.releaseSwapped,',
       'enterUpdatePhase(recoveryTracker, updatePhases.startingPostgres);',
       'startPostgresService({ skipServices, timeoutMs: serviceTimeoutMs });',
-      'enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted);',
+      'enterUpdatePhase(recoveryTracker, updatePhases.postgresStarted, {',
       'enterUpdatePhase(recoveryTracker, updatePhases.migrating);',
       'run(nodeExe, [migrationsScript],',
       'enterUpdatePhase(recoveryTracker, updatePhases.migrationsRun);',
