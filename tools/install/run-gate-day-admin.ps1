@@ -5,10 +5,10 @@ param(
 
   [string]$InstallRoot = "C:\BellField",
 
-  [Parameter(Mandatory = $true)]
+  # Required, but deliberately NOT [Parameter(Mandatory)]: a mandatory-parameter
+  # prompt hangs invisibly in hidden/elevated windows (rerun-28 lost Gate 1 to a
+  # runner idling at an unseen "ReleaseRoot:" prompt). Validated below instead.
   [string]$ReleaseRoot,
-
-  [Parameter(Mandatory = $true)]
   [string]$EvidenceRoot,
 
   [string]$RunId,
@@ -31,6 +31,24 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+
+# Fail fast on usage errors with a parseable stderr line and exit 2; never
+# fall into interactive prompts that a hidden or elevated window cannot show.
+$usageErrors = @()
+if (-not $ReleaseRoot) {
+  $usageErrors += "-ReleaseRoot is required."
+}
+if (-not $EvidenceRoot) {
+  $usageErrors += "-EvidenceRoot is required."
+}
+$prepareModes = @("gate1-prepare-release", "gate3-prepare-update-artifact")
+if ($ArtifactZip -and ($prepareModes -notcontains $Mode)) {
+  $usageErrors += "-ArtifactZip is only valid for prepare modes ($($prepareModes -join ', ')); mode '$Mode' installs from -ReleaseRoot. Run gate1-prepare-release first if the release is not prepared."
+}
+if ($usageErrors.Count -gt 0) {
+  [Console]::Error.WriteLine("BELLFIELD_GATE_ADMIN_USAGE: $($usageErrors -join ' ') See docs/gate-day-checklist.md for the runner mode commands.")
+  exit 2
+}
 
 $script:runnerScriptPath = if ($PSCommandPath) { $PSCommandPath } else { $MyInvocation.MyCommand.Path }
 $script:invocationDirectory = (Get-Location).ProviderPath
@@ -1324,6 +1342,23 @@ function Invoke-Gate1PrepareRelease {
 }
 
 function Invoke-Gate1AdminInstall {
+  Invoke-GateStep -Name "prepared-release-preflight" -Action {
+    # rerun-28 attempted gate1-admin-install without ever running
+    # gate1-prepare-release; fail with the remedy instead of an opaque
+    # missing-node error from the first helper step.
+    $nodeExe = Get-NodeExe -Root $ReleaseRoot
+    $preparedRunner = Get-InstallTool -Root $ReleaseRoot -Name "run-gate-day-admin.ps1"
+    foreach ($requiredPath in @($nodeExe, $preparedRunner)) {
+      if (-not (Test-Path -LiteralPath $requiredPath)) {
+        throw "Prepared release at $ReleaseRoot is missing $requiredPath. Run -Mode gate1-prepare-release for the active artifact before gate1-admin-install."
+      }
+    }
+    return @{
+      releaseRoot = $ReleaseRoot
+      nodeExe = $nodeExe
+    }
+  }
+
   Invoke-GateStep -Name "write-server-config" -Action {
     Invoke-NodeInstallTool -Step "write-server-config" -Root $ReleaseRoot -ScriptName "write-server-config.mjs" -Arguments @("--install-root=$InstallRoot")
   }

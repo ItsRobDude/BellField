@@ -70,6 +70,7 @@
     "check:architecture": "node tools/check-architecture.mjs",
     "check:file-size": "node tools/check-file-size.mjs",
     "check:ui-copy": "node tools/check-ui-copy.mjs",
+    "usb:validate-start-here": "node tools/install/validate-start-here.mjs",
     "security:secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "security:audit": "pnpm audit --prod",
     "format": "prettier --write .",
