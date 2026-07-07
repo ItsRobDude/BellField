@@ -62,6 +62,7 @@ try {
       mode: 'gate1-admin-install',
       runId: 'gate1-admin-install',
       expectedSteps: [
+        'prepared-release-preflight',
         'write-server-config',
         'configure-lan-access',
         'provision-postgres',
