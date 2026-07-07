@@ -6,6 +6,14 @@ import { validateStartHereText } from './validate-start-here.mjs';
 const GOOD_START_HERE = `
 BellField Gate Day USB - rerun-29
 
+Read before install work:
+- docs\\codex-install-test-operator-rules.md
+- docs\\gate-day-checklist.md
+
+The runner creates the first-owner test account automatically with the
+documented Gate Day dummy credential; the browser proof is sign-in plus
+job booking.
+
 Set the USB root first:
 $usb = (Get-Location).Path
 
@@ -35,6 +43,9 @@ test('rejects the rerun-28 START-HERE shape with actionable problems', () => {
   const result = validateStartHereText(RERUN_28_START_HERE);
   assert.equal(result.status, 'failed');
   const joined = result.problems.join('\n');
+  assert.match(joined, /must brief the operator on the first-owner step/);
+  assert.match(joined, /codex-install-test-operator-rules\.md/);
+  assert.match(joined, /gate-day-checklist\.md/);
   assert.match(joined, /Missing a -Mode gate1-prepare-release command/);
   assert.match(joined, /must not take -ArtifactZip/);
   assert.match(joined, /missing -InstallRoot/);
@@ -66,6 +77,8 @@ powershell.exe -File $usb\\tools\\install\\run-gate-day-admin.ps1 -Mode gate1-pr
 test('joins backtick line continuations before parsing', () => {
   const result = validateStartHereText(
     [
+      'Read docs\\codex-install-test-operator-rules.md and docs\\gate-day-checklist.md.',
+      'The runner creates the first-owner test account automatically.',
       'powershell.exe -File $usb\\tools\\install\\run-gate-day-admin.ps1 `',
       '  -Mode gate1-prepare-release `',
       '  -InstallRoot C:\\BellField `',

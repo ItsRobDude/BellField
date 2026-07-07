@@ -52,6 +52,7 @@ try {
     updateRecovery: readRequired('tools/install/update-recovery.mjs'),
     updateRecoveryTest: readRequired('tools/install/update-recovery.test.mjs'),
     gateDayAdminRunner: readRequired('tools/install/run-gate-day-admin.ps1'),
+    createFirstOwner: readRequired('tools/install/create-first-owner.mjs'),
     provisionPostgres: readRequired('tools/install/provision-postgres.mjs'),
     sensitiveRedaction: readRequired('tools/install/sensitive-redaction.mjs'),
     backupService: readRequired('apps/worker/src/jobs/backup/backup-service.ts'),
@@ -408,8 +409,39 @@ try {
       'Stop-Transcript',
       'needs-human-action',
       'create-first-owner-in-browser',
+      'verify-first-owner-in-browser',
       'create-post-backup-marker'
     ])
+  );
+  // Rerun-29: no human types Gate Day credentials. The runner creates the
+  // documented test owner automatically; manual browser creation survives only
+  // behind -NoAutoFirstOwner.
+  assertOrdered(
+    files.gateDayAdminRunner,
+    'runner creates the first owner automatically between token metadata and the browser proof',
+    [
+      'copy-first-owner-setup-token-metadata',
+      'if ($NoAutoFirstOwner) {',
+      '"create-first-owner"',
+      '--use-gate-day-dummy-credential',
+      'verify-first-owner-in-browser'
+    ]
+  );
+  check(
+    'runner forwards -NoAutoFirstOwner through self-elevation',
+    /if \(\$NoAutoFirstOwner\) \{\s*\$arguments \+= "-NoAutoFirstOwner"/.test(
+      files.gateDayAdminRunner
+    )
+  );
+  check(
+    'first-owner helper gates the public dummy credential behind an explicit flag',
+    includesAll(files.createFirstOwner, [
+      'use-gate-day-dummy-credential',
+      'cannot be combined',
+      'setup/first-owner',
+      'extractLatestSetupToken',
+      'redactSensitiveText'
+    ]) && files.createFirstOwner.includes('gate.owner@example.com')
   );
   check(
     'Gate Day admin runner avoids first-owner setup token leakage',

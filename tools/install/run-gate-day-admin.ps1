@@ -24,6 +24,7 @@ param(
   [int]$StepTimeoutSeconds = 1800,
   [int]$UacTimeoutSeconds = 300,
   [switch]$NoSelfElevate,
+  [switch]$NoAutoFirstOwner,
   [switch]$DryRun,
   [ValidateSet("success", "nonzero", "timeout", "quiet", "missing-terminal")]
   [string]$DryRunGate3Outcome = "success",
@@ -353,6 +354,9 @@ function Invoke-SelfElevation {
   }
   if ($SetCurrentNetworkPrivate) {
     $arguments += "-SetCurrentNetworkPrivate"
+  }
+  if ($NoAutoFirstOwner) {
+    $arguments += "-NoAutoFirstOwner"
   }
   if ($DryRun) {
     $arguments += "-DryRun"
@@ -1414,7 +1418,32 @@ function Invoke-Gate1AdminInstall {
     }
   }
 
-  Invoke-HumanAction -Step "create-first-owner-in-browser" -Message "Create the first owner in the browser using the copied setup token. The runner stops here by design."
+  if ($NoAutoFirstOwner) {
+    Invoke-HumanAction -Step "create-first-owner-in-browser" -Message "Create the first owner in the browser using the copied setup token. The runner stops here by design."
+    return "needs-human-action"
+  }
+
+  Invoke-GateStep -Name "create-first-owner" -Action {
+    # No human ever types Gate Day credentials (rerun-29): create the
+    # documented public test owner automatically. The helper refuses the
+    # dummy credential without this explicit flag, so no other install path
+    # can create a publicly known owner by accident.
+    $apiBaseUrl = $HealthUrl -replace "/health/?$", ""
+    $result = Invoke-NodeInstallTool -Step "create-first-owner" -Root $ReleaseRoot -ScriptName "create-first-owner.mjs" -Arguments @(
+      "--install-root=$InstallRoot",
+      "--api-base-url=$apiBaseUrl",
+      "--use-gate-day-dummy-credential"
+    )
+    $stdout = Get-Content -LiteralPath $result.stdoutPath -Raw | ConvertFrom-Json
+    return @{
+      status = $stdout.status
+      email = $stdout.email
+      displayName = $stdout.displayName
+      usedGateDayDummyCredential = $stdout.usedGateDayDummyCredential
+    }
+  }
+
+  Invoke-HumanAction -Step "verify-first-owner-in-browser" -Message "First owner was created automatically with the documented Gate Day dummy credential (docs/gate-day-checklist.md). Sign in at http://localhost:3000, create the customer/service location, and book the job proof. The runner stops here by design."
   return "needs-human-action"
 }
 

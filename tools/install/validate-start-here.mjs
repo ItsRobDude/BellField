@@ -17,6 +17,23 @@ export function validateStartHereText(text) {
   const problems = [];
   const commands = extractRunnerCommands(text);
 
+  // Operator-briefing content: rerun-29 stalled because the operator was
+  // briefed by START-HERE alone, which never mentioned the first-owner step,
+  // the documented Gate Day dummy credential, or the docs to read - so the
+  // operator improvised credentials the product correctly rejects.
+  if (!/first[- ]owner/i.test(text)) {
+    problems.push(
+      'START-HERE must brief the operator on the first-owner step (the runner creates the documented Gate Day test owner automatically; the browser proof is sign-in plus job booking).'
+    );
+  }
+  for (const requiredDoc of ['codex-install-test-operator-rules.md', 'gate-day-checklist.md']) {
+    if (!text.includes(requiredDoc)) {
+      problems.push(
+        `START-HERE must direct the operator to read docs\\${requiredDoc} before install work.`
+      );
+    }
+  }
+
   if (commands.length === 0) {
     problems.push('START-HERE contains no run-gate-day-admin.ps1 commands.');
     return { status: 'failed', commands, problems };
