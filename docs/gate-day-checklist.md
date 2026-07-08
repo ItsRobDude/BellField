@@ -392,29 +392,34 @@ Follow install-runbook.md top to bottom using artifact A. Checkpoints:
   the readback from an elevated read-only PowerShell session before treating it
   as a product failure.
 
-- [ ] **First-owner setup:** the runner should stop at `needs-human-action`
-      after copying first-owner setup-token metadata without logging the token.
-      The one-time token is in the API service log
-      (WinSW captures stdout under
-      `C:\BellField\data\logs\services\bellfield-api\bellfield-api.out.log`),
-      not the UI. After ACL hardening, log capture may require an elevated
-      read-only shell or packaged log collector. Prefer the packaged helper
-      only as fallback/diagnostic outside the runner:
+- [ ] **First-owner setup (automated):** the runner now creates the first
+      owner itself (`create-first-owner` step) using the documented Gate Day
+      dummy credential below, then stops at `needs-human-action`
+      (`verify-first-owner-in-browser`). No operator ever types Gate Day
+      credentials during a strict run (rerun #29 stalled when an improvised
+      7-character password hit the product's 12-character owner minimum).
+      The browser proof is now **sign-in** with the dummy credential at
+      `http://localhost:3000` (set the server URL first), then the
+      customer/service-location/job-booking proof.
+
+  Pass `-NoAutoFirstOwner` to gate1-admin-install only when the run is
+  deliberately proving the manual browser creation flow; then use the
+  packaged token helper as fallback/diagnostic outside the runner:
 
   ```powershell
   .\release\tools\install\copy-first-owner-setup-token.ps1 -InstallRoot C:\BellField
   ```
 
-  Complete owner setup in the browser. If more than one token line exists, use
-  the latest one; the token can change after an API restart. If the token is
-  placed on the clipboard, overwrite it afterward with a harmless placeholder
-  rather than an empty string; rerun #7 showed `Set-Clipboard` can reject empty
-  text. The office setup form is part of the office auth shell after the server
-  URL/API URL is accepted; do not navigate directly to
+  In the manual flow: if more than one token line exists, use the latest one;
+  the token can change after an API restart. If the token is placed on the
+  clipboard, overwrite it afterward with a harmless placeholder rather than an
+  empty string; rerun #7 showed `Set-Clipboard` can reject empty text. The
+  office setup form is part of the office auth shell after the server URL/API
+  URL is accepted; do not navigate directly to
   `http://localhost:3000/identity/setup/first-owner`, because
   `/identity/setup/first-owner` is the API endpoint, not an office-web route.
-  For disposable Gate Day scratch-machine runs, create the owner through the
-  real browser setup flow with this fixed test-only credential:
+  Automated and manual flows both use this fixed, intentionally public
+  test-only credential (owner passwords require at least 12 characters):
 
   ```text
   Display name: Gate Day Owner

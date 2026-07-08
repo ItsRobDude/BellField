@@ -486,9 +486,15 @@ C:\BellField\release\tools\install\run-gate-day-admin.ps1 `
 
 The Gate 1 mode runs server config, LAN/firewall configuration, PostgreSQL
 provisioning, packaged migrations, service rendering/install, service/LAN
-evidence collection, and first-owner setup-token metadata capture without
-printing the token. It stops at `needs-human-action` for browser first-owner
-creation.
+evidence collection, first-owner setup-token metadata capture without printing
+the token, and automated first-owner creation (`create-first-owner`) using the
+documented Gate Day dummy credential from `docs/gate-day-checklist.md`. It
+stops at `needs-human-action` (`verify-first-owner-in-browser`) for the
+browser sign-in and job-booking proof. Pass `-NoAutoFirstOwner` to prove the
+manual browser creation flow instead; the underlying helper
+(`create-first-owner.mjs`) refuses the dummy credential without its explicit
+`--use-gate-day-dummy-credential` flag, so non-gate installs cannot create the
+public test owner by accident.
 
 Post-reboot readback:
 

@@ -73,7 +73,8 @@ try {
         'collect-service-evidence',
         'collect-lan-evidence',
         'copy-first-owner-setup-token-metadata',
-        'create-first-owner-in-browser'
+        'create-first-owner',
+        'verify-first-owner-in-browser'
       ]
     },
     {
