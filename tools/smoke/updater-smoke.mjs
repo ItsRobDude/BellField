@@ -42,8 +42,13 @@ try {
 
   writeCurrentRelease();
   writeUpdateArtifact();
-  issueSmokeLicense();
-  writeServerEnv();
+  issueSmokeLicense({
+    licenseId: 'lic_updater_smoke',
+    shopName: 'BellField Updater Smoke',
+    updateWindowEnd: '2026-06-11',
+    outputPath: licensePath
+  });
+  writeServerEnv({ envPath, licensePath });
 
   const updateResult = spawnSync(
     process.execPath,
@@ -175,6 +180,112 @@ try {
     )
   );
 
+  // Gate 4 regression guard: a real signed artifact plus a real signed license
+  // whose update window ends before the artifact release date must be refused
+  // pre-flight — a REJECTED terminal event with the expired reason, zero update
+  // phases, and no on-disk side effects. Dates are relative to the artifact
+  // (releaseDate 2026-06-11), not the wall clock, so this stays deterministic.
+  const expiredLicensePath = path.join(
+    installRoot,
+    'data',
+    'license',
+    'bellfield-license-expired-smoke.json'
+  );
+  const expiredEnvPath = path.join(installRoot, 'bellfield-server-expired.env');
+  issueSmokeLicense({
+    licenseId: 'lic_updater_smoke_expired',
+    shopName: 'BellField Updater Smoke Expired',
+    updateWindowEnd: '2026-06-10',
+    outputPath: expiredLicensePath
+  });
+  writeServerEnv({ envPath: expiredEnvPath, licensePath: expiredLicensePath });
+
+  const preExpiredInstallEntries = JSON.stringify(readdirSync(installRoot).sort());
+  const preExpiredManifestVersion = JSON.parse(
+    readFileSync(path.join(currentReleaseRoot, 'bellfield-build-manifest.json'), 'utf8')
+  ).version;
+  const preExpiredLogFiles = new Set(listUpdateLogFiles(updateLogRoot));
+
+  const expiredResult = spawnSync(
+    process.execPath,
+    [
+      path.resolve('tools', 'install', 'update-bellfield.mjs'),
+      `--install-root=${installRoot}`,
+      `--current-release-root=${currentReleaseRoot}`,
+      `--update-artifact-root=${updateArtifactRoot}`,
+      `--env=${expiredEnvPath}`,
+      '--confirm=UPDATE',
+      '--skip-services=true',
+      '--skip-health=true',
+      '--skip-backup=true'
+    ],
+    { encoding: 'utf8', shell: false }
+  );
+  check('expired-window update exits nonzero', expiredResult.status !== 0, {
+    status: expiredResult.status,
+    stdout: expiredResult.stdout,
+    stderr: expiredResult.stderr
+  });
+  const newExpiredLogFiles = listUpdateLogFiles(updateLogRoot).filter(
+    (logFile) => !preExpiredLogFiles.has(logFile)
+  );
+  check(
+    'expired-window update wrote exactly one new durable update log',
+    newExpiredLogFiles.length === 1,
+    {
+      newExpiredLogFiles
+    }
+  );
+  const expiredLogPath = path.join(updateLogRoot, newExpiredLogFiles[0] ?? '');
+  const expiredLogRecords = newExpiredLogFiles.length === 1 ? readJsonLines(expiredLogPath) : [];
+  evidence.expiredUpdateLogPath = expiredLogPath;
+  const expiredRejectedEvent = expiredLogRecords.find(
+    (record) => record.event === 'BELLFIELD_UPDATE_REJECTED'
+  );
+  check(
+    'expired-window update records a rejected terminal event with the expired reason',
+    expiredRejectedEvent?.reason === 'update-window-expired' &&
+      expiredRejectedEvent?.releaseDate === '2026-06-11' &&
+      expiredRejectedEvent?.updateWindowEnd === '2026-06-10',
+    {
+      events: expiredLogRecords.map((record) => record.event),
+      expiredRejectedEvent
+    }
+  );
+  check(
+    'expired-window rejection happens before any update phase or failure',
+    !expiredLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_PHASE') &&
+      !expiredLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_FAILURE') &&
+      !expiredLogRecords.some((record) => record.event === 'BELLFIELD_UPDATE_FATAL'),
+    {
+      events: expiredLogRecords.map((record) => record.event)
+    }
+  );
+  check(
+    'expired-window refusal message tells the shop to renew update coverage',
+    `${expiredResult.stdout}\n${expiredResult.stderr}`.includes(
+      'this release is newer than the license update window'
+    ),
+    {
+      stdout: expiredResult.stdout,
+      stderr: expiredResult.stderr
+    }
+  );
+  check(
+    'expired-window refusal leaves the install root untouched',
+    JSON.stringify(readdirSync(installRoot).sort()) === preExpiredInstallEntries,
+    {
+      preExpiredInstallEntries,
+      installEntries: readdirSync(installRoot).sort()
+    }
+  );
+  check(
+    'expired-window refusal leaves the installed release version unchanged',
+    JSON.parse(readFileSync(path.join(currentReleaseRoot, 'bellfield-build-manifest.json'), 'utf8'))
+      .version === preExpiredManifestVersion,
+    { preExpiredManifestVersion }
+  );
+
   evidence.completedAt = new Date().toISOString();
   evidence.result = 'passed';
   console.log(JSON.stringify(evidence, null, 2));
@@ -277,16 +388,16 @@ function writeUpdateArtifact() {
   });
 }
 
-function issueSmokeLicense() {
+function issueSmokeLicense({ licenseId, shopName, updateWindowEnd, outputPath }) {
   const result = spawnSync(
     process.execPath,
     [
       path.resolve('tools', 'license', 'issue-license.mjs'),
       `--private-key=${licensePrivateKeyPath}`,
-      '--license-id=lic_updater_smoke',
-      '--shop-name=BellField Updater Smoke',
-      '--update-window-end=2026-06-11',
-      `--output=${licensePath}`,
+      `--license-id=${licenseId}`,
+      `--shop-name=${shopName}`,
+      `--update-window-end=${updateWindowEnd}`,
+      `--output=${outputPath}`,
       `--ledger=${path.join(root, 'issued-licenses.jsonl')}`
     ],
     { encoding: 'utf8', shell: false }
@@ -296,12 +407,12 @@ function issueSmokeLicense() {
   }
 }
 
-function writeServerEnv() {
+function writeServerEnv({ envPath: targetEnvPath, licensePath: targetLicensePath }) {
   const username = 'bellfield';
   const password = ['updater', 'smoke', 'password'].join('-');
-  mkdirSync(path.dirname(envPath), { recursive: true });
+  mkdirSync(path.dirname(targetEnvPath), { recursive: true });
   writeFileSync(
-    envPath,
+    targetEnvPath,
     [
       'NODE_ENV=production',
       `DATABASE_URL=postgresql://${username}:${password}@127.0.0.1:5432/bellfield`,
@@ -310,7 +421,7 @@ function writeServerEnv() {
       `BELLFIELD_MEDIA_ROOT=${path.join(installRoot, 'data', 'media')}`,
       `BELLFIELD_BACKUP_ROOT=${path.join(installRoot, 'data', 'backups')}`,
       'BELLFIELD_LICENSE_REQUIRED=true',
-      `BELLFIELD_LICENSE_PATH=${licensePath}`
+      `BELLFIELD_LICENSE_PATH=${targetLicensePath}`
     ].join('\n'),
     { flag: 'wx' }
   );
@@ -347,8 +458,14 @@ function readJsonLines(filePath) {
 }
 
 function latestUpdateLogPath(updateLogRoot) {
-  const updateLogFiles = existsSync(updateLogRoot)
-    ? readdirSync(updateLogRoot).filter((entry) => /^update-.*\.jsonl$/.test(entry))
+  const updateLogFiles = listUpdateLogFiles(updateLogRoot);
+  return updateLogFiles.length ? path.join(updateLogRoot, updateLogFiles.at(-1)) : null;
+}
+
+function listUpdateLogFiles(updateLogRoot) {
+  return existsSync(updateLogRoot)
+    ? readdirSync(updateLogRoot)
+        .filter((entry) => /^update-.*\.jsonl$/.test(entry))
+        .sort()
     : [];
-  return updateLogFiles.length ? path.join(updateLogRoot, updateLogFiles.sort().at(-1)) : null;
 }

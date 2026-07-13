@@ -26,6 +26,15 @@ export function validateStartHereText(text) {
       'START-HERE must brief the operator on the first-owner step (the runner creates the documented Gate Day test owner automatically; the browser proof is sign-in plus job booking).'
     );
   }
+  // Rerun-30 completed every documented command and then simply ran out of
+  // instructions: START-HERE stopped at Gate 3, so Gate 4 was never attempted.
+  // The strict sequence must carry the operator through the expired-window
+  // refusal drill.
+  if (!/bellfield-license-EXPIRED/i.test(text)) {
+    problems.push(
+      'START-HERE must brief the operator on Gate 4: the expired-window refusal drill uses the USB bellfield-license-EXPIRED.json and the runner restores the valid license automatically.'
+    );
+  }
   for (const requiredDoc of ['codex-install-test-operator-rules.md', 'gate-day-checklist.md']) {
     if (!text.includes(requiredDoc)) {
       problems.push(
@@ -50,6 +59,20 @@ export function validateStartHereText(text) {
   }
   if (prepareIndex !== -1 && adminInstallIndex !== -1 && adminInstallIndex < prepareIndex) {
     problems.push('gate1-admin-install appears before gate1-prepare-release.');
+  }
+
+  const gate3UpdateIndex = commands.findIndex((command) => command.mode === 'gate3-update');
+  const gate4Index = commands.findIndex((command) => command.mode === 'gate4-expired-refusal');
+  if (gate3UpdateIndex === -1) {
+    problems.push('Missing a -Mode gate3-update command.');
+  }
+  if (gate4Index === -1) {
+    problems.push(
+      'Missing a -Mode gate4-expired-refusal command; the strict sequence must include the Gate 4 expired-window refusal drill.'
+    );
+  }
+  if (gate3UpdateIndex !== -1 && gate4Index !== -1 && gate4Index < gate3UpdateIndex) {
+    problems.push('gate4-expired-refusal appears before gate3-update.');
   }
 
   for (const command of commands) {
@@ -92,6 +115,22 @@ export function validateStartHereText(text) {
       problems.push(
         'gate1-admin-install must run the prepared release copy of run-gate-day-admin.ps1 (under the release root), not the USB tools copy.'
       );
+    }
+
+    if (command.mode === 'gate3-update' || command.mode === 'gate4-expired-refusal') {
+      if (!command.arguments.has('-updateartifactroot')) {
+        problems.push(`${label} is missing -UpdateArtifactRoot.`);
+      }
+    }
+    if (command.mode === 'gate4-expired-refusal') {
+      const expiredLicense = command.arguments.get('-expiredlicensepath');
+      if (expiredLicense === undefined) {
+        problems.push(`${label} is missing -ExpiredLicensePath.`);
+      } else if (isDotRelativePath(expiredLicense)) {
+        problems.push(
+          `${label} uses a relative -ExpiredLicensePath (${expiredLicense}); UAC elevation can change the child working directory. Use an absolute path or a $usb-anchored variable.`
+        );
+      }
     }
   }
 

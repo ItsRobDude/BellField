@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -32,6 +32,7 @@ try {
   const installRoot = path.join(root, 'BellField');
   const releaseRoot = path.join(root, 'release');
   const updateArtifactRoot = path.join(root, 'update artifact');
+  const expiredLicensePath = path.join(root, 'licenses', 'bellfield-license-EXPIRED.json');
   const artifactZip = path.join(root, 'artifact with spaces.zip');
   const callerRoot = path.join(root, 'usb caller root');
   const relativeArtifactZip = path.join('artifacts', 'relative artifact with spaces.zip');
@@ -41,6 +42,8 @@ try {
   const evidenceRoot = evidenceRootBase + path.sep;
   const runner = path.resolve('tools', 'install', 'run-gate-day-admin.ps1');
   mkdirSync(path.dirname(expectedRelativeArtifactZip), { recursive: true });
+  mkdirSync(path.dirname(expiredLicensePath), { recursive: true });
+  writeFileSync(expiredLicensePath, '{"license":"expired-smoke-placeholder"}\n', { flag: 'wx' });
 
   const modePlans = [
     {
@@ -139,6 +142,22 @@ try {
       ],
       expectedCollectorReason: 'dry-run',
       expectedNeedsCollector: true
+    },
+    {
+      mode: 'gate4-expired-refusal',
+      runId: 'gate4-expired-refusal',
+      expiredLicensePath,
+      expectedSteps: [
+        'capture-pre-refusal-state',
+        'swap-in-expired-license',
+        'run-update-bellfield-expect-refusal',
+        'dry-run-gate4-refusal-outcome',
+        'copy-durable-update-jsonl',
+        'assert-refusal-evidence',
+        'assert-services-uninterrupted',
+        'restore-valid-license',
+        'health-after-restore'
+      ]
     },
     {
       mode: 'collect-only',
@@ -245,6 +264,25 @@ try {
         (event) => event.status === 'skipped' && event.reason === 'dry-run'
       ),
     { outcomeEvent: gate3Failure.outcomeEvent, collectorEvents: gate3Failure.collectorEvents }
+  );
+
+  const gate4Refusal = evidence.modeRuns.find((run) => run.runId === 'gate4-expired-refusal');
+  const gate4OutcomeEvent = gate4Refusal.steps.find(
+    (event) => event.step === 'dry-run-gate4-refusal-outcome'
+  );
+  check(
+    'dry-run Gate 4 plan simulates a pre-flight expired-window rejection',
+    gate4OutcomeEvent?.simulatedTerminalEvent?.event === 'BELLFIELD_UPDATE_REJECTED' &&
+      gate4OutcomeEvent?.simulatedTerminalEvent?.reason === 'update-window-expired' &&
+      gate4OutcomeEvent?.simulatedRefusalExitCode === 1,
+    { gate4OutcomeEvent }
+  );
+  check(
+    'dry-run Gate 4 plan always reaches the license restore step',
+    gate4Refusal.steps.some(
+      (event) => event.step === 'restore-valid-license' && event.status === 'started'
+    ),
+    { stepOrder: gate4Refusal.stepOrder }
   );
 
   if (process.platform === 'win32') {
@@ -373,6 +411,7 @@ function runDryRunMode({
   installRoot,
   releaseRoot,
   updateArtifactRoot,
+  expiredLicensePath,
   artifactZip,
   expectedVersion,
   expectedSourceCommit,
@@ -408,8 +447,11 @@ function runDryRunMode({
   if (expectedSourceCommit) {
     args.push('-ExpectedSourceCommit', expectedSourceCommit);
   }
-  if (mode === 'gate3-update') {
+  if (mode === 'gate3-update' || mode === 'gate4-expired-refusal') {
     args.push('-UpdateArtifactRoot', updateArtifactRoot);
+  }
+  if (expiredLicensePath) {
+    args.push('-ExpiredLicensePath', expiredLicensePath);
   }
   if (dryRunGate3Outcome) {
     args.push('-DryRunGate3Outcome', dryRunGate3Outcome);

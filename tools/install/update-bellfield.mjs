@@ -30,6 +30,7 @@ import {
 } from './windows-service-control.mjs';
 import {
   assertReleaseWithinUpdateWindow,
+  readBuildManifest,
   verifyReleaseArtifact
 } from '../update/release-artifact.mjs';
 import { verifyLicenseFile } from '../update/license-verification.mjs';
@@ -1059,6 +1060,54 @@ async function main() {
     );
   }
 
+  // License and update-window entitlement are pre-flight refusals, not update
+  // failures: they must reject before the lock, the recovery tracker, and any
+  // destructive phase, so an expired-window shop sees a clean
+  // BELLFIELD_UPDATE_REJECTED instead of a generic update failure (Gate 4).
+  // The release date comes from the artifact's build manifest; a tampered
+  // manifest cannot reach destructive work because the verifying phase still
+  // checks it against the signed manifest before staging.
+  let preflightBuild;
+  try {
+    preflightBuild = readBuildManifest(updateArtifactRoot);
+  } catch (error) {
+    rejectUpdate(error, {
+      reason: 'invalid-build-manifest',
+      updateArtifactRoot
+    });
+  }
+  updateContext.attemptedVersion = preflightBuild.version;
+  const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PATH });
+  if (licenseStatus.status !== 'valid') {
+    rejectUpdate(new Error(`BellField update cannot be installed: ${licenseStatus.message}`), {
+      reason: 'license-invalid',
+      licenseStatus: licenseStatus.status
+    });
+  }
+  if (licenseStatus.license.licenseKind === 'dataOnly') {
+    rejectUpdate(
+      new Error(
+        'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
+      ),
+      {
+        reason: 'license-data-only'
+      }
+    );
+  }
+  try {
+    assertReleaseWithinUpdateWindow({
+      releaseDate: preflightBuild.releaseDate,
+      updateWindowEnd: licenseStatus.license.updateWindowEnd
+    });
+  } catch (error) {
+    rejectUpdate(error, {
+      reason: 'update-window-expired',
+      releaseDate: preflightBuild.releaseDate,
+      updateWindowEnd: licenseStatus.license.updateWindowEnd,
+      licenseKind: licenseStatus.license.licenseKind
+    });
+  }
+
   const recoveryTracker = createUpdateRecoveryTracker({ skipServices });
   updateContext.recoveryTracker = recoveryTracker;
   updateContext.currentReleaseRoot = currentReleaseRoot;
@@ -1086,19 +1135,6 @@ async function main() {
     const verifiedArtifact = verifyReleaseArtifact({ releaseRoot: updateArtifactRoot });
     attemptedVersion = verifiedArtifact.build.version;
     updateContext.attemptedVersion = attemptedVersion;
-    const licenseStatus = verifyLicenseFile({ licensePath: env.BELLFIELD_LICENSE_PATH });
-    if (licenseStatus.status !== 'valid') {
-      throw new Error(`BellField update cannot be installed: ${licenseStatus.message}`);
-    }
-    if (licenseStatus.license.licenseKind === 'dataOnly') {
-      throw new Error(
-        'BellField update cannot be installed: this license is data-only. Install a paid license or use a BellField recovery tool.'
-      );
-    }
-    assertReleaseWithinUpdateWindow({
-      releaseDate: verifiedArtifact.build.releaseDate,
-      updateWindowEnd: licenseStatus.license.updateWindowEnd
-    });
 
     const restoreStamp = timestampForRestorePath();
     enterUpdatePhase(recoveryTracker, updatePhases.staging, { restoreStamp });
