@@ -76,7 +76,9 @@ not a USB-ready artifact gate.
 - `START-HERE.txt` uses `$UsbRoot`-anchored `$ArtifactA`/`$ArtifactB` variables
   for `-ArtifactZip`, not `.\artifacts\...`: yes/no
 - Raw `Expand-Archive` is diagnostic/fallback only, not the strict Gate Day path: yes/no
-- Runner modes listed for Gate 1, Gate 2, and Gate 3: yes/no
+- Runner modes listed for Gate 1, Gate 2, Gate 3, and Gate 4: yes/no
+- Gate 4 `gate4-expired-refusal` command present after the Gate 3 update
+  command with a `$UsbRoot`-anchored `-ExpiredLicensePath`: yes/no
 - Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only: yes/no
 - `artifacts/` contains only active artifacts: yes/no
 - Superseded artifacts archived on USB or removed:

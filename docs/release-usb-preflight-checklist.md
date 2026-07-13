@@ -167,7 +167,13 @@ For each active release zip:
 - [ ] `START-HERE.txt` names the active update artifact.
 - [ ] `START-HERE.txt` points the scratch-machine operator at
       `run-gate-day-admin.ps1` as the default Gate Day admin path for Gate 1,
-      Gate 2, and Gate 3.
+      Gate 2, Gate 3, and Gate 4.
+- [ ] `START-HERE.txt` includes the Gate 4 `gate4-expired-refusal` command
+      after the Gate 3 update command, with a `$UsbRoot`-anchored
+      `-ExpiredLicensePath` pointing at `licenses\bellfield-license-EXPIRED.json`,
+      and briefs the operator that the runner swaps and restores the license
+      automatically. `corepack pnpm usb:validate-start-here --path=<START-HERE.txt>`
+      enforces this shape at USB build.
 - [ ] `START-HERE.txt` points artifact A/B preparation at
       `run-gate-day-admin.ps1 -Mode gate1-prepare-release` and
       `run-gate-day-admin.ps1 -Mode gate3-prepare-update-artifact`; raw

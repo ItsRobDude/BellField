@@ -643,13 +643,42 @@ documented Gate Day dummy credential: yes` instead of echoing the password
 
 ## Gate 4 — Expired-window refusal (Phase 4)
 
-- [ ] Replace the installed license with `bellfield-license-EXPIRED.json`
-      (keep the valid one safe).
-- [ ] Re-run the updater from artifact B. It must **refuse before touching
-      anything**: no service stop, no swap, no backup consumed. Capture the
-      refusal message verbatim.
-- [ ] Confirm services were never interrupted (health still `ok` during).
-- [ ] Restore the valid license file; health `ok`.
+The packaged runner automates the whole drill, including the license swap and
+the guaranteed restore. Run it after the Gate 3 update from the installed
+release copy of the runner:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\BellField\release\tools\install\run-gate-day-admin.ps1" -Mode gate4-expired-refusal -InstallRoot $InstallRoot -ReleaseRoot "C:\BellField\release" -UpdateArtifactRoot $UpdateReleaseRoot -ExpiredLicensePath "$UsbRoot\licenses\bellfield-license-EXPIRED.json" -EvidenceRoot $EvidenceRoot -RunId rerun-<N>
+```
+
+The mode swaps in the USB `bellfield-license-EXPIRED.json`, re-runs the real
+updater from artifact B, and fails loudly unless every assertion below holds.
+The valid license restore runs in a `finally` (hash-verified against the
+pre-drill license), so an aborted drill still restores it.
+
+- [ ] `capture-pre-refusal-state` succeeded: all four services Running, health
+      `ok`, valid license present, pre-drill backup/rollback inventories taken.
+- [ ] `run-update-bellfield-expect-refusal` exited nonzero. An exit code of 0
+      here means the updater installed with an expired window — a launch
+      blocker, not an operator error.
+- [ ] `assert-refusal-evidence` succeeded: the refusal wrote a **new** durable
+      update log whose terminal event is `BELLFIELD_UPDATE_REJECTED` with
+      reason `update-window-expired`, with **zero** `BELLFIELD_UPDATE_PHASE`
+      events — the updater refused before touching anything: no service stop,
+      no swap, no backup consumed. The runner copies the durable log to
+      `gate4-refusal-durable-<run-id>-*.jsonl`; the refusal message verbatim is
+      "BellField update cannot be installed: this release is newer than the
+      license update window. Renew update coverage to install this update."
+- [ ] `assert-services-uninterrupted` succeeded: all four services still
+      Running and health `ok` after the refusal.
+- [ ] `restore-valid-license` reported a hash-verified `restored: true`, and
+      `health-after-restore` succeeded.
+
+Manual fallback (only if the runner route is unavailable): replace the
+installed license with `bellfield-license-EXPIRED.json` (keep the valid one
+safe), re-run the updater from artifact B, capture the refusal verbatim,
+confirm services were never interrupted, then restore the valid license and
+confirm health `ok`.
 
 ---
 

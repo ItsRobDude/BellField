@@ -1,6 +1,6 @@
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only", "process-capture-smoke")]
+  [ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "gate4-expired-refusal", "collect-only", "process-capture-smoke")]
   [string]$Mode,
 
   [string]$InstallRoot = "C:\BellField",
@@ -16,6 +16,7 @@ param(
   [string]$ExpectedVersion,
   [string]$ExpectedSourceCommit,
   [string]$UpdateArtifactRoot,
+  [string]$ExpiredLicensePath,
   [string]$BackupSet,
   [string]$HealthUrl = "http://127.0.0.1:3001/health",
   [string]$LanIp,
@@ -45,6 +46,14 @@ if (-not $EvidenceRoot) {
 $prepareModes = @("gate1-prepare-release", "gate3-prepare-update-artifact")
 if ($ArtifactZip -and ($prepareModes -notcontains $Mode)) {
   $usageErrors += "-ArtifactZip is only valid for prepare modes ($($prepareModes -join ', ')); mode '$Mode' installs from -ReleaseRoot. Run gate1-prepare-release first if the release is not prepared."
+}
+if ($Mode -eq "gate4-expired-refusal") {
+  if (-not $UpdateArtifactRoot) {
+    $usageErrors += "-UpdateArtifactRoot is required for gate4-expired-refusal (the prepared Gate 3 update artifact release root)."
+  }
+  if (-not $ExpiredLicensePath) {
+    $usageErrors += "-ExpiredLicensePath is required for gate4-expired-refusal (the USB bellfield-license-EXPIRED.json)."
+  }
 }
 if ($usageErrors.Count -gt 0) {
   [Console]::Error.WriteLine("BELLFIELD_GATE_ADMIN_USAGE: $($usageErrors -join ' ') See docs/gate-day-checklist.md for the runner mode commands.")
@@ -110,6 +119,9 @@ function Normalize-GateRunnerPathInputs {
   }
   if ($script:UpdateArtifactRoot) {
     $script:UpdateArtifactRoot = Resolve-GatePathInput $script:UpdateArtifactRoot
+  }
+  if ($script:ExpiredLicensePath) {
+    $script:ExpiredLicensePath = Resolve-GatePathInput $script:ExpiredLicensePath
   }
   if ($script:BackupSet) {
     $script:BackupSet = Resolve-GatePathInput $script:BackupSet
@@ -1309,6 +1321,7 @@ function Get-TerminalUpdateEvent {
 }
 
 function Copy-LatestUpdateLog {
+  param([string]$DestinationPrefix = "gate3-update-durable")
   $latestLogPath = Get-LatestUpdateLogPath
   if (-not $latestLogPath) {
     return @{
@@ -1318,7 +1331,7 @@ function Copy-LatestUpdateLog {
       reason = "No durable update JSONL log was found."
     }
   }
-  $destinationPath = Join-Path $EvidenceRoot "gate3-update-durable-$RunId-$(Split-Path -Leaf $latestLogPath)"
+  $destinationPath = Join-Path $EvidenceRoot "$DestinationPrefix-$RunId-$(Split-Path -Leaf $latestLogPath)"
   Copy-Item -LiteralPath $latestLogPath -Destination $destinationPath -Force
   return @{
     copied = $true
@@ -1596,6 +1609,188 @@ function Invoke-Gate3Update {
   return "succeeded"
 }
 
+function Invoke-Gate4ExpiredRefusal {
+  # Gate 4: prove the updater refuses an expired-window license before touching
+  # anything - no backup consumed, no service stop, no release swap - and leave
+  # the machine exactly as found (valid license restored, services running).
+  if (-not $UpdateArtifactRoot) {
+    throw "gate4-expired-refusal requires -UpdateArtifactRoot."
+  }
+  if (-not $ExpiredLicensePath) {
+    throw "gate4-expired-refusal requires -ExpiredLicensePath."
+  }
+
+  $currentReleaseRoot = Join-Path $InstallRoot "release"
+  $nodeExe = Get-NodeExe -Root $UpdateArtifactRoot
+  $updateScript = Get-InstallTool -Root $UpdateArtifactRoot -Name "update-bellfield.mjs"
+  $licensePath = Get-LicensePath
+  $validLicenseBackupPath = "$licensePath.gate4-valid-backup"
+  $installedManifestPath = Join-Path $currentReleaseRoot "bellfield-build-manifest.json"
+  $backupsRoot = Join-Path $InstallRoot "data\backups"
+
+  $preState = Invoke-GateStep -Name "capture-pre-refusal-state" -Action {
+    if (-not (Test-Path -LiteralPath $ExpiredLicensePath)) {
+      throw "Expired license file was not found at $ExpiredLicensePath."
+    }
+    if (-not (Test-Path -LiteralPath $licensePath)) {
+      throw "Installed license was not found at $licensePath. Gate 4 must start from a healthy install with the valid license in place."
+    }
+    $serviceStates = Get-BellFieldServiceStates
+    $notRunning = @($serviceStates | Where-Object { $_.state -ne "Running" })
+    if ($notRunning.Count -gt 0) {
+      throw "Gate 4 requires all BellField services running before the refusal drill: $(($notRunning | ForEach-Object { "$($_.name)=$($_.state)" }) -join ', ')."
+    }
+    @{
+      validLicenseHash = (Get-FileHash -LiteralPath $licensePath -Algorithm SHA256).Hash
+      serviceStates = $serviceStates
+      health = Invoke-HealthProbe
+      installedVersion = (Get-Content -LiteralPath $installedManifestPath -Raw | ConvertFrom-Json).version
+      backupSetNames = @(if (Test-Path -LiteralPath $backupsRoot) { (Get-ChildItem -LiteralPath $backupsRoot -Directory).Name })
+      restoreDirNames = @((Get-ChildItem -LiteralPath $InstallRoot -Directory -Filter "release.restore-*").Name)
+      latestUpdateLogPath = Get-LatestUpdateLogPath
+    }
+  }
+
+  try {
+    Invoke-GateStep -Name "swap-in-expired-license" -Action {
+      # The backup copy is the first mutation; restore-valid-license keys off
+      # its existence, so every partial failure past this point still restores.
+      Copy-Item -LiteralPath $licensePath -Destination $validLicenseBackupPath -Force
+      Copy-Item -LiteralPath $ExpiredLicensePath -Destination $licensePath -Force
+      @{
+        licensePath = $licensePath
+        validLicenseBackupPath = $validLicenseBackupPath
+      }
+    } | Out-Null
+
+    $updateResult = Invoke-GateStep -Name "run-update-bellfield-expect-refusal" -Action {
+      Invoke-GateProcess -Step "run-update-bellfield-expect-refusal" -FilePath $nodeExe -AllowNonZero -Arguments @(
+        $updateScript,
+        "--install-root=$InstallRoot",
+        "--current-release-root=$currentReleaseRoot",
+        "--update-artifact-root=$UpdateArtifactRoot",
+        "--confirm=UPDATE"
+      )
+    }
+
+    if ($DryRun) {
+      Write-GateEvent -Event "BELLFIELD_GATE_ADMIN_STEP" -Fields @{
+        step = "dry-run-gate4-refusal-outcome"
+        status = "succeeded"
+        simulatedRefusalExitCode = 1
+        simulatedTerminalEvent = @{
+          event = "BELLFIELD_UPDATE_REJECTED"
+          reason = "update-window-expired"
+        }
+      }
+    }
+
+    $logCopy = Invoke-GateStep -Name "copy-durable-update-jsonl" -Action {
+      Copy-LatestUpdateLog -DestinationPrefix "gate4-refusal-durable"
+    }
+
+    Invoke-GateStep -Name "assert-refusal-evidence" -Action {
+      if ($updateResult.timedOut) {
+        throw "Updater timed out; an expired-window refusal must return quickly without touching the install."
+      }
+      if ($updateResult.exitCodeUnknown) {
+        throw "Updater exit code was unknown; cannot prove the refusal."
+      }
+      if ($updateResult.exitCode -eq 0) {
+        throw "CRITICAL: the updater exited 0 with an expired-window license; the update was not refused."
+      }
+      if (-not $logCopy.copied) {
+        throw "No durable update log was found after the refusal attempt."
+      }
+      if ($preState.latestUpdateLogPath -and ($logCopy.sourcePath -eq $preState.latestUpdateLogPath)) {
+        throw "The refusal attempt did not produce a new durable update log; latest is still $($logCopy.sourcePath)."
+      }
+      $terminalEvent = $logCopy.terminalEvent
+      if (-not $terminalEvent) {
+        throw "The refusal durable log has no terminal update event."
+      }
+      if ([string]$terminalEvent.event -ne "BELLFIELD_UPDATE_REJECTED") {
+        throw "Expected a BELLFIELD_UPDATE_REJECTED terminal event, found '$($terminalEvent.event)'."
+      }
+      if ([string]$terminalEvent.reason -ne "update-window-expired") {
+        throw "Expected rejection reason 'update-window-expired', found '$($terminalEvent.reason)'."
+      }
+      $phaseEventCount = 0
+      foreach ($line in [System.IO.File]::ReadLines($logCopy.sourcePath)) {
+        if ([string]::IsNullOrWhiteSpace($line)) {
+          continue
+        }
+        try {
+          $parsedLine = $line | ConvertFrom-Json
+        } catch {
+          continue
+        }
+        if ([string]$parsedLine.event -eq "BELLFIELD_UPDATE_PHASE") {
+          $phaseEventCount += 1
+        }
+      }
+      if ($phaseEventCount -gt 0) {
+        throw "The refusal durable log contains $phaseEventCount update phase event(s); the updater touched the machine before refusing."
+      }
+      $backupSetNames = @(if (Test-Path -LiteralPath $backupsRoot) { (Get-ChildItem -LiteralPath $backupsRoot -Directory).Name })
+      $newBackupSets = @($backupSetNames | Where-Object { $preState.backupSetNames -notcontains $_ })
+      if ($newBackupSets.Count -gt 0) {
+        throw "The refusal attempt consumed a pre-update backup: $($newBackupSets -join ', ')."
+      }
+      $restoreDirNames = @((Get-ChildItem -LiteralPath $InstallRoot -Directory -Filter "release.restore-*").Name)
+      $newRestoreDirs = @($restoreDirNames | Where-Object { $preState.restoreDirNames -notcontains $_ })
+      if ($newRestoreDirs.Count -gt 0) {
+        throw "The refusal attempt staged or swapped release directories: $($newRestoreDirs -join ', ')."
+      }
+      $installedVersion = (Get-Content -LiteralPath $installedManifestPath -Raw | ConvertFrom-Json).version
+      if ($installedVersion -ne $preState.installedVersion) {
+        throw "Installed release version changed from $($preState.installedVersion) to $installedVersion during the refusal drill."
+      }
+      @{
+        terminalEvent = $terminalEvent
+        refusalExitCode = $updateResult.exitCode
+        durableLogCopy = $logCopy.destinationPath
+        installedVersion = $installedVersion
+      }
+    } | Out-Null
+
+    Invoke-GateStep -Name "assert-services-uninterrupted" -Action {
+      $serviceStates = Get-BellFieldServiceStates
+      $notRunning = @($serviceStates | Where-Object { $_.state -ne "Running" })
+      if ($notRunning.Count -gt 0) {
+        throw "Services were interrupted by the refusal drill: $(($notRunning | ForEach-Object { "$($_.name)=$($_.state)" }) -join ', ')."
+      }
+      @{
+        serviceStates = $serviceStates
+        health = Invoke-HealthProbe
+      }
+    } | Out-Null
+  } finally {
+    Invoke-GateStep -Name "restore-valid-license" -Action {
+      if (-not (Test-Path -LiteralPath $validLicenseBackupPath)) {
+        return @{
+          restored = $false
+          reason = "license-was-never-swapped"
+        }
+      }
+      Copy-Item -LiteralPath $validLicenseBackupPath -Destination $licensePath -Force
+      $restoredHash = (Get-FileHash -LiteralPath $licensePath -Algorithm SHA256).Hash
+      if ($restoredHash -ne $preState.validLicenseHash) {
+        throw "Restored license hash does not match the pre-drill valid license. Do not continue until $licensePath is the valid license again (backup copy: $validLicenseBackupPath)."
+      }
+      Remove-Item -LiteralPath $validLicenseBackupPath -Force
+      @{
+        restored = $true
+        hashVerified = $true
+        licensePath = $licensePath
+      }
+    } | Out-Null
+  }
+
+  Invoke-GateStep -Name "health-after-restore" -Action { Invoke-HealthProbe } | Out-Null
+  return "succeeded"
+}
+
 function Invoke-CollectOnly {
   # Evidence-collection mode: run every collector even when one fails, then
   # fail at the end. A single missing collector (e.g. no API service yet, or a
@@ -1699,7 +1894,7 @@ function Invoke-FailureEvidenceCollection {
   if ($DryRun -or -not (Test-IsAdministrator)) {
     return
   }
-  if (@("gate1-admin-install", "gate2-backup-restore", "gate3-update") -notcontains $Mode) {
+  if (@("gate1-admin-install", "gate2-backup-restore", "gate3-update", "gate4-expired-refusal") -notcontains $Mode) {
     return
   }
 
@@ -1734,6 +1929,7 @@ function Invoke-SelectedMode {
     "gate2-backup-restore" { return Invoke-Gate2BackupRestore }
     "gate3-prepare-update-artifact" { return Invoke-Gate3PrepareUpdateArtifact }
     "gate3-update" { return Invoke-Gate3Update }
+    "gate4-expired-refusal" { return Invoke-Gate4ExpiredRefusal }
     "collect-only" { return Invoke-CollectOnly }
     "process-capture-smoke" { return Invoke-ProcessCaptureSmoke }
     default { throw "Unsupported Gate Day admin runner mode: $Mode" }

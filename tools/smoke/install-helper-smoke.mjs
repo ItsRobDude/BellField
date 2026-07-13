@@ -267,11 +267,12 @@ try {
   check(
     'Gate Day admin runner exposes only fixed modes and no arbitrary command parameter',
     includesAll(files.gateDayAdminRunner, [
-      'ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "collect-only", "process-capture-smoke")',
+      'ValidateSet("gate1-prepare-release", "gate1-admin-install", "gate1-post-reboot-check", "gate2-backup-restore", "gate3-prepare-update-artifact", "gate3-update", "gate4-expired-refusal", "collect-only", "process-capture-smoke")',
       '[string]$ArtifactZip',
       '[string]$ExpectedVersion',
       '[string]$ExpectedSourceCommit',
       '[string]$UpdateArtifactRoot',
+      '[string]$ExpiredLicensePath',
       '[string]$BackupSet',
       '[switch]$NoSelfElevate',
       '[switch]$DryRun',
@@ -470,17 +471,21 @@ try {
       '[ValidateSet("success", "nonzero", "timeout", "quiet", "missing-terminal")]',
       'dry-run-gate3-update-outcome',
       'needsCollector = $dryRunNeedsCollector',
-      'dry-run-no-collector-needed'
+      'dry-run-no-collector-needed',
+      'dry-run-gate4-refusal-outcome',
+      'restore-valid-license'
     ]) &&
       includesAll(files.gateDayAdminSmoke, [
         "mode: 'gate1-admin-install'",
         "mode: 'gate1-post-reboot-check'",
         "mode: 'gate2-backup-restore'",
         "mode: 'gate3-update'",
+        "mode: 'gate4-expired-refusal'",
         "mode: 'collect-only'",
         "dryRunGate3Outcome: 'nonzero'",
         'follows the fixed expected step sequence',
-        'dry-run Gate 3 nonzero plan runs the update collector handling path'
+        'dry-run Gate 3 nonzero plan runs the update collector handling path',
+        'dry-run Gate 4 plan simulates a pre-flight expired-window rejection'
       ])
   );
   check(
@@ -1230,9 +1235,13 @@ try {
       'run-gate-day-admin.ps1',
       'gate1-prepare-release',
       'gate3-prepare-update-artifact',
+      'gate4-expired-refusal',
       'Gate 1',
       'Gate 2',
       'Gate 3',
+      'Gate 4',
+      '-ExpiredLicensePath',
+      'usb:validate-start-here',
       'diagnostic/fallback only',
       '$ArtifactA = Join-Path $UsbRoot',
       '$ArtifactB = Join-Path $UsbRoot',
@@ -1243,7 +1252,8 @@ try {
         'Runner prepare modes listed for artifact A and artifact B extraction',
         '`START-HERE.txt` uses `$UsbRoot`-anchored `$ArtifactA`/`$ArtifactB` variables',
         'Raw `Expand-Archive` is diagnostic/fallback only',
-        'Runner modes listed for Gate 1, Gate 2, and Gate 3',
+        'Runner modes listed for Gate 1, Gate 2, Gate 3, and Gate 4',
+        'Gate 4 `gate4-expired-refusal` command present after the Gate 3 update',
         'Per-helper `Start-Process -Verb RunAs` commands are diagnostic/fallback only'
       ])
   );
