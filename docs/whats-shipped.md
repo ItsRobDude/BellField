@@ -139,7 +139,11 @@ readiness recovered after one retry. Gate 3 completed the installed `.55` to
 `.56` update with a real pre-update backup, preserved rollback release, durable
 terminal success, and healthy services after reboot. Gates 4 and 5 were not
 attempted. See
-`docs/gate-day-clean-windows-smoke-2026-07-08-rerun-30.md`.
+`docs/gate-day-clean-windows-smoke-2026-07-08-rerun-30.md`. PR #94 later landed
+the `gate4-expired-refusal` runner mode and moved the updater's expired-window
+check to a pre-flight `BELLFIELD_UPDATE_REJECTED`, so the Gate 4 drill is now
+automated and CI-guarded; it stays unproven on the scratch machine until rerun
+#31.
 
 ## Not Started
 

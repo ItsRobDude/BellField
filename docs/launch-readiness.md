@@ -266,7 +266,10 @@ Current clean-machine status is still owned by
       preserved the pre-update backup and rollback release, and returned all
       services plus API health after the required reboot.
 - [ ] real expired-window update refusal remains open; Gate 4 was not attempted
-      in rerun #30.
+      in rerun #30. The `gate4-expired-refusal` runner mode and the updater's
+      pre-flight expired-window rejection (`BELLFIELD_UPDATE_REJECTED`) landed in
+      PR #94 after rerun #30, so the drill is now automated and CI-guarded; it is
+      unproven on the scratch machine until rerun #31.
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)
 - [ ] second office desktop + real Android field device against that install

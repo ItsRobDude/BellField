@@ -54,7 +54,9 @@ Environmental gate status:
   readiness, a real pre-update backup, preserved rollback release, durable
   terminal success, and healthy post-reboot services.
 - **Open - Phase 4 expired-window refusal:** Gate 4 was not attempted in rerun
-  #30.
+  #30. The `gate4-expired-refusal` runner mode and the updater's pre-flight
+  expired-window rejection landed in PR #94 after rerun #30; the drill is
+  automated and CI-guarded but unproven on hardware until rerun #31.
 - **Open - Phase 5/6:** prove that the sold-shaped installed release sends an
   estimate through the production relay, opens the customer acceptance page,
   and applies the customer decision through the worker poller.
