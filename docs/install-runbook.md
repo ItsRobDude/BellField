@@ -259,6 +259,18 @@ Validated on the development machine:
 
 Current clean-machine validation status:
 
+- rerun #30 used `.55`/`.56` artifacts from PR #93 at source commit `2d0670f`.
+  Physical USB verification passed `189` checked and `0` failed. Gate 1
+  completed the runner-first clean install, automatic first-owner creation,
+  browser customer/location/job proof, reboot recovery, packaged LAN evidence,
+  and real iPhone second-device login. Gate 2 completed packaged backup and
+  owned-schema restore with all services and health recovered. Gate 3 completed
+  the real installed `.55` to `.56` update, including a pre-update backup,
+  release swap, PostgreSQL restart/readiness, migrations, app-service restart,
+  durable `BELLFIELD_UPDATE_RESULT status=succeeded`, preserved rollback
+  release, and healthy post-update reboot readback. Gates 4 and 5 were not
+  attempted. See
+  [gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md)
 - rerun #21 used rebuilt `.39`/`.40` artifacts from source commit `b4135ba`.
   USB hash verification and baseline collection passed, but Gate 1 stopped in
   `gate1-prepare-release` before install logic. The USB `START-HERE.txt`
@@ -267,12 +279,13 @@ Current clean-machine validation status:
   failed artifact preflight. `C:\BellField\release` was never published, no
   services were installed, and Gate 2/Gate 3 were not attempted. The repo-side
   follow-up now absolutizes runner path inputs before self-elevation and tightens
-  generated USB instruction checks; the next strict run requires a freshly
-  prepared USB that includes those changes. See
+  generated USB instruction checks; at that point the next strict run required
+  a freshly prepared USB carrying those changes. See
   [gate-day-clean-windows-smoke-2026-06-20-rerun-21.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-21.md)
-- clean Windows Gate 1 passed again in rerun #18 for the entry-tier install
-  path: no developer tooling, real services, first-owner setup, job proof,
-  reboot recovery, packaged LAN evidence, and real second-device browser login
+- clean Windows Gate 1 passed again in rerun #30 for the entry-tier install
+  path: no developer tooling, real services, automatic first-owner setup,
+  browser job proof, reboot recovery, packaged LAN evidence, and real
+  second-device browser login
   in one strict run
 - a green run of the packaged service-account diagnostic (supporting preflight
   evidence only, not the gate; now uses corrected virtual-account proof criteria)

@@ -164,7 +164,9 @@ Purpose: Phase 1 release-folder runbook covering build assembly, unified server 
 
 Read when: assembling or testing a BellField server release artifact, or checking what the current installer path can and cannot claim.
 
-Does not own: the broader install posture (`self-hosted-installation-strategy.md`) or deployment philosophy (`deployment-model.md`). It is not yet proof that the stranger install gate has passed.
+Does not own: the broader install posture (`self-hosted-installation-strategy.md`)
+or deployment philosophy (`deployment-model.md`). The current dated
+clean-machine proof is rerun #30, not the recipe by itself.
 
 ### [restore-runbook.md](./restore-runbook.md)
 
@@ -202,7 +204,9 @@ Audience: contributors checking what Phase 4 update-channel validation has actua
 
 Purpose: dated evidence for the nondestructive same-machine Phase 4 validation: release-date stamping, signed update artifact verification, update-window refusal, scratch updater swap, and packaged updater contents.
 
-Read when: deciding whether Phase 4 repo-side updater foundations are ready to build on, or distinguishing local scratch proof from the unclaimed real installed v(N) to v(N+1) update gate.
+Read when: deciding whether Phase 4 repo-side updater foundations are ready to
+build on, or distinguishing local scratch proof from the installed v(N) to
+v(N+1) gate later closed by rerun #30.
 
 Does not own: the install recipe (`install-runbook.md`), license format (`license-design.md`), restore recipe (`restore-runbook.md`), or the future self-serve update UI.
 
@@ -748,6 +752,32 @@ Gate 3 with the runner-first flow before claiming the installed update gate.
 
 Does not own: the install recipe (`install-runbook.md`), the restore recipe
 (`restore-runbook.md`), or the longer-term junction/versioned release layout.
+
+### [gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md)
+
+Audience: contributors checking the current clean Windows install, restore, and
+installed-update proof.
+
+Purpose: dated evidence for rerun 30 against artifacts `.55`/`.56` from source
+commit `2d0670f`. Physical USB verification passed `189`/`0`. Gate 1 completed
+the runner-first clean install, automatic first-owner creation, browser job
+proof, reboot recovery, packaged LAN evidence, and real iPhone second-device
+login. Gate 2 completed packaged backup and owned-schema restore with services
+and health recovered. Gate 3 completed the real `.55` to `.56` update with a
+pre-update backup, preserved rollback release, durable terminal success, and
+healthy post-reboot services.
+
+Read when: deciding whether the real installed update gate is closed, reviewing
+the latest clean-machine status, or separating remaining Gate 4/5 work from the
+completed Gates 1-3.
+
+Current follow-up: Gate 4 expired-window refusal and Gate 5 sold-shaped relay
+acceptance remain unattempted. Restore and update each needed one readiness
+retry, and future Gate 2 evidence should directly record post-restore marker
+absence.
+
+Does not own: the install/update recipes (`install-runbook.md`), restore recipe
+(`restore-runbook.md`), or remaining gate sequence (`gate-day-checklist.md`).
 
 ### [release-usb-preflight-checklist.md](./release-usb-preflight-checklist.md)
 

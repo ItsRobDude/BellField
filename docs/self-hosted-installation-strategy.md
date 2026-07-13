@@ -142,7 +142,13 @@ The production install experience should eventually provide:
 
 The customer should not need to know the repo's package manager or development commands.
 
-Current Phase 1 implementation note: the repo now contains an assisted install runbook and release/service tooling in [install-runbook.md](./install-runbook.md). That is a repo-side install path, not yet a passed clean-machine self-serve installer gate.
+Current Phase 1 implementation note: the repo contains an assisted install
+runbook, a fixed-mode elevated Gate Day runner, and release/service tooling in
+[install-runbook.md](./install-runbook.md). Rerun #30 passed that assisted
+runner-first path on a clean Windows 11 Home machine through first-owner setup,
+job booking, reboot recovery, packaged LAN evidence, and real second-device
+access. This is environmental proof of the assisted path; it is not yet a
+customer self-serve installer.
 
 A same-machine compiled-release smoke passed on 2026-06-11 and is recorded in
 [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md).
@@ -258,8 +264,17 @@ proved fresh packaged backup creation on the clean install. Restore then failed
 because the old helper tried to recreate the database with the runtime app role
 and PostgreSQL returned `permission denied to create database`. The repo-side
 restore helper now uses the owned database/schema path instead of granting the
-runtime app role permanent `CREATEDB`, but backup/restore remains the next
-install-readiness blocker until a rebuilt artifact proves the restore drill.
+runtime app role permanent `CREATEDB`; at that point backup/restore remained the
+next install-readiness blocker until a rebuilt artifact could prove the restore
+drill.
+
+Rerun #30 is the current clean-machine proof. Artifacts `.55`/`.56` from source
+commit `2d0670f` passed physical USB verification. Gate 1 completed the assisted
+clean install and second-device proof, Gate 2 completed packaged backup and
+owned-schema restore, and Gate 3 completed the real installed update with a
+pre-update backup, durable terminal success, preserved rollback release, and
+healthy services after reboot. See
+[gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md).
 
 Current Phase 2 implementation note: backup and restore now have repo-side tooling and System visibility, documented in [restore-runbook.md](./restore-runbook.md). A configured network backup path should still be treated as unsupported until a restore drill has passed from that exact path.
 
