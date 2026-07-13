@@ -219,7 +219,17 @@ relative path under `C:\WINDOWS\system32`, so artifact preflight failed and
 `C:\BellField\release` was never published. This is a Gate Day runner/docs
 path-resolution failure, not a product install or update failure. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-21.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-21.md).
-The remaining clean-machine proofs are still owned by
+Rerun #30 used `.55`/`.56` artifacts from PR #93 at source commit `2d0670f`.
+Physical USB verification passed `189` checked and `0` failed. Gate 1 completed
+the runner-first clean install, automatic first-owner creation, browser job
+proof, reboot recovery, packaged LAN evidence, and real iPhone second-device
+login. Gate 2 completed packaged backup and owned-schema restore; readiness
+recovered after one service-start retry. Gate 3 completed the real installed
+`.55` to `.56` update with a pre-update backup, preserved rollback release,
+durable terminal success evidence, and healthy services after the required
+reboot. Gates 4 and 5 were not attempted. See
+[gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md).
+Current clean-machine status is still owned by
 [gate-day-checklist.md](./gate-day-checklist.md):
 
 - [x] clean-machine stranger install from the runbook through first-owner
@@ -242,20 +252,24 @@ The remaining clean-machine proofs are still owned by
       gate is also the definition of
       done for the QuickBooks-Desktop-grade install bar
       ([positioning-and-pricing.md](./positioning-and-pricing.md) §The install
-      bar) — the owner does not perform installs.
+      bar) — the owner does not perform installs. Rerun #30 re-proved the gate
+      with the runner-first path and automatic first-owner creation.
 - [x] scratch-machine restore from a real backup set. Rerun #15 proved packaged
       backup creation, owned-schema restore, marker erasure, service restart,
-      login, and pre-backup data readback on the clean Windows machine. Rough
-      edges remain around post-restore health readiness messaging and System
-      backup-card wording, but the Phase 2 environmental proof is closed.
-- [ ] real installed v(N) → v(N+1) update with services and pre-update backup
-      remains open. Rerun #19 reached a durable `.35` to `.36` updater attempt,
-      swapped in `.36`, preserved rollback/pre-update-backup evidence, and
-      emitted terminal `BELLFIELD_UPDATE_FAILURE phase=startingPostgres`; all
-      services were left stopped. The code follow-up for staged service
-      assets, staged service ACLs, and failed-update collector JSON safety
-      landed in PR #81, but this gate is not closed until a fresh artifact
-      rerun proves the installed update path.
+      login, and pre-backup data readback on the clean Windows machine. Rerun
+      #30 re-proved packaged backup and restore with all four services and API
+      health recovered after one readiness retry. Its command log did not add a
+      separate browser readback proving the post-backup marker absent, so the
+      direct marker-erasure assertion remains grounded in rerun #15.
+- [x] real installed v(N) → v(N+1) update with services and pre-update backup.
+      Rerun #30 completed `.55` to `.56`, durably recorded terminal success,
+      preserved the pre-update backup and rollback release, and returned all
+      services plus API health after the required reboot.
+- [ ] real expired-window update refusal remains open; Gate 4 was not attempted
+      in rerun #30. The `gate4-expired-refusal` runner mode and the updater's
+      pre-flight expired-window rejection (`BELLFIELD_UPDATE_REJECTED`) landed in
+      PR #94 after rerun #30, so the drill is now automated and CI-guarded; it is
+      unproven on the scratch machine until rerun #31.
 - [ ] sold-shaped install sends and accepts through the production relay end
       to end (closes the formal Phase 5/6a environmental gate)
 - [ ] second office desktop + real Android field device against that install

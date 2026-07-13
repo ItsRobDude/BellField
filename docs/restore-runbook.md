@@ -15,7 +15,6 @@ Phase 2 adds:
 
 Still not claimed:
 
-- scratch-machine restore gate
 - customer self-service restore
 - arbitrary NAS/cloud backup layouts
 - update rollback using automatic pre-update backups
@@ -28,9 +27,19 @@ packaged backup helper produced a fresh backup set with the required shape. The
 restore drill then failed because the old restore helper tried to recreate the
 database with the runtime `DATABASE_URL` role, which intentionally does not have
 cluster-level `CREATEDB`. The repo-side helper now restores through the owned
-database/schema path instead, but the scratch-machine restore gate remains open
-until a rebuilt artifact proves it end to end. See
+database/schema path instead. At that point the scratch-machine restore gate
+remained open until a rebuilt artifact could prove it end to end. See
 [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md).
+
+Rerun #15 closed the scratch-machine gate with packaged backup creation,
+owned-schema restore, service restart, login, pre-backup data survival, and
+post-backup marker erasure. Rerun #30 re-proved packaged backup and restore on a
+fresh Windows 11 Home install using the runner-first path; media/license work,
+migrations, all four services, and API health completed after one readiness
+retry. The rerun #30 command log did not include a separate post-restore browser
+readback of the marker absence, so rerun #15 remains the direct marker-erasure
+evidence. See
+[gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md).
 
 ## Backup Set Shape
 

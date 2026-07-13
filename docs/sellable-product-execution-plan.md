@@ -39,52 +39,42 @@ Primary references:
 
 ## Open validation debt
 
-Environmental gates currently open, all satisfiable in one scratch-machine
-session:
+Environmental gate status:
 
-- Phase 1: clean-machine stranger install through browser-based owner setup,
-  job booking, reboot survival, and second-device access. Rerun #18 re-proved
-  this gate on Windows 11 Home with active `.33`/`.34` artifacts: service
-  registration/stability, PostgreSQL SCM/ACL checks, API health, first-owner
-  setup, job proof, reboot recovery, packaged LAN evidence, and real
-  second-device same-Wi-Fi browser login all completed in one strict run.
-- Phase 2: restore drill onto a scratch machine from a real worker-produced
-  backup set. Rerun #18 re-proved this gate: packaged backup creation,
-  owned-schema restore, service-readiness recovery, marker erasure, login,
-  pre-backup data readback, and license readback all passed on
-  the clean Windows machine.
-- Phase 4: installed v(N) → v(N+1) update with real services and a real
-  pre-update `pg_dump` backup, plus a real refusal against an expired-window
-  license. Rerun #19 produced durable Gate 3 updater evidence and narrowed the
-  product failure to `phase=startingPostgres`; follow-up code now prepares
-  staged service wrappers/XML, reapplies staged service ACLs, and hardens the
-  failed-update collector. Rerun #21 did not reach this proof because
-  `gate1-prepare-release` failed first on a relative artifact path that the
-  elevated runner resolved under `C:\WINDOWS\system32`. The repo-side follow-up
-  now absolutizes runner path inputs before self-elevation and requires
-  `$UsbRoot`-anchored artifact variables in USB prep; the next proof needs a
-  freshly prepared USB, then a fresh installed v(N) to v(N+1) update attempt
-  with terminal durable JSONL evidence.
-- Phase 5/6: sold-shaped installed release sends an estimate through the
-  production relay, opens the customer acceptance page, and applies the
-  customer decision back through the worker poller
+- **Closed - Phase 1:** rerun #30 completed the runner-first clean install on
+  Windows 11 Home through automatic first-owner creation, browser
+  customer/location/job proof, reboot survival, packaged LAN evidence, and real
+  iPhone second-device office login.
+- **Closed - Phase 2:** rerun #30 completed packaged backup and owned-schema
+  restore with media/license handling, migrations, all four services, and API
+  health recovered. Rerun #15 remains the direct browser proof that the
+  post-backup marker is erased.
+- **Closed - Phase 4 installed update:** rerun #30 completed a real `.55` to
+  `.56` update with service stop/start, staged release swap, PostgreSQL
+  readiness, a real pre-update backup, preserved rollback release, durable
+  terminal success, and healthy post-reboot services.
+- **Open - Phase 4 expired-window refusal:** Gate 4 was not attempted in rerun
+  #30. The `gate4-expired-refusal` runner mode and the updater's pre-flight
+  expired-window rejection landed in PR #94 after rerun #30; the drill is
+  automated and CI-guarded but unproven on hardware until rerun #31.
+- **Open - Phase 5/6:** prove that the sold-shaped installed release sends an
+  estimate through the production relay, opens the customer acceptance page,
+  and applies the customer decision through the worker poller.
+- **Open - broader device proof:** complete the second-office-desktop and real
+  Android field-device checks tracked by launch readiness. The rerun #30 iPhone
+  office-browser proof closes the Gate 1 second-device requirement, not the
+  field-device lane.
 
-These must all be performed and dated before the first sold install or pilot.
+The open items must be performed and dated before the first sold install or
+pilot.
 
-Deepest clean-machine install evidence is now run #12 on 2026-06-23: rebuilt
-artifacts with exact managed-rule LAN collector hardening completed clean
-extraction, server config, LAN helper Public-profile refusal/consent, LAN env
-URL updates, managed firewall rule creation, PostgreSQL provisioning, packaged
-migrations, license placement, service rendering, elevated service
-installation, packaged service evidence collection, API `/health`, browser
-first-owner setup, browser customer/location/job proof, reboot recovery, and
-post-reboot service/API health. `bellfield-postgres` read back as
-`NT SERVICE\bellfield-postgres`, all four services stayed running, and elevated
-PostgreSQL ACL readbacks matched the intended narrow model. Gate 1 stopped at
-post-reboot browser login because the test owner password existed only in
-transient Codex/browser automation state and was unavailable after reboot.
-Packaged LAN evidence and real second-device proof were not reached. See
-[gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md).
+The deepest current clean-machine evidence is rerun #30 on 2026-07-08. It used
+artifacts `.55`/`.56` from PR #93 at source commit `2d0670f`; physical USB
+verification passed `189` checked and `0` failed. Gates 1-3 all completed,
+including the real installed update and post-update reboot. Restore and update
+each used their one-time service-readiness retry and then reached health `ok`.
+See
+[gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md).
 PR #68 added a packaged LAN access helper that configures LAN-safe office/API
 URLs and exact BellField-managed Private/Domain LocalSubnet firewall rules for
 office/API ports only. Rerun #9 proved hash verification, extraction, baseline
