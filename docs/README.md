@@ -1148,7 +1148,7 @@ Does not own: implementation order or product behavior. Use it as an evaluation 
 
 Audience: contributors and product reviewers digging into competitive gaps beyond the scorecard.
 
-Purpose: the 2026-07-14 deep gap-analysis and design self-audit pass — accounting depth, inventory/catalog, UX foot-guns, workflow frontier — with fresh ServiceTitan public-surface evidence, market economics, and consolidated priorities. Not a scored rubric rerun; the 2026-06-12 scorecard remains the current score.
+Purpose: the 2026-07-14 deep gap-analysis and design self-audit pass — accounting depth, inventory/catalog, UX foot-guns, workflow frontier — grounded in a fresh live ServiceTitan tenant walk (accounting, inventory, pricebook, payroll/tax/membership settings), with an indicative rescore and consolidated priorities. The 2026-06-12 scorecard remains the official score until a pass browser-drives BellField too.
 
 Read when: planning accounting/inventory/comms/design gap-closing work, or looking for the file-evidenced current state behind a competitive claim.
 

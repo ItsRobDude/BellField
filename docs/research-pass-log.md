@@ -21,6 +21,17 @@ Every research/observation pass doc must open with an **Attribution** table:
 Passes missing attribution are marked **pre-convention** below rather than
 guessed.
 
+## Evidence Standard (owner rule, set 2026-07-14)
+
+Competitor claims must come from **observing the real product** (a live
+logged-in tenant walk, a real device, a real install) — never from marketing
+pages, feature-page copy, or third-party review/pricing aggregators. If the
+primary source is unavailable, the pass **stops and says so** instead of
+substituting weaker evidence. Precedent: the 2026-07-14 pass's first attempt
+used ServiceTitan's public pages when the tenant session appeared expired;
+the owner rejected it and the pass was redone the same day against the
+logged-in tenant from the second machine's Chrome.
+
 ## Agent Lanes (disambiguation)
 
 - **Claude (Claude Code)** — competitive comparison and research passes, code
@@ -33,9 +44,9 @@ guessed.
 
 ## Passes
 
-| Date       | Doc                                                                                      | Pass type                                                               | Operator agent / model                                                                                         | Prompts recorded                  |
-| ---------- | ---------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| 2026-06-08 | [fsm-comparison-servicetitan-2026-06.md](./fsm-comparison-servicetitan-2026-06.md)       | Scored rubric comparison                                                | Pre-convention — operator identity not recorded in the doc                                                     | No                                |
-| 2026-06-10 | [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md) | Scored rubric comparison                                                | Pre-convention — operator identity not recorded in the doc                                                     | No                                |
-| 2026-06-12 | [fsm-comparison-servicetitan-2026-06-12.md](./fsm-comparison-servicetitan-2026-06-12.md) | Scored rubric comparison (live ST tenant walk)                          | Pre-convention — operator identity not recorded in the doc; method text indicates a Chrome-assisted AI session | No                                |
-| 2026-07-14 | [fsm-gap-analysis-2026-07-14.md](./fsm-gap-analysis-2026-07-14.md)                       | Gap analysis + design self-audit (accounting, inventory, workflows, UX) | **Claude** (Claude Code), model `claude-fable-5` (Claude Fable 5)                                              | Yes — Appendices A & B of the doc |
+| Date       | Doc                                                                                      | Pass type                                                                                           | Operator agent / model                                                                                         | Prompts recorded                  |
+| ---------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| 2026-06-08 | [fsm-comparison-servicetitan-2026-06.md](./fsm-comparison-servicetitan-2026-06.md)       | Scored rubric comparison                                                                            | Pre-convention — operator identity not recorded in the doc                                                     | No                                |
+| 2026-06-10 | [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md) | Scored rubric comparison                                                                            | Pre-convention — operator identity not recorded in the doc                                                     | No                                |
+| 2026-06-12 | [fsm-comparison-servicetitan-2026-06-12.md](./fsm-comparison-servicetitan-2026-06-12.md) | Scored rubric comparison (live ST tenant walk)                                                      | Pre-convention — operator identity not recorded in the doc; method text indicates a Chrome-assisted AI session | No                                |
+| 2026-07-14 | [fsm-gap-analysis-2026-07-14.md](./fsm-gap-analysis-2026-07-14.md)                       | Gap analysis + design self-audit (live ST tenant walk + 4 code-audit subagents; indicative rescore) | **Claude** (Claude Code), model `claude-fable-5` (Claude Fable 5)                                              | Yes — Appendices A & B of the doc |

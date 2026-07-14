@@ -1,4 +1,4 @@
-# BellField vs. the FSM Market — Gap Analysis & Design Self-Audit (2026-07-14)
+# BellField vs. ServiceTitan — Gap Analysis & Design Self-Audit (2026-07-14)
 
 ## Attribution
 
@@ -14,23 +14,35 @@
 
 ## Method And Caveats
 
-- **ServiceTitan evidence this pass is public-surface**: live Chrome walk of
-  servicetitan.com feature pages (accounting, accounts payable, inventory,
-  payroll/timesheets, Pricebook Pro, service agreements, the Pro add-on suite)
-  plus third-party pricing/review aggregators. The logged-in tenant session
-  used by the 2026-06-12 pass had expired; **no login was attempted**. Feature
-  claims from marketing pages are paraphrased and should be treated as
-  vendor-stated, not tenant-verified.
+- **ServiceTitan evidence is a live logged-in tenant walk** at
+  `go.servicetitan.com` on 2026-07-14 (same test tenant family as the
+  2026-06-12 pass), driven read-only in Chrome: Accounting (batch workspace,
+  Journal Entries, Accounting Periods, AR Management, Bank Deposits, AP
+  Bills, Accounting Audit Trail), Inventory (Items, Replenishment, Purchase
+  Orders, Receipts, Returns, Adjustments/Transfers/Counts), Pricebook
+  (Services/Materials/Equipment/Categories, Price Setup, Pricing Builder,
+  Templates, Import/Export, Pricebook Connect), and Settings (Payroll, Tax
+  Zones, Membership Types). **Strictly read-only**: nothing was created,
+  edited, sent, assigned, or saved; no tenant customer data is reproduced
+  here — observations are about structure and workflow only. Surfaces not
+  re-walked today (dispatch board, job record, estimates/Follow Up, Reports
+  library) carry forward the 2026-06-12 tenant observations.
+- **Integrity note:** this pass was restarted. A first attempt fell back to
+  ServiceTitan's public marketing pages when the tenant session appeared
+  expired; the owner rejected that evidence standard ("real product or
+  stop"), the tenant walk was run from the second machine's Chrome, and
+  every ServiceTitan claim below is tenant-observed. No marketing-page or
+  review-aggregator claims remain in this document's findings.
 - **BellField evidence is code-audited, not browser-driven**: four read-only
   subagents (prompts in Appendix B) audited the repo — accounting depth,
   inventory/purchasing/catalog, design/UX foot-guns, and the workflow
   frontier — with file-level evidence. Per the rubric's evidence rules, code
   evidence is the strongest kind for `[Code]` rows and weaker than a browser
   drive for look-and-feel rows.
-- **This is not a scored rubric rerun.** The 2026-06-12 scorecard
-  ([fsm-comparison-servicetitan-2026-06-12.md](./fsm-comparison-servicetitan-2026-06-12.md))
-  remains the current official score. A formal rescore should ride the next
-  live-tenant walk plus a BellField browser drive; this pass feeds it.
+- The **indicative rescore** below moves only rows with hard evidence and is
+  labeled indicative because BellField was not browser-driven this pass; the
+  next formal scorecard should pair a BellField browser drive with this
+  tenant access.
 - Rule reminder from [positioning-and-pricing.md](./positioning-and-pricing.md):
   comparison docs **measure; they do not steer**. Scope decisions check
   identity first.
@@ -59,82 +71,108 @@ dated smoke docs — all of it lands on rubric rows 9, 10, 12, 13, 14:
   backup/restore, real installed update), Gate 4 automation landed (PR #94).
 - **Identity/session hardening** and per-employee scoping of offline queues.
 
-Directional read: Track A's biggest 06-12 losses were comms breadth, payments,
-and reporting. Payments has moved substantially; comms moved on the money loop
-only (receipts) — operational comms (confirmation/reminder/on-my-way) remain
-unbuilt; reporting gained accounting-handoff reports but still lacks the owner
-KPI landing.
+## ServiceTitan Tenant Walk — Observed Depth (2026-07-14)
 
-## Competitor Intelligence (fresh evidence, this pass)
+Everything in this section was seen working in the logged-in tenant today.
 
-### What ServiceTitan's deep modules actually contain (vendor-stated)
+### Accounting
 
-**Accounting.** Near-real-time export to QuickBooks Online / Sage Intacct; an
-internal general ledger with downloadable detailed-or-summarized journal
-entries; **accounting periods with a monthly close** so transactions can't
-drift after close; audit-trail logs; AR views for invoice aging, payment
-status, and **bank deposits**; deposit/overpayment handling that can move
-payments between invoices and apply payments in bulk; automated refunds.
+- **The workspace is batch-centric.** Unbatched-invoices view with a
+  payment-type totals strip (cash/check/card brands/ACH, plus
+  promotions-discounts, paid, tax, revenue, balance), batch selection/search,
+  and actions for Collect Payments, **Charge Interest**, and **Recurring
+  Billing**. A right-rail shows a **per-batch QuickBooks export log** with
+  real statuses — including "Partially exported. See error report." This is
+  the concrete meaning of "QuickBooks integration" at suite level.
+- **Journal Entries is a first-class grid** (entry #, name, post date, last
+  modified, **last downloaded by/date**) — the bookkeeper-download workflow,
+  with download tracking.
+- **Accounting Periods**: month-long periods (173 in this tenant), each
+  **Open / Partially closed** with closed-through date, date closed, and
+  closed-by columns — a _graduated_ close, not a binary lock.
+- **AR Management is the statements + collections workspace**: statement
+  type + as-of date, invoice-export-status and min-days-past-due filters,
+  and a **per-customer** grid: # of invoices, credit, balance, and aging
+  buckets (Current / 1-30 / 31-60 / 61-90 / 90+), with per-customer
+  **"Printed and Sent" and "Last emailed"** statement tracking and bulk
+  actions.
+- **Bank Deposits**: deposit records (auto-batched by date/account) with
+  total, # of payments, bank account, # of refunds, batch #, **export
+  status, review status, deposit status**, and an open-vs-deposited summary
+  with reviewed counts — the deposit-slip reconciliation loop.
+- **AP Bills** exists as a base surface: vendor, vendor doc #, date billed,
+  **due date**, bill #, PO #, job #, project #, line items (empty in this
+  tenant, but the workflow is present and PO/job-linked).
+- **Accounting Audit Trail**: field-level before/after per user with record
+  links and view-details, filterable, downloadable. Observed entries show
+  invoices being **field-edited after creation** (batch, due date, summary,
+  invoice type, invoice date modified; email-sent events logged). Two
+  structural reads: ST invoices are mutable-with-audit (the audit trail
+  compensates for the mutation model), and **invoices carry due dates**.
 
-**Accounts payable.** A whole paid suite: bill capture (including non-PO
-bills), vendor credits and statements, an automated inbox that matches bills
-to receipts and POs, manual bill reconciliation before export, 3-way matching
-with discrepancy/fraud flagging.
+### Inventory and purchasing
 
-**Inventory.** Multi-location tracking (trucks/warehouses), purchases, vendor
-returns, transfers, adjustments; **replenishment templates / custom stock
-lists per location that trigger restock**; a dedicated barcode-scanning
-Inventory App; technician stock check + reserve/request from the field.
-Notably, ServiceTitan refers customers to **paid third-party consultants**
-(Powerhouse Consulting Group, Go Time Success Group) for inventory
-implementation — the module is heavy enough to need a services ecosystem.
+- **Replenishment is a first-class view**: truck and warehouse tabs, rows of
+  item / location / replenishment source / qty available / **qty to
+  replenish** / item cost / total cost, with create actions — min/max stock
+  lists driving computed restock.
+- **Purchase orders have "Partially Received" as a status tab** (Pending /
+  Sent / Partially Received / Received / Canceled), a **Send PO** action,
+  required-by dates, and a **vendor dropdown** (vendor master, not
+  freetext). Receipts are their own section (multiple receipts per PO).
+- **Returns are a full RMA lifecycle**: Pending / Returned / **Credit
+  Received** / Canceled, tied to vendor, job #, PO #, reference #, and send
+  status — vendor credit closes the loop.
+- **Inventory Counts** (count worksheets) and Adjustments/Transfers are
+  their own sections.
+- **Item Overview** shows valuation, negative-item count, and per-item
+  quantity columns **Available / On Hold / On Order / On Hand** — on-order
+  visibility straight from POs.
 
-**Payroll/timesheets.** Timesheets auto-populated from dispatch state
-(drive time, vendor runs, wrench time); configurable overtime rules;
-office clock-in/out; automated commission/bonus ("performance pay")
-configuration; technicians see their own timesheet live, can flag
-discrepancies, and **digitally sign off each pay period**; payroll costs
-flow into job costing across departments; GPS ties timesheets to visits;
-pre-dispatch paid time requires an explicit timesheet code (audit-trailed).
+### Pricebook
 
-**Pricebook Pro** (paid add-on). Flat-rate content out of the box (Smart
-Start seeds a few hundred common services), regional pricing averages,
-data-backed upsell recommendations, professional images/explainer PDFs, and
-**continuous content updates to costs/descriptions/sold-hours**. The pitch
-implicitly concedes the base pricebook takes weeks to set up and hours per
-week to maintain.
+- **Materials grid carries a "Primary Vendor" column**, bulk serialization,
+  an **Edit Mode toggle for inline bulk editing**, and configurable
+  columns.
+- **Markup rules**: "How would you like to apply mark-ups" with add-markup
+  rules for Purchase Orders and Materials (cost → price markup tiers).
+- **Price Setup is the flat-rate engine, observed directly**: pick service
+  categories, then a modifier panel with **billable rate ($/hr, multiple
+  rates supported), surcharge ($ and %), and Member Discount %** with three
+  application modes (after labor+service+surcharge / labor only /
+  labor+service before surcharge), plus separate add-on rates — service
+  prices recalculate from material cost, markups, and sold hours.
+- **Import/Export is in the base product**: Excel-template import (file
+  type "Pricebook (Settings, Materials and Part Link)", optional
+  "deactivate existing pricebook") and an export tab pitched for bulk-edit
+  round-trips.
+- **Pricebook Connect** hosts manufacturer catalogs in-tenant (Goodman —
+  806 items; Lennox — 28,308 items) browsable into the pricebook, with an
+  Updates feed for content changes.
+- Also present: Pricing Builder, Templates, and a pricebook change History.
 
-**Service agreements/memberships.** Proposal generation from
-equipment/location/cost details; email or in-person **digital signatures**;
-**automated renewals**; automatic scheduling of recurring visits;
-reminders/follow-ups (visits due, expiring agreements, expiring cards);
-**agreement-level budgeted-vs-actual margin** on labor, burden, and materials.
+### Payroll, tax, memberships (Settings)
 
-**The Pro paywall.** Marketing Pro, Contact Center Pro, Scheduling Pro,
-Dispatch Pro, Fleet Pro, Field Pro, Pricebook Pro — the headline automation
-story is sold as per-module add-ons on top of the per-tech license.
+- **Payroll Settings**: Employee Payroll Settings, **Legal Terms employees
+  sign off on when approving their pay** (the timesheet sign-off loop),
+  Labor Types (work classifications), Earnings Codes, custom **Overtime
+  Settings**, Timesheet Codes, and Payroll Adjustment Codes (under
+  Operations).
+- **Tax Zones**: zones with name, **zip-code mapping**, a sales-tax item,
+  and **separate service vs material tax rates** per zone.
+- **Membership Types**: seven active types in this tenant with billing and
+  duration shapes observed — Monthly-Ongoing, Annual-12 Months,
+  Quarterly-12 Months, Upfront-6/12 Months, Annual/Bi-Annual-Ongoing —
+  owning "service agreement programs, membership discounts, billing
+  frequency."
 
-### Market economics (third-party reported; ST does not publish pricing)
+### Carried forward from the 2026-06-12 tenant walk (not re-walked today)
 
-| Product       | Reported price shape (2026)                                                                          | Onboarding                            | Contract                                                  |
-| ------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------- |
-| ServiceTitan  | ~$245–$500 per **technician** per month, tier- and deal-dependent; Pro modules extra                 | $5k–$50k+ implementation, 3–12 months | 12+ month term; early-termination fees reported $5k–$20k+ |
-| Housecall Pro | $79 / $189 / $329 per month tiers (1 / 1–5 / up to 8 users); GPS, advanced reporting etc. as add-ons | self-serve                            | monthly or annual                                         |
-| Jobber        | ~$29–$249 per month tiers + ~$19–29 per extra user on upper tiers; route optimization now included   | self-serve                            | monthly or annual                                         |
-
-Recurring small-shop complaints about ServiceTitan across reviews/forums:
-overwhelming for teams under ~10 techs, long implementations (BBB complaints
-about paying a year without being fully onboarded), expensive add-ons, slow
-support, and teams using "the bare features" because staff are afraid of the
-surface area. Sources in Appendix C.
-
-### What this means for BellField's wedge
-
-BellField's deal — **one-time purchase, self-hosted, no per-tech tax,
-runs-forever** — is the exact inverse of the pain the market reports. The
-product implication: for every "deep" module, ship the ~20% a 5–25 tech shop
-actually uses, working in minutes not months, rather than chasing module
-parity. The rest of this doc names that 20% per area.
+Dispatch board density (compact card face + rich hover + status-bucket
+counters + map), the unified job history feed with channel tabs, Follow Up →
+Unsold Estimates money grid with dollar total, the owner KPI dashboard
+landing, and the 30+ item report library. See
+[fsm-comparison-servicetitan-2026-06-12.md](./fsm-comparison-servicetitan-2026-06-12.md).
 
 ## Deep-Dive Findings
 
@@ -176,7 +214,8 @@ across view/create/edit/post/send/refund with separately gated exports.
    has zero query params).
 3. **No customer statements; AR is job-level only**, aged from posted date
    (due dates don't exist) — a property manager with 12 open jobs appears 12
-   times with nothing to send them.
+   times with nothing to send them. (ST's AR Management — observed today —
+   is customer-level with statement print/email tracking.)
 4. **Credit balances / unapplied deposits are invisible cross-job** — the
    open-balance query filters `amountDue > 0`, so the deposit-liability figure
    is unobtainable without walking jobs
@@ -187,23 +226,30 @@ across view/create/edit/post/send/refund with separately gated exports.
 6. **QuickBooks re-keying**: catalog carries `income_category` /
    `accounting_export_code` but they dead-end there — never snapshotted onto
    invoice lines, never exported; no journal-shaped export; no export-status
-   marking (deferral acknowledged in [catalog-phase-plan.md](./catalog-phase-plan.md) §9).
+   marking (deferral acknowledged in [catalog-phase-plan.md](./catalog-phase-plan.md) §9;
+   ST's observed bar is the per-batch export log + downloadable journal
+   entries).
 7. **No period lock** — payments can be recorded/voided/refunded into a month
-   the owner already filed; audited but unguarded.
+   the owner already filed; audited but unguarded. (ST's observed model:
+   month periods with a graduated Open → Partially closed → closed-by
+   lifecycle.)
 8. **Labor cost realism**: labor is manual hours × typed rate (no employee
    rates/burden/timesheets), so labor-heavy margins read optimistic; the
    engine at least flags incomplete cost.
 
-**Where BellField already beats the ST pattern:** derived balances from
-append-only ledgers (no stored balance to corrupt — ST's batch ceremony exists
-to manage mutation risk BellField structurally lacks); posting freezes
-display reality against CRM edits; one shared gapless number series (the
-Xero/QBO model); refund math enforced at six named paid-total sites with
-tests; report and worklist share one CTE so they cannot disagree; exports are
-permission-gated at all.
+**Where BellField already beats the ST pattern (tenant-confirmed):** the
+audit trail we observed today shows ST invoices being field-edited after
+creation — batch, due date, even invoice date — with the audit trail as the
+compensating control. BellField's derived balances over append-only ledgers
+and posted-lock + adjustment/credit corrections make that whole drift class
+structurally impossible: no stored balance to corrupt, no filed document that
+CRM cleanup can rewrite. One shared gapless number series (the Xero/QBO
+model); refund math enforced at six named paid-total sites with tests; report
+and worklist share one CTE so they cannot disagree; exports permission-gated
+at all.
 
-**Deliberately do NOT copy from ST:** in-app GL/chart of accounts,
-batch-posting ceremony, custom report builder, payroll/commission engines.
+**Deliberately do NOT copy from ST:** in-app GL/chart of accounts, the
+batch-posting ceremony, a custom report builder, payroll/commission engines.
 BellField stays the **system of original entry** with bookkeeper-ready,
 period-scoped, number-keyed CSVs plus a journal-summary export — QuickBooks
 entry in five minutes, no API integration.
@@ -216,7 +262,8 @@ a UTC date cast, so late-evening local payments land in the next day's batch.
 
 **Headline: the rubric row-11 checklist is fully shipped; the competitive
 exposure is entirely in the "second ring" a parts-heavy shop hits after week
-one.**
+one — and today's tenant walk confirmed every second-ring feature is real,
+base-product ServiceTitan, not marketing.**
 
 **Shipped and strong** (file evidence in the pass transcript): item catalog +
 stock locations (warehouse/truck/other, truck→employee); immutable 7-kind
@@ -232,35 +279,40 @@ actor) triple with graceful `needsResolution` degradation; catalog with
 kinds/categories/tax defaults/sell-price snapshots/good-better-best and
 permission-tiered internals (sell-side only without `catalog:edit`).
 
-**Gaps, ordered by how soon a real parts-heavy shop hits them:**
+**Gaps, ordered by how soon a real parts-heavy shop hits them** (each
+tenant-confirmed on the ST side today):
 
 - **Day 1 — no pricebook/inventory import.** A shop moving off
   ST/FieldEdge/spreadsheets has 500–5,000 items and no path but hand-typing
-  into two surfaces. The single biggest adoption blocker for exactly the
-  segment inventory serves (and `GET /operations/catalog/items` is
-  unpaginated).
-- **Week 1 — no reorder points/replenishment** (the one ST inventory feature
-  small shops actually use); **no partial receipts/backorders** (one-shot
-  receive forces "receive short and lose the remainder" — the
-  `purchase_receipts` schema already supports N receipts; the blocker is the
-  status machine, and the `'closed'` PO status has no writer); **vendor is
-  freetext** ("Ferguson" vs "ferguson #2" fragments history; no terms, no
-  preferred vendor, no last-cost).
+  into two surfaces. ST ships Excel-template **Import/Export in the base
+  pricebook** (observed), so this is table stakes, not a differentiator.
+  (`GET /operations/catalog/items` is also unpaginated.)
+- **Week 1 — no reorder points/replenishment** (ST: first-class
+  Replenishment view with computed qty-to-replenish per truck/warehouse);
+  **no partial receipts/backorders** (ST: "Partially Received" is a PO
+  status tab; BellField's one-shot receive forces "receive short and lose
+  the remainder" — the `purchase_receipts` schema already supports N
+  receipts; the blocker is the status machine, and the `'closed'` PO status
+  has no writer); **vendor is freetext** (ST: vendor master driving PO
+  dropdowns, primary-vendor on materials, returns, and AP bills; BellField's
+  "Ferguson" vs "ferguson #2" fragments history).
 - **Month 1 — cost drift**: receiving captures real cost but nothing compares
-  it to `cost_hint`/`default_sale_price` or flags margin erosion (the honest
-  core of the Pricebook Pro pitch). **Labor auto-costing missing**: the spec's
+  it to `cost_hint`/`default_sale_price` or flags margin erosion (ST's
+  observed answer is markup rules + Price Setup recalculation + Pricebook
+  Connect content updates). **Labor auto-costing missing**: the spec's
   company burdened rate was never built, so _every_ field labor line lands
-  `needsResolution` and the office types hours × rate each time — the honest-
-  cost design currently generates a permanent office chore. **Agreement
+  `needsResolution` and the office types hours × rate each time. **Agreement
   pricing not wired**: `agreementPrice` + `priceMode` exist in contracts and
   snapshots, but every writer hardcodes `'standard'` — Phase 6 sold member
-  pricing that changes no price anywhere. **No cycle counts** (nobody counts
-  trucks without a worksheet). Cost-resolution is per-job only — no cross-job
+  pricing that changes no price anywhere (ST: Member Discount % is a
+  first-class Price Setup field, observed). **No cycle counts** (ST:
+  Inventory Counts section). Cost-resolution is per-job only — no cross-job
   worklist.
-- **Quarter 1 —** no barcode (Expo camera is already an approved dependency);
-  no returns-to-vendor movement kind (warranty returns become fake shrinkage);
-  job→stock PO provenance gap (parts ordered for a job but delivered to
-  stock can't reference the job, and receiving never nudges the
+- **Quarter 1 —** no barcode (Expo camera is already an approved
+  dependency); no returns-to-vendor movement kind (ST: full RMA lifecycle
+  with vendor-credit tracking; BellField warranty returns become fake
+  shrinkage); job→stock PO provenance gap (parts ordered for a job but
+  delivered to stock can't reference the job, and receiving never nudges the
   `waitingOnParts` queue); no kits/flat-rate task expansion; no item images.
 
 **Where the simpler model is already better than ST:** on-hand _cannot_
@@ -268,26 +320,25 @@ disagree with history (derived from the append-only ledger; corrections are
 reversals — every gap above is a new movement writer, never a balance
 migration); split-destination receiving errors are unrepresentable; cost is
 either right or visibly unfinished (never a silent $0); catalog ≠ inventory
-(a short catalog works day one — ST's monolithic pricebook is why shops pay
-for Pricebook Pro maintenance); ST needs a paid-consultant ecosystem to
-implement inventory, BellField needs a CSV.
+(a short catalog works day one).
 
 **Deliberate non-goals (posture-correct):** FIFO/LIFO and multi-currency;
 a full AP/vendor-bill module (cost truth enters at receiving; accounting is
-handoff, not a QuickBooks rebuild); PO approval chains (the owner is the
-approver at this size); ST's managed flat-rate content subscription
-(HVAC-centric content licensing vs trade-neutral import rails); dynamic
-pricing matrices (one standard + one agreement price is the honest model);
-warehouse bins/pick-pack; full field inventory management (techs pick parts,
-they don't run inventory).
+handoff, not a QuickBooks rebuild — ST's AP Bills/3-way world is the
+overbuild to avoid); PO approval chains (the owner is the approver at this
+size); manufacturer-content subscriptions à la Pricebook Connect
+(HVAC-centric content licensing vs trade-neutral import rails — build the
+rails, never license the content); dynamic pricing matrices beyond one
+standard + one agreement price; warehouse bins/pick-pack; full field
+inventory management (techs pick parts, they don't run inventory).
 
 **Recommendations (sized):** catalog+inventory CSV import/export with dry-run
 validation + pagination (M); vendor master (S/M) → reorder points +
 "below minimum" replenishment view with draft-PO-per-vendor (M) → partial
-receipts + wire the dead `'closed'` status (M); cost-drift worklist —
-"Pricebook Pro, the boring version" (M); wire agreement pricing (S/M);
-burdened labor rate setting + cross-job cost-resolution worklist (S);
-cycle-count worksheet posting variance as an adjustment batch (M).
+receipts + wire the dead `'closed'` status (M); cost-drift worklist (M);
+wire agreement pricing (S/M); burdened labor rate setting + cross-job
+cost-resolution worklist (S); cycle-count worksheet posting variance as an
+adjustment batch (M).
 
 ### Design/UX self-audit (subagent audit) — "where we're shooting ourselves in the foot"
 
@@ -415,8 +466,8 @@ slice, L = new subsystem):
 | Owner "needs attention" landing                   | No dashboard view exists; landing = dispatch                                                                                                                                                            | Composes worklists that mostly exist: open balances ✔, expiring agreements ✔, unsold estimates (S), approved-not-scheduled (S — `hasFutureAppointments` exists), revenue trend (S — `POSTED_NET_BILLED_SUM` fragment centralized)                                                                                                                                                                                                               | **M**                               |
 | Booking confirmation / reminder / on-my-way email | Not started; outbox DB-constrained to estimate/invoice, relay transactional enum to receipts only                                                                                                       | **Strongest reuse story in the audit**: payment-receipt lane is a complete blueprint (enqueue-in-txn exactly-once, worker retry loop, owner templates, toggles, timeline logging); trigger choke points exist (appointment create, `onTheWay` status with offline `occurredAt` replay); JobRunner is the reminder scheduler substrate. New work: relay message types + a third sender identity, per-job suppression flag, reminder timing setting | **M** total, decomposes to S slices |
 | Dispatch card density                             | Card face is arguably done (status rail, job # chip, name, Review/Overlap chips, adaptive detail line, right-click menu). Missing vs ST recipe: **hover card** and **status-bucket counters**           | Read model already carries nearly the whole hover payload; buckets are client-side derivation; only contact phone needs one SQL column                                                                                                                                                                                                                                                                                                            | **S**                               |
-| Agreement automation                              | Phase 6 shipped lifecycle + visit templates; reports already compute projected due dates in a 60-day window                                                                                             | Visit-prompt rows carry jobType/summary/duration/locations → one-click job creation via existing `createJob` (needs generated-period dupe guard) **M**; renewal action **S–M**; recurring billing **L** (agreement invoices have no job home — real design problem)                                                                                                                                                                               | M / S–M / L                         |
-| GPS/time tracking                                 | Nothing; but appointment status transitions are a de-facto time clock (timestamps + offline replay), and `job_cost_events(kind='labor')` is exactly the right sink                                      | Cheap first slice: **status-derived visit-durations report (S, no schema)** → structured time entries + auto-labor (M) → true GPS (L)                                                                                                                                                                                                                                                                                                             | S→M→L                               |
+| Agreement automation                              | Phase 6 shipped lifecycle + visit templates; reports already compute projected due dates in a 60-day window                                                                                             | Visit-prompt rows carry jobType/summary/duration/locations → one-click job creation via existing `createJob` (needs generated-period dupe guard) **M**; renewal action **S–M**; recurring billing **L** (agreement invoices have no job home — real design problem; ST's observed model bills by membership-type cadence)                                                                                                                         | M / S–M / L                         |
+| GPS/time tracking                                 | Nothing; but appointment status transitions are a de-facto time clock (timestamps + offline replay), and `job_cost_events(kind='labor')` is exactly the right sink                                      | Cheap first slice: **status-derived visit-durations report (S, no schema)** → structured time entries + auto-labor (M) → true GPS (L). ST's observed payroll machinery (labor types, earnings codes, OT rules, sign-off legal terms) validates the derive-from-status shape while showing the payroll-engine depth BellField should export to, not rebuild                                                                                        | S→M→L                               |
 | Recurring/multi-day/capacity                      | No recurrence fields (agreements are the rail); multi-day supported structurally, no N-day quick action (S); no capacity sublabel on tech rows — "5.5h booked · 3 visits" is pure client derivation (S) | —                                                                                                                                                                                                                                                                                                                                                                                                                                                 | S each                              |
 
 **Gaps the known list missed** (daily CSR/dispatcher reality):
@@ -456,57 +507,88 @@ scorecards (S for visits/hours, M for revenue attribution on multi-tech jobs).
 
 ## How BellField Does It Better (synthesis)
 
-The pattern across all four audits and the market data is consistent:
-**ServiceTitan's weight is not just its moat — it's its wound.** $245–500 per
-tech per month, $5k–50k implementations, 3–12 month onboardings, paid
-consultants for inventory, paid Pro modules for automation, and small teams
-reporting they use "the bare features" because staff fear the surface area.
-BellField does not win by cloning modules; it wins by making the 20% a 5–25
-tech shop actually uses work in minutes, on hardware they own, at a price
-that ends.
+The consistent pattern across the tenant walk and the four code audits:
+**ServiceTitan's depth is real — and so is the operational weight it brings.**
+Every deep module observed today (batch accounting, AP with bills and
+credits, replenishment-driven inventory, the flat-rate pricing engine,
+payroll with labor types and sign-off terms, zip-mapped tax zones) is another
+surface an office has to configure, staff, and understand. BellField does not
+win by cloning modules; it wins by shipping the 20% of each that a 5–25 tech
+shop actually uses, working in minutes, on hardware they own.
 
-Per area, the BellField-shaped answer:
+Per area, the BellField-shaped answer, grounded in what was observed:
 
-1. **Accounting: be the system of original entry, not the GL.** ST built
-   accounting periods, batch ceremony, and reconciliation reports largely to
-   manage mutation risk; BellField's append-only ledgers structurally don't
-   have that risk. Sell that ("your books cannot drift"), and ship the
+1. **Accounting: be the system of original entry, not the GL.** ST's own
+   audit trail shows invoices being field-edited after the fact — the batch
+   ceremony, export logs, and audit trail exist to manage a mutation model
+   BellField structurally doesn't have (append-only ledgers, posted locks,
+   derived balances). Sell that ("your books cannot drift"), and ship the
    handoff instead: period-scoped, invoice-number-keyed CSVs, a
    journal-summary export a bookkeeper enters in QuickBooks in five minutes,
-   statements, deposit-slip-shaped payment batches, and a soft period lock.
-   No in-app GL, no live API sync until real customers demand it.
+   customer statements, deposit-slip-shaped payment batches, and a **soft
+   period lock** (ST's graduated Open → Partially closed model is the shape
+   to borrow, minus the ceremony). No in-app GL, no live API sync until real
+   customers demand it.
 2. **Inventory: boring beats big.** The immutable ledger + one-destination
    PO make whole error classes unrepresentable — extend that with the four
-   boring features shops actually use (CSV import, vendor master, reorder
-   points, partial receipts) and skip everything that made ST inventory need
-   consultants. "ST needs an implementation partner; BellField needs a CSV"
-   is a sales line worth engineering toward.
-3. **Pricebook: import rails, not licensed content.** Trade-neutral means
-   never buying ST's content-subscription fight. Great import/bulk edit, a
-   cost-drift review worklist when receipts move costs, honest "Price not
-   set", and wiring the already-modeled agreement price deliver the value
-   without the maintenance treadmill Pricebook Pro monetizes.
+   boring features the tenant walk confirmed shops actually get from ST (CSV
+   import, vendor master, reorder points/replenishment, partial receipts)
+   and skip the rest. Returns-to-vendor with credit tracking earns a place
+   on the roadmap behind those four.
+3. **Pricebook: import rails, not licensed content.** ST ships base-product
+   Excel import/export and monetizes manufacturer content through Pricebook
+   Connect. Trade-neutral BellField builds the import/export and bulk-edit
+   rails, adds a cost-drift review worklist when receipts move costs, and
+   never enters the content-licensing business. **Wire the already-modeled
+   agreement price** — member pricing is a first-class field in ST's pricing
+   engine and BellField's Phase 6 sold it without delivering it.
 4. **Comms: triggered + logged on owned rails.** Booking confirmation,
    reminder, and on-my-way emails ride the receipt-lane blueprint end to end
    (enqueue-in-transaction, retries, owner templates, per-job suppression,
-   timeline logging) — table-stakes parity ST partly gates behind Pro
-   modules, delivered without SMS provider costs until demanded.
-5. **Time/GPS: derive, don't surveil.** Appointment statuses techs already
-   tap are a de-facto time clock with offline replay; a status-derived
-   visit-durations report is free today, structured time entries feeding the
-   existing labor-cost sink come next, GPS last with technician-visible
-   policy. ST's own design (status-driven timesheets + sign-off) validates
-   the shape; BellField skips the payroll engine and exports instead.
-6. **Design: make "simple" true, not claimed.** The five systemic fixes
+   timeline logging) — table-stakes parity delivered without new
+   infrastructure.
+5. **Time/GPS: derive, don't surveil — and export, don't rebuild.** ST's
+   payroll machinery (labor types, earnings codes, OT rules, legal sign-off
+   terms) shows both the value and the weight. BellField's shape: appointment
+   statuses techs already tap are the time clock (status-derived durations
+   report is free today), structured time entries feed the existing
+   labor-cost sink next, GPS last with technician-visible policy — and
+   payroll itself stays an export, never an engine.
+6. **Tax: stay simple, know the boundary.** ST's model is zip-mapped tax
+   zones with separate service/material rates. BellField's single company
+   rate + item taxability is the right v1 — but it must actually work (the
+   $0-tax bug) and the zone model is the documented growth path if
+   multi-jurisdiction shops arrive.
+7. **Design: make "simple" true, not claimed.** The five systemic fixes
    (URL-backed navigation + persisted session, three shared primitives, one
    formatter, scoped messages, list pagination) convert an honest-but-rough
    office app into the intuitive product the positioning promises — and they
    are prerequisites for demos, not polish. Density work (hover card + status
    buckets) then adopts ST's best dispatch idea without maps/routing bloat.
-7. **Close the sold-but-not-delivered loops.** Two were found: agreement
+8. **Close the sold-but-not-delivered loops.** Two were found: agreement
    member pricing (modeled, never applied) and the printable invoice's
    missing company identity/amount-due. Loops like these cost trust far
    beyond their size; both are small.
+
+## Indicative Rescore (labeled: BellField code-evidenced, not browser-driven)
+
+Against [fsm-comparison-rubric.md](./fsm-comparison-rubric.md) v2, moving
+only rows with hard evidence since the 2026-06-12 scorecard. ServiceTitan
+absolute stays **98/A** (today's walk reinforced depth). Not an official
+scorecard — the next formal pass should browser-drive BellField.
+
+| Row (Pts)                | 06-12 A  |  Now A  | 06-12 B  |  Now B  | Why                                                                                                                             |
+| ------------------------ | :------: | :-----: | :------: | :-----: | ------------------------------------------------------------------------------------------------------------------------------- |
+| 1 Navigation/IA (5)      |   3.5    |   3.5   |   4.5    |  **4**  | Design audit: no URLs/deep links, F5 logout, back-to-dispatch — fit-for-intent quality issue                                    |
+| 9 Estimates (8)          |   3.5    |  **4**  |   4.5    |  **5**  | Acceptance links shipped + live-smoked (the 06-12 caveat resolved); field builder still deferred                                |
+| 10 Billing/payments (10) |   3.5    |   3.5   |    5     | **4.5** | Payments moved a lot (links/deposits/refunds/receipts/numbering), but the $0-tax bug is an accounting-safety defect until fixed |
+| 13 Comms/documents (4)   |    3     | **3.5** |   4.5    |  **5**  | Invoice email + four receipt slices shipped; operational comms still absent (A stays behind ST's observed breadth)              |
+| 14 Reporting/admin (3)   |   3.5    |  **4**  |   4.5    |   4.5   | Accounting-handoff reports + Gates 1–3 proven; owner KPI landing still missing                                                  |
+| **Weighted totals**      | **76.8** | **≈78** | **94.6** | **≈94** | Track A grade C; Track B grade A                                                                                                |
+
+Reading: Track A inched up on money delivery; Track B dipped on two honest
+findings (the tax bug, the navigation/session foot-guns) that are both
+cheap to fix — fixing Tier 0 alone should put Track B at ~96.
 
 ## Consolidated Priorities
 
@@ -533,10 +615,12 @@ Cross-audit ranking, money-correctness first, then reuse-weighted
 5. **Unsold-estimates worklist** with dollar total (S) → **owner
    "needs attention" landing** (M: open balances ✔, unsold estimates,
    approved-not-scheduled, expiring agreements ✔, revenue trend).
-6. **Customer statements** (M); **payment terms + due dates** (M);
-   **accounting handoff v2** — income-category snapshot onto lines +
-   journal-summary CSV + exported-through marking (M); **soft period lock**
-   (M).
+6. **Customer statements** (M — ST's observed AR Management is the bar:
+   customer-level, print/email tracked); **payment terms + due dates** (M —
+   observed as standard invoice fields in ST); **accounting handoff v2** —
+   income-category snapshot onto lines + journal-summary CSV +
+   exported-through marking (M); **soft period lock** (M — ST's graduated
+   close validates the shape).
 
 **Tier 2 — comms and dispatch polish (the visible ST gap):**
 
@@ -551,10 +635,12 @@ Cross-audit ranking, money-correctness first, then reuse-weighted
 9. **Office search breadth**: job #, invoice #, equipment serial (M) — the
    spec requires all three; CSRs hit this daily.
 
-**Tier 3 — inventory/catalog second ring:**
+**Tier 3 — inventory/catalog second ring (every ST counterpart
+tenant-confirmed):**
 
 10. **Catalog + inventory CSV import/export** with dry-run validation +
-    catalog pagination (M) — the #1 adoption blocker for parts-heavy shops.
+    catalog pagination (M) — base-product table stakes at ST; the #1
+    adoption blocker for parts-heavy shops.
 11. **Vendor master** (S/M) → **reorder points + replenishment view** (M) →
     **partial receipts** + wire the dead `closed` status (M).
 12. **Burdened labor rate + cross-job cost-resolution worklist** (S) — stops
@@ -571,11 +657,9 @@ Cross-audit ranking, money-correctness first, then reuse-weighted
 16. Customer **confirm-appointment loop** on the acceptance-link pattern (M,
     after comms slices).
 17. Recurring **agreement billing** (L — needs the invoice-home design
-    decision); QuickBooks API sync (L, demand-gated); field estimate builder
-    (L, already roadmapped).
-
-A formal rubric rescore should follow the next live-tenant ST walk once
-Tier 0–1 land; expected movement concentrates in rows 2, 10, 13, and 14.
+    decision; ST bills by membership-type cadence); returns-to-vendor
+    movement kind (M); QuickBooks API sync (L, demand-gated); field estimate
+    builder (L, already roadmapped).
 
 ## Appendix A — Operator Prompt (verbatim)
 
@@ -591,6 +675,15 @@ Tier 0–1 land; expected movement concentrates in rows 2, 10, 13, and 14.
 > pass. include your name, date, prompts etc and lets keep track of research
 > passes like this and make sure your passes never get confused for codex's or
 > another agent etc.
+
+Mid-pass correction (verbatim, after the first attempt used public marketing
+pages):
+
+> If service titan wasn't available and you didnt get a real look at the
+> product you should have stopped immediately as I dont care about any
+> "publicly avaialble" claims or marketing. I'd consider any of those
+> comparisons garbage and based on marketing lies. Try chrome on the other
+> pc. start over ONLY IF YOU GET INTO SERVICE TITAN.
 
 ## Appendix B — Subagent Prompts (verbatim)
 
@@ -691,26 +784,33 @@ PART 3 — reporting breadth: list every report that exists today (apps/api/src/
 Output structured markdown: current state w/ file evidence per item, gap severity for a working shop, reuse leverage, S/M/L size, and a top-8 priority order across all three parts. Your final message is raw data for a synthesis doc, not prose for a human.
 ```
 
-## Appendix C — Sources
+## Appendix C — Evidence Surfaces
 
-**ServiceTitan public pages (walked live in Chrome this pass):**
+**ServiceTitan tenant walk (logged-in, read-only, 2026-07-14):**
 
-- https://www.servicetitan.com/features (taxonomy incl. AR/AP, three-way matching, payables, timekeeping, tech tracking, customer portal, financing)
-- https://www.servicetitan.com/features/accounting
-- https://www.servicetitan.com/features/accounts-payable
-- https://www.servicetitan.com/features/contractor-inventory-software
-- https://www.servicetitan.com/features/contractor-payroll-software
-- https://www.servicetitan.com/features/pro/pricebook
-- https://www.servicetitan.com/features/pro
-- https://www.servicetitan.com/features/service-agreement-software
+- `go.servicetitan.com` Modular Dashboard
+- Accounting → Batch/Export Transactions (unbatched invoices workspace + QuickBooks export rail)
+- Accounting → Journal Entries
+- Accounting → Accounting Periods
+- Accounting → AR Management
+- Accounting → Bank Deposits
+- Accounting → Accounts Payable → Bills
+- Accounting → Accounting Audit Trail
+- Inventory → Items (Item Overview)
+- Inventory → Replenishment
+- Inventory → Purchase Orders
+- Inventory → Returns
+- Inventory nav: Receipts, Adjustments, Transfers, Inventory Counts (sections confirmed)
+- Pricebook → Materials
+- Pricebook → Price Setup
+- Pricebook → Import/Export
+- Pricebook → Pricebook Connect → Catalogs
+- Pricebook nav: Services, Equipment, Categories, Pricing Builder, Templates, History, Updates (sections confirmed)
+- Settings → Payroll (+ Payroll Adjustment Codes)
+- Settings → Invoicing → Tax Zones
+- Settings → Invoicing → Membership Types
 
-**Pricing/pain-point aggregators (web search, third-party, unverified):**
-
-- https://projul.com/blog/servicetitan-pricing-analysis-2026/
-- https://myquoteiq.com/servicetitan-pricing/
-- https://fieldcamp.ai/reviews/servicetitan/
-- https://procured.us/articles/servicetitan-pricing
-- https://www.getonecrew.com/post/servicetitan-reviews
-- https://www.getjobber.com/comparison/jobber-vs-housecall-pro/
-- https://www.housecallpro.com/compare/housecall-pro-jobber/
-- https://korekomfortsolutions.com/jobber-vs-housecall-pro-pricing-hidden-fees-real-costs-2026/
+**Struck from this pass per the evidence standard:** all
+servicetitan.com marketing/feature-page claims and third-party
+pricing/review aggregator content gathered during the rejected first
+attempt. None of it is used as evidence anywhere in this document.
