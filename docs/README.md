@@ -1134,13 +1134,33 @@ Read when: running a fresh competitive score, discussing market gaps, or decidin
 
 Does not own: BellField behavior; product and workflow docs remain source of truth.
 
+### [competitive-research-log.md](./competitive-research-log.md)
+
+Audience: contributors and product reviewers tracking competitive-research provenance.
+
+Purpose: registry of comparison passes, lead identity, date, method, artifact, and historical/current status so Codex, Claude, and unrecorded legacy work are not confused.
+
+Read when: starting, interpreting, or citing a competitive-research pass.
+
+Does not own: product direction, scores, implementation order, or product behavior.
+
+### [fsm-comparison-servicetitan-2026-07-14-codex-deep-pass.md](./fsm-comparison-servicetitan-2026-07-14-codex-deep-pass.md)
+
+Audience: contributors and product reviewers evaluating deeper competitive gaps after the delivery/payment arc.
+
+Purpose: current qualitative Codex deep-systems comparison covering accounting close and export controls, inventory/procurement lifecycles, operational exception work, UX/architecture debt, and ways BellField can outperform enterprise complexity through clarity.
+
+Read when: deciding which non-surface competitive gaps deserve future planning or checking the evidence and prompts from the July 14, 2026 pass.
+
+Does not own: implementation order, product behavior, or a replacement numerical score. The milestone plan and focused product docs remain authoritative.
+
 ### [fsm-comparison-servicetitan-2026-06-12.md](./fsm-comparison-servicetitan-2026-06-12.md)
 
-Audience: contributors and product reviewers checking the current competitive score.
+Audience: contributors and product reviewers checking the latest scored competitive snapshot.
 
-Purpose: current scorecard from the 2026-06-12 live-tenant ServiceTitan walk after the relay arc, including design recipes (dispatch density, unsold-estimates worklist, comms-on-rails, owner KPI landing, QuickBooks export) and re-ranked recommendations.
+Purpose: historical scorecard from the 2026-06-12 live-tenant ServiceTitan walk after the relay arc, including design recipes (dispatch density, unsold-estimates worklist, comms-on-rails, owner KPI landing, QuickBooks export) and re-ranked recommendations. It predates later acceptance, delivery, and payment work.
 
-Read when: asking where BellField stands against the mature FSM market today, or pulling the next gap-closing recipe. Remember the rule in `positioning-and-pricing.md`: comparison docs measure; they do not steer.
+Read when: checking the last numerical rubric result or pulling its gap-closing recipes. Do not treat the score as current product state. Remember the rule in `positioning-and-pricing.md`: comparison docs measure; they do not steer.
 
 Does not own: implementation order or product behavior. Use it as an evaluation snapshot.
 
