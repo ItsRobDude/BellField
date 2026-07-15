@@ -188,6 +188,28 @@ function copyRequired(source, target) {
   cpSync(source, target, { recursive: true });
 }
 
+/**
+ * copyRequired, but prunes every node_modules directory from the copy.
+ *
+ * Used for the Next standalone output: its traced node_modules are deleted by
+ * the very next packaging step and replaced with one deployed production tree,
+ * so copying them is pure waste — and worse, those trees are riddled with pnpm
+ * store junctions that natively crashed the whole build (0xC0000409) on the
+ * windows runners' ReFS Dev Drive. Never copying them removes that crash
+ * surface instead of racing it.
+ */
+function copyRequiredWithoutNodeModules(source, target) {
+  if (!existsSync(source)) {
+    throw new Error(`Required release artifact is missing: ${relative(repoRoot, source)}`);
+  }
+
+  mkdirSync(dirname(target), { recursive: true });
+  cpSync(source, target, {
+    recursive: true,
+    filter: (entrySource) => basename(entrySource) !== 'node_modules'
+  });
+}
+
 function copyFileRequired(source, target) {
   if (!existsSync(source)) {
     throw new Error(`Required release file is missing: ${relative(repoRoot, source)}`);
@@ -485,8 +507,11 @@ function packageOfficeWebRuntime(nodeExe) {
   // has crashed natively on CI (exit 0xC0000409 prints nothing), so each step
   // announces itself — a failing run then names its own crash site.
   const officeReleaseRoot = join(releaseRoot, 'apps', 'office-web');
-  console.log('office-web runtime: copying Next standalone output...');
-  copyRequired(join(repoRoot, 'apps', 'office-web', '.next', 'standalone'), officeReleaseRoot);
+  console.log('office-web runtime: copying Next standalone output (without node_modules)...');
+  copyRequiredWithoutNodeModules(
+    join(repoRoot, 'apps', 'office-web', '.next', 'standalone'),
+    officeReleaseRoot
+  );
 
   const officeServer = officeServerPath(releaseRoot);
   if (!officeServer) {
