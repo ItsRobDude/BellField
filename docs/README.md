@@ -1164,6 +1164,26 @@ Read when: checking the last numerical rubric result or pulling its gap-closing 
 
 Does not own: implementation order or product behavior. Use it as an evaluation snapshot.
 
+### [fsm-gap-analysis-2026-07-14.md](./fsm-gap-analysis-2026-07-14.md)
+
+Audience: contributors and product reviewers digging into competitive gaps beyond the scorecard.
+
+Purpose: the 2026-07-14 deep gap-analysis and design self-audit pass — accounting depth, inventory/catalog, UX foot-guns, workflow frontier — grounded in a fresh live ServiceTitan tenant walk (accounting, inventory, pricebook, payroll/tax/membership settings), with an indicative rescore and consolidated priorities. The 2026-06-12 scorecard remains the official score until a pass browser-drives BellField too.
+
+Read when: planning accounting/inventory/comms/design gap-closing work, or looking for the file-evidenced current state behind a competitive claim.
+
+Does not own: the official score (`fsm-comparison-servicetitan-2026-06-12.md`), implementation order, or product behavior.
+
+### [research-pass-log.md](./research-pass-log.md)
+
+Audience: anyone checking who ran a research/observation pass and with which agent.
+
+Purpose: the attribution registry for competitive/research passes — operator agent, model id, date, prompt locations — plus the attribution convention every future pass must follow, and the Claude-vs-Codex lane disambiguation.
+
+Read when: starting or filing a research pass, or attributing an existing one.
+
+Does not own: pass findings; each pass doc owns its own content.
+
 ## Legacy and Planning Context
 
 ### [fsm-comparison-servicetitan-2026-06.md](./fsm-comparison-servicetitan-2026-06.md) and [fsm-comparison-servicetitan-2026-06-10.md](./fsm-comparison-servicetitan-2026-06-10.md)
