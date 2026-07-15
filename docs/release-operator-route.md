@@ -43,7 +43,10 @@ pnpm smoke:release-zip -- --zip=bellfield-<version>.zip --require-gate-day-deps=
 
 The release builder uses the release signing key path configured in
 `tools/update/release-artifact.mjs`, currently under the owner's API Keys
-folder. The generated `release/` folder is ignored by git.
+folder. The generated `release/` folder is ignored by git. Build compilation,
+production dependency deployment, and signing run in a disposable detached
+worktree at the current clean commit; only the finished release tree is copied
+back to this checkout.
 
 The PostgreSQL and WinSW inputs are copied into `release/` before the signed
 update manifest is written. Do not manually copy or replace files after

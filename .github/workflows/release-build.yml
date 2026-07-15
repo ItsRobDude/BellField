@@ -1,33 +1,20 @@
 name: Release build
 
-# Non-blocking safety net: assembles a real Windows release with
+# Required Windows safety net: assembles a real Windows release with
 # `pnpm build:release` and validates the packaged manifest + layout, so a
 # broken builder (or a layout drift) is caught here instead of on gate day.
-# Not a required status check — it informs, it does not gate merges.
 #
 # Runs on windows-latest on purpose: it is the real artifact target and the
 # only place the build runner's win32 pnpm/git resolution path executes.
-# Path-filtered so docs-only changes skip the (slow, 2x-minutes) Windows build.
+# It is intentionally unfiltered so every pull request produces the required
+# `release-build` check; this also means workspace/config changes such as
+# pnpm-workspace.yaml can never bypass release validation.
 
 on:
   push:
     branches:
       - main
-    paths:
-      - 'apps/**'
-      - 'packages/**'
-      - 'tools/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/release-build.yml'
   pull_request:
-    paths:
-      - 'apps/**'
-      - 'packages/**'
-      - 'tools/**'
-      - 'package.json'
-      - 'pnpm-lock.yaml'
-      - '.github/workflows/release-build.yml'
 
 jobs:
   release-build:
@@ -39,13 +26,11 @@ jobs:
 
       - name: Set up pnpm
         uses: pnpm/action-setup@v6
-        with:
-          version: 11.13.0
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: pnpm
 
       - name: Install dependencies

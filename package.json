@@ -6,6 +6,13 @@
     "node": "24.x",
     "pnpm": "11.13.0"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.18.0",
+      "onFail": "download"
+    }
+  },
   "devDependencies": {
     "@secretlint/secretlint-rule-preset-recommend": "^13.0.2",
     "@typescript-eslint/eslint-plugin": "8.31.0",
@@ -18,12 +25,12 @@
     "typescript": "5.8.3"
   },
   "scripts": {
-    "dev:office-web": "pnpm --filter @bellfield/office-web dev",
-    "dev:field-mobile": "pnpm --filter @bellfield/field-mobile dev",
-    "dev:api": "pnpm --filter @bellfield/api dev",
-    "dev:worker": "pnpm --filter @bellfield/worker dev",
-    "dev:relay": "pnpm --filter @bellfield/relay dev",
-    "dev:relay:migrate": "pnpm --filter @bellfield/relay migration:up",
+    "dev:office-web": "corepack pnpm --filter @bellfield/office-web dev",
+    "dev:field-mobile": "corepack pnpm --filter @bellfield/field-mobile dev",
+    "dev:api": "corepack pnpm --filter @bellfield/api dev",
+    "dev:worker": "corepack pnpm --filter @bellfield/worker dev",
+    "dev:relay": "corepack pnpm --filter @bellfield/relay dev",
+    "dev:relay:migrate": "corepack pnpm --filter @bellfield/relay migration:up",
     "dev:postgres": "node tools/start-local-postgres.mjs",
     "dev:postgres:stop": "node tools/stop-local-postgres.mjs",
     "dev:postgres:docker": "docker compose up -d postgres",
@@ -31,7 +38,7 @@
     "dev:postgres:docker:down": "docker compose down",
     "dev:postgres:docker:logs": "docker compose logs -f postgres",
     "dev:migrate": "node tools/run-local-migrations.mjs",
-    "dev:field-smoke-data": "pnpm --filter @bellfield/api field-smoke:data",
+    "dev:field-smoke-data": "corepack pnpm --filter @bellfield/api field-smoke:data",
     "smoke:m9": "node tools/smoke/m9-api-smoke.mjs",
     "smoke:jobs": "node tools/smoke/jobs-lifecycle-api-smoke.mjs",
     "smoke:release-office-web": "node tools/smoke/release-office-web-assets-smoke.mjs",
@@ -45,29 +52,30 @@
     "smoke:release-zip": "node tools/smoke/release-zip-smoke.mjs",
     "smoke:updater": "node tools/smoke/updater-smoke.mjs",
     "smoke:gate-day-admin": "node tools/smoke/gate-day-admin-runner-smoke.mjs",
-    "start:office-web": "pnpm --filter @bellfield/office-web start",
-    "start:field-mobile": "pnpm --filter @bellfield/field-mobile start",
-    "start:api": "pnpm --filter @bellfield/api start",
-    "start:worker": "pnpm --filter @bellfield/worker start",
-    "build": "pnpm -r --if-present build",
-    "build:release": "node tools/build-release.mjs",
+    "start:office-web": "corepack pnpm --filter @bellfield/office-web start",
+    "start:field-mobile": "corepack pnpm --filter @bellfield/field-mobile start",
+    "start:api": "corepack pnpm --filter @bellfield/api start",
+    "start:worker": "corepack pnpm --filter @bellfield/worker start",
+    "build": "corepack pnpm -r --if-present build",
+    "build:release": "node tools/build-release-isolated.mjs",
     "package:release-zip": "node tools/package-release-zip.mjs",
+    "clean:generated": "node tools/clean-generated.mjs",
     "check:architecture": "node tools/check-architecture.mjs",
     "check:file-size": "node tools/check-file-size.mjs",
     "check:ui-copy": "node tools/check-ui-copy.mjs",
     "usb:validate-start-here": "node tools/install/validate-start-here.mjs",
     "security:secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
-    "security:audit": "pnpm audit --prod",
+    "security:audit": "corepack pnpm audit --prod",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "typecheck": "pnpm -r --if-present typecheck",
-    "lint": "pnpm -r --if-present lint && pnpm check:file-size",
-    "test:tools": "node --test \"tools/install/*.test.mjs\"",
+    "typecheck": "corepack pnpm -r --if-present typecheck",
+    "lint": "corepack pnpm -r --if-present lint && corepack pnpm check:file-size",
+    "test:tools": "node --test \"tools/install/*.test.mjs\" \"tools/*.test.mjs\"",
     "test": "corepack pnpm test:tools && corepack pnpm -r --if-present test",
     "prepare": "simple-git-hooks"
   },
   "simple-git-hooks": {
-    "pre-commit": "pnpm exec lint-staged",
+    "pre-commit": "corepack pnpm exec lint-staged",
     "pre-push": "corepack pnpm security:secrets && corepack pnpm test"
   },
   "lint-staged": {
