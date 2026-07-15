@@ -77,12 +77,13 @@ function findPnpmExecutable() {
   }
 
   const expected = expectedPnpmVersion();
-  const searchRoots = [
-    process.env.PNPM_HOME,
-    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'pnpm') : null
-  ].filter(Boolean);
+  const localPnpmRoot = process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, 'pnpm') : null;
+  const searchRoots = [process.env.PNPM_HOME, localPnpmRoot].filter(Boolean);
   const candidates = [
     ...searchRoots.flatMap((root) => collectPnpmExecutables(join(root, '.tools'))),
+    ...(localPnpmRoot
+      ? collectPnpmExecutables(join(localPnpmRoot, 'store', 'v11', 'links', '@pnpm', 'exe'))
+      : []),
     ...pathEntries()
       .map((entry) => join(entry, 'pnpm.exe'))
       .filter((candidate) => existsSync(candidate))
@@ -93,11 +94,6 @@ function findPnpmExecutable() {
       cachedPnpmExecutable = candidate;
       return cachedPnpmExecutable;
     }
-  }
-
-  if (candidates[0]) {
-    cachedPnpmExecutable = candidates[0];
-    return cachedPnpmExecutable;
   }
 
   return null;
@@ -384,15 +380,6 @@ function copyWinSwExe(winSwExe) {
   copyFileRequired(source, join(releaseRoot, 'tools', 'winsw', 'WinSW-x64.exe'));
 }
 
-// STATUS_STACK_BUFFER_OVERRUN: pnpm 11 child processes on the windows-latest
-// runners intermittently die with this code during worker-thread teardown —
-// observed at different deploy steps across runs, usually AFTER the deploy's
-// work and output completed. The exit code of a crashing package manager is
-// not load-bearing here: every deploy below is independently verified by
-// assertReleasePackageDependencies (node-resolves every declared dependency
-// from the deployed tree), assertNoReparsePoints, and the packaged smoke.
-const WINDOWS_FAST_FAIL_EXIT = 3221226505;
-
 function deployWorkspacePackage(filter, target) {
   // pnpm legacy deploy is most reliable with repo-relative targets on Windows;
   // absolute or cross-drive paths can be folded into the workspace path.
@@ -412,31 +399,7 @@ function deployWorkspacePackage(filter, target) {
     deployTarget
   ];
 
-  for (let attempt = 1; attempt <= 2; attempt += 1) {
-    const status = runStatus('pnpm', deployArgs);
-    if (status === 0) {
-      return;
-    }
-    const producedOutput = existsSync(join(target, 'node_modules'));
-    if (status === WINDOWS_FAST_FAIL_EXIT && producedOutput) {
-      console.warn(
-        `[WARN] pnpm deploy for ${filter} exited with 0xC0000409 after producing its output ` +
-          '(known pnpm 11 worker-teardown crash on windows runners). Continuing; the ' +
-          'dependency assertions independently verify the deployed tree.'
-      );
-      return;
-    }
-    if (status === WINDOWS_FAST_FAIL_EXIT && attempt === 1) {
-      console.warn(
-        `[WARN] pnpm deploy for ${filter} crashed with 0xC0000409 before producing output; ` +
-          'retrying once with a clean target...'
-      );
-      rmSync(target, { force: true, recursive: true });
-      mkdirSync(target, { recursive: true });
-      continue;
-    }
-    throw new Error(`pnpm deploy for ${filter} exited with ${status}`);
-  }
+  run('pnpm', deployArgs);
 }
 
 function assertReleasePackageDependencies(input) {
@@ -604,6 +567,12 @@ function assertCleanSourceTree() {
       ].join(' ')
     );
   }
+}
+
+if (process.env.BELLFIELD_RELEASE_STAGED_BUILD !== '1') {
+  throw new Error(
+    'Release assembly must run through `pnpm build:release` so it uses a disposable clean worktree.'
+  );
 }
 
 assertCleanSourceTree();

@@ -54,7 +54,7 @@ does not replace the clean-machine run.
   ```
 
 - [ ] Required GitHub checks are green for that same source commit:
-      `quality` and `install-helper-smoke`. The helper-smoke check must run on
+      `quality`, `install-helper-smoke`, and `release-build`. The helper-smoke check must run on
       `windows-latest` with `BELLFIELD_REQUIRE_POWERSHELL_CORPUS=1`, so the
       PowerShell redaction/env-line/firewall corpora cannot silently skip.
 

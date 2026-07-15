@@ -49,14 +49,14 @@ BellField uses `pnpm` only.
 
 Expected local baseline:
 
-- Node `24.x` (LTS)
-- pnpm `10.13.1`
+- Node `24.18.0` (LTS; pinned by `devEngines.runtime` in `package.json`)
+- pnpm `11.13.0`
 
 Bootstrap from the repo root:
 
 ```powershell
 corepack enable
-corepack prepare pnpm@10.13.1 --activate
+corepack install
 pnpm install --frozen-lockfile
 ```
 
@@ -98,7 +98,11 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
+pnpm clean:generated --dry-run
 ```
+
+`pnpm clean:generated --dry-run` lists only BellField's known build-output
+directories. Use `pnpm clean:generated --apply` to remove exactly that allowlist.
 
 Architecture guardrails are documented in [docs/architecture-guardrails.md](./docs/architecture-guardrails.md) and checked with:
 
