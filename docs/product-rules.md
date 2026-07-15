@@ -631,6 +631,12 @@ When an estimate or invoice is priced, BellField should snapshot the rate and li
 for that document. Later company-setting or catalog changes must not silently rewrite old estimates,
 posted invoices, job history, or accounting reports.
 
+How an invoice draft gets its rate (2026-07-15, closing the $0-tax gap found by the 2026-07-14
+gap-analysis pass): the main draft seeds the company default rate at creation; converting an
+estimate in replace mode (or into an empty draft) adopts the estimate's snapshotted rate; an
+adjustment/credit inherits the rate frozen on the posted invoice it corrects; and the office can
+edit a draft's header rate (`invoices:edit`) until posting locks it. Posted invoices never change.
+
 Customer sales tax is separate from purchase/vendor tax and job cost. If a shop pays tax on parts,
 that belongs in purchase, inventory, or job-cost handling rather than being mixed with the customer
 sales tax rate.

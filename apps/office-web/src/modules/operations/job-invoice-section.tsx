@@ -7,6 +7,7 @@ import {
   editOfficeInvoiceLine,
   getOfficeInvoiceForJob,
   postOfficeInvoice,
+  setOfficeInvoiceTaxRate,
   voidOfficeInvoiceLine,
   type EstimateEmailDeliveryStatus,
   type InvoiceLineItemSummary,
@@ -31,6 +32,7 @@ import {
 import {
   formatCurrency,
   InvoiceLineEditor,
+  InvoiceTaxRateEditor,
   InvoiceTotals,
   invoiceSourceLabels,
   PostedInvoiceSummary,
@@ -81,6 +83,7 @@ export function JobInvoiceSection({
   const [editingLineId, setEditingLineId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState<InvoiceLineDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [isEditingTaxRate, setIsEditingTaxRate] = useState(false);
   const [isDeliveryPanelOpen, setIsDeliveryPanelOpen] = useState(false);
   const [deliveryDraft, setDeliveryDraft] = useState<DocumentDeliveryDraft>({
     recipientEmail: billToCustomerEmail ?? '',
@@ -181,6 +184,29 @@ export function JobInvoiceSection({
       applyResult(response.invoice, 'Line removed.');
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to remove the line.');
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function saveTaxRate(taxRateBasisPoints: number): Promise<boolean> {
+    if (!invoice) {
+      return false;
+    }
+    setIsSaving(true);
+    try {
+      const response = await setOfficeInvoiceTaxRate({
+        invoiceId: invoice.id,
+        taxRateBasisPoints,
+        apiBaseUrl,
+        sessionToken
+      });
+      applyResult(response.invoice, 'Tax rate updated.');
+      setIsEditingTaxRate(false);
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update the tax rate.');
+      return false;
     } finally {
       setIsSaving(false);
     }
@@ -404,6 +430,11 @@ export function JobInvoiceSection({
                 Add line
               </button>
             ) : null}
+            {invoice && canEdit && invoice.status === 'draft' && !isEditingTaxRate ? (
+              <button type="button" style={styles.button} onClick={() => setIsEditingTaxRate(true)}>
+                Edit tax rate
+              </button>
+            ) : null}
             {invoice && canPost && invoice.status === 'draft' && !newLineDraft && !editingLineId ? (
               <button
                 type="button"
@@ -509,6 +540,14 @@ export function JobInvoiceSection({
                 )}
               </div>
             )}
+            {isEditingTaxRate && invoice.status === 'draft' ? (
+              <InvoiceTaxRateEditor
+                taxRateBasisPoints={invoice.taxRateBasisPoints}
+                isSaving={isSaving}
+                onSave={saveTaxRate}
+                onCancel={() => setIsEditingTaxRate(false)}
+              />
+            ) : null}
             <InvoiceTotals invoice={invoice} />
             {invoice.status === 'draft' && paymentPermissions.canView ? (
               <DraftInvoiceDepositsPanel

@@ -326,6 +326,7 @@ export type JobTimelineEntry = {
     | 'estimateDeliveryFailed'
     | 'estimateSendCanceled'
     | 'invoicePosted'
+    | 'invoiceTaxRateChanged'
     | 'invoiceAdjustmentCreated'
     | 'invoiceSent'
     | 'invoiceDeliveryFailed'

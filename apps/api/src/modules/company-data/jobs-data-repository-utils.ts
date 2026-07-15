@@ -61,6 +61,12 @@ export function buildMediaVoidedMessage(filename: string, reason: string | null)
  *
  * Must run inside the same transaction/queryable as the job insert so a job is
  * never briefly missing its draft.
+ *
+ * The draft seeds its sales-tax rate from company settings at creation (0 when
+ * the company does not charge sales tax, or before settings exist). Read in the
+ * same statement so the seed is transaction-consistent; without this, drafts
+ * inherit the column default of 0 bps and register-first/manual invoices bill
+ * $0 tax (the 2026-07-14 gap-analysis bug).
  */
 export async function ensureMainInvoiceDraft(
   jobId: string,
@@ -69,8 +75,19 @@ export async function ensureMainInvoiceDraft(
 ): Promise<void> {
   await queryable.query(
     `
-      insert into invoices (id, job_id, invoice_kind, status, created_at, updated_at, version)
-      values ($1, $2, 'main', 'draft', $3, $3, 1)
+      insert into invoices (id, job_id, invoice_kind, status, tax_rate_basis_points, created_at, updated_at, version)
+      values (
+        $1, $2, 'main', 'draft',
+        coalesce(
+          (
+            select case when charges_sales_tax then default_sales_tax_basis_points else 0 end
+            from company_settings
+            limit 1
+          ),
+          0
+        ),
+        $3, $3, 1
+      )
       on conflict (job_id) where invoice_kind = 'main' do nothing
     `,
     [randomUUID(), jobId, occurredAt]

@@ -989,6 +989,21 @@ export async function postOfficeInvoiceById(input: {
   });
 }
 
+/** Set the header sales-tax rate on a DRAFT invoice (main or adjustment/credit). */
+export async function setOfficeInvoiceTaxRate(input: {
+  invoiceId: string;
+  taxRateBasisPoints: number;
+  sessionToken: string;
+  apiBaseUrl?: string;
+}): Promise<InvoiceResponse> {
+  return requestJson<InvoiceResponse>(`/operations/invoices/${input.invoiceId}/tax-rate`, {
+    apiBaseUrl: input.apiBaseUrl,
+    sessionToken: input.sessionToken,
+    method: 'PUT',
+    body: JSON.stringify({ taxRateBasisPoints: input.taxRateBasisPoints })
+  });
+}
+
 // Payment-ledger client functions live in operations-payments-api.ts (size
 // guardrail); re-exported here so existing import sites are unchanged.
 export {

@@ -10,6 +10,7 @@ import {
   type InvoiceLineItemInput,
   type InvoiceNumberingSettingsResponse,
   type JobInvoiceBalance,
+  type SetInvoiceTaxRateRequest,
   type UpdateInvoiceNumberingRequest,
   type VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
@@ -311,6 +312,33 @@ export class InvoicesService {
       actor
     );
     return { invoice: this.toSummary(created) };
+  }
+
+  /**
+   * Set the header sales-tax rate on a DRAFT invoice (main or adjustment/credit)
+   * and recompute totals. Posted invoices are locked and rejected — corrections to
+   * a posted bill go through adjustments/credits, which inherit its rate.
+   */
+  async setDraftTaxRate(
+    sessionToken: string,
+    invoiceId: string,
+    request: SetInvoiceTaxRateRequest
+  ): Promise<InvoiceResponseDto> {
+    const actor = await this.identityAccessService.getAuthorizedEmployee(
+      sessionToken,
+      'invoices:edit',
+      ['office-web']
+    );
+    const rate = request.taxRateBasisPoints;
+    if (!Number.isInteger(rate) || rate < 0 || rate > 2500) {
+      throw new BadRequestException('Invoice sales tax rate must be between 0% and 25%.');
+    }
+    // Friendly pre-check; the repository's guarded update is the authoritative
+    // draft-only gate (race-proof against a concurrent post).
+    this.ensureDraft(await this.requireInvoice(invoiceId));
+
+    await this.invoicesRepository.setDraftTaxRate(invoiceId, rate, actor.displayName);
+    return { invoice: this.toSummary(await this.requireInvoice(invoiceId)) };
   }
 
   /** Add a manual line to a specific invoice by id (used for adjustment/credit lines). */

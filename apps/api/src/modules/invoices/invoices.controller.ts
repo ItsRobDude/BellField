@@ -6,6 +6,7 @@ import {
   CreateAdjustmentRequestBodyDto,
   InvoiceLineItemInputDto,
   SendInvoiceRequestBodyDto,
+  SetInvoiceTaxRateRequestBodyDto,
   UpdateInvoiceNumberingRequestBodyDto,
   VoidInvoiceLineItemRequestBodyDto
 } from './invoices.dto';
@@ -139,6 +140,20 @@ export class InvoiceController {
     @Param('invoiceId') invoiceId: string
   ) {
     return this.invoicesService.getInvoice(getBearerToken(authorizationHeader), invoiceId);
+  }
+
+  // Set the header sales-tax rate on a draft (main or adjustment/credit).
+  @Put(':invoiceId/tax-rate')
+  async setTaxRate(
+    @Headers('authorization') authorizationHeader: string | undefined,
+    @Param('invoiceId') invoiceId: string,
+    @Body() request: SetInvoiceTaxRateRequestBodyDto
+  ) {
+    return this.invoicesService.setDraftTaxRate(
+      getBearerToken(authorizationHeader),
+      invoiceId,
+      request
+    );
   }
 
   @Get(':invoiceId/document')

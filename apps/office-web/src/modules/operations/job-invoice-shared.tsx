@@ -1,5 +1,6 @@
 'use client';
 
+import { useId, useState } from 'react';
 import type { InvoiceLineItemSummary, InvoiceSummary } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
@@ -59,6 +60,26 @@ export function SummaryRow({
   );
 }
 
+/** Render basis points as a human percent: 825 -> "8.25", 800 -> "8". */
+export function formatTaxRatePercent(taxRateBasisPoints: number): string {
+  return (taxRateBasisPoints / 100).toFixed(2).replace(/\.?0+$/, '');
+}
+
+/** Parse a percent input ("8.25") into basis points, enforcing 0–25% at ≤2 decimals. */
+export function parseTaxRatePercent(
+  value: string
+): { ok: true; basisPoints: number } | { ok: false; message: string } {
+  const trimmed = value.trim();
+  if (!/^\d{1,2}(\.\d{1,2})?$/.test(trimmed)) {
+    return { ok: false, message: 'Enter a tax rate between 0 and 25 with up to two decimals.' };
+  }
+  const basisPoints = Math.round(Number.parseFloat(trimmed) * 100);
+  if (basisPoints > 2500) {
+    return { ok: false, message: 'The tax rate cannot exceed 25%.' };
+  }
+  return { ok: true, basisPoints };
+}
+
 export function InvoiceTotals({ invoice }: { invoice: InvoiceSummary }) {
   const { totals } = invoice;
   return (
@@ -67,8 +88,79 @@ export function InvoiceTotals({ invoice }: { invoice: InvoiceSummary }) {
       {totals.discount > 0 ? (
         <SummaryRow label="Discount" value={`−${formatCurrency(totals.discount)}`} />
       ) : null}
-      <SummaryRow label="Tax" value={formatCurrency(totals.tax)} />
+      <SummaryRow
+        label={`Tax (${formatTaxRatePercent(invoice.taxRateBasisPoints)}%)`}
+        value={formatCurrency(totals.tax)}
+      />
       <SummaryRow label="Total" value={formatCurrency(totals.total)} emphasize />
+    </div>
+  );
+}
+
+/**
+ * Inline editor for a draft invoice's header sales-tax rate. Input state is local;
+ * the parent performs the save (and reports success so a failed save keeps the
+ * editor open with the typed value intact).
+ */
+export function InvoiceTaxRateEditor({
+  taxRateBasisPoints,
+  isSaving,
+  onSave,
+  onCancel
+}: {
+  taxRateBasisPoints: number;
+  isSaving: boolean;
+  onSave: (taxRateBasisPoints: number) => Promise<boolean>;
+  onCancel: () => void;
+}) {
+  const inputId = useId();
+  const [percentText, setPercentText] = useState(formatTaxRatePercent(taxRateBasisPoints));
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
+
+  async function save() {
+    const parsed = parseTaxRatePercent(percentText);
+    if (!parsed.ok) {
+      setValidationMessage(parsed.message);
+      return;
+    }
+    await onSave(parsed.basisPoints);
+  }
+
+  return (
+    <div style={styles.subpanel}>
+      <div style={styles.row}>
+        <label style={styles.fieldLabel} htmlFor={inputId}>
+          Sales tax rate (%)
+        </label>
+        <div style={styles.badgeRow}>
+          <input
+            id={inputId}
+            style={styles.input}
+            inputMode="decimal"
+            value={percentText}
+            disabled={isSaving}
+            onChange={(event) => {
+              setPercentText(event.target.value);
+              setValidationMessage(null);
+            }}
+          />
+          <button
+            type="button"
+            style={styles.primaryButton}
+            disabled={isSaving}
+            onClick={() => void save()}
+          >
+            Save
+          </button>
+          <button type="button" style={styles.button} disabled={isSaving} onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
+      <p style={styles.tinyMuted}>
+        Applies to the taxable lines on this draft. Posted invoices never change.
+      </p>
+      {validationMessage ? <p style={styles.error}>{validationMessage}</p> : null}
     </div>
   );
 }

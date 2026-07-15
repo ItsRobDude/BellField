@@ -13,6 +13,7 @@ import {
   recordOfficePayment,
   refundOfficePayment,
   requestOfficeOnlineRefund,
+  setOfficeInvoiceTaxRate,
   voidOfficeInvoiceLine,
   voidOfficePayment,
   type InvoiceAdjustmentKind,
@@ -192,6 +193,28 @@ export function JobInvoiceCorrections({
       setBalance(await getOfficeJobInvoiceBalance({ jobId, apiBaseUrl, sessionToken }));
     } catch {
       // A stale balance is non-fatal; the next full load corrects it.
+    }
+  }
+
+  async function saveCorrectionTaxRate(
+    invoiceId: string,
+    taxRateBasisPoints: number
+  ): Promise<boolean> {
+    setIsSaving(true);
+    try {
+      const response = await setOfficeInvoiceTaxRate({
+        invoiceId,
+        taxRateBasisPoints,
+        apiBaseUrl,
+        sessionToken
+      });
+      applyCorrection(response.invoice, 'Tax rate updated.');
+      return true;
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Unable to update the tax rate.');
+      return false;
+    } finally {
+      setIsSaving(false);
     }
   }
 
@@ -656,6 +679,9 @@ export function JobInvoiceCorrections({
               isSaving={isSaving}
               lineEdit={lineEdit?.invoiceId === correction.id ? lineEdit : null}
               otherEditInProgress={lineEdit !== null && lineEdit.invoiceId !== correction.id}
+              onSaveTaxRate={(taxRateBasisPoints) =>
+                saveCorrectionTaxRate(correction.id, taxRateBasisPoints)
+              }
               onStartAddLine={() =>
                 setLineEdit({
                   invoiceId: correction.id,

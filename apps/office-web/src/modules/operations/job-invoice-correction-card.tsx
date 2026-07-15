@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type {
   InvoiceAdjustmentKind,
   InvoiceLineItemSummary,
@@ -9,6 +10,7 @@ import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   formatCurrency,
   InvoiceLineEditor,
+  InvoiceTaxRateEditor,
   InvoiceTotals,
   invoiceSourceLabels,
   PostedInvoiceSummary
@@ -33,7 +35,8 @@ export function CorrectionCard({
   onChangeLineDraft,
   onSaveLine,
   onRemoveLine,
-  onPost
+  onPost,
+  onSaveTaxRate
 }: {
   correction: InvoiceSummary;
   canEdit: boolean;
@@ -48,7 +51,9 @@ export function CorrectionCard({
   onSaveLine: () => void;
   onRemoveLine: (line: InvoiceLineItemSummary) => void;
   onPost: () => void;
+  onSaveTaxRate: (taxRateBasisPoints: number) => Promise<boolean>;
 }) {
+  const [isEditingTaxRate, setIsEditingTaxRate] = useState(false);
   const isDraft = correction.status === 'draft';
   const kindLabel =
     correctionKindLabels[correction.invoiceKind === 'credit' ? 'credit' : 'adjustment'];
@@ -71,6 +76,11 @@ export function CorrectionCard({
           {actionsEnabled ? (
             <button type="button" style={styles.button} onClick={onStartAddLine}>
               Add line
+            </button>
+          ) : null}
+          {actionsEnabled && !isEditingTaxRate ? (
+            <button type="button" style={styles.button} onClick={() => setIsEditingTaxRate(true)}>
+              Edit tax rate
             </button>
           ) : null}
           {isDraft &&
@@ -145,6 +155,21 @@ export function CorrectionCard({
           onChange={onChangeLineDraft}
           onSave={onSaveLine}
           onCancel={onCancelLineEdit}
+        />
+      ) : null}
+
+      {isEditingTaxRate && isDraft ? (
+        <InvoiceTaxRateEditor
+          taxRateBasisPoints={correction.taxRateBasisPoints}
+          isSaving={isSaving}
+          onSave={async (taxRateBasisPoints) => {
+            const saved = await onSaveTaxRate(taxRateBasisPoints);
+            if (saved) {
+              setIsEditingTaxRate(false);
+            }
+            return saved;
+          }}
+          onCancel={() => setIsEditingTaxRate(false)}
         />
       ) : null}
 
