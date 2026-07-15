@@ -139,6 +139,14 @@ function resolveCommandInvocation(command, args) {
 }
 
 function run(command, args) {
+  const status = runStatus(command, args);
+  if (status !== 0) {
+    throw new Error(`${command} ${args.join(' ')} exited with ${status}`);
+  }
+}
+
+/** Like run(), but returns the child's exit status instead of throwing on nonzero. */
+function runStatus(command, args) {
   const invocation = resolveCommandInvocation(command, args);
   const result = spawnSync(invocation.executable, invocation.args, {
     cwd: repoRoot,
@@ -151,9 +159,7 @@ function run(command, args) {
     throw new Error(`Failed to run ${command}: ${result.error.message}`);
   }
 
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(' ')} exited with ${result.status}`);
-  }
+  return result.status ?? 1;
 }
 
 function runCapture(command, args) {
@@ -356,19 +362,59 @@ function copyWinSwExe(winSwExe) {
   copyFileRequired(source, join(releaseRoot, 'tools', 'winsw', 'WinSW-x64.exe'));
 }
 
+// STATUS_STACK_BUFFER_OVERRUN: pnpm 11 child processes on the windows-latest
+// runners intermittently die with this code during worker-thread teardown —
+// observed at different deploy steps across runs, usually AFTER the deploy's
+// work and output completed. The exit code of a crashing package manager is
+// not load-bearing here: every deploy below is independently verified by
+// assertReleasePackageDependencies (node-resolves every declared dependency
+// from the deployed tree), assertNoReparsePoints, and the packaged smoke.
+const WINDOWS_FAST_FAIL_EXIT = 3221226505;
+
 function deployWorkspacePackage(filter, target) {
   // pnpm legacy deploy is most reliable with repo-relative targets on Windows;
   // absolute or cross-drive paths can be folded into the workspace path.
   const deployTarget = relative(repoRoot, target);
-  run('pnpm', [
+  const deployArgs = [
     '--filter',
     filter,
     'deploy',
     '--prod',
     '--legacy',
     '--config.node-linker=hoisted',
+    // Plain file copies: no reflink/clone machinery (the ReFS Dev Drive on
+    // GitHub's windows runners would otherwise trigger pnpm 11's native
+    // reflink path), and a release bundle must not depend on store
+    // cloning/link semantics anyway.
+    '--config.package-import-method=copy',
     deployTarget
-  ]);
+  ];
+
+  for (let attempt = 1; attempt <= 2; attempt += 1) {
+    const status = runStatus('pnpm', deployArgs);
+    if (status === 0) {
+      return;
+    }
+    const producedOutput = existsSync(join(target, 'node_modules'));
+    if (status === WINDOWS_FAST_FAIL_EXIT && producedOutput) {
+      console.warn(
+        `[WARN] pnpm deploy for ${filter} exited with 0xC0000409 after producing its output ` +
+          '(known pnpm 11 worker-teardown crash on windows runners). Continuing; the ' +
+          'dependency assertions independently verify the deployed tree.'
+      );
+      return;
+    }
+    if (status === WINDOWS_FAST_FAIL_EXIT && attempt === 1) {
+      console.warn(
+        `[WARN] pnpm deploy for ${filter} crashed with 0xC0000409 before producing output; ` +
+          'retrying once with a clean target...'
+      );
+      rmSync(target, { force: true, recursive: true });
+      mkdirSync(target, { recursive: true });
+      continue;
+    }
+    throw new Error(`pnpm deploy for ${filter} exited with ${status}`);
+  }
 }
 
 function assertReleasePackageDependencies(input) {
@@ -435,7 +481,11 @@ function removeNestedNodeModules(root) {
 }
 
 function packageOfficeWebRuntime(nodeExe) {
+  // Step breadcrumbs: this is the longest multi-step section and the one that
+  // has crashed natively on CI (exit 0xC0000409 prints nothing), so each step
+  // announces itself — a failing run then names its own crash site.
   const officeReleaseRoot = join(releaseRoot, 'apps', 'office-web');
+  console.log('office-web runtime: copying Next standalone output...');
   copyRequired(join(repoRoot, 'apps', 'office-web', '.next', 'standalone'), officeReleaseRoot);
 
   const officeServer = officeServerPath(releaseRoot);
@@ -446,16 +496,20 @@ function packageOfficeWebRuntime(nodeExe) {
 
   // Replace all traced Next node_modules with one hoisted production tree next
   // to server.js so the artifact does not depend on pnpm store reparse points.
+  console.log('office-web runtime: removing traced node_modules...');
   removeNestedNodeModules(officeReleaseRoot);
   // Keep the temp deploy on the repo drive; pnpm legacy deploy can mis-handle
   // cross-drive absolute targets on Windows CI.
   const deployRoot = mkdtempSync(join(repoRoot, 'bellfield-office-web-deploy-'));
   try {
+    console.log('office-web runtime: deploying production dependencies...');
     deployWorkspacePackage('@bellfield/office-web', deployRoot);
+    console.log('office-web runtime: copying production node_modules into the release...');
     copyNodeModules(join(deployRoot, 'node_modules'), join(officeServerRoot, 'node_modules'));
   } finally {
     removeGeneratedTempDirectory(deployRoot, 'office-web deploy temp directory');
   }
+  console.log('office-web runtime: packaged.');
 
   assertReleasePackageDependencies({
     nodeExe,
