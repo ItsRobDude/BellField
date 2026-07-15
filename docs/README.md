@@ -1136,13 +1136,13 @@ Does not own: BellField behavior; product and workflow docs remain source of tru
 
 ### [competitive-research-log.md](./competitive-research-log.md)
 
-Audience: contributors and product reviewers tracking competitive-research provenance.
+Audience: anyone following an older link to the Codex-created registry.
 
-Purpose: registry of comparison passes, lead identity, date, method, artifact, and historical/current status so Codex, Claude, and unrecorded legacy work are not confused.
+Purpose: pointer stub only — merged into `research-pass-log.md` on 2026-07-14 so exactly one research-pass registry exists; its pass-ID scheme was adopted there.
 
-Read when: starting, interpreting, or citing a competitive-research pass.
+Read when: you landed here from an old link; then use the merged registry.
 
-Does not own: product direction, scores, implementation order, or product behavior.
+Does not own: anything; add new passes to `research-pass-log.md`.
 
 ### [fsm-comparison-servicetitan-2026-07-14-codex-deep-pass.md](./fsm-comparison-servicetitan-2026-07-14-codex-deep-pass.md)
 
@@ -1178,9 +1178,9 @@ Does not own: the official score (`fsm-comparison-servicetitan-2026-06-12.md`), 
 
 Audience: anyone checking who ran a research/observation pass and with which agent.
 
-Purpose: the attribution registry for competitive/research passes — operator agent, model id, date, prompt locations — plus the attribution convention every future pass must follow, and the Claude-vs-Codex lane disambiguation.
+Purpose: the **single merged registry** for competitive/research passes (absorbed `competitive-research-log.md` 2026-07-14) — pass IDs, operator agent + model, method, prompt locations — plus the attribution convention, registry rules, the owner evidence standard, Claude-vs-Codex lane disambiguation, and the 2026-07-14 sibling-pass reconciliation note.
 
-Read when: starting or filing a research pass, or attributing an existing one.
+Read when: starting or filing a research pass, attributing an existing one, or checking the evidence standard.
 
 Does not own: pass findings; each pass doc owns its own content.
 
