@@ -1,13 +1,16 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-// The backfill repairs the $0-tax drafts created before rate seeding existed.
-// These assertions pin its safety envelope: drafts only, posted rows untouched,
-// estimate-converted mains skipped, and SQL totals math only attempted for
-// discount-free drafts that actually have active lines.
+// The original backfill repairs the $0-tax drafts created before rate seeding
+// existed. Keep its committed forward SQL immutable; the follow-up migration
+// owns the discounted-with-lines repair for databases that already applied it.
 describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
   const migrationSql = readFileSync(
     join(__dirname, '20260715_001_invoice_draft_tax_rate_backfill.up.sql'),
+    'utf8'
+  );
+  const rollbackSql = readFileSync(
+    join(__dirname, '20260715_001_invoice_draft_tax_rate_backfill.down.sql'),
     'utf8'
   );
   // Strip comment lines BEFORE splitting on ';' — the prose comments contain
@@ -18,12 +21,12 @@ describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
     .join('\n');
   const statements = sqlWithoutComments
     .split(';')
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const updates = statements.filter((s) => /update invoices/i.test(s));
+    .map((statement) => statement.trim())
+    .filter((statement) => statement.length > 0);
+  const updates = statements.filter((statement) => /update invoices/i.test(statement));
   const [mainsWithLines, mainsEmpty, adjustmentsWithLines, adjustmentsEmpty] = updates;
 
-  it('contains exactly the four draft updates (mains then adjustments, with-lines then empty)', () => {
+  it('contains exactly the four original draft update paths', () => {
     expect(updates).toHaveLength(4);
     expect(mainsWithLines).toMatch(/invoice_kind = 'main'/);
     expect(mainsEmpty).toMatch(/invoice_kind = 'main'/);
@@ -38,12 +41,12 @@ describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
     }
   });
 
-  it('skips estimate-converted mains (adopted terms are deliberate, 0 may be a choice)', () => {
+  it('skips estimate-converted mains', () => {
     expect(mainsWithLines).toMatch(/source_kind = 'estimate'/);
     expect(mainsWithLines).toMatch(/not exists/i);
   });
 
-  it('only attempts SQL totals math on discount-free drafts with active lines', () => {
+  it('limits original SQL totals math to discount-free drafts with active lines', () => {
     for (const update of [mainsWithLines, adjustmentsWithLines]) {
       expect(update).toMatch(/discount_kind is null/);
       expect(update).toMatch(/round\(t\.taxable_base \* /);
@@ -57,21 +60,18 @@ describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
     }
   });
 
-  it('avoids LATERAL against the update target (grouped derived table instead)', () => {
+  it('avoids LATERAL against the update target', () => {
     expect(sqlWithoutComments).not.toMatch(/lateral/i);
     for (const update of [mainsWithLines, adjustmentsWithLines]) {
       expect(update).toMatch(/group by ili\.invoice_id/);
     }
   });
 
-  it('seeds mains from company settings only when the company charges sales tax', () => {
-    expect(mainsWithLines).toMatch(/charges_sales_tax then default_sales_tax_basis_points/);
-    expect(mainsEmpty).toMatch(/charges_sales_tax then default_sales_tax_basis_points/);
-    expect(mainsWithLines).toMatch(/cr\.bps > 0/);
-    expect(mainsEmpty).toMatch(/cr\.bps > 0/);
-  });
-
-  it('inherits adjustment/credit rates from the corrected invoice, not company settings', () => {
+  it('uses the company rate for mains and the frozen parent rate for corrections', () => {
+    for (const update of [mainsWithLines, mainsEmpty]) {
+      expect(update).toMatch(/charges_sales_tax then default_sales_tax_basis_points/);
+      expect(update).toMatch(/cr\.bps > 0/);
+    }
     for (const update of [adjustmentsWithLines, adjustmentsEmpty]) {
       expect(update).toMatch(/parent\.id = adj\.adjusts_invoice_id/);
       expect(update).toMatch(/parent\.tax_rate_basis_points > 0/);
@@ -83,5 +83,16 @@ describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
     for (const update of updates) {
       expect(update).toMatch(/version = \w+\.version \+ 1/);
     }
+  });
+
+  it('provides an explicit non-destructive rollback for the data repair', () => {
+    const rollbackWithoutComments = rollbackSql
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('--'))
+      .join('\n')
+      .trim();
+
+    expect(rollbackSql).toMatch(/intentionally non-destructive rollback/i);
+    expect(rollbackWithoutComments).toBe('select 1;');
   });
 });
