@@ -2,6 +2,14 @@ packages:
   - apps/*
   - packages/*
 
+# pnpm 11 checks node_modules freshness before every `pnpm run` and
+# auto-reinstalls on mismatch. After the release script's --prod deploys mark
+# the workspace state stale, that auto-install production-prunes the workspace
+# mid-pipeline (deleting dev deps like simple-git-hooks, which then fails the
+# prepare hook). Installs here are always explicit — frozen in CI, deliberate
+# locally — so the pre-run check is disabled.
+verifyDepsBeforeRun: false
+
 # pnpm 11 blocks dependency build scripts unless allowed. These six ran their
 # scripts under pnpm 10 (native binaries + the repo's git-hook installer).
 allowBuilds:

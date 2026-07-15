@@ -4,6 +4,7 @@ import { DatabaseService, type QueryExecutor } from '../../database/database.ser
 import { toIsoString } from '../../database/database-row.utils';
 import type { PostedInvoiceContext } from '@bellfield/contracts';
 import { recalculateInvoiceTotals } from '../company-data/invoice-reflection-utils';
+import { setDraftInvoiceTaxRate } from './invoice-tax-rate-utils';
 import { insertJobTimelineEntry } from '../company-data/jobs-data-repository-utils';
 import {
   assignInvoiceNumber,
@@ -661,11 +662,16 @@ export class InvoicesRepository {
     const now = new Date().toISOString();
     const invoiceId = randomUUID();
     await this.databaseService.transaction(async (queryable) => {
+      // Inherit the corrected invoice's frozen tax rate: a correction to a posted
+      // bill taxes like the document it corrects, not like today's settings.
       await queryable.query(
         `insert into invoices (
-           id, job_id, invoice_kind, status, adjusts_invoice_id, created_at, updated_at, version
+           id, job_id, invoice_kind, status, adjusts_invoice_id, tax_rate_basis_points,
+           created_at, updated_at, version
          )
-         values ($1, $2, $3, 'draft', $4, $5, $5, 1)`,
+         values ($1, $2, $3, 'draft', $4,
+           coalesce((select tax_rate_basis_points from invoices where id = $4), 0),
+           $5, $5, 1)`,
         [invoiceId, jobId, kind, adjustsInvoiceId, now]
       );
 
@@ -688,6 +694,16 @@ export class InvoicesRepository {
       throw new Error('Created adjustment could not be loaded.');
     }
     return created;
+  }
+
+  /** Set a DRAFT invoice's header tax rate and recompute totals (posted is rejected).
+   * Delegates to invoice-tax-rate-utils, kept separate for file-size discipline. */
+  async setDraftTaxRate(
+    invoiceId: string,
+    taxRateBasisPoints: number,
+    actorName: string
+  ): Promise<void> {
+    await setDraftInvoiceTaxRate(this.databaseService, invoiceId, taxRateBasisPoints, actorName);
   }
 
   /** Count active lines on a job's main draft (used to decide block-with-choice on conversion). */

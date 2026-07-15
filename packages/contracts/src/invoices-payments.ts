@@ -101,6 +101,11 @@ export interface UpdateInvoiceNumberingRequest {
   nextNumber: number;
 }
 
+export interface SetInvoiceTaxRateRequest {
+  /** Header sales-tax rate for a DRAFT invoice, in basis points (0..2500 = 0%..25%). */
+  taxRateBasisPoints: number;
+}
+
 export interface InvoiceSummary {
   id: string;
   jobId: string;

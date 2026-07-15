@@ -17,6 +17,7 @@ import {
   type InvoiceAdjustmentKind,
   type InvoiceLineItemInput,
   type SendInvoiceRequest,
+  type SetInvoiceTaxRateRequest,
   type UpdateInvoiceNumberingRequest,
   type VoidInvoiceLineItemRequest
 } from '@bellfield/contracts';
@@ -90,4 +91,11 @@ export class UpdateInvoiceNumberingRequestBodyDto implements UpdateInvoiceNumber
   @Min(1)
   @Max(maxInvoiceNumber)
   nextNumber!: number;
+}
+
+export class SetInvoiceTaxRateRequestBodyDto implements SetInvoiceTaxRateRequest {
+  @IsInt()
+  @Min(0)
+  @Max(2500)
+  taxRateBasisPoints!: number;
 }

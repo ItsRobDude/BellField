@@ -49,3 +49,7 @@ site/.wrangler/
 
 # wrangler local state
 .wrangler/
+
+# Local development env files (copies of .env.example)
+.env
+apps/*/.env
