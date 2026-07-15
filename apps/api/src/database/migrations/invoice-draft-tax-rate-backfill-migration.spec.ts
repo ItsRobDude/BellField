@@ -10,10 +10,16 @@ describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
     join(__dirname, '20260715_001_invoice_draft_tax_rate_backfill.up.sql'),
     'utf8'
   );
-  const statements = migrationSql
+  // Strip comment lines BEFORE splitting on ';' — the prose comments contain
+  // semicolons and SQL keywords that would otherwise corrupt the statement list.
+  const sqlWithoutComments = migrationSql
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('--'))
+    .join('\n');
+  const statements = sqlWithoutComments
     .split(';')
     .map((s) => s.trim())
-    .filter((s) => s.length > 0 && !s.startsWith('--'));
+    .filter((s) => s.length > 0);
   const updates = statements.filter((s) => /update invoices/i.test(s));
   const [mainsWithLines, mainsEmpty, adjustmentsWithLines, adjustmentsEmpty] = updates;
 
@@ -52,7 +58,7 @@ describe('20260715_001_invoice_draft_tax_rate_backfill migration', () => {
   });
 
   it('avoids LATERAL against the update target (grouped derived table instead)', () => {
-    expect(migrationSql).not.toMatch(/lateral/i);
+    expect(sqlWithoutComments).not.toMatch(/lateral/i);
     for (const update of [mainsWithLines, adjustmentsWithLines]) {
       expect(update).toMatch(/group by ili\.invoice_id/);
     }
