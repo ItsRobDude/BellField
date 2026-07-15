@@ -1,8 +1,9 @@
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import test from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { findPnpmActionEntrypoint, readPnpmEntrypointVersion } from './pnpm-invocation.mjs';
 
 test('finds and verifies the pnpm/action-setup JavaScript entrypoint', () => {
@@ -35,5 +36,15 @@ test('returns null when pnpm/action-setup has no package entrypoint', () => {
     assert.equal(findPnpmActionEntrypoint(pnpmHome), null);
   } finally {
     rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('both isolated and inner release layers consume the verified pnpm action resolver', () => {
+  const toolsRoot = dirname(fileURLToPath(import.meta.url));
+
+  for (const filename of ['build-release-isolated.mjs', 'build-release.mjs']) {
+    const source = readFileSync(join(toolsRoot, filename), 'utf8');
+    assert.match(source, /findPnpmActionEntrypoint/);
+    assert.match(source, /readPnpmEntrypointVersion/);
   }
 });

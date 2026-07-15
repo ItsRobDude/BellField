@@ -16,6 +16,7 @@ import { basename, dirname, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getBoolean, readArgs } from './install/install-utils.mjs';
+import { findPnpmActionEntrypoint, readPnpmEntrypointVersion } from './pnpm-invocation.mjs';
 import { writeSignedReleaseArtifact } from './update/release-artifact.mjs';
 import {
   assertDependencyPackageJsons,
@@ -105,9 +106,22 @@ function resolveCommandInvocation(command, args) {
   }
 
   if (command === 'pnpm') {
+    const expected = expectedPnpmVersion();
     const pnpmExecutable = findPnpmExecutable();
     if (pnpmExecutable) {
       return { executable: pnpmExecutable, args, env: process.env };
+    }
+
+    const actionEntrypoint = findPnpmActionEntrypoint(process.env.PNPM_HOME);
+    if (
+      actionEntrypoint &&
+      (!expected || readPnpmEntrypointVersion(actionEntrypoint, process.execPath) === expected)
+    ) {
+      return {
+        executable: process.execPath,
+        args: [actionEntrypoint, ...args],
+        env: process.env
+      };
     }
 
     const corepackPnpm = join(
@@ -118,7 +132,9 @@ function resolveCommandInvocation(command, args) {
       'pnpm.js'
     );
     if (!existsSync(corepackPnpm)) {
-      throw new Error('Could not find a pnpm.exe on PATH/PNPM_HOME or a Corepack pnpm entrypoint.');
+      throw new Error(
+        `Could not find pnpm${expected ? ` ${expected}` : ''} on PATH/PNPM_HOME or through Corepack.`
+      );
     }
     return {
       executable: process.execPath,
