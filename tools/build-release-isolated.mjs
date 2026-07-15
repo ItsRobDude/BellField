@@ -13,6 +13,7 @@ import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:pa
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getBoolean, readArgs } from './install/install-utils.mjs';
+import { findPnpmActionEntrypoint, readPnpmEntrypointVersion } from './pnpm-invocation.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
@@ -89,9 +90,24 @@ function resolveInvocation(command, commandArgs) {
   }
 
   if (command === 'pnpm') {
+    const expected = expectedPnpmVersion();
     const pnpmExecutable = findPnpmExecutable();
     if (pnpmExecutable) {
       return { executable: pnpmExecutable, args: commandArgs, env: process.env };
+    }
+
+    // pnpm/action-setup exposes a .CMD shim in PNPM_HOME. Keep shell execution
+    // disabled and invoke the action-owned JS entrypoint with Node directly.
+    const actionEntrypoint = findPnpmActionEntrypoint(process.env.PNPM_HOME);
+    if (
+      actionEntrypoint &&
+      readPnpmEntrypointVersion(actionEntrypoint, process.execPath) === expected
+    ) {
+      return {
+        executable: process.execPath,
+        args: [actionEntrypoint, ...commandArgs],
+        env: process.env
+      };
     }
 
     const corepackPnpm = join(
@@ -102,9 +118,7 @@ function resolveInvocation(command, commandArgs) {
       'pnpm.js'
     );
     if (!existsSync(corepackPnpm)) {
-      throw new Error(
-        `Could not find pnpm ${expectedPnpmVersion()} or a Corepack pnpm entrypoint.`
-      );
+      throw new Error(`Could not find pnpm ${expected} or a Corepack pnpm entrypoint.`);
     }
     return {
       executable: process.execPath,
