@@ -8,12 +8,12 @@ import {
   rmSync,
   statSync
 } from 'node:fs';
-import { tmpdir } from 'node:os';
 import { delimiter, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { getBoolean, readArgs } from './install/install-utils.mjs';
 import { findPnpmActionEntrypoint, readPnpmEntrypointVersion } from './pnpm-invocation.mjs';
+import { resolveReleaseStagingRoot } from './release-staging-root.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const releaseRoot = join(repoRoot, 'release');
@@ -239,13 +239,14 @@ function removeStagedBuildResidue(stagingRepo) {
 assertCleanSourceTree();
 
 const sourceCommit = run('git', ['rev-parse', 'HEAD'], { capture: true });
-const stagingParent = mkdtempSync(join(tmpdir(), 'bf-rel-'));
+const stagingRoot = resolveReleaseStagingRoot();
+const stagingParent = mkdtempSync(join(stagingRoot, 'bf-rel-'));
 const stagingRepo = join(stagingParent, 's');
 const stagedReleaseRoot = join(stagingRepo, 'release');
 const publishRoot = join(repoRoot, `bellfield-release-publish-${process.pid}-${Date.now()}`);
 let worktreeAdded = false;
 
-assertOwnedChild(tmpdir(), stagingParent, 'release staging directory');
+assertOwnedChild(stagingRoot, stagingParent, 'release staging directory');
 assertOwnedChild(stagingParent, stagingRepo, 'release staging worktree');
 assertOwnedChild(repoRoot, publishRoot, 'release publish directory');
 
