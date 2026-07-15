@@ -3,11 +3,11 @@
 #   docker build -f apps/relay/Dockerfile -t bellfield-relay .
 
 FROM node:24-alpine AS build
-RUN npm install -g pnpm@10.13.1
 WORKDIR /workspace
 
 # Install with just the manifests first so dependency layers cache.
 COPY pnpm-workspace.yaml package.json pnpm-lock.yaml tsconfig.base.json ./
+RUN corepack enable
 COPY packages/contracts/package.json packages/contracts/package.json
 COPY apps/relay/package.json apps/relay/package.json
 # --ignore-scripts: the repo root prepare hook wants a git checkout.

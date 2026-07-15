@@ -326,6 +326,12 @@ From the repo root:
 pnpm build:release
 ```
 
+The command refuses an ordinary dirty tree, checks out the current commit into
+a disposable detached worktree, installs with the frozen lockfile, and performs
+all compilation, production deploys, and signing there. It publishes only the
+completed `release/` tree back into the everyday checkout, so release assembly
+cannot prune or otherwise rewrite the developer workspace's dependencies.
+
 For gate-day or sold-shaped Windows artifacts, include the runtime
 dependencies before the update manifest is signed:
 

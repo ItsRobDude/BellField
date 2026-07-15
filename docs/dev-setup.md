@@ -8,8 +8,8 @@ It should match the repo as it exists today, not an older scaffold or a future t
 
 BellField uses:
 
-- Node `24.x` (LTS)
-- pnpm `10.13.1`
+- Node `24.18.0` (LTS; pinned by `devEngines.runtime` in `package.json`)
+- pnpm `11.13.0`
 
 BellField is a `pnpm` workspace repo.
 Do not mix `npm`, `yarn`, `bun`, or extra monorepo tooling unless the repo is intentionally changed to support them.
@@ -37,7 +37,7 @@ From the repo root:
 
 ```powershell
 corepack enable
-corepack prepare pnpm@10.13.1 --activate
+corepack install
 pnpm install --frozen-lockfile
 ```
 
@@ -164,7 +164,19 @@ Production-style release assembly:
 pnpm build:release
 ```
 
-This creates a generated `release/` folder with compiled API/worker output, the office-web standalone server, migration scripts, install helpers, and the bundled Node runtime from the current machine. See [install-runbook.md](./install-runbook.md) for the assisted install flow and current validation boundaries.
+This requires a clean Git tree, creates a disposable detached worktree at the
+current commit, installs frozen dependencies there, and builds/signs in that
+staging checkout. Only the completed `release/` folder is copied back; normal
+development dependencies and build outputs are not mutated by release assembly.
+See [install-runbook.md](./install-runbook.md) for the assisted install flow and
+current validation boundaries.
+
+Preview the safe generated-output cleanup allowlist before applying it:
+
+```powershell
+pnpm clean:generated --dry-run
+pnpm clean:generated --apply
+```
 
 Current testing posture:
 
