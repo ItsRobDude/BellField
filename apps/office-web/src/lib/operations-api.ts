@@ -60,6 +60,8 @@ import type {
   InvoiceLineItemKind,
   InvoiceLineItemSummary,
   BookkeepingPaymentBatchItem,
+  BookkeepingQueueKey,
+  BookkeepingQueuePaging,
   BookkeepingQueuesResponse,
   BookkeepingInvoiceItem,
   BookkeepingBalanceItem,
@@ -192,6 +194,8 @@ export type {
   InvoiceLineItemKind,
   InvoiceLineItemSummary,
   BookkeepingPaymentBatchItem,
+  BookkeepingQueueKey,
+  BookkeepingQueuePaging,
   BookkeepingQueuesResponse,
   BookkeepingInvoiceItem,
   BookkeepingBalanceItem,
@@ -1023,15 +1027,31 @@ export type {
   OnlineRefundRequestSummary
 } from '@bellfield/contracts';
 
-/** Cross-job bookkeeping worklists: ready-to-post, open balances, recently posted. */
+/** Cross-job bookkeeping worklists, each paged: pass a worklist's `nextCursor` to fetch its next page. */
 export async function getOfficeBookkeepingQueues(input: {
   sessionToken: string;
   apiBaseUrl?: string;
+  limit?: number;
+  cursors?: Partial<Record<BookkeepingQueueKey, string>>;
 }): Promise<BookkeepingQueuesResponse> {
-  return requestJson<BookkeepingQueuesResponse>('/operations/bookkeeping/invoice-queues', {
-    apiBaseUrl: input.apiBaseUrl,
-    sessionToken: input.sessionToken
-  });
+  const search = new URLSearchParams();
+  if (input.limit !== undefined) {
+    search.set('limit', String(input.limit));
+  }
+  for (const [queueKey, cursor] of Object.entries(input.cursors ?? {})) {
+    if (cursor) {
+      search.set(`${queueKey}Cursor`, cursor);
+    }
+  }
+  const query = search.toString();
+
+  return requestJson<BookkeepingQueuesResponse>(
+    `/operations/bookkeeping/invoice-queues${query ? `?${query}` : ''}`,
+    {
+      apiBaseUrl: input.apiBaseUrl,
+      sessionToken: input.sessionToken
+    }
+  );
 }
 
 // Milestone 9 client modules, split out to keep this file under the size budget. Re-exported
