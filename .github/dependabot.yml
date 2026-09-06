@@ -1,10 +1,12 @@
 version: 2
 updates:
+  # One npm job at the workspace root. pnpm workspaces must be updated from the root
+  # (Dependabot refuses subdirectory updates when pnpm-lock.yaml and pnpm-workspace.yaml
+  # live in a parent directory), and listing /apps/* and /packages/* on top of / made the
+  # job evaluate every dependency once per directory — 355 checks for 58 unique packages —
+  # and hit Dependabot's job time limit every week without ever opening a PR.
   - package-ecosystem: 'npm'
-    directories:
-      - '/'
-      - '/apps/*'
-      - '/packages/*'
+    directory: '/'
     schedule:
       interval: 'weekly'
       day: 'monday'
@@ -18,6 +20,15 @@ updates:
         update-types:
           - 'minor'
           - 'patch'
+    ignore:
+      # Expo owns these versions: field-mobile pins them per Expo SDK release and
+      # `expo install --fix` is the supported way to move them together.
+      - dependency-name: 'expo'
+      - dependency-name: 'expo-*'
+      - dependency-name: '@expo/*'
+      - dependency-name: 'react-native'
+      - dependency-name: 'react-native-*'
+      - dependency-name: '@react-native/*'
 
   - package-ecosystem: 'github-actions'
     directory: '/'
