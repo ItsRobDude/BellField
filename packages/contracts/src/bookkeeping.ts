@@ -35,13 +35,30 @@ export interface BookkeepingPaymentBatchItem {
   latestReceivedAt: string;
 }
 
+export type BookkeepingQueueKey =
+  | 'readyToPost'
+  | 'openBalance'
+  | 'recentlyPosted'
+  | 'paymentBatches';
+
+/** Paging state for one worklist: its true row count and, when rows exist past this page, an
+ * opaque cursor that fetches the next page (`<queue>Cursor` query parameter). */
+export interface BookkeepingQueuePaging {
+  totalCount: number;
+  nextCursor?: string;
+}
+
 /**
- * Cross-job bookkeeping worklists (each bounded): main drafts ready to post, jobs with
- * an outstanding balance, and recently posted invoices. A read-only review surface.
+ * Cross-job bookkeeping worklists: main drafts ready to post, jobs with an outstanding
+ * balance, and recently posted invoices. A read-only review surface. Each worklist is paged
+ * (`limit` rows per request) and `paging` carries its true total plus next-page cursor, so a
+ * page boundary never hides an open balance.
  */
 export interface BookkeepingQueuesResponse {
+  limit: number;
   readyToPost: BookkeepingInvoiceItem[];
   openBalance: BookkeepingBalanceItem[];
   recentlyPosted: BookkeepingInvoiceItem[];
   paymentBatches: BookkeepingPaymentBatchItem[];
+  paging: Record<BookkeepingQueueKey, BookkeepingQueuePaging>;
 }

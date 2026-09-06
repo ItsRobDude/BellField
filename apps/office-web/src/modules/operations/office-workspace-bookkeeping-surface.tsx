@@ -6,6 +6,8 @@ import {
   type BookkeepingBalanceItem,
   type BookkeepingInvoiceItem,
   type BookkeepingPaymentBatchItem,
+  type BookkeepingQueueKey,
+  type BookkeepingQueuePaging,
   type BookkeepingQueuesResponse
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -26,7 +28,9 @@ const correctionKindLabels: Record<BookkeepingInvoiceItem['invoiceKind'], string
 // A read-only cross-job bookkeeping review surface: main drafts ready to post, jobs with
 // an outstanding balance, and recently posted invoices. Every row links back to the
 // job's invoice tab, where the actual post/adjust/pay actions live behind their own
-// permissions. All styling reuses officeWorkspaceStyles.
+// permissions. Each worklist is paged: the API reports its true total and "Load more"
+// appends the next page, so a page boundary never hides an open balance. All styling
+// reuses officeWorkspaceStyles.
 export function OfficeBookkeepingSurface({
   apiBaseUrl,
   sessionToken,
@@ -34,6 +38,7 @@ export function OfficeBookkeepingSurface({
 }: OfficeBookkeepingSurfaceProps) {
   const [queues, setQueues] = useState<BookkeepingQueuesResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadingMoreKey, setLoadingMoreKey] = useState<BookkeepingQueueKey | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const load = useCallback(async () => {
@@ -49,6 +54,30 @@ export function OfficeBookkeepingSurface({
       setIsLoading(false);
     }
   }, [apiBaseUrl, sessionToken]);
+
+  const loadMore = useCallback(
+    async (queueKey: BookkeepingQueueKey, cursor: string) => {
+      setLoadingMoreKey(queueKey);
+      setErrorMessage(null);
+      try {
+        const nextPage = await getOfficeBookkeepingQueues({
+          apiBaseUrl,
+          sessionToken,
+          cursors: { [queueKey]: cursor }
+        });
+        setQueues((current) =>
+          current ? appendBookkeepingQueuePage(current, nextPage, queueKey) : nextPage
+        );
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : 'Unable to load more bookkeeping records.'
+        );
+      } finally {
+        setLoadingMoreKey(null);
+      }
+    },
+    [apiBaseUrl, sessionToken]
+  );
 
   useEffect(() => {
     void load();
@@ -74,11 +103,13 @@ export function OfficeBookkeepingSurface({
         <p style={styles.muted}>Loading worklists…</p>
       ) : queues ? (
         <>
-          <p style={styles.tinyMuted}>Showing up to 50 records per worklist.</p>
           <QueuePanel
             title="Ready to post"
             emptyText="No drafts with billable lines are waiting to post."
             items={queues.readyToPost}
+            paging={queues.paging.readyToPost}
+            isLoadingMore={loadingMoreKey === 'readyToPost'}
+            onLoadMore={(cursor) => void loadMore('readyToPost', cursor)}
             renderItem={(item) => (
               <InvoiceRow key={item.invoiceId} item={item} onOpenJob={onOpenJob} />
             )}
@@ -87,12 +118,18 @@ export function OfficeBookkeepingSurface({
             title="Open balances"
             emptyText="No jobs have an outstanding balance."
             items={queues.openBalance}
+            paging={queues.paging.openBalance}
+            isLoadingMore={loadingMoreKey === 'openBalance'}
+            onLoadMore={(cursor) => void loadMore('openBalance', cursor)}
             renderItem={(item) => <BalanceRow key={item.jobId} item={item} onOpenJob={onOpenJob} />}
           />
           <QueuePanel
             title="Recently posted"
             emptyText="No posted invoices yet."
             items={queues.recentlyPosted}
+            paging={queues.paging.recentlyPosted}
+            isLoadingMore={loadingMoreKey === 'recentlyPosted'}
+            onLoadMore={(cursor) => void loadMore('recentlyPosted', cursor)}
             renderItem={(item) => (
               <InvoiceRow key={item.invoiceId} item={item} onOpenJob={onOpenJob} />
             )}
@@ -101,6 +138,9 @@ export function OfficeBookkeepingSurface({
             title="Payment batches"
             emptyText="No received payments are ready for deposit review."
             items={queues.paymentBatches}
+            paging={queues.paging.paymentBatches}
+            isLoadingMore={loadingMoreKey === 'paymentBatches'}
+            onLoadMore={(cursor) => void loadMore('paymentBatches', cursor)}
             renderItem={(item) => (
               <PaymentBatchRow key={`${item.batchDate}-${item.method}`} item={item} />
             )}
@@ -111,28 +151,79 @@ export function OfficeBookkeepingSurface({
   );
 }
 
+/** Appends one worklist's next page to what is already shown and adopts its new paging state. */
+export function appendBookkeepingQueuePage(
+  current: BookkeepingQueuesResponse,
+  nextPage: BookkeepingQueuesResponse,
+  queueKey: BookkeepingQueueKey
+): BookkeepingQueuesResponse {
+  const paging = { ...current.paging, [queueKey]: nextPage.paging[queueKey] };
+
+  switch (queueKey) {
+    case 'readyToPost':
+      return { ...current, readyToPost: [...current.readyToPost, ...nextPage.readyToPost], paging };
+    case 'openBalance':
+      return { ...current, openBalance: [...current.openBalance, ...nextPage.openBalance], paging };
+    case 'recentlyPosted':
+      return {
+        ...current,
+        recentlyPosted: [...current.recentlyPosted, ...nextPage.recentlyPosted],
+        paging
+      };
+    case 'paymentBatches':
+      return {
+        ...current,
+        paymentBatches: [...current.paymentBatches, ...nextPage.paymentBatches],
+        paging
+      };
+  }
+}
+
 function QueuePanel<T>({
   title,
   emptyText,
   items,
+  paging,
+  isLoadingMore,
+  onLoadMore,
   renderItem
 }: {
   title: string;
   emptyText: string;
   items: T[];
+  paging: BookkeepingQueuePaging;
+  isLoadingMore: boolean;
+  onLoadMore: (cursor: string) => void;
   renderItem: (item: T) => ReactNode;
 }) {
+  const shownCount = items.length;
+  const remainingCount = Math.max(0, paging.totalCount - shownCount);
+  const countLabel = remainingCount > 0 ? `${shownCount} of ${paging.totalCount}` : `${shownCount}`;
+  const nextCursor = paging.nextCursor;
+
   return (
     <div style={styles.panel}>
       <div style={styles.row}>
         <h2 style={styles.heading}>{title}</h2>
-        <span style={styles.badge}>{items.length}</span>
+        <span style={styles.badge} aria-label={`${title}: ${countLabel}`}>
+          {countLabel}
+        </span>
       </div>
       {items.length === 0 ? (
         <p style={styles.muted}>{emptyText}</p>
       ) : (
         <div style={styles.list}>{items.map((item) => renderItem(item))}</div>
       )}
+      {nextCursor ? (
+        <button
+          type="button"
+          style={styles.button}
+          disabled={isLoadingMore}
+          onClick={() => onLoadMore(nextCursor)}
+        >
+          {isLoadingMore ? 'Loading…' : `Load more (${remainingCount} remaining)`}
+        </button>
+      ) : null}
     </div>
   );
 }
