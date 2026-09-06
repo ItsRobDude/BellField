@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   acknowledgeOfficeFinishedVisitReview,
   addOfficeAppointment,
@@ -52,7 +52,9 @@ import {
 } from './office-workspace-shell-helpers';
 import { OfficeWorkspaceLoadingState } from './office-workspace-loading-state';
 import { OfficeWorkspaceSurfaces } from './office-workspace-surfaces';
+import { defaultOfficeRoute, type OfficeRoute } from './office-route';
 import { useJobIntakeWorkflow } from './use-job-intake-workflow';
+import { useOfficeNavigation } from './use-office-navigation';
 
 const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
@@ -92,17 +94,19 @@ export function OfficeWorkspaceShell({
   const [capturedWorkByJobId, setCapturedWorkByJobId] = useState<
     Record<string, CapturedWorkDetails>
   >({});
-  const [dispatchViewDate, setDispatchViewDate] = useState(() => getDateInputValue());
-  const [activeOfficeView, setActiveOfficeView] = useState<OfficeView>('dispatch');
-  const [jobIntakeReturnView, setJobIntakeReturnView] = useState<OfficeView>('dispatch');
-  const [crmNavigationTarget, setCrmNavigationTarget] = useState<CrmNavigationTarget | null>(null);
-  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
-  const [focusedAppointmentId, setFocusedAppointmentId] = useState<string | null>(null);
-  const [jobDetailInitialTab, setJobDetailInitialTab] = useState<JobDetailTab>('overview');
+  // Which screen is open lives in the address bar (see office-route.ts); the shell only keeps
+  // the bits a URL should not carry, like which job a CRM record was opened from.
+  const { route: requestedRoute, navigate, goBack } = useOfficeNavigation();
+  const [crmReturnToJobId, setCrmReturnToJobId] = useState<string | null>(null);
+  const [dispatchViewDate, setDispatchViewDate] = useState(() =>
+    requestedRoute?.view === 'dispatch' && requestedRoute.date
+      ? requestedRoute.date
+      : getDateInputValue()
+  );
   const refreshInFlightRef = useRef(false);
   const dispatchRefreshInFlightRef = useRef(false);
   const jobsQueueRefreshInFlightRef = useRef(false);
-  const isJobIntakeOpen = activeOfficeView === 'jobIntake';
+  const intakeContextRequestedRef = useRef(false);
 
   const canViewInventory = employee.effectivePermissions.includes('inventory:view');
   const canCreateInventory = employee.effectivePermissions.includes('inventory:create');
@@ -152,6 +156,56 @@ export function OfficeWorkspaceShell({
     canVoid: employee.effectivePermissions.includes('payments:edit'),
     canRefund: employee.effectivePermissions.includes('payments:refund')
   };
+
+  // Deep links only open surfaces this employee may see; anything else lands on Dispatch and
+  // the address bar is repaired to match. The API still enforces every permission itself.
+  const viewAccess: Record<OfficeView, boolean> = {
+    dispatch: true,
+    customers: true,
+    jobs: true,
+    jobIntake: true,
+    jobDetail: true,
+    inventory: canViewInventory,
+    catalog: canViewCatalog,
+    agreements: canViewAgreements,
+    purchasing: canViewPurchasing,
+    bookkeeping: canViewInvoice,
+    reports: canViewReports,
+    employees: canViewEmployees,
+    history: canViewHistory,
+    settings: canViewSettings,
+    system: canViewSystem
+  };
+  const route: OfficeRoute =
+    requestedRoute && viewAccess[requestedRoute.view] ? requestedRoute : defaultOfficeRoute;
+  const isRequestedRouteUsable = route === requestedRoute;
+  const activeOfficeView = route.view;
+  const isJobIntakeOpen = activeOfficeView === 'jobIntake';
+  const selectedJobId = route.view === 'jobDetail' ? route.jobId : null;
+  const focusedAppointmentId = route.view === 'jobDetail' ? route.appointmentId : null;
+  const jobDetailInitialTab: JobDetailTab = route.view === 'jobDetail' ? route.tab : 'overview';
+  const routeDispatchDate = route.view === 'dispatch' ? route.date : null;
+  const crmRouteTarget = route.view === 'customers' ? route.target : null;
+  const crmNavigationTarget = useMemo<CrmNavigationTarget | null>(
+    () =>
+      crmRouteTarget ? { ...crmRouteTarget, returnToJobId: crmReturnToJobId ?? undefined } : null,
+    [crmRouteTarget, crmReturnToJobId]
+  );
+
+  useEffect(() => {
+    if (!isRequestedRouteUsable) {
+      navigate(defaultOfficeRoute, { replace: true });
+    }
+  }, [isRequestedRouteUsable, navigate]);
+
+  useEffect(() => {
+    if (route.view !== 'dispatch') {
+      return;
+    }
+
+    const nextDate = routeDispatchDate ?? getDateInputValue();
+    setDispatchViewDate((current) => (current === nextDate ? current : nextDate));
+  }, [route.view, routeDispatchDate]);
 
   const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
     if (dispatchRefreshInFlightRef.current) {
@@ -315,6 +369,28 @@ export function OfficeWorkspaceShell({
   useEffect(() => {
     void refreshJobsQueue();
   }, [refreshJobsQueue]);
+
+  useEffect(() => {
+    if (selectedJobId) {
+      void loadJobDetail(selectedJobId);
+    }
+  }, [loadJobDetail, selectedJobId]);
+
+  // "New job" normally loads its intake context before navigating; a refresh or deep link on
+  // /jobs/new arrives without it, so request it once per visit.
+  useEffect(() => {
+    if (!isJobIntakeOpen) {
+      intakeContextRequestedRef.current = false;
+      return;
+    }
+
+    if (jobIntakeWorkflow.hasContext || intakeContextRequestedRef.current) {
+      return;
+    }
+
+    intakeContextRequestedRef.current = true;
+    void jobIntakeWorkflow.loadContext();
+  }, [isJobIntakeOpen, jobIntakeWorkflow.hasContext, jobIntakeWorkflow.loadContext]);
 
   useEffect(() => {
     const intervalId = window.setInterval(() => {
@@ -537,17 +613,15 @@ export function OfficeWorkspaceShell({
   }
 
   async function handleOpenJobIntake() {
-    const returnView = activeOfficeView === 'jobIntake' ? jobIntakeReturnView : activeOfficeView;
     const context = await jobIntakeWorkflow.loadContext();
 
     if (context) {
-      setJobIntakeReturnView(returnView);
-      setActiveOfficeView('jobIntake');
+      navigate({ view: 'jobIntake' });
     }
   }
 
   function handleCloseJobIntake() {
-    setActiveOfficeView(jobIntakeReturnView);
+    goBack({ view: 'jobs' });
   }
 
   function handleJobStatusReviewRequested(
@@ -794,39 +868,65 @@ export function OfficeWorkspaceShell({
     }
   }
 
+  function dispatchRouteFor(date: string): OfficeRoute {
+    // Today's board is addressed as plain /dispatch so bookmarks keep meaning "today".
+    return { view: 'dispatch', date: date === getDateInputValue() ? null : date };
+  }
+
   function handleOpenJobDetail(
     jobId: string,
     appointmentId?: string,
     initialTab: JobDetailTab = 'overview'
   ) {
-    setCrmNavigationTarget(null);
-    setSelectedJobId(jobId);
-    setFocusedAppointmentId(appointmentId ?? null);
-    setJobDetailInitialTab(initialTab);
-    setActiveOfficeView('jobDetail');
-    void loadJobDetail(jobId);
+    setCrmReturnToJobId(null);
+    navigate({ view: 'jobDetail', jobId, tab: initialTab, appointmentId: appointmentId ?? null });
+  }
+
+  function handleJobDetailTabChange(tab: JobDetailTab) {
+    if (route.view !== 'jobDetail' || route.tab === tab) {
+      return;
+    }
+
+    navigate({ ...route, tab }, { replace: true });
   }
 
   function handleOfficeViewChange(nextView: OfficeView) {
     if (nextView !== 'customers') {
-      setCrmNavigationTarget(null);
+      setCrmReturnToJobId(null);
     }
 
-    setActiveOfficeView(nextView);
+    if (nextView === 'dispatch') {
+      navigate(dispatchRouteFor(dispatchViewDate));
+      return;
+    }
+
+    if (nextView === 'customers') {
+      navigate({ view: 'customers', target: null });
+      return;
+    }
+
+    if (nextView === 'jobDetail') {
+      // The rail never asks for job detail directly; jobs open through handleOpenJobDetail.
+      return;
+    }
+
+    navigate({ view: nextView });
   }
 
   function handleOpenCustomerFromJob(customerId: string, sourceJobId: string) {
-    setCrmNavigationTarget({ kind: 'customer', customerId, returnToJobId: sourceJobId });
-    setActiveOfficeView('customers');
+    setCrmReturnToJobId(sourceJobId);
+    navigate({ view: 'customers', target: { kind: 'customer', customerId } });
   }
 
   function handleOpenLocationFromJob(locationId: string, sourceJobId: string) {
-    setCrmNavigationTarget({ kind: 'location', locationId, returnToJobId: sourceJobId });
-    setActiveOfficeView('customers');
+    setCrmReturnToJobId(sourceJobId);
+    navigate({ view: 'customers', target: { kind: 'location', locationId } });
   }
 
   function handleDispatchViewDateChange(nextDate: string) {
-    setDispatchViewDate(nextDate || getDateInputValue());
+    const resolvedDate = nextDate || getDateInputValue();
+    setDispatchViewDate(resolvedDate);
+    navigate(dispatchRouteFor(resolvedDate), { replace: true });
   }
 
   async function handleDispatchRefresh() {
@@ -881,8 +981,8 @@ export function OfficeWorkspaceShell({
           canDeleteEquipment,
           navigationTarget: crmNavigationTarget,
           onErrorMessage: setErrorMessage,
-          onNavigationTargetConsumed: () => setCrmNavigationTarget(null),
-          onBackToJob: (jobId) => handleOpenJobDetail(jobId)
+          onBackToJob: (jobId) =>
+            goBack({ view: 'jobDetail', jobId, tab: 'overview', appointmentId: null })
         }}
         dispatch={{
           dispatchBoard,
@@ -997,7 +1097,7 @@ export function OfficeWorkspaceShell({
           appointmentDrafts,
           appointmentEditDrafts,
           capturedWorkByJobId,
-          onJobDetailBack: () => setActiveOfficeView('dispatch'),
+          onJobDetailBack: () => goBack(dispatchRouteFor(dispatchViewDate)),
           onOpenCustomer: handleOpenCustomerFromJob,
           onOpenLocation: handleOpenLocationFromJob,
           onLoadCapturedWork: loadCapturedWork,
@@ -1018,7 +1118,8 @@ export function OfficeWorkspaceShell({
           onSaveMediaCaption: handleSaveMediaCaption,
           onMediaVoidReasonChange: handleMediaVoidReasonChange,
           onVoidMediaAttachment: handleVoidMediaAttachment,
-          onOpenMediaAttachment: handleOpenMediaAttachment
+          onOpenMediaAttachment: handleOpenMediaAttachment,
+          onJobDetailTabChange: handleJobDetailTabChange
         }}
       />
     </OfficeWorkspaceFrame>

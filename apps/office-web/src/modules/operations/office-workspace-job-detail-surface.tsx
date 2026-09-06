@@ -77,6 +77,7 @@ export type OfficeJobDetailSurfaceProps = {
   onMediaVoidReasonChange: (jobId: string, mediaId: string, reason: string) => void;
   onVoidMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
   onOpenMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
+  onJobDetailTabChange: (tab: JobDetailTab) => void;
 };
 
 export function OfficeJobDetailSurface({
@@ -127,7 +128,8 @@ export function OfficeJobDetailSurface({
   onSaveMediaCaption,
   onMediaVoidReasonChange,
   onVoidMediaAttachment,
-  onOpenMediaAttachment
+  onOpenMediaAttachment,
+  onJobDetailTabChange
 }: OfficeJobDetailSurfaceProps) {
   const selectedJobDetail = selectedJobId ? (jobDetailsById[selectedJobId] ?? null) : null;
   const selectedJob = selectedJobDetail?.job ?? null;
@@ -135,7 +137,7 @@ export function OfficeJobDetailSurface({
   if (selectedJob && selectedJobDetail) {
     return (
       <JobDetailPanel
-        key={`${selectedJob.id}-${focusedAppointmentId ?? ''}-${jobDetailInitialTab}`}
+        key={selectedJob.id}
         technicians={selectedJobDetail.technicians}
         job={selectedJob}
         location={selectedJobDetail.location}
@@ -189,6 +191,7 @@ export function OfficeJobDetailSurface({
         onMediaVoidReasonChange={onMediaVoidReasonChange}
         onVoidMediaAttachment={onVoidMediaAttachment}
         onOpenMediaAttachment={onOpenMediaAttachment}
+        onActiveTabChange={onJobDetailTabChange}
       />
     );
   }

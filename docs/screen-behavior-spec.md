@@ -47,6 +47,22 @@ For the current operations-focused office app, BellField should land on **Dispat
 
 A broader business dashboard can come later, but the daily work surface should not block dispatchers behind a marketing-style or summary-only landing page.
 
+### URLs, refresh, and browser navigation
+
+Every office screen has its own URL, and the address bar is the source of truth for which
+screen is open: Dispatch (optionally with a day), customer search, a customer or location, the
+jobs queue, new-job intake, and a job with its tab and focused appointment.
+
+- Refreshing the page keeps the user signed in and on the same screen, job, tab, and day.
+- Browser Back and Forward move between screens. In-app Back returns to the screen the record
+  was opened from (a job opened from Bookkeeping goes back to Bookkeeping), or to Dispatch when
+  the user arrived on a deep link.
+- Links can be bookmarked and shared inside the office. A link to a surface the employee may not
+  view lands on Dispatch; the API still enforces every permission itself.
+- Switching job tabs or the dispatch day updates the address without adding history entries.
+
+Route shapes live in `apps/office-web/src/modules/operations/office-route.ts`.
+
 ### Global search behavior
 
 BellField should not force a search bar onto every screen.
