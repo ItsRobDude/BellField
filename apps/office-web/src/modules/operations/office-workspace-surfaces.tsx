@@ -53,7 +53,6 @@ type OfficeCrmSurfaceProps = {
   canDeleteEquipment: boolean;
   navigationTarget: CrmNavigationTarget | null;
   onErrorMessage: (message: string | null) => void;
-  onNavigationTargetConsumed: () => void;
   onBackToJob: (jobId: string) => void;
 };
 
@@ -142,7 +141,6 @@ export function OfficeWorkspaceSurfaces({
           canReplaceRemoveEquipment={crm.canReplaceRemoveEquipment}
           canDeleteEquipment={crm.canDeleteEquipment}
           navigationTarget={crm.navigationTarget}
-          onNavigationTargetConsumed={crm.onNavigationTargetConsumed}
           onBackToJob={crm.onBackToJob}
         />
       ) : null}

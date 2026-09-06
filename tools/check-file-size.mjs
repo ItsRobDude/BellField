@@ -13,7 +13,7 @@ const legacyOversizedFiles = new Map(
   [
     ['apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts', 1181],
     ['apps/office-web/src/modules/operations/office-workspace-shell.tsx', 1159],
-    ['apps/office-web/src/modules/operations/job-detail-panel.tsx', 855],
+    ['apps/office-web/src/modules/operations/job-detail-panel.tsx', 700],
     ['apps/office-web/src/lib/operations-api.ts', 1073],
     ['apps/api/src/modules/invoices/invoices.repository.ts', 963]
   ].map(([filePath, maxLines]) => [normalizeRepoPath(filePath), maxLines])

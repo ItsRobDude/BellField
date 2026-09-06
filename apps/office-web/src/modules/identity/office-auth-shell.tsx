@@ -13,10 +13,18 @@ import {
 import { getInitialOfficeApiBaseUrl } from '@/lib/api-base-url';
 import {
   createFirstOwner,
+  getCurrentOfficeSession,
   getOfficeSetupStatus,
   loginToOfficeApi,
+  OfficeIdentityApiError,
   type EmployeeSummary
 } from '@/lib/identity-api';
+import {
+  clearStoredOfficeSession,
+  readStoredOfficeServerUrl,
+  readStoredOfficeSession,
+  writeStoredOfficeSession
+} from '@/lib/office-session-storage';
 import { OfficeWorkspaceShell } from '@/modules/operations/office-workspace-shell';
 import {
   resolveInitialLoginCredentials,
@@ -54,6 +62,8 @@ export function OfficeAuthShell() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locale, setLocale] = useState<BellFieldLocale>(defaultBellFieldLocale);
+  const [sessionRestoreState, setSessionRestoreState] = useState<'pending' | 'done'>('pending');
+  const [isServerUnreachableForRestore, setIsServerUnreachableForRestore] = useState(false);
   const t = createBellFieldTranslator(locale);
   const setupPasswordTooShort =
     setupRequired && password.length > 0 && password.length < minimumPasswordLength;
@@ -68,6 +78,66 @@ export function OfficeAuthShell() {
           : navigator.language;
 
     setLocale(resolveBellFieldLocale(browserLanguages));
+  }, []);
+
+  useEffect(() => {
+    // A remembered session survives refreshes and new tabs; the server decides whether it is
+    // still valid before the workspace opens.
+    const rememberedServerUrl = readStoredOfficeServerUrl();
+
+    if (rememberedServerUrl !== null) {
+      setApiBaseUrl(rememberedServerUrl);
+    }
+
+    const storedSession = readStoredOfficeSession();
+
+    if (!storedSession) {
+      setSessionRestoreState('done');
+      return;
+    }
+
+    let isCurrent = true;
+    setApiBaseUrl(storedSession.apiBaseUrl);
+
+    getCurrentOfficeSession({
+      sessionToken: storedSession.sessionToken,
+      apiBaseUrl: storedSession.apiBaseUrl
+    })
+      .then((currentSession) => {
+        if (!isCurrent) {
+          return;
+        }
+
+        setSessionToken(storedSession.sessionToken);
+        setEmployee(currentSession.employee);
+      })
+      .catch((error: unknown) => {
+        if (!isCurrent) {
+          return;
+        }
+
+        if (
+          error instanceof OfficeIdentityApiError &&
+          (error.status === 401 || error.status === 403)
+        ) {
+          // The server no longer honours this session: forget it and ask for a fresh sign-in.
+          clearStoredOfficeSession();
+          setErrorMessage(error.message);
+          return;
+        }
+
+        // Unreachable server: keep the remembered session so the next load can try again.
+        setIsServerUnreachableForRestore(true);
+      })
+      .finally(() => {
+        if (isCurrent) {
+          setSessionRestoreState('done');
+        }
+      });
+
+    return () => {
+      isCurrent = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -100,6 +170,7 @@ export function OfficeAuthShell() {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+    setIsServerUnreachableForRestore(false);
 
     try {
       const response = await loginToOfficeApi({
@@ -109,6 +180,7 @@ export function OfficeAuthShell() {
         apiBaseUrl
       });
 
+      writeStoredOfficeSession({ sessionToken: response.sessionToken, apiBaseUrl });
       setSessionToken(response.sessionToken);
       setEmployee(response.employee);
     } catch (error) {
@@ -122,6 +194,7 @@ export function OfficeAuthShell() {
     event.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);
+    setIsServerUnreachableForRestore(false);
 
     try {
       const response = await createFirstOwner({
@@ -134,6 +207,7 @@ export function OfficeAuthShell() {
 
       setSetupRequired(false);
       setSetupToken('');
+      writeStoredOfficeSession({ sessionToken: response.sessionToken, apiBaseUrl });
       setSessionToken(response.sessionToken);
       setEmployee(response.employee);
     } catch (error) {
@@ -150,16 +224,29 @@ export function OfficeAuthShell() {
         initialEmployee={employee}
         sessionToken={sessionToken}
         onSignOut={() => {
+          clearStoredOfficeSession();
           setSessionToken(null);
           setEmployee(null);
           setErrorMessage(null);
         }}
         onSessionExpired={(message) => {
+          clearStoredOfficeSession();
           setSessionToken(null);
           setEmployee(null);
           setErrorMessage(message);
         }}
       />
+    );
+  }
+
+  if (sessionRestoreState === 'pending') {
+    return (
+      <main style={styles.page}>
+        <section style={styles.card}>
+          <div style={styles.kicker}>{t('officeAuth.productName')}</div>
+          <p style={styles.muted}>{t('officeAuth.restoringSession')}</p>
+        </section>
+      </main>
     );
   }
 
@@ -271,6 +358,9 @@ export function OfficeAuthShell() {
           </div>
         ) : null}
         {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {!errorMessage && isServerUnreachableForRestore ? (
+          <p style={styles.error}>{t('officeAuth.sessionRestoreUnavailable')}</p>
+        ) : null}
       </section>
     </main>
   );

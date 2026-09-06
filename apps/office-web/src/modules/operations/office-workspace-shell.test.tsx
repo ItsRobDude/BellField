@@ -646,6 +646,8 @@ async function selectJobIntakeLocationBySearch(query = 'Main') {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  // The shell reads its screen from the address bar, so every test starts from the root.
+  window.history.replaceState(null, '', '/');
 });
 
 afterEach(() => {
@@ -1681,5 +1683,135 @@ describe('OfficeWorkspaceShell IA', () => {
     await waitFor(() => {
       expect(screen.queryByLabelText(/Job 1001, Acme/i)).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('OfficeWorkspaceShell URLs', () => {
+  it('keeps the address bar in step with rail navigation, job detail, and tabs', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Jobs' }));
+    expect(await screen.findByRole('region', { name: 'Jobs queue' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/jobs');
+
+    fireEvent.click(await screen.findByRole('button', { name: /Job 1001/i }));
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/jobs/job-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Timeline' }));
+    expect(await screen.findByText(/Job scheduled\./)).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/jobs/job-1/timeline');
+  });
+
+  it('returns to the surface a job was opened from', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Jobs' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Job 1001/i }));
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(await screen.findByRole('region', { name: 'Jobs queue' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/jobs');
+  });
+
+  it('opens a deep link to a job tab and falls back to Dispatch on Back', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    window.history.replaceState(null, '', '/jobs/job-1/timeline');
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+    expect(await screen.findByText(/Job scheduled\./)).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeJobDetail).toHaveBeenCalledWith(
+      expect.objectContaining({ jobId: 'job-1' })
+    );
+    expect(window.location.pathname).toBe('/jobs/job-1/timeline');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/dispatch');
+  });
+
+  it('opens a location deep link in the CRM panel without a source job', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    window.history.replaceState(null, '', '/locations/location-1');
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+    expect(screen.getByText('CRM target: location location-1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to source job' })).not.toBeInTheDocument();
+  });
+
+  it('opens New job from a deep link by loading its intake context', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    window.history.replaceState(null, '', '/jobs/new');
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'New job' })).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeJobIntakeContext).toHaveBeenCalledTimes(1);
+  });
+
+  it('sends a deep link to a surface the employee cannot view back to Dispatch', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    window.history.replaceState(null, '', '/inventory');
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe('/dispatch'));
+  });
+
+  it('follows browser Back and Forward between screens', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Customers' }));
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+
+    act(() => {
+      window.history.back();
+    });
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+
+    act(() => {
+      window.history.forward();
+    });
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+  });
+
+  it('keeps the dispatch day in the address bar', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    window.history.replaceState(null, '', '/dispatch/2026-05-22');
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    expect(mockedOperationsApi.getOfficeDispatchBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ startDate: '2026-05-22', endDate: '2026-05-22' })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous dispatch day' }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/dispatch/2026-05-21'));
+    expect(mockedOperationsApi.getOfficeDispatchBoard).toHaveBeenCalledWith(
+      expect.objectContaining({ startDate: '2026-05-21', endDate: '2026-05-21' })
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Today' }));
+
+    await waitFor(() => expect(window.location.pathname).toBe('/dispatch'));
   });
 });

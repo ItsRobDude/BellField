@@ -294,8 +294,11 @@ Gate day is validation debt, not build debt — it never blocks build lanes.
       5-minute lockout; the new-password minimum and session expiry fit were
       closed the same day; first-owner setup throttling is now DB-backed under
       a fixed setup bucket. Field-mobile remote URL handling remains open.
-      Tunnel-level access policy remains optional hardening to evaluate, not a
-      promised blocker.
+      Since 2026-09-06 the office session token is remembered in browser
+      storage (re-validated on load, bounded by the 12-hour absolute expiry
+      and admin revocation); a server-side sign-out revocation endpoint is a
+      session-hardening follow-up. Tunnel-level access policy remains optional
+      hardening to evaluate, not a promised blocker.
 
 ---
 
