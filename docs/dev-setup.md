@@ -51,7 +51,8 @@ pnpm install
 
 Root runtime settings:
 
-- Copy `.env.example` values into your local shell or app-specific `.env` files when running the API or worker.
+- Copy `.env.example` to `.env` at the repo root when running the API or worker. In development the API, worker, and relay load `<repo>/.env` and then `<app>/.env` at startup (see `src/common/config/local-env.ts` in each app); values already set in the shell win, and production never reads these files.
+- `pnpm dev:env` copies the gitignored env files into place from a shared master folder (see "Shared master env files" below).
 - `DATABASE_URL` is required for API runtime and migration scripts.
 - `PORT` controls the local API listen port.
 - `BELLFIELD_API_PORT` is the production/server-config API port override; it takes precedence over `PORT` when set.
@@ -70,6 +71,12 @@ Media config notes:
 - Production also rejects media token secrets shorter than 32 characters or known sample/dev placeholder values.
 - Development and test runs fall back to an OS temp media folder and a weak dev-only token secret if those values are omitted.
 - Use an absolute Windows-friendly path such as `C:\BellFieldData\media` for local server-style testing.
+
+Shared master env files:
+
+- `pnpm dev:env` copies `bellfield-dev.env` to `.env` and `bellfield-dev-relay.env` to `apps/relay/.env`, and seeds `apps/office-web/.env` and `apps/field-mobile/.env` from their examples when they are missing. It never prints file contents.
+- The default source folder is `W:\Documents\API Keys\BellField\dev` on the shared operator drive. Set `BELLFIELD_DEV_ENV_DIR` to use another folder.
+- Edit the master copies, then re-run `pnpm dev:env` on each machine. The copies inside the checkout are gitignored; never commit them.
 
 Relay settings (only when working on delivery/relay code):
 
@@ -97,6 +104,14 @@ pnpm dev:api
 pnpm dev:worker
 ```
 
+After switching machines or pulling new commits, refresh everything in one step:
+
+```powershell
+pnpm sync
+```
+
+`pnpm sync` pulls (fast-forward only), installs from the lockfile, runs `pnpm dev:env`, and applies both the API and relay migrations. Use `--skip-pull`, `--skip-install`, `--skip-env`, or `--skip-migrate` to leave a step out.
+
 Relay (only when working on relay code; it needs its own `bellfield_relay` database and `BELLFIELD_RELAY_*` env values from Section 4):
 
 ```powershell
@@ -119,7 +134,7 @@ pnpm dev:postgres:docker:down
 The default local connection string is `postgresql://postgres:postgres@localhost:5432/bellfield`.
 By default, the helper looks for PostgreSQL binaries under `%LOCALAPPDATA%\Programs\PostgreSQL\16.14\pgsql\bin`.
 Set `POSTGRES_BIN` if PostgreSQL is installed elsewhere.
-`pnpm dev:migrate` applies pending API migrations against that default unless `DATABASE_URL` is already set.
+`pnpm dev:migrate` applies pending API migrations against that default unless `DATABASE_URL` is set in the shell or in the root `.env`.
 Docker Compose helpers are kept as an optional path for machines where Docker Desktop is healthy.
 
 Start commands:

@@ -68,9 +68,10 @@ pnpm install
 
 Environment setup:
 
-- Copy root settings from [.env.example](./.env.example) when running the API or worker locally.
+- Copy [.env.example](./.env.example) to `.env` at the repo root when running the API or worker locally. In development the API, worker, and relay load `<repo>/.env` and then `<app>/.env` at startup; values already set in the shell win, and production never reads these files.
 - Copy [apps/office-web/.env.example](./apps/office-web/.env.example) for the office app.
 - Copy [apps/field-mobile/.env.example](./apps/field-mobile/.env.example) for the field app.
+- `pnpm dev:env` copies all of the above into place from a shared master folder (see [docs/dev-setup.md](./docs/dev-setup.md)).
 - Set `DATABASE_URL` for the API runtime and migration scripts.
 - Set `BELLFIELD_MEDIA_ROOT` and `BELLFIELD_MEDIA_TOKEN_SECRET` for any production-like API run that needs media uploads.
 - Outside local development, point `NEXT_PUBLIC_API_BASE_URL` and `EXPO_PUBLIC_API_BASE_URL` at the BellField API running on the office server.
@@ -86,6 +87,8 @@ pnpm dev:api
 pnpm dev:worker
 pnpm dev:field-smoke-data
 ```
+
+After switching machines or pulling new commits, `pnpm sync` does the whole refresh: fast-forward pull, frozen install, `pnpm dev:env`, and both API and relay migrations.
 
 `pnpm dev:postgres` starts a local PostgreSQL server from a user-space PostgreSQL install.
 It uses the development `DATABASE_URL` from [.env.example](./.env.example).

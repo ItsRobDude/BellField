@@ -1,3 +1,6 @@
+// Keep this import first: it seeds process.env from local .env files (development only).
+import './common/config/load-local-env';
+
 import { getWorkerRuntimeConfig } from './common/config/runtime-config';
 import { WorkerDatabase } from './common/database';
 import { workerLog } from './common/logger';

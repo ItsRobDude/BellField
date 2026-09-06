@@ -1,3 +1,6 @@
+// Keep this import first: it seeds process.env from local .env files (development only).
+import './common/config/load-local-env';
+
 import { ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
