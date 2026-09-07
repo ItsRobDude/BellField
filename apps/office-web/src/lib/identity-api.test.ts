@@ -4,6 +4,7 @@ import {
   createOfficeEmployee,
   getOfficeSetupStatus,
   isOfficeSessionExpiredError,
+  loginToOfficeApi,
   OfficeIdentityApiError,
   resetOfficeEmployeePassword,
   revokeOfficeEmployeeSession,
@@ -170,5 +171,97 @@ describe('identity-api employee admin helpers', () => {
         new OfficeIdentityApiError('Only an owner can do that.', 403, 'sessionExpired')
       )
     ).toBe(false);
+  });
+});
+
+describe('identity-api session-ended notices', () => {
+  it('tells the registered listener when an authenticated call comes back 401', async () => {
+    const { notifyOfficeUnauthorized, setOfficeUnauthorizedListener } = await import(
+      './office-session-events'
+    );
+    const listener = vi.fn();
+    setOfficeUnauthorizedListener(listener);
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({
+        message: 'Session expired. Please sign in again.',
+        code: 'sessionExpired'
+      })
+    });
+
+    try {
+      await expect(
+        updateOfficeEmployee({
+          employeeId: 'emp-2',
+          sessionToken: 'stale',
+          isActive: false,
+          apiBaseUrl: 'http://api.test'
+        })
+      ).rejects.toMatchObject({ status: 401, code: 'sessionExpired' });
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith('Session expired. Please sign in again.');
+    } finally {
+      setOfficeUnauthorizedListener(null);
+    }
+
+    // With no listener registered (the sign-in screen), a 401 is just the thrown error.
+    notifyOfficeUnauthorized('ignored');
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves a sign-in 401 to the form even while a listener is registered', async () => {
+    const { setOfficeUnauthorizedListener } = await import('./office-session-events');
+    const listener = vi.fn();
+    setOfficeUnauthorizedListener(listener);
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ message: 'Invalid email or password.' })
+    });
+
+    try {
+      await expect(
+        loginToOfficeApi({
+          email: 'office@example.com',
+          password: 'wrong',
+          apiBaseUrl: 'http://api.test'
+        })
+      ).rejects.toMatchObject({ message: 'Invalid email or password.', status: 401 });
+
+      expect(listener).not.toHaveBeenCalled();
+    } finally {
+      setOfficeUnauthorizedListener(null);
+    }
+  });
+
+  it('throws the same message it announced when a 401 carries no body', async () => {
+    const { officeSessionEndedMessage, setOfficeUnauthorizedListener } = await import(
+      './office-session-events'
+    );
+    const listener = vi.fn();
+    setOfficeUnauthorizedListener(listener);
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => {
+        throw new Error('no body');
+      }
+    });
+
+    try {
+      await expect(
+        updateOfficeEmployee({
+          employeeId: 'emp-2',
+          sessionToken: 'stale',
+          apiBaseUrl: 'http://api.test'
+        })
+      ).rejects.toMatchObject({ message: officeSessionEndedMessage, status: 401 });
+
+      expect(listener).toHaveBeenCalledWith(officeSessionEndedMessage);
+    } finally {
+      setOfficeUnauthorizedListener(null);
+    }
   });
 });

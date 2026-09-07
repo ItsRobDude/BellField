@@ -7,12 +7,14 @@ type OfficeWorkspaceLoadingStateProps = {
   employee: EmployeeSummary;
   errorMessage: string | null;
   isDispatchRefreshing: boolean;
+  onRetry: () => void;
 };
 
 export function OfficeWorkspaceLoadingState({
   employee,
   errorMessage,
-  isDispatchRefreshing
+  isDispatchRefreshing,
+  onRetry
 }: OfficeWorkspaceLoadingStateProps) {
   return (
     <main style={styles.page}>
@@ -23,6 +25,11 @@ export function OfficeWorkspaceLoadingState({
           {isDispatchRefreshing ? 'Loading dispatch...' : 'Dispatch is not ready yet.'}
         </p>
         {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        {errorMessage && !isDispatchRefreshing ? (
+          <button type="button" style={styles.button} onClick={onRetry}>
+            Try again
+          </button>
+        ) : null}
       </section>
     </main>
   );
