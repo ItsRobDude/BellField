@@ -971,6 +971,7 @@ export function OfficeWorkspaceShell({
         employee={employee}
         errorMessage={errorMessage}
         isDispatchRefreshing={isDispatchRefreshing}
+        onRetry={() => void refreshCoreWorkspace()}
       />
     );
   }

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import * as identityApi from '@/lib/identity-api';
 import { OfficeAuthShell } from './office-auth-shell';
@@ -290,5 +290,32 @@ describe('OfficeAuthShell remembered sessions', () => {
     expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
     expect(window.localStorage.getItem(sessionStorageKey)).toBeNull();
     expect(screen.getByLabelText('Server URL')).toHaveValue('http://office-pc:3001');
+  });
+});
+
+describe('OfficeAuthShell mid-session sign-out', () => {
+  it('returns to sign-in with the server message when any office call reports 401', async () => {
+    const { notifyOfficeUnauthorized } = await import('@/lib/office-session-events');
+    vi.stubEnv('NODE_ENV', 'production');
+    rememberSession();
+    vi.mocked(identityApi.getCurrentOfficeSession).mockResolvedValue({ employee: buildEmployee() });
+
+    render(<OfficeAuthShell />);
+
+    expect(await screen.findByText('Workspace for First Owner')).toBeInTheDocument();
+
+    act(() => {
+      notifyOfficeUnauthorized('Session not found. Please log in again.');
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByText('Session not found. Please log in again.')).toBeInTheDocument();
+    expect(window.localStorage.getItem(sessionStorageKey)).toBeNull();
+
+    // Signed out now, so a stray 401 (a wrong password, say) must not disturb the screen.
+    act(() => {
+      notifyOfficeUnauthorized('Invalid email or password.');
+    });
+    expect(screen.queryByText('Invalid email or password.')).not.toBeInTheDocument();
   });
 });

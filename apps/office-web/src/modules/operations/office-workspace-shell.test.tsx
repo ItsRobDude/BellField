@@ -1890,3 +1890,22 @@ describe('OfficeWorkspaceShell URLs', () => {
     expect(window.location.pathname).toBe('/dispatch');
   });
 });
+
+describe('OfficeWorkspaceShell startup', () => {
+  it('offers Try again when the first dispatch load fails, then recovers', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    mockedOperationsApi.getOfficeDispatchBoard.mockRejectedValueOnce(
+      new Error('Database unavailable.')
+    );
+
+    renderShell();
+
+    expect(await screen.findByText('Dispatch is not ready yet.')).toBeInTheDocument();
+    expect(screen.getByText('Database unavailable.')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
+
+    expect(await screen.findByRole('region', { name: 'Dispatch board' })).toBeInTheDocument();
+    expect(screen.queryByText('Database unavailable.')).not.toBeInTheDocument();
+  });
+});

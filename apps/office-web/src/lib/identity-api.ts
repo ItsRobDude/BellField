@@ -15,6 +15,7 @@ import type {
   RoleTemplateListResponse
 } from '@bellfield/contracts';
 import { resolveOfficeApiBaseUrl } from './api-base-url';
+import { notifyOfficeUnauthorized, officeSessionEndedMessage } from './office-session-events';
 
 export type {
   EmployeeAdminDetailResponse,
@@ -69,6 +70,13 @@ async function requestJson<TResponse>(
       message?: string;
       code?: string;
     } | null;
+
+    if (response.status === 401) {
+      // Only a signed-in shell listens, so a wrong password on the sign-in screen is not
+      // mistaken for a session ending mid-work.
+      notifyOfficeUnauthorized(errorBody?.message ?? officeSessionEndedMessage);
+    }
+
     throw new OfficeIdentityApiError(
       errorBody?.message ?? 'Request failed.',
       response.status,
