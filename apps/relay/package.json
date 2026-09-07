@@ -20,11 +20,11 @@
     "@nestjs/core": "11.1.24",
     "@nestjs/platform-express": "11.1.24",
     "class-transformer": "0.5.1",
-    "class-validator": "0.14.2",
-    "pg": "8.13.1",
+    "class-validator": "0.15.1",
+    "pg": "8.23.0",
     "reflect-metadata": "0.2.2",
     "rxjs": "7.8.2",
-    "stripe": "^22.2.1"
+    "stripe": "^22.6.1"
   },
   "devDependencies": {
     "@nestjs/cli": "11.0.21",
@@ -32,12 +32,12 @@
     "@nestjs/testing": "11.1.24",
     "@types/jest": "30.0.0",
     "@types/node": "22.15.17",
-    "@types/pg": "8.20.0",
-    "@typescript-eslint/eslint-plugin": "8.31.0",
-    "@typescript-eslint/parser": "8.31.0",
+    "@types/pg": "8.23.1",
+    "@typescript-eslint/eslint-plugin": "8.69.0",
+    "@typescript-eslint/parser": "8.69.0",
     "eslint": "9.39.4",
-    "jest": "30.0.5",
-    "ts-jest": "29.4.0",
+    "jest": "30.5.1",
+    "ts-jest": "29.4.12",
     "typescript": "5.8.3"
   }
 }
