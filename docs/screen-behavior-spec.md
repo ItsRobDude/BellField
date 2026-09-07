@@ -47,6 +47,31 @@ For the current operations-focused office app, BellField should land on **Dispat
 
 A broader business dashboard can come later, but the daily work surface should not block dispatchers behind a marketing-style or summary-only landing page.
 
+### URLs, refresh, and browser navigation
+
+Every office screen has its own URL, and the address bar is the source of truth for which
+screen is open: Dispatch (optionally with a day), customer search, a customer or location, the
+jobs queue, new-job intake, and a job with its tab and focused appointment.
+
+- Refreshing the page keeps the user signed in and on the same screen, job, tab, and day.
+  Contact detail and the create forms have no URL of their own yet; a refresh there lands on
+  customer search or on the customer or location the form was opened from.
+- Browser Back and Forward move between screens. In-app Back returns to the screen the record
+  was opened from (a job opened from Bookkeeping goes back to Bookkeeping; a customer opened
+  from a job goes back to that job), or to Dispatch when the user arrived on a deep link. Inside
+  CRM, a record opened from search or from another record gets its own history entry, and the
+  panel's Back returns to search.
+- Links can be bookmarked and shared inside the office. A link to a surface the employee may not
+  view lands on Dispatch, and a link to a job tab they may not view (Invoice, Job cost) opens on
+  Overview; the address is repaired to match either way. The API still enforces every permission
+  itself.
+- Switching job tabs or the dispatch day updates the address without adding history entries.
+- Sign out returns the address bar to Dispatch so the next person at a shared PC does not inherit
+  the previous employee's job or customer. A session that expires keeps the address so the same
+  employee can sign back in where they were.
+
+Route shapes live in `apps/office-web/src/modules/operations/office-route.ts`.
+
 ### Global search behavior
 
 BellField should not force a search bar onto every screen.

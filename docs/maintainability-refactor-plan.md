@@ -52,13 +52,13 @@ Current non-test source snapshot when this plan was created:
 
 Current oversized baseline:
 
-| Lines | File                                                                  | Refactor direction                                                                          |
-| ----: | --------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-|  1181 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts` | Split job commands, appointment commands, status transitions, and closeout/follow-up rules. |
-|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`   | Split workspace state/actions by surface and keep shell as orchestration.                   |
-|   855 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`         | First appointments split completed; continue splitting remaining tab sections when touched. |
-|  1073 | `apps/office-web/src/lib/operations-api.ts`                           | Split API helpers by domain and keep compatibility exports.                                 |
-|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                | Split posting/line/balance/correction persistence helpers.                                  |
+| Lines | File                                                                  | Refactor direction                                                                                                                      |
+| ----: | --------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+|  1181 | `apps/api/src/modules/jobs-appointments/jobs-appointments.service.ts` | Split job commands, appointment commands, status transitions, and closeout/follow-up rules.                                             |
+|  1159 | `apps/office-web/src/modules/operations/office-workspace-shell.tsx`   | Split workspace state/actions by surface and keep shell as orchestration.                                                               |
+|   700 | `apps/office-web/src/modules/operations/job-detail-panel.tsx`         | Appointments and media sections plus display formatters split out (2026-09-06); continue splitting remaining tab sections when touched. |
+|  1073 | `apps/office-web/src/lib/operations-api.ts`                           | Split API helpers by domain and keep compatibility exports.                                                                             |
+|   963 | `apps/api/src/modules/invoices/invoices.repository.ts`                | Split posting/line/balance/correction persistence helpers.                                                                              |
 
 The baseline is intentionally strict: these files are allowed to remain temporarily oversized, but not to keep growing.
 

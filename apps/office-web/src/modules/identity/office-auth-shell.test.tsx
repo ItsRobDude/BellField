@@ -5,19 +5,34 @@ import { OfficeAuthShell } from './office-auth-shell';
 
 vi.mock('@/lib/identity-api', () => ({
   createFirstOwner: vi.fn(),
+  getCurrentOfficeSession: vi.fn(),
   getOfficeSetupStatus: vi.fn(),
-  loginToOfficeApi: vi.fn()
+  loginToOfficeApi: vi.fn(),
+  OfficeIdentityApiError: class OfficeIdentityApiError extends Error {
+    constructor(
+      message: string,
+      readonly status: number,
+      readonly code?: string
+    ) {
+      super(message);
+      this.name = 'OfficeIdentityApiError';
+    }
+  }
 }));
 
 type MockWorkspaceProps = {
   initialEmployee: { displayName: string };
+  onSignOut?: () => void;
   onSessionExpired?: (message: string) => void;
 };
 
 vi.mock('@/modules/operations/office-workspace-shell', () => ({
-  OfficeWorkspaceShell: ({ initialEmployee, onSessionExpired }: MockWorkspaceProps) => (
+  OfficeWorkspaceShell: ({ initialEmployee, onSignOut, onSessionExpired }: MockWorkspaceProps) => (
     <div>
       Workspace for {initialEmployee.displayName}
+      <button type="button" onClick={() => onSignOut?.()}>
+        Sign out
+      </button>
       <button
         type="button"
         onClick={() => onSessionExpired?.('Session expired. Please sign in again.')}
@@ -28,12 +43,34 @@ vi.mock('@/modules/operations/office-workspace-shell', () => ({
   )
 }));
 
+const sessionStorageKey = 'bellfield.office.session';
+
+function buildEmployee() {
+  return {
+    id: 'owner-1',
+    email: 'owner@example.com',
+    displayName: 'First Owner',
+    roleId: 'owner' as const,
+    roleName: 'Owner',
+    isActive: true,
+    effectivePermissions: [],
+    permissionOverrides: { grantedPermissions: [], revokedPermissions: [] }
+  };
+}
+
+function rememberSession(
+  session = { sessionToken: 'session-9', apiBaseUrl: 'http://office-pc:3001' }
+) {
+  window.localStorage.setItem(sessionStorageKey, JSON.stringify(session));
+}
+
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.clearAllMocks();
 });
 
 beforeEach(() => {
+  window.localStorage.clear();
   vi.mocked(identityApi.getOfficeSetupStatus).mockResolvedValue({ setupRequired: false });
 });
 
@@ -168,5 +205,90 @@ describe('OfficeAuthShell', () => {
     expect(screen.getByText('At least 12 characters.')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create owner' })).toBeDisabled();
     expect(identityApi.createFirstOwner).not.toHaveBeenCalled();
+  });
+});
+
+describe('OfficeAuthShell remembered sessions', () => {
+  it('restores a remembered session without asking for credentials', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    rememberSession();
+    vi.mocked(identityApi.getCurrentOfficeSession).mockResolvedValue({ employee: buildEmployee() });
+
+    render(<OfficeAuthShell />);
+
+    expect(screen.getByText('Signing you back in...')).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Sign in' })).not.toBeInTheDocument();
+    expect(await screen.findByText('Workspace for First Owner')).toBeInTheDocument();
+    expect(identityApi.getCurrentOfficeSession).toHaveBeenCalledWith({
+      sessionToken: 'session-9',
+      apiBaseUrl: 'http://office-pc:3001'
+    });
+    expect(identityApi.loginToOfficeApi).not.toHaveBeenCalled();
+  });
+
+  it('forgets a remembered session the server no longer accepts', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    rememberSession();
+    vi.mocked(identityApi.getCurrentOfficeSession).mockRejectedValue(
+      new identityApi.OfficeIdentityApiError(
+        'Session expired. Please sign in again.',
+        401,
+        'sessionExpired'
+      )
+    );
+
+    render(<OfficeAuthShell />);
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(screen.getByText('Session expired. Please sign in again.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Server URL')).toHaveValue('http://office-pc:3001');
+    expect(window.localStorage.getItem(sessionStorageKey)).toBeNull();
+  });
+
+  it('keeps a remembered session when the server cannot be reached', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    rememberSession();
+    vi.mocked(identityApi.getCurrentOfficeSession).mockRejectedValue(
+      new TypeError('Failed to fetch')
+    );
+
+    render(<OfficeAuthShell />);
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'Could not reach the server to continue your session. Check the server address and sign in again.'
+      )
+    ).toBeInTheDocument();
+    expect(window.localStorage.getItem(sessionStorageKey)).not.toBeNull();
+  });
+
+  it('remembers a fresh sign-in and forgets it on sign out', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.mocked(identityApi.loginToOfficeApi).mockResolvedValue({
+      sessionToken: 'session-1',
+      employee: buildEmployee()
+    });
+
+    render(<OfficeAuthShell />);
+
+    fireEvent.change(screen.getByLabelText('Server URL'), {
+      target: { value: 'http://office-pc:3001' }
+    });
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'owner@example.com' } });
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'owner-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+
+    expect(await screen.findByText('Workspace for First Owner')).toBeInTheDocument();
+    expect(JSON.parse(window.localStorage.getItem(sessionStorageKey) ?? 'null')).toEqual({
+      sessionToken: 'session-1',
+      apiBaseUrl: 'http://office-pc:3001'
+    });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Sign out' }));
+
+    expect(await screen.findByRole('heading', { name: 'Sign in' })).toBeInTheDocument();
+    expect(window.localStorage.getItem(sessionStorageKey)).toBeNull();
+    expect(screen.getByLabelText('Server URL')).toHaveValue('http://office-pc:3001');
   });
 });

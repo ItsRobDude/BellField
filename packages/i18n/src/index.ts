@@ -30,6 +30,9 @@ const englishMessages = {
   'officeAuth.creatingOwner': 'Creating owner...',
   'officeAuth.displayName': 'Display name',
   'officeAuth.productName': 'BellField Office',
+  'officeAuth.restoringSession': 'Signing you back in...',
+  'officeAuth.sessionRestoreUnavailable':
+    'Could not reach the server to continue your session. Check the server address and sign in again.',
   'officeAuth.passwordMinimum': 'At least 12 characters.',
   'officeAuth.serverSetupStatus': 'Checking server setup status...',
   'officeAuth.serverUrlHelp': 'Enter the BellField API address for this office server.',
@@ -293,6 +296,9 @@ const spanishMessages = {
   'officeAuth.creatingOwner': 'Creando propietario...',
   'officeAuth.displayName': 'Nombre visible',
   'officeAuth.productName': 'BellField Office',
+  'officeAuth.restoringSession': 'Reanudando tu sesión...',
+  'officeAuth.sessionRestoreUnavailable':
+    'No se pudo contactar al servidor para continuar tu sesión. Revisa la dirección del servidor e inicia sesión de nuevo.',
   'officeAuth.passwordMinimum': 'Al menos 12 caracteres.',
   'officeAuth.serverSetupStatus': 'Revisando el estado de configuración del servidor...',
   'officeAuth.serverUrlHelp':

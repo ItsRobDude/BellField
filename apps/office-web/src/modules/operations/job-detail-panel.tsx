@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type CSSProperties } from 'react';
+import { useCallback, useEffect, useState, type CSSProperties } from 'react';
 import type {
   AppointmentStatus,
   CustomerAccountSummary,
@@ -8,10 +8,16 @@ import type {
   JobStatus,
   JobsWorkspaceResponse,
   LocationSummary,
-  MediaAttachmentSummary,
   RegisterEntryKind,
   RegisterEntrySummary
 } from '@/lib/operations-api';
+import {
+  formatAppointmentReference,
+  formatCurrency,
+  formatDateTime,
+  formatQuantity
+} from './job-detail-format';
+import { JobMediaSection } from './job-media-section';
 import {
   getOfficeJobElementId,
   type AppointmentDraft,
@@ -97,6 +103,8 @@ type JobDetailPanelProps = {
   onMediaVoidReasonChange: (jobId: string, mediaId: string, reason: string) => void;
   onVoidMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
   onOpenMediaAttachment: (jobId: string, mediaId: string) => Promise<void>;
+  /** Reports tab changes so the shell can keep the address bar in step with the panel. */
+  onActiveTabChange?: (tab: JobDetailTab) => void;
 };
 
 const finalJobStatusValues: JobStatus[] = ['completed', 'closed', 'cancelled'];
@@ -162,15 +170,27 @@ export function JobDetailPanel({
   onSaveMediaCaption,
   onMediaVoidReasonChange,
   onVoidMediaAttachment,
-  onOpenMediaAttachment
+  onOpenMediaAttachment,
+  onActiveTabChange
 }: JobDetailPanelProps) {
   const [activeTab, setActiveTab] = useState<JobDetailTab>(initialTab);
   const [editingRegisterEntryId, setEditingRegisterEntryId] = useState<string | null>(null);
+  const selectTab = useCallback(
+    (tab: JobDetailTab) => {
+      setActiveTab(tab);
+      onActiveTabChange?.(tab);
+    },
+    [onActiveTabChange]
+  );
   const { registerGuard: registerEstimatesUnsavedGuard, changeTab } = useJobDetailTabGuard(
     activeTab,
-    setActiveTab,
+    selectTab,
     'estimates'
   );
+  // The address bar owns the tab on refresh and deep links; follow it when it changes.
+  useEffect(() => {
+    setActiveTab(initialTab);
+  }, [initialTab]);
   const jobPendingStatusChange =
     pendingJobStatusChange?.jobId === job.id ? pendingJobStatusChange : null;
   useEffect(() => {
@@ -334,17 +354,17 @@ export function JobDetailPanel({
           jobIsFinal={finalJobStatusValues.includes(job.status)}
         />
       ) : null}
-      {activeTab === 'media'
-        ? renderMedia({
-            job,
-            capturedWork,
-            onMediaCaptionChange,
-            onSaveMediaCaption,
-            onMediaVoidReasonChange,
-            onVoidMediaAttachment,
-            onOpenMediaAttachment
-          })
-        : null}
+      {activeTab === 'media' ? (
+        <JobMediaSection
+          job={job}
+          capturedWork={capturedWork}
+          onMediaCaptionChange={onMediaCaptionChange}
+          onSaveMediaCaption={onSaveMediaCaption}
+          onMediaVoidReasonChange={onMediaVoidReasonChange}
+          onVoidMediaAttachment={onVoidMediaAttachment}
+          onOpenMediaAttachment={onOpenMediaAttachment}
+        />
+      ) : null}
       {activeTab === 'timeline' ? renderTimeline(job, timelineHasMore, timelineLimit) : null}
     </section>
   );
@@ -607,143 +627,6 @@ function renderRegisterEntry({
   );
 }
 
-function renderMedia({
-  job,
-  capturedWork,
-  onMediaCaptionChange,
-  onSaveMediaCaption,
-  onMediaVoidReasonChange,
-  onVoidMediaAttachment,
-  onOpenMediaAttachment
-}: {
-  job: JobSummary;
-  capturedWork?: CapturedWorkDetails;
-  onMediaCaptionChange: JobDetailPanelProps['onMediaCaptionChange'];
-  onSaveMediaCaption: JobDetailPanelProps['onSaveMediaCaption'];
-  onMediaVoidReasonChange: JobDetailPanelProps['onMediaVoidReasonChange'];
-  onVoidMediaAttachment: JobDetailPanelProps['onVoidMediaAttachment'];
-  onOpenMediaAttachment: JobDetailPanelProps['onOpenMediaAttachment'];
-}) {
-  if (!capturedWork || capturedWork.isLoading) {
-    return <p style={styles.muted}>Loading media...</p>;
-  }
-
-  if (capturedWork.mediaAttachments.length === 0) {
-    return <p style={styles.muted}>No media.</p>;
-  }
-
-  return (
-    <div style={styles.list}>
-      {capturedWork.mediaAttachments.map((media) =>
-        renderMediaAttachment({
-          job,
-          media,
-          captionDraft: capturedWork.mediaCaptionDrafts[media.id] ?? '',
-          voidReason: capturedWork.mediaVoidReasons[media.id] ?? '',
-          onMediaCaptionChange,
-          onSaveMediaCaption,
-          onMediaVoidReasonChange,
-          onVoidMediaAttachment,
-          onOpenMediaAttachment
-        })
-      )}
-    </div>
-  );
-}
-
-function renderMediaAttachment({
-  job,
-  media,
-  captionDraft,
-  voidReason,
-  onMediaCaptionChange,
-  onSaveMediaCaption,
-  onMediaVoidReasonChange,
-  onVoidMediaAttachment,
-  onOpenMediaAttachment
-}: {
-  job: JobSummary;
-  media: MediaAttachmentSummary;
-  captionDraft: string;
-  voidReason: string;
-  onMediaCaptionChange: JobDetailPanelProps['onMediaCaptionChange'];
-  onSaveMediaCaption: JobDetailPanelProps['onSaveMediaCaption'];
-  onMediaVoidReasonChange: JobDetailPanelProps['onMediaVoidReasonChange'];
-  onVoidMediaAttachment: JobDetailPanelProps['onVoidMediaAttachment'];
-  onOpenMediaAttachment: JobDetailPanelProps['onOpenMediaAttachment'];
-}) {
-  return (
-    <section key={media.id} style={media.isVoid ? styles.mutedPanel : styles.panel}>
-      <div style={styles.row}>
-        <div>
-          <strong>{media.originalFilename}</strong>
-          <p style={styles.tinyMuted}>
-            {formatMediaKind(media.kind)} - {formatByteSize(media.byteSize)}
-            {media.appointmentId
-              ? ` - ${formatAppointmentReference(job, media.appointmentId)}`
-              : ''}
-          </p>
-        </div>
-        <div style={styles.badgeRow}>
-          <span style={media.uploadCompleted ? styles.badge : styles.dangerBadge}>
-            {media.uploadCompleted ? 'Uploaded' : 'Pending'}
-          </span>
-          {media.isVoid ? <span style={styles.dangerBadge}>Voided</span> : null}
-        </div>
-      </div>
-      <p style={styles.tinyMuted}>
-        {formatDateTime(media.capturedAt)} - {media.capturedByName}
-      </p>
-      {media.isVoid ? (
-        <p style={styles.tinyMuted}>
-          {media.voidReason ? `Void reason: ${media.voidReason}` : 'Voided.'}
-        </p>
-      ) : (
-        <>
-          <textarea
-            aria-label={`Media caption for ${media.originalFilename}`}
-            value={captionDraft}
-            onChange={(event) => onMediaCaptionChange(job.id, media.id, event.target.value)}
-            placeholder="Caption"
-            style={styles.textarea}
-          />
-          <div style={styles.inlineActionBar}>
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => void onSaveMediaCaption(job.id, media.id)}
-            >
-              Save
-            </button>
-            <button
-              type="button"
-              disabled={!media.uploadCompleted}
-              style={styles.button}
-              onClick={() => void onOpenMediaAttachment(job.id, media.id)}
-            >
-              Open
-            </button>
-            <input
-              aria-label={`Void reason for ${media.originalFilename}`}
-              value={voidReason}
-              onChange={(event) => onMediaVoidReasonChange(job.id, media.id, event.target.value)}
-              placeholder="Void reason"
-              style={styles.input}
-            />
-            <button
-              type="button"
-              style={styles.dangerButton}
-              onClick={() => void onVoidMediaAttachment(job.id, media.id)}
-            >
-              Void
-            </button>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
 function renderTimeline(job: JobSummary, timelineHasMore: boolean, timelineLimit: number) {
   if (job.timeline.length === 0) {
     return <p style={styles.muted}>No timeline entries.</p>;
@@ -800,44 +683,6 @@ function TextField({
       />
     </label>
   );
-}
-
-function formatAppointmentReference(job: JobSummary, appointmentId: string): string {
-  const appointment = job.appointments.find((candidate) => candidate.id === appointmentId);
-  if (!appointment) {
-    return 'Appointment';
-  }
-  return `${appointment.scheduledDate ?? 'Unscheduled'} ${appointment.technicianName ?? 'Unassigned'}`;
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
-}
-
-function formatQuantity(quantity: number, unitOfMeasure?: string): string {
-  return `${quantity}${unitOfMeasure ? ` ${unitOfMeasure}` : ''}`;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
-}
-
-function formatByteSize(byteSize: number): string {
-  if (byteSize < 1024) {
-    return `${byteSize} B`;
-  }
-  if (byteSize < 1024 * 1024) {
-    return `${(byteSize / 1024).toFixed(1)} KB`;
-  }
-  return `${(byteSize / 1024 / 1024).toFixed(1)} MB`;
-}
-
-function formatMediaKind(kind: MediaAttachmentSummary['kind']): string {
-  return kind[0].toUpperCase() + kind.slice(1);
 }
 
 const fieldLabelStyle: CSSProperties = {

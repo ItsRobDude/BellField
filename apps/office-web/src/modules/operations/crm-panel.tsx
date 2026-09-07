@@ -29,6 +29,8 @@ import { CrmCustomerCreatePanel } from './crm-customer-create-panel';
 import { CrmDetailRouter } from './crm-detail-router';
 import { CrmPanelHeader } from './crm-panel-header';
 import {
+  buildCreateCustomerRequest,
+  buildCreateLocationRequest,
   collectCrmDuplicateWarnings,
   createContactLinkDrafts,
   createEmptyContactForm,
@@ -43,27 +45,16 @@ import { CrmSearchSurface } from './crm-search-surface';
 import type {
   ContactFormState,
   ContactLinkDraft,
-  CrmNavigationTarget,
   CrmPanelMode,
+  CrmPanelProps,
   CustomerDetailTab,
   CustomerFormState,
   LocationDetailTab,
   LocationFormState
 } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { useCrmNavigationTarget } from './use-crm-navigation-target';
+import { shownCrmRecord, useCrmNavigationTarget } from './use-crm-navigation-target';
 import { useCrmSearch } from './use-crm-search';
-
-type Props = {
-  apiBaseUrl: string;
-  sessionToken: string;
-  onErrorMessage: (message: string | null) => void;
-  canReplaceRemoveEquipment?: boolean;
-  canDeleteEquipment?: boolean;
-  navigationTarget?: CrmNavigationTarget | null;
-  onNavigationTargetConsumed?: () => void;
-  onBackToJob?: (jobId: string) => void;
-};
 
 export function CrmPanel({
   apiBaseUrl,
@@ -73,8 +64,9 @@ export function CrmPanel({
   canDeleteEquipment = false,
   navigationTarget = null,
   onNavigationTargetConsumed,
+  onNavigate,
   onBackToJob
-}: Props) {
+}: CrmPanelProps) {
   const [workspace, setWorkspace] = useState<CrmWorkspaceResponse | null>(null);
   const [mode, setMode] = useState<CrmPanelMode>('search');
   const [returnModeAfterContactForm, setReturnModeAfterContactForm] =
@@ -117,10 +109,12 @@ export function CrmPanel({
 
   useCrmNavigationTarget({
     navigationTarget,
+    shownRecord: shownCrmRecord(mode, selectedCustomer?.id ?? null, selectedLocation?.id ?? null),
     onNavigationTargetConsumed,
     onOpenCustomer: openCustomerDetail,
     onOpenLocation: openLocationDetail,
-    onReturnToJobChange: setReturnToJobId
+    onReturnToJobChange: setReturnToJobId,
+    onReturnToSearch: returnToSearch
   });
 
   useEffect(() => {
@@ -159,6 +153,7 @@ export function CrmPanel({
     clearSelectedRecords();
     setReturnToJobId(null);
     setMode('search');
+    onNavigate?.(null);
   }
 
   function handleDetailBack() {
@@ -221,12 +216,12 @@ export function CrmPanel({
     setReturnToJobId(null);
 
     if (result.kind === 'customer') {
-      await openCustomerDetail(result.id);
+      await openCustomerFromPanel(result.id);
       return;
     }
 
     if (result.kind === 'location') {
-      await openLocationDetail(result.id);
+      await openLocationFromPanel(result.id);
       return;
     }
 
@@ -246,7 +241,7 @@ export function CrmPanel({
     }
   }
 
-  async function openCustomerDetail(customerId: string) {
+  async function openCustomerDetail(customerId: string): Promise<boolean> {
     onErrorMessage(null);
 
     try {
@@ -260,12 +255,14 @@ export function CrmPanel({
       setSelectedContact(null);
       hydrateCustomerForm(customer);
       setMode('customerDetail');
+      return true;
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to load customer detail.');
+      return false;
     }
   }
 
-  async function openLocationDetail(locationId: string) {
+  async function openLocationDetail(locationId: string): Promise<boolean> {
     onErrorMessage(null);
 
     try {
@@ -280,8 +277,24 @@ export function CrmPanel({
       hydrateLocationForm(location);
       hydrateLinkDrafts(location.contacts);
       setMode('locationDetail');
+      return true;
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to load location detail.');
+      return false;
+    }
+  }
+
+  // Opens started inside the panel tell the shell once the record is on screen; opens that came
+  // from a navigation target do not, since the address bar already says where we are.
+  async function openCustomerFromPanel(customerId: string) {
+    if (await openCustomerDetail(customerId)) {
+      onNavigate?.({ kind: 'customer', customerId });
+    }
+  }
+
+  async function openLocationFromPanel(locationId: string) {
+    if (await openLocationDetail(locationId)) {
+      onNavigate?.({ kind: 'location', locationId });
     }
   }
 
@@ -306,17 +319,10 @@ export function CrmPanel({
       const response = await createOfficeCustomer({
         sessionToken,
         apiBaseUrl,
-        name: customerForm.name,
-        accountType: customerForm.accountType,
-        billingAddressLine1: customerForm.billingAddressLine1,
-        billingCity: customerForm.billingCity,
-        billingState: customerForm.billingState,
-        billingPostalCode: customerForm.billingPostalCode,
-        phone: customerForm.phone || undefined,
-        email: customerForm.email || undefined,
-        fax: customerForm.fax || undefined,
-        flags: splitCommaValues(customerForm.flags),
-        confirmDuplicate: forceConfirm || customerDuplicateWarnings.length > 0
+        ...buildCreateCustomerRequest(
+          customerForm,
+          forceConfirm || customerDuplicateWarnings.length > 0
+        )
       });
       setCustomerDuplicateWarnings([]);
       setSelectedCustomer(response.customer);
@@ -325,6 +331,7 @@ export function CrmPanel({
       hydrateCustomerForm(response.customer);
       setCustomerForm(createEmptyCustomerForm());
       setMode('customerDetail');
+      onNavigate?.({ kind: 'customer', customerId: response.customer.id });
       await refreshWorkspace();
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to create customer.');
@@ -391,17 +398,10 @@ export function CrmPanel({
       const response = await createOfficeLocation({
         sessionToken,
         apiBaseUrl,
-        customerId: locationForm.customerId,
-        name: locationForm.name,
-        addressLine1: locationForm.addressLine1,
-        city: locationForm.city,
-        state: locationForm.state,
-        postalCode: locationForm.postalCode,
-        phone: locationForm.phone || undefined,
-        email: locationForm.email || undefined,
-        fax: locationForm.fax || undefined,
-        confirmDuplicate: options.confirmDuplicate || locationDuplicateWarnings.length > 0,
-        confirmMissingContactInfo
+        ...buildCreateLocationRequest(locationForm, {
+          confirmDuplicate: options.confirmDuplicate || locationDuplicateWarnings.length > 0,
+          confirmMissingContactInfo
+        })
       });
       setLocationDuplicateWarnings([]);
       setCreateLocationMissingContactConfirmation(false);
@@ -412,6 +412,7 @@ export function CrmPanel({
       hydrateLinkDrafts(response.location.contacts);
       setLocationForm(createEmptyLocationForm(locationForm.customerId));
       setMode('locationDetail');
+      onNavigate?.({ kind: 'location', locationId: response.location.id });
       await refreshWorkspace();
     } catch (error) {
       onErrorMessage(error instanceof Error ? error.message : 'Unable to create location.');
@@ -776,8 +777,8 @@ export function CrmPanel({
           onLinkExisting={() => void handleLinkExistingContact()}
           onLocationTransferred={(location) => void handleLocationTransferred(location)}
           onNewContact={openNewContactForm}
-          onOpenCustomer={(customerId) => void openCustomerDetail(customerId)}
-          onOpenLocation={(locationId) => void openLocationDetail(locationId)}
+          onOpenCustomer={(customerId) => void openCustomerFromPanel(customerId)}
+          onOpenLocation={(locationId) => void openLocationFromPanel(locationId)}
           onRefreshSelectedRecord={reloadSelectedRecord}
           onSaveContact={() => void handleSaveSharedContact()}
           onSaveCustomer={() => void handleSaveCustomer()}

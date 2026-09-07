@@ -1,4 +1,10 @@
-import type { ContactLink, ContactMethodSummary, DuplicateCandidate } from '@/lib/operations-api';
+import type {
+  ContactLink,
+  ContactMethodSummary,
+  CreateCustomerRequest,
+  CreateLocationRequest,
+  DuplicateCandidate
+} from '@/lib/operations-api';
 import { searchOfficeCrm } from '@/lib/operations-api';
 import type {
   ContactFormState,
@@ -113,4 +119,44 @@ export async function collectCrmDuplicateWarnings(input: {
       isActive: result.isActive,
       hasDoNotServiceFlag: result.badges.includes('DNU')
     }));
+}
+
+/** The create-customer payload for a filled-in form; blank contact fields are left out. */
+export function buildCreateCustomerRequest(
+  form: CustomerFormState,
+  confirmDuplicate: boolean
+): CreateCustomerRequest {
+  return {
+    name: form.name,
+    accountType: form.accountType,
+    billingAddressLine1: form.billingAddressLine1,
+    billingCity: form.billingCity,
+    billingState: form.billingState,
+    billingPostalCode: form.billingPostalCode,
+    phone: form.phone || undefined,
+    email: form.email || undefined,
+    fax: form.fax || undefined,
+    flags: splitCommaValues(form.flags),
+    confirmDuplicate
+  };
+}
+
+/** The create-location payload for a filled-in form; blank contact fields are left out. */
+export function buildCreateLocationRequest(
+  form: LocationFormState,
+  confirmations: { confirmDuplicate: boolean; confirmMissingContactInfo: boolean }
+): CreateLocationRequest {
+  return {
+    customerId: form.customerId,
+    name: form.name,
+    addressLine1: form.addressLine1,
+    city: form.city,
+    state: form.state,
+    postalCode: form.postalCode,
+    phone: form.phone || undefined,
+    email: form.email || undefined,
+    fax: form.fax || undefined,
+    confirmDuplicate: confirmations.confirmDuplicate,
+    confirmMissingContactInfo: confirmations.confirmMissingContactInfo
+  };
 }

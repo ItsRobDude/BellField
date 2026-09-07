@@ -51,17 +51,28 @@ export type CrmPanelMode =
   | 'locationDetail'
   | 'contactDetail';
 
-export type CrmNavigationTarget =
-  | {
-      kind: 'customer';
-      customerId: string;
-      returnToJobId?: string;
-    }
-  | {
-      kind: 'location';
-      locationId: string;
-      returnToJobId?: string;
-    };
+/** A customer or location record the CRM panel can show; the shell gives each one a URL. */
+export type CrmRecordRef =
+  | { kind: 'customer'; customerId: string }
+  | { kind: 'location'; locationId: string };
+
+export type CrmNavigationTarget = CrmRecordRef & {
+  /** The job the record was opened from, so the panel's Back can return to it. */
+  returnToJobId?: string;
+};
+
+export type CrmPanelProps = {
+  apiBaseUrl: string;
+  sessionToken: string;
+  onErrorMessage: (message: string | null) => void;
+  canReplaceRemoveEquipment?: boolean;
+  canDeleteEquipment?: boolean;
+  navigationTarget?: CrmNavigationTarget | null;
+  onNavigationTargetConsumed?: () => void;
+  /** The user moved to a record (or back to search) inside the panel; null means search. */
+  onNavigate?: (record: CrmRecordRef | null) => void;
+  onBackToJob?: (jobId: string) => void;
+};
 
 export type CustomerDetailTab =
   | 'overview'
