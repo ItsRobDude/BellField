@@ -70,21 +70,40 @@ async function requestJson<TResponse>(
       message?: string;
       code?: string;
     } | null;
+    const code = typeof errorBody?.code === 'string' ? errorBody.code : undefined;
 
     if (response.status === 401) {
-      // Only a signed-in shell listens, so a wrong password on the sign-in screen is not
-      // mistaken for a session ending mid-work.
-      notifyOfficeUnauthorized(errorBody?.message ?? officeSessionEndedMessage);
+      // A 401 on a call that carried the session token means the session is over. Sign-in and
+      // first-owner setup answer 401 to a wrong password, but they send no Authorization
+      // header, so those stay ordinary form errors.
+      const message = errorBody?.message ?? officeSessionEndedMessage;
+      if (hasAuthorizationHeader(headers)) {
+        notifyOfficeUnauthorized(message);
+      }
+      throw new OfficeIdentityApiError(message, response.status, code);
     }
 
     throw new OfficeIdentityApiError(
       errorBody?.message ?? 'Request failed.',
       response.status,
-      typeof errorBody?.code === 'string' ? errorBody.code : undefined
+      code
     );
   }
 
   return (await response.json()) as TResponse;
+}
+
+function hasAuthorizationHeader(headers: HeadersInit | undefined): boolean {
+  if (!headers) {
+    return false;
+  }
+
+  if (headers instanceof Headers) {
+    return headers.has('Authorization');
+  }
+
+  const names = Array.isArray(headers) ? headers.map(([name]) => name) : Object.keys(headers);
+  return names.some((name) => name.toLowerCase() === 'authorization');
 }
 
 export async function loginToOfficeApi(input: {
