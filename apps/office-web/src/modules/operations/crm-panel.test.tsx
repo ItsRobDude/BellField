@@ -217,7 +217,7 @@ function renderCrmPanel(
 ) {
   vi.stubGlobal('fetch', fetchMock);
 
-  render(
+  return render(
     <CrmPanel
       apiBaseUrl="http://api.test"
       sessionToken="session-token"
@@ -413,6 +413,116 @@ describe('CrmPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back' }));
 
     expect(onBackToJob).toHaveBeenCalledWith('job-1');
+  });
+
+  it('reports records opened inside the panel and the return to search', async () => {
+    const onNavigate = vi.fn();
+    const customerWithLocation: CustomerDetail = {
+      ...customerDetail,
+      locations: [
+        {
+          id: 'location-1',
+          name: 'Main Shop',
+          addressLine1: '123 Main',
+          city: 'Blaine',
+          state: 'WA',
+          postalCode: '98230',
+          isActive: true
+        }
+      ]
+    };
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/search') {
+        return jsonResponse({ query: url.searchParams.get('q') ?? '', results: [customerResult] });
+      }
+
+      if (url.pathname === '/operations/crm/customers/customer-1') {
+        return jsonResponse(customerWithLocation);
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-1') {
+        return jsonResponse(createdLocation);
+      }
+
+      return jsonResponse({});
+    });
+    renderCrmPanel(fetchMock, { onNavigate });
+
+    fireEvent.change(await screen.findByLabelText('Customer, location, or person search'), {
+      target: { value: 'Acme' }
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Acme/ }));
+    expect(await screen.findByRole('heading', { name: 'Customer' })).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenLastCalledWith({ kind: 'customer', customerId: 'customer-1' });
+
+    fireEvent.click(await screen.findByRole('tab', { name: 'Locations' }));
+    fireEvent.click(await screen.findByRole('button', { name: /Main Shop/ }));
+    expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenLastCalledWith({ kind: 'location', locationId: 'location-1' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back' }));
+    expect(
+      await screen.findByRole('heading', { name: 'Find customers, locations, and people' })
+    ).toBeInTheDocument();
+    expect(onNavigate).toHaveBeenLastCalledWith(null);
+    expect(onNavigate).toHaveBeenCalledTimes(3);
+  });
+
+  it('follows the navigation target back to search without refetching a record it shows', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL, options?: RequestInit) => {
+      const url = new URL(String(input));
+
+      if (url.pathname === '/operations/crm' && !options?.method) {
+        return jsonResponse(workspace);
+      }
+
+      if (url.pathname === '/operations/crm/locations/location-1') {
+        return jsonResponse(createdLocation);
+      }
+
+      return jsonResponse({});
+    });
+    const locationFetchCount = () =>
+      fetchMock.mock.calls.filter(([input]) =>
+        String(input).endsWith('/operations/crm/locations/location-1')
+      ).length;
+    const { rerender } = renderCrmPanel(fetchMock, {
+      navigationTarget: { kind: 'location', locationId: 'location-1', returnToJobId: 'job-1' }
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    expect(locationFetchCount()).toBe(1);
+
+    // The same record without its source job (the shell forgot it) is already on screen.
+    rerender(
+      <CrmPanel
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        onErrorMessage={vi.fn()}
+        navigationTarget={{ kind: 'location', locationId: 'location-1' }}
+      />
+    );
+    expect(screen.getByRole('heading', { name: 'Location' })).toBeInTheDocument();
+    expect(locationFetchCount()).toBe(1);
+
+    // Browser Back to /customers clears the target while the record is still open.
+    rerender(
+      <CrmPanel
+        apiBaseUrl="http://api.test"
+        sessionToken="session-token"
+        onErrorMessage={vi.fn()}
+        navigationTarget={null}
+      />
+    );
+    expect(
+      await screen.findByRole('heading', { name: 'Find customers, locations, and people' })
+    ).toBeInTheDocument();
   });
 
   it('shows customer service context across jobs, invoices, and activity tabs', async () => {

@@ -19,7 +19,7 @@ import * as operationsApi from '@/lib/operations-api';
 import { OfficeIdentityApiError, type EmployeeSummary } from '@/lib/identity-api';
 import * as identityApi from '@/lib/identity-api';
 import { OfficeWorkspaceShell } from './office-workspace-shell';
-import type { CrmNavigationTarget } from './crm-panel-types';
+import type { CrmNavigationTarget, CrmRecordRef } from './crm-panel-types';
 
 vi.mock('@/lib/operations-api', () => ({
   acknowledgeOfficeFinishedVisitReview: vi.fn(),
@@ -84,11 +84,12 @@ vi.mock('@/lib/identity-api', () => ({
 
 type MockCrmPanelProps = {
   navigationTarget?: CrmNavigationTarget | null;
+  onNavigate?: (record: CrmRecordRef | null) => void;
   onBackToJob?: (jobId: string) => void;
 };
 
 vi.mock('./crm-panel', () => ({
-  CrmPanel: ({ navigationTarget, onBackToJob }: MockCrmPanelProps) => (
+  CrmPanel: ({ navigationTarget, onNavigate, onBackToJob }: MockCrmPanelProps) => (
     <section aria-label="CRM panel mock">
       CRM panel mock
       {navigationTarget ? (
@@ -104,6 +105,21 @@ vi.mock('./crm-panel', () => ({
           Back to source job
         </button>
       ) : null}
+      <button
+        type="button"
+        onClick={() => onNavigate?.({ kind: 'customer', customerId: 'customer-1' })}
+      >
+        Open customer 1 in panel
+      </button>
+      <button
+        type="button"
+        onClick={() => onNavigate?.({ kind: 'location', locationId: 'location-1' })}
+      >
+        Open location 1 in panel
+      </button>
+      <button type="button" onClick={() => onNavigate?.(null)}>
+        Back to search in panel
+      </button>
     </section>
   )
 }));
@@ -1813,5 +1829,64 @@ describe('OfficeWorkspaceShell URLs', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Today' }));
 
     await waitFor(() => expect(window.location.pathname).toBe('/dispatch'));
+  });
+
+  it('keeps customer and location URLs in step with navigation inside the CRM panel', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell();
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Customers' }));
+    expect(await screen.findByRole('region', { name: 'CRM panel mock' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/customers');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open customer 1 in panel' }));
+    expect(window.location.pathname).toBe('/customers/customer-1');
+    expect(await screen.findByText('CRM target: customer customer-1')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Back to source job' })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Open location 1 in panel' }));
+    expect(window.location.pathname).toBe('/locations/location-1');
+    expect(await screen.findByText('CRM target: location location-1')).toBeInTheDocument();
+
+    // Browser Back walks the records in the order they were opened.
+    act(() => {
+      window.history.back();
+    });
+    expect(await screen.findByText('CRM target: customer customer-1')).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/customers/customer-1');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Back to search in panel' }));
+    expect(window.location.pathname).toBe('/customers');
+    await waitFor(() => expect(screen.queryByText(/CRM target/)).not.toBeInTheDocument());
+  });
+
+  it('opens a job tab the employee may not view on Overview and repairs the address', async () => {
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+    window.history.replaceState(null, '', '/jobs/job-1/invoice');
+
+    renderShell();
+
+    expect(await screen.findByRole('region', { name: 'Job 1001 detail' })).toBeInTheDocument();
+    await waitFor(() => expect(window.location.pathname).toBe('/jobs/job-1'));
+    expect(screen.getByRole('heading', { name: 'Overview' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Invoice' })).not.toBeInTheDocument();
+  });
+
+  it('returns the address bar to Dispatch on sign out', async () => {
+    const onSignOut = vi.fn();
+    arrangeWorkspace(buildWorkspace([buildJob()]));
+
+    renderShell({ onSignOut });
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Jobs' }));
+    expect(await screen.findByRole('region', { name: 'Jobs queue' })).toBeInTheDocument();
+    expect(window.location.pathname).toBe('/jobs');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Account menu for Office User' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Sign out' }));
+
+    expect(onSignOut).toHaveBeenCalledTimes(1);
+    expect(window.location.pathname).toBe('/dispatch');
   });
 });

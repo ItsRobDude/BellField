@@ -1,8 +1,6 @@
 import type { JobSummary, MediaAttachmentSummary } from '@/lib/operations-api';
 
-// Display formatting shared by the job detail panel and its extracted sections. Lifted out of
-// job-detail-panel.tsx unchanged; the app-wide formatter consolidation is tracked separately
-// (docs/fsm-gap-analysis-2026-07-14.md, "one format.ts").
+// Display formatting shared by the job detail panel and its media section.
 
 export function formatAppointmentReference(job: JobSummary, appointmentId: string): string {
   const appointment = job.appointments.find((candidate) => candidate.id === appointmentId);

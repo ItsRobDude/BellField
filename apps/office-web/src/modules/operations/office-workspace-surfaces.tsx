@@ -43,7 +43,7 @@ import {
   OfficeEmployeeAccessSurface,
   type OfficeEmployeeAccessSurfaceProps
 } from './office-employee-access-surface';
-import type { CrmNavigationTarget } from './crm-panel-types';
+import type { CrmNavigationTarget, CrmRecordRef } from './crm-panel-types';
 import type { OfficeView } from './office-workspace-frame';
 
 type OfficeCrmSurfaceProps = {
@@ -53,6 +53,7 @@ type OfficeCrmSurfaceProps = {
   canDeleteEquipment: boolean;
   navigationTarget: CrmNavigationTarget | null;
   onErrorMessage: (message: string | null) => void;
+  onNavigate: (record: CrmRecordRef | null) => void;
   onBackToJob: (jobId: string) => void;
 };
 
@@ -141,6 +142,7 @@ export function OfficeWorkspaceSurfaces({
           canReplaceRemoveEquipment={crm.canReplaceRemoveEquipment}
           canDeleteEquipment={crm.canDeleteEquipment}
           navigationTarget={crm.navigationTarget}
+          onNavigate={crm.onNavigate}
           onBackToJob={crm.onBackToJob}
         />
       ) : null}

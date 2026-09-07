@@ -39,7 +39,7 @@ import {
   type PendingJobStatusChange,
   type RegisterEntryEditDraft
 } from './job-work-types';
-import type { CrmNavigationTarget } from './crm-panel-types';
+import type { CrmNavigationTarget, CrmRecordRef } from './crm-panel-types';
 import { OfficeWorkspaceFrame, type OfficeView } from './office-workspace-frame';
 import {
   buildCapturedWorkDetails,
@@ -183,7 +183,14 @@ export function OfficeWorkspaceShell({
   const isJobIntakeOpen = activeOfficeView === 'jobIntake';
   const selectedJobId = route.view === 'jobDetail' ? route.jobId : null;
   const focusedAppointmentId = route.view === 'jobDetail' ? route.appointmentId : null;
-  const jobDetailInitialTab: JobDetailTab = route.view === 'jobDetail' ? route.tab : 'overview';
+  // A job tab the employee may not view (invoice, job cost) opens on Overview, the same way
+  // a forbidden rail surface lands on Dispatch.
+  const requestedJobDetailTab: JobDetailTab = route.view === 'jobDetail' ? route.tab : 'overview';
+  const jobDetailInitialTab: JobDetailTab =
+    (requestedJobDetailTab === 'invoice' && !canViewInvoice) ||
+    (requestedJobDetailTab === 'jobCost' && !canViewJobCosting)
+      ? 'overview'
+      : requestedJobDetailTab;
   const routeDispatchDate = route.view === 'dispatch' ? route.date : null;
   const crmRouteTarget = route.view === 'customers' ? route.target : null;
   const crmNavigationTarget = useMemo<CrmNavigationTarget | null>(
@@ -195,8 +202,13 @@ export function OfficeWorkspaceShell({
   useEffect(() => {
     if (!isRequestedRouteUsable) {
       navigate(defaultOfficeRoute, { replace: true });
+      return;
     }
-  }, [isRequestedRouteUsable, navigate]);
+
+    if (route.view === 'jobDetail' && route.tab !== jobDetailInitialTab) {
+      navigate({ ...route, tab: jobDetailInitialTab }, { replace: true });
+    }
+  }, [isRequestedRouteUsable, jobDetailInitialTab, navigate, route]);
 
   useEffect(() => {
     if (route.view !== 'dispatch') {
@@ -923,6 +935,22 @@ export function OfficeWorkspaceShell({
     navigate({ view: 'customers', target: { kind: 'location', locationId } });
   }
 
+  // Moving inside the CRM panel: a record opened from search or from another record gets its
+  // own history entry, and going back to search replaces the record's entry. Either way the
+  // record was not opened from a job, so the panel's Back returns to search.
+  function handleCrmNavigate(record: CrmRecordRef | null) {
+    setCrmReturnToJobId(null);
+    navigate({ view: 'customers', target: record }, { replace: record === null });
+  }
+
+  // Sign out is the "done with this computer" path: leave the next person at Dispatch instead
+  // of the previous employee's job or customer. Session expiry keeps the address so the same
+  // employee can sign back in where they were.
+  function handleSignOut() {
+    navigate(defaultOfficeRoute, { replace: true });
+    onSignOut();
+  }
+
   function handleDispatchViewDateChange(nextDate: string) {
     const resolvedDate = nextDate || getDateInputValue();
     setDispatchViewDate(resolvedDate);
@@ -969,7 +997,7 @@ export function OfficeWorkspaceShell({
       noticeMessage={noticeMessage}
       onOpenJobIntake={() => void handleOpenJobIntake()}
       onRefresh={() => void refreshAllWorkspace()}
-      onSignOut={onSignOut}
+      onSignOut={handleSignOut}
       onViewChange={handleOfficeViewChange}
     >
       <OfficeWorkspaceSurfaces
@@ -981,6 +1009,7 @@ export function OfficeWorkspaceShell({
           canDeleteEquipment,
           navigationTarget: crmNavigationTarget,
           onErrorMessage: setErrorMessage,
+          onNavigate: handleCrmNavigate,
           onBackToJob: (jobId) =>
             goBack({ view: 'jobDetail', jobId, tab: 'overview', appointmentId: null })
         }}
