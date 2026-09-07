@@ -38,8 +38,11 @@ type CountRow = {
 
 // Every worklist pages by keyset: the caller asks for `limit` rows after an optional cursor
 // (the sort key of the last row it already holds), and each query orders by that same key
-// with the row id as the tiebreaker, so a page boundary can never skip or repeat a row. The
-// matching count queries report each worklist's true size.
+// plus a unique tiebreaker (the row id; method within a batch date for payment batches) so
+// equal keys still page deterministically. The sort keys are live values, so a row whose
+// key changes between two requests can cross a page boundary; the office surface skips
+// rows it already shows and Refresh restarts from page one. The matching count queries
+// report each worklist's true size.
 @Injectable()
 export class BookkeepingRepository {
   constructor(private readonly databaseService: DatabaseService) {}

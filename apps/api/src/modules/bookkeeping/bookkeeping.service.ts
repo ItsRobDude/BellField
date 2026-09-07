@@ -11,9 +11,8 @@ import type {
   RecentlyPostedCursor
 } from './bookkeeping.types';
 
-// Each worklist is paged so the review surface stays a fast, finite read. The response
-// carries every worklist's true total and a next-page cursor, so a page boundary never
-// hides an open balance the way a silent cap did.
+// Each worklist is paged so the review surface stays a fast, finite read; the response
+// carries every worklist's true total and a next-page cursor.
 const defaultQueueLimit = 50;
 const maxQueueLimit = 200;
 const paymentMethods: PaymentMethod[] = ['cash', 'check', 'card', 'ach', 'other'];
