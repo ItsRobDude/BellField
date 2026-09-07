@@ -13,17 +13,45 @@ allowBuilds:
   unrs-resolver: true
 
 # Moved from package.json "pnpm.overrides" — pnpm 11 reads overrides here.
+# Each entry pins a vulnerable transitive range to its patched release so
+# `pnpm audit --prod` (a blocking CI step) stays clean. Keep a selector inside
+# one major so a pin can never move a dependent onto a breaking release; the
+# uuid 7 -> 11 entry predates that rule and is left as the pnpm 11 migration
+# set it.
 overrides:
-  'postcss@<=8.5.17': '8.5.18'
-  'qs@6.15.1': '6.15.2'
-  '@xmldom/xmldom@0.8.12': '0.8.13'
+  'postcss@<=8.5.22': '8.5.23'
+  'qs@>=6.0.0 <6.16.0': '6.16.0'
+  '@xmldom/xmldom@>=0.7.0 <=0.8.14': '0.8.15'
   'body-parser@2.2.2': '2.3.0'
-  'brace-expansion@5.0.5': '5.0.8'
+  'brace-expansion@>=5.0.0 <5.0.9': '5.0.9'
+  'browserslist@>=4.0.0 <4.28.7': '4.28.7'
+  'nanoid@>=3.0.0 <3.3.18': '3.3.18'
   'shell-quote': '1.9.0'
   '@babel/core@7.29.0': '7.29.7'
-  'js-yaml@4.1.1': '4.3.0'
+  # 4.3.2 also carries the merge-key CPU limit backported from 5.4.1, which is
+  # not on the GitHub advisory feed yet, so audit alone would not ask for it.
+  'js-yaml@>=4.0.0 <4.3.2': '4.3.2'
   'sharp@0.34.5': '0.35.3'
   'ws@7.5.10': '7.5.11'
   'ws@8.20.0': '8.21.0'
   'multer@2.1.1': '2.2.0'
   'uuid@7.0.3': '11.1.1'
+
+# Advisories with no fix that can be applied yet. An ignore is global to the
+# advisory, not to the consumer named below, so re-check an entry's reach if a
+# new dependent of that package appears. Revisit on the next Expo SDK bump or
+# when the noted fix ships, then delete the entry.
+auditConfig:
+  ignoreGhsas:
+    # image-size 1.2.1 via metro@0.84: reads asset dimensions while bundling the
+    # field app, so it only ever sees the shop's own image files at build time.
+    # The advisories name >=2.0.3 as patched but no such release exists on npm.
+    - GHSA-w3rx-r6r6-pgpr
+    - GHSA-5p2g-fcmc-qvqq
+    # decode-uri-component 0.2.2 via query-string@7 (expo-router): this one runs
+    # at field-app runtime on route and deep-link query strings, so the residual
+    # risk is a crafted link pinning the CPU of the one device that opens it (no
+    # data exposure, the shop API is not involved). The only patched release
+    # (0.5.0) is ESM-only and query-string 7 `require()`s it, so forcing it would
+    # break route parsing. Goes away when expo-router moves off query-string 7.
+    - GHSA-vcc3-ghjq-m6fr
