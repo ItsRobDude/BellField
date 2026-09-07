@@ -48,7 +48,9 @@ Built, tested, and (where marked) deployed. Each line names its evidence.
   [acceptance-links-design.md](./acceptance-links-design.md),
   [phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md)
 - **Security harness in CI** — secret scanning, blocking prod dependency
-  audit (currently zero known vulnerabilities), `SECURITY.md` +
+  audit (transitive pins live in `pnpm-workspace.yaml` `overrides`; the
+  `auditConfig.ignoreGhsas` list there names the few advisories with no
+  applicable fix, each with its reason and removal trigger), `SECURITY.md` +
   `security@bellfield.app`, prod env-var startup validation, Dependabot
 - **Release runtime-mode guard** — release build manifests now refuse API
   startup unless `NODE_ENV=production`; Windows service manifest rendering
