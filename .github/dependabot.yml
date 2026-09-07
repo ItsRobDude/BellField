@@ -22,10 +22,13 @@ updates:
           - 'patch'
     ignore:
       # Expo owns these versions: field-mobile pins them per Expo SDK release and
-      # `expo install --fix` is the supported way to move them together.
+      # `expo install --fix` is the supported way to move them together. react and
+      # react-dom are Expo-pinned too, but office-web pins its own copies, so a
+      # root-level ignore would freeze both; they stay open to review case by case.
       - dependency-name: 'expo'
       - dependency-name: 'expo-*'
       - dependency-name: '@expo/*'
+      - dependency-name: 'eslint-config-expo'
       - dependency-name: 'react-native'
       - dependency-name: 'react-native-*'
       - dependency-name: '@react-native/*'
