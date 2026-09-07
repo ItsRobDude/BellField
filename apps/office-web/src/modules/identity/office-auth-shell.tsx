@@ -19,6 +19,7 @@ import {
   OfficeIdentityApiError,
   type EmployeeSummary
 } from '@/lib/identity-api';
+import { setOfficeUnauthorizedListener } from '@/lib/office-session-events';
 import {
   clearStoredOfficeSession,
   readStoredOfficeServerUrl,
@@ -68,6 +69,25 @@ export function OfficeAuthShell() {
   const setupPasswordTooShort =
     setupRequired && password.length > 0 && password.length < minimumPasswordLength;
   const setupPasswordInvalid = setupRequired && password.length < minimumPasswordLength;
+
+  useEffect(() => {
+    if (!sessionToken) {
+      return;
+    }
+
+    // Any office call that comes back 401 ends the session everywhere at once: forget the
+    // remembered token and return to sign-in with the server's reason.
+    setOfficeUnauthorizedListener((message) => {
+      clearStoredOfficeSession();
+      setSessionToken(null);
+      setEmployee(null);
+      setErrorMessage(message);
+    });
+
+    return () => {
+      setOfficeUnauthorizedListener(null);
+    };
+  }, [sessionToken]);
 
   useEffect(() => {
     const browserLanguages =
