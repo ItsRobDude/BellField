@@ -313,6 +313,8 @@ export const officeWorkspaceStyles: Record<string, CSSProperties> = {
   tinyMuted: { color: '#7b8794', fontSize: '0.85rem', margin: 0 },
   fieldLabel: { display: 'grid', gap: '0.25rem', fontSize: '0.85rem', fontWeight: 800 },
   fieldText: { color: '#52606d', fontSize: '0.85rem', fontWeight: 800 },
+  fieldHint: { color: '#52606d', fontSize: '0.8rem', fontWeight: 500 },
+  fieldError: { color: '#b42318', fontSize: '0.8rem', fontWeight: 700 },
   detailHeader: {
     alignItems: 'center',
     display: 'flex',

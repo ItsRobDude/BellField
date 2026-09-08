@@ -2,6 +2,9 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { DuplicateCandidate } from '@/lib/operations-api';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
+import { useAsyncAction } from '@/components/use-async-action';
 import type { CustomerFormState } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -11,7 +14,7 @@ type CrmCustomerCreatePanelProps = {
   onBack: () => void;
   onChangeCustomerForm: Dispatch<SetStateAction<CustomerFormState>>;
   onClearDuplicateWarnings: () => void;
-  onCreateCustomer: (forceConfirm?: boolean) => void;
+  onCreateCustomer: (forceConfirm?: boolean) => Promise<void>;
 };
 
 export function CrmCustomerCreatePanel({
@@ -22,6 +25,15 @@ export function CrmCustomerCreatePanel({
   onClearDuplicateWarnings,
   onCreateCustomer
 }: CrmCustomerCreatePanelProps) {
+  const createCustomer = useAsyncAction(onCreateCustomer);
+
+  function setField(patch: Partial<CustomerFormState>, clearsDuplicates = false) {
+    onChangeCustomerForm((current) => ({ ...current, ...patch }));
+    if (clearsDuplicates) {
+      onClearDuplicateWarnings();
+    }
+  }
+
   return (
     <div style={styles.panel}>
       <div style={styles.row}>
@@ -31,98 +43,81 @@ export function CrmCustomerCreatePanel({
         </button>
       </div>
       <div style={styles.formRow}>
-        <input
-          value={customerForm.name}
-          onChange={(event) => {
-            onChangeCustomerForm((current) => ({ ...current, name: event.target.value }));
-            onClearDuplicateWarnings();
-          }}
-          placeholder="Customer name"
-          style={styles.input}
-        />
-        <select
-          value={customerForm.accountType}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, accountType: event.target.value }))
-          }
-          style={styles.input}
-        >
-          <option value="residential">Residential</option>
-          <option value="company">Company</option>
-          <option value="propertyManager">Property manager</option>
-          <option value="landlord">Landlord</option>
-        </select>
-        <input
-          value={customerForm.billingAddressLine1}
-          onChange={(event) => {
-            onChangeCustomerForm((current) => ({
-              ...current,
-              billingAddressLine1: event.target.value
-            }));
-            onClearDuplicateWarnings();
-          }}
-          placeholder="Billing address"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.billingCity}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, billingCity: event.target.value }))
-          }
-          placeholder="City"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.billingState}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, billingState: event.target.value }))
-          }
-          placeholder="State"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.billingPostalCode}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({
-              ...current,
-              billingPostalCode: event.target.value
-            }))
-          }
-          placeholder="Postal code"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.phone}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, phone: event.target.value }))
-          }
-          placeholder="Phone"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.email}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, email: event.target.value }))
-          }
-          placeholder="Email"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.fax}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, fax: event.target.value }))
-          }
-          placeholder="Fax"
-          style={styles.input}
-        />
-        <input
-          value={customerForm.flags}
-          onChange={(event) =>
-            onChangeCustomerForm((current) => ({ ...current, flags: event.target.value }))
-          }
-          placeholder="Flags (comma separated)"
-          style={styles.input}
-        />
+        <FormField label="Customer name">
+          <input
+            value={customerForm.name}
+            onChange={(event) => setField({ name: event.target.value }, true)}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Account type">
+          <select
+            value={customerForm.accountType}
+            onChange={(event) => setField({ accountType: event.target.value })}
+            style={styles.input}
+          >
+            <option value="residential">Residential</option>
+            <option value="company">Company</option>
+            <option value="propertyManager">Property manager</option>
+            <option value="landlord">Landlord</option>
+          </select>
+        </FormField>
+        <FormField label="Billing address">
+          <input
+            value={customerForm.billingAddressLine1}
+            onChange={(event) => setField({ billingAddressLine1: event.target.value }, true)}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="City">
+          <input
+            value={customerForm.billingCity}
+            onChange={(event) => setField({ billingCity: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="State">
+          <input
+            value={customerForm.billingState}
+            onChange={(event) => setField({ billingState: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Postal code">
+          <input
+            value={customerForm.billingPostalCode}
+            onChange={(event) => setField({ billingPostalCode: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Phone">
+          <input
+            value={customerForm.phone}
+            onChange={(event) => setField({ phone: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Email">
+          <input
+            value={customerForm.email}
+            onChange={(event) => setField({ email: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Fax">
+          <input
+            value={customerForm.fax}
+            onChange={(event) => setField({ fax: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Flags" hint="Comma separated">
+          <input
+            value={customerForm.flags}
+            onChange={(event) => setField({ flags: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
       </div>
       {duplicateWarnings.length > 0 ? (
         <div style={styles.subpanel}>
@@ -133,22 +128,26 @@ export function CrmCustomerCreatePanel({
             </div>
           ))}
           <div style={styles.row}>
-            <button
-              type="button"
-              onClick={() => onCreateCustomer(true)}
-              style={styles.primaryButton}
+            <SubmitButton
+              isBusy={createCustomer.isBusy}
+              busyLabel="Creating…"
+              onClick={() => void createCustomer.run(true)}
             >
               Create anyway
-            </button>
+            </SubmitButton>
             <button type="button" onClick={onClearDuplicateWarnings} style={styles.button}>
               Keep editing
             </button>
           </div>
         </div>
       ) : null}
-      <button type="button" onClick={() => onCreateCustomer()} style={styles.primaryButton}>
+      <SubmitButton
+        isBusy={createCustomer.isBusy}
+        busyLabel="Creating…"
+        onClick={() => void createCustomer.run()}
+      >
         Create customer
-      </button>
+      </SubmitButton>
     </div>
   );
 }

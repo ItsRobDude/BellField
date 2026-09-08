@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import type { AppointmentStatus, JobSummary, JobsWorkspaceResponse } from '@/lib/operations-api';
+import { SubmitButton } from '@/components/submit-button';
+import { useAsyncAction } from '@/components/use-async-action';
 import { formatAppointmentScheduleTime } from './appointment-schedule-format';
 import {
   appointmentStatusLabels,
@@ -45,94 +47,30 @@ export function JobAppointmentsSection({
   const [isAddFormOpen, setIsAddFormOpen] = useState(false);
   const canAddAppointment = job.status !== 'closed' && job.status !== 'cancelled';
   const draft = appointmentDrafts[job.id] ?? createEmptyAppointmentDraft();
+  const addAppointment = useAsyncAction(async () => {
+    await onAddAppointment(job.id);
+    setIsAddFormOpen(false);
+  });
 
   useEffect(() => {
     setIsAddFormOpen(false);
   }, [job.id]);
 
-  async function handleAddAppointment() {
-    await onAddAppointment(job.id);
-    setIsAddFormOpen(false);
-  }
-
   return (
     <div style={styles.list}>
       {job.appointments.length === 0 ? <p style={styles.muted}>No appointments.</p> : null}
-      {job.appointments.map((appointment) => {
-        const editDraft =
-          appointmentEditDrafts[appointment.id] ?? createAppointmentDraft(appointment);
-        const isFocused = focusedAppointmentId === appointment.id;
-
-        return (
-          <section
-            key={appointment.id}
-            style={isFocused ? { ...styles.panel, borderColor: '#1c6b57' } : styles.panel}
-            aria-label={`Appointment ${appointment.id}`}
-          >
-            <div style={styles.row}>
-              <div>
-                <strong>{appointment.scheduledDate ?? 'Unscheduled'}</strong>
-                <p style={styles.tinyMuted}>
-                  {formatAppointmentScheduleTime(appointment)} -{' '}
-                  {appointment.technicianName ?? 'Unassigned'}
-                </p>
-              </div>
-              <div style={styles.badgeRow}>
-                <span style={styles.badge}>{appointmentStatusLabels[appointment.status]}</span>
-                {appointment.needsOfficeReview ? (
-                  <span style={styles.dangerBadge}>Review</span>
-                ) : null}
-              </div>
-            </div>
-            {appointment.finishOutcome ? (
-              <p style={styles.tinyMuted}>
-                Outcome: {formatFinishOutcome(appointment.finishOutcome)}
-              </p>
-            ) : null}
-            {appointment.visitNotes ? (
-              <p style={styles.tinyMuted}>Notes: {appointment.visitNotes}</p>
-            ) : null}
-            {appointment.registerFollowUpNote ? (
-              <p style={styles.tinyMuted}>Follow-up: {appointment.registerFollowUpNote}</p>
-            ) : null}
-            <div style={styles.formGridCompact}>
-              <label style={fieldLabelStyle}>
-                <span>Status</span>
-                <select
-                  value={appointment.status}
-                  onChange={(event) => {
-                    const nextStatus = event.target.value as AppointmentStatus;
-                    if (nextStatus === 'cancelled' && !window.confirm('Cancel this appointment?')) {
-                      return;
-                    }
-                    void onAppointmentStatusChange(appointment.id, nextStatus);
-                  }}
-                  style={styles.input}
-                >
-                  {appointmentStatusOptions.map((status) => (
-                    <option key={status} value={status}>
-                      {appointmentStatusLabels[status]}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <ScheduleDraftFields
-                draft={editDraft}
-                technicians={technicians}
-                prefix="Appointment"
-                onChange={(patch) => onAppointmentEditDraftChange(appointment.id, editDraft, patch)}
-              />
-            </div>
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => void onSaveAppointmentSchedule(appointment.id)}
-            >
-              Save appointment
-            </button>
-          </section>
-        );
-      })}
+      {job.appointments.map((appointment) => (
+        <AppointmentCard
+          key={appointment.id}
+          appointment={appointment}
+          editDraft={appointmentEditDrafts[appointment.id] ?? createAppointmentDraft(appointment)}
+          isFocused={focusedAppointmentId === appointment.id}
+          technicians={technicians}
+          onAppointmentStatusChange={onAppointmentStatusChange}
+          onAppointmentEditDraftChange={onAppointmentEditDraftChange}
+          onSaveAppointmentSchedule={onSaveAppointmentSchedule}
+        />
+      ))}
       {canAddAppointment ? (
         isAddFormOpen ? (
           <section style={styles.panel} aria-label="Add appointment">
@@ -145,9 +83,13 @@ export function JobAppointmentsSection({
               />
             </div>
             <div style={styles.inlineActionBar}>
-              <button type="button" style={styles.primaryButton} onClick={handleAddAppointment}>
+              <SubmitButton
+                isBusy={addAppointment.isBusy}
+                busyLabel="Adding…"
+                onClick={() => void addAppointment.run()}
+              >
                 Add appointment
-              </button>
+              </SubmitButton>
               <button type="button" style={styles.button} onClick={() => setIsAddFormOpen(false)}>
                 Cancel
               </button>
@@ -162,6 +104,91 @@ export function JobAppointmentsSection({
         <p style={styles.tinyMuted}>Reopen to add appointments.</p>
       )}
     </div>
+  );
+}
+
+function AppointmentCard({
+  appointment,
+  editDraft,
+  isFocused,
+  technicians,
+  onAppointmentStatusChange,
+  onAppointmentEditDraftChange,
+  onSaveAppointmentSchedule
+}: {
+  appointment: JobSummary['appointments'][number];
+  editDraft: AppointmentEditDraft;
+  isFocused: boolean;
+  technicians: JobsWorkspaceResponse['technicians'];
+  onAppointmentStatusChange: JobAppointmentsSectionProps['onAppointmentStatusChange'];
+  onAppointmentEditDraftChange: JobAppointmentsSectionProps['onAppointmentEditDraftChange'];
+  onSaveAppointmentSchedule: JobAppointmentsSectionProps['onSaveAppointmentSchedule'];
+}) {
+  const saveSchedule = useAsyncAction(() => onSaveAppointmentSchedule(appointment.id));
+
+  return (
+    <section
+      style={isFocused ? { ...styles.panel, borderColor: '#1c6b57' } : styles.panel}
+      aria-label={`Appointment ${appointment.id}`}
+    >
+      <div style={styles.row}>
+        <div>
+          <strong>{appointment.scheduledDate ?? 'Unscheduled'}</strong>
+          <p style={styles.tinyMuted}>
+            {formatAppointmentScheduleTime(appointment)} -{' '}
+            {appointment.technicianName ?? 'Unassigned'}
+          </p>
+        </div>
+        <div style={styles.badgeRow}>
+          <span style={styles.badge}>{appointmentStatusLabels[appointment.status]}</span>
+          {appointment.needsOfficeReview ? <span style={styles.dangerBadge}>Review</span> : null}
+        </div>
+      </div>
+      {appointment.finishOutcome ? (
+        <p style={styles.tinyMuted}>Outcome: {formatFinishOutcome(appointment.finishOutcome)}</p>
+      ) : null}
+      {appointment.visitNotes ? (
+        <p style={styles.tinyMuted}>Notes: {appointment.visitNotes}</p>
+      ) : null}
+      {appointment.registerFollowUpNote ? (
+        <p style={styles.tinyMuted}>Follow-up: {appointment.registerFollowUpNote}</p>
+      ) : null}
+      <div style={styles.formGridCompact}>
+        <label style={fieldLabelStyle}>
+          <span>Status</span>
+          <select
+            value={appointment.status}
+            onChange={(event) => {
+              const nextStatus = event.target.value as AppointmentStatus;
+              if (nextStatus === 'cancelled' && !window.confirm('Cancel this appointment?')) {
+                return;
+              }
+              void onAppointmentStatusChange(appointment.id, nextStatus);
+            }}
+            style={styles.input}
+          >
+            {appointmentStatusOptions.map((status) => (
+              <option key={status} value={status}>
+                {appointmentStatusLabels[status]}
+              </option>
+            ))}
+          </select>
+        </label>
+        <ScheduleDraftFields
+          draft={editDraft}
+          technicians={technicians}
+          prefix="Appointment"
+          onChange={(patch) => onAppointmentEditDraftChange(appointment.id, editDraft, patch)}
+        />
+      </div>
+      <SubmitButton
+        variant="secondary"
+        isBusy={saveSchedule.isBusy}
+        onClick={() => void saveSchedule.run()}
+      >
+        Save appointment
+      </SubmitButton>
+    </section>
   );
 }
 

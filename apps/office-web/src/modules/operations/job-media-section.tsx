@@ -2,6 +2,8 @@
 
 import type { JobSummary, MediaAttachmentSummary } from '@/lib/operations-api';
 import { formatByteSize, formatDateTime } from '@/lib/format';
+import { SubmitButton } from '@/components/submit-button';
+import { useAsyncAction } from '@/components/use-async-action';
 import { formatAppointmentReference, formatMediaKind } from './job-detail-format';
 import type { CapturedWorkDetails } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -35,24 +37,25 @@ export function JobMediaSection({
 
   return (
     <div style={styles.list}>
-      {capturedWork.mediaAttachments.map((media) =>
-        renderMediaAttachment({
-          job,
-          media,
-          captionDraft: capturedWork.mediaCaptionDrafts[media.id] ?? '',
-          voidReason: capturedWork.mediaVoidReasons[media.id] ?? '',
-          onMediaCaptionChange,
-          onSaveMediaCaption,
-          onMediaVoidReasonChange,
-          onVoidMediaAttachment,
-          onOpenMediaAttachment
-        })
-      )}
+      {capturedWork.mediaAttachments.map((media) => (
+        <MediaAttachmentCard
+          key={media.id}
+          job={job}
+          media={media}
+          captionDraft={capturedWork.mediaCaptionDrafts[media.id] ?? ''}
+          voidReason={capturedWork.mediaVoidReasons[media.id] ?? ''}
+          onMediaCaptionChange={onMediaCaptionChange}
+          onSaveMediaCaption={onSaveMediaCaption}
+          onMediaVoidReasonChange={onMediaVoidReasonChange}
+          onVoidMediaAttachment={onVoidMediaAttachment}
+          onOpenMediaAttachment={onOpenMediaAttachment}
+        />
+      ))}
     </div>
   );
 }
 
-function renderMediaAttachment({
+function MediaAttachmentCard({
   job,
   media,
   captionDraft,
@@ -73,8 +76,10 @@ function renderMediaAttachment({
   onVoidMediaAttachment: JobMediaSectionProps['onVoidMediaAttachment'];
   onOpenMediaAttachment: JobMediaSectionProps['onOpenMediaAttachment'];
 }) {
+  const saveCaption = useAsyncAction(() => onSaveMediaCaption(job.id, media.id));
+
   return (
-    <section key={media.id} style={media.isVoid ? styles.mutedPanel : styles.panel}>
+    <section style={media.isVoid ? styles.mutedPanel : styles.panel}>
       <div style={styles.row}>
         <div>
           <strong>{media.originalFilename}</strong>
@@ -109,13 +114,13 @@ function renderMediaAttachment({
             style={styles.textarea}
           />
           <div style={styles.inlineActionBar}>
-            <button
-              type="button"
-              style={styles.button}
-              onClick={() => void onSaveMediaCaption(job.id, media.id)}
+            <SubmitButton
+              variant="secondary"
+              isBusy={saveCaption.isBusy}
+              onClick={() => void saveCaption.run()}
             >
               Save
-            </button>
+            </SubmitButton>
             <button
               type="button"
               disabled={!media.uploadCompleted}

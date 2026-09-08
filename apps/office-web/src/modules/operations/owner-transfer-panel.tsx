@@ -12,6 +12,8 @@ import {
   reassignOfficeLocationOwner,
   searchOfficeCrm
 } from '@/lib/operations-api';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
 import {
   collectCrmDuplicateWarnings,
   createEmptyCustomerForm,
@@ -263,91 +265,100 @@ export function OwnerTransferPanel({
             </button>
           </div>
           <div style={styles.formRow}>
-            <input
-              value={customerForm.name}
-              onChange={(event) => {
-                setCustomerForm((current) => ({ ...current, name: event.target.value }));
-                setDuplicateWarnings([]);
-              }}
-              placeholder="Customer name"
-              style={styles.input}
-            />
-            <select
-              value={customerForm.accountType}
-              onChange={(event) =>
-                setCustomerForm((current) => ({
-                  ...current,
-                  accountType: event.target.value
-                }))
-              }
-              style={styles.input}
-            >
-              <option value="residential">Residential</option>
-              <option value="company">Company</option>
-              <option value="propertyManager">Property manager</option>
-              <option value="landlord">Landlord</option>
-            </select>
-            <input
-              value={customerForm.billingAddressLine1}
-              onChange={(event) => {
-                setCustomerForm((current) => ({
-                  ...current,
-                  billingAddressLine1: event.target.value
-                }));
-                setDuplicateWarnings([]);
-              }}
-              placeholder="Billing address"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.billingCity}
-              onChange={(event) =>
-                setCustomerForm((current) => ({
-                  ...current,
-                  billingCity: event.target.value
-                }))
-              }
-              placeholder="City"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.billingState}
-              onChange={(event) =>
-                setCustomerForm((current) => ({
-                  ...current,
-                  billingState: event.target.value
-                }))
-              }
-              placeholder="State"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.billingPostalCode}
-              onChange={(event) =>
-                setCustomerForm((current) => ({
-                  ...current,
-                  billingPostalCode: event.target.value
-                }))
-              }
-              placeholder="Postal code"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.phone}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, phone: event.target.value }))
-              }
-              placeholder="Phone"
-              style={styles.input}
-            />
-            <input
-              value={customerForm.email}
-              onChange={(event) =>
-                setCustomerForm((current) => ({ ...current, email: event.target.value }))
-              }
-              placeholder="Email"
-              style={styles.input}
-            />
+            <FormField label="Customer name">
+              <input
+                value={customerForm.name}
+                onChange={(event) => {
+                  setCustomerForm((current) => ({ ...current, name: event.target.value }));
+                  setDuplicateWarnings([]);
+                }}
+                style={styles.input}
+              />
+            </FormField>
+            <FormField label="Account type">
+              <select
+                value={customerForm.accountType}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({
+                    ...current,
+                    accountType: event.target.value
+                  }))
+                }
+                style={styles.input}
+              >
+                <option value="residential">Residential</option>
+                <option value="company">Company</option>
+                <option value="propertyManager">Property manager</option>
+                <option value="landlord">Landlord</option>
+              </select>
+            </FormField>
+            <FormField label="Billing address">
+              <input
+                value={customerForm.billingAddressLine1}
+                onChange={(event) => {
+                  setCustomerForm((current) => ({
+                    ...current,
+                    billingAddressLine1: event.target.value
+                  }));
+                  setDuplicateWarnings([]);
+                }}
+                style={styles.input}
+              />
+            </FormField>
+            <FormField label="City">
+              <input
+                value={customerForm.billingCity}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({
+                    ...current,
+                    billingCity: event.target.value
+                  }))
+                }
+                style={styles.input}
+              />
+            </FormField>
+            <FormField label="State">
+              <input
+                value={customerForm.billingState}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({
+                    ...current,
+                    billingState: event.target.value
+                  }))
+                }
+                style={styles.input}
+              />
+            </FormField>
+            <FormField label="Postal code">
+              <input
+                value={customerForm.billingPostalCode}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({
+                    ...current,
+                    billingPostalCode: event.target.value
+                  }))
+                }
+                style={styles.input}
+              />
+            </FormField>
+            <FormField label="Phone">
+              <input
+                value={customerForm.phone}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({ ...current, phone: event.target.value }))
+                }
+                style={styles.input}
+              />
+            </FormField>
+            <FormField label="Email">
+              <input
+                value={customerForm.email}
+                onChange={(event) =>
+                  setCustomerForm((current) => ({ ...current, email: event.target.value }))
+                }
+                style={styles.input}
+              />
+            </FormField>
           </div>
           {duplicateWarnings.length > 0 ? (
             <div style={styles.subpanel}>
@@ -358,14 +369,13 @@ export function OwnerTransferPanel({
                 </div>
               ))}
               <div style={styles.row}>
-                <button
-                  type="button"
+                <SubmitButton
+                  isBusy={isSaving}
+                  busyLabel="Creating…"
                   onClick={() => void handleCreateCustomer(true)}
-                  style={styles.primaryButton}
-                  disabled={isSaving}
                 >
                   Create anyway
-                </button>
+                </SubmitButton>
                 <button
                   type="button"
                   onClick={() => setDuplicateWarnings([])}
@@ -376,14 +386,14 @@ export function OwnerTransferPanel({
               </div>
             </div>
           ) : null}
-          <button
-            type="button"
+          <SubmitButton
+            variant="secondary"
+            isBusy={isSaving}
+            busyLabel="Creating…"
             onClick={() => void handleCreateCustomer()}
-            style={styles.button}
-            disabled={isSaving}
           >
             Create and select customer
-          </button>
+          </SubmitButton>
         </div>
       ) : null}
       <div style={styles.formRow}>
@@ -413,14 +423,14 @@ export function OwnerTransferPanel({
             ? `${location.name} will transfer from ${location.customerName} to ${selectedCustomer.name} effective ${effectiveDate || 'date not set'}.`
             : 'Select a customer to review the transfer.'}
         </div>
-        <button
-          type="button"
+        <SubmitButton
+          isBusy={isSaving}
+          busyLabel="Transferring…"
+          disabled={!selectedCustomer || !effectiveDate}
           onClick={() => void handleTransferOwnership()}
-          style={styles.primaryButton}
-          disabled={!selectedCustomer || !effectiveDate || isSaving}
         >
           Confirm transfer
-        </button>
+        </SubmitButton>
       </div>
     </div>
   );
