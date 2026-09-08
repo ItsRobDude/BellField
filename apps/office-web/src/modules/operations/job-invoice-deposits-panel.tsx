@@ -14,6 +14,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { ConfirmPanel } from '@/components/confirm-action';
 import { SummaryRow } from './job-invoice-shared';
 
 type DepositDraft = {
@@ -64,6 +65,10 @@ export function DraftInvoiceDepositsPanel({
   > | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [pendingDepositConfirmation, setPendingDepositConfirmation] = useState<{
+    title: string;
+    description?: string;
+  } | null>(null);
   const [isRecording, setIsRecording] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null);
@@ -90,7 +95,7 @@ export function DraftInvoiceDepositsPanel({
     void load();
   }, [load]);
 
-  async function createDepositLink() {
+  async function createDepositLink(confirmSameAmountCharge = false) {
     if (!depositDraft) return;
     const amount = Number(depositDraft.amount);
     const amountCents = Math.round(amount * 100);
@@ -103,53 +108,46 @@ export function DraftInvoiceDepositsPanel({
       return;
     }
     const normalizedAmount = amountCents / 100;
+    setPendingDepositConfirmation(null);
     setIsCreating(true);
     setErrorMessage(null);
     try {
-      const confirmations = {
-        confirmSameAmountCharge: false
-      };
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const response = await requestDepositLink(normalizedAmount, confirmations);
-        if (response.state === 'confirmationRequired') {
-          if (response.code === 'sameAmountPreviouslyPaid') {
-            const confirmed = window.confirm(
-              `Create another ${formatCurrency(response.amount)} deposit link?\n\n${response.message}`
-            );
-            if (!confirmed) {
-              return;
-            }
-            confirmations.confirmSameAmountCharge = true;
-            continue;
-          }
-          setErrorMessage(response.message ?? 'Deposit links are not available right now.');
+      const response = await requestDepositLink(normalizedAmount, { confirmSameAmountCharge });
+      if (response.state === 'confirmationRequired') {
+        if (response.code === 'sameAmountPreviouslyPaid') {
+          // The server asks before a second charge for the same amount; the question is shown
+          // in place and the request is sent again with that answer.
+          setPendingDepositConfirmation({
+            title: `Create another ${formatCurrency(response.amount)} deposit link?`,
+            description: response.message
+          });
           return;
         }
-        if (response.state !== 'created') {
-          setErrorMessage(response.message ?? 'Deposit links are not available right now.');
-          return;
-        }
-        setDepositLink(response);
-        setDepositDraft(null);
-        let copied = false;
-        try {
-          await navigator.clipboard?.writeText(response.checkoutUrl);
-          copied = true;
-        } catch {
-          copied = false;
-        }
-        setNoticeMessage(
-          response.reusedExisting
-            ? copied
-              ? 'Existing active deposit link copied.'
-              : 'Existing active deposit link shown.'
-            : copied
-              ? 'Deposit link copied.'
-              : 'Deposit link created.'
-        );
+        setErrorMessage(response.message ?? 'Deposit links are not available right now.');
         return;
       }
-      setErrorMessage('Deposit link confirmation could not be completed.');
+      if (response.state !== 'created') {
+        setErrorMessage(response.message ?? 'Deposit links are not available right now.');
+        return;
+      }
+      setDepositLink(response);
+      setDepositDraft(null);
+      let copied = false;
+      try {
+        await navigator.clipboard?.writeText(response.checkoutUrl);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      setNoticeMessage(
+        response.reusedExisting
+          ? copied
+            ? 'Existing active deposit link copied.'
+            : 'Existing active deposit link shown.'
+          : copied
+            ? 'Deposit link copied.'
+            : 'Deposit link created.'
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create deposit link.');
     } finally {
@@ -321,6 +319,18 @@ export function DraftInvoiceDepositsPanel({
             </button>
           </div>
         </div>
+      ) : null}
+      {pendingDepositConfirmation ? (
+        <ConfirmPanel
+          title={pendingDepositConfirmation.title}
+          description={pendingDepositConfirmation.description}
+          confirmLabel="Create link anyway"
+          cancelLabel="Keep editing"
+          busyLabel="Creating…"
+          isBusy={isCreating}
+          onConfirm={() => void createDepositLink(true)}
+          onCancel={() => setPendingDepositConfirmation(null)}
+        />
       ) : null}
 
       {manualDepositDraft ? (

@@ -77,8 +77,15 @@ Route shapes live in `apps/office-web/src/modules/operations/office-route.ts`.
 Every form field shows a visible label; a placeholder alone is not a label once the field has a
 value. Hints and inline errors sit under the field they belong to. A button that writes shows a
 busy state and ignores repeat clicks until the request settles, so a double click can never
-create a second customer, appointment, or equipment record. The shared pieces live in
-`apps/office-web/src/components/` (`FormField`, `SubmitButton`, `useAsyncAction`).
+create a second customer, appointment, or equipment record. Money-moving and destructive actions
+(posting, voiding, removing lines, sending documents, revoking sessions, ending agreements,
+deleting equipment, cancelling appointments) ask first, in the app's own style and right where
+the user clicked, never through the browser's own confirm dialog, and they ask even when the
+employee has permission. When the server itself asks before going on (a second charge for the
+same amount, a link that could exceed what is due, a missing serial number), that question is
+shown in the same place and the request is sent again with the answer. The shared pieces live in
+`apps/office-web/src/components/` (`FormField`, `SubmitButton`, `useAsyncAction`,
+`ConfirmAction`, `ConfirmPanel`).
 
 ### Global search behavior
 

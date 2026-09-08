@@ -11,6 +11,7 @@ import {
   type RoleTemplate
 } from '@/lib/identity-api';
 import { formatDateTime } from '@/lib/format';
+import { ConfirmAction } from '@/components/confirm-action';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   computeEffectivePermissions,
@@ -576,34 +577,26 @@ function SessionRevokeButton({
   onChanged: () => void;
   onError: (message: string | null) => void;
 }) {
-  const [isRevoking, setIsRevoking] = useState(false);
-
   async function handleRevoke() {
-    // Revoking is destructive (the actor can be looking at their own sessions) — confirm first.
-    if (!window.confirm('Revoke this session? The employee will need to sign in again.')) {
-      return;
-    }
     onError(null);
-    setIsRevoking(true);
     try {
       await revokeOfficeEmployeeSession({ employeeId, sessionId, sessionToken, apiBaseUrl });
       onChanged();
     } catch (error) {
       onError(error instanceof Error ? error.message : 'Unable to revoke session.');
-    } finally {
-      setIsRevoking(false);
     }
   }
 
+  // Revoking is destructive (the actor can be looking at their own sessions), so it asks first.
   return (
-    <button
-      type="button"
+    <ConfirmAction
+      label="Revoke"
       aria-label={`Revoke session ${sessionId}`}
-      style={styles.button}
-      disabled={isRevoking}
-      onClick={handleRevoke}
-    >
-      {isRevoking ? 'Revoking…' : 'Revoke'}
-    </button>
+      title="Revoke this session?"
+      description="The employee will need to sign in again."
+      confirmLabel="Revoke session"
+      busyLabel="Revoking…"
+      onConfirm={handleRevoke}
+    />
   );
 }

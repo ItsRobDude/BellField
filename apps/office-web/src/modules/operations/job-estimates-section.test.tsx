@@ -551,7 +551,6 @@ describe('JobEstimatesSection', () => {
   });
 
   it('still offers Decline on a pending estimate with options', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const optionEstimate: EstimateSummary = {
       ...estimate,
       id: 'estimate-options',
@@ -591,8 +590,9 @@ describe('JobEstimatesSection', () => {
     expect(screen.getByRole('button', { name: 'Mark Better approved' })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));
+    expect(screen.getByRole('group', { name: 'Decline this estimate?' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Decline estimate' }));
 
-    expect(confirmSpy).toHaveBeenCalledWith('Decline this estimate?');
     await waitFor(() =>
       expect(mockedApi.declineOfficeEstimate).toHaveBeenCalledWith({
         estimateId: 'estimate-options',
@@ -864,8 +864,6 @@ describe('JobEstimatesSection', () => {
   });
 
   it('offers sending on a pending estimate so the customer can review before approval', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
-
     render(
       <JobEstimatesSection
         jobId="job-1"
@@ -886,8 +884,11 @@ describe('JobEstimatesSection', () => {
       'Estimate from BellField'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    expect(
+      screen.getByRole('group', { name: 'Send this estimate PDF to customer@example.com?' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
-    expect(confirmSpy).toHaveBeenCalledWith('Send this estimate PDF to customer@example.com?');
     await waitFor(() =>
       expect(mockedApi.sendOfficeEstimate).toHaveBeenCalledWith(
         expect.objectContaining({ estimateId: 'estimate-1' })
@@ -896,7 +897,6 @@ describe('JobEstimatesSection', () => {
   });
 
   it('sends an approved estimate PDF and refreshes delivery history', async () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
       estimates: [
         {
@@ -936,6 +936,7 @@ describe('JobEstimatesSection', () => {
       'Hello Acme, attached is Replacement options.'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     await waitFor(() => {
       expect(mockedApi.sendOfficeEstimate).toHaveBeenCalledWith({
@@ -952,7 +953,6 @@ describe('JobEstimatesSection', () => {
       apiBaseUrl: 'http://api.test',
       sessionToken: 'session-token'
     });
-    expect(confirmSpy).toHaveBeenCalledWith('Send this estimate PDF to customer@example.com?');
     expect(await screen.findByText('Estimate sent.')).toBeInTheDocument();
     expect(mockedApi.getOfficeEstimateOutboundMessages).toHaveBeenCalledWith({
       estimateId: 'estimate-1',
@@ -962,7 +962,6 @@ describe('JobEstimatesSection', () => {
   });
 
   it('reports a queued send as a notice, not an error', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.sendOfficeEstimate.mockResolvedValue({
       outboundMessage: {
         id: 'message-q1',
@@ -1025,6 +1024,7 @@ describe('JobEstimatesSection', () => {
       'Estimate from BellField'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByText('Queued — will send automatically.')).toBeInTheDocument();
     expect(screen.getByText('Queued')).toBeInTheDocument();
@@ -1203,7 +1203,6 @@ describe('JobEstimatesSection', () => {
   });
 
   it('warns instead of celebrating when a send is accepted but not recorded', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
       estimates: [
         {
@@ -1264,6 +1263,7 @@ describe('JobEstimatesSection', () => {
       'Estimate from BellField'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     const warning = await screen.findByText(
       'The email was sent, but BellField could not finish recording it. Do not resend until support checks it.'
@@ -1273,7 +1273,6 @@ describe('JobEstimatesSection', () => {
   });
 
   it('shows a failed send as an error, not a success notice', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.getOfficeEstimatesForJob.mockResolvedValue({
       estimates: [
         {
@@ -1334,6 +1333,7 @@ describe('JobEstimatesSection', () => {
       'Estimate from BellField'
     );
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     const failureMessage = await screen.findByText(
       'Email was not delivered. Try again or contact BellField support.'

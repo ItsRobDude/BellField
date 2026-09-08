@@ -27,6 +27,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from '@/lib/format';
+import { ConfirmPanel } from '@/components/confirm-action';
 import { SummaryRow, type InvoicePaymentPermissions } from './job-invoice-shared';
 import {
   emptyPaymentDraft,
@@ -102,6 +103,16 @@ export function JobInvoiceCorrections({
   const [refundDraft, setRefundDraft] = useState<RefundDraft | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isCreatingPaymentLink, setIsCreatingPaymentLink] = useState(false);
+  const [pendingPaymentOverage, setPendingPaymentOverage] = useState<{
+    amount: number;
+    amountDue: number;
+    extra: number;
+  } | null>(null);
+  const [pendingLinkConfirmation, setPendingLinkConfirmation] = useState<{
+    title: string;
+    description?: string;
+    confirmations: { confirmSameAmountCharge: boolean; confirmActiveLinkOverage: boolean };
+  } | null>(null);
   const [onlinePaymentLink, setOnlinePaymentLink] = useState<Extract<
     OnlinePaymentLinkResponse,
     { state: 'created' }
@@ -275,7 +286,6 @@ export function JobInvoiceCorrections({
   }
 
   async function removeLine(line: InvoiceLineItemSummary) {
-    if (!window.confirm(`Remove "${line.description}" from this correction?`)) return;
     setIsSaving(true);
     try {
       const response = await voidOfficeInvoiceLine({ lineId: line.id, apiBaseUrl, sessionToken });
@@ -292,13 +302,6 @@ export function JobInvoiceCorrections({
       correctionKindLabels[
         correction.invoiceKind === 'credit' ? 'credit' : 'adjustment'
       ].toLowerCase();
-    if (
-      !window.confirm(
-        `Post this ${label}? Once posted it becomes part of the locked accounting record and can no longer be edited.`
-      )
-    ) {
-      return;
-    }
     setIsSaving(true);
     try {
       const response = await postOfficeInvoiceById({
@@ -318,7 +321,7 @@ export function JobInvoiceCorrections({
     }
   }
 
-  async function savePayment() {
+  async function savePayment(overageConfirmed = false) {
     if (!paymentDraft) return;
     const amount = Number(paymentDraft.amount);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -333,17 +336,15 @@ export function JobInvoiceCorrections({
     }
     const amountCents = Math.round(amount * 100);
     const amountDueCents = Math.max(Math.round((balance?.amountDue ?? 0) * 100), 0);
-    if (amountCents > amountDueCents) {
-      const extraCents = amountCents - amountDueCents;
-      const confirmed = window.confirm(
-        `Record a ${formatCurrency(amount)} payment when this job only has ${formatCurrency(
-          amountDueCents / 100
-        )} due?\n\nThe extra ${formatCurrency(extraCents / 100)} will be held as job credit.`
-      );
-      if (!confirmed) {
-        return;
-      }
+    if (amountCents > amountDueCents && !overageConfirmed) {
+      setPendingPaymentOverage({
+        amount,
+        amountDue: amountDueCents / 100,
+        extra: (amountCents - amountDueCents) / 100
+      });
+      return;
     }
+    setPendingPaymentOverage(null);
     setIsSaving(true);
     try {
       const response = await recordOfficePayment({
@@ -382,7 +383,9 @@ export function JobInvoiceCorrections({
     setErrorMessage(null);
   }
 
-  async function createPaymentLink() {
+  async function createPaymentLink(
+    confirmations = { confirmSameAmountCharge: false, confirmActiveLinkOverage: false }
+  ) {
     if (!paymentLinkDraft) return;
     const target = findPaymentTarget(paymentTargets, paymentLinkDraft.invoiceId);
     if (!target) {
@@ -413,64 +416,54 @@ export function JobInvoiceCorrections({
       return;
     }
     const amount = requestedAmountCents / 100;
+    setPendingLinkConfirmation(null);
     setIsCreatingPaymentLink(true);
     try {
-      const confirmations = {
-        confirmSameAmountCharge: false,
-        confirmActiveLinkOverage: false
-      };
-      for (let attempt = 0; attempt < 3; attempt += 1) {
-        const response = await requestPaymentLink(confirmations, amount, targetInvoiceId);
-        if (response.state === 'confirmationRequired') {
-          if (response.code === 'sameAmountPreviouslyPaid') {
-            const confirmed = window.confirm(
-              `Create another ${formatCurrency(response.amount)} payment link?\n\n${response.message}`
-            );
-            if (!confirmed) {
-              return;
-            }
-            confirmations.confirmSameAmountCharge = true;
-            continue;
-          }
-          if (response.code === 'activeLinksMayExceedDue') {
-            const confirmed = window.confirm(
-              `${response.message}\n\nCreate this ${formatCurrency(
-                response.amount
-              )} payment link anyway?`
-            );
-            if (!confirmed) {
-              return;
-            }
-            confirmations.confirmActiveLinkOverage = true;
-            continue;
-          }
-          setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+      const response = await requestPaymentLink(confirmations, amount, targetInvoiceId);
+      if (response.state === 'confirmationRequired') {
+        // The server asks before a second charge for the same amount, or before links that
+        // together exceed what is due. The question is shown in place and the request is sent
+        // again with that answer.
+        if (response.code === 'sameAmountPreviouslyPaid') {
+          setPendingLinkConfirmation({
+            title: `Create another ${formatCurrency(response.amount)} payment link?`,
+            description: response.message,
+            confirmations: { ...confirmations, confirmSameAmountCharge: true }
+          });
           return;
         }
-        if (response.state !== 'created') {
-          setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+        if (response.code === 'activeLinksMayExceedDue') {
+          setPendingLinkConfirmation({
+            title: `Create this ${formatCurrency(response.amount)} payment link anyway?`,
+            description: response.message,
+            confirmations: { ...confirmations, confirmActiveLinkOverage: true }
+          });
           return;
         }
-        setOnlinePaymentLink(response);
-        setPaymentLinkDraft(null);
-        setErrorMessage(null);
-        let copied = false;
-        try {
-          await navigator.clipboard?.writeText(response.checkoutUrl);
-          copied = true;
-        } catch {
-          copied = false;
-        }
-        if (response.reusedExisting) {
-          setNoticeMessage(
-            copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
-          );
-        } else {
-          setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
-        }
+        setErrorMessage(response.message ?? 'Online payment links are not available right now.');
         return;
       }
-      setErrorMessage('Online payment link confirmation could not be completed.');
+      if (response.state !== 'created') {
+        setErrorMessage(response.message ?? 'Online payment links are not available right now.');
+        return;
+      }
+      setOnlinePaymentLink(response);
+      setPaymentLinkDraft(null);
+      setErrorMessage(null);
+      let copied = false;
+      try {
+        await navigator.clipboard?.writeText(response.checkoutUrl);
+        copied = true;
+      } catch {
+        copied = false;
+      }
+      if (response.reusedExisting) {
+        setNoticeMessage(
+          copied ? 'Existing active payment link copied.' : 'Existing active payment link shown.'
+        );
+      } else {
+        setNoticeMessage(copied ? 'Payment link copied.' : 'Payment link created.');
+      }
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : 'Unable to create payment link.');
     } finally {
@@ -702,8 +695,8 @@ export function JobInvoiceCorrections({
                 setLineEdit((current) => (current ? { ...current, draft } : current))
               }
               onSaveLine={() => void saveLineEdit()}
-              onRemoveLine={(line) => void removeLine(line)}
-              onPost={() => void postCorrection(correction)}
+              onRemoveLine={removeLine}
+              onPost={() => postCorrection(correction)}
             />
           ))}
         </div>
@@ -751,6 +744,30 @@ export function JobInvoiceCorrections({
           onCancelRefund={() => setRefundDraft(null)}
           onChangeRefundDraft={setRefundDraft}
           onSaveRefund={() => void saveRefund()}
+        />
+      ) : null}
+      {pendingPaymentOverage ? (
+        <ConfirmPanel
+          title={`Record a ${formatCurrency(pendingPaymentOverage.amount)} payment when this job only has ${formatCurrency(pendingPaymentOverage.amountDue)} due?`}
+          description={`The extra ${formatCurrency(pendingPaymentOverage.extra)} will be held as job credit.`}
+          confirmLabel="Record payment anyway"
+          cancelLabel="Keep editing"
+          busyLabel="Recording…"
+          isBusy={isSaving}
+          onConfirm={() => void savePayment(true)}
+          onCancel={() => setPendingPaymentOverage(null)}
+        />
+      ) : null}
+      {pendingLinkConfirmation ? (
+        <ConfirmPanel
+          title={pendingLinkConfirmation.title}
+          description={pendingLinkConfirmation.description}
+          confirmLabel="Create link anyway"
+          cancelLabel="Keep editing"
+          busyLabel="Creating…"
+          isBusy={isCreatingPaymentLink}
+          onConfirm={() => void createPaymentLink(pendingLinkConfirmation.confirmations)}
+          onCancel={() => setPendingLinkConfirmation(null)}
         />
       ) : null}
     </section>

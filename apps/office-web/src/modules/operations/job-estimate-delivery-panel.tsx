@@ -1,5 +1,6 @@
 import type { EstimateEmailDeliveryStatus, OutboundMessageSummary } from '@bellfield/contracts';
 import { formatDateTime } from '@/lib/format';
+import { ConfirmAction } from '@/components/confirm-action';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type EstimateDeliveryDraft = {
@@ -19,7 +20,7 @@ export function EstimateDeliveryPanel(props: {
   isSending: boolean;
   cancelingMessageId: string | null;
   onChange: (patch: Partial<EstimateDeliveryDraft>) => void;
-  onSend: () => void;
+  onSend: () => Promise<void>;
   onCancelMessage: (outboundMessageId: string) => void;
 }) {
   return (
@@ -58,7 +59,7 @@ export function DocumentDeliveryPanel({
   isSending: boolean;
   cancelingMessageId: string | null;
   onChange: (patch: Partial<DocumentDeliveryDraft>) => void;
-  onSend: () => void;
+  onSend: () => Promise<void>;
   onCancelMessage: (outboundMessageId: string) => void;
 }) {
   const deliveryBlocked = deliveryStatus !== null && !deliveryStatus.ready;
@@ -110,14 +111,15 @@ export function DocumentDeliveryPanel({
       {deliveryBlocked ? <p style={styles.error}>{deliveryStatus.message}</p> : null}
 
       <div style={styles.inlineActionBar}>
-        <button
-          type="button"
-          style={styles.primaryButton}
+        <ConfirmAction
+          variant="primary"
           disabled={!canSend || isSending}
-          onClick={onSend}
-        >
-          {isSending ? 'Sending...' : 'Send email'}
-        </button>
+          label={isSending ? 'Sending...' : 'Send email'}
+          title={`Send this ${documentLabel.toLowerCase()} PDF to ${draft.recipientEmail.trim() || 'the recipient'}?`}
+          confirmLabel="Send"
+          busyLabel="Sending…"
+          onConfirm={onSend}
+        />
       </div>
       <EstimateDeliveryHistory
         documentLabel={documentLabel}

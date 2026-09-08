@@ -290,11 +290,6 @@ export function JobEstimatesSection({
       return;
     }
     try {
-      if (
-        !window.confirm('Mark this estimate approved? Approved estimates can no longer be edited.')
-      ) {
-        return;
-      }
       setErrorMessage(null);
       setNoticeMessage(null);
       await approveOfficeEstimate({ estimateId, selectedOptionId, apiBaseUrl, sessionToken });
@@ -312,9 +307,6 @@ export function JobEstimatesSection({
       return;
     }
     try {
-      if (!window.confirm('Decline this estimate?')) {
-        return;
-      }
       setErrorMessage(null);
       setNoticeMessage(null);
       await declineOfficeEstimate({ estimateId, apiBaseUrl, sessionToken });
@@ -513,10 +505,6 @@ export function JobEstimatesSection({
       setErrorMessage('Recipient email is required.');
       return;
     }
-    if (!window.confirm(`Send this estimate PDF to ${recipientEmail}?`)) {
-      return;
-    }
-
     setSendingEstimateId(estimate.id);
     setErrorMessage(null);
     setNoticeMessage(null);
@@ -687,7 +675,7 @@ export function JobEstimatesSection({
                     isSending={sendingEstimateId === selectedEstimate.id}
                     cancelingMessageId={cancelingMessageId}
                     onChange={(patch) => updateDeliveryDraft(selectedEstimate.id, patch)}
-                    onSend={() => void sendEstimate(selectedEstimate)}
+                    onSend={() => sendEstimate(selectedEstimate)}
                     onCancelMessage={(outboundMessageId) =>
                       void cancelQueuedMessage(selectedEstimate.id, outboundMessageId)
                     }
@@ -695,8 +683,8 @@ export function JobEstimatesSection({
                 ) : null
               }
               onEdit={() => startEditEstimate(selectedEstimate)}
-              onApprove={(selectedOptionId) => void approve(selectedEstimate.id, selectedOptionId)}
-              onDecline={() => void decline(selectedEstimate.id)}
+              onApprove={(selectedOptionId) => approve(selectedEstimate.id, selectedOptionId)}
+              onDecline={() => decline(selectedEstimate.id)}
               onConvert={() => void convert(selectedEstimate.id)}
               onDownload={() => void downloadEstimate(selectedEstimate)}
               onToggleDelivery={() => toggleDeliveryPanel(selectedEstimate)}

@@ -4,6 +4,7 @@ import type { JobSummary, MediaAttachmentSummary } from '@/lib/operations-api';
 import { formatByteSize, formatDateTime } from '@/lib/format';
 import { SubmitButton } from '@/components/submit-button';
 import { useAsyncAction } from '@/components/use-async-action';
+import { ConfirmAction } from '@/components/confirm-action';
 import { formatAppointmentReference, formatMediaKind } from './job-detail-format';
 import type { CapturedWorkDetails } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -136,13 +137,15 @@ function MediaAttachmentCard({
               placeholder="Void reason"
               style={styles.input}
             />
-            <button
-              type="button"
-              style={styles.dangerButton}
-              onClick={() => void onVoidMediaAttachment(job.id, media.id)}
-            >
-              Void
-            </button>
+            <ConfirmAction
+              variant="danger"
+              label="Void"
+              title="Void this media attachment?"
+              description="A voided attachment stays on the job's record, marked void."
+              confirmLabel="Void attachment"
+              busyLabel="Voiding…"
+              onConfirm={() => onVoidMediaAttachment(job.id, media.id)}
+            />
           </div>
         </>
       )}

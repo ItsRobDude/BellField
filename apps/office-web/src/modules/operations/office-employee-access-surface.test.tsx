@@ -150,7 +150,6 @@ beforeEach(() => {
   mockedApi.createOfficeEmployee.mockResolvedValue(employee({ id: 'e-new', roleId: 'csr' }));
   mockedApi.resetOfficeEmployeePassword.mockResolvedValue({ revokedSessionCount: 2 });
   mockedApi.revokeOfficeEmployeeSession.mockResolvedValue({ revoked: true });
-  vi.spyOn(window, 'confirm').mockReturnValue(true);
 });
 
 afterEach(() => {
@@ -313,10 +312,13 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
   });
 
   it('revokes a device session after the user confirms', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     renderSurface({ canConfigure: true, actorId: 'e-owner', actorRoleId: 'owner' });
     await selectEmployee('Tina Tech');
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke session s1' }));
+    expect(screen.getByRole('group', { name: 'Revoke this session?' })).toHaveTextContent(
+      'The employee will need to sign in again.'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke session' }));
     await waitFor(() => {
       expect(mockedApi.revokeOfficeEmployeeSession).toHaveBeenCalledWith(
         expect.objectContaining({ employeeId: 'e-tech', sessionId: 's1' })
@@ -325,10 +327,11 @@ describe('OfficeEmployeeAccessSurface — mutations', () => {
   });
 
   it('does not revoke a session when the user cancels the confirm', async () => {
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     renderSurface({ canConfigure: true, actorId: 'e-owner', actorRoleId: 'owner' });
     await selectEmployee('Tina Tech');
     fireEvent.click(await screen.findByRole('button', { name: 'Revoke session s1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('group', { name: 'Revoke this session?' })).toBeNull();
     expect(mockedApi.revokeOfficeEmployeeSession).not.toHaveBeenCalled();
   });
 

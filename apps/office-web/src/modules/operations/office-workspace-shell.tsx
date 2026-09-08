@@ -551,10 +551,6 @@ export function OfficeWorkspaceShell({
   }
 
   async function handleVoidRegisterEntry(jobId: string, registerEntryId: string) {
-    if (!window.confirm('Void this register entry?')) {
-      return;
-    }
-
     try {
       setNoticeMessage(null);
       await voidOfficeRegisterEntry({
@@ -593,10 +589,6 @@ export function OfficeWorkspaceShell({
   }
 
   async function handleVoidMediaAttachment(jobId: string, mediaId: string) {
-    if (!window.confirm('Void this media attachment?')) {
-      return;
-    }
-
     try {
       setNoticeMessage(null);
       await voidOfficeMediaAttachment({
