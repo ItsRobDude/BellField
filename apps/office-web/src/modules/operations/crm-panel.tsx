@@ -709,7 +709,7 @@ export function CrmPanel({
           onBack={returnToSearch}
           onChangeCustomerForm={setCustomerForm}
           onClearDuplicateWarnings={() => setCustomerDuplicateWarnings([])}
-          onCreateCustomer={(forceConfirm) => void handleCreateCustomer(forceConfirm)}
+          onCreateCustomer={handleCreateCustomer}
         />
       ) : null}
 
@@ -732,7 +732,7 @@ export function CrmPanel({
           }
           onChangeLocationForm={setLocationForm}
           onClearDuplicateWarnings={() => setLocationDuplicateWarnings([])}
-          onCreateLocation={(options) => void handleCreateLocation(options)}
+          onCreateLocation={handleCreateLocation}
         />
       ) : null}
 
@@ -742,7 +742,7 @@ export function CrmPanel({
           isLinkingToSelectedRecord={Boolean(selectedCustomer || selectedLocation)}
           onBack={returnFromContactForm}
           onChangeContactForm={setContactForm}
-          onCreateContact={() => void handleCreateContactAndMaybeLink()}
+          onCreateContact={handleCreateContactAndMaybeLink}
         />
       ) : null}
 

@@ -20,6 +20,9 @@ The M9 backend (B1–B6 + corrections) is shipped. This is the office-web surfac
 - **Money/date/time/quantity** via `apps/office-web/src/lib/format.ts` (one locale decision:
   US English, US dollars, the PC's time zone; plain dates read as local dates). The dispatch
   timeline keeps its own minute/clock helpers. No new local formatters.
+- **Form fields** via `FormField` (visible label, hint, inline error) and **write buttons** via
+  `SubmitButton` + `useAsyncAction` (busy state, repeat clicks ignored), both from
+  `apps/office-web/src/components/`. No placeholder-only inputs, no hand-rolled busy flags.
 - **Per slice:** office-web `typecheck` + `lint` + `test` (vitest) + `build` green; new
   `operations-api` client functions covered by vitest fetch-mock tests (mirroring
   `operations-api.test.ts`); commit + push; Codex review; address findings.

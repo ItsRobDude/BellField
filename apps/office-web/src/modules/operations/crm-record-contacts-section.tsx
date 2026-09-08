@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import type { ContactLink, ContactUpdateScope, CrmWorkspaceResponse } from '@/lib/operations-api';
+import { FormField } from '@/components/form-field';
 import type { ContactLinkDraft } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -149,38 +150,42 @@ export function RecordContactsSection({
               </select>
             </div>
             <div style={styles.formRow}>
-              <input
-                value={draft.phone}
-                onChange={(event) =>
-                  onLinkDraftChange(contact.id, { ...draft, phone: event.target.value })
-                }
-                placeholder="Phone"
-                style={styles.input}
-              />
-              <input
-                value={draft.email}
-                onChange={(event) =>
-                  onLinkDraftChange(contact.id, { ...draft, email: event.target.value })
-                }
-                placeholder="Email"
-                style={styles.input}
-              />
-              <input
-                value={draft.fax}
-                onChange={(event) =>
-                  onLinkDraftChange(contact.id, { ...draft, fax: event.target.value })
-                }
-                placeholder="Fax"
-                style={styles.input}
-              />
-              <input
-                value={draft.tags}
-                onChange={(event) =>
-                  onLinkDraftChange(contact.id, { ...draft, tags: event.target.value })
-                }
-                placeholder="Tags"
-                style={styles.input}
-              />
+              <FormField label="Phone">
+                <input
+                  value={draft.phone}
+                  onChange={(event) =>
+                    onLinkDraftChange(contact.id, { ...draft, phone: event.target.value })
+                  }
+                  style={styles.input}
+                />
+              </FormField>
+              <FormField label="Email">
+                <input
+                  value={draft.email}
+                  onChange={(event) =>
+                    onLinkDraftChange(contact.id, { ...draft, email: event.target.value })
+                  }
+                  style={styles.input}
+                />
+              </FormField>
+              <FormField label="Fax">
+                <input
+                  value={draft.fax}
+                  onChange={(event) =>
+                    onLinkDraftChange(contact.id, { ...draft, fax: event.target.value })
+                  }
+                  style={styles.input}
+                />
+              </FormField>
+              <FormField label="Tags">
+                <input
+                  value={draft.tags}
+                  onChange={(event) =>
+                    onLinkDraftChange(contact.id, { ...draft, tags: event.target.value })
+                  }
+                  style={styles.input}
+                />
+              </FormField>
             </div>
             <div style={styles.row}>
               <button type="button" onClick={() => onSaveLink(contact)} style={styles.button}>

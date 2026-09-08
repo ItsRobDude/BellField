@@ -72,6 +72,14 @@ jobs queue, new-job intake, and a job with its tab and focused appointment.
 
 Route shapes live in `apps/office-web/src/modules/operations/office-route.ts`.
 
+### Forms and write actions
+
+Every form field shows a visible label; a placeholder alone is not a label once the field has a
+value. Hints and inline errors sit under the field they belong to. A button that writes shows a
+busy state and ignores repeat clicks until the request settles, so a double click can never
+create a second customer, appointment, or equipment record. The shared pieces live in
+`apps/office-web/src/components/` (`FormField`, `SubmitButton`, `useAsyncAction`).
+
 ### Global search behavior
 
 BellField should not force a search bar onto every screen.

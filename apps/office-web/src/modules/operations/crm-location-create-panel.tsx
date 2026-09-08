@@ -2,6 +2,9 @@
 
 import type { Dispatch, SetStateAction } from 'react';
 import type { DuplicateCandidate } from '@/lib/operations-api';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
+import { useAsyncAction } from '@/components/use-async-action';
 import type { LocationFormState } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -19,7 +22,7 @@ type CrmLocationCreatePanelProps = {
   onCancelMissingContactConfirmation: () => void;
   onChangeLocationForm: Dispatch<SetStateAction<LocationFormState>>;
   onClearDuplicateWarnings: () => void;
-  onCreateLocation: (options?: CreateLocationOptions) => void;
+  onCreateLocation: (options?: CreateLocationOptions) => Promise<void>;
 };
 
 export function CrmLocationCreatePanel({
@@ -33,6 +36,15 @@ export function CrmLocationCreatePanel({
   onClearDuplicateWarnings,
   onCreateLocation
 }: CrmLocationCreatePanelProps) {
+  const createLocation = useAsyncAction(onCreateLocation);
+
+  function setField(patch: Partial<LocationFormState>, clearsDuplicates = false) {
+    onChangeLocationForm((current) => ({ ...current, ...patch }));
+    if (clearsDuplicates) {
+      onClearDuplicateWarnings();
+    }
+  }
+
   return (
     <div style={styles.panel}>
       <div style={styles.row}>
@@ -46,75 +58,62 @@ export function CrmLocationCreatePanel({
         <div style={styles.tinyMuted}>{ownerCustomerName}</div>
       </div>
       <div style={styles.formRow}>
-        <input
-          value={locationForm.name}
-          onChange={(event) => {
-            onChangeLocationForm((current) => ({ ...current, name: event.target.value }));
-            onClearDuplicateWarnings();
-          }}
-          placeholder="Location name"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.addressLine1}
-          onChange={(event) => {
-            onChangeLocationForm((current) => ({
-              ...current,
-              addressLine1: event.target.value
-            }));
-            onClearDuplicateWarnings();
-          }}
-          placeholder="Service address"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.city}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, city: event.target.value }))
-          }
-          placeholder="City"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.state}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, state: event.target.value }))
-          }
-          placeholder="State"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.postalCode}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, postalCode: event.target.value }))
-          }
-          placeholder="Postal code"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.phone}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, phone: event.target.value }))
-          }
-          placeholder="Phone"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.email}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, email: event.target.value }))
-          }
-          placeholder="Email"
-          style={styles.input}
-        />
-        <input
-          value={locationForm.fax}
-          onChange={(event) =>
-            onChangeLocationForm((current) => ({ ...current, fax: event.target.value }))
-          }
-          placeholder="Fax"
-          style={styles.input}
-        />
+        <FormField label="Location name">
+          <input
+            value={locationForm.name}
+            onChange={(event) => setField({ name: event.target.value }, true)}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Service address">
+          <input
+            value={locationForm.addressLine1}
+            onChange={(event) => setField({ addressLine1: event.target.value }, true)}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="City">
+          <input
+            value={locationForm.city}
+            onChange={(event) => setField({ city: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="State">
+          <input
+            value={locationForm.state}
+            onChange={(event) => setField({ state: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Postal code">
+          <input
+            value={locationForm.postalCode}
+            onChange={(event) => setField({ postalCode: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Phone">
+          <input
+            value={locationForm.phone}
+            onChange={(event) => setField({ phone: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Email">
+          <input
+            value={locationForm.email}
+            onChange={(event) => setField({ email: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Fax">
+          <input
+            value={locationForm.fax}
+            onChange={(event) => setField({ fax: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
       </div>
       {duplicateWarnings.length > 0 ? (
         <div style={styles.subpanel}>
@@ -125,13 +124,13 @@ export function CrmLocationCreatePanel({
             </div>
           ))}
           <div style={styles.row}>
-            <button
-              type="button"
-              onClick={() => onCreateLocation({ confirmDuplicate: true })}
-              style={styles.primaryButton}
+            <SubmitButton
+              isBusy={createLocation.isBusy}
+              busyLabel="Creating…"
+              onClick={() => void createLocation.run({ confirmDuplicate: true })}
             >
               Create anyway
-            </button>
+            </SubmitButton>
             <button type="button" onClick={onClearDuplicateWarnings} style={styles.button}>
               Keep editing
             </button>
@@ -148,13 +147,13 @@ export function CrmLocationCreatePanel({
             </div>
           ) : null}
           <div style={styles.row}>
-            <button
-              type="button"
-              onClick={() => onCreateLocation({ confirmMissingContactInfo: true })}
-              style={styles.primaryButton}
+            <SubmitButton
+              isBusy={createLocation.isBusy}
+              busyLabel="Creating…"
+              onClick={() => void createLocation.run({ confirmMissingContactInfo: true })}
             >
               Create without phone or email
-            </button>
+            </SubmitButton>
             <button
               type="button"
               onClick={onCancelMissingContactConfirmation}
@@ -165,9 +164,13 @@ export function CrmLocationCreatePanel({
           </div>
         </div>
       ) : null}
-      <button type="button" onClick={() => onCreateLocation()} style={styles.primaryButton}>
+      <SubmitButton
+        isBusy={createLocation.isBusy}
+        busyLabel="Creating…"
+        onClick={() => void createLocation.run()}
+      >
         Create location
-      </button>
+      </SubmitButton>
     </div>
   );
 }

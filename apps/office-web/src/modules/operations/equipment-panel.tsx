@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type { EquipmentDetail, EquipmentStatus, EquipmentSummary } from '@/lib/operations-api';
 import { formatDate, formatDateTime } from '@/lib/format';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
+import { useAsyncAction } from '@/components/use-async-action';
 import {
   canStartEquipmentReplacement,
   EquipmentReplacementPanel
@@ -88,6 +91,8 @@ export function EquipmentPanel({
     createDefaultCreateDraft(locationScope?.locationId ?? locations[0]?.id)
   );
   const [detailDraft, setDetailDraft] = useState<EquipmentEditDraft | null>(null);
+  const createEquipment = useAsyncAction(onCreateEquipment);
+  const saveEquipment = useAsyncAction(onRecordUpdate);
   const isLocationScoped = Boolean(locationScope);
   const scopedLocationId = locationScope?.locationId;
 
@@ -151,168 +156,194 @@ export function EquipmentPanel({
             </div>
           ) : (
             <>
-              <select
-                value={createDraft.placementKind}
-                onChange={(event) =>
-                  setCreateDraft((current) => ({
-                    ...current,
-                    placementKind: event.target.value as EquipmentCreateDraft['placementKind']
-                  }))
-                }
-                style={styles.input}
-              >
-                <option value="location">Customer location</option>
-                <option value="inventory">Inventory placement</option>
-              </select>
-              {createDraft.placementKind === 'location' ? (
+              <FormField label="Placement">
                 <select
-                  value={createDraft.locationId}
-                  onChange={(event) =>
-                    setCreateDraft((current) => ({ ...current, locationId: event.target.value }))
-                  }
-                  style={styles.input}
-                >
-                  {locations.map((location) => (
-                    <option key={location.id} value={location.id}>
-                      {location.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <input
-                  value={createDraft.inventoryLocationLabel}
+                  value={createDraft.placementKind}
                   onChange={(event) =>
                     setCreateDraft((current) => ({
                       ...current,
-                      inventoryLocationLabel: event.target.value
+                      placementKind: event.target.value as EquipmentCreateDraft['placementKind']
                     }))
                   }
-                  placeholder="Inventory placement label"
                   style={styles.input}
-                />
+                >
+                  <option value="location">Customer location</option>
+                  <option value="inventory">Inventory placement</option>
+                </select>
+              </FormField>
+              {createDraft.placementKind === 'location' ? (
+                <FormField label="Customer location">
+                  <select
+                    value={createDraft.locationId}
+                    onChange={(event) =>
+                      setCreateDraft((current) => ({ ...current, locationId: event.target.value }))
+                    }
+                    style={styles.input}
+                  >
+                    {locations.map((location) => (
+                      <option key={location.id} value={location.id}>
+                        {location.name}
+                      </option>
+                    ))}
+                  </select>
+                </FormField>
+              ) : (
+                <FormField label="Inventory placement">
+                  <input
+                    value={createDraft.inventoryLocationLabel}
+                    onChange={(event) =>
+                      setCreateDraft((current) => ({
+                        ...current,
+                        inventoryLocationLabel: event.target.value
+                      }))
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
               )}
             </>
           )}
-          <input
-            list="equipment-type-suggestions"
-            value={createDraft.equipmentType}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, equipmentType: event.target.value }))
-            }
-            placeholder="Equipment type"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.brand}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, brand: event.target.value }))
-            }
-            placeholder="Brand"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.model}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, model: event.target.value }))
-            }
-            placeholder="Model"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.serialNumber}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, serialNumber: event.target.value }))
-            }
-            placeholder="Serial number"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.filterSizes}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, filterSizes: event.target.value }))
-            }
-            placeholder="Filter sizes (comma separated)"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.equipmentLocationDescription}
-            onChange={(event) =>
-              setCreateDraft((current) => ({
-                ...current,
-                equipmentLocationDescription: event.target.value
-              }))
-            }
-            placeholder="Equipment location"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.installDate}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, installDate: event.target.value }))
-            }
-            type="date"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.warrantyStartDate}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, warrantyStartDate: event.target.value }))
-            }
-            type="date"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.warrantyEndDate}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, warrantyEndDate: event.target.value }))
-            }
-            type="date"
-            style={styles.input}
-          />
-          <input
-            value={createDraft.systemGroupName}
-            onChange={(event) =>
-              setCreateDraft((current) => ({ ...current, systemGroupName: event.target.value }))
-            }
-            placeholder="System group name"
-            style={styles.input}
-          />
-          <select
-            value={createDraft.status}
-            onChange={(event) =>
-              setCreateDraft((current) => ({
-                ...current,
-                status: event.target.value as EquipmentStatus
-              }))
-            }
-            style={styles.input}
-          >
-            <option value="active">Active</option>
-            <option value="pendingInstall">Pending install</option>
-            <option value="inactive">Inactive</option>
-            <option value="removed">Removed</option>
-          </select>
+          <FormField label="Equipment type">
+            <input
+              list="equipment-type-suggestions"
+              value={createDraft.equipmentType}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, equipmentType: event.target.value }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Brand">
+            <input
+              value={createDraft.brand}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, brand: event.target.value }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Model">
+            <input
+              value={createDraft.model}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, model: event.target.value }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Serial number">
+            <input
+              value={createDraft.serialNumber}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, serialNumber: event.target.value }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Filter sizes" hint="Comma separated">
+            <input
+              value={createDraft.filterSizes}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, filterSizes: event.target.value }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Equipment location">
+            <input
+              value={createDraft.equipmentLocationDescription}
+              onChange={(event) =>
+                setCreateDraft((current) => ({
+                  ...current,
+                  equipmentLocationDescription: event.target.value
+                }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Install date">
+            <input
+              value={createDraft.installDate}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, installDate: event.target.value }))
+              }
+              type="date"
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Warranty start">
+            <input
+              value={createDraft.warrantyStartDate}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, warrantyStartDate: event.target.value }))
+              }
+              type="date"
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Warranty end">
+            <input
+              value={createDraft.warrantyEndDate}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, warrantyEndDate: event.target.value }))
+              }
+              type="date"
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="System group">
+            <input
+              value={createDraft.systemGroupName}
+              onChange={(event) =>
+                setCreateDraft((current) => ({ ...current, systemGroupName: event.target.value }))
+              }
+              style={styles.input}
+            />
+          </FormField>
+          <FormField label="Status">
+            <select
+              value={createDraft.status}
+              onChange={(event) =>
+                setCreateDraft((current) => ({
+                  ...current,
+                  status: event.target.value as EquipmentStatus
+                }))
+              }
+              style={styles.input}
+            >
+              <option value="active">Active</option>
+              <option value="pendingInstall">Pending install</option>
+              <option value="inactive">Inactive</option>
+              <option value="removed">Removed</option>
+            </select>
+          </FormField>
         </div>
-        <input
-          value={createDraft.warrantyProviderNote}
-          onChange={(event) =>
-            setCreateDraft((current) => ({ ...current, warrantyProviderNote: event.target.value }))
-          }
-          placeholder="Warranty provider or note"
-          style={styles.input}
-        />
-        <textarea
-          value={createDraft.notes}
-          onChange={(event) =>
-            setCreateDraft((current) => ({ ...current, notes: event.target.value }))
-          }
-          placeholder="Equipment notes"
-          style={styles.textarea}
-        />
-        <button
-          type="button"
+        <FormField label="Warranty provider">
+          <input
+            value={createDraft.warrantyProviderNote}
+            onChange={(event) =>
+              setCreateDraft((current) => ({
+                ...current,
+                warrantyProviderNote: event.target.value
+              }))
+            }
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Notes">
+          <textarea
+            value={createDraft.notes}
+            onChange={(event) =>
+              setCreateDraft((current) => ({ ...current, notes: event.target.value }))
+            }
+            style={styles.textarea}
+          />
+        </FormField>
+        <SubmitButton
+          isBusy={createEquipment.isBusy}
+          busyLabel="Adding…"
           onClick={() =>
-            void onCreateEquipment(
+            void createEquipment.run(
               locationScope
                 ? {
                     ...createDraft,
@@ -323,10 +354,9 @@ export function EquipmentPanel({
                 : createDraft
             )
           }
-          style={styles.primaryButton}
         >
           Add equipment
-        </button>
+        </SubmitButton>
         <datalist id="equipment-type-suggestions">
           {suggestedEquipmentTypes.map((equipmentType) => (
             <option key={equipmentType} value={equipmentType} />
@@ -425,148 +455,165 @@ export function EquipmentPanel({
               </div>
 
               <div style={styles.formRow}>
-                <input
-                  list="equipment-type-suggestions"
-                  value={detailDraft.equipmentType}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, equipmentType: event.target.value } : current
-                    )
-                  }
-                  placeholder="Equipment type"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.brand}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, brand: event.target.value } : current
-                    )
-                  }
-                  placeholder="Brand"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.model}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, model: event.target.value } : current
-                    )
-                  }
-                  placeholder="Model"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.serialNumber}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, serialNumber: event.target.value } : current
-                    )
-                  }
-                  placeholder="Serial number"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.filterSizes}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, filterSizes: event.target.value } : current
-                    )
-                  }
-                  placeholder="Filter sizes (comma separated)"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.equipmentLocationDescription}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current
-                        ? { ...current, equipmentLocationDescription: event.target.value }
-                        : current
-                    )
-                  }
-                  placeholder="Equipment location"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.installDate}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, installDate: event.target.value } : current
-                    )
-                  }
-                  type="date"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.warrantyStartDate}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, warrantyStartDate: event.target.value } : current
-                    )
-                  }
-                  type="date"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.warrantyEndDate}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, warrantyEndDate: event.target.value } : current
-                    )
-                  }
-                  type="date"
-                  style={styles.input}
-                />
-                <input
-                  value={detailDraft.systemGroupName}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current ? { ...current, systemGroupName: event.target.value } : current
-                    )
-                  }
-                  placeholder="System group"
-                  style={styles.input}
-                />
-                <select
-                  value={detailDraft.status}
-                  onChange={(event) =>
-                    setDetailDraft((current) =>
-                      current
-                        ? { ...current, status: event.target.value as EquipmentStatus }
-                        : current
-                    )
-                  }
-                  style={styles.input}
-                >
-                  <option value="active">Active</option>
-                  <option value="pendingInstall">Pending install</option>
-                  <option value="inactive">Inactive</option>
-                  <option value="removed">Removed</option>
-                </select>
+                <FormField label="Equipment type">
+                  <input
+                    list="equipment-type-suggestions"
+                    value={detailDraft.equipmentType}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, equipmentType: event.target.value } : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Brand">
+                  <input
+                    value={detailDraft.brand}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, brand: event.target.value } : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Model">
+                  <input
+                    value={detailDraft.model}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, model: event.target.value } : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Serial number">
+                  <input
+                    value={detailDraft.serialNumber}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, serialNumber: event.target.value } : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Filter sizes" hint="Comma separated">
+                  <input
+                    value={detailDraft.filterSizes}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, filterSizes: event.target.value } : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Equipment location">
+                  <input
+                    value={detailDraft.equipmentLocationDescription}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current
+                          ? { ...current, equipmentLocationDescription: event.target.value }
+                          : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Install date">
+                  <input
+                    value={detailDraft.installDate}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, installDate: event.target.value } : current
+                      )
+                    }
+                    type="date"
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Warranty start">
+                  <input
+                    value={detailDraft.warrantyStartDate}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, warrantyStartDate: event.target.value } : current
+                      )
+                    }
+                    type="date"
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Warranty end">
+                  <input
+                    value={detailDraft.warrantyEndDate}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, warrantyEndDate: event.target.value } : current
+                      )
+                    }
+                    type="date"
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="System group">
+                  <input
+                    value={detailDraft.systemGroupName}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current ? { ...current, systemGroupName: event.target.value } : current
+                      )
+                    }
+                    style={styles.input}
+                  />
+                </FormField>
+                <FormField label="Status">
+                  <select
+                    value={detailDraft.status}
+                    onChange={(event) =>
+                      setDetailDraft((current) =>
+                        current
+                          ? { ...current, status: event.target.value as EquipmentStatus }
+                          : current
+                      )
+                    }
+                    style={styles.input}
+                  >
+                    <option value="active">Active</option>
+                    <option value="pendingInstall">Pending install</option>
+                    <option value="inactive">Inactive</option>
+                    <option value="removed">Removed</option>
+                  </select>
+                </FormField>
               </div>
 
-              <input
-                value={detailDraft.warrantyProviderNote}
-                onChange={(event) =>
-                  setDetailDraft((current) =>
-                    current ? { ...current, warrantyProviderNote: event.target.value } : current
-                  )
-                }
-                placeholder="Warranty provider or note"
-                style={styles.input}
-              />
+              <FormField label="Warranty provider">
+                <input
+                  value={detailDraft.warrantyProviderNote}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, warrantyProviderNote: event.target.value } : current
+                    )
+                  }
+                  style={styles.input}
+                />
+              </FormField>
 
-              <textarea
-                value={detailDraft.notes}
-                onChange={(event) =>
-                  setDetailDraft((current) =>
-                    current ? { ...current, notes: event.target.value } : current
-                  )
-                }
-                placeholder="Equipment notes"
-                style={styles.textarea}
-              />
+              <FormField label="Notes">
+                <textarea
+                  value={detailDraft.notes}
+                  onChange={(event) =>
+                    setDetailDraft((current) =>
+                      current ? { ...current, notes: event.target.value } : current
+                    )
+                  }
+                  style={styles.textarea}
+                />
+              </FormField>
 
               <div style={styles.badgeRow}>
                 {selectedEquipmentDetail.ageLabel ? (
@@ -587,13 +634,12 @@ export function EquipmentPanel({
               </div>
 
               <div style={styles.row}>
-                <button
-                  type="button"
-                  onClick={() => void onRecordUpdate(selectedEquipmentDetail.id, detailDraft)}
-                  style={styles.primaryButton}
+                <SubmitButton
+                  isBusy={saveEquipment.isBusy}
+                  onClick={() => void saveEquipment.run(selectedEquipmentDetail.id, detailDraft)}
                 >
                   Save equipment changes
-                </button>
+                </SubmitButton>
                 {canDelete ? (
                   <button
                     type="button"

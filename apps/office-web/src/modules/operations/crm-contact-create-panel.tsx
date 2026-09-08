@@ -1,6 +1,9 @@
 'use client';
 
 import type { Dispatch, SetStateAction } from 'react';
+import { FormField } from '@/components/form-field';
+import { SubmitButton } from '@/components/submit-button';
+import { useAsyncAction } from '@/components/use-async-action';
 import type { ContactFormState } from './crm-panel-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -9,7 +12,7 @@ type CrmContactCreatePanelProps = {
   isLinkingToSelectedRecord: boolean;
   onBack: () => void;
   onChangeContactForm: Dispatch<SetStateAction<ContactFormState>>;
-  onCreateContact: () => void;
+  onCreateContact: () => Promise<void>;
 };
 
 export function CrmContactCreatePanel({
@@ -19,6 +22,12 @@ export function CrmContactCreatePanel({
   onChangeContactForm,
   onCreateContact
 }: CrmContactCreatePanelProps) {
+  const createContact = useAsyncAction(onCreateContact);
+
+  function setField(patch: Partial<ContactFormState>) {
+    onChangeContactForm((current) => ({ ...current, ...patch }));
+  }
+
   return (
     <div style={styles.panel}>
       <div style={styles.row}>
@@ -28,50 +37,49 @@ export function CrmContactCreatePanel({
         </button>
       </div>
       <div style={styles.formRow}>
-        <input
-          value={contactForm.displayName}
-          onChange={(event) =>
-            onChangeContactForm((current) => ({ ...current, displayName: event.target.value }))
-          }
-          placeholder="Display name"
-          style={styles.input}
-        />
-        <input
-          value={contactForm.phone}
-          onChange={(event) =>
-            onChangeContactForm((current) => ({ ...current, phone: event.target.value }))
-          }
-          placeholder="Phone"
-          style={styles.input}
-        />
-        <input
-          value={contactForm.email}
-          onChange={(event) =>
-            onChangeContactForm((current) => ({ ...current, email: event.target.value }))
-          }
-          placeholder="Email"
-          style={styles.input}
-        />
-        <input
-          value={contactForm.fax}
-          onChange={(event) =>
-            onChangeContactForm((current) => ({ ...current, fax: event.target.value }))
-          }
-          placeholder="Fax"
-          style={styles.input}
-        />
-        <input
-          value={contactForm.tags}
-          onChange={(event) =>
-            onChangeContactForm((current) => ({ ...current, tags: event.target.value }))
-          }
-          placeholder="Tags (comma separated)"
-          style={styles.input}
-        />
+        <FormField label="Display name">
+          <input
+            value={contactForm.displayName}
+            onChange={(event) => setField({ displayName: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Phone">
+          <input
+            value={contactForm.phone}
+            onChange={(event) => setField({ phone: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Email">
+          <input
+            value={contactForm.email}
+            onChange={(event) => setField({ email: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Fax">
+          <input
+            value={contactForm.fax}
+            onChange={(event) => setField({ fax: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
+        <FormField label="Tags" hint="Comma separated">
+          <input
+            value={contactForm.tags}
+            onChange={(event) => setField({ tags: event.target.value })}
+            style={styles.input}
+          />
+        </FormField>
       </div>
-      <button type="button" onClick={onCreateContact} style={styles.primaryButton}>
+      <SubmitButton
+        isBusy={createContact.isBusy}
+        busyLabel="Creating…"
+        onClick={() => void createContact.run()}
+      >
         {isLinkingToSelectedRecord ? 'Create and link contact' : 'Create contact'}
-      </button>
+      </SubmitButton>
     </div>
   );
 }

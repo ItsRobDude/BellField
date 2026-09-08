@@ -239,26 +239,26 @@ async function openNewLocationForm() {
 }
 
 function fillRequiredLocationFields(input: { phone?: string; fax?: string }) {
-  fireEvent.change(screen.getByPlaceholderText('Location name'), {
+  fireEvent.change(screen.getByLabelText('Location name'), {
     target: { value: 'Main Shop' }
   });
-  fireEvent.change(screen.getByPlaceholderText('Service address'), {
+  fireEvent.change(screen.getByLabelText('Service address'), {
     target: { value: '123 Main' }
   });
-  fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: 'Blaine' } });
-  fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: 'WA' } });
-  fireEvent.change(screen.getByPlaceholderText('Postal code'), {
+  fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Blaine' } });
+  fireEvent.change(screen.getByLabelText('State'), { target: { value: 'WA' } });
+  fireEvent.change(screen.getByLabelText('Postal code'), {
     target: { value: '98230' }
   });
 
   if (input.phone) {
-    fireEvent.change(screen.getByPlaceholderText('Phone'), {
+    fireEvent.change(screen.getByLabelText('Phone'), {
       target: { value: input.phone }
     });
   }
 
   if (input.fax) {
-    fireEvent.change(screen.getByPlaceholderText('Fax'), { target: { value: input.fax } });
+    fireEvent.change(screen.getByLabelText('Fax'), { target: { value: input.fax } });
   }
 }
 
@@ -906,16 +906,16 @@ describe('CrmPanel', () => {
     await screen.findByRole('heading', { name: 'Find customers, locations, and people' });
     fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
     await screen.findByRole('heading', { name: 'Create customer' });
-    fireEvent.change(screen.getByPlaceholderText('Customer name'), {
+    fireEvent.change(screen.getByLabelText('Customer name'), {
       target: { value: 'Acme' }
     });
-    fireEvent.change(screen.getByPlaceholderText('Billing address'), {
+    fireEvent.change(screen.getByLabelText('Billing address'), {
       target: { value: '123 Main' }
     });
-    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: 'Blaine' } });
-    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: 'WA' } });
-    fireEvent.change(screen.getByPlaceholderText('Postal code'), { target: { value: '98230' } });
-    fireEvent.change(screen.getByPlaceholderText('Phone'), { target: { value: '360-555-0100' } });
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Blaine' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'WA' } });
+    fireEvent.change(screen.getByLabelText('Postal code'), { target: { value: '98230' } });
+    fireEvent.change(screen.getByLabelText('Phone'), { target: { value: '360-555-0100' } });
 
     fireEvent.click(screen.getByRole('button', { name: 'Create customer' }));
 
@@ -975,10 +975,10 @@ describe('CrmPanel', () => {
 
     fireEvent.click(screen.getByRole('button', { name: 'New contact' }));
     expect(await screen.findByRole('heading', { name: 'New contact' })).toBeInTheDocument();
-    fireEvent.change(screen.getByPlaceholderText('Display name'), {
+    fireEvent.change(screen.getByLabelText('Display name'), {
       target: { value: 'Sam Service' }
     });
-    fireEvent.change(screen.getByPlaceholderText('Phone'), {
+    fireEvent.change(screen.getByLabelText('Phone'), {
       target: { value: '360-555-0188' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create and link contact' }));
@@ -1455,15 +1455,15 @@ describe('CrmPanel', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Transfer ownership' }));
     fireEvent.click(screen.getByRole('button', { name: 'New customer' }));
 
-    fireEvent.change(screen.getByPlaceholderText('Customer name'), {
+    fireEvent.change(screen.getByLabelText('Customer name'), {
       target: { value: 'North End Homes' }
     });
-    fireEvent.change(screen.getByPlaceholderText('Billing address'), {
+    fireEvent.change(screen.getByLabelText('Billing address'), {
       target: { value: '12 Cedar Lane' }
     });
-    fireEvent.change(screen.getByPlaceholderText('City'), { target: { value: 'Everett' } });
-    fireEvent.change(screen.getByPlaceholderText('State'), { target: { value: 'WA' } });
-    fireEvent.change(screen.getByPlaceholderText('Postal code'), {
+    fireEvent.change(screen.getByLabelText('City'), { target: { value: 'Everett' } });
+    fireEvent.change(screen.getByLabelText('State'), { target: { value: 'WA' } });
+    fireEvent.change(screen.getByLabelText('Postal code'), {
       target: { value: '98201' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create and select customer' }));
