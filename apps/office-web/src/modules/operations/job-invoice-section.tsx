@@ -22,6 +22,7 @@ import {
 } from '@/lib/operations-invoice-delivery-api';
 import { downloadBlob } from '@/lib/download-file';
 import { formatCurrency } from '@/lib/format';
+import { ConfirmAction } from '@/components/confirm-action';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildInvoiceLineDraft,
@@ -177,7 +178,6 @@ export function JobInvoiceSection({
   }
 
   async function voidLine(line: InvoiceLineItemSummary) {
-    if (!window.confirm(`Remove "${line.description}" from the invoice?`)) return;
     setIsSaving(true);
     try {
       const response = await voidOfficeInvoiceLine({ lineId: line.id, apiBaseUrl, sessionToken });
@@ -213,14 +213,6 @@ export function JobInvoiceSection({
   }
 
   async function postInvoice() {
-    // Posting is a locking, accounting-significant action: confirm even when permitted.
-    if (
-      !window.confirm(
-        'Post this invoice? Once posted it becomes the locked accounting record and can no longer be edited.'
-      )
-    ) {
-      return;
-    }
     setIsSaving(true);
     try {
       const response = await postOfficeInvoice({ jobId, apiBaseUrl, sessionToken });
@@ -339,10 +331,6 @@ export function JobInvoiceSection({
       setErrorMessage('Recipient email is required.');
       return;
     }
-    if (!window.confirm(`Send this invoice PDF to ${recipientEmail}?`)) {
-      return;
-    }
-
     setIsSendingInvoice(true);
     setErrorMessage(null);
     setNoticeMessage(null);
@@ -436,14 +424,16 @@ export function JobInvoiceSection({
               </button>
             ) : null}
             {invoice && canPost && invoice.status === 'draft' && !newLineDraft && !editingLineId ? (
-              <button
-                type="button"
-                style={styles.primaryButton}
+              <ConfirmAction
+                variant="primary"
                 disabled={isSaving}
-                onClick={() => void postInvoice()}
-              >
-                Post invoice
-              </button>
+                label="Post invoice"
+                title="Post this invoice?"
+                description="Once posted it becomes the locked accounting record and can no longer be edited."
+                confirmLabel="Post invoice"
+                busyLabel="Posting…"
+                onConfirm={postInvoice}
+              />
             ) : null}
             {invoice && canSend && invoice.status === 'posted' ? (
               <button type="button" style={styles.button} onClick={toggleDeliveryPanel}>
@@ -524,13 +514,14 @@ export function JobInvoiceSection({
                               >
                                 Edit
                               </button>
-                              <button
-                                type="button"
-                                style={styles.dangerButton}
-                                onClick={() => void voidLine(line)}
-                              >
-                                Remove
-                              </button>
+                              <ConfirmAction
+                                variant="danger"
+                                label="Remove"
+                                title={`Remove "${line.description}" from the invoice?`}
+                                confirmLabel="Remove line"
+                                busyLabel="Removing…"
+                                onConfirm={() => voidLine(line)}
+                              />
                             </>
                           ) : null}
                         </div>
@@ -572,7 +563,7 @@ export function JobInvoiceSection({
                 isSending={isSendingInvoice}
                 cancelingMessageId={cancelingMessageId}
                 onChange={(patch) => setDeliveryDraft((current) => ({ ...current, ...patch }))}
-                onSend={() => void sendInvoiceEmail()}
+                onSend={() => sendInvoiceEmail()}
                 onCancelMessage={(outboundMessageId) => void cancelQueuedMessage(outboundMessageId)}
               />
             ) : null}

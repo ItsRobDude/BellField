@@ -24,7 +24,7 @@ workflow rules, API endpoint docs, or architecture guardrails.
 
 - API modules live under `apps/api/src/modules`. Start with the controller for endpoint shape, then service/repository files for behavior.
 - Shared company-data persistence and reference reads live under `apps/api/src/modules/company-data`.
-- Office operation surfaces live mostly under `apps/office-web/src/modules/operations`; API client helpers live under `apps/office-web/src/lib`; shared UI primitives (`FormField`, `SubmitButton`, `useAsyncAction`) live under `apps/office-web/src/components`; display formatting is `apps/office-web/src/lib/format.ts`.
+- Office operation surfaces live mostly under `apps/office-web/src/modules/operations`; API client helpers live under `apps/office-web/src/lib`; shared UI primitives (`FormField`, `SubmitButton`, `useAsyncAction`, `ConfirmAction`) live under `apps/office-web/src/components`; display formatting is `apps/office-web/src/lib/format.ts`.
 - Field operation, offline queue, register, media, and sync helpers live under `apps/field-mobile/src/modules/operations`.
 - Database migrations live under `apps/api/src/database/migrations`; every schema change must use tracked migrations. The relay keeps separate migrations inside `apps/relay`.
 - Relay modules live under `apps/relay/src/modules` (`identity` tokens/binding, `delivery` send/quota/suppression/webhooks, `releases` credentialed downloads); the operator CLI is `apps/relay/src/cli`.

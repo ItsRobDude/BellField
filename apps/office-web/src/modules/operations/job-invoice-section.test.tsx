@@ -264,11 +264,14 @@ describe('JobInvoiceSection posting', () => {
   it('posts a confirmed draft and then shows the frozen posted record', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: draftInvoice() });
     mockedApi.postOfficeInvoice.mockResolvedValueOnce({ invoice: postedInvoice() });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     renderSection(true);
 
     fireEvent.click(await screen.findByRole('button', { name: 'Post invoice' }));
+    expect(screen.getByRole('group', { name: 'Post this invoice?' })).toHaveTextContent(
+      'Once posted it becomes the locked accounting record and can no longer be edited.'
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Post invoice' }));
 
     await waitFor(() =>
       expect(mockedApi.postOfficeInvoice).toHaveBeenCalledWith({
@@ -480,7 +483,6 @@ describe('JobInvoiceSection posting', () => {
 
   it('previews and sends a posted invoice email with the bill-to email default', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
 
     renderSection(true, { canSend: true, customerEmail: 'customer@example.com' });
 
@@ -494,6 +496,10 @@ describe('JobInvoiceSection posting', () => {
     );
 
     fireEvent.click(screen.getByRole('button', { name: 'Send email' }));
+    expect(
+      screen.getByRole('group', { name: 'Send this invoice PDF to customer@example.com?' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     await waitFor(() =>
       expect(mockedInvoiceDeliveryApi.sendOfficeInvoice).toHaveBeenCalledWith({
@@ -510,7 +516,6 @@ describe('JobInvoiceSection posting', () => {
 
   it('reports when a pay-now link was included in the sent invoice', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedInvoiceDeliveryApi.sendOfficeInvoice.mockResolvedValueOnce({
       outboundMessage: {
         id: 'message-1',
@@ -545,6 +550,7 @@ describe('JobInvoiceSection posting', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Email invoice' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Send email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     expect(await screen.findByText('Invoice sent with a pay-now link.')).toBeInTheDocument();
     expect(screen.queryByText('Invoice sent.')).not.toBeInTheDocument();
@@ -552,7 +558,6 @@ describe('JobInvoiceSection posting', () => {
 
   it('warns (not confirms success) when a sent invoice could not be fully recorded', async () => {
     mockedApi.getOfficeInvoiceForJob.mockResolvedValueOnce({ invoice: postedInvoice() });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedInvoiceDeliveryApi.sendOfficeInvoice.mockResolvedValueOnce({
       outboundMessage: {
         id: 'message-1',
@@ -587,6 +592,7 @@ describe('JobInvoiceSection posting', () => {
 
     fireEvent.click(await screen.findByRole('button', { name: 'Email invoice' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Send email' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
 
     // The operator must see a "stop and call support" warning, never a green success.
     expect(await screen.findByText(/could not finish recording it/i)).toBeInTheDocument();
@@ -1015,8 +1021,6 @@ describe('JobInvoiceSection posting', () => {
       refundedTotal: 0,
       amountDue: 50
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
-
     renderSection(true);
 
     expect(await screen.findByText('$50.00')).toBeInTheDocument();
@@ -1024,9 +1028,13 @@ describe('JobInvoiceSection posting', () => {
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '60' } });
     fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
 
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Record a $60.00 payment when this job only has $50.00 due?\n\nThe extra $10.00 will be held as job credit.'
-    );
+    expect(
+      screen.getByRole('group', {
+        name: 'Record a $60.00 payment when this job only has $50.00 due?'
+      })
+    ).toHaveTextContent('The extra $10.00 will be held as job credit.');
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+    expect(screen.queryByRole('button', { name: 'Record payment anyway' })).toBeNull();
     expect(mockedApi.recordOfficePayment).not.toHaveBeenCalled();
   });
 
@@ -1046,7 +1054,6 @@ describe('JobInvoiceSection posting', () => {
     mockedApi.listOfficeJobAdjustments.mockResolvedValueOnce({
       adjustments: [postedAdjustment()]
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.recordOfficePayment.mockResolvedValueOnce({
       payment: manualPayment({
         id: 'pay-over',
@@ -1063,6 +1070,7 @@ describe('JobInvoiceSection posting', () => {
     });
     fireEvent.change(screen.getByLabelText('Amount'), { target: { value: '60' } });
     fireEvent.click(screen.getByRole('button', { name: 'Record payment' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Record payment anyway' }));
 
     await waitFor(() =>
       expect(mockedApi.recordOfficePayment).toHaveBeenCalledWith({
@@ -1131,7 +1139,6 @@ describe('JobInvoiceSection posting', () => {
       refundedTotal: 0,
       amountDue: 250
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.createOfficeOnlinePaymentLink
       .mockResolvedValueOnce({
         state: 'confirmationRequired',
@@ -1155,10 +1162,14 @@ describe('JobInvoiceSection posting', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
-    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
-    expect(window.confirm).toHaveBeenCalledWith(
-      'Create another $250.00 payment link?\n\nThis job already had an online card payment for $250.00. BellField still shows $250.00 due.'
+    expect(
+      await screen.findByRole('group', { name: 'Create another $250.00 payment link?' })
+    ).toHaveTextContent(
+      'This job already had an online card payment for $250.00. BellField still shows $250.00 due.'
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Create link anyway' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
     expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(1, {
       invoiceId: 'inv-1',
       amount: 250,
@@ -1191,7 +1202,6 @@ describe('JobInvoiceSection posting', () => {
       refundedTotal: 0,
       amountDue: 250
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
       state: 'confirmationRequired',
       code: 'sameAmountPreviouslyPaid',
@@ -1206,8 +1216,13 @@ describe('JobInvoiceSection posting', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Create payment link' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Create link' }));
 
+    expect(
+      await screen.findByRole('group', { name: 'Create another $250.00 payment link?' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Create link anyway' })).toBeNull();
     expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
   });
 
@@ -1224,7 +1239,6 @@ describe('JobInvoiceSection posting', () => {
       refundedTotal: 0,
       amountDue: 250
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(true);
     mockedApi.createOfficeOnlinePaymentLink
       .mockResolvedValueOnce({
         state: 'confirmationRequired',
@@ -1251,10 +1265,14 @@ describe('JobInvoiceSection posting', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
 
-    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
-    expect(window.confirm).toHaveBeenCalledWith(
-      'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.\n\nCreate this $100.00 payment link anyway?'
+    expect(
+      await screen.findByRole('group', { name: 'Create this $100.00 payment link anyway?' })
+    ).toHaveTextContent(
+      'This job already has $200.00 in active unpaid online payment links. Creating another $100.00 link could let the customer pay more than the $250.00 currently due. Any overpayment will be held as job credit.'
     );
+    fireEvent.click(screen.getByRole('button', { name: 'Create link anyway' }));
+
+    await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(2));
     expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenNthCalledWith(2, {
       invoiceId: 'inv-1',
       amount: 100,
@@ -1281,7 +1299,6 @@ describe('JobInvoiceSection posting', () => {
       refundedTotal: 0,
       amountDue: 250
     });
-    vi.spyOn(window, 'confirm').mockReturnValue(false);
     mockedApi.createOfficeOnlinePaymentLink.mockResolvedValueOnce({
       state: 'confirmationRequired',
       code: 'activeLinksMayExceedDue',
@@ -1299,8 +1316,13 @@ describe('JobInvoiceSection posting', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Create link' }));
 
+    expect(
+      await screen.findByRole('group', { name: 'Create this $100.00 payment link anyway?' })
+    ).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Keep editing' }));
+
     await waitFor(() => expect(mockedApi.createOfficeOnlinePaymentLink).toHaveBeenCalledTimes(1));
-    expect(window.confirm).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: 'Create link anyway' })).toBeNull();
     expect(screen.queryByLabelText('Payment link')).not.toBeInTheDocument();
   });
 });

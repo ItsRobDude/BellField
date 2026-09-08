@@ -5,6 +5,7 @@ import type { JobSummary, RegisterEntryKind, RegisterEntrySummary } from '@/lib/
 import { formatCurrency, formatDateTime, formatQuantity } from '@/lib/format';
 import { SubmitButton } from '@/components/submit-button';
 import { useAsyncAction } from '@/components/use-async-action';
+import { ConfirmAction } from '@/components/confirm-action';
 import { formatAppointmentReference } from './job-detail-format';
 import type { CapturedWorkDetails, RegisterEntryEditDraft } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -268,13 +269,15 @@ function RegisterEntryCard({
               placeholder="Void reason"
               style={styles.input}
             />
-            <button
-              type="button"
-              style={styles.dangerButton}
-              onClick={() => void onVoidRegisterEntry(job.id, entry.id)}
-            >
-              Void
-            </button>
+            <ConfirmAction
+              variant="danger"
+              label="Void"
+              title="Void this register entry?"
+              description="A voided entry stays on the job's record, marked void."
+              confirmLabel="Void entry"
+              busyLabel="Voiding…"
+              onConfirm={() => onVoidRegisterEntry(job.id, entry.id)}
+            />
           </div>
         </>
       ) : null}

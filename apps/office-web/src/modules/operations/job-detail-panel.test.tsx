@@ -410,8 +410,7 @@ describe('JobDetailPanel', () => {
     expect(screen.getByRole('button', { name: 'Add appointment' })).toBeInTheDocument();
   });
 
-  it('requires confirmation before cancelling an appointment', () => {
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false);
+  it('asks in place before cancelling an appointment', async () => {
     const onAppointmentStatusChange = vi.fn(async () => undefined);
 
     renderDetail({
@@ -423,8 +422,19 @@ describe('JobDetailPanel', () => {
 
     fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'cancelled' } });
 
-    expect(confirmSpy).toHaveBeenCalledWith('Cancel this appointment?');
+    expect(screen.getByRole('group', { name: 'Cancel this appointment?' })).toBeInTheDocument();
     expect(onAppointmentStatusChange).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Keep appointment' }));
+    expect(screen.queryByRole('group', { name: 'Cancel this appointment?' })).toBeNull();
+    expect(onAppointmentStatusChange).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText('Status'), { target: { value: 'cancelled' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel appointment' }));
+
+    await waitFor(() =>
+      expect(onAppointmentStatusChange).toHaveBeenCalledWith('appt-1', 'cancelled')
+    );
   });
 
   it('keeps finished-visit review actions on the job detail surface', () => {
@@ -509,6 +519,7 @@ describe('JobDetailPanel', () => {
     });
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     fireEvent.click(screen.getByRole('button', { name: 'Void' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Void entry' }));
 
     expect(onRegisterDraftChange).toHaveBeenCalledWith(
       'job-1',
@@ -549,6 +560,7 @@ describe('JobDetailPanel', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     fireEvent.click(screen.getByRole('button', { name: 'Open' }));
     fireEvent.click(screen.getByRole('button', { name: 'Void' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Void attachment' }));
 
     expect(onMediaCaptionChange).toHaveBeenCalledWith('job-1', 'media-1', 'After cleaning');
     expect(onMediaVoidReasonChange).toHaveBeenCalledWith('job-1', 'media-1', 'wrong file');

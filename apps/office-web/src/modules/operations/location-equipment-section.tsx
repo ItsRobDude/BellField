@@ -12,6 +12,8 @@ import {
   type EquipmentSummary,
   type EquipmentWorkspaceResponse
 } from '@/lib/operations-api';
+import { ConfirmPanel } from '@/components/confirm-action';
+import { useAsyncAction } from '@/components/use-async-action';
 import {
   EquipmentPanel,
   type EquipmentCreateDraft,
@@ -51,6 +53,19 @@ export function LocationEquipmentSection({
   const [hasLoadedEquipmentWorkspace, setHasLoadedEquipmentWorkspace] = useState(false);
   const [isEquipmentRefreshing, setIsEquipmentRefreshing] = useState(false);
   const [showInactiveEquipment, setShowInactiveEquipment] = useState(false);
+  const [pendingMissingSerial, setPendingMissingSerial] = useState<
+    | { kind: 'create'; draft: EquipmentCreateDraft }
+    | { kind: 'update'; recordId: string; draft: EquipmentEditDraft }
+    | null
+  >(null);
+  const confirmMissingSerial = useAsyncAction(async () => {
+    if (!pendingMissingSerial) return;
+    if (pendingMissingSerial.kind === 'create') {
+      await handleCreateEquipment(pendingMissingSerial.draft, true);
+    } else {
+      await handleEquipmentUpdate(pendingMissingSerial.recordId, pendingMissingSerial.draft, true);
+    }
+  });
   const selectedEquipmentIdRef = useRef(selectedEquipmentId);
   const equipmentRefreshInFlightRef = useRef(false);
 
@@ -137,7 +152,7 @@ export function LocationEquipmentSection({
     void refreshLocationEquipmentWorkspace();
   }, [refreshLocationEquipmentWorkspace]);
 
-  async function handleCreateEquipment(draft: EquipmentCreateDraft) {
+  async function handleCreateEquipment(draft: EquipmentCreateDraft, confirmMissingSerial = false) {
     try {
       const response = await createOfficeEquipment({
         sessionToken,
@@ -155,35 +170,14 @@ export function LocationEquipmentSection({
         warrantyProviderNote: draft.warrantyProviderNote || undefined,
         systemGroupName: draft.systemGroupName || undefined,
         notes: draft.notes || undefined,
-        status: draft.status
+        status: draft.status,
+        confirmMissingSerial: confirmMissingSerial || undefined
       });
+      setPendingMissingSerial(null);
       await refreshLocationEquipmentWorkspace(response.equipment.id);
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Serial number is strongly recommended') &&
-        window.confirm('Serial number is blank. Create this equipment record anyway?')
-      ) {
-        const response = await createOfficeEquipment({
-          sessionToken,
-          apiBaseUrl,
-          locationId: location.id,
-          equipmentType: draft.equipmentType,
-          brand: draft.brand,
-          model: draft.model,
-          serialNumber: draft.serialNumber,
-          filterSizes: splitFilterSizes(draft.filterSizes),
-          equipmentLocationDescription: draft.equipmentLocationDescription || undefined,
-          installDate: draft.installDate || undefined,
-          warrantyStartDate: draft.warrantyStartDate || undefined,
-          warrantyEndDate: draft.warrantyEndDate || undefined,
-          warrantyProviderNote: draft.warrantyProviderNote || undefined,
-          systemGroupName: draft.systemGroupName || undefined,
-          notes: draft.notes || undefined,
-          status: draft.status,
-          confirmMissingSerial: true
-        });
-        await refreshLocationEquipmentWorkspace(response.equipment.id);
+      if (isMissingSerialError(error) && !confirmMissingSerial) {
+        setPendingMissingSerial({ kind: 'create', draft });
         return;
       }
 
@@ -191,7 +185,11 @@ export function LocationEquipmentSection({
     }
   }
 
-  async function handleEquipmentUpdate(recordId: string, draft: EquipmentEditDraft) {
+  async function handleEquipmentUpdate(
+    recordId: string,
+    draft: EquipmentEditDraft,
+    confirmMissingSerial = false
+  ) {
     try {
       await updateOfficeEquipment({
         equipmentId: recordId,
@@ -212,38 +210,14 @@ export function LocationEquipmentSection({
         systemGroupName: draft.systemGroupName || undefined,
         clearSystemGroup: draft.systemGroupName.trim().length === 0,
         status: draft.status,
-        notes: draft.notes
+        notes: draft.notes,
+        confirmMissingSerial: confirmMissingSerial || undefined
       });
+      setPendingMissingSerial(null);
       await refreshLocationEquipmentWorkspace(recordId);
     } catch (error) {
-      if (
-        error instanceof Error &&
-        error.message.includes('Serial number is strongly recommended') &&
-        window.confirm('Serial number is blank. Save this equipment change anyway?')
-      ) {
-        await updateOfficeEquipment({
-          equipmentId: recordId,
-          sessionToken,
-          apiBaseUrl,
-          locationId: location.id,
-          inventoryLocationLabel: undefined,
-          equipmentType: draft.equipmentType,
-          brand: draft.brand,
-          model: draft.model,
-          serialNumber: draft.serialNumber,
-          filterSizes: splitFilterSizes(draft.filterSizes),
-          equipmentLocationDescription: draft.equipmentLocationDescription,
-          installDate: draft.installDate,
-          warrantyStartDate: draft.warrantyStartDate || undefined,
-          warrantyEndDate: draft.warrantyEndDate || undefined,
-          warrantyProviderNote: draft.warrantyProviderNote || undefined,
-          systemGroupName: draft.systemGroupName || undefined,
-          clearSystemGroup: draft.systemGroupName.trim().length === 0,
-          status: draft.status,
-          notes: draft.notes,
-          confirmMissingSerial: true
-        });
-        await refreshLocationEquipmentWorkspace(recordId);
+      if (isMissingSerialError(error) && !confirmMissingSerial) {
+        setPendingMissingSerial({ kind: 'update', recordId, draft });
         return;
       }
 
@@ -283,10 +257,6 @@ export function LocationEquipmentSection({
   }
 
   async function handleDeleteEquipment(equipmentId: string) {
-    if (!window.confirm('Delete this equipment record permanently?')) {
-      return;
-    }
-
     try {
       await deleteOfficeEquipment({
         equipmentId,
@@ -305,23 +275,42 @@ export function LocationEquipmentSection({
   return (
     <section aria-label="Location equipment" style={styles.list}>
       {hasLoadedEquipmentWorkspace ? (
-        <EquipmentPanel
-          locations={locationOptions}
-          equipment={locationEquipment}
-          suggestedEquipmentTypes={suggestedEquipmentTypes}
-          locationScope={{ locationId: location.id, locationName: location.name }}
-          selectedEquipmentId={selectedEquipmentId}
-          selectedEquipmentDetail={selectedEquipmentDetail}
-          showInactiveEquipment={showInactiveEquipment}
-          canReplaceRemove={canReplaceRemove}
-          canDelete={canDelete}
-          onSelectEquipment={handleEquipmentSelect}
-          onShowInactiveChange={setShowInactiveEquipment}
-          onCreateEquipment={handleCreateEquipment}
-          onRecordUpdate={handleEquipmentUpdate}
-          onLinkReplacement={handleLinkReplacement}
-          onDeleteEquipment={handleDeleteEquipment}
-        />
+        <>
+          {pendingMissingSerial ? (
+            <ConfirmPanel
+              title="Serial number is blank"
+              description={
+                pendingMissingSerial.kind === 'create'
+                  ? 'Create this equipment record anyway?'
+                  : 'Save this equipment change anyway?'
+              }
+              confirmLabel={
+                pendingMissingSerial.kind === 'create' ? 'Create anyway' : 'Save anyway'
+              }
+              busyLabel="Saving…"
+              isBusy={confirmMissingSerial.isBusy}
+              onConfirm={() => void confirmMissingSerial.run()}
+              onCancel={() => setPendingMissingSerial(null)}
+            />
+          ) : null}
+          <EquipmentPanel
+            locations={locationOptions}
+            equipment={locationEquipment}
+            suggestedEquipmentTypes={suggestedEquipmentTypes}
+            locationScope={{ locationId: location.id, locationName: location.name }}
+            selectedEquipmentId={selectedEquipmentId}
+            selectedEquipmentDetail={selectedEquipmentDetail}
+            showInactiveEquipment={showInactiveEquipment}
+            canReplaceRemove={canReplaceRemove}
+            canDelete={canDelete}
+            onSelectEquipment={handleEquipmentSelect}
+            onShowInactiveChange={setShowInactiveEquipment}
+            onCreateEquipment={handleCreateEquipment}
+            onRecordUpdate={handleEquipmentUpdate}
+            onLinkReplacement={handleLinkReplacement}
+            onDeleteEquipment={handleDeleteEquipment}
+          />
+        </>
       ) : (
         <section style={styles.workspacePanel} aria-label="Equipment loading">
           <p style={styles.muted}>
@@ -333,6 +322,10 @@ export function LocationEquipmentSection({
       )}
     </section>
   );
+}
+
+function isMissingSerialError(error: unknown): boolean {
+  return error instanceof Error && error.message.includes('Serial number is strongly recommended');
 }
 
 function splitFilterSizes(filterSizes: string): string[] {

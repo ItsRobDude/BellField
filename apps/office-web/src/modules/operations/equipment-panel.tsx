@@ -7,6 +7,7 @@ import { formatDate, formatDateTime } from '@/lib/format';
 import { FormField } from '@/components/form-field';
 import { SubmitButton } from '@/components/submit-button';
 import { useAsyncAction } from '@/components/use-async-action';
+import { ConfirmAction } from '@/components/confirm-action';
 import {
   canStartEquipmentReplacement,
   EquipmentReplacementPanel
@@ -641,13 +642,14 @@ export function EquipmentPanel({
                   Save equipment changes
                 </SubmitButton>
                 {canDelete ? (
-                  <button
-                    type="button"
-                    onClick={() => void onDeleteEquipment(selectedEquipmentDetail.id)}
-                    style={styles.button}
-                  >
-                    Delete equipment
-                  </button>
+                  <ConfirmAction
+                    variant="danger"
+                    label="Delete equipment"
+                    title="Delete this equipment record permanently?"
+                    confirmLabel="Delete permanently"
+                    busyLabel="Deleting…"
+                    onConfirm={() => onDeleteEquipment(selectedEquipmentDetail.id)}
+                  />
                 ) : null}
               </div>
 

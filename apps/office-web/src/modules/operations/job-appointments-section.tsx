@@ -4,6 +4,7 @@ import { useEffect, useState, type CSSProperties } from 'react';
 import type { AppointmentStatus, JobSummary, JobsWorkspaceResponse } from '@/lib/operations-api';
 import { SubmitButton } from '@/components/submit-button';
 import { useAsyncAction } from '@/components/use-async-action';
+import { ConfirmPanel } from '@/components/confirm-action';
 import { formatAppointmentScheduleTime } from './appointment-schedule-format';
 import {
   appointmentStatusLabels,
@@ -125,6 +126,11 @@ function AppointmentCard({
   onSaveAppointmentSchedule: JobAppointmentsSectionProps['onSaveAppointmentSchedule'];
 }) {
   const saveSchedule = useAsyncAction(() => onSaveAppointmentSchedule(appointment.id));
+  const [isCancelPending, setIsCancelPending] = useState(false);
+  const changeStatus = useAsyncAction(async (status: AppointmentStatus) => {
+    await onAppointmentStatusChange(appointment.id, status);
+    setIsCancelPending(false);
+  });
 
   return (
     <section
@@ -160,10 +166,11 @@ function AppointmentCard({
             value={appointment.status}
             onChange={(event) => {
               const nextStatus = event.target.value as AppointmentStatus;
-              if (nextStatus === 'cancelled' && !window.confirm('Cancel this appointment?')) {
+              if (nextStatus === 'cancelled') {
+                setIsCancelPending(true);
                 return;
               }
-              void onAppointmentStatusChange(appointment.id, nextStatus);
+              void changeStatus.run(nextStatus);
             }}
             style={styles.input}
           >
@@ -181,6 +188,18 @@ function AppointmentCard({
           onChange={(patch) => onAppointmentEditDraftChange(appointment.id, editDraft, patch)}
         />
       </div>
+      {isCancelPending ? (
+        <ConfirmPanel
+          title="Cancel this appointment?"
+          confirmLabel="Cancel appointment"
+          cancelLabel="Keep appointment"
+          confirmVariant="danger"
+          isBusy={changeStatus.isBusy}
+          busyLabel="Cancelling…"
+          onConfirm={() => void changeStatus.run('cancelled')}
+          onCancel={() => setIsCancelPending(false)}
+        />
+      ) : null}
       <SubmitButton
         variant="secondary"
         isBusy={saveSchedule.isBusy}

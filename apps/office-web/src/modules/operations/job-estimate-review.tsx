@@ -7,6 +7,7 @@ import {
   formatMarginPercent,
   formatTaxRatePercent
 } from '@/lib/format';
+import { ConfirmAction } from '@/components/confirm-action';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { estimateLineItemKindLabels, estimateStatusLabels } from './job-estimate-types';
 
@@ -102,8 +103,8 @@ export function EstimateDetailPanel({
   isDeliveryPanelOpen: boolean;
   deliveryPanel: ReactNode;
   onEdit: () => void;
-  onApprove: (selectedOptionId?: string) => void;
-  onDecline: () => void;
+  onApprove: (selectedOptionId?: string) => Promise<void>;
+  onDecline: () => Promise<void>;
   onConvert: () => void;
   onDownload: () => void;
   onToggleDelivery: () => void;
@@ -159,35 +160,40 @@ export function EstimateDetailPanel({
             {estimate.optionGroups?.length ? (
               estimate.optionGroups.flatMap((group) =>
                 group.options.map((option) => (
-                  <button
+                  <ConfirmAction
                     key={option.id}
-                    type="button"
-                    style={styles.primaryButton}
+                    variant="primary"
                     disabled={isActionPending}
-                    onClick={() => onApprove(option.id)}
-                  >
-                    Mark {option.label} approved
-                  </button>
+                    label={`Mark ${option.label} approved`}
+                    title={`Mark ${option.label} approved?`}
+                    description="Approved estimates can no longer be edited."
+                    confirmLabel="Mark approved"
+                    busyLabel="Approving…"
+                    onConfirm={() => onApprove(option.id)}
+                  />
                 ))
               )
             ) : (
-              <button
-                type="button"
-                style={styles.primaryButton}
+              <ConfirmAction
+                variant="primary"
                 disabled={isActionPending}
-                onClick={() => onApprove()}
-              >
-                Mark approved
-              </button>
+                label="Mark approved"
+                title="Mark this estimate approved?"
+                description="Approved estimates can no longer be edited."
+                confirmLabel="Mark approved"
+                busyLabel="Approving…"
+                onConfirm={() => onApprove()}
+              />
             )}
-            <button
-              type="button"
-              style={styles.dangerButton}
+            <ConfirmAction
+              variant="danger"
               disabled={isActionPending}
-              onClick={onDecline}
-            >
-              Decline
-            </button>
+              label="Decline"
+              title="Decline this estimate?"
+              confirmLabel="Decline estimate"
+              busyLabel="Declining…"
+              onConfirm={onDecline}
+            />
           </>
         ) : null}
         {estimate.status === 'approved' && estimate.approvedByName ? (

@@ -7,6 +7,7 @@ import type {
   InvoiceSummary
 } from '@/lib/operations-api';
 import { formatCurrency } from '@/lib/format';
+import { ConfirmAction } from '@/components/confirm-action';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   InvoiceLineEditor,
@@ -49,8 +50,8 @@ export function CorrectionCard({
   onCancelLineEdit: () => void;
   onChangeLineDraft: (draft: InvoiceLineDraft) => void;
   onSaveLine: () => void;
-  onRemoveLine: (line: InvoiceLineItemSummary) => void;
-  onPost: () => void;
+  onRemoveLine: (line: InvoiceLineItemSummary) => Promise<void>;
+  onPost: () => Promise<void>;
   onSaveTaxRate: (taxRateBasisPoints: number) => Promise<boolean>;
 }) {
   const [isEditingTaxRate, setIsEditingTaxRate] = useState(false);
@@ -88,9 +89,16 @@ export function CorrectionCard({
           !isBusyEditing &&
           !otherEditInProgress &&
           correction.lineItems.length > 0 ? (
-            <button type="button" style={styles.primaryButton} disabled={isSaving} onClick={onPost}>
-              Post {kindLabel.toLowerCase()}
-            </button>
+            <ConfirmAction
+              variant="primary"
+              disabled={isSaving}
+              label={`Post ${kindLabel.toLowerCase()}`}
+              title={`Post this ${kindLabel.toLowerCase()}?`}
+              description="Once posted it becomes part of the locked accounting record and can no longer be edited."
+              confirmLabel={`Post ${kindLabel.toLowerCase()}`}
+              busyLabel="Posting…"
+              onConfirm={onPost}
+            />
           ) : null}
         </div>
       </div>
@@ -132,13 +140,14 @@ export function CorrectionCard({
                     >
                       Edit
                     </button>
-                    <button
-                      type="button"
-                      style={styles.dangerButton}
-                      onClick={() => onRemoveLine(line)}
-                    >
-                      Remove
-                    </button>
+                    <ConfirmAction
+                      variant="danger"
+                      label="Remove"
+                      title={`Remove "${line.description}" from this correction?`}
+                      confirmLabel="Remove line"
+                      busyLabel="Removing…"
+                      onConfirm={() => onRemoveLine(line)}
+                    />
                   </>
                 ) : null}
               </div>

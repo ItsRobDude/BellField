@@ -1581,7 +1581,6 @@ describe('OfficeWorkspaceShell IA', () => {
     mockedOperationsApi.getOfficeJobDetail.mockResolvedValue(
       buildJobDetail(job, [registerEntry], [mediaAttachment])
     );
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
     const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
     const createObjectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:media-1');
     vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => undefined);
@@ -1625,6 +1624,7 @@ describe('OfficeWorkspaceShell IA', () => {
       target: { value: 'wrong file' }
     });
     fireEvent.click(screen.getByRole('button', { name: 'Void' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Void attachment' }));
 
     await waitFor(() => {
       expect(mockedOperationsApi.updateOfficeMediaAttachment).toHaveBeenCalledWith(
@@ -1643,7 +1643,6 @@ describe('OfficeWorkspaceShell IA', () => {
         expect.objectContaining({ mediaId: 'media-1', reason: 'wrong file' })
       );
     });
-    expect(confirmSpy).toHaveBeenCalled();
     expect(createObjectUrlSpy).toHaveBeenCalled();
     expect(openSpy).toHaveBeenCalledWith('blob:media-1', '_blank', 'noopener,noreferrer');
   });

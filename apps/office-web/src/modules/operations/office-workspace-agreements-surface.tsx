@@ -13,6 +13,7 @@ import {
   type ServiceAgreementSummary
 } from '@/lib/operations-api';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { ConfirmAction } from '@/components/confirm-action';
 import {
   AgreementForm,
   billingCadenceLabels,
@@ -208,9 +209,6 @@ export function OfficeAgreementsSurface({
     agreement: ServiceAgreementSummary,
     action: 'activate' | 'pause' | 'end'
   ) {
-    if (action === 'end' && !window.confirm(`End ${agreement.agreementNumber}?`)) {
-      return;
-    }
     setIsSaving(true);
     setErrorMessage(null);
     setNoticeMessage(null);
@@ -336,7 +334,7 @@ export function OfficeAgreementsSurface({
             isSaving={isSaving}
             formOpen={formOpen}
             onEdit={startEdit}
-            onStatusChange={(agreement, action) => void changeStatus(agreement, action)}
+            onStatusChange={changeStatus}
           />
         </div>
       ) : isLoading ? (
@@ -428,7 +426,7 @@ function AgreementDetail({
   onStatusChange: (
     agreement: ServiceAgreementSummary,
     action: 'activate' | 'pause' | 'end'
-  ) => void;
+  ) => Promise<void>;
 }) {
   if (!agreement) {
     return (
@@ -489,14 +487,16 @@ function AgreementDetail({
           </button>
         ) : null}
         {canEnd ? (
-          <button
-            type="button"
-            style={styles.dangerButton}
+          <ConfirmAction
+            variant="danger"
             disabled={isSaving || formOpen}
-            onClick={() => onStatusChange(agreement, 'end')}
-          >
-            End
-          </button>
+            label="End"
+            title={`End ${agreement.agreementNumber}?`}
+            description="An ended agreement stops covering its locations and equipment."
+            confirmLabel="End agreement"
+            busyLabel="Ending…"
+            onConfirm={() => onStatusChange(agreement, 'end')}
+          />
         ) : null}
       </div>
 
