@@ -6,9 +6,9 @@ import type {
   InvoiceLineItemSummary,
   InvoiceSummary
 } from '@/lib/operations-api';
+import { formatCurrency } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
-  formatCurrency,
   InvoiceLineEditor,
   InvoiceTaxRateEditor,
   InvoiceTotals,

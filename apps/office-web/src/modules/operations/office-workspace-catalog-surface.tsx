@@ -19,7 +19,7 @@ import {
   type UpdateCatalogItemRequest
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency } from '@/lib/format';
 import {
   CatalogForm,
   draftFromCatalogItem,

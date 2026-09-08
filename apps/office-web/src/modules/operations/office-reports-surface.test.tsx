@@ -10,6 +10,7 @@ import type {
 } from '@bellfield/contracts';
 import * as reportingApi from '@/lib/reporting-api';
 import * as downloadFile from '@/lib/download-file';
+import { formatDateTime } from '@/lib/format';
 import { OfficeReportsSurface } from './office-reports-surface';
 
 vi.mock('@/lib/reporting-api', () => ({
@@ -299,7 +300,9 @@ describe('OfficeReportsSurface (AR / Open Balances)', () => {
     expect(screen.getByText('Beta')).toBeInTheDocument();
     expect(screen.getByText('$120.00')).toBeInTheDocument(); // total amount due
     expect(screen.getByText('1003')).toBeInTheDocument();
-    expect(screen.getByText('Generated 2026-06-06 00:00 UTC')).toBeInTheDocument();
+    expect(
+      screen.getByText(`Generated ${formatDateTime('2026-06-06T00:00:00.000Z')}`)
+    ).toBeInTheDocument();
   });
 
   it('hides the export button without reports:export', async () => {

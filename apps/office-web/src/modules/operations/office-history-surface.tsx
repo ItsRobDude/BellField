@@ -8,6 +8,7 @@ import {
   type HistoryRecordType
 } from '@/lib/history-api';
 import { getOfficeEmployees, type EmployeeSummary } from '@/lib/identity-api';
+import { formatDateTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeHistorySurfaceProps = {
@@ -201,7 +202,7 @@ export function OfficeHistorySurface({
         <div>
           {entries.map((entry) => (
             <div key={`${entry.recordType}:${entry.sourceId}`} style={rowStyle}>
-              <span style={mutedStyle}>{new Date(entry.occurredAt).toLocaleString()}</span>
+              <span style={mutedStyle}>{formatDateTime(entry.occurredAt)}</span>
               <span style={badgeStyle}>{RECORD_TYPE_LABELS[entry.recordType]}</span>
               <span style={mutedStyle}>{entry.actorName ?? '—'}</span>
               <span>

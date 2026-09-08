@@ -1,5 +1,12 @@
 import type { ReactNode } from 'react';
 import type { EstimateSummary } from '@/lib/operations-api';
+import {
+  formatCurrency,
+  formatDate,
+  formatDateTime,
+  formatMarginPercent,
+  formatTaxRatePercent
+} from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { estimateLineItemKindLabels, estimateStatusLabels } from './job-estimate-types';
 
@@ -39,7 +46,7 @@ export function EstimateList({
               <p style={styles.tinyMuted}>
                 {estimate.lineItems.length} line{estimate.lineItems.length === 1 ? '' : 's'} ·{' '}
                 {formatCurrency(estimate.totals.total)}
-                {estimate.validUntil ? ` · valid until ${formatDateOnly(estimate.validUntil)}` : ''}
+                {estimate.validUntil ? ` · valid until ${formatDate(estimate.validUntil)}` : ''}
               </p>
               <div style={styles.badgeRow}>
                 {estimate.selectedOptionId ? (
@@ -115,13 +122,13 @@ export function EstimateDetailPanel({
           <p style={styles.tinyMuted}>
             {estimate.lineItems.length} line{estimate.lineItems.length === 1 ? '' : 's'} ·{' '}
             {formatCurrency(estimate.totals.total)}
-            {estimate.validUntil ? ` · valid until ${formatDateOnly(estimate.validUntil)}` : ''}
+            {estimate.validUntil ? ` · valid until ${formatDate(estimate.validUntil)}` : ''}
           </p>
           {acceptanceDetailText ? <p style={styles.tinyMuted}>{acceptanceDetailText}</p> : null}
         </div>
         <div style={styles.badgeRow}>
           {estimate.lastSentAt ? (
-            <span style={styles.tinyMuted}>Last sent {formatSentDate(estimate.lastSentAt)}</span>
+            <span style={styles.tinyMuted}>Last sent {formatDateTime(estimate.lastSentAt)}</span>
           ) : null}
           {wasEditedSinceLastSend(estimate) ? (
             <span style={styles.dangerBadge}>Edited since sent</span>
@@ -319,7 +326,7 @@ function EstimateTotals({ estimate }: { estimate: EstimateSummary }) {
       <SummaryRow label="Cost" value={formatCurrency(totals.totalCost)} />
       <SummaryRow
         label="Profit"
-        value={`${formatCurrency(totals.profit)} (${formatMargin(totals.marginBasisPoints)})`}
+        value={`${formatCurrency(totals.profit)} (${formatMarginPercent(totals.marginBasisPoints)})`}
       />
       {!totals.costComplete ? (
         <p style={styles.tinyMuted}>
@@ -385,7 +392,7 @@ function estimateAcceptanceBadgeLabel(estimate: EstimateSummary): string | null 
 
 function estimateAcceptanceDetailText(estimate: EstimateSummary): string | null {
   if (estimate.latestAcceptanceDecisionAppliedAt) {
-    const at = formatSentDate(estimate.latestAcceptanceDecisionAppliedAt);
+    const at = formatDateTime(estimate.latestAcceptanceDecisionAppliedAt);
     if (wasApprovedByCustomerOnline(estimate)) {
       return `Customer approved online ${at}.`;
     }
@@ -397,7 +404,7 @@ function estimateAcceptanceDetailText(estimate: EstimateSummary): string | null 
   if (!estimate.latestAcceptanceLinkExpiresAt) {
     return null;
   }
-  const at = formatSentDate(estimate.latestAcceptanceLinkExpiresAt);
+  const at = formatDateTime(estimate.latestAcceptanceLinkExpiresAt);
   return isPastDateTime(estimate.latestAcceptanceLinkExpiresAt)
     ? `Customer response link expired ${at}.`
     : `Awaiting customer response · link expires ${at}.`;
@@ -426,21 +433,6 @@ function isPastDateTime(value: string): boolean {
   return !Number.isNaN(date.getTime()) && date.getTime() < Date.now();
 }
 
-function formatSentDate(value: string): string {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
-}
-
-// validUntil is a plain yyyy-mm-dd; build the date in local time so the label
-// never shifts a day in negative-offset timezones.
-function formatDateOnly(value: string): string {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
-  if (!match) {
-    return value;
-  }
-  return new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toLocaleDateString();
-}
-
 function formatOptionLabel(estimate: EstimateSummary, optionId: string): string {
   for (const group of estimate.optionGroups ?? []) {
     const option = group.options.find((candidate) => candidate.id === optionId);
@@ -449,19 +441,4 @@ function formatOptionLabel(estimate: EstimateSummary, optionId: string): string 
     }
   }
   return optionId;
-}
-
-function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
-}
-
-function formatTaxRatePercent(basisPoints: number): string {
-  return `${Number((basisPoints / 100).toFixed(2))}%`;
-}
-
-function formatMargin(marginBasisPoints: number | null): string {
-  if (marginBasisPoints === null) {
-    return 'n/a';
-  }
-  return `${(marginBasisPoints / 100).toFixed(1)}%`;
 }

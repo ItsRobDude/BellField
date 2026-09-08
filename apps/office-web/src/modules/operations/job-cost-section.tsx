@@ -9,7 +9,7 @@ import {
   type JobCostingSummary
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency, formatDate } from '@/lib/format';
 import { JobCostResolutionPanel } from './job-cost-resolution-panel';
 
 export type JobCostSectionProps = {
@@ -257,7 +257,7 @@ export function JobCostSection({
                     !reversedIds.has(event.id);
                   return (
                     <tr key={event.id}>
-                      <td style={styles.tableCell}>{event.occurredAt.slice(0, 10)}</td>
+                      <td style={styles.tableCell}>{formatDate(event.occurredAt)}</td>
                       <td style={styles.tableCell}>
                         {eventKindLabel(event.kind)}
                         {isReversal ? ' (reversal)' : ''}

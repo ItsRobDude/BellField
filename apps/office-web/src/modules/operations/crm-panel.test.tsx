@@ -685,7 +685,7 @@ describe('CrmPanel', () => {
     expect(screen.getByText('SA-1001')).toBeInTheDocument();
     expect(screen.getByText('Annual maintenance plan')).toBeInTheDocument();
     expect(screen.getByText('Main Shop · 2 equipment item(s)')).toBeInTheDocument();
-    expect(screen.getByText('$240.00 Annual · next 2027-01-01')).toBeInTheDocument();
+    expect(screen.getByText('$240.00 Annual · next Jan 1, 2027')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('tab', { name: 'Activity' }));
     expect(screen.getByText('Contact linked: Casey Parker')).toBeInTheDocument();

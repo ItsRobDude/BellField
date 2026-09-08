@@ -40,7 +40,7 @@ const equipmentDetail: EquipmentDetail = {
 };
 
 describe('EquipmentPanel', () => {
-  it('renders warranty-relevant equipment glance fields with installed date as MM/DD/YYYY', () => {
+  it('renders warranty-relevant equipment glance fields with a readable installed date', () => {
     render(
       <EquipmentPanel
         locations={[location]}
@@ -66,7 +66,7 @@ describe('EquipmentPanel', () => {
     expect(screen.getAllByText('24ABC6').length).toBeGreaterThan(0);
     expect(screen.getByText('ABC123')).toBeInTheDocument();
     expect(screen.getByText('16x25x1, 20x20x1')).toBeInTheDocument();
-    expect(screen.getByText('08/14/2020')).toBeInTheDocument();
+    expect(screen.getByText('Aug 14, 2020')).toBeInTheDocument();
     expect(screen.queryByText('4 years old')).not.toBeInTheDocument();
   });
 

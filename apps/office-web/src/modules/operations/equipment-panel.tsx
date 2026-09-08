@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import type { EquipmentDetail, EquipmentStatus, EquipmentSummary } from '@/lib/operations-api';
+import { formatDate, formatDateTime } from '@/lib/format';
 import {
   canStartEquipmentReplacement,
   EquipmentReplacementPanel
@@ -618,9 +619,7 @@ export function EquipmentPanel({
                   {selectedEquipmentDetail.history.map((entry) => (
                     <li key={entry.id}>
                       <strong>{entry.actorName}</strong> - {entry.message}
-                      <div style={styles.tinyMuted}>
-                        {new Date(entry.occurredAt).toLocaleString()}
-                      </div>
+                      <div style={styles.tinyMuted}>{formatDateTime(entry.occurredAt)}</div>
                     </li>
                   ))}
                 </ol>
@@ -673,17 +672,7 @@ function EquipmentGlanceField({ label, value }: { label: string; value: string }
 }
 
 function formatEquipmentInstallDate(installDate: string | undefined): string {
-  if (!installDate) {
-    return 'Install date pending';
-  }
-
-  const [year, month, day] = installDate.split('-');
-
-  if (!year || !month || !day) {
-    return installDate;
-  }
-
-  return `${month}/${day}/${year}`;
+  return formatDate(installDate, 'Install date pending');
 }
 
 function createDetailDraft(record: EquipmentDetail): EquipmentEditDraft {

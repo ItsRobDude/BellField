@@ -11,7 +11,7 @@ import {
   type BookkeepingQueuesResponse
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency, formatDate } from '@/lib/format';
 
 export type OfficeBookkeepingSurfaceProps = {
   apiBaseUrl: string;
@@ -311,7 +311,7 @@ function InvoiceRow({
           </strong>
           <p style={styles.tinyMuted}>
             {correctionKindLabels[item.invoiceKind]}
-            {item.postedAt ? ` · posted ${item.postedAt.slice(0, 10)}` : ''}
+            {item.postedAt ? ` · posted ${formatDate(item.postedAt)}` : ''}
           </p>
         </div>
         <strong>{formatCurrency(item.total)}</strong>
@@ -326,11 +326,11 @@ function PaymentBatchRow({ item }: { item: BookkeepingPaymentBatchItem }) {
       <div style={styles.row}>
         <div style={{ minWidth: 0 }}>
           <strong>
-            {item.batchDate} · {paymentMethodLabel(item.method)}
+            {formatDate(item.batchDate)} · {paymentMethodLabel(item.method)}
           </strong>
           <p style={styles.tinyMuted}>
             {item.paymentCount} payment{item.paymentCount === 1 ? '' : 's'} · latest{' '}
-            {item.latestReceivedAt.slice(0, 10)}
+            {formatDate(item.latestReceivedAt)}
           </p>
         </div>
         <strong>{formatCurrency(item.totalAmount)}</strong>

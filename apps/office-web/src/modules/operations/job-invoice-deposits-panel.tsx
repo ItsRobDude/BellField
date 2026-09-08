@@ -13,7 +13,8 @@ import {
   type PaymentRefund
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency, SummaryRow } from './job-invoice-shared';
+import { formatCurrency, formatDate } from '@/lib/format';
+import { SummaryRow } from './job-invoice-shared';
 
 type DepositDraft = {
   amount: string;
@@ -283,7 +284,7 @@ export function DraftInvoiceDepositsPanel({
             <input style={styles.input} value={depositLink.checkoutUrl} readOnly />
           </label>
           <p style={styles.tinyMuted}>
-            {formatCurrency(depositLink.amount)} - expires {depositLink.expiresAt.slice(0, 10)}
+            {formatCurrency(depositLink.amount)} - expires {formatDate(depositLink.expiresAt)}
           </p>
         </div>
       ) : null}

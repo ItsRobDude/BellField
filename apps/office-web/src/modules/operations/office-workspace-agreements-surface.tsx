@@ -12,7 +12,7 @@ import {
   type ServiceAgreementStatus,
   type ServiceAgreementSummary
 } from '@/lib/operations-api';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency, formatDate } from '@/lib/format';
 import {
   AgreementForm,
   billingCadenceLabels,
@@ -395,7 +395,7 @@ function AgreementList({
                   <td style={styles.tableCell}>
                     <StatusBadge status={agreement.status} />
                   </td>
-                  <td style={styles.tableCell}>{formatDate(agreement.renewalDate) ?? '-'}</td>
+                  <td style={styles.tableCell}>{formatDate(agreement.renewalDate, '-')}</td>
                   <td style={styles.tableCell}>
                     {billingCadenceLabels[agreement.billingCadence]}
                     {agreement.billingAmount !== undefined ? (
@@ -501,9 +501,9 @@ function AgreementDetail({
       </div>
 
       <div style={styles.detailGrid}>
-        <SummaryField label="Start" value={formatDate(agreement.startDate) ?? '-'} />
-        <SummaryField label="End" value={formatDate(agreement.endDate) ?? '-'} />
-        <SummaryField label="Renewal" value={formatDate(agreement.renewalDate) ?? '-'} />
+        <SummaryField label="Start" value={formatDate(agreement.startDate, '-')} />
+        <SummaryField label="End" value={formatDate(agreement.endDate, '-')} />
+        <SummaryField label="Renewal" value={formatDate(agreement.renewalDate, '-')} />
         <SummaryField
           label="Billing"
           value={`${billingCadenceLabels[agreement.billingCadence]}${
@@ -607,11 +607,4 @@ function StatusBadge({ status }: { status: ServiceAgreementStatus }) {
       {statusLabels[status]}
     </span>
   );
-}
-
-function formatDate(value: string | undefined): string | undefined {
-  if (!value) {
-    return undefined;
-  }
-  return new Date(value).toLocaleDateString();
 }

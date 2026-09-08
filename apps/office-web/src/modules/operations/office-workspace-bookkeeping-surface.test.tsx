@@ -104,7 +104,7 @@ describe('OfficeBookkeepingSurface', () => {
   it('shows payment batches with their worklist count', async () => {
     renderSurface();
 
-    expect(await screen.findByText('2026-06-08 · Check')).toBeInTheDocument();
+    expect(await screen.findByText('Jun 8, 2026 · Check')).toBeInTheDocument();
     expect(screen.getByText('$250.00')).toBeInTheDocument();
     expect(screen.getByLabelText('Payment batches: 1')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Load more/ })).not.toBeInTheDocument();

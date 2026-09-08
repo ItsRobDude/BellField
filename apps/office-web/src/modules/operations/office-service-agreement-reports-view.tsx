@@ -10,6 +10,7 @@ import {
   type ServiceAgreementReports
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
+import { formatCurrency, formatDateTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const numberCellStyle: CSSProperties = { ...styles.tableCell, textAlign: 'right' };
@@ -123,7 +124,7 @@ export function ServiceAgreementReportsView({
 
       {report ? (
         <>
-          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
+          <p style={styles.tinyMuted}>Generated {formatDateTime(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Active" value={String(report.totals.activeAgreementCount)} />
             <TotalItem label="Expiring soon" value={String(report.totals.expiringSoonCount)} />
@@ -234,7 +235,7 @@ function BillingDueTable({
                 <td style={styles.tableCell}>{row.nextBillingDate ?? '-'}</td>
                 <td style={numberCellStyle}>{row.daysUntilBilling}</td>
                 <td style={numberCellStyle}>
-                  {row.billingAmount === undefined ? '-' : money(row.billingAmount)}
+                  {row.billingAmount === undefined ? '-' : formatCurrency(row.billingAmount)}
                 </td>
               </tr>
             ))}
@@ -308,17 +309,9 @@ function TotalItem({ label, value }: { label: string; value: string }) {
   );
 }
 
-function formatGeneratedAt(value: string): string {
-  return `Generated ${value.slice(0, 10)} ${value.slice(11, 16)} UTC`;
-}
-
-function money(value: number): string {
-  return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
-}
-
 function formatAgreementBilling(row: ServiceAgreementReports['activeAgreements'][number]): string {
   if (row.billingCadence === 'none') return 'No recurring billing';
-  const amount = row.billingAmount === undefined ? '' : `${money(row.billingAmount)} `;
+  const amount = row.billingAmount === undefined ? '' : `${formatCurrency(row.billingAmount)} `;
   const next = row.nextBillingDate ? ` · next ${row.nextBillingDate}` : '';
   return `${amount}${formatCamelLabel(row.billingCadence)}${next}`;
 }

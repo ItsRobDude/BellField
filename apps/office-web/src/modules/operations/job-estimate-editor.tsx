@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { CatalogCategory, CatalogItem } from '@/lib/operations-api';
+import { formatTaxRatePercent } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { EstimateCatalogPicker } from './job-estimate-catalog-picker';
 import {
@@ -416,10 +417,6 @@ export function EstimateEditor({
       </div>
     </div>
   );
-}
-
-function formatTaxRatePercent(basisPoints: number): string {
-  return `${Number((basisPoints / 100).toFixed(2))}%`;
 }
 
 function resolveLineTarget(

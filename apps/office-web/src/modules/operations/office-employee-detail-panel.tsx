@@ -10,6 +10,7 @@ import {
   type PermissionKey,
   type RoleTemplate
 } from '@/lib/identity-api';
+import { formatDateTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   computeEffectivePermissions,
@@ -300,7 +301,7 @@ export function OfficeEmployeeDetailPanel({
                 <tr key={session.id}>
                   <td style={styles.tableCell}>{session.deviceLabel ?? '—'}</td>
                   <td style={styles.tableCell}>{session.surface}</td>
-                  <td style={styles.tableCell}>{new Date(session.issuedAt).toLocaleString()}</td>
+                  <td style={styles.tableCell}>{formatDateTime(session.issuedAt)}</td>
                   {mutationsAllowed ? (
                     <td style={styles.tableCell}>
                       <SessionRevokeButton

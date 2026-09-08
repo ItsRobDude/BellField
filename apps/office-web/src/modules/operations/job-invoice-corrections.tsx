@@ -26,7 +26,8 @@ import {
   type PaymentRefund
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency, SummaryRow, type InvoicePaymentPermissions } from './job-invoice-shared';
+import { formatCurrency } from '@/lib/format';
+import { SummaryRow, type InvoicePaymentPermissions } from './job-invoice-shared';
 import {
   emptyPaymentDraft,
   PaymentsBlock,

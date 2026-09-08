@@ -1,6 +1,7 @@
 'use client';
 
 import type { CrmSearchResult, DuplicateCandidate } from '@/lib/operations-api';
+import { formatAddress } from '@/lib/format';
 import type { CustomerFormState, LocationFormState } from './crm-panel-types';
 import type {
   JobIntakeCustomerLocationOption,
@@ -424,17 +425,6 @@ function DuplicateWarnings({ warnings }: { warnings: DuplicateCandidate[] }) {
       </div>
     </div>
   );
-}
-
-function formatAddress(location: {
-  addressLine1: string;
-  city: string;
-  state: string;
-  postalCode: string;
-}): string {
-  return [location.addressLine1, location.city, location.state, location.postalCode]
-    .filter(Boolean)
-    .join(', ');
 }
 
 function TextInput({
