@@ -9,6 +9,7 @@ import {
   type SystemDiagnosticsResponse
 } from '@/lib/system-diagnostics-api';
 import { formatDateTime } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeSystemSurfaceProps = {
@@ -249,7 +250,7 @@ export function OfficeSystemSurface({
         </div>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
       {diagnostics ? (
         <>

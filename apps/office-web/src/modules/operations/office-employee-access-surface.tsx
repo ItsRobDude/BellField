@@ -10,6 +10,7 @@ import {
   type EmployeeSummary,
   type RoleTemplate
 } from '@/lib/identity-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { OfficeEmployeeDetailPanel } from './office-employee-detail-panel';
 import { OfficeEmployeeCreateForm } from './office-employee-create-form';
@@ -170,7 +171,7 @@ export function OfficeEmployeeAccessSurface({
           </button>
         ) : null}
       </div>
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
       <div style={layoutStyle}>
         <div style={listStyle}>

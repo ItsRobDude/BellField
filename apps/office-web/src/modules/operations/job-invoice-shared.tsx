@@ -3,6 +3,7 @@
 import { useId, useState } from 'react';
 import type { InvoiceLineItemSummary, InvoiceSummary } from '@/lib/operations-api';
 import { formatAddress, formatCurrency, formatDate, formatTaxRatePercent } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   invoiceLineKindLabels,
@@ -149,7 +150,11 @@ export function InvoiceTaxRateEditor({
       <p style={styles.tinyMuted}>
         Applies to the taxable lines on this draft. Posted invoices never change.
       </p>
-      {validationMessage ? <p style={styles.error}>{validationMessage}</p> : null}
+      <StatusMessage
+        kind="error"
+        message={validationMessage}
+        onDismiss={() => setValidationMessage(null)}
+      />
     </div>
   );
 }

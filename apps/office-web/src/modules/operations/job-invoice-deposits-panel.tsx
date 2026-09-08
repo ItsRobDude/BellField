@@ -15,6 +15,7 @@ import {
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ConfirmPanel } from '@/components/confirm-action';
+import { StatusMessage } from '@/components/status-message';
 import { SummaryRow } from './job-invoice-shared';
 
 type DepositDraft = {
@@ -247,8 +248,12 @@ export function DraftInvoiceDepositsPanel({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
 
       {isLoading ? (
         <p style={styles.muted}>Loading deposits...</p>

@@ -25,6 +25,8 @@ The M9 backend (B1–B6 + corrections) is shipped. This is the office-web surfac
   `apps/office-web/src/components/`. No placeholder-only inputs, no hand-rolled busy flags.
 - **Confirmations** via `ConfirmAction` (a button that asks in place) or `ConfirmPanel` (when the
   trigger is a select or a server reply). Never `window.confirm` for money or destructive actions.
+- **Messages** via `StatusMessage` (dismissible; notices clear themselves; errors and warnings
+  stay). A background refresh never clears or replaces a message the user is reading.
 - **Per slice:** office-web `typecheck` + `lint` + `test` (vitest) + `build` green; new
   `operations-api` client functions covered by vitest fetch-mock tests (mirroring
   `operations-api.test.ts`); commit + push; Codex review; address findings.

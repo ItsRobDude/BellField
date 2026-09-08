@@ -22,6 +22,7 @@ import {
   type OutboundMessageSummary
 } from '@/lib/operations-api';
 import { downloadBlob } from '@/lib/download-file';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { EstimateDeliveryPanel, type EstimateDeliveryDraft } from './job-estimate-delivery-panel';
 import { EstimateEditor } from './job-estimate-editor';
@@ -578,9 +579,17 @@ export function JobEstimatesSection({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {warningMessage ? <p style={styles.warning}>{warningMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="warning"
+        message={warningMessage}
+        onDismiss={() => setWarningMessage(null)}
+      />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
 
       {draft ? (
         <EstimateEditor

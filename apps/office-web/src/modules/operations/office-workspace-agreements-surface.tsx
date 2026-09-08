@@ -14,6 +14,7 @@ import {
 } from '@/lib/operations-api';
 import { formatCurrency, formatDate } from '@/lib/format';
 import { ConfirmAction } from '@/components/confirm-action';
+import { StatusMessage } from '@/components/status-message';
 import {
   AgreementForm,
   billingCadenceLabels,
@@ -277,8 +278,12 @@ export function OfficeAgreementsSurface({
         </div>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
 
       <div style={styles.panel}>
         <div style={styles.formGridCompact}>

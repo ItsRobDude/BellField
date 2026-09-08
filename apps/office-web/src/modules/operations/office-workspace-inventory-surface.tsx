@@ -25,6 +25,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency, formatQuantity } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import {
   InventoryForm,
   emptyItemDraft,
@@ -356,8 +357,12 @@ export function OfficeInventorySurface({
         </div>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
 
       {activeForm ? (
         <InventoryForm

@@ -2,6 +2,7 @@
 
 import { useState, type ReactNode } from 'react';
 import type { EmployeeSummary } from '@/lib/identity-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeView =
@@ -26,6 +27,7 @@ type OfficeWorkspaceFrameProps = {
   children: ReactNode;
   employee: EmployeeSummary;
   errorMessage: string | null;
+  onDismissError?: () => void;
   isDispatchRefreshing: boolean;
   isJobIntakeLoading: boolean;
   isJobsQueueRefreshing: boolean;
@@ -41,6 +43,7 @@ type OfficeWorkspaceFrameProps = {
   canViewSystem: boolean;
   canViewHistory: boolean;
   noticeMessage: string | null;
+  onDismissNotice?: () => void;
   onOpenJobIntake: () => void;
   onRefresh: () => void;
   onSignOut: () => void;
@@ -52,6 +55,7 @@ export function OfficeWorkspaceFrame({
   children,
   employee,
   errorMessage,
+  onDismissError,
   isDispatchRefreshing,
   isJobIntakeLoading,
   isJobsQueueRefreshing,
@@ -67,6 +71,7 @@ export function OfficeWorkspaceFrame({
   canViewSystem,
   canViewHistory,
   noticeMessage,
+  onDismissNotice,
   onOpenJobIntake,
   onRefresh,
   onSignOut,
@@ -234,8 +239,12 @@ export function OfficeWorkspaceFrame({
         </aside>
 
         <div style={styles.workArea}>
-          {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-          {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+          <StatusMessage kind="error" message={errorMessage} onDismiss={() => onDismissError?.()} />
+          <StatusMessage
+            kind="notice"
+            message={noticeMessage}
+            onDismiss={() => onDismissNotice?.()}
+          />
 
           {children}
         </div>

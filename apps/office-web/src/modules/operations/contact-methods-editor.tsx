@@ -12,6 +12,7 @@ import {
   createOfficeLocationContactMethod,
   updateOfficeContactMethod
 } from '@/lib/operations-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type ContactMethodsEditorProps = {
@@ -321,7 +322,7 @@ export function ContactMethodsEditor({
       ) : (
         <p style={styles.tinyMuted}>No contact methods recorded.</p>
       )}
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       <div style={styles.inlineActionBar} aria-label="Contact method type">
         {contactMethodKinds.map((option) => (
           <button

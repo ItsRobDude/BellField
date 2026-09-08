@@ -6,6 +6,7 @@ import {
   getOfficeCompanySettings,
   updateOfficeCompanySettings
 } from '@/lib/operations-company-settings-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { OfficeInvoiceNumberingPanel } from './office-invoice-numbering-panel';
 import { OnlinePaymentsSettingsPanel } from './online-payments-settings-panel';
@@ -159,8 +160,12 @@ export function OfficeSettingsSurface({
         </button>
       </div>
 
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
       {settings ? (
         <div style={styles.splitGrid}>
