@@ -24,7 +24,7 @@ import {
   type JobSummary
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency, formatQuantity } from '@/lib/format';
 import {
   InventoryForm,
   emptyItemDraft,
@@ -60,11 +60,6 @@ const movementKindLabels: Record<InventoryMovementKind, string> = {
   adjustmentLoss: 'Adjustment (loss)',
   returnFromJob: 'Returned from job'
 };
-
-function formatQuantity(value: number): string {
-  // Quantities are stored at 4-decimal precision; show up to 4 dp, trimming trailing zeros.
-  return Number(value.toFixed(4)).toString();
-}
 
 // Inventory overview + write actions. Read panels (on-hand, items, locations, movements)
 // plus a single active form for catalog/location edits and stock actions (adjust, transfer,

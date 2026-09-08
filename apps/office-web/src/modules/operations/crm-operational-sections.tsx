@@ -7,6 +7,7 @@ import type {
   CrmOperationalContext,
   CrmOperationalJobSummary
 } from '@/lib/operations-api';
+import { formatCurrency, formatDate, formatDateTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 type CrmOperationalOverviewProps = {
@@ -42,7 +43,7 @@ export function CrmOperationalOverview({
       </div>
       <div style={styles.subpanel}>
         <strong>Last service</strong>
-        <span>{formatDate(operational.summary.lastServiceAt) ?? 'No finished service yet'}</span>
+        <span>{formatDate(operational.summary.lastServiceAt, 'No finished service yet')}</span>
       </div>
       <div style={styles.subpanel}>
         <strong>Equipment</strong>
@@ -283,17 +284,10 @@ function formatJobAppointment(job: CrmOperationalJobSummary): string {
   }
 
   const appointment = job.nextAppointment;
-  const date = formatDate(appointment.scheduledDate) ?? 'Unscheduled';
+  const date = formatDate(appointment.scheduledDate, 'Unscheduled');
   const start = appointment.scheduledStartTime ? ` ${appointment.scheduledStartTime}` : '';
   const tech = appointment.technicianName ? ` · ${appointment.technicianName}` : '';
   return `${date}${start}${tech}`;
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: 'USD'
-  }).format(value);
 }
 
 function formatAgreementCoverage(agreement: CrmOperationalAgreementSummary): string {
@@ -317,20 +311,6 @@ function formatAgreementBilling(agreement: CrmOperationalAgreementSummary): stri
     agreement.billingAmount === undefined ? '' : `${formatCurrency(agreement.billingAmount)} `;
   const next = agreement.nextBillingDate ? ` · next ${formatDate(agreement.nextBillingDate)}` : '';
   return `${amount}${formatCamelStatus(agreement.billingCadence)}${next}`;
-}
-
-function formatDate(value: string | undefined): string | undefined {
-  return value ? value.slice(0, 10) : undefined;
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-
-  return date.toLocaleString();
 }
 
 function formatCamelStatus(value: string): string {

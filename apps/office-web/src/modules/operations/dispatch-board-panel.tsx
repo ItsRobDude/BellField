@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { AppointmentStatus, DispatchBoardResponse } from '@/lib/operations-api';
+import { formatTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildDispatchBoardModel,
@@ -408,13 +409,8 @@ function formatLastRefreshedAt(value?: string | null): string {
     return 'Not refreshed';
   }
 
-  const refreshedAt = new Date(value);
-
-  if (Number.isNaN(refreshedAt.getTime())) {
-    return 'Refreshed';
-  }
-
-  return `Refreshed ${refreshedAt.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}`;
+  const time = formatTime(value);
+  return time === value ? 'Refreshed' : `Refreshed ${time}`;
 }
 
 function getDispatchContextMenuViewport(): DispatchContextMenuViewport {

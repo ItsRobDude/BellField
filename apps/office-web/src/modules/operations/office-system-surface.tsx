@@ -8,6 +8,7 @@ import {
   getSystemDiagnostics,
   type SystemDiagnosticsResponse
 } from '@/lib/system-diagnostics-api';
+import { formatDateTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeSystemSurfaceProps = {
@@ -34,13 +35,6 @@ const gridStyle: CSSProperties = {
 
 const labelStyle: CSSProperties = { fontSize: 12, color: '#5b6672', textTransform: 'uppercase' };
 const valueStyle: CSSProperties = { fontSize: 14, color: '#1f2933', marginTop: 4 };
-
-function formatDateTime(value: string | null): string {
-  if (!value) {
-    return 'Never';
-  }
-  return new Date(value).toLocaleString();
-}
 
 function backupStatusText(backups: SystemDiagnosticsResponse['backups']): string {
   if (!backups.enabled) {
@@ -298,7 +292,7 @@ export function OfficeSystemSurface({
                 {backupStatusText(diagnostics.backups)}
               </div>
               <div style={{ ...valueStyle, fontSize: 12, color: '#5b6672' }}>
-                Last successful: {formatDateTime(diagnostics.backups.latestSuccessfulAt)}
+                Last successful: {formatDateTime(diagnostics.backups.latestSuccessfulAt, 'Never')}
               </div>
               {backupSecondaryText(diagnostics.backups) ? (
                 <div style={{ ...valueStyle, fontSize: 12, color: '#8a5a00' }}>
@@ -342,7 +336,7 @@ export function OfficeSystemSurface({
                   ? `Release ${diagnostics.app.releaseDate}`
                   : diagnostics.app.buildKind}
                 {' · '}
-                {diagnostics.app.nodeEnv} · {new Date(diagnostics.serverTime).toLocaleString()}
+                {diagnostics.app.nodeEnv} · {formatDateTime(diagnostics.serverTime)}
               </div>
             </div>
             <div style={cardStyle}>

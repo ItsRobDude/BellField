@@ -4,6 +4,7 @@ import type { InvoiceSummary } from '@/lib/operations-api';
 import * as operationsApi from '@/lib/operations-api';
 import * as invoiceDeliveryApi from '@/lib/operations-invoice-delivery-api';
 import * as downloadFile from '@/lib/download-file';
+import { formatDate } from '@/lib/format';
 import { JobInvoiceSection } from './job-invoice-section';
 
 vi.mock('@/lib/operations-api', () => ({
@@ -300,7 +301,9 @@ describe('JobInvoiceSection posting', () => {
     renderSection(true);
 
     expect(await screen.findByText('Posted record')).toBeInTheDocument();
-    expect(screen.getByText('Posted by Olivia Owner on 2026-06-01.')).toBeInTheDocument();
+    expect(
+      screen.getByText(`Posted by Olivia Owner on ${formatDate('2026-06-01T12:00:00.000Z')}.`)
+    ).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Post invoice' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Add line' })).not.toBeInTheDocument();
   });

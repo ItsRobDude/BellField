@@ -1120,7 +1120,7 @@ describe('OfficeWorkspaceShell IA', () => {
     expect(mockedOperationsApi.getOfficeLocationDetail).not.toHaveBeenCalled();
 
     await selectJobIntakeLocationBySearch('Main');
-    expect(await screen.findByText('123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(await screen.findByText('123 Main, Blaine, WA 98230')).toBeInTheDocument();
     expect(screen.getByText('Location owner: Acme')).toBeInTheDocument();
     expect(screen.getByText('Acme (location owner)')).toBeInTheDocument();
     expect(screen.queryByLabelText('Bill to')).not.toBeInTheDocument();
@@ -1228,7 +1228,7 @@ describe('OfficeWorkspaceShell IA', () => {
         locationId: 'location-1'
       });
     });
-    expect(await screen.findByText('123 Main, Blaine, WA, 98230')).toBeInTheDocument();
+    expect(await screen.findByText('123 Main, Blaine, WA 98230')).toBeInTheDocument();
     expect(screen.getByText('Location owner: Acme')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Create job' })).not.toBeDisabled();
   });

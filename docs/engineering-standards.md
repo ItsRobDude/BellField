@@ -279,6 +279,7 @@ BellField should not copy the same business rule into multiple places.
 - if office app and field app need the same business rule, that rule should live in shared/backend logic where practical
 - do not duplicate validation/business behavior in three places unless there is a clear reason
 - UI-specific behavior can stay client-side, but business truth should not drift
+- office display formatting (money, dates, times, quantities, percents, addresses) lives in `apps/office-web/src/lib/format.ts`; add to that module with a test instead of writing a local `formatX`, so the office keeps one locale decision
 
 ### Examples
 

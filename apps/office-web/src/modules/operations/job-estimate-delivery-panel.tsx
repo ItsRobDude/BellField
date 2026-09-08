@@ -1,4 +1,5 @@
 import type { EstimateEmailDeliveryStatus, OutboundMessageSummary } from '@bellfield/contracts';
+import { formatDateTime } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type EstimateDeliveryDraft = {
@@ -196,14 +197,6 @@ function EstimateDeliveryHistory({
       })}
     </div>
   );
-}
-
-function formatDateTime(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) {
-    return value;
-  }
-  return date.toLocaleString();
 }
 
 function acceptanceHistoryMessage(message: OutboundMessageSummary): string | null {

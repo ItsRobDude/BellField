@@ -1,12 +1,8 @@
 'use client';
 
 import type { JobSummary, MediaAttachmentSummary } from '@/lib/operations-api';
-import {
-  formatAppointmentReference,
-  formatByteSize,
-  formatDateTime,
-  formatMediaKind
-} from './job-detail-format';
+import { formatByteSize, formatDateTime } from '@/lib/format';
+import { formatAppointmentReference, formatMediaKind } from './job-detail-format';
 import type { CapturedWorkDetails } from './job-work-types';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 

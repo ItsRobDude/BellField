@@ -2,6 +2,7 @@
 
 import { useId, useState } from 'react';
 import type { InvoiceLineItemSummary, InvoiceSummary } from '@/lib/operations-api';
+import { formatAddress, formatCurrency, formatDate, formatTaxRatePercent } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   invoiceLineKindLabels,
@@ -28,21 +29,6 @@ export type InvoicePaymentPermissions = {
   canRefund: boolean;
 };
 
-export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(amount);
-}
-
-export function formatAddress(place: {
-  addressLine1?: string;
-  city?: string;
-  state?: string;
-  postalCode?: string;
-}): string {
-  const cityState = [place.city, place.state].filter((part) => part && part.trim()).join(', ');
-  const tail = [cityState, place.postalCode?.trim()].filter(Boolean).join(' ');
-  return [place.addressLine1?.trim(), tail].filter(Boolean).join(', ');
-}
-
 export function SummaryRow({
   label,
   value,
@@ -61,7 +47,8 @@ export function SummaryRow({
 }
 
 /** Render basis points as a human percent: 825 -> "8.25", 800 -> "8". */
-export function formatTaxRatePercent(taxRateBasisPoints: number): string {
+// The editable percent field wants the bare number ("8.25"), not the display form with a sign.
+function taxRateBasisPointsToPercentText(taxRateBasisPoints: number): string {
   return (taxRateBasisPoints / 100).toFixed(2).replace(/\.?0+$/, '');
 }
 
@@ -89,7 +76,7 @@ export function InvoiceTotals({ invoice }: { invoice: InvoiceSummary }) {
         <SummaryRow label="Discount" value={`−${formatCurrency(totals.discount)}`} />
       ) : null}
       <SummaryRow
-        label={`Tax (${formatTaxRatePercent(invoice.taxRateBasisPoints)}%)`}
+        label={`Tax (${formatTaxRatePercent(invoice.taxRateBasisPoints)})`}
         value={formatCurrency(totals.tax)}
       />
       <SummaryRow label="Total" value={formatCurrency(totals.total)} emphasize />
@@ -114,7 +101,9 @@ export function InvoiceTaxRateEditor({
   onCancel: () => void;
 }) {
   const inputId = useId();
-  const [percentText, setPercentText] = useState(formatTaxRatePercent(taxRateBasisPoints));
+  const [percentText, setPercentText] = useState(
+    taxRateBasisPointsToPercentText(taxRateBasisPoints)
+  );
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
   async function save() {
@@ -178,7 +167,7 @@ export function PostedInvoiceSummary({
     <div style={styles.subpanel}>
       <h3 style={styles.sectionHeading}>Posted record</h3>
       <p style={styles.tinyMuted}>
-        Posted by {posted.postedByName} on {posted.postedAt.slice(0, 10)}.
+        Posted by {posted.postedByName} on {formatDate(posted.postedAt)}.
       </p>
       <SummaryRow label="Bill to" value={posted.billTo.name} />
       {billToAddress ? <p style={styles.tinyMuted}>{billToAddress}</p> : null}

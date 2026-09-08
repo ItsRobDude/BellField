@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
 import type { JobsQueueKey, JobsQueueResponse } from '@/lib/operations-api';
+import { formatDate } from '@/lib/format';
 import { formatAppointmentScheduleDisplay } from './appointment-schedule-format';
 import { jobStatusLabels } from './job-overview-section';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
@@ -186,7 +187,7 @@ function JobWorklistRow({
       <QueueFact label="Location" value={job.locationName} />
       <QueueFact label="Next" value={nextAppointmentLabel(job)} />
       <QueueFact label="Assigned" value={nextAppointmentTechnicianLabel(job)} />
-      <QueueFact label="Updated" value={formatShortDate(job.updatedAt)} />
+      <QueueFact label="Updated" value={formatDate(job.updatedAt, 'Unknown')} />
       <span style={job.needsOfficeReview ? styles.dangerBadge : styles.badge}>
         {jobStatusLabels[job.status]}
       </span>
@@ -211,14 +212,6 @@ function nextAppointmentLabel(job: JobsQueueItem): string {
 
 function nextAppointmentTechnicianLabel(job: JobsQueueItem): string {
   return job.nextAppointment?.technicianName ?? 'Unassigned';
-}
-
-function formatShortDate(value: string): string {
-  if (!value) {
-    return 'Unknown';
-  }
-
-  return value.slice(0, 10);
 }
 
 function emptyQueueMessage(activeFilter: QueueFilterKey): string {

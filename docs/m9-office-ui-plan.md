@@ -17,8 +17,9 @@ The M9 backend (B1–B6 + corrections) is shipped. This is the office-web surfac
   helpers).
 - **Permission gating** in the UI mirrors the backend gates (`inventory:*`, `purchasing:*`,
   `jobCosting:*`); the backend still enforces. Hide nav/actions the user can't use.
-- **Money/date** via existing `formatCurrency` (job-invoice-shared) and the dispatch date
-  helpers — no new formatters.
+- **Money/date/time/quantity** via `apps/office-web/src/lib/format.ts` (one locale decision:
+  US English, US dollars, the PC's time zone; plain dates read as local dates). The dispatch
+  timeline keeps its own minute/clock helpers. No new local formatters.
 - **Per slice:** office-web `typecheck` + `lint` + `test` (vitest) + `build` green; new
   `operations-api` client functions covered by vitest fetch-mock tests (mirroring
   `operations-api.test.ts`); commit + push; Codex review; address findings.

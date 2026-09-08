@@ -8,6 +8,7 @@ import type {
   CatalogItemKind,
   CatalogLineSnapshot
 } from '@/lib/operations-api';
+import { formatCurrency } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { createEstimateLineClientId, type EstimateLineDraft } from './job-estimate-types';
 
@@ -299,9 +300,7 @@ function formatCatalogPrice(item: CatalogItem): string {
   if (item.defaultSalePrice === undefined) {
     return 'No price';
   }
-  return new Intl.NumberFormat('en-US', { currency: 'USD', style: 'currency' }).format(
-    item.defaultSalePrice
-  );
+  return formatCurrency(item.defaultSalePrice);
 }
 
 const estimateKindByCatalogKind: Record<CatalogItemKind, EstimateLineDraft['kind']> = {

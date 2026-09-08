@@ -17,7 +17,7 @@ import {
   type ReceivePurchaseOrderRequest
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency, formatQuantity } from '@/lib/format';
 import {
   CreatePurchaseOrderForm,
   ReceivePurchaseOrderForm,
@@ -39,10 +39,6 @@ const statusLabels: Record<PurchaseOrderStatus, string> = {
   received: 'Received',
   closed: 'Closed'
 };
-
-function formatQuantity(value: number): string {
-  return Number(value.toFixed(4)).toString();
-}
 
 // Purchasing surface: PO list + detail (read), creating a draft PO, and marking a draft
 // ordered. Receiving is a later slice. All styling reuses officeWorkspaceStyles.

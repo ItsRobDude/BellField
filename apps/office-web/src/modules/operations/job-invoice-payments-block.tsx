@@ -8,7 +8,7 @@ import type {
   PaymentRefund
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
-import { formatCurrency } from './job-invoice-shared';
+import { formatCurrency, formatDate } from '@/lib/format';
 import {
   defaultPaymentLinkAmountForTarget,
   findPaymentTarget,
@@ -181,7 +181,7 @@ export function PaymentsBlock({
           </label>
           <p style={styles.tinyMuted}>
             {formatCurrency(onlinePaymentLink.amount)} · expires{' '}
-            {onlinePaymentLink.expiresAt.slice(0, 10)}
+            {formatDate(onlinePaymentLink.expiresAt)}
           </p>
         </div>
       ) : null}
@@ -390,7 +390,7 @@ export function PaymentsBlock({
                     {formatCurrency(payment.amount)} · {paymentLabel(payment)}
                   </span>
                   <p style={styles.tinyMuted}>
-                    {payment.receivedAt.slice(0, 10)}
+                    {formatDate(payment.receivedAt)}
                     {payment.reference ? ` · ${payment.reference}` : ''}
                     {payment.isVoid
                       ? ` · void${payment.voidedByName ? ` by ${payment.voidedByName}` : ''}`
@@ -450,7 +450,7 @@ export function PaymentsBlock({
 
               {paymentRefunds.map((refund) => (
                 <p key={refund.id} style={styles.tinyMuted}>
-                  ↳ {formatCurrency(refund.amount)} refunded {refund.refundedAt.slice(0, 10)}
+                  ↳ {formatCurrency(refund.amount)} refunded {formatDate(refund.refundedAt)}
                   {refund.reason ? ` · ${refund.reason}` : ''}
                 </p>
               ))}

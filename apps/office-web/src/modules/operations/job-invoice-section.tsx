@@ -21,6 +21,7 @@ import {
   sendOfficeInvoice
 } from '@/lib/operations-invoice-delivery-api';
 import { downloadBlob } from '@/lib/download-file';
+import { formatCurrency } from '@/lib/format';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildInvoiceLineDraft,
@@ -30,7 +31,6 @@ import {
   type InvoiceLineDraft
 } from './job-invoice-types';
 import {
-  formatCurrency,
   InvoiceLineEditor,
   InvoiceTaxRateEditor,
   InvoiceTotals,

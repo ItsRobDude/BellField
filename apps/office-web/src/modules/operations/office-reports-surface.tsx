@@ -21,6 +21,7 @@ import {
   type SalesTaxSummaryReport
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
+import { formatCurrency, formatDate, formatDateTime, formatMarginPercent } from '@/lib/format';
 import { ServiceAgreementReportsView } from './office-service-agreement-reports-view';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -83,23 +84,11 @@ const incompleteBadgeStyle: CSSProperties = {
   padding: '0 6px'
 };
 
-function money(value: number): string {
-  return value.toLocaleString(undefined, { style: 'currency', currency: 'USD' });
-}
-
-function formatMargin(basisPoints: number | null): string {
-  return basisPoints === null ? '—' : `${(basisPoints / 100).toFixed(1)}%`;
-}
-
 function agingBucketLabel(bucket: ArAgingReport['rows'][number]['bucket']): string {
   if (bucket === 'current') return 'Current';
   if (bucket === 'days31To60') return '31-60';
   if (bucket === 'days61To90') return '61-90';
   return 'Over 90';
-}
-
-function formatGeneratedAt(value: string): string {
-  return `Generated ${value.slice(0, 10)} ${value.slice(11, 16)} UTC`;
 }
 
 // Top-level Reports surface (M10 slice 3). Fixed, read-only reports — no builder. Tabs appear per the
@@ -279,12 +268,12 @@ function ArOpenBalancesReportView({
 
       {report ? (
         <>
-          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
+          <p style={styles.tinyMuted}>Generated {formatDateTime(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Jobs owing" value={String(report.totals.jobCount)} />
-            <TotalItem label="Net billed" value={money(report.totals.netBilled)} />
-            <TotalItem label="Paid" value={money(report.totals.paidTotal)} />
-            <TotalItem label="Amount due" value={money(report.totals.amountDue)} />
+            <TotalItem label="Net billed" value={formatCurrency(report.totals.netBilled)} />
+            <TotalItem label="Paid" value={formatCurrency(report.totals.paidTotal)} />
+            <TotalItem label="Amount due" value={formatCurrency(report.totals.amountDue)} />
           </div>
 
           {report.rows.length === 0 ? (
@@ -305,9 +294,9 @@ function ArOpenBalancesReportView({
                   <tr key={r.jobId}>
                     <td style={styles.tableCell}>{r.jobNumber}</td>
                     <td style={styles.tableCell}>{r.customerName}</td>
-                    <td style={numberCellStyle}>{money(r.netBilled)}</td>
-                    <td style={numberCellStyle}>{money(r.paidTotal)}</td>
-                    <td style={numberCellStyle}>{money(r.amountDue)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.netBilled)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.paidTotal)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.amountDue)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -378,14 +367,14 @@ function ArAgingReportView({
 
       {report ? (
         <>
-          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
+          <p style={styles.tinyMuted}>Generated {formatDateTime(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Jobs owing" value={String(report.totals.jobCount)} />
-            <TotalItem label="Current" value={money(report.totals.current)} />
-            <TotalItem label="31-60" value={money(report.totals.days31To60)} />
-            <TotalItem label="61-90" value={money(report.totals.days61To90)} />
-            <TotalItem label="Over 90" value={money(report.totals.over90)} />
-            <TotalItem label="Amount due" value={money(report.totals.amountDue)} />
+            <TotalItem label="Current" value={formatCurrency(report.totals.current)} />
+            <TotalItem label="31-60" value={formatCurrency(report.totals.days31To60)} />
+            <TotalItem label="61-90" value={formatCurrency(report.totals.days61To90)} />
+            <TotalItem label="Over 90" value={formatCurrency(report.totals.over90)} />
+            <TotalItem label="Amount due" value={formatCurrency(report.totals.amountDue)} />
           </div>
 
           {report.rows.length === 0 ? (
@@ -407,10 +396,10 @@ function ArAgingReportView({
                   <tr key={r.jobId}>
                     <td style={styles.tableCell}>{r.jobNumber}</td>
                     <td style={styles.tableCell}>{r.customerName}</td>
-                    <td style={styles.tableCell}>{r.oldestPostedAt.slice(0, 10)}</td>
+                    <td style={styles.tableCell}>{formatDate(r.oldestPostedAt)}</td>
                     <td style={numberCellStyle}>{r.daysOld}</td>
                     <td style={styles.tableCell}>{agingBucketLabel(r.bucket)}</td>
-                    <td style={numberCellStyle}>{money(r.amountDue)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.amountDue)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -481,12 +470,12 @@ function SalesTaxSummaryReportView({
 
       {report ? (
         <>
-          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
+          <p style={styles.tinyMuted}>Generated {formatDateTime(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Posted records" value={String(report.totals.invoiceCount)} />
-            <TotalItem label="Taxable base" value={money(report.totals.taxableBase)} />
-            <TotalItem label="Tax" value={money(report.totals.tax)} />
-            <TotalItem label="Total" value={money(report.totals.total)} />
+            <TotalItem label="Taxable base" value={formatCurrency(report.totals.taxableBase)} />
+            <TotalItem label="Tax" value={formatCurrency(report.totals.tax)} />
+            <TotalItem label="Total" value={formatCurrency(report.totals.total)} />
           </div>
 
           {report.rows.length === 0 ? (
@@ -507,9 +496,9 @@ function SalesTaxSummaryReportView({
                   <tr key={r.taxRateBasisPoints}>
                     <td style={styles.tableCell}>{(r.taxRateBasisPoints / 100).toFixed(2)}%</td>
                     <td style={numberCellStyle}>{r.invoiceCount}</td>
-                    <td style={numberCellStyle}>{money(r.taxableBase)}</td>
-                    <td style={numberCellStyle}>{money(r.tax)}</td>
-                    <td style={numberCellStyle}>{money(r.total)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.taxableBase)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.tax)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.total)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -580,12 +569,12 @@ function JobProfitabilityReportView({
 
       {report ? (
         <>
-          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
+          <p style={styles.tinyMuted}>Generated {formatDateTime(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Jobs" value={String(report.totals.jobCount)} />
-            <TotalItem label="Revenue" value={money(report.totals.revenue)} />
-            <TotalItem label="Known cost" value={money(report.totals.knownCost)} />
-            <TotalItem label="Known profit" value={money(report.totals.knownProfit)} />
+            <TotalItem label="Revenue" value={formatCurrency(report.totals.revenue)} />
+            <TotalItem label="Known cost" value={formatCurrency(report.totals.knownCost)} />
+            <TotalItem label="Known profit" value={formatCurrency(report.totals.knownProfit)} />
             <TotalItem label="Cost incomplete" value={String(report.totals.incompleteJobCount)} />
           </div>
 
@@ -617,10 +606,10 @@ function JobProfitabilityReportView({
                     </td>
                     <td style={styles.tableCell}>{r.customerName}</td>
                     <td style={styles.tableCell}>{r.status}</td>
-                    <td style={numberCellStyle}>{money(r.revenue)}</td>
-                    <td style={numberCellStyle}>{money(r.totalCost)}</td>
-                    <td style={numberCellStyle}>{money(r.profit)}</td>
-                    <td style={numberCellStyle}>{formatMargin(r.marginBasisPoints)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.revenue)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.totalCost)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.profit)}</td>
+                    <td style={numberCellStyle}>{formatMarginPercent(r.marginBasisPoints)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -691,11 +680,11 @@ function InventoryValuationReportView({
 
       {report ? (
         <>
-          <p style={styles.tinyMuted}>{formatGeneratedAt(report.generatedAt)}</p>
+          <p style={styles.tinyMuted}>Generated {formatDateTime(report.generatedAt)}</p>
           <div style={totalsStyle}>
             <TotalItem label="Lines" value={String(report.totals.rowCount)} />
             <TotalItem label="Total quantity" value={String(report.totals.totalQuantity)} />
-            <TotalItem label="Total value" value={money(report.totals.totalValue)} />
+            <TotalItem label="Total value" value={formatCurrency(report.totals.totalValue)} />
           </div>
 
           {report.rows.length === 0 ? (
@@ -719,8 +708,8 @@ function InventoryValuationReportView({
                     <td style={styles.tableCell}>{r.itemKind}</td>
                     <td style={styles.tableCell}>{r.locationName}</td>
                     <td style={numberCellStyle}>{r.quantity}</td>
-                    <td style={numberCellStyle}>{money(r.averageUnitCost)}</td>
-                    <td style={numberCellStyle}>{money(r.totalValue)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.averageUnitCost)}</td>
+                    <td style={numberCellStyle}>{formatCurrency(r.totalValue)}</td>
                   </tr>
                 ))}
               </tbody>

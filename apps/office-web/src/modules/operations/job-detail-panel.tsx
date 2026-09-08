@@ -11,12 +11,8 @@ import type {
   RegisterEntryKind,
   RegisterEntrySummary
 } from '@/lib/operations-api';
-import {
-  formatAppointmentReference,
-  formatCurrency,
-  formatDateTime,
-  formatQuantity
-} from './job-detail-format';
+import { formatCurrency, formatDateTime, formatQuantity } from '@/lib/format';
+import { formatAppointmentReference } from './job-detail-format';
 import { JobMediaSection } from './job-media-section';
 import {
   getOfficeJobElementId,
