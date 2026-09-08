@@ -49,6 +49,7 @@ type DispatchBoardPanelProps = {
   ) => Promise<void>;
   isRefreshing?: boolean;
   lastRefreshedAt?: string | null;
+  refreshError?: string | null;
   onRefresh?: () => Promise<void>;
 };
 
@@ -98,6 +99,7 @@ export function DispatchBoardPanel({
   onAppointmentStatusUpdate,
   isRefreshing = false,
   lastRefreshedAt,
+  refreshError = null,
   onRefresh
 }: DispatchBoardPanelProps) {
   const effectiveViewDate = viewDate || getDateInputValue();
@@ -303,6 +305,11 @@ export function DispatchBoardPanel({
           <span aria-live="polite" style={styles.tinyMuted}>
             {isRefreshing ? 'Refreshing...' : formatLastRefreshedAt(lastRefreshedAt)}
           </span>
+          {refreshError ? (
+            <span role="status" style={styles.fieldError}>
+              {refreshError}
+            </span>
+          ) : null}
           {contextMessage ? (
             <span role="status" style={styles.tinyMuted}>
               {contextMessage}

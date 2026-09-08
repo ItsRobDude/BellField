@@ -10,6 +10,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import { JobCostResolutionPanel } from './job-cost-resolution-panel';
 
 export type JobCostSectionProps = {
@@ -119,7 +120,9 @@ export function JobCostSection({
     return <p style={styles.muted}>Loading job cost…</p>;
   }
   if (!costing) {
-    return errorMessage ? <p style={styles.error}>{errorMessage}</p> : null;
+    return (
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+    );
   }
 
   const events = costing.events;
@@ -166,8 +169,12 @@ export function JobCostSection({
         </div>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
       {jobIsFinal ? (
         <p style={styles.tinyMuted}>This job is finalized. Reopen it to change job cost.</p>
       ) : null}

@@ -12,6 +12,7 @@ import {
 } from '@/lib/identity-api';
 import { formatDateTime } from '@/lib/format';
 import { ConfirmAction } from '@/components/confirm-action';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   computeEffectivePermissions,
@@ -505,7 +506,7 @@ function PasswordResetPanel({
   return (
     <div style={sectionStyle}>
       <div style={sectionLabelStyle}>Password</div>
-      {notice ? <p style={styles.notice}>{notice}</p> : null}
+      <StatusMessage kind="notice" message={notice} onDismiss={() => setNotice(null)} />
       {!open ? (
         <button type="button" style={styles.button} onClick={() => setOpen(true)}>
           Reset password

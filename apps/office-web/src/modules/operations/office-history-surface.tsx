@@ -9,6 +9,7 @@ import {
 } from '@/lib/history-api';
 import { getOfficeEmployees, type EmployeeSummary } from '@/lib/identity-api';
 import { formatDateTime } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeHistorySurfaceProps = {
@@ -194,7 +195,7 @@ export function OfficeHistorySurface({
         </label>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
       {entries.length === 0 && !isLoading ? (
         <p style={styles.notice}>No history entries for these filters.</p>

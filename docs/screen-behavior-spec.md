@@ -87,6 +87,15 @@ shown in the same place and the request is sent again with the answer. The share
 `apps/office-web/src/components/` (`FormField`, `SubmitButton`, `useAsyncAction`,
 `ConfirmAction`, `ConfirmPanel`).
 
+### Messages
+
+The outcome of an action shows where the action happened, in a message box the user can
+dismiss. A notice ("Invoice posted.") clears itself after a few seconds; a warning or error stays
+until it is dismissed or the next action replaces it. Background work never touches these: the
+dispatch board's automatic refresh leaves the message slot alone and reports its own failure
+beside the board's "Refreshed" stamp, and the next successful refresh clears that note. Errors
+from the Customers screen show inside that screen, not at the top of the workspace.
+
 ### Global search behavior
 
 BellField should not force a search bar onto every screen.

@@ -22,6 +22,7 @@ import {
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
 import { formatCurrency, formatDate, formatDateTime, formatMarginPercent } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import { ServiceAgreementReportsView } from './office-service-agreement-reports-view';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
@@ -263,7 +264,7 @@ function ArOpenBalancesReportView({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {isLoading ? <p style={styles.notice}>Loading…</p> : null}
 
       {report ? (
@@ -362,7 +363,7 @@ function ArAgingReportView({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {isLoading ? <p style={styles.notice}>Loading…</p> : null}
 
       {report ? (
@@ -465,7 +466,7 @@ function SalesTaxSummaryReportView({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {isLoading ? <p style={styles.notice}>Loading…</p> : null}
 
       {report ? (
@@ -564,7 +565,7 @@ function JobProfitabilityReportView({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {isLoading ? <p style={styles.notice}>Loading…</p> : null}
 
       {report ? (
@@ -675,7 +676,7 @@ function InventoryValuationReportView({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {isLoading ? <p style={styles.notice}>Loading…</p> : null}
 
       {report ? (

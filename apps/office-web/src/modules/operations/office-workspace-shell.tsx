@@ -53,10 +53,10 @@ import {
 import { OfficeWorkspaceLoadingState } from './office-workspace-loading-state';
 import { OfficeWorkspaceSurfaces } from './office-workspace-surfaces';
 import { defaultOfficeRoute, type OfficeRoute } from './office-route';
+import { useDispatchAutoRefresh } from './use-dispatch-auto-refresh';
 import { useJobIntakeWorkflow } from './use-job-intake-workflow';
 import { useOfficeNavigation } from './use-office-navigation';
 
-const dispatchAutoRefreshIntervalMs = 60_000;
 const jobsQueuePageLimit = 20;
 
 type Props = {
@@ -219,35 +219,45 @@ export function OfficeWorkspaceShell({
     setDispatchViewDate((current) => (current === nextDate ? current : nextDate));
   }, [route.view, routeDispatchDate]);
 
-  const refreshDispatchBoard = useCallback(async (): Promise<boolean> => {
-    if (dispatchRefreshInFlightRef.current) {
-      return false;
-    }
+  // A background refresh (the timer) must not clear or replace whatever message the user is
+  // reading, and reports its own failure beside the board instead.
+  const refreshDispatchBoard = useCallback(
+    async (options = { background: false }): Promise<boolean> => {
+      if (dispatchRefreshInFlightRef.current) {
+        return options.background;
+      }
 
-    dispatchRefreshInFlightRef.current = true;
-    setIsDispatchRefreshing(true);
-    setErrorMessage(null);
+      dispatchRefreshInFlightRef.current = true;
+      setIsDispatchRefreshing(true);
+      if (!options.background) {
+        setErrorMessage(null);
+      }
 
-    try {
-      const nextDispatchBoard = await getOfficeDispatchBoard({
-        sessionToken,
-        apiBaseUrl,
-        startDate: dispatchViewDate,
-        endDate: dispatchViewDate
-      });
-      setDispatchBoard(nextDispatchBoard);
-      setLastDispatchRefreshedAt(new Date().toISOString());
-      return true;
-    } catch (error) {
-      setErrorMessage(
-        error instanceof Error ? error.message : 'Unable to refresh the dispatch board.'
-      );
-      return false;
-    } finally {
-      dispatchRefreshInFlightRef.current = false;
-      setIsDispatchRefreshing(false);
-    }
-  }, [apiBaseUrl, dispatchViewDate, sessionToken]);
+      try {
+        const nextDispatchBoard = await getOfficeDispatchBoard({
+          sessionToken,
+          apiBaseUrl,
+          startDate: dispatchViewDate,
+          endDate: dispatchViewDate
+        });
+        setDispatchBoard(nextDispatchBoard);
+        setLastDispatchRefreshedAt(new Date().toISOString());
+        return true;
+      } catch (error) {
+        if (!options.background) {
+          setErrorMessage(
+            error instanceof Error ? error.message : 'Unable to refresh the dispatch board.'
+          );
+        }
+        return false;
+      } finally {
+        dispatchRefreshInFlightRef.current = false;
+        setIsDispatchRefreshing(false);
+      }
+    },
+    [apiBaseUrl, dispatchViewDate, sessionToken]
+  );
+  const dispatchRefreshError = useDispatchAutoRefresh(refreshDispatchBoard);
 
   const refreshJobsQueue = useCallback(async (): Promise<boolean> => {
     if (jobsQueueRefreshInFlightRef.current) {
@@ -403,14 +413,6 @@ export function OfficeWorkspaceShell({
     intakeContextRequestedRef.current = true;
     void jobIntakeWorkflow.loadContext();
   }, [isJobIntakeOpen, jobIntakeWorkflow.hasContext, jobIntakeWorkflow.loadContext]);
-
-  useEffect(() => {
-    const intervalId = window.setInterval(() => {
-      void refreshDispatchBoard();
-    }, dispatchAutoRefreshIntervalMs);
-
-    return () => window.clearInterval(intervalId);
-  }, [refreshDispatchBoard]);
 
   async function handleLoadMoreJobsQueue(queueKey: JobsQueueKey, cursor: string) {
     try {
@@ -989,6 +991,8 @@ export function OfficeWorkspaceShell({
       canViewHistory={canViewHistory}
       noticeMessage={noticeMessage}
       onOpenJobIntake={() => void handleOpenJobIntake()}
+      onDismissError={() => setErrorMessage(null)}
+      onDismissNotice={() => setNoticeMessage(null)}
       onRefresh={() => void refreshAllWorkspace()}
       onSignOut={handleSignOut}
       onViewChange={handleOfficeViewChange}
@@ -1001,7 +1005,6 @@ export function OfficeWorkspaceShell({
           canReplaceRemoveEquipment,
           canDeleteEquipment,
           navigationTarget: crmNavigationTarget,
-          onErrorMessage: setErrorMessage,
           onNavigate: handleCrmNavigate,
           onBackToJob: (jobId) =>
             goBack({ view: 'jobDetail', jobId, tab: 'overview', appointmentId: null })
@@ -1011,6 +1014,7 @@ export function OfficeWorkspaceShell({
           dispatchViewDate,
           isDispatchRefreshing,
           lastDispatchRefreshedAt,
+          dispatchRefreshError,
           onDispatchViewDateChange: handleDispatchViewDateChange,
           onDispatchRefresh: handleDispatchRefresh,
           onOpenJobDetail: handleOpenJobDetail,

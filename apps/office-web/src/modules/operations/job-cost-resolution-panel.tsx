@@ -12,6 +12,7 @@ import {
   resolveOfficeRegisterCost,
   type ResolveRegisterCostRequest
 } from '@/lib/operations-job-costing-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 // Per-line cost resolution for register lines in `needsResolution`. The office picks how each
@@ -181,7 +182,7 @@ export function JobCostResolutionPanel({
         These field-captured lines bill the customer but still owe a job cost. Resolve each so the
         cost is complete.
       </p>
-      {error ? <p style={styles.error}>{error}</p> : null}
+      <StatusMessage kind="error" message={error} onDismiss={() => setError(null)} />
 
       {lines.map((entry) => {
         const isOpen = openId === entry.id && draft !== null;

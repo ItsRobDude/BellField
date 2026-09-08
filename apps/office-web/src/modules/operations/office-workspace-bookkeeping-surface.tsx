@@ -12,6 +12,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency, formatDate } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 
 export type OfficeBookkeepingSurfaceProps = {
   apiBaseUrl: string;
@@ -120,7 +121,7 @@ export function OfficeBookkeepingSurface({
         </button>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
       {isLoading && !queues ? (
         <p style={styles.muted}>Loading worklists…</p>

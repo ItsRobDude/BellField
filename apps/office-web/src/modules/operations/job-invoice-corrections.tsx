@@ -28,6 +28,7 @@ import {
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency } from '@/lib/format';
 import { ConfirmPanel } from '@/components/confirm-action';
+import { StatusMessage } from '@/components/status-message';
 import { SummaryRow, type InvoicePaymentPermissions } from './job-invoice-shared';
 import {
   emptyPaymentDraft,
@@ -625,8 +626,12 @@ export function JobInvoiceCorrections({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
 
       {balance ? (
         <div style={styles.subpanel}>

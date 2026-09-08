@@ -5,6 +5,7 @@ import {
   getOfficeInvoiceNumbering,
   updateOfficeInvoiceNumbering
 } from '@/lib/operations-company-settings-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OfficeInvoiceNumberingPanelProps = {
@@ -83,8 +84,12 @@ export function OfficeInvoiceNumberingPanel({
   return (
     <section style={styles.panel} aria-label="Invoice numbering">
       <h2 style={styles.sectionHeading}>Invoice numbering</h2>
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       <label style={styles.fieldLabel}>
         Next invoice number
         <input

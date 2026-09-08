@@ -23,6 +23,7 @@ import {
 import { downloadBlob } from '@/lib/download-file';
 import { formatCurrency } from '@/lib/format';
 import { ConfirmAction } from '@/components/confirm-action';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import {
   buildInvoiceLineDraft,
@@ -443,9 +444,21 @@ export function JobInvoiceSection({
           </div>
         </div>
 
-        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-        {warningMessage ? <p style={styles.warning}>{warningMessage}</p> : null}
-        {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+        <StatusMessage
+          kind="error"
+          message={errorMessage}
+          onDismiss={() => setErrorMessage(null)}
+        />
+        <StatusMessage
+          kind="warning"
+          message={warningMessage}
+          onDismiss={() => setWarningMessage(null)}
+        />
+        <StatusMessage
+          kind="notice"
+          message={noticeMessage}
+          onDismiss={() => setNoticeMessage(null)}
+        />
 
         {newLineDraft ? (
           <InvoiceLineEditor

@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import type { AppointmentStatus, DispatchBoardResponse } from '@/lib/operations-api';
+import { StatusMessage } from '@/components/status-message';
 import {
   OfficeBookkeepingSurface,
   type OfficeBookkeepingSurfaceProps
@@ -52,7 +54,6 @@ type OfficeCrmSurfaceProps = {
   canReplaceRemoveEquipment: boolean;
   canDeleteEquipment: boolean;
   navigationTarget: CrmNavigationTarget | null;
-  onErrorMessage: (message: string | null) => void;
   onNavigate: (record: CrmRecordRef | null) => void;
   onBackToJob: (jobId: string) => void;
 };
@@ -62,6 +63,7 @@ type OfficeDispatchSurfaceProps = {
   dispatchViewDate: string;
   isDispatchRefreshing: boolean;
   lastDispatchRefreshedAt: string | null;
+  dispatchRefreshError: string | null;
   onDispatchViewDateChange: (date: string) => void;
   onDispatchRefresh: () => Promise<void>;
   onOpenJobDetail: OfficeJobsQueueSurfaceProps['onOpenJobDetail'];
@@ -114,6 +116,8 @@ export function OfficeWorkspaceSurfaces({
   settings,
   employees
 }: OfficeWorkspaceSurfacesProps) {
+  // CRM errors show inside the CRM surface, next to the form that caused them.
+  const [crmError, setCrmError] = useState<string | null>(null);
   return (
     <>
       {activeOfficeView === 'jobIntake' ? <OfficeJobIntakeSurface {...jobIntake} /> : null}
@@ -130,21 +134,25 @@ export function OfficeWorkspaceSurfaces({
           onAppointmentStatusUpdate={dispatch.onAppointmentStatusUpdate}
           isRefreshing={dispatch.isDispatchRefreshing}
           lastRefreshedAt={dispatch.lastDispatchRefreshedAt}
+          refreshError={dispatch.dispatchRefreshError}
           onRefresh={dispatch.onDispatchRefresh}
         />
       ) : null}
 
       {activeOfficeView === 'customers' ? (
-        <CrmPanel
-          apiBaseUrl={crm.apiBaseUrl}
-          sessionToken={crm.sessionToken}
-          onErrorMessage={crm.onErrorMessage}
-          canReplaceRemoveEquipment={crm.canReplaceRemoveEquipment}
-          canDeleteEquipment={crm.canDeleteEquipment}
-          navigationTarget={crm.navigationTarget}
-          onNavigate={crm.onNavigate}
-          onBackToJob={crm.onBackToJob}
-        />
+        <>
+          <StatusMessage kind="error" message={crmError} onDismiss={() => setCrmError(null)} />
+          <CrmPanel
+            apiBaseUrl={crm.apiBaseUrl}
+            sessionToken={crm.sessionToken}
+            onErrorMessage={setCrmError}
+            canReplaceRemoveEquipment={crm.canReplaceRemoveEquipment}
+            canDeleteEquipment={crm.canDeleteEquipment}
+            navigationTarget={crm.navigationTarget}
+            onNavigate={crm.onNavigate}
+            onBackToJob={crm.onBackToJob}
+          />
+        </>
       ) : null}
 
       {activeOfficeView === 'jobs' ? <OfficeJobsQueueSurface {...jobs} /> : null}

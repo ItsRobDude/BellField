@@ -24,6 +24,7 @@ import {
   updateOfficeCustomer,
   updateOfficeLocation
 } from '@/lib/operations-api';
+import { StatusMessage } from '@/components/status-message';
 import { CrmContactCreatePanel } from './crm-contact-create-panel';
 import { CrmCustomerCreatePanel } from './crm-customer-create-panel';
 import { CrmDetailRouter } from './crm-detail-router';
@@ -689,7 +690,11 @@ export function CrmPanel({
     <section style={styles.card}>
       <CrmPanelHeader isRefreshing={isRefreshing} onRefresh={() => void refreshWorkspace()} />
 
-      {crmNoticeMessage ? <p style={styles.notice}>{crmNoticeMessage}</p> : null}
+      <StatusMessage
+        kind="notice"
+        message={crmNoticeMessage}
+        onDismiss={() => setCrmNoticeMessage(null)}
+      />
 
       {mode === 'search' ? (
         <CrmSearchSurface

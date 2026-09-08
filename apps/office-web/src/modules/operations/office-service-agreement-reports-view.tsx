@@ -11,6 +11,7 @@ import {
 } from '@/lib/reporting-api';
 import { downloadBlob } from '@/lib/download-file';
 import { formatCurrency, formatDateTime } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 const numberCellStyle: CSSProperties = { ...styles.tableCell, textAlign: 'right' };
@@ -119,7 +120,7 @@ export function ServiceAgreementReportsView({
         ) : null}
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       {isLoading ? <p style={styles.notice}>Loading...</p> : null}
 
       {report ? (

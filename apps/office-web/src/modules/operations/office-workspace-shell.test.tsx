@@ -1699,6 +1699,65 @@ describe('OfficeWorkspaceShell IA', () => {
       expect(screen.queryByLabelText(/Job 1001, Acme/i)).not.toBeInTheDocument();
     });
   });
+
+  it('keeps a shown error and reports a failed automatic refresh beside the board', async () => {
+    let nextIntervalId = 1;
+    const intervalHandlers = new Map<number, () => void>();
+    vi.spyOn(window, 'setInterval').mockImplementation(((handler: TimerHandler) => {
+      if (typeof handler === 'function') {
+        const intervalId = nextIntervalId;
+        intervalHandlers.set(intervalId, () => handler());
+        nextIntervalId += 1;
+
+        return intervalId;
+      }
+
+      return nextIntervalId++;
+    }) as typeof window.setInterval);
+    vi.spyOn(window, 'clearInterval').mockImplementation(((intervalId?: number) => {
+      if (typeof intervalId === 'number') {
+        intervalHandlers.delete(intervalId);
+      }
+    }) as typeof window.clearInterval);
+
+    const workspace = buildWorkspace([buildJob()]);
+    arrangeWorkspace(workspace);
+    mockedOperationsApi.getOfficeDispatchBoard
+      .mockResolvedValueOnce(buildDispatchBoard(workspace))
+      .mockRejectedValueOnce(new Error('Dispatch is unavailable.'))
+      .mockRejectedValueOnce(new Error('Still unavailable.'))
+      .mockResolvedValue(buildDispatchBoard(workspace));
+
+    renderShell();
+    expect(await screen.findByLabelText(/Job 1001, Acme/i)).toBeInTheDocument();
+
+    // A refresh the user asked for reports its failure in the message slot.
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Dispatch is unavailable.');
+
+    // The timer's refresh fails too: the user's message stays, and the board says so itself.
+    await act(async () => {
+      [...intervalHandlers.values()][0]?.();
+    });
+    await waitFor(() =>
+      expect(mockedOperationsApi.getOfficeDispatchBoard).toHaveBeenCalledTimes(3)
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Dispatch is unavailable.');
+    expect(await screen.findByText(/Automatic refresh failed/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Job 1001, Acme/i)).toBeInTheDocument();
+
+    // The next timer refresh succeeds: the board note clears; the message is still the user's.
+    await act(async () => {
+      [...intervalHandlers.values()][0]?.();
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(/Automatic refresh failed/)).not.toBeInTheDocument()
+    );
+    expect(screen.getByRole('alert')).toHaveTextContent('Dispatch is unavailable.');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
 
 describe('OfficeWorkspaceShell URLs', () => {

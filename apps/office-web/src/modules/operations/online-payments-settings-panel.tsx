@@ -11,6 +11,7 @@ import {
   getOfficeOnlinePaymentsSetupStatus,
   refreshOfficeOnlinePaymentsSetupLink
 } from '@/lib/operations-company-settings-api';
+import { StatusMessage } from '@/components/status-message';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 
 export type OnlinePaymentsSettingsPanelProps = {
@@ -100,8 +101,12 @@ export function OnlinePaymentsSettingsPanel({
       {setup?.message && status !== 'ready' && setup.message !== setupCopy(status) ? (
         <p style={styles.warning}>{setup.message}</p>
       ) : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
 
       <div style={styles.inlineActionBar}>
         {primaryAction ? (

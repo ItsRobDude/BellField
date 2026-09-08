@@ -18,6 +18,7 @@ import {
 } from '@/lib/operations-api';
 import { officeWorkspaceStyles as styles } from './office-workspace-styles';
 import { formatCurrency, formatQuantity } from '@/lib/format';
+import { StatusMessage } from '@/components/status-message';
 import {
   CreatePurchaseOrderForm,
   ReceivePurchaseOrderForm,
@@ -211,7 +212,11 @@ export function OfficePurchasingSurface({
             Back
           </button>
         </div>
-        {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+        <StatusMessage
+          kind="error"
+          message={errorMessage}
+          onDismiss={() => setErrorMessage(null)}
+        />
         {sources ? (
           <CreatePurchaseOrderForm
             sources={sources}
@@ -252,8 +257,12 @@ export function OfficePurchasingSurface({
         </div>
       </div>
 
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
-      {noticeMessage ? <p style={styles.notice}>{noticeMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
+      <StatusMessage
+        kind="notice"
+        message={noticeMessage}
+        onDismiss={() => setNoticeMessage(null)}
+      />
 
       {hasLoaded ? (
         <>

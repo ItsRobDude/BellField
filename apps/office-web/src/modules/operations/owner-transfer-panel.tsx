@@ -14,6 +14,7 @@ import {
 } from '@/lib/operations-api';
 import { FormField } from '@/components/form-field';
 import { SubmitButton } from '@/components/submit-button';
+import { StatusMessage } from '@/components/status-message';
 import {
   collectCrmDuplicateWarnings,
   createEmptyCustomerForm,
@@ -201,7 +202,7 @@ export function OwnerTransferPanel({
           Cancel
         </button>
       </div>
-      {errorMessage ? <p style={styles.error}>{errorMessage}</p> : null}
+      <StatusMessage kind="error" message={errorMessage} onDismiss={() => setErrorMessage(null)} />
       <div style={styles.formRow}>
         <label style={styles.fieldLabel}>
           <span>Search customers</span>
