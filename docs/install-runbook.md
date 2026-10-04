@@ -611,13 +611,18 @@ token line without printing the token into evidence:
 .\release\tools\install\copy-first-owner-setup-token.ps1 -InstallRoot C:\BellField
 ```
 
-Open the office web app. On a clean install the office auth shell shows the
+Use the destination `bellfield-server.env` values for the URLs below:
+`<api-port>` is `BELLFIELD_API_PORT` and `<office-port>` is
+`BELLFIELD_OFFICE_WEB_PORT`. These may be recovered nondefault ports.
+Open `http://localhost:<office-port>` on the installed PC, or the configured
+LAN office origin from `BELLFIELD_OFFICE_ORIGINS` on another device.
+On a clean install the office auth shell shows the
 setup form after it can reach the API and confirm setup is required. If the
 setup form is not visible, enter the installed server URL in the auth shell's
-server/API URL field first: use `http://localhost:3001` on the installed PC, or
-the configured LAN API URL such as `http://<scratch-lan-ip>:3001` from another
+server/API URL field first: use `http://localhost:<api-port>` on the installed PC, or
+the configured LAN API URL such as `http://<scratch-lan-ip>:<api-port>` from another
 device. Do not navigate the office browser directly to
-`http://localhost:3000/identity/setup/first-owner`; `/identity/setup/first-owner`
+`http://localhost:<office-port>/identity/setup/first-owner`; `/identity/setup/first-owner`
 is the API endpoint, not an office-web route. Paste the token into the setup
 form and create the first owner account.
 
@@ -664,10 +669,12 @@ Rules:
 
 ## Health Check
 
-Use the unauthenticated health endpoint:
+Use the unauthenticated health endpoint on the installed PC. Replace
+`<api-port>` below with `BELLFIELD_API_PORT` from the destination
+`bellfield-server.env`, including its recovered value after `--from-backup`:
 
 ```powershell
-Invoke-RestMethod http://localhost:3001/health
+Invoke-RestMethod "http://127.0.0.1:<api-port>/health"
 ```
 
 Expected shape:
@@ -706,7 +713,10 @@ collector could hang while enumerating broad firewall evidence; rerun #13 proved
 the exact-rule collector artifact on the clean machine, then a real iPhone
 same-Wi-Fi browser login closed the Gate 1 LAN proof.
 
-Then open `http://<scratch-lan-ip>:3000` from the second device and log in.
+Then open `http://<scratch-lan-ip>:<office-port>` from the second device and log in.
+Use `BELLFIELD_OFFICE_WEB_PORT` from the destination env file and the current
+LAN host; this office origin must appear in `BELLFIELD_OFFICE_ORIGINS` after LAN
+configuration.
 Only a real second-device login closes the Gate 1 LAN proof. If
 `effectiveLanAccess` is false, or local LAN-IP checks pass but the second device
 times out, stop the strict gate and record the firewall/profile evidence.

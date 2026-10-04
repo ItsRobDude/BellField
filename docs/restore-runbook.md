@@ -280,12 +280,15 @@ If the chosen data backup predates license inclusion or its license is missing:
 
 ## After Restore
 
-Check:
+Check from the installed PC. Replace `<api-port>` below with
+`BELLFIELD_API_PORT` from the destination `bellfield-server.env`. If config was
+created with `--from-backup`, use the recovered port after any deliberate
+destination changes:
 
 ```powershell
 for ($i=1; $i -le 12; $i++) {
   try {
-    Invoke-RestMethod http://localhost:3001/health
+    Invoke-RestMethod "http://127.0.0.1:<api-port>/health"
     break
   } catch {
     "attempt $i failed: $($_.Exception.Message)"
@@ -302,7 +305,10 @@ service-readiness failure: inspect service logs and `/health` first, and do not
 rerun the destructive restore just for that readiness result. Keep the manual
 probe as recorded evidence, not as the first readiness gate.
 
-Then sign in and verify:
+Then open `http://localhost:<office-port>` on the installed PC, replacing
+`<office-port>` with the destination's `BELLFIELD_OFFICE_WEB_PORT`. On another
+device, use the current LAN office origin in `BELLFIELD_OFFICE_ORIGINS` after
+LAN configuration. Sign in and verify:
 
 - System diagnostics load
 - the System License card shows the expected shop name and update-window end
