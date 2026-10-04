@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { afterEach, beforeEach, test } from 'node:test';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { getWorkerRuntimeConfig } from './runtime-config';
 
 const validProductionDatabaseUrl = 'postgresql://app:secret@db.internal:5432/bellfield';
@@ -67,6 +68,40 @@ test('treats fully absent relay config as not configured', () => {
   const config = getWorkerRuntimeConfig();
 
   assert.equal(config.relay, undefined);
+});
+
+test('backup environment replaces inherited relay credentials as a complete configuration', async () => {
+  const helperUrl = pathToFileURL(
+    resolve(__dirname, '../../../../../tools/install/backup-source-env.mjs')
+  ).href;
+  const { createBackupSourceEnv } = await import(helperUrl);
+  const configuredRelay = {
+    BELLFIELD_RELAY_BASE_URL: 'https://configured-relay.example',
+    BELLFIELD_RELAY_TOKEN: 'configured-fixture-token',
+    BELLFIELD_RELAY_SERVER_INSTANCE_ID: 'configured-fixture-instance'
+  };
+
+  for (const serverEnv of [{}, configuredRelay]) {
+    setProductionWorkerEnv();
+    process.env.BELLFIELD_RELAY_BASE_URL = 'https://unrelated-relay.example';
+    process.env.BELLFIELD_RELAY_TOKEN = 'unrelated-shell-token';
+    process.env.BELLFIELD_RELAY_SERVER_INSTANCE_ID = 'unrelated-shell-instance';
+    const backupEnv = createBackupSourceEnv(serverEnv, resolve('fixture-release'));
+    for (const key of Object.keys(configuredRelay)) {
+      if (Object.hasOwn(backupEnv, key)) process.env[key] = backupEnv[key];
+    }
+
+    assert.deepEqual(
+      getWorkerRuntimeConfig().relay,
+      serverEnv === configuredRelay
+        ? {
+            baseUrl: configuredRelay.BELLFIELD_RELAY_BASE_URL,
+            token: configuredRelay.BELLFIELD_RELAY_TOKEN,
+            serverInstanceId: configuredRelay.BELLFIELD_RELAY_SERVER_INSTANCE_ID
+          }
+        : undefined
+    );
+  }
 });
 
 test('treats generated instance id alone as relay disabled in production', () => {

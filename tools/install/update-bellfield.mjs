@@ -34,6 +34,7 @@ import {
   verifyReleaseArtifact
 } from '../update/release-artifact.mjs';
 import { verifyLicenseFile } from '../update/license-verification.mjs';
+import { createBackupSourceEnv } from './backup-source-env.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultUpdateArtifactRoot = resolve(scriptDir, '..', '..');
@@ -1164,7 +1165,9 @@ async function main() {
     const backup = runManualBackup({
       updateArtifactRoot,
       nodeExe,
-      env: updateEnv,
+      // The incoming tool runs against the old database before the release swap.
+      // Its own build identity must never label that recovery point.
+      env: { ...updateEnv, ...createBackupSourceEnv(env, currentReleaseRoot) },
       skipBackup,
       timeoutMs: backupTimeoutMs
     });

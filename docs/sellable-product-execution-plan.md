@@ -358,6 +358,17 @@ Build: nightly (configurable) job producing a dated backup set: `pg_dump`
 retention (keep N). Record each run's outcome in a small table the System
 surface can read.
 
+Recovery metadata now records source-release provenance and an allowlist of
+nonsecret server settings. Packaged backup entrypoints pass the installed
+release identity explicitly, including pre-update backups. The replacement
+config helper can reconstruct those settings with new credentials/identity and
+new-root storage; relay tokens remain excluded and use separate recovery or
+reissue. Restore checks release identity before staging or database work and
+requires explicit operator acknowledgement for legacy/unknown or mismatched
+releases. See [the restore runbook](./restore-runbook.md). This repo-side
+addition still needs a dated total-loss replacement-machine drill with no old
+env available; earlier Gate 2 evidence does not qualify it.
+
 ### 2.3 Restore path and staleness visibility
 
 Build: a packaged restore script (stop services → restore dump → restore

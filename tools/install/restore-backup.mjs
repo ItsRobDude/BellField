@@ -16,6 +16,11 @@ import {
   timestampForRestorePath
 } from './restore-staging.mjs';
 import { startWindowsService, stopWindowsService } from './windows-service-control.mjs';
+import {
+  checkRestoreReleaseCompatibility,
+  readApplicationProvenance,
+  readBackupRecoveryMetadata
+} from './backup-recovery-metadata.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultReleaseRoot = resolve(scriptDir, '..', '..');
@@ -320,12 +325,32 @@ if (!databaseUrl) {
 if (!existsSync(manifestPath) || !existsSync(dumpPath) || !existsSync(backupMediaPath)) {
   throw new Error('Backup set must contain manifest.json, database.dump, and media/.');
 }
+// Never stage files, touch services, or connect to the database before the
+// selected backup's schema and application identity have passed this preflight.
+const backupRecovery = readBackupRecoveryMetadata(backupSetPath);
+const sourceApplication = backupRecovery?.application ?? null;
+const destinationApplication = readApplicationProvenance(
+  join(releaseRoot, 'bellfield-build-manifest.json')
+);
+console.log(
+  `Backup source application: ${JSON.stringify(
+    sourceApplication ?? { status: 'unknown', reason: 'legacy-backup-without-recovery-metadata' }
+  )}`
+);
+console.log(`Restore destination application: ${JSON.stringify(destinationApplication)}`);
+const releaseCompatibility = checkRestoreReleaseCompatibility({
+  source: sourceApplication,
+  destination: destinationApplication,
+  allowReleaseMismatch: args['allow-release-mismatch'] === 'true',
+  allowUnknownRelease: args['allow-unknown-release'] === 'true'
+});
+console.log(`Restore release preflight: ${releaseCompatibility}.`);
 if (licenseRequired && !licensePath) {
   throw new Error('BELLFIELD_LICENSE_PATH is required when BELLFIELD_LICENSE_REQUIRED=true.');
 }
 if (licenseRequired && !existsSync(backupLicensePath)) {
   throw new Error(
-    'Backup set does not include license/bellfield-license.json. Install a re-issued license or choose a Phase 3 backup set before restoring a license-required server.'
+    'Backup set does not include license/bellfield-license.json. Choose a complete licensed backup set, or follow the restore runbook to add a BellField-issued replacement license to a separate recovery copy of this set. An installed license alone does not satisfy this check.'
   );
 }
 

@@ -24,6 +24,7 @@ import type {
   BackupRunSucceededInput,
   LatestSuccessfulBackupRun
 } from './backup-runs.repository';
+import type { BackupRecoveryMetadata } from './backup-recovery-metadata';
 
 class InMemoryBackupRunsRepository implements BackupRunsStore {
   started: string[] = [];
@@ -188,6 +189,57 @@ test('BackupService writes a dump, copies media, records success, and writes a m
     });
   } finally {
     rmSync(root, { force: true, recursive: true });
+  }
+});
+
+test('BackupService writes fresh recovery metadata per backup and permits unknown provenance', async () => {
+  const root = createTempRoot();
+  try {
+    const mediaRoot = join(root, 'media');
+    mkdirSync(mediaRoot, { recursive: true });
+    const repository = new InMemoryBackupRunsRepository();
+    let calls = 0;
+    const service = new BackupService(
+      minimalBackupConfig({ mediaRoot, backupRoot: join(root, 'backups') }),
+      repository,
+      {
+        processRunner: async (_command, args) => {
+          writeFileSync(args[args.indexOf('--file') + 1], 'dump bytes');
+          return { status: 0 };
+        },
+        recoveryMetadata: (): BackupRecoveryMetadata => {
+          calls += 1;
+          return {
+            schemaVersion: 1,
+            application: { status: 'unknown', reason: 'manifest-missing' },
+            configuration: {
+              status: 'captured',
+              settings: { BELLFIELD_API_PORT: String(3000 + calls) },
+              relayConfigured: false
+            }
+          };
+        }
+      }
+    );
+    for (let run = 1; run <= 2; run += 1) {
+      const result = await service.runBackupOrThrow();
+      const manifest = JSON.parse(readFileSync(result.manifestPath, 'utf8'));
+      assert.equal(manifest.schemaVersion, 1);
+      assert.deepEqual(manifest.recovery, {
+        schemaVersion: 1,
+        application: { status: 'unknown', reason: 'manifest-missing' },
+        configuration: {
+          status: 'captured',
+          settings: { BELLFIELD_API_PORT: String(3000 + run) },
+          relayConfigured: false
+        }
+      });
+    }
+    assert.equal(calls, 2);
+    assert.equal(repository.succeeded.length, 2);
+  } finally {
+    assert.equal(root.startsWith(join(tmpdir(), 'bellfield-backup-spec-')), true);
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

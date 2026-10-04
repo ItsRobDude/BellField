@@ -169,6 +169,14 @@ Backup defaults written by the config helper:
 
 Use a local/server-owned backup directory first. A network path is allowed only after a dated backup and restore drill from that exact path.
 
+For a replacement server with a new-format backup, pass
+`--from-backup=<backup-set-directory>` to `write-server-config.mjs` to recover
+supported nonsecret settings. It creates a fresh config with new secrets and
+identity, uses storage beneath the new install root, and leaves relay access
+disabled. It refuses overwrite/force in this mode. Follow the
+[replacement-server procedure](./restore-runbook.md#destination-prerequisites)
+and review LAN addresses and the backup destination before provisioning.
+
 ## Preferred Gate Day Elevated Runner
 
 For Gate Day smoke runs, prefer the packaged fixed-mode elevated runner instead
@@ -712,6 +720,15 @@ Each set includes:
 - a recursive copy of `BELLFIELD_MEDIA_ROOT`
 - `license\bellfield-license.json` when `BELLFIELD_LICENSE_PATH` is configured
 - `manifest.json`
+
+The manifest includes source-release provenance and allowlisted nonsecret
+recovery settings. Relay credentials and the raw server env remain excluded.
+Scheduled, packaged manual, and pre-update backups share the same settings
+capture; pre-update sets record the installed release. Updated service manifests
+are required for complete scheduled capture. Keep the matching signed release
+ZIP off-machine with the recovery material. See the
+[backup metadata and restore guards](./restore-runbook.md#backup-set-shape),
+including explicit handling for legacy backups and different releases.
 
 The System surface shows the latest successful backup and warns when it is stale.
 

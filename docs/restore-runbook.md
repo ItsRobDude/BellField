@@ -58,6 +58,29 @@ The database dump is PostgreSQL custom format from `pg_dump --format=custom`.
 The `media` directory is a recursive copy of `BELLFIELD_MEDIA_ROOT`.
 The `license` file is copied from `BELLFIELD_LICENSE_PATH` when configured so licensed restores can start without online activation.
 
+New sets include a versioned `recovery` section in `manifest.json`:
+
+- `application` records the source build version, build kind, release date,
+  generation time, and source commit. Missing or invalid build manifests are
+  recorded as unknown provenance; the worker still preserves the data backup.
+- `configuration` records allowlisted nonsecret settings: API/office ports and
+  URLs, session/media limits, backup timing/retention, and delivery polling.
+  It also records whether relay access was configured. It never contains the
+  database URL/password, media-token secret, relay token, server-instance ID,
+  or the raw env file. URLs containing credentials, queries, or fragments are
+  omitted. The sanitized relay endpoint is reference information only.
+- `configuration.status` is `captured` for the packaged manual helper, updater,
+  and newly rendered worker services. Direct source/CLI runs, older service
+  manifests, or invalid settings produce `partial` metadata; review missing
+  settings against the install defaults before use. Re-render and restart
+  existing worker services after updating this tooling.
+
+Pre-update backups identify the **installed** release even though the updater
+uses the incoming artifact's backup tool. Older backup sets remain usable; they
+do not acquire metadata retroactively. Keep the matching signed release ZIP
+with the protected off-machine recovery material: version metadata identifies
+the software but does not include its binaries or prove migration compatibility.
+
 Retention keeps the newest `BELLFIELD_BACKUP_RETENTION_COUNT` successful backup sets. The default is `7`.
 
 ## Supported Destination
@@ -85,6 +108,91 @@ The default staleness threshold is `36` hours, controlled by `BELLFIELD_BACKUP_S
 ## Restore Procedure
 
 Use an elevated PowerShell session on the server or replacement server.
+
+### Destination prerequisites
+
+The restore helper replaces data in an existing, reachable BellField database;
+it does not create a server installation, PostgreSQL cluster, database, role,
+env file, or Windows services. On an existing server, verify these inputs before
+continuing. For a replacement Windows server:
+
+1. Keep the selected backup and any surviving server configuration in a
+   separate protected recovery location. Keep the old server stopped during
+   cutover. Read `manifest.json` → `recovery.application` and select the matching
+   retained release. Legacy/unknown provenance needs retained install/support
+   records. A newer release needs a verified migration path; restoring into an
+   older schema/release is not supported by this procedure.
+2. Follow [Extract Release](./install-runbook.md#extract-release) and
+   [Write Server Config](./install-runbook.md#write-server-config) in the install
+   runbook. Use the recovery-config command below when the backup has recovery
+   metadata. It restores supported settings into a fresh env file, generates a
+   new database password, media-token secret, and relay server-instance ID, and
+   puts storage beneath the new install root. Review the old LAN addresses,
+   backup destination, and any partial settings before proceeding. For legacy
+   sets, generate config normally and recover settings from retained records.
+   The raw env file and relay credential deliberately remain outside backups.
+   Recover the relay token through its protected issuance record or have
+   BellField reissue it; keep relay base URL/token blank until cutover is ready.
+   Reissue revokes the previous token. Do not copy the old server's instance ID
+   or put credentials in evidence logs. See the
+   [relay credential lifecycle](./relay-token-design.md#issuance-and-lifecycle).
+3. Follow [Configure LAN Access](./install-runbook.md#configure-lan-access) and
+   [Provision PostgreSQL](./install-runbook.md#provision-postgresql), including
+   packaged migrations. On a fresh data directory, `provision-postgres.mjs`
+   creates the login and database from the new `DATABASE_URL` with that login
+   as database owner. The helper exits early for an initialized data directory;
+   it does not repair existing credentials or ownership. An operator must
+   resolve either mismatch before restore, without granting the runtime role
+   cluster-level `CREATEDB`.
+4. Place the backup's valid same-shop license at the new configured license path
+   using [Install License File](./install-runbook.md#install-license-file), then
+   [Register Windows Services](./install-runbook.md#register-windows-services).
+   If the backup lacks the license, complete the recovery-copy procedure below
+   first. Confirm the installer reaches healthy services; do not create a new
+   first owner or enter business data in this temporary empty database.
+5. Run restore below with PostgreSQL running and the prepared backup selected.
+   The restore preflight checks database ownership before stopping the app
+   services. After restore, use the owner account from the restored database
+   and complete the readbacks below before returning the server to the shop.
+
+This is the assisted replacement-server route. Rerun #30 proves the existing
+clean-machine backup/restore path, not a separate total-loss recovery exercise
+with all old configuration unavailable.
+
+### Rebuild configuration from a new backup
+
+Run this only on the replacement, before provisioning PostgreSQL or services:
+
+```powershell
+.\release\runtime\node\node.exe .\release\tools\install\write-server-config.mjs `
+  --install-root=C:\BellField `
+  --from-backup=C:\BellField-Recovery\selected-backup
+```
+
+The helper refuses an existing output file and rejects `--force` in recovery
+mode. It validates the metadata before creating files, ignores original storage
+paths, and leaves relay URL/token blank even when the backup says relay access
+was configured. It does not restore the database or contact the relay. Complete
+the destination prerequisites above, including LAN configuration and licensing.
+Database endpoints/tool paths and service-log paths use installation defaults;
+configure any replacement-specific overrides before provisioning services.
+Existing-server restore continues using its existing env file and identity.
+
+### Restore release checks
+
+Before staging files, contacting PostgreSQL, or stopping services, restore reads
+the manifest and reports source/destination build identities. By default their
+version, build kind, and source commit must match. These checks use identity,
+not version ordering; a higher version is not automatically compatible.
+
+- For a legacy backup, unknown source provenance, or unavailable destination
+  provenance, verify the intended release from independent records and add
+  `--allow-unknown-release=true` to the restore command.
+- For different known release identities, first verify the forward migration
+  path on a scratch copy, then add `--allow-release-mismatch=true`. This flag is
+  an operator acknowledgement, not a compatibility test or downgrade support.
+- Neither flag accepts malformed/unsupported recovery metadata, bypasses the
+  license requirement, or substitutes for the destructive-restore confirmation.
 
 Inputs:
 
@@ -131,7 +239,44 @@ operator diagnostics, the helper also accepts `--skip-health=true`,
 `--health-url=<url>`, `--health-timeout-ms=<milliseconds>`, and
 `--service-timeout-ms=<milliseconds>`.
 
-If `BELLFIELD_LICENSE_REQUIRED=true`, the helper checks for `license\bellfield-license.json` before stopping services or replacing data. Use a Phase 3 backup set or install a re-issued license before restoring a license-required server.
+### Backup missing its license
+
+If `BELLFIELD_LICENSE_REQUIRED=true`, the helper requires
+`license\bellfield-license.json` **inside the selected backup set** before
+stopping services or replacing data. A license already installed on the server
+does not satisfy that check. Prefer a complete licensed backup set when it
+contains the data the operator intends to restore.
+
+If the chosen data backup predates license inclusion or its license is missing:
+
+1. Obtain an authentic BellField-issued replacement license for the same shop
+   through the [license issuance procedure](./license-design.md#issuance-boundary).
+   Do not edit license JSON or disable required-license mode.
+2. Copy the entire chosen backup to a new, clearly named recovery directory
+   outside the worker's retention-managed backup root. Preserve the original
+   backup unchanged. Add the replacement at
+   `<recovery-copy>\license\bellfield-license.json`; leave the dump, media, and
+   original manifest unchanged. Record the source backup path, license ID, and
+   the deliberate addition in a separate recovery note. The helper validates
+   manifest structure and release metadata, but does not rewrite or
+   cryptographically authenticate the manifest. The note must identify this as
+   a prepared recovery copy.
+3. Preserve any existing destination license separately, then place the same
+   replacement at `BELLFIELD_LICENSE_PATH` and run the packaged config/license
+   validator before the destructive restore:
+
+   ```powershell
+   .\release\runtime\node\node.exe .\release\tools\install\validate-server-runtime-config.mjs `
+     --release-root=.\release `
+     --install-root=C:\BellField
+   ```
+
+   Require `status: "ok"`. This verifies the signed license using the selected
+   release and validates API/worker configuration without restoring data.
+
+4. Run the normal restore command with `--backup-set` pointing at the recovery
+   copy. Keep the original backup and recovery note until post-restore checks
+   and a fresh complete backup succeed.
 
 ## After Restore
 

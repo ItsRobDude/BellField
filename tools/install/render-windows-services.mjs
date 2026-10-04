@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { escapeXml, parseEnvFile, pickEnv, readArgs } from './install-utils.mjs';
+import { createBackupSourceEnv } from './backup-source-env.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultReleaseRoot = resolve(scriptDir, '..', '..');
@@ -122,6 +123,7 @@ const workerEnv = {
     'BELLFIELD_RELAY_TOKEN',
     'BELLFIELD_RELAY_SERVER_INSTANCE_ID'
   ]),
+  ...createBackupSourceEnv(env, releaseRoot),
   NODE_ENV: 'production'
 };
 const officeEnv = {

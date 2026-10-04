@@ -60,8 +60,7 @@ try {
       `--env=${envPath}`,
       '--confirm=UPDATE',
       '--skip-services=true',
-      '--skip-health=true',
-      '--skip-backup=true'
+      '--skip-health=true'
     ],
     { encoding: 'utf8', shell: false }
   );
@@ -80,6 +79,15 @@ try {
     {
       version: installedManifest.version
     }
+  );
+  const backupInput = JSON.parse(readFileSync(path.join(root, 'backup-input.json'), 'utf8'));
+  check(
+    'incoming backup CLI receives the installed release identity and complete config marker',
+    backupInput.application.version === '1.2.3' &&
+      backupInput.application.sourceCommit === 'abc1234' &&
+      backupInput.manifestPath === path.join(currentReleaseRoot, 'bellfield-build-manifest.json') &&
+      backupInput.configurationComplete === 'true',
+    backupInput
   );
   check(
     'packaged migrations ran during update',
@@ -316,6 +324,18 @@ function writeCurrentRelease() {
       flag: 'wx'
     }
   );
+  writeFileSync(
+    path.join(currentReleaseRoot, 'bellfield-build-manifest.json'),
+    JSON.stringify({
+      schemaVersion: 1,
+      buildKind: 'release',
+      licenseRequired: true,
+      version: '1.2.3',
+      releaseDate: '2026-06-10',
+      generatedAt: '2026-06-10T00:00:00.000Z',
+      sourceCommit: 'abc1234'
+    })
+  );
 }
 
 function writeUpdateArtifact() {
@@ -343,6 +363,33 @@ function writeUpdateArtifact() {
   copyFileSync(
     path.resolve('tools', 'install', 'install-utils.mjs'),
     path.join(updateArtifactRoot, 'tools', 'install', 'install-utils.mjs')
+  );
+  for (const name of ['backup-source-env.mjs', 'backup-recovery-metadata.mjs']) {
+    copyFileSync(
+      path.resolve('tools', 'install', name),
+      path.join(updateArtifactRoot, 'tools', 'install', name)
+    );
+  }
+  const backupCliDir = path.join(updateArtifactRoot, 'apps', 'worker', 'dist', 'jobs', 'backup');
+  mkdirSync(backupCliDir, { recursive: true });
+  copyFileSync(
+    path.resolve('apps/worker/src/jobs/backup/recovery-settings.json'),
+    path.join(backupCliDir, 'recovery-settings.json')
+  );
+  // This smoke stubs database work, but executes the real updater's subprocess
+  // boundary so using the incoming release identity fails the assertion above.
+  writeFileSync(
+    path.join(backupCliDir, 'run-backup-cli.js'),
+    `
+    const fs = require('node:fs');
+    const manifestPath = process.env.BELLFIELD_BUILD_MANIFEST_PATH;
+    fs.writeFileSync(${JSON.stringify(path.join(root, 'backup-input.json'))}, JSON.stringify({
+      manifestPath,
+      application: JSON.parse(fs.readFileSync(manifestPath, 'utf8')),
+      configurationComplete: process.env.BELLFIELD_BACKUP_CONFIG_COMPLETE
+    }));
+    console.log('BELLFIELD_BACKUP_RESULT ' + JSON.stringify({status: 'succeeded', backupSetPath: ${JSON.stringify(path.join(root, 'stub-backup-set'))}}));
+  `
   );
   writeFileSync(
     path.join(updateArtifactRoot, 'tools', 'winsw', 'WinSW-x64.exe'),

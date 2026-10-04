@@ -4,6 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseEnvFile, readArgs } from './install-utils.mjs';
 import { redactSensitiveText } from './sensitive-redaction.mjs';
+import { createBackupSourceEnv } from './backup-source-env.mjs';
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const defaultReleaseRoot = resolve(scriptDir, '..', '..');
@@ -58,6 +59,7 @@ try {
     env: {
       ...process.env,
       ...env,
+      ...createBackupSourceEnv(env, releaseRoot),
       NODE_ENV: 'production',
       BOOTSTRAP_SEED_DATA: 'false',
       BELLFIELD_POSTGRES_BIN: env.BELLFIELD_POSTGRES_BIN?.trim() || postgresBin,

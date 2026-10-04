@@ -86,7 +86,11 @@ Properties that placement buys:
   machine keeps the same env file and the same identity — no rebind, no
   friction.
 - A **replacement** machine gets a fresh env (the operator reruns
-  `write-server-config.mjs`), hence a fresh instance id.
+  `write-server-config.mjs`), hence a fresh instance id. Its `--from-backup`
+  option can recover allowlisted nonsecret settings, but always leaves relay
+  URL/token blank. The sanitized relay endpoint and a configured-state flag in
+  backup recovery metadata are reference information, never activation proof.
+  Recover the token separately or reissue it through the lifecycle below.
 
 Binding rules (v1, decided):
 
@@ -151,7 +155,9 @@ BELLFIELD_RELAY_SERVER_INSTANCE_ID=<generated uuid>
 
 Rules:
 
-- never stored in the install's database, the license file, or backup sets
+- the token and server-instance ID are never stored in the install's database,
+  the license file, or backup sets; only the nonsecret relay endpoint and a
+  configured-state flag may appear in backup recovery metadata
 - absent config means relay-backed features report not-configured through the
   existing readiness path (`EstimateEmailDeliveryStatus`); nothing else
   degrades

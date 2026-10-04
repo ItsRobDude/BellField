@@ -135,7 +135,13 @@ Private-key loss means BellField cannot issue additional licenses for that key v
 
 ## Backup and Restore Boundary
 
-The license file lives under the app-owned data directory so Phase 2 backups can include it. A restore onto a replacement machine must restore the license file along with the database and media root, or the operator must install a re-issued license before starting a sold-shaped API.
+The license file lives under the app-owned data directory so worker backups can
+include it. The restore helper requires the license inside the selected backup
+set when `BELLFIELD_LICENSE_REQUIRED=true`; a valid license already installed
+at the destination does not satisfy that preflight. For an older backup without
+a license, follow the [recovery-copy procedure](./restore-runbook.md#backup-missing-its-license)
+to preserve the original set and add a BellField-issued replacement to a
+separate copy before restoring.
 
 The license is customer-bound, not hardware-bound. A normal restore must not require online activation.
 

@@ -13,6 +13,10 @@ import { copyFile, lstat, mkdir, readdir } from 'node:fs/promises';
 import { basename, dirname, join, resolve } from 'node:path';
 import type { BackupRunsStore, LatestSuccessfulBackupRun } from './backup-runs.repository';
 import { workerLog } from '../../common/logger';
+import {
+  createBackupRecoveryMetadata,
+  type BackupRecoveryMetadata
+} from './backup-recovery-metadata';
 
 export type BackupJobConfig = {
   databaseUrl: string;
@@ -45,6 +49,7 @@ export type ProcessRunner = (
 export type BackupServiceOptions = {
   now?: () => Date;
   processRunner?: ProcessRunner;
+  recoveryMetadata?: () => BackupRecoveryMetadata;
 };
 
 type RunBackupInput = {
@@ -77,6 +82,7 @@ const manifestlessPartialMinimumAgeMs = 30 * 60 * 1000;
 export class BackupService {
   private readonly now: () => Date;
   private readonly processRunner: ProcessRunner;
+  private readonly recoveryMetadata: () => BackupRecoveryMetadata;
 
   constructor(
     private readonly config: BackupJobConfig,
@@ -85,6 +91,7 @@ export class BackupService {
   ) {
     this.now = options.now ?? (() => new Date());
     this.processRunner = options.processRunner ?? defaultProcessRunner;
+    this.recoveryMetadata = options.recoveryMetadata ?? createBackupRecoveryMetadata;
   }
 
   async runBackup(input: RunBackupInput = {}): Promise<BackupRunResult> {
@@ -122,6 +129,7 @@ export class BackupService {
         runKind,
         startedAt: startedAt.toISOString(),
         completedAt: completedAt.toISOString(),
+        recovery: this.recoveryMetadata(),
         database: {
           format: 'pg_dump-custom',
           file: databaseDumpFilename
@@ -170,7 +178,9 @@ export class BackupService {
       workerLog('info', 'Backup completed.', {
         backupId,
         backupSetPath,
-        retentionCount: this.config.retentionCount
+        retentionCount: this.config.retentionCount,
+        applicationMetadataStatus: manifest.recovery.application.status,
+        configurationMetadataStatus: manifest.recovery.configuration.status
       });
       return success;
     } catch (error) {

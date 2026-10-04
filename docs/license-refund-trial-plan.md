@@ -268,9 +268,17 @@ email/SMS/acceptance sends · payment links · customer-facing worker jobs ·
 update downloads except license-recovery tools.
 
 **Two hard requirements:** scheduled **backups keep running**, and **export is
-the real full backup set** (DB dump + media + manifest + license/config) — not a
+the real full backup set** (DB dump + media + manifest + license + recoverable
+nonsecret configuration) — not a
 cosmetic CSV. This is what makes "your data is always yours" literally true and
 is the entire ethical basis for degrading instead of bricking.
+
+Configuration recovery must preserve the
+[relay credential exclusion](./relay-token-design.md#single-active-activation):
+no raw env, database password, media-token secret, relay token, or old server
+identity in the backup. Replacement config generates fresh secrets/identity;
+relay credentials are recovered separately or reissued. The current mechanism
+is documented in [the restore runbook](./restore-runbook.md#backup-set-shape).
 
 **Restore must never erase a termination artifact.** The supported restore
 helper today swaps in the backup's license file

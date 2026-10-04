@@ -155,7 +155,9 @@ Owners: [permissions](./permissions-model.md),
   server config, bundled PostgreSQL, service manifests, LAN configuration and
   evidence, health checks, and first-owner setup.
 - **Backup/license/update:** scheduled database/media/license backup sets and
-  history, retention/freshness visibility, packaged restore, signed offline
+  history, source-release/nonsecret recovery metadata, replacement-config
+  generation with fresh secrets/identity, restore release guards,
+  retention/freshness visibility, packaged restore, signed offline
   licenses, signed update verification and window enforcement, pre-update
   backups, staged swaps/migrations, durable evidence, and preserved rollback
   releases.
