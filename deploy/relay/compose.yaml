@@ -2,7 +2,7 @@
 # Cloudflare Tunnel. Outbound-only — no inbound router ports, ever.
 #
 #   cp relay-host.env.example relay-host.env   # fill in the secrets
-#   docker compose up -d --build
+#   docker compose --env-file relay-host.env up -d --build
 #
 # Images are pinned on purpose; bump them deliberately, never with :latest.
 

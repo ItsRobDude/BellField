@@ -11,14 +11,14 @@ workflow rules, API endpoint docs, or architecture guardrails.
 - `apps/api` - NestJS API and shared business logic host.
 - `apps/worker` - background worker service (backups, delivery retry/expiry/status-poll jobs).
 - `apps/relay` - BellField-hosted delivery relay (NestJS, own `bellfield_relay` database, own migrations, operator admin CLI). Deployed artifacts live in `deploy/relay/`.
+- `site` - public Pages site and waitlist function; [site/README.md](../site/README.md) owns preview and maintenance procedures.
 
 ## Current Shared Packages
 
 - `packages/contracts` - shared request/response contracts and cross-app types.
 - `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers.
 - `packages/i18n` - shared locale catalog and translation helpers for user-facing app copy.
-- `packages/validation` - shared validation helpers.
-- `packages/utils` - low-level shared utilities.
+- `packages/validation` and `packages/utils` - reserved helper scaffolding with no current app consumers; retained as part of the intended repo shape.
 
 ## Where Core Work Lives
 
@@ -62,7 +62,8 @@ workflow rules, API endpoint docs, or architecture guardrails.
 - `docs/data-modeling-rules.md` - record ownership, history, snapshots, and schema semantics.
 - `docs/offline-sync.md` - field app sync and offline rules.
 - `docs/api-endpoints.md` - quick endpoint catalog; controller code remains exact source of truth.
-- `docs/delivery-relay-plan.md` - relay design; `docs/relay-token-design.md` for token semantics; `docs/relay-deployment-2026-06-12.md` for the live production host.
+- `docs/delivery-relay-plan.md` - relay design; `docs/relay-token-design.md` for token semantics; [testing relay evidence](./relay-deployment-2026-06-12.md) for the current test host and [release operations](./release-operator-route.md) for permanent-relay cutover criteria.
+- [Validation evidence index](./validation-evidence-index.md) - dated gate attempts, live-service smokes, and research snapshots; historical follow-ups do not override current runbooks.
 - `docs/validation-playbook.md` - how to prove risky lanes with checks, browser smoke, and device evidence.
 - `docs/launch-readiness.md` - the pre-pilot punch list; `docs/gate-day-checklist.md` for the batched clean-machine validation gates.
 

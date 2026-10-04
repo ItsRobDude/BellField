@@ -92,8 +92,8 @@ function agingBucketLabel(bucket: ArAgingReport['rows'][number]['bucket']): stri
   return 'Over 90';
 }
 
-// Top-level Reports surface (M10 slice 3). Fixed, read-only reports — no builder. Tabs appear per the
-// actor's gates: AR/Open Balances always; Job Profitability with jobCosting:view (Inventory in 3C).
+// Reports are read-only; each domain-specific tab follows its own permission gate
+// in addition to the parent Reports surface's access check.
 export function OfficeReportsSurface({
   apiBaseUrl,
   sessionToken,

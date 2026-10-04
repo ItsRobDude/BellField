@@ -4,9 +4,10 @@ This is the controlling execution plan for taking BellField from "runs for
 BellField's own shop" to "a stranger can buy it, install it on a Windows
 office server, run it for years, and be supported."
 
-It is grounded in a code audit performed 2026-06-10 (branch
-`review-fixes-20260610`). Where this plan states "current reality," that was
-verified against code, not assumed from docs.
+It began with a code audit performed 2026-06-10 (branch
+`review-fixes-20260610`). The implementation summary and open validation debt
+below describe the current boundary; completed slice descriptions retain their
+original acceptance criteria as an implementation record.
 
 Primary references:
 
@@ -56,10 +57,13 @@ Environmental gate status:
 - **Open - Phase 4 expired-window refusal:** Gate 4 was not attempted in rerun
   #30. The `gate4-expired-refusal` runner mode and the updater's pre-flight
   expired-window rejection landed in PR #94 after rerun #30; the drill is
-  automated and CI-guarded but unproven on hardware until rerun #31.
+  automated and CI-guarded but unproven on hardware until a dated strict run passes.
 - **Open - Phase 5/6:** prove that the sold-shaped installed release sends an
   estimate through the production relay, opens the customer acceptance page,
-  and applies the customer decision through the worker poller.
+  and applies the customer decision through the worker poller, as specified in
+  [Gate 5](./gate-day-checklist.md#gate-5--production-relay-send-and-acceptance-phase-56a).
+  The current laptop is documented as a testing/pilot host; this cleanup does
+  not qualify it as permanent production infrastructure.
 - **Open - broader device proof:** complete the second-office-desktop and real
   Android field-device checks tracked by launch readiness. The rerun #30 iPhone
   office-browser proof closes the Gate 1 second-device requirement, not the
@@ -75,85 +79,39 @@ including the real installed update and post-update reboot. Restore and update
 each used their one-time service-readiness retry and then reached health `ok`.
 See
 [gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md).
-PR #68 added a packaged LAN access helper that configures LAN-safe office/API
-URLs and exact BellField-managed Private/Domain LocalSubnet firewall rules for
-office/API ports only. Rerun #9 proved hash verification, extraction, baseline
-collection, and server config, then failed at the required LAN helper because
-its PowerShell env reader rejected blank separator lines in the generated env.
-Rerun #10 used rebuilt `.19`/`.20` artifacts from source commit `31cd16c` and
-proved that blank-line fix reached the intended Public-profile refusal/consent
-branch. After explicit operator consent it changed Wi-Fi to Private and created
-the expected TCP `3000`/`3001` LocalSubnet rules, but failed before PostgreSQL
-provisioning because the helper appears to validate `RemoteAddress` from the
-port filter instead of the address filter. The source now patches that
-configurator/collector readback and adds a helper-smoke guard for the
-NetSecurity object model. Rerun #11 proved that fix in the packaged artifact
-and advanced through service install, browser work, and reboot recovery, but
-the packaged LAN evidence collector hung before real second-device login. Rerun
-#12 proved the hardened `.23` artifact through service install, browser work,
-reboot recovery, and post-reboot service/API health, but stopped before
-post-reboot login because the first-owner credential existed only in transient
-automation state. This is still not a passed Gate 1 claim until the fixed
-documented Gate Day dummy credential is used and one strict run proves
-post-reboot login, packaged LAN evidence, and real second-device login.
+Earlier failed attempts are retained in their dated Gate Day evidence documents;
+use the [documentation index](./README.md) to find them. They are historical
+failure analysis, not additional open Gate 1 or Gate 3 blockers.
 
-## Current reality (audited 2026-06-10; Phase 0 applied 2026-06-11; hardening follow-up applied 2026-06-11; Phase 4 repo-side updater foundation applied 2026-06-11)
+## Current implementation boundary
 
-- Release artifact scaffolding now exists: `tools/build-release.mjs` assembles
-  compiled API/worker output, office-web standalone output, migration scripts,
-  install helpers, deployed contracts, a release build manifest, signed update
-  artifact manifest, updater helper, and a bundled Node runtime into
-  `release/`. The office static asset copy now targets the actual standalone
-  server root and has a same-machine asset/browser smoke. Clean-machine
-  artifact packaging is now past the PostgreSQL runtime and ZIP-portability
-  blockers. Clean-machine run #4 proved XML account shape is insufficient:
-  WinSW installed PostgreSQL as `LocalSystem`. The repo-side installer now
-  configures and reads back the Postgres SCM account before startup.
-  Clean-machine run #6 showed the installer can configure PostgreSQL through
-  SCM as `NT SERVICE\bellfield-postgres`, start it under that account, and
-  preserve the intended PostgreSQL ACL model on Windows 11 Home. Clean-machine
-  run #7 showed the relay-disabled generated-config shape starts API/worker,
-  all four services remain running after installer success, and API health
-  reaches `ok`. The clean-machine install gate stays open until the first-owner
-  setup failed-attempt persistence bug is fixed and the scratch machine
-  completes first-owner setup and browser job booking.
-- First-user paradox is closed in code: when a fresh database has zero active
-  employees, the API logs a one-time first-owner setup token and office-web
-  switches to owner-account setup.
-- Backup/restore: Phase 2 repo-side foundation now exists. The worker owns a
-  scheduled backup job, startup due-check from latest successful backup,
-  orphaned-running cleanup, old manifest-less partial-set cleanup, backup run
-  history, backup-set retention, and a packaged restore helper with staged
-  media/license replacement. Rerun #18 re-proved the scratch-machine restore
-  gate with a real worker backup set, owned-schema restore path, service
-  readiness recovery, pre-backup marker preservation/rollback, media root
-  presence, license readback, and recovered API health.
-- Update path: repo-side Phase 4 foundation now exists. Release builds are
-  stamped with version/release date, System/support read the manifest, release
-  artifacts are signed, the updater verifies artifact signature + license
-  update window, runs a hard-fail pre-update backup by default, stages/swaps
-  release folders, runs migrations, restarts services, and health-checks. A
-  scratch same-machine updater smoke passed. Rerun #18 showed the real installed
-  updater still needs durable phase/failure evidence plus a post-swap
-  service/recovery fix before the installed v(N) to v(N+1) service update gate
-  can be claimed.
-- Licensing: Phase 3 repo-side primitive now exists: signed offline license
-  file design, API startup verification behind a license-required runtime flag
-  or release build manifest, System/support visibility, private issuance
-  tooling, v1 key ceremony docs, local-key smoke, and backup/restore coverage
-  for the license file. The v2 trial/refund foundation has begun: verifier
-  parity accepts v1 and v2 `paid | trial | dataOnly`, issuance tooling can mint
-  all v2 kinds, and the pure entitlement resolver/cache helpers exist but are
-  not wired into runtime startup or operation guards yet.
-- `apps/worker`: real DB-backed job-runner footing now exists for heartbeat and
-  scheduled backups; Phase 5 can reuse it for delivery retry jobs.
-- Live contradictions after Phase 1 repo work: the interim Resend key remains a
-  BellField-operated-only bridge until Phase 5, and the release/runbook path is
-  not yet clean-machine certified.
-- Genuinely ready: explicit seed posture, release-manifest production-mode
-  enforcement, production CORS allowlist,
-  structured email failure codes, provider-key seam, shared email attachment
-  cap, snapshot-at-queue-time semantics, and snapshot read/verify path.
+- Release assembly builds compiled API/worker and office standalone output,
+  production dependencies, migrations/install tools, deployed contracts, bundled
+  runtimes, production/license build metadata, and signed update manifests.
+  Windows install tools configure and verify PostgreSQL's service identity,
+  restricted storage access, LAN reachability, service stability, and API health.
+- Fresh databases expose first-owner setup without seed accounts. Sold-shaped
+  runtime refuses seed data and pending migrations.
+- The worker owns scheduled backups, retention and backup history. Restore
+  stages media/license replacement, checks database ownership, restores through
+  the owned schema, runs migrations, and verifies service readiness. The
+  [restore runbook](./restore-runbook.md) owns operator recovery instructions.
+- The updater verifies artifact signatures and update entitlement, requires a
+  pre-update backup by default, swaps releases, runs migrations, restarts
+  services, and records durable terminal results. Gate 3 passed in rerun #30;
+  Gate 4's hardware expired-window refusal remains open.
+- Licensing verifies signed offline v1 and v2 `paid | trial | dataOnly` files.
+  Issuance, diagnostics, backup inclusion, and pure entitlement/cache helpers
+  exist. Recovery/data-only startup, operation guards, and relay license-status
+  wiring remain pending under [license-refund-trial-plan.md](./license-refund-trial-plan.md).
+- Delivery uses the relay-only install adapter. The worker retries queued sends,
+  expires them, and polls status, acceptance decisions, and payment events.
+  Queued-send UI and cancellation have shipped. Provider credentials are held
+  only by the relay; the old install-side Resend key has been deleted.
+- Acceptance and payment-link implementation exists; local/live testing evidence
+  does not close Gate 5's sold-shaped installed-release proof. The current
+  relay is a testing/pilot host; its operator route is
+  [testing-relay-ops.md](./testing-relay-ops.md).
 
 ---
 
@@ -167,7 +125,7 @@ implementation record and as regression criteria for future changes.
 
 ### 0.1 Seed-data and dev-mode guard
 
-Current: `runtime-config.ts` defaults `bootstrapSeedData` to true whenever
+Pre-change baseline: `runtime-config.ts` defaults `bootstrapSeedData` to true whenever
 `NODE_ENV` is not `production`, and unset maps to `development`. Production
 honors an explicit `BOOTSTRAP_SEED_DATA=true`.
 
@@ -189,7 +147,7 @@ with a readable error; existing dev flow documented and working.
 
 ### 0.2 Production CORS allowlist
 
-Current: `app.enableCors({ origin: true })` unconditionally.
+Pre-change baseline: `app.enableCors({ origin: true })` unconditionally.
 
 Build: new env `BELLFIELD_OFFICE_ORIGINS` (comma-separated). Production:
 required, fail-fast when missing, exact-match allowlist. Dev/test: keep
@@ -201,7 +159,7 @@ unchanged.
 
 ### 0.3 Structured delivery failure codes
 
-Current: `EmailProviderSendResult` is `sent | notConfigured | error`, and
+Pre-change baseline: `EmailProviderSendResult` is `sent | notConfigured | error`, and
 `estimate-delivery.service.ts` derives the public failure code by string
 equality on adapter error copy — the one brittle joint in the relay seam.
 
@@ -216,7 +174,7 @@ no string-equality mapping remains.
 
 ### 0.4 Provider literal out of the call site
 
-Current: `provider: 'resend'` hardcoded in `estimate-delivery.service.ts`.
+Pre-change baseline: `provider: 'resend'` hardcoded in `estimate-delivery.service.ts`.
 
 Build: the adapter exposes its provider key; the service writes
 `emailProviderService.providerKey`. Contracts/migration widening to `'relay'`
@@ -224,7 +182,7 @@ waits for Phase 5.
 
 ### 0.5 Shared attachment-size constant
 
-Current: `15_000_000` inline in `estimate-delivery.service.ts`. A future
+Pre-change baseline: `15_000_000` inline in `estimate-delivery.service.ts`. A future
 relay-side mismatch would strand queued sends for the full expiry window.
 
 Build: `estimateEmailMaxAttachmentBytes` in `packages/contracts`
@@ -249,9 +207,9 @@ retry semantics exist, queued rows live for seconds and today's 60-second
 window is correct and self-healing. The dedupe widening lands in 5.3 with its
 safety prerequisites.
 
-Phase 0 gate: all slices merged, full suite green, no live contradiction
-between code and `deployment-model.md` remains except the interim email key
-(closed by Phase 5) and the artifact itself (Phase 1).
+Phase 0 gate at closeout: all slices merged and the full suite was green. The
+interim email key and install artifact were assigned to Phases 5 and 1;
+both implementation follow-ups have since landed.
 
 ---
 
@@ -269,9 +227,9 @@ manifests, PostgreSQL provisioning helper, and `docs/install-runbook.md`. A
 nondestructive same-machine compiled-release smoke passed on 2026-06-11, with
 follow-up office asset/browser proof after release-packaging hardening; see
 [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md).
-The clean-machine stranger gate remains deliberately unclaimed because only
-machines with some existing development tooling were available. That later
-gate should not block continued product work.
+The assisted entry-tier clean-machine gate is closed by rerun #30. The
+zero-terminal customer installer and headless/server packaging remain separate
+work; this result does not qualify them.
 
 ### 1.1 First-admin setup flow (parallel-safe; pure product code)
 
@@ -337,7 +295,7 @@ dev keeps its current flow.
 
 ### 1.6 Meaningful health endpoint
 
-Current: `/health` returns static ok. Build: unauthenticated
+Pre-change baseline: `/health` returns static ok. Build: unauthenticated
 `{ status: ok|degraded }` summarizing db reachability and pending-migration
 state — status only, no details (details stay behind the authenticated System
 surface). Used by service monitors and the installer's post-install check.
@@ -479,15 +437,11 @@ Status: repo-side Phase 4 foundation landed 2026-06-11. Release stamping,
 signed update artifacts, update-window refusal, packaged updater, manual backup
 CLI, and scratch updater swap are covered by local same-machine validation; see
 [phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md).
-The full Phase 4 gate remains open until an installed v(N) machine updates to
-v(N+1) through the updater with real Windows services, real pre-update backup,
-health check, and a refused out-of-window build. Rerun #16 proved the updater
-reports and recovers a pre-swap failure. Rerun #17 exposed overlapping elevated
-updater attempts. Rerun #18 reached a single corrected updater process, but the
-`.33` to `.34` update returned exit code `1`, installed `.34`, preserved
-rollback/pre-update-backup evidence, left all services stopped, and captured no
-structured updater terminal line. The remaining Phase 4 blocker is durable
-updater evidence plus the actual post-swap service/recovery failure.
+The installed-service update portion (Gate 3) is closed by rerun #30, including
+real pre-update backup, durable success, health, and post-update reboot. The
+expired-window refusal drill (Gate 4) remains unproven on hardware. Earlier
+updater failures are historical evidence; they are not current open blockers.
+The zero-terminal customer installer remains separate from this assisted path.
 
 ### 4.1 Release stamping
 
@@ -533,9 +487,10 @@ script exists now, but the zero-terminal/customer-ready gate is not yet claimed.
 
 The relay service itself plus the install-side work. Controlling design:
 [delivery-relay-plan.md](./delivery-relay-plan.md). Decision D7 (relay hosting
-and codebase location) blocks the service work.
+and codebase location) is resolved; its hosting revisit trigger is recorded
+under Decisions below.
 
-Status: slices 5.1–5.5 landed 2026-06-11; **relay deployed to production
+Status: slices 5.1–5.5 landed 2026-06-11; **testing/pilot relay deployed
 2026-06-12** at `https://relay.bellfield.app`
 ([relay-deployment-2026-06-12.md](./relay-deployment-2026-06-12.md)). `apps/relay` exists (token auth with
 single-active binding + flap detection per
@@ -550,7 +505,7 @@ polling, entitlement surfacing with the approved copy — verified live in the
 browser against the running app). Local validation: relay unit suites + live
 HTTP smoke (auth, entitlement, rebind, send path, webhook refusal) against
 the dev database. Remaining for the Phase 5 gate: a sold-shaped install
-sending end to end through the production relay.
+sending end to end through the testing/pilot relay.
 
 ### 5.1 Relay service v1 (BellField-hosted)
 
@@ -630,7 +585,7 @@ estimate is never auto-approved stale, at-least-once poll/ack delivery to the
 install, and office-action-wins race rules.
 
 Status: Phase 6a is closed as a build/functional lane. Local same-machine proof
-against the live production relay passed on 2026-06-13; see
+against the live testing/pilot relay passed on 2026-06-13; see
 [phase-6a-live-acceptance-smoke-2026-06-13.md](./phase-6a-live-acceptance-smoke-2026-06-13.md).
 Phase 6b's first payment-link slice landed on 2026-06-13 and has since expanded
 to amount-scoped Stripe Checkout links plus job-level deposit links through the

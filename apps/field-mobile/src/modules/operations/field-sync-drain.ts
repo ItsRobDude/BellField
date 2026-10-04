@@ -94,6 +94,8 @@ export async function drainFieldSyncQueue(
     let shouldStopEarly = false;
     let hadSyncFailure = false;
 
+    // Persist each applied response before dropping its queued operation: a later
+    // request may fail, but successful work must stay cached and stop replaying.
     async function preserveAppliedOperation(
       operationId: string,
       nextSnapshot: AssignedWorkSnapshot

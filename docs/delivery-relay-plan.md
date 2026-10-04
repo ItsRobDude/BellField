@@ -260,30 +260,36 @@ when acceptance links are designed.
 
 ---
 
-## 10. Build Order
+## 10. Implementation Status And Remaining Work
 
 1. **License/identity primitive** (licensing lane) — per-shop token, one
    active server, activation/move/revoke. Prerequisite; designed first —
    done, see [relay-token-design.md](./relay-token-design.md).
 2. **Relay v1** — BellField-domain sending only: auth, narrow send API, quotas,
    suppression, webhook termination, status polling. **Built 2026-06-11**
-   (`apps/relay`); deployment to the pilot host is still ahead.
+   (`apps/relay`); the testing/pilot host was deployed 2026-06-12. Current
+   operator steps are in [testing-relay-ops.md](./testing-relay-ops.md).
 3. **Install integration** — swap the internal email adapter to a relay client
    (the adapter boundary in `EmailProviderService` is the seam; office
    workflows unchanged), plus queue-and-retry via the worker. **Built
-   2026-06-11** (office UI for queued sends remains, execution plan 5.5).
-4. **Custom-domain add-on** — domain registration/verification flow and
-   per-shop sender identity.
-5. **Acceptance links** (comms Phase 4) on the same host/auth.
+   2026-06-11**, including the queued-send notice, cancellation, history
+   polling, and entitlement copy in execution-plan slice 5.5.
+4. **Custom-domain add-on** — planned domain registration/verification flow
+   and per-shop sender identity.
+5. **Acceptance links** (comms Phase 4) on the same host/auth. **Built**;
+   [live acceptance smoke](./phase-6a-live-acceptance-smoke-2026-06-13.md)
+   passed 2026-06-13. Sold-shaped installed-release proof remains Gate 5 debt.
 6. **Payment links** (comms Phase 5) with the rule that BellField pages never
    touch card data or shop processor keys: the install requests
    processor-hosted Stripe Checkout sessions through the relay, and payment
    confirmation follows the same webhook-at-BellField / poll-from-install
    pattern. First slice shipped 2026-06-13.
 
-Until step 3 ships, the direct provider adapter behind
-`BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY` remains the interim implementation
-for BellField-operated installs only and must not ship to sold installs.
+Install-side sending is relay-only. The direct provider adapter and
+`BELLFIELD_ESTIMATE_EMAIL_RESEND_API_KEY` were removed; use the relay base URL,
+relay token, and server-instance ID described in
+[relay-token-design.md](./relay-token-design.md). Provider secrets belong only
+on the relay host.
 
 Execution detail for this build order — slices, mechanics, acceptance
 criteria, and its place in the wider sellability sequence — lives in
@@ -304,8 +310,10 @@ Cloudflare Tunnel: outbound-only connectivity, no inbound router ports, home
 IP hidden. Operating rules: relay containers are single-purpose and
 image-pinned, the relay database gets a nightly off-box `pg_dump` (it is the
 billing ledger), and an external uptime monitor alerts on the health endpoint.
-A dedicated host or VPS is required before Phase 6 ships — acceptance and
-payment links make relay downtime visible to shops' own customers.
+The original dedicated-host/VPS prerequisite was superseded by the owner
+decision on 2026-06-12: keep the laptop until the first paying customer has
+acceptance links live, then revisit hosting. See the
+[acceptance-link shipping prerequisite](./acceptance-links-design.md#shipping-prerequisite-d7--resolved-2026-06-12).
 
 **Testing relay deployed 2026-06-12**: live at
 `https://relay.bellfield.app` on the dual-purpose laptop's Ubuntu disk (the
@@ -327,4 +335,4 @@ window** for new licenses.
 
 Still open:
 
-- pilot uptime target (informal until Phase 6 forces a real one)
+- pilot uptime target and the hosting revisit when a paying customer's links go live

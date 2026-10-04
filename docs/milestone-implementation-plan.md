@@ -6,6 +6,11 @@ Its purpose is to turn BellField's product vision, workflow rules, deployment ru
 
 This is the build-order source of truth **for feature milestones**.
 
+For today's implementation and remaining validation, start with
+[Current Working Status](#21-current-working-status-snapshot) and
+[what is shipped](./whats-shipped.md). The milestone scopes below describe the
+build sequence and acceptance criteria, including work already implemented.
+
 > **Division of labor (2026-06-12).** Three planning spines now coexist:
 > this document owns the feature-milestone sequence (M1–M12);
 > [sellable-product-execution-plan.md](./sellable-product-execution-plan.md)
@@ -482,9 +487,9 @@ Milestone 8 is done when:
 - adjustment/credit-style follow-up is the correction path rather than rewriting posted invoices
 - permissions around invoice actions behave correctly and payments remain aligned with the online-only v1 expectation
 
-### Status (in progress)
+### Implemented core and later integrations
 
-Milestone 8 has started. The first slice has shipped:
+The Milestone 8 core has shipped. The first slice includes:
 
 - invoice posting (draft→posted) gated on `invoices:post`, as a guarded, atomic transition
 - the posted-invoice lock across every write path — office line edits, estimate conversion, and register reflection all refuse a posted invoice
@@ -723,65 +728,67 @@ The extras can come later.
 
 ## 21. Current Working Status Snapshot
 
-This section is a repo-current orientation note.
-It should be refreshed after major milestone slices land.
-For a shorter status-only version, see `docs/whats-shipped.md`.
+Use [what is shipped](./whats-shipped.md) for the current capability overview.
+The milestone definitions above preserve the build sequence and acceptance
+criteria; their original "not yet" lists are milestone boundaries, not an
+inventory of capabilities still absent from today's repository.
 
-### Shipped foundation
+### Implemented lanes and recorded proof
 
-| Milestone                 | Current repo state                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Remaining pressure                                                                                                                                                                                      |
-| ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 2 - CRM backbone          | Customer, location, contact, ownership history, shared contact links, duplicate warnings, and SQL-backed CRM search exist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Large-dataset polish should continue with SQL-backed duplicate checks and typeahead-style intake instead of loading every customer/location into forms.                                                 |
-| 3 - Equipment context     | Equipment records, active/inactive status, history, grouping/replacement links, install date, filters, and office equipment detail surfaces exist.                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | Field and office location-context ergonomics can improve, but the entity shape is usable.                                                                                                               |
-| 4 - Jobs and appointments | Jobs may exist with or without appointments. Appointments belong to jobs. Status updates, finished-visit review acknowledgement, add-appointment follow-up, register entries, media metadata, and unified timeline events exist.                                                                                                                                                                                                                                                                                                                                                                                              | Snapshot behavior for historical job customer/location display context is still a future hardening item before invoices/posting become serious.                                                         |
-| 5 - Dispatch board v1     | Dispatch now uses a dedicated dated read model, technician rows, unassigned queue, structured local start/end times, schedule/status writes, job detail opened from appointment cards, date picker, Today, previous/next, and refresh controls.                                                                                                                                                                                                                                                                                                                                                                               | Manual browser smoke checks remain the main dispatch closeout item. Compact week strip is polish, not a blocker; week view remains later.                                                               |
-| 6 - Field app/offline     | Field assigned-work caching, notes/status/equipment/register/media queueing, job/appointment media attribution, media size guardrails, media rejected-state handling, conflict/rejected preservation, Sync Now, in-screen background sync, and a home/detail field layout exist. Real-device smokes have passed for field sign-in/assigned work, register queue -> Sync Now, media upload, and revoked-device wipe.                                                                                                                                                                                                           | Remaining reliability pressure is media partial-success handling, media retry after transient blob/API failure, broader repeated transient-failure device smoke, and later field estimate builder work. |
-| 8 - Invoicing money flow  | Invoice posting, adjustment/credit records with office UI, read-only job invoice balance, append-only payments, and bookkeeping worklists have shipped.                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | Invoice PDF export/delivery and automated payment-gateway integration remain later work, outside the M8 core that is now built.                                                                         |
-| 9 - Inventory/PO/costing  | Shipped end to end (backend + office UI + field capture): inventory items/locations, immutable inventory movements, derived on-hand/value, adjustments/transfers/issue-to-job, purchase orders (create/order/receive) with the equipment bridge, the job-cost read model with labor/expense events and reversal corrections, and finalized job-cost snapshots on completion/reopen. Cost writes are locked on finalized jobs (reopen to revise). Office Inventory, Purchasing, and Job Cost surfaces are live, and the field app captures parts from a truck-stock picker that auto-cost as tracked-inventory issues on sync. | Remaining: live multi-user smoke. Full field inventory management is deferred, but field truck-stock selection and auto-costed captured parts are now shipped.                                          |
+- CRM, equipment, jobs/appointments, dispatch, field capture, estimates,
+  invoicing, inventory/purchasing/job costing, and trust/admin foundations are
+  implemented. Current domain details and limits are consolidated in
+  [what is shipped](./whats-shipped.md).
+- Dispatch includes move/resize/reassignment dragging. The
+  [2026-06-05 office smoke](./validation-playbook.md#run-log) already records
+  date navigation, refresh, detail opening, schedule/status writes, M9 surface
+  loading, and a labor-cost write. Do not relist that original smoke as unrun;
+  it also does not claim validation of later dispatch interactions.
+- Field login, assigned work, register sync, media upload, revoked-session
+  cutoff, and employee queue isolation have dated
+  [real-device evidence](./field-mobile-smoke.md#run-log). Broader media
+  transient-failure/partial-success device proof remains open.
+- Customer document delivery, queued retries, acceptance links, invoice PDF
+  email, online payment/deposit links, refunds, and payment/refund receipts are
+  implemented. These are no longer proposed next-build lanes. The
+  [sellability plan](./sellable-product-execution-plan.md) and
+  [customer communications contract](./customer-comms-and-delivery.md) own
+  their behavior and validation boundaries.
+- [Clean-machine rerun 30](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md)
+  closed Gates 1–3 for its tested artifacts. Gate 4 expired-window refusal,
+  Gate 5 sold-shaped production-relay acceptance, the broader installed-server
+  device lane, and real merchant/live-money proof remain distinct gates.
 
-### Current next implementation order
+### Choosing the next bounded slice
 
-1. Dispatch board closeout:
-   run browser/manual smoke steps for date changes, refresh, job detail open, schedule edits, and status changes. Compact week strip is deferred polish.
-2. Field app Milestone 6 mobile follow-up:
-   the assigned-work home, focused job detail tabs, register sync, media upload, and revoked-device wipe have real-device proof; keep future device work focused on transient-failure/retry behavior and later field estimate-builder scope.
-3. Field media hardening:
-   harden and smoke media partial success plus retry after transient blob/API failure on a device/runtime.
-4. Sync reliability for real field actions:
-   harden background/manual sync around register and media operations, including partial success, retry, and conflict/rejected handling.
-5. M9 inventory/PO/job-costing closeout:
-   shipped end to end — backend (inventory, purchasing, issue-to-job, labor/expense events, the job-cost read model, finalized snapshots, and the finalized-job cost lock) and the office Inventory/Purchasing/Job Cost surfaces, plus field truck-stock part capture that auto-costs as tracked-inventory issues on sync. `pnpm smoke:m9` now covers the local API/DB workflow; remaining pressure is live multi-user smoke and manual office-browser evidence. Full field inventory management is deferred; truck-stock selection and auto-costed captured parts are shipped.
-6. Historical snapshot hardening beyond invoices:
-   posted invoices now freeze the customer/location/job display context at posting (migration `20260601_007`). Open/live jobs and dispatch intentionally still resolve current names; extending frozen snapshots to other historical surfaces remains future hardening only where the product meaning requires it.
-7. Self-hosted deployment readiness planning:
-   keep the supported Windows install profile, assisted pilot setup posture, backup/restore/update expectations, and internal Rob install test aligned with `docs/self-hosted-installation-strategy.md` before any paid pilot is treated as repeatable.
+Choose the next slice from owner direction and unresolved acceptance criteria. Use
+[launch readiness](./launch-readiness.md) and the
+[Gate Day checklist](./gate-day-checklist.md) for unresolved environmental
+validation, and the [sellability plan](./sellable-product-execution-plan.md) for
+install/backup/license/update/relay sequencing. Verify dated gap-analysis items
+against current code before turning one into an implementation task.
 
-### Next strategic product lane after current closeout
-
-After the current reliability/self-hosted closeout items are solid, the next owner-first growth lane should be customer document delivery and operational follow-through, not a broad marketing suite.
-
-Preferred order:
-
-1. Communications foundation:
-   add a BellField-operated outbound message model for operational email first, with customer-facing template settings and audit history. Shops must not configure email providers or provider API keys.
-2. Estimate delivery:
-   let office users send and resend estimate documents, recording recipient, actor, timestamp, provider reference, and failure state when available.
-3. Estimate customer acceptance:
-   add a secure approval/decline link with captured name/signature, timestamp, and immutable estimate snapshot behavior.
-4. Payment links:
-   add optional payment-gateway links for posted invoices only, with payments recorded from confirmed gateway/webhook state rather than optimistic UI state.
-5. SMS reminders and on-my-way messages:
-   add optional SMS only after email/document delivery is trustworthy, with opt-in, opt-out, provider cost visibility, and rate controls.
-6. GPS/time tracking:
-   add as an owner/dispatch trust tool tied to appointment status, job costing, ETA accuracy, and technician-visible policy, not as hidden surveillance.
-
-This lane should continue to respect the product audience priority: business owners first, office staff second, field technicians third.
-Field work in this lane should focus on clean capture of recommendations, add-ons, photos, equipment context, and signatures rather than exposing the whole office workflow on a phone.
+Known follow-up categories are field media/retry reliability, M9 live
+multi-user smoke, bounded loading beyond the completed intake/job/bookkeeping
+queues, and deployment validation. Historical display snapshots beyond posted
+invoices require a product reason; open jobs and dispatch intentionally resolve
+current names. Keep any chosen slice within its documented acceptance boundary.
 
 ### Milestone-boundary reminders
 
-- Dispatch v1 can keep improving as the daily office home, but route optimization, drag/drop, live sockets, and week view remain later until day-view scheduling is trustworthy.
-- Field media capture now uses the approved Expo ImagePicker, FileSystem, and Crypto dependencies; no additional picker/storage dependencies should be added without a new reason.
-- Register entries, the eager invoice draft, register-to-invoice reflection, and estimate→draft conversion shipped in Milestone 7. Invoice posting, adjustment/credit records, read-side balance, payments, and bookkeeping worklists have shipped in Milestone 8.
-- Payments remain online-only in v1.
-- Estimate/invoice email delivery is BellField-operated from relay-owned sender addresses (`estimates@bellfield.app` for estimates, `billing@bellfield.app` for invoice/payment documents); optional SMS/payment integrations may get separate ownership decisions later, but customer-facing APIs must not expose backend provider or infrastructure controls.
+- Dragging is part of the shipped dispatch day view. Route optimization, live
+  sockets, and week-view work remain deferred.
+- Field media uses the approved Expo ImagePicker, FileSystem, and Crypto
+  dependencies; add no further picker/storage dependency without a new reason.
+- Register entries, the eager invoice draft, register reflection, and estimate
+  conversion shipped in M7. Posting, adjustment/credit records, invoice balance,
+  payments, and bookkeeping shipped in M8. Posted invoices freeze display/tax
+  context; later delivery and payment integrations preserve those locks.
+- Payments remain online-only in v1. Sandbox payment/refund proof does not close
+  the separate [payments go-live gate](./gate-day-checklist.md#payments-go-live-separate-track-not-part-of-the-scratch-machine-day).
+- Estimate/invoice delivery uses relay-owned sender identities and customer-facing
+  template settings. Shops do not configure provider API keys. Booking/reminder/
+  on-my-way communications and optional SMS remain separate future scope.
+- Field estimate building, full field inventory management, GPS/time tracking,
+  customer portal, and hosted SaaS remain deferred. Existing field work stays
+  focused on assigned work and reliable capture.

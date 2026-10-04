@@ -140,14 +140,14 @@ connected account:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
-  "cd /home/rob/bellfield && pnpm --filter @bellfield/relay relay-admin -- set-payments-account --shop-id=<shop_id> --stripe-account-id=acct_..."
+  "cd /home/rob/bellfield/deploy/relay && docker compose --env-file relay-host.env exec -T relay node dist/apps/relay/src/cli/relay-admin.js set-payments-account --shop-id=<shop_id> --stripe-account-id=acct_..."
 ```
 
 Disable payment links for a shop:
 
 ```powershell
 ssh -i "$env:USERPROFILE\.ssh\bellfield-relay-operator" rob@192.168.50.243 `
-  "cd /home/rob/bellfield && pnpm --filter @bellfield/relay relay-admin -- disable-payments --shop-id=<shop_id>"
+  "cd /home/rob/bellfield/deploy/relay && docker compose --env-file relay-host.env exec -T relay node dist/apps/relay/src/cli/relay-admin.js disable-payments --shop-id=<shop_id>"
 ```
 
 ## Host Hardening Baseline

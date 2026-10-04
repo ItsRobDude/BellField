@@ -16,7 +16,6 @@ import type {
   LinkEquipmentReplacementRequest,
   MediaAttachmentKind,
   MediaAttachmentResponse,
-  MediaAttachmentsResponse,
   RegisterEntryKind,
   RegisterCatalogSnapshot,
   RegisterEntrySummary,
@@ -38,7 +37,6 @@ export type {
   JobMutationResponse,
   MediaAttachmentKind,
   MediaAttachmentResponse,
-  MediaAttachmentsResponse,
   RegisterEntryKind,
   RegisterEntrySummary,
   RegisterCatalogSnapshot,
@@ -64,6 +62,8 @@ export function isFieldSessionExpiredError(error: unknown): error is FieldApiErr
   return isFieldApiError(error) && error.status === 401 && error.code === 'sessionExpired';
 }
 
+// A true result authorizes clearing local field data. Ordinary session expiry and
+// operation-level permission denials must preserve unsynced work for later recovery.
 export function isFieldSessionAccessLostError(error: unknown): boolean {
   if (!isFieldApiError(error)) {
     return false;
@@ -250,17 +250,6 @@ export async function voidFieldRegisterEntry(input: {
   );
 }
 
-export async function getFieldMediaAttachments(input: {
-  sessionToken: string;
-  apiBaseUrl?: string;
-  jobId: string;
-}): Promise<MediaAttachmentsResponse> {
-  return requestJson<MediaAttachmentsResponse>(`/operations/jobs/${input.jobId}/media`, {
-    sessionToken: input.sessionToken,
-    apiBaseUrl: input.apiBaseUrl
-  });
-}
-
 export async function createFieldMediaUploadIntent(
   input: CreateMediaUploadIntentRequest & {
     sessionToken: string;
@@ -279,22 +268,6 @@ export async function createFieldMediaUploadIntent(
       body: JSON.stringify(payload)
     }
   );
-}
-
-export async function updateFieldMediaAttachment(input: {
-  sessionToken: string;
-  apiBaseUrl?: string;
-  mediaId: string;
-  caption?: string | null;
-}): Promise<MediaAttachmentResponse> {
-  const { sessionToken, apiBaseUrl, mediaId, ...payload } = input;
-
-  return requestJson<MediaAttachmentResponse>(`/operations/media/${mediaId}`, {
-    sessionToken,
-    apiBaseUrl,
-    method: 'PATCH',
-    body: JSON.stringify(payload)
-  });
 }
 
 export async function updateFieldEquipment(input: {

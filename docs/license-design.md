@@ -43,7 +43,8 @@ These are constraints, not merely deferred work:
 
 ## File Format
 
-The license file is JSON:
+The license file is JSON. This example shows the legacy v1 body; new issuance
+defaults to a v2 `paid` body with `schemaVersion: 2` and `licenseKind: "paid"`:
 
 ```json
 {
@@ -82,7 +83,8 @@ The signature covers the canonical UTF-8 JSON representation of the `license` ob
 Runtime verification:
 
 1. Read the file path from `BELLFIELD_LICENSE_PATH`.
-2. Parse the JSON and validate the v1 shape.
+2. Parse the JSON and validate the supported v1 or v2 shape, including the
+   fields required by the v2 `licenseKind`.
 3. Canonicalize the `license` object.
 4. Verify the Ed25519 signature using the public key embedded in the product build.
 5. Return the license identity and update-window end for diagnostics.

@@ -1,6 +1,10 @@
 # Pre-Release Site — Copy and Design Draft
 
-Status: **DRAFT for owner markup** (2026-06-12). Controlling strategy lives
+Status: **Historical copy/design draft for owner markup** (2026-06-12). The site and
+KV-backed waitlist are implemented under `site/`; use the
+[site maintenance guide](../site/README.md) for current files and procedures.
+The checklist below records draft-time questions, not a current build backlog or deployment claim.
+Controlling strategy lives
 in [positioning-and-pricing.md](./positioning-and-pricing.md) §Go-to-market.
 Every string below is proposed copy; mark up freely. Square brackets are
 facts only the owner can fill in.
@@ -9,8 +13,8 @@ facts only the owner can fill in.
 
 One static page at the `bellfield.app` root. Cloudflare Pages, $0/month, no
 framework needed. Real product screenshots, not illustrations. The waitlist
-form posts to a simple email-capture endpoint (decide at build: Cloudflare
-Pages function writing to a KV list is the zero-dependency option).
+form now posts to `/api/waitlist`, a Cloudflare Pages Function writing to the `WAITLIST`
+KV binding. The source files and maintenance guide describe the implemented behavior.
 
 ## Visual direction (refined after the v2 mockup, 2026-06-12)
 
@@ -162,7 +166,7 @@ Owner voice; facts in brackets are Rob's to confirm or correct:
 - Status copy is honest about pre-release state (brand rule).
 - Waitlist promise is specific and single-purpose; no newsletter.
 
-## Open items before build
+## Original Owner Markup Checklist
 
 - [ ] Owner markup of every quoted string above
 - [ ] Fill the bracketed facts in the founder story

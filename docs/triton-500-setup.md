@@ -138,7 +138,7 @@ On the relay host:
 git clone https://github.com/ItsRobDude/BellField.git ~/bellfield
 cd ~/bellfield/deploy/relay
 cp relay-host.env.example relay-host.env   # fill in every CHANGE_ME
-docker compose up -d --build
+docker compose --env-file relay-host.env up -d --build
 curl http://127.0.0.1:3201/health           # expect status ok
 ```
 
@@ -149,7 +149,7 @@ the tunnel; create the Resend webhook pointing at
 timer with an off-box target; point an external uptime monitor at the health
 URL; add DHCP reservations for the relay host and off-box backup target; issue
 the pilot shop + relay token with the relay-admin CLI
-(`docker compose exec relay node dist/apps/relay/src/cli/relay-admin.js ...`)
+(`docker compose --env-file relay-host.env exec -T relay node dist/apps/relay/src/cli/relay-admin.js ...`)
 and smoke an end-to-end estimate send from a real install.
 
 Prerequisites already satisfied (2026-06-11): `bellfield.app` is a verified

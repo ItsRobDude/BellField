@@ -64,13 +64,17 @@ Covered by `field-queue-resolution.test.ts`.
 
 ---
 
-## Display gaps (Milestone 6 punch list — not fixed here)
+## Display follow-through
 
-These are real gaps a technician will notice once dispatch starts driving real-world schedule changes. None of them needed a fix to make the lane safe to land, but they should be on a later field lane's plate.
+The service address now opens device maps from the job Overview tab. The tap target is in
+[`field-job-overview-section.tsx`](../apps/field-mobile/src/modules/operations/field-job-overview-section.tsx),
+with platform-specific URLs opened by
+[`field-contact-actions.ts`](../apps/field-mobile/src/modules/operations/field-contact-actions.ts).
+URL generation has helper tests; this implementation fact does not claim a new device smoke.
 
-1. **No explicit route/navigation action from the address.** The full address is visible now, but there is no tap target to hand it to device maps.
-
-(The original single-scrollable-card gap noted here has since been addressed: the field app now uses a job feed plus a focused job detail with tabbed sections and a bottom nav — see `field-job-feed.tsx`, `field-workspace-shell.tsx`, `FieldWorkspaceBottomNav`.)
+The original single-scrollable-card gap has also been addressed: the field app uses a job feed
+plus focused job detail with tabbed sections and a bottom nav. See `field-job-feed.tsx`,
+`field-workspace-shell.tsx`, and `FieldWorkspaceBottomNav`.
 
 ---
 
@@ -105,7 +109,7 @@ These are now pinned by tests and should stay true:
 - Conflict and rejected ops are kept in the queue with `lastResultMessage`, not deleted.
 - Ordinary `Sync Now` replays `pending` operations only; conflict/rejected entries require an explicit retry action before another server attempt.
 - Discarding a conflict/rejected queue entry is an explicit destructive action and removes only that one local operation.
-- A network failure during `syncNow` leaves the entire queue untouched and only flips tone to alert via `lastSyncError`.
+- A successful operation saves its applied server snapshot before removing that operation from the queue. If a later request fails, those successful operations remain saved and removed; unapplied work stays queued. A failure records `lastSyncError`, with a visible error for user-initiated sync and the sync indicator for background attempts. See [`field-sync-drain.ts`](../apps/field-mobile/src/modules/operations/field-sync-drain.ts).
 - Ordinary session expiry is not a destructive wipe path; revoked/inactive access remains destructive after the server confirms access loss.
 - Pending operations and staged media stay scoped to the employee who created them.
 - Merge helpers only mutate cache entries that exist locally — they never invent new cached jobs or equipment from a response.
@@ -116,14 +120,10 @@ These are now pinned by tests and should stay true:
 
 ## Recommended next field lane
 
-Both the original top items here — field media queueing/capture and the
-dashboard/detail split — have since landed (see `field-media-*.ts` plus the
-feed/detail/bottom-nav layout). Remaining field-side gaps:
+Field media queueing/capture, the dashboard/detail split, and address-to-maps navigation are
+implemented. Remaining reliability work is device evidence for media partial success,
+transient upload/API failures, and repeated retries; follow the
+[field smoke procedure](./field-mobile-smoke.md).
 
-1. **Route/navigation action from the address.** Add a tap target that hands the
-   service address to device maps.
-2. **Estimate drafting on the field side.** Estimates are office-only in the
-   current milestone; a field builder is a later, deliberate lane.
-
-Each item is small enough to ship as its own lane and none of them require
-dispatch-model decisions to be settled first.
+Estimate drafting remains office-only. A field estimate builder is a later implementation lane
+under the [milestone plan](./milestone-implementation-plan.md), not part of this handoff cleanup.

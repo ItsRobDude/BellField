@@ -28,8 +28,11 @@ Current shared packages:
 
 - `packages/contracts`
 - `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
-- `packages/validation`
-- `packages/utils`
+- `packages/i18n` - shared locale catalog and translation helpers
+- `packages/validation` and `packages/utils` - reserved helper scaffolding with no current app consumers
+
+The public Pages site is separate from the application workspaces; use
+[site/README.md](../site/README.md) for its preview and maintenance route.
 
 ## 3. Install
 

@@ -10,9 +10,8 @@ import type {
 const sendFailedMessage = 'The delivery provider did not accept this message.';
 
 /**
- * The relay's provider adapter — the only place in the whole product that
- * holds a provider credential. Ported from the API's interim direct adapter,
- * which Phase 5.2 deletes from installs.
+ * The relay owns the email-provider credential and transport. Customer installs
+ * send through the relay client, so provider configuration stays on this host.
  */
 @Injectable()
 export class ResendEmailAdapter implements EmailSendAdapter {

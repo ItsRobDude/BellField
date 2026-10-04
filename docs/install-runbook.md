@@ -6,317 +6,33 @@ It is not yet a self-serve customer installer. It is the assisted install recipe
 
 ## Current Boundary
 
-Validated on the development machine:
+The assisted Windows path includes a signed, portable release with bundled Node,
+PostgreSQL and WinSW; generated server configuration; first-owner setup;
+production runtime/license validation; Windows service installation with narrow
+PostgreSQL identity/ACL checks; LAN access; backup/restore; and the installed
+updater. The procedures below own how to operate those tools.
 
-- first-owner setup flow exists without seed accounts
-- API health reports `ok` or `degraded` from database and migration readiness
-- API production boot refuses pending migrations
-- worker runs from compiled `dist`
-- office-web builds as a Next standalone app
-- release office-web static assets are copied beside the actual standalone
-  server root and covered by `pnpm smoke:release-office-web`
-- release assembly and Windows service manifest tooling exist
-- release assembly includes `@bellfield/contracts/dist` in deployed API deps
-- release assembly writes a build manifest that forces license-required mode in
-  sold-shaped artifacts, and stamps version + release date for update
-  entitlement checks
-- release build manifests force the API to run with `NODE_ENV=production`; the
-  Windows service renderer emits production mode for API/worker/office and
-  refuses bootstrap seed data
-- release assembly signs update artifacts with `bellfield-update-manifest.json`
-  and `bellfield-update-signature.json`
-- release assembly can package operator-provided PostgreSQL 16 binaries and
-  WinSW before signing, and `pnpm smoke:release-build -- --require-gate-day-deps=true`
-  verifies those dependencies are present in the signed tree
-- release assembly now builds API, worker, and office-web runtime dependencies
-  into a portable non-junction layout before signing; `pnpm smoke:release-zip`
-  extracts the final ZIP with the Windows operator path and validates the
-  extracted dependency graph, office-web SSR/static assets, packaged
-  PostgreSQL, and migrations
-- worker scheduled backup foundation exists: backup run table, configured
-  backup directory, `pg_dump` + media backup set creation, retention, and
-  System-surface freshness status
-- worker backup startup now runs immediately when no successful backup exists
-  or the last success is overdue, and waits only the remaining interval after a
-  recent success
-- packaged restore helper exists; see [restore-runbook.md](./restore-runbook.md)
-- packaged restore stages media/license replacement before swapping live paths
-- Phase 3 signed-license runtime verification exists: sold-shaped API startup
-  requires a valid offline license file, and the System surface shows license
-  identity/update-window status
-- local Phase 2 validation passed on 2026-06-11 for worker tests, release
-  packaging, backup migration smoke, restore-helper refusal behavior, and
-  compiled-worker boot; see
-  [phase-2-local-backup-restore-smoke-2026-06-11.md](./phase-2-local-backup-restore-smoke-2026-06-11.md)
-- local Phase 3 validation passed on 2026-06-11 for license verifier tests,
-  issuance tooling smoke, release packaging, System/support/UI visibility,
-  worker license backup inclusion, and restore-helper missing-license refusal;
-  see [phase-3-local-license-smoke-2026-06-11.md](./phase-3-local-license-smoke-2026-06-11.md)
-- local Phase 4 validation passed on 2026-06-11 for release stamping, signed
-  artifact verification, update-window refusal, scratch updater swap, and
-  packaged updater contents; see
-  [phase-4-local-updater-smoke-2026-06-11.md](./phase-4-local-updater-smoke-2026-06-11.md)
-- local compiled-release smoke passed on 2026-06-11: release API, worker,
-  office-web standalone, release-packaged migrations, first-owner setup, health,
-  and a scheduled-job creation path all ran against an isolated temporary
-  database; see [phase-1-local-install-smoke-2026-06-11.md](./phase-1-local-install-smoke-2026-06-11.md)
-- first clean Windows gate-day attempt ran on 2026-06-20 and failed before
-  migrations because the signed artifacts packaged `release\postgres\bin` but
-  not PostgreSQL `lib`/`share` runtime files required by the bundled tools; see
-  [gate-day-clean-windows-smoke-2026-06-20.md](./gate-day-clean-windows-smoke-2026-06-20.md)
-- second clean Windows gate-day attempt ran on 2026-06-20 and got past
-  PostgreSQL provisioning with the full runtime/app-local VC++ bundle, then
-  failed during migrations because the extracted ZIP could not resolve the API
-  package dependency `pg`; see
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-2.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-2.md)
-- third clean Windows gate-day attempt ran on 2026-06-20 and proved the
-  post-extraction dependency packaging fix on the scratch machine: the active
-  ZIP extracted, packaged PostgreSQL provisioning completed, packaged
-  migrations applied, and WinSW services registered. It then failed when
-  `bellfield-postgres` started as `LocalSystem`; PostgreSQL refused to run
-  under an administrative account. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-3.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-3.md)
-- fourth clean Windows gate-day attempt ran on 2026-06-20 and proved the
-  repaired USB docs, artifact hashes, extraction, server config, packaged
-  PostgreSQL provisioning, migrations, license placement, service manifest
-  rendering, and the checked env/PostgreSQL ACL readbacks. It still failed at
-  service startup because Windows SCM reported `bellfield-postgres` as
-  `LocalSystem` even though the XML contained
-  `<serviceaccount><username>NT SERVICE\bellfield-postgres</username>`.
-  Later reruns proved the repo-side SCM service-account enforcement path. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-4.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-4.md)
-- fifth clean Windows gate-day attempt ran on 2026-06-20/21 with rebuilt
-  artifacts carrying the SCM account enforcement path. It stopped at the
-  required pre-service diagnostic before server config, PostgreSQL
-  provisioning, or service installation. The diagnostic proved the preferred
-  virtual account was accepted by SCM with no password, `StartName` read back
-  as `NT SERVICE\bellfield-postgres`, the probe process ran as that service
-  virtual account, and SID-only ACL write succeeded. It still returned failure
-  because the diagnostic required the service SID to appear in `whoami /groups`
-  and then crashed in the empty-password compatibility branch. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-5.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-5.md)
-- sixth clean Windows gate-day attempt ran on 2026-06-21 with rebuilt artifacts
-  carrying the corrected diagnostic and installer path. Clean extraction,
-  server config, PostgreSQL provisioning, packaged migrations, license
-  placement, service manifest rendering, and elevated service installation
-  completed. `bellfield-postgres` read back as
-  `NT SERVICE\bellfield-postgres`, PostgreSQL stayed running, and the
-  PostgreSQL service-account ACL readbacks matched the intended narrow model.
-  Gate 1 still failed because API/worker refused to start with the generated
-  `BELLFIELD_RELAY_SERVER_INSTANCE_ID` present while relay base URL/token were
-  empty. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-6.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-6.md)
-- seventh clean Windows gate-day attempt ran on 2026-06-21 with rebuilt
-  artifacts carrying the relay-disabled runtime config and installer
-  stabilization gates. Clean extraction, server config, PostgreSQL
-  provisioning, packaged migrations, license placement, service rendering,
-  elevated service installation, PostgreSQL SCM `StartName`, ACL readback,
-  packaged service evidence collection, installer service stability, and API
-  `/health` all passed on the scratch machine. Gate 1 still failed at
-  browser first-owner setup: `POST /identity/setup/first-owner` returned 500
-  while recording a failed setup attempt because `blocked_until` is a
-  `timestamptz` column and the SQL path supplied text. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-7.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-7.md)
-- eighth clean Windows gate-day attempt ran on 2026-06-21 with rebuilt
-  artifacts carrying the first-owner SQL fix and packaged first-owner release
-  smoke proof. Its first preflight exposed a USB manifest mistake around
-  mutable current-run `evidence/**` files; after the manifest was corrected, the
-  same artifact set completed clean extraction, server config, PostgreSQL
-  provisioning, packaged migrations, license placement, service rendering,
-  elevated service installation, PostgreSQL SCM `StartName`, ACL readback,
-  packaged service evidence collection, installer service stability, API
-  `/health`, browser first-owner setup, browser job booking, reboot recovery,
-  and post-reboot login. Gate 1 still failed at second-device LAN proof: two
-  same-Wi-Fi devices timed out against the installed PC's LAN IP while local
-  LAN-IP office/API checks passed and no explicit BellField/Node/3000/3001
-  inbound firewall rule was found. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-8.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-8.md)
-- PR #68 added the packaged Windows LAN ingress helper. The 2026-06-21 rerun-9
-  USB prep rebuilt active `.17`/`.18` artifacts from source commit `991d773`
-  with that helper, refreshed USB hashes, and kept `evidence/**` excluded from
-  the immutable hash manifest. This is prep evidence only; Gate 1 still requires
-  a cleaned-machine rerun proving effective firewall/profile readback and real
-  second-device login.
-- ninth clean Windows gate-day attempt ran on 2026-06-22 with active `.17`/`.18`
-  artifacts. USB hash verification, `.17` extraction, packaged baseline
-  collection, and `write-server-config.mjs` passed. The required elevated LAN
-  helper then failed before PostgreSQL provisioning with a `Read-ServerEnvValue`
-  binding error because generated env files contain blank separator lines. The
-  helper had not reached the documented Public-profile refusal/consent branch,
-  no firewall rules were created, and no services were rendered or installed.
-  See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-9.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-9.md)
-- tenth clean Windows gate-day attempt ran on 2026-06-22 with active `.19`/`.20`
-  artifacts from source commit `31cd16c`. USB hash verification, `.19`
-  extraction, packaged baseline collection, developer-tool PATH check, and
-  `write-server-config.mjs` passed. The blank-line fix worked: the LAN helper
-  reached the intended Public-profile refusal and, after explicit operator
-  consent, changed Wi-Fi to Private and created BellField-managed TCP
-  `3000`/`3001` Private/Domain LocalSubnet firewall rules. It then failed its
-  own effective-rule validation before PostgreSQL provisioning, apparently
-  because the helper validated `RemoteAddress` from the port filter instead of
-  the address filter. No services were rendered or installed. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-10.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-10.md)
-- eleventh clean Windows gate-day attempt ran on 2026-06-22 with active
-  `.21`/`.22` artifacts from source commit `8154dc8`. USB hash verification,
-  `.21` extraction, packaged baseline collection, LAN helper Public-profile
-  refusal, explicit trusted-LAN consent, Private profile readback, BellField
-  firewall rule creation, LAN env URL updates, PostgreSQL provisioning,
-  packaged migrations, license placement, service rendering, elevated service
-  installation, PostgreSQL SCM `StartName`, ACL readback, packaged service
-  evidence collection, installer service stability, API `/health`, browser
-  first-owner setup, browser job/appointment proof, reboot recovery, and
-  post-reboot login all passed. Gate 1 still failed before real second-device
-  browser proof because the packaged LAN evidence collector hung while reading
-  firewall evidence and wrote no stdout or JSON. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-11.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-11.md)
-- twelfth clean Windows gate-day attempt ran on 2026-06-23 with active
-  `.23`/`.24` artifacts from source commit `0a6d4ed`. USB hash verification,
-  `.23` extraction, packaged baseline collection, LAN helper Public-profile
-  refusal, explicit trusted-LAN consent, Private profile readback, BellField
-  firewall rule creation, LAN env URL updates, PostgreSQL provisioning,
-  packaged migrations, license placement, service rendering, elevated service
-  installation, PostgreSQL SCM `StartName`, ACL readback, packaged service
-  evidence collection, installer service stability, API `/health`, browser
-  first-owner setup, browser customer/location/job proof, reboot recovery, and
-  post-reboot service/API health all passed. Gate 1 stopped at post-reboot
-  browser login because the newly created owner password existed only in
-  transient Codex/browser automation state and was unavailable after reboot. The
-  run did not reach packaged LAN evidence or real second-device login. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-12.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-12.md)
-- thirteenth clean Windows gate-day attempt ran on 2026-06-23 with the same
-  active `.23`/`.24` artifacts and the fixed documented Gate Day owner
-  credential. Gate 1 passed: USB hashes, extraction, baseline collection, LAN
-  Public-profile refusal/consent, LAN env/firewall setup, PostgreSQL
-  provisioning, packaged migrations, license placement, service rendering,
-  elevated service installation, PostgreSQL SCM `StartName`, ACL readback,
-  service evidence, API `/health`, browser first-owner setup, customer/location
-  job proof, reboot recovery, post-reboot login, packaged LAN evidence, and
-  real second-device browser login all passed. The strict run then stopped at
-  Gate 2 because the documented packaged manual backup CLI could not find
-  `pg_dump.exe`. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-13.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-13.md)
-- fourteenth clean Windows gate-day attempt ran on 2026-06-23 with rebuilt
-  `.25`/`.26` artifacts from source commit `a730639`. Gate 1 passed again:
-  clean install, LAN Public-profile refusal/consent, service installation,
-  PostgreSQL SCM `StartName`, ACL readback, first-owner setup, job proof,
-  reboot recovery, packaged LAN evidence, and real iPhone same-Wi-Fi login all
-  passed. Gate 2 advanced past the rerun #13 backup blocker: the packaged manual
-  backup helper produced a fresh backup set with `database.dump`, `media\`,
-  `license\bellfield-license.json`, and `manifest.json`. Restore then failed
-  because the old restore helper tried to recreate the database with the runtime
-  app role and PostgreSQL returned `permission denied to create database`. The
-  repo-side follow-up restores through the owned schema path without granting the
-  runtime app role permanent `CREATEDB`; rerun #15 proved that fix. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-14.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-14.md)
-- fifteenth clean Windows gate-day attempt ran on 2026-06-24 with rebuilt
-  `.27`/`.28` artifacts from source commit `d60afaf`. Gate 1 passed again.
-  Gate 2 passed for the first time: packaged manual backup created a fresh
-  backup set, restore completed through the owned-schema path, services
-  restarted, login worked, pre-backup data survived, and the post-backup marker
-  was erased. Gate 3 failed during the real `.27` to `.28` update: the updater
-  continued after the outer wrapper timeout, created a pre-update backup, staged
-  `.28`, left `.27` installed, and left API/worker/office-web stopped. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-15.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md)
-- seventeenth clean Windows gate-day attempt ran on 2026-06-27 with rebuilt
-  `.31`/`.32` artifacts from source commit `233e061`. Gate 1 and Gate 2 passed
-  again; restore readiness retried service start once and recovered to health
-  `ok`. Gate 3 failed because overlapping elevated updater attempts were
-  allowed after a capture timeout. Final closeout showed `.32` installed, `.31`
-  preserved as rollback, a fresh pre-update backup present, all BellField
-  services stopped, and health down. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-17.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-17.md)
-- eighteenth clean Windows gate-day attempt ran on 2026-06-27 with authorized
-  rebuilt `.33`/`.34` artifacts from source commit `2582d79` after the previous
-  unauthorized `.33`/`.34` USB refresh was discarded. Gate 1 and Gate 2 passed
-  again; restore readiness retried service start once and recovered to health
-  `ok`. Gate 3 failed during the real `.33` to `.34` update: one corrected
-  updater process started and returned exit code `1`, `.34` was installed,
-  rollback release and pre-update backup were preserved, all services were
-  stopped, API health was down, and no structured updater phase/result/failure
-  line was captured. Missing structured updater output is now an evidence gap
-  unless durable logs or machine state prove product failure. The active work is
-  durable updater failure evidence plus the post-swap service/recovery failure.
-  See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-18.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-18.md)
-- release-build smoke now functionally validates bundled PostgreSQL by running
-  packaged `initdb`, `pg_ctl`, `postgres`, and `psql` against a temporary data
-  directory when gate-day dependencies are included, and checks the app-local
-  VC++ runtime DLLs required by the Windows PostgreSQL bundle
-- repo-side runtime-config tests and `pnpm smoke:install-config` now prove the
-  generated clean-install relay-disabled env shape is accepted by API and
-  worker: base URL/token blank means relay disabled even though
-  `BELLFIELD_RELAY_SERVER_INSTANCE_ID` is generated
-- repo-side identity-attempt SQL now has a PostgreSQL-backed regression test,
-  and the gate-day release ZIP smoke must prove both controlled invalid
-  first-owner token handling and successful first-owner creation before USB
-  prep
-- the Windows service installer now validates packaged API/worker runtime
-  config and license readability before service startup, then requires service
-  state/process-id stability and API `/health` before reporting success
-- a packaged elevated read-only service evidence collector exists at
-  `tools\install\collect-windows-service-evidence.ps1`
+Current environmental qualification is tracked in
+[sellable-product-execution-plan.md](./sellable-product-execution-plan.md#open-validation-debt):
 
-Current clean-machine validation status:
+- **Gates 1–3 closed for the entry-tier Windows path:**
+  [rerun #30](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md) completed
+  clean install, first-owner/browser job proof, reboot, real iPhone office
+  login, packaged backup/restore, and the installed `.55` to `.56` update with
+  preserved rollback and post-update reboot health.
+- **Restore evidence limit:** rerun #30 required one readiness retry and lacks a
+  separate browser readback of marker erasure;
+  [rerun #15](./gate-day-clean-windows-smoke-2026-06-20-rerun-15.md) remains the
+  direct marker-erasure proof.
+- **Gates 4 and 5 remain unproven on hardware:** expired-window update refusal
+  and the sold-shaped relay/acceptance flow were not attempted in rerun #30.
+  Broader office-desktop/Android field-device proof remains separately tracked
+  in [launch-readiness.md](./launch-readiness.md).
 
-- rerun #30 used `.55`/`.56` artifacts from PR #93 at source commit `2d0670f`.
-  Physical USB verification passed `189` checked and `0` failed. Gate 1
-  completed the runner-first clean install, automatic first-owner creation,
-  browser customer/location/job proof, reboot recovery, packaged LAN evidence,
-  and real iPhone second-device login. Gate 2 completed packaged backup and
-  owned-schema restore with all services and health recovered. Gate 3 completed
-  the real installed `.55` to `.56` update, including a pre-update backup,
-  release swap, PostgreSQL restart/readiness, migrations, app-service restart,
-  durable `BELLFIELD_UPDATE_RESULT status=succeeded`, preserved rollback
-  release, and healthy post-update reboot readback. Gates 4 and 5 were not
-  attempted. See
-  [gate-day-clean-windows-smoke-2026-07-08-rerun-30.md](./gate-day-clean-windows-smoke-2026-07-08-rerun-30.md)
-- rerun #21 used rebuilt `.39`/`.40` artifacts from source commit `b4135ba`.
-  USB hash verification and baseline collection passed, but Gate 1 stopped in
-  `gate1-prepare-release` before install logic. The USB `START-HERE.txt`
-  command passed a relative `.\artifacts\...` `-ArtifactZip`; after UAC, the
-  elevated runner child resolved that path under `C:\WINDOWS\system32` and
-  failed artifact preflight. `C:\BellField\release` was never published, no
-  services were installed, and Gate 2/Gate 3 were not attempted. The repo-side
-  follow-up now absolutizes runner path inputs before self-elevation and tightens
-  generated USB instruction checks; at that point the next strict run required
-  a freshly prepared USB carrying those changes. See
-  [gate-day-clean-windows-smoke-2026-06-20-rerun-21.md](./gate-day-clean-windows-smoke-2026-06-20-rerun-21.md)
-- clean Windows Gate 1 passed again in rerun #30 for the entry-tier install
-  path: no developer tooling, real services, automatic first-owner setup,
-  browser job proof, reboot recovery, packaged LAN evidence, and real
-  second-device browser login
-  in one strict run
-- a green run of the packaged service-account diagnostic (supporting preflight
-  evidence only, not the gate; now uses corrected virtual-account proof criteria)
-- Windows LAN/firewall reachability for office web on a second device; rerun #8
-  proved local install, owner setup, job booking, reboot recovery, and
-  post-reboot login, but second-device same-Wi-Fi access timed out; rerun #9
-  stopped earlier because the packaged LAN helper could not read generated env
-  files containing blank separator lines; rerun #10 proved that fix reached the
-  Public-profile consent branch but stopped because firewall effective-rule
-  validation checked remote address on the wrong filter object; rerun #11 proved
-  the address-filter fix through service install, first-owner setup, browser
-  job/appointment proof, reboot recovery, and post-reboot login but stopped
-  when the packaged LAN evidence collector hung; rerun #12 used the hardened
-  exact-rule collector artifact and proved service install, browser owner setup,
-  job booking, reboot recovery, and post-reboot service/API health, but stopped
-  before post-reboot browser login because the test owner password was only in
-  transient automation state. Rerun #13 used the documented Gate Day dummy
-  credential and passed post-reboot login, packaged LAN evidence, and real
-  second-device browser login from an iPhone on the same Wi-Fi
-- second office desktop and Android field-device proof remain separate optional
-  environmental checks
-- scratch-machine backup/restore drill. Rerun #18 re-proved packaged manual
-  backup creation, restore through the owned-schema path, service-readiness
-  retry to health `ok`, marker erasure, login, pre-backup data readback, and
-  license readback. The helper still has an operator-experience rough edge: the
-  first readiness message looks like a failure before the retry succeeds.
-- real installed v(N) to v(N+1) update with Windows services, real pre-update
-  `pg_dump`, health check, and reboot/service recovery proof. Rerun #18
-  installed `.34` and preserved rollback/pre-update-backup evidence, but exited
-  nonzero, captured no structured updater terminal line, and left all services
-  stopped.
+These results qualify the recorded artifacts and route; they do not qualify
+headless Windows Server, Linux/Docker, or a self-serve installer. Earlier
+failed attempts remain in the dated Gate Day evidence documents linked from
+[the documentation index](./README.md), rather than serving as current blockers.
 
 ## Build The Release Folder
 
@@ -1147,7 +863,8 @@ For scratch validation only, the updater supports `--skip-services=true`,
 `--skip-health=true`, and `--skip-backup=true`. Do not use those skips for a
 customer update.
 
-Rerun #15 exposed the update blocker: the real `.27` to `.28` updater run
+Historical failure context (superseded by rerun #30's Gate 3 pass): rerun #15's
+real `.27` to `.28` updater run
 continued after the outer wrapper timed out, created a fresh pre-update backup,
 staged `.28`, left `.27` installed, and left API/worker/office-web stopped.
 Rerun #16 proved structured updater phase/result/failure lines and pre-swap

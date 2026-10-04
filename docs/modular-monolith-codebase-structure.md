@@ -14,13 +14,16 @@ Current top-level apps:
 - `apps/field-mobile`
 - `apps/api`
 - `apps/worker`
+- `apps/relay` (BellField-hosted delivery service, separate database)
+
+The public website lives in `site`; [its guide](../site/README.md) owns that separate deployment.
 
 Current shared packages:
 
 - `packages/contracts`
 - `packages/estimating`
-- `packages/validation`
-- `packages/utils`
+- `packages/i18n`
+- `packages/validation` and `packages/utils` (reserved scaffolding; no current app consumers)
 
 Current repo rule:
 
@@ -97,8 +100,8 @@ Current shared packages should stay narrow:
 
 - `contracts` for shared request, response, and contract shapes
 - `estimating` for the shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
-- `validation` for shared validation helpers
-- `utils` for small cross-cutting utilities
+- `i18n` for the shared locale catalog and translation helpers
+- `validation` and `utils` are reserved scaffolding, currently unused by apps; their existence does not require moving working domain code into them
 
 Package guardrails:
 

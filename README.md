@@ -29,14 +29,15 @@ Top-level apps:
 - `apps/field-mobile` - Expo / React Native field application
 - `apps/api` - NestJS API and shared business logic host
 - `apps/worker` - background worker service
+- `apps/relay` - BellField-hosted delivery relay with its own database
+- `site` - Cloudflare Pages public site and waitlist; see [site maintenance](./site/README.md)
 
 Current shared packages:
 
 - `packages/contracts` - shared request and response contracts
 - `packages/estimating` - shared estimating/pricing engine used by API estimate pricing, invoice reflection, and job-cost money helpers
 - `packages/i18n` - shared locale catalog and translation helpers for user-facing app copy
-- `packages/validation` - shared validation helpers
-- `packages/utils` - shared utility code
+- `packages/validation` and `packages/utils` - reserved helper scaffolding, currently unused by apps; retained as part of the intended repo shape
 
 Important note:
 
