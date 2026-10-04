@@ -22,6 +22,7 @@ pnpm lint
 pnpm build
 pnpm check:architecture
 pnpm check:ui-copy
+pnpm check:docs
 pnpm format:check
 pnpm security:secrets
 pnpm security:audit
@@ -148,3 +149,9 @@ Capture screenshots and any concise notes under `artifacts/validation/<timestamp
 ## Completion Standard
 
 A lane is ready to call closed only when the evidence names the commit, local API target, commands run, and any skipped checks. If a smoke cannot support a strong conclusion, say that plainly in the evidence note instead of rounding it up to a pass.
+
+Use `pnpm evidence:review -- --root <evidence-directory> --json` to inspect saved
+smoke JSON and Gate Day/update JSONL without running the underlying workflows.
+The [agent tooling guide](./agent-tooling.md) defines its supported evidence and
+limits. A successful inspection is not a release qualification or proof that
+missing checks ran.

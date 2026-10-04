@@ -50,6 +50,9 @@ jobs:
       - name: UI copy guardrails
         run: pnpm check:ui-copy
 
+      - name: Documentation contracts
+        run: pnpm check:docs
+
       - name: Secret scan
         run: pnpm security:secrets
 

@@ -123,6 +123,11 @@ User-facing copy guardrails catch internal scaffold/milestone wording before it 
 pnpm check:ui-copy
 ```
 
+Check documentation links and current command examples with `pnpm check:docs`.
+[Shared agent tooling](./docs/agent-tooling.md) documents the repository-owned
+Gate Day skills and the read-only `pnpm evidence:review` command for Codex,
+Claude, Grok, and human operators.
+
 Field-mobile local smoke steps are documented in [docs/field-mobile-smoke.md](./docs/field-mobile-smoke.md).
 
 API migration commands:

@@ -144,6 +144,11 @@ Also read:
 
 If a task does not touch one of these areas, do not pull in extra docs.
 
+For shared agent skills, documentation checking, or inspecting validation evidence,
+read `docs/agent-tooling.md`. Gate Day review, repair, and preparation procedures
+live in `docs/agent-workflows/`; the skill entrypoints for different assistants
+refer to those same procedures. Select the workflow that matches the user's scope.
+
 Historical planning docs such as `docs/product-shape-plan.md` are context only unless the task explicitly asks for older planning material.
 
 ---

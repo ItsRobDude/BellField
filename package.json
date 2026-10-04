@@ -63,6 +63,8 @@
     "check:architecture": "node tools/check-architecture.mjs",
     "check:file-size": "node tools/check-file-size.mjs",
     "check:ui-copy": "node tools/check-ui-copy.mjs",
+    "check:docs": "node tools/check-docs.mjs",
+    "evidence:review": "node tools/review-evidence.mjs",
     "usb:validate-start-here": "node tools/install/validate-start-here.mjs",
     "security:secrets": "secretlint --secretlintignore .secretlintignore \"**/*\"",
     "security:audit": "corepack pnpm audit --prod",

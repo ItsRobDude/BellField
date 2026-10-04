@@ -55,6 +55,7 @@ there is no need to read every linked document.
 - [Modular monolith structure](./modular-monolith-codebase-structure.md): architecture direction.
 - [Maintainability plan](./maintainability-refactor-plan.md): file-size baseline and bounded refactors.
 - [Validation playbook](./validation-playbook.md): checks, disposable DB smokes, and browser/device proof.
+- [Shared agent tooling](./agent-tooling.md): portable Gate Day skills, documentation checks, and read-only evidence inspection.
 - [Security policy](../SECURITY.md): security review scope and reporting guidance.
 
 ## Planning and Commercial Owners
